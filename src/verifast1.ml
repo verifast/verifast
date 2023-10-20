@@ -3656,6 +3656,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | FixedWidthRank k -> k + 4
 
   let integer_promotion l t = (* C11 6.3.1.1 *)
+    if dialect = Some Rust then t else
     match t with
     | Int (Signed, k) -> if width_le dummy_loc (width_of_rank k) int_width then intType else t
     | Int (Unsigned, k) -> if definitely_width_lt (width_of_rank k) int_width then intType else if width_le dummy_loc int_width (width_of_rank k) then t else static_error l "Computing the type of this expression involves an integer promotion whose result depends on the target architecture. This is not supported by VeriFast. Insert casts or specify a target (using the -target command-line option) to work around this problem." None

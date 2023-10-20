@@ -468,6 +468,10 @@ lemma_auto void chars_to_integer_(void *p, int size, bool signed_);
     requires [?f]chars(p, size, ?cs) &*& has_type(p, &typeid(int)) == true;
     ensures [f]integer_(p, size, signed_, _);
 
+lemma void u8s__to_integer__(void *p, int size, bool signed_);
+    requires [?f]integers__(p, 1, false, size, _);
+    ensures [f]integer__(p, size, signed_, _);
+
 // ... to chars
 lemma_auto void int__to_chars_(int *p);
     requires [?f]int_(p, _);
@@ -504,6 +508,10 @@ lemma_auto void boolean_to_chars(void *p);
 lemma_auto void integer__to_chars(void *p, int size, bool signed_);
     requires [?f]integer_(p, size, signed_, ?v);
     ensures [f]chars(p, size, _);
+
+lemma void integer__to_u8s(void *p, int size, bool signed_);
+    requires [?f]integer_(p, size, signed_, _);
+    ensures [f]integers_(p, 1, false, size, _);
 
 // u_character to/from character
 lemma_auto void u_character_to_character(void *p);
