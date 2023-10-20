@@ -849,6 +849,34 @@ and of_decl = function
     of_list of_ctor ctors
   ])
 | AbstractTypeDecl (l, x) -> C ("AbstractTypeDecl", [of_loc l; S x])
+| PredFamilyDecl (l, p, tparams, nbIndices, paramTypes, inputParamCount, inductiveness) ->
+  C ("PredFamilyDecl", [
+    of_loc l;
+    S p;
+    of_list s tparams;
+    I nbIndices;
+    of_list of_type_expr paramTypes;
+    of_option i inputParamCount;
+    of_inductiveness inductiveness
+  ])
+| PredFamilyInstanceDecl (l, p, tparams, indices, params, body) ->
+  C ("PredFamilyInstanceDecl", [
+    of_loc l;
+    S p;
+    of_list s tparams;
+    of_list (fun (l, x) -> T [of_loc l; S x]) indices;
+    of_list (fun (t, x) -> T [of_type_expr t; S x]) params;
+    of_expr body
+  ])
+| PredCtorDecl (l, p, ctorParams, predParams, inputParamCount, body) ->
+  C ("PredCtorDecl", [
+    of_loc l;
+    S p;
+    of_list (fun (t, x) -> T [of_type_expr t; S x]) ctorParams;
+    of_list (fun (t, x) -> T [of_type_expr t; S x]) predParams;
+    of_option i inputParamCount;
+    of_expr body
+  ])
 | Func (l, k, tparams, rt, g, xs, nonghostCallersOnly, funcTypeClause, spec, terminates, body, isVirtual, overrides) ->
   C ("Func", [
     of_loc l;
@@ -875,6 +903,23 @@ and of_decl = function
     end body;
     B isVirtual;
     of_list s overrides
+  ])
+| TypedefDecl (l, t, x) ->
+  C ("TypedefDecl", [of_loc l; of_type_expr t; S x])
+| FuncTypeDecl (l, gh, rt, ftn, tparams, ftparams, params, (pre, post, terminates)) ->
+  C ("FuncTypeDecl", [
+    of_loc l;
+    of_ghostness gh;
+    of_option of_type_expr rt;
+    S ftn;
+    of_list s tparams;
+    of_list (fun (t, x) -> T [of_type_expr t; S x]) ftparams;
+    of_list (fun (t, x) -> T [of_type_expr t; S x]) params;
+    T [
+      of_expr pre;
+      of_expr post;
+      B terminates
+    ]
   ])
 and of_ghostness = function
   Ghost -> c "Ghost"
