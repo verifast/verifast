@@ -3,6 +3,7 @@ module UtilRd = VfMirStub.Reader.Util
 module VfMirRd = VfMirStub.Reader.VfMir
 
 (* Util *)
+module Int128Rd = UtilRd.Int128
 module UInt128Rd = UtilRd.UInt128
 module OptionRd = UtilRd.Option
 module IndListRd = UtilRd.IndList
@@ -65,6 +66,7 @@ module AggregateKindRd = AggregateDataRd.AggregateKind
 
 (* Types *)
 module TyRd = VfMirStub.Reader.Ty
+module IntTyRd = TyRd.IntTy
 module UIntTyRd = TyRd.UIntTy
 module AdtTyRd = TyRd.AdtTy
 module AdtKindRd = TyRd.AdtKind

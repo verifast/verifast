@@ -1,11 +1,17 @@
 @0x810f32815ffa3aa2;
 # Todo @Nima: Move Util to another capnp file
 struct Util {
+    struct Int128 {
+        h @0: Int64;
+        l @1: UInt64;
+    }
+
     struct UInt128 {
         h @0: UInt64;
         l @1: UInt64;
     }
 
+    using BigInt = Int128;
     using BigUInt = UInt128;
     # Todo @Nima: We are using `BigUInt` for encoding `usize` values. It is better to have a distinct type for them.
 
@@ -29,7 +35,9 @@ struct Util {
     struct TextWrapper {text @0: Text;} #The pointer in Option just supports structs
 }
 
+using Util.Int128;
 using Util.UInt128;
+using Util.BigInt;
 using Util.BigUInt;
 using Util.Option;
 using Util.IndList;
@@ -313,9 +321,14 @@ struct Body {
     }
 
     struct Scalar {
-        struct Int {
-            # Todo
-        }
+        struct Int { union {
+            isize @0: BigInt;
+            i8 @1: Int8;
+            i16 @2: Int16;
+            i32 @3: Int32;
+            i64 @4: Int64;
+            i128 @5: Int128;
+        }}
         struct UInt { union {
             usize @0: BigUInt;
             u8 @1: UInt8;

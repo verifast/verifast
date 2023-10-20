@@ -30,6 +30,11 @@ module IntAux = struct
       Big_int.big_int_of_string (to_string a)
   end
 
+  module Int8 = Make (Stdint.Int8)
+  module Int16 = Make (Stdint.Int16)
+  module Int32 = Make (Stdint.Int32)
+  module Int64 = Make (Stdint.Int64)
+  module Int128 = Make (Stdint.Int128)
   module Uint8 = Make (Stdint.Uint8)
   module Uint16 = Make (Stdint.Uint16)
   module Uint32 = Make (Stdint.Uint32)
@@ -410,6 +415,21 @@ module Mir = struct
   }
 
   type fn_call_dst_data = { dst : Ast.expr; dst_bblock_id : string }
+
+  type int_ty = ISize | I8 | I16 | I32 | I64 | I128
+
+  let int_ty_bits_len (it : int_ty) =
+    match it with
+    | ISize ->
+        Error
+          (`UIntTyBitsLen
+            "The number of bits of a isize value is not specified by Rust")
+    | I8 -> Ok 8
+    | I16 -> Ok 16
+    | I32 -> Ok 32
+    | I64 -> Ok 64
+    | I128 -> Ok 128
+
   type u_int_ty = USize | U8 | U16 | U32 | U64 | U128
 
   let u_int_ty_bits_len (uit : u_int_ty) =
@@ -539,6 +559,16 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
 
   module CapnpAux = struct
     open Stdint
+
+    let int128_get (i_cpn : Int128Rd.t) : Int128.t =
+      let open Int128Rd in
+      let open Int128 in
+      let h = h_get i_cpn in
+      let l = l_get i_cpn in
+      let r = of_int64 h in
+      let r = shift_left r 64 in
+      let r = add r (of_uint64 l) in
+      r
 
     let uint128_get (ui_cpn : UInt128Rd.t) : Uint128.t =
       let open UInt128Rd in
@@ -729,6 +759,50 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
 
   let translate_region (reg_cpn : RegionRd.t) = RegionRd.id_get reg_cpn
   let int_size_rank = Ast.PtrRank
+
+  let translate_int_ty (int_ty_cpn : IntTyRd.t) (loc : Ast.loc) =
+    let open Ast in
+    let sz_and_rank i =
+      let open SizeAux in
+      let* bits = Mir.int_ty_bits_len i in
+      let* sz_bits = sz_bits_of_int bits in
+      let sz_bytes = sz_bytes_of_sz_bits sz_bits in
+      let sz_expr =
+        IntLit
+          ( loc,
+            Big_int.big_int_of_int @@ int_of_sz_bytes @@ sz_bytes,
+            (*decimal*) true,
+            (*U suffix*) true,
+            NoLSuffix )
+      in
+      let rank = FixedWidthRank (TrTyInt.calc_rank sz_bytes) in
+      Ok (sz_expr, rank)
+    in
+    let* sz_expr, rank =
+      match IntTyRd.get int_ty_cpn with
+      | ISize ->
+          (* isize is pointer-sized *)
+          let ptr_sz_expr =
+            SizeofExpr (loc, TypeExpr (ManifestTypeExpr (loc, PtrType Void)))
+          in
+          Ok (ptr_sz_expr, int_size_rank)
+      | I8 -> sz_and_rank Mir.I8
+      | I16 -> sz_and_rank Mir.I16
+      | I32 -> sz_and_rank Mir.I32
+      | I64 -> sz_and_rank Mir.I64
+      | I128 -> sz_and_rank Mir.I128
+      | Undefined _ -> Error (`TrIntTy "Unknown Rust int type")
+    in
+    let own tid vs = Ok (True loc) in
+    let shr lft tid l = Ok (True loc) in
+    let ty_info =
+      Mir.TyInfoBasic
+        {
+          vf_ty = ManifestTypeExpr (loc, Int (Signed, rank));
+          interp = RustBelt.{ size = sz_expr; own; shr };
+        }
+    in
+    Ok ty_info
 
   let translate_u_int_ty (u_int_ty_cpn : UIntTyRd.t) (loc : Ast.loc) =
     let open Ast in
@@ -968,7 +1042,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                vf_ty = ManifestTypeExpr (loc, Bool);
                interp = RustBelt.emp_ty_interp loc;
              })
-    | Int int_ty_cpn -> failwith "Todo: Int Ty is not implemented yet"
+    | Int int_ty_cpn -> translate_int_ty int_ty_cpn loc
     | UInt u_int_ty_cpn -> translate_u_int_ty u_int_ty_cpn loc
     | Adt adt_ty_cpn -> translate_adt_ty adt_ty_cpn loc
     | RawPtr raw_ptr_ty_cpn -> translate_raw_ptr_ty raw_ptr_ty_cpn loc
@@ -1100,6 +1174,26 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         (Ast.Var (loc, id))
         projection_cpn
 
+    let translate_scalar_int (si_cpn : ScalarRd.Int.t) (ty : Ast.type_expr)
+        (loc : Ast.loc) =
+      let mk_const v =
+        let open Ast in
+        let lit =
+          IntLit (loc, v, (*decimal*) true, (*U suffix*) false, LLSuffix)
+        in
+        Ok (CastExpr (loc, ty, lit))
+      in
+      let open ScalarRd.Int in
+      let open IntAux in
+      match get si_cpn with
+      | Isize v_cpn | I128 v_cpn ->
+          let vi128 = Int128.to_big_int (CapnpAux.int128_get v_cpn) in
+          mk_const vi128
+      | I8 v | I16 v -> mk_const (Big_int.big_int_of_int v)
+      | I32 vi32 -> mk_const (Int32.to_big_int vi32)
+      | I64 vi64 -> mk_const (Int64.to_big_int vi64)
+      | Undefined _ -> Error (`TrScalarInt "Unknown Int type")
+
     let translate_scalar_u_int (sui_cpn : ScalarRd.UInt.t) (ty : Ast.type_expr)
         (loc : Ast.loc) =
       let mk_const v =
@@ -1126,7 +1220,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       match get s_cpn with
       | Bool b -> failwith "Todo: Scalar::Bool"
       | Char str -> failwith "Todo: Scalar::Char"
-      | Int int_cpn -> failwith "Todo: Scalar::Int"
+      | Int int_cpn -> translate_scalar_int int_cpn ty loc
       | Uint u_int_cpn -> translate_scalar_u_int u_int_cpn ty loc
       | Float float_cpn -> failwith "Todo: Scalar::Float"
       | FnDef -> failwith "Todo: Scalar::FnDef"
@@ -1180,10 +1274,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             in
             Ok (`TrTypedConstantRvalueBinderBuilder rvalue_binder_builder)
       | Ast.FuncType _ -> Ok (`TrTypedConstantFn ty_info)
-      | Ast.Int (Ast.Unsigned, _) ->
-          let val_cpn = val_get ty_const_cpn in
-          let* const_expr = translate_ty_const_kind val_cpn ty_expr loc in
-          Ok (`TrTypedConstantScalar const_expr)
+      | Ast.Int (_, _) ->
+        let val_cpn = val_get ty_const_cpn in
+        let* const_expr = translate_ty_const_kind val_cpn ty_expr loc in
+        Ok (`TrTypedConstantScalar const_expr)
       | _ -> failwith "Todo: Constant of unsupported type"
 
     let translate_constant_kind (constant_kind_cpn : ConstantKindRd.t)

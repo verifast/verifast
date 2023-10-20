@@ -1711,7 +1711,38 @@ mod vf_mir_builder {
                     let cv = scalar.to_char().expect(err_msg);
                     scalar_cpn.set_char(&cv.to_string());
                 }
-                ty::TyKind::Int(int_ty) => todo!(),
+                ty::TyKind::Int(int_ty) =>  {
+                    let mut int_val_cpn = scalar_cpn.init_int();
+                    match int_ty {
+                        ty::IntTy::Isize => {
+                            let visz = scalar.to_machine_isize(&tcx).expect(err_msg);
+                            capnp_utils::encode_int128(
+                                visz.try_into().unwrap(),
+                                int_val_cpn.init_isize(),
+                            );
+                        }
+                        ty::IntTy::I8 => {
+                            let vi8 = scalar.to_i8().expect(err_msg);
+                            int_val_cpn.set_i8(vi8);
+                        }
+                        ty::IntTy::I16 => {
+                            let vi16 = scalar.to_i16().expect(err_msg);
+                            int_val_cpn.set_i16(vi16);
+                        }
+                        ty::IntTy::I32 => {
+                            let vi32 = scalar.to_i32().expect(err_msg);
+                            int_val_cpn.set_i32(vi32);
+                        }
+                        ty::IntTy::I64 => {
+                            let vi64 = scalar.to_i64().expect(err_msg);
+                            int_val_cpn.set_i64(vi64);
+                        }
+                        ty::IntTy::I128 => {
+                            let vi128 = scalar.to_i128().expect(err_msg);
+                            capnp_utils::encode_int128(vi128, int_val_cpn.init_i128());
+                        }
+                    }
+                }
                 ty::TyKind::Uint(uint_ty) => {
                     let mut uint_val_cpn = scalar_cpn.init_uint();
                     match uint_ty {
