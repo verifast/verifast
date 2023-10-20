@@ -460,6 +460,10 @@ lemma_auto void chars_to_pointer(void *p);
     requires [?f]chars(p, sizeof(void *), ?cs) &*& has_type(p, &typeid(void *)) == true;
     ensures [f]pointer(p, pointer_of_chars(cs));
 
+lemma_auto void u8s__to_pointer_(void *p);
+    requires [?f]integers__(p, 1, false, sizeof(void *), _);
+    ensures [f]pointer_(p, _);
+
 lemma_auto void chars_to_boolean(void *p);
     requires [?f]chars(p, sizeof(bool), ?cs) &*& has_type(p, &typeid(bool)) == true;
     ensures [f]boolean(p, _);
@@ -500,6 +504,10 @@ lemma_auto void u_short_integer_to_chars(void *p);
 lemma_auto void pointer_to_chars(void *p);
     requires [?f]pointer(p, ?v);
     ensures [f]chars(p, sizeof(void *), chars_of_pointer(v)) &*& has_type(p, &typeid(void *)) == true;
+
+lemma_auto void pointer_to_u8s(void *p);
+    requires [?f]pointer(p, _);
+    ensures [f]integers_(p, 1, false, sizeof(void *), _);
 
 lemma_auto void boolean_to_chars(void *p);
     requires [?f]boolean(p, _);

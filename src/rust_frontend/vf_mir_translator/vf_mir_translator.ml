@@ -1406,6 +1406,15 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                     (`TrFnCallRExpr
                       "Invalid (generic) arg(s) for std::ptr::mut_ptr::<impl \
                        *mut T>::is_null"))
+          | "std_ptr_null_mut" ->
+            Ok
+              ( [],
+                IntLit
+                  ( fn_loc,
+                    Big_int.zero_big_int,
+                    (*decimal*) true,
+                    (*U suffix*) false,
+                    (*int literal*) Ast.NoLSuffix ) )
           | _ ->
               failwith
                 ("Todo: Generic functions are not supported yet. Function: "
