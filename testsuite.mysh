@@ -671,6 +671,7 @@ cd tests
   cd ..
   cd rust
     cd purely_unsafe
+      verifast -c -allow_dead_code scalars.rs
       verifast -c -allow_dead_code alloc.rs
     cd ..
     cd safe_abstraction

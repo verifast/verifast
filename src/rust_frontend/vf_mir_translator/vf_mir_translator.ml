@@ -11,6 +11,7 @@ module IntAux = struct
     val rem : t -> t -> t
     val to_int : t -> int
     val of_int : int -> t
+    val to_string : t -> string
   end) =
   struct
     open StdintMod
@@ -26,18 +27,7 @@ module IntAux = struct
       if a = of_int i then Ok i else Error `IntAuxToInt
 
     let rec to_big_int (a : t) =
-      let a_maybe_truncated = to_int a in
-      let a_reconst = of_int a_maybe_truncated in
-      if a = a_reconst then
-        let a_int = a_maybe_truncated in
-        Big_int.(big_int_of_int a_int)
-      else
-        let m = div a a_reconst in
-        let r = rem a a_reconst in
-        let open Big_int in
-        let bi = big_int_of_int a_maybe_truncated in
-        let bi = mult_big_int (to_big_int m) bi in
-        add_int_big_int (to_int r) bi
+      Big_int.big_int_of_string (to_string a)
   end
 
   module Uint8 = Make (Stdint.Uint8)
@@ -556,7 +546,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let h = h_get ui_cpn in
       let l = l_get ui_cpn in
       let r = of_uint64 h in
-      let r = shift_left r 8 in
+      let r = shift_left r 64 in
       let r = add r (of_uint64 l) in
       r
 
