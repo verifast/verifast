@@ -1825,21 +1825,14 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let kind_cpn = kind_get statement_cpn in
       translate_statement_kind kind_cpn loc
 
-    let translate_basic_block (ret_place_id : string)
+  let translate_basic_block (ret_place_id : string)
         (bblock_cpn : BasicBlockRd.t) =
       let open BasicBlockRd in
       let id_cpn = id_get bblock_cpn in
       let id = translate_basic_block_id id_cpn in
       if is_cleanup_get bblock_cpn then
         (* Todo @Nima: For now we are ignoring cleanup basic-blocks *)
-        let bblock : Mir.basic_block =
-          {
-            id;
-            statements = [];
-            terminator = [ Ast.NoopStmt (Ast.Lexed Ast.dummy_loc0) ];
-          }
-        in
-        Ok bblock
+        Ok None
       else
         let statements_cpn = statements_get_list bblock_cpn in
         let* statements = ListAux.try_map translate_statement statements_cpn in
@@ -1847,7 +1840,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         let terminator_cpn = terminator_get bblock_cpn in
         let* terminator = translate_terminator ret_place_id terminator_cpn in
         let bblock : Mir.basic_block = { id; statements; terminator } in
-        Ok bblock
+        Ok (Some bblock)
 
     let translate_to_vf_basic_block
         ({ id; statements = stmts; terminator = trm } : Mir.basic_block) =
@@ -2221,7 +2214,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         in
         let bblocks_cpn = basic_blocks_get_list body_cpn in
         let* bblocks =
-          ListAux.try_map
+          ListAux.try_filter_map
             (fun bblock_cpn -> translate_basic_block ret_place_id bblock_cpn)
             bblocks_cpn
         in
