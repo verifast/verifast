@@ -978,6 +978,7 @@ mod vf_mir_builder {
                     let u_int_ty_cpn = ty_kind_cpn.init_u_int();
                     Self::encode_ty_uint(u_int_ty, u_int_ty_cpn)
                 }
+                ty::TyKind::Char => ty_kind_cpn.set_char(()),
                 ty::TyKind::Adt(adt_def, substs) => {
                     let adt_ty_cpn = ty_kind_cpn.init_adt();
                     Self::encode_ty_adt(tcx, enc_ctx, adt_def, substs, adt_ty_cpn);
@@ -1714,7 +1715,7 @@ mod vf_mir_builder {
                 }
                 ty::TyKind::Char => {
                     let cv = scalar.to_char().expect(err_msg);
-                    scalar_cpn.set_char(&cv.to_string());
+                    scalar_cpn.set_char(cv as u32);
                 }
                 ty::TyKind::Int(int_ty) =>  {
                     let mut int_val_cpn = scalar_cpn.init_int();

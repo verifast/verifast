@@ -39,14 +39,14 @@ fn main() {
         if p.is_null() {
             std::alloc::handle_alloc_error(layout);
         }
-        *p = 1; //'H' as u8;
-        *p.offset(1) = 2; //'i' as u8;
-        *p.offset(2) = 3; // '!' as u8;
+        *p = 'H' as u8;
+        *p.offset(1) = 'i' as u8;
+        *p.offset(2) = '!' as u8;
         *p.offset(3) = 0;
-        //@ close zstr(p + 3, {});
-        //@ close zstr(p + 2, {3});
-        //@ close zstr(p + 1, {2, 3});
-        //@ close zstr(p, {1, 2, 3});
+        //@ close zstr(p + 3, "");
+        //@ close zstr(p + 2, "!");
+        //@ close zstr(p + 1, "i!");
+        //@ close zstr(p, "Hi!");
 
         let n = strlen(p);
         assert(n == 3);

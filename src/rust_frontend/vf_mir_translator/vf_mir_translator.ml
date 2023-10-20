@@ -1044,6 +1044,13 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
              })
     | Int int_ty_cpn -> translate_int_ty int_ty_cpn loc
     | UInt u_int_ty_cpn -> translate_u_int_ty u_int_ty_cpn loc
+    | Char ->
+        Ok
+          (Mir.TyInfoBasic
+             {
+               vf_ty = ManifestTypeExpr (loc, Int (Unsigned, FixedWidthRank 2));
+               interp = RustBelt.emp_ty_interp loc;
+             })
     | Adt adt_ty_cpn -> translate_adt_ty adt_ty_cpn loc
     | RawPtr raw_ptr_ty_cpn -> translate_raw_ptr_ty raw_ptr_ty_cpn loc
     | Ref ref_ty_cpn -> translate_ref_ty ref_ty_cpn loc
@@ -1219,7 +1226,13 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let open ScalarRd in
       match get s_cpn with
       | Bool b -> failwith "Todo: Scalar::Bool"
-      | Char str -> failwith "Todo: Scalar::Char"
+      | Char code ->
+        let open Ast in
+        Ok
+          ( CastExpr
+              ( loc,
+                ManifestTypeExpr (loc, Int (Unsigned, FixedWidthRank 2)),
+                IntLit ( loc, IntAux.Uint32.to_big_int code, true, true, LLSuffix ) ) )
       | Int int_cpn -> translate_scalar_int int_cpn ty loc
       | Uint u_int_cpn -> translate_scalar_u_int u_int_cpn ty loc
       | Float float_cpn -> failwith "Todo: Scalar::Float"

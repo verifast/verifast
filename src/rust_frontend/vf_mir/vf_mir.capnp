@@ -261,6 +261,7 @@ struct Ty {
             bool @0: Void;
             int @1: IntTy;
             uInt @2: UIntTy;
+            char @9: Void;
             adt @3: AdtTy;
             rawPtr @4: RawPtrTy;
             ref @5: RefTy;
@@ -342,7 +343,7 @@ struct Body {
         }
         union {
             bool @0: Bool;
-            char @1: Text;
+            char @1: UInt32;
             int @2: Int;
             uint @3: UInt;
             float @4: Float;
