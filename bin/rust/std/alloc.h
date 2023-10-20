@@ -1,8 +1,12 @@
 #include "../../stddef.h"
 #include "../../stdint.h"
 
+size_t std_alloc_Layout_from_size_align_unchecked(size_t size, size_t align);
+//@ requires align == 1 || align == 2 || align == 4 || align == 8 || align == 16;
+//@ ensures result == size;
+
 uint8_t *std_alloc_alloc(size_t size);
-    //@ requires true;
+    //@ requires 1 <= size;
     /*@
     ensures
         result == 0 ?

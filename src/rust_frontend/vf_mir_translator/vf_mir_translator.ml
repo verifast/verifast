@@ -1406,6 +1406,19 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                     (`TrFnCallRExpr
                       "Invalid (generic) arg(s) for std::ptr::mut_ptr::<impl \
                        *mut T>::is_null"))
+          | "std_ptr_const_ptr_<impl *const T>_offset" | "std_ptr_mut_ptr_<impl *mut T>_offset" -> (
+            match (substs, args_cpn) with
+            | [ Mir.GenArgType gen_arg_ty_info ], [ arg1_cpn; arg2_cpn ] ->
+              let* tmp_rvalue_binders, [ arg1; arg2 ] =
+                translate_operands [ (arg1_cpn, fn_loc); (arg2_cpn, fn_loc) ]
+              in
+              Ok
+                ( tmp_rvalue_binders,
+                  Ast.Operation ( fn_loc, Ast.Add, [ arg1; arg2 ] ) )
+            | _ ->
+                Error
+                  (`TrFnCallRExpr
+                    (Printf.sprintf "Invalid (generic) arg(s) for %s" fn_name)))
           | "std_ptr_null_mut" ->
             Ok
               ( [],

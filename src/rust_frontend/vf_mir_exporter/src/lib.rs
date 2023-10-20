@@ -57,6 +57,7 @@ use tracing::{debug, error, info, trace, Level};
 pub fn run_compiler() -> i32 {
     rustc_driver::catch_with_exit_code(move || {
         let mut rustc_args: Vec<_> = std::env::args().collect();
+        rustc_args.push("-Coverflow_checks=off".to_owned());
         // To also compile crates without a main function
         // Todo @Nima: Should it not be passed from VeriFast?
         rustc_args.push("--crate-type=lib".to_owned());
@@ -1427,6 +1428,10 @@ mod vf_mir_builder {
                 mir::TerminatorKind::Goto { target } => {
                     let target_cpn = terminator_kind_cpn.init_goto();
                     Self::encode_basic_block_id(*target, target_cpn);
+                }
+                mir::TerminatorKind::FalseUnwind { real_target, unwind } => {
+                    let target_cpn = terminator_kind_cpn.init_goto();
+                    Self::encode_basic_block_id(*real_target, target_cpn);
                 }
                 mir::TerminatorKind::SwitchInt {
                     discr,
