@@ -37,6 +37,7 @@ extern crate rustc_session;
 extern crate rustc_span;
 
 mod hir_utils;
+mod preprocessor;
 
 use rustc_borrowck::consumers::BodyWithBorrowckFacts;
 use rustc_driver::Compilation;
@@ -82,6 +83,17 @@ struct CompilerCalls;
 impl rustc_driver::Callbacks for CompilerCalls {
     // In this callback we override the mir_borrowck query.
     fn config(&mut self, config: &mut Config) {
+        let path =
+            match &config.input {
+                rustc_session::config::Input::File(path) => path.clone(),
+                _ => { panic!("File expected"); }
+            };
+        let contents = std::fs::read_to_string(&path).unwrap();
+        let preprocessed_contents = preprocessor::preprocess(contents.as_str());
+        config.input = rustc_session::config::Input::Str {
+            name: rustc_span::FileName::Real(rustc_span::RealFileName::LocalPath(path)),
+            input: preprocessed_contents
+        };
         assert!(config.override_queries.is_none());
         config.override_queries = Some(override_queries);
     }
@@ -96,27 +108,7 @@ impl rustc_driver::Callbacks for CompilerCalls {
         compiler.session().abort_if_errors();
         queries.global_ctxt().unwrap().peek_mut().enter(|tcx| {
             /*** Collecting Annotations */
-            trace!("Collecting Annotations");
-            let src_map = compiler.session().source_map();
-            let src_name = compiler.input().source_name();
-            let src_string = String::clone(
-                src_map
-                    .get_source_file(&src_name)
-                    .expect(&format!(
-                        "Failed to get the source file information for: {:?}",
-                        src_name
-                    ))
-                    .src
-                    .as_ref()
-                    .expect(&format!(
-                        "Failed to get the source string for: {:?}",
-                        src_name
-                    ))
-                    .as_ref(),
-            );
-            trace!("Gathering comments from: {:?}", src_name);
-            let comments =
-                rustc_ast::util::comments::gather_comments(src_map, src_name, src_string);
+            // TODO: Get comments from preprocessor
 
             /*** Collecting MIR bodies */
             trace!("Collecting MIR bodies");
@@ -143,7 +135,7 @@ impl rustc_driver::Callbacks for CompilerCalls {
                 .collect();
 
             let mut vf_mir_capnp_builder = vf_mir_builder::VfMirCapnpBuilder::new(tcx);
-            vf_mir_capnp_builder.add_comments(comments);
+            //vf_mir_capnp_builder.add_comments([]);
             vf_mir_capnp_builder.add_bodies(bodies.as_slice());
             let msg_cpn = vf_mir_capnp_builder.build();
             capnp::serialize::write_message(&mut ::std::io::stdout(), msg_cpn.borrow_inner());
