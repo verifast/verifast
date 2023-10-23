@@ -245,6 +245,7 @@ mod vf_mir_builder {
     use crate::vf_mir_capnp::ty as ty_cpn;
     use crate::vf_mir_capnp::unsafety as unsafety_cpn;
     use crate::vf_mir_capnp::vf_mir as vf_mir_cpn;
+    use crate::vf_mir_capnp::visibility as visibility_cpn;
     use adt_def_cpn::variant_def as variant_def_cpn;
     use basic_block_cpn::operand as operand_cpn;
     use basic_block_cpn::rvalue as rvalue_cpn;
@@ -263,7 +264,6 @@ mod vf_mir_builder {
     use body_cpn::source_info as source_info_cpn;
     use body_cpn::var_debug_info as var_debug_info_cpn;
     use constant_cpn::constant_kind as constant_kind_cpn;
-    use field_def_cpn::visibility as visibility_cpn;
     use file_name_cpn::real_file_name as real_file_name_cpn;
     use hir_cpn::generics as hir_generics_cpn;
     use hir_generic_param_cpn::generic_param_kind as hir_generic_param_kind_cpn;
@@ -491,9 +491,18 @@ mod vf_mir_builder {
             }
             let kind_cpn = adt_def_cpn.reborrow().init_kind();
             Self::encode_adt_kind(adt_def.adt_kind(), kind_cpn);
-            let span_cpn = adt_def_cpn.init_span();
+            let span_cpn = adt_def_cpn.reborrow().init_span();
             let span = tcx.def_span(adt_def.did);
             Self::encode_span_data(tcx, &span.data(), span_cpn);
+            let vis_cpn = adt_def_cpn.reborrow().init_vis();
+            let vis = tcx.visibility(adt_def.did);
+            Self::encode_visibility(vis, vis_cpn);
+            let is_local = adt_def.did.is_local();
+            adt_def_cpn.set_is_local(is_local);
+            debug!(
+                "Adt def {:?} Visibility:{:?} Local:{}",
+                adt_def, vis, is_local
+            );
         }
 
         fn encode_adt_kind(adt_kind: ty::AdtKind, mut adt_kind_cpn: adt_kind_cpn::Builder<'_>) {

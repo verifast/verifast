@@ -94,6 +94,14 @@ struct Ident {
     span @1: SpanData;
 }
 
+struct Visibility {
+    union {
+        public @0: Void;
+        restricted @1: Void;
+        invisible @2: Void;
+    }
+}
+
 struct Annotation {
     raw @0: Text;
     span @1: SpanData;
@@ -194,14 +202,6 @@ struct Ty {
     struct AdtDef {
         struct VariantDef {
             struct FieldDef {
-                struct Visibility {
-                    union {
-                        public @0: Void;
-                        restricted @1: Void;
-                        invisible @2: Void;
-                    }
-                }
-
                 name @0: Symbol;
                 ty @1: Ty;
                 vis @2: Visibility;
@@ -217,6 +217,8 @@ struct Ty {
         variants @1: List(VariantDef);
         kind @2: AdtKind;
         span @3: SpanData;
+        vis @4: Visibility;
+        isLocal @5: Bool;
     }
 
     struct AdtTy {

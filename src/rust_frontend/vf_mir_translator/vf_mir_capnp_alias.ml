@@ -22,6 +22,7 @@ module SymbolRd = VfMirStub.Reader.Symbol
 module AnnotationRd = VfMirStub.Reader.Annotation
 module UnsafetyRd = VfMirStub.Reader.Unsafety
 module IdentRd = VfMirStub.Reader.Ident
+module VisibilityRd = VfMirStub.Reader.Visibility
 
 (* Hir *)
 module HirRd = VfMirStub.Reader.Hir
@@ -79,5 +80,4 @@ module TyConstKindRd = TyRd.ConstKind
 module AdtDefRd = TyRd.AdtDef
 module VariantDefRd = AdtDefRd.VariantDef
 module FieldDefRd = VariantDefRd.FieldDef
-module VisibilityRd = FieldDefRd.Visibility
 module RegionRd = TyRd.Region

@@ -452,6 +452,12 @@ module Mir = struct
     | _ -> Error (`DeclMirAdtKind "Not an ADT")
 
   type aggregate_kind = AggKindAdt of { name : string; def : Ast.decl }
+
+  type adt_def_tr = {
+    def : Ast.decl;
+    full_bor_content : Ast.decl option;
+    proof_obligs : Ast.decl list;
+  }
 end
 
 module TrTyTuple = struct
@@ -2223,39 +2229,6 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let fields = List.map translate_to_vf_field_def fields in
     Ok fields
 
-  let translate_adt_def (adt_def_cpn : AdtDefRd.t) =
-    let open AdtDefRd in
-    let id_cpn = id_get adt_def_cpn in
-    let def_path = translate_adt_def_id id_cpn in
-    let name = TrName.translate_def_path def_path in
-    let variants_cpn = variants_get_list adt_def_cpn in
-    let* variants = ListAux.try_map translate_variant_def variants_cpn in
-    let span_cpn = span_get adt_def_cpn in
-    let* def_loc = translate_span_data span_cpn in
-    let kind_cpn = kind_get adt_def_cpn in
-    match AdtKindRd.get kind_cpn with
-    | StructKind ->
-        let* field_defs =
-          match variants with
-          | [ field_defs ] -> Ok field_defs
-          | _ -> Error (`TrAdtDef "Struct ADT kind should have one variant")
-        in
-        let struct_decl =
-          Ast.Struct
-            ( def_loc,
-              name,
-              Some
-                ( (*base_spec list*) [],
-                  (*field list*) field_defs,
-                  (*instance_pred_decl list*) [],
-                  (*is polymorphic*) false ),
-              (*struct_attr list*) [] )
-        in
-        Ok struct_decl
-    | EnumKind -> failwith "Todo: AdtDef::Enum"
-    | UnionKind -> failwith "Todo: AdtDef::Union"
-    | Undefined _ -> Error (`TrAdtDef "Unknown ADT kind")
-
   let gen_adt_full_borrow_content adt_def =
     let open Ast in
     let* adt_kind = Mir.decl_mir_adt_kind adt_def in
@@ -2496,6 +2469,58 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         in
         Ok [ share_mono_po; share_po ]
 
+  let translate_adt_def (adt_def_cpn : AdtDefRd.t) =
+    let open AdtDefRd in
+    let id_cpn = id_get adt_def_cpn in
+    let def_path = translate_adt_def_id id_cpn in
+    let name = TrName.translate_def_path def_path in
+    let variants_cpn = variants_get_list adt_def_cpn in
+    let* variants = ListAux.try_map translate_variant_def variants_cpn in
+    let span_cpn = span_get adt_def_cpn in
+    let* def_loc = translate_span_data span_cpn in
+    let vis_cpn = vis_get adt_def_cpn in
+    let* vis = translate_visibility vis_cpn in
+    let is_local = is_local_get adt_def_cpn in
+    let kind_cpn = kind_get adt_def_cpn in
+    let* def =
+      match AdtKindRd.get kind_cpn with
+      | StructKind ->
+          let* field_defs =
+            match variants with
+            | [ field_defs ] -> Ok field_defs
+            | _ -> Error (`TrAdtDef "Struct ADT kind should have one variant")
+          in
+          let struct_decl =
+            Ast.Struct
+              ( def_loc,
+                name,
+                Some
+                  ( (*base_spec list*) [],
+                    (*field list*) field_defs,
+                    (*instance_pred_decl list*) [],
+                    (*is polymorphic*) false ),
+                (*struct_attr list*) [] )
+          in
+          Ok struct_decl
+      | EnumKind -> failwith "Todo: AdtDef::Enum"
+      | UnionKind -> failwith "Todo: AdtDef::Union"
+      | Undefined _ -> Error (`TrAdtDef "Unknown ADT kind")
+    in
+    let* full_bor_content, proof_obligs =
+      match (is_local, vis) with
+      | false, _ | true, Mir.Restricted -> Ok (None, [])
+      | true, Mir.Invisible ->
+          Error
+            (`TrAdtDef
+              ("The " ^ def_path
+             ^ " ADT definition is local and locally invisible"))
+      | true, Mir.Public ->
+          let* full_bor_content = gen_adt_full_borrow_content def in
+          let* proof_obligs = gen_adt_proof_obligs def in
+          Ok (Some full_bor_content, proof_obligs)
+    in
+    Ok Mir.{ def; full_bor_content; proof_obligs }
+
   (** Checks for the existence of a lemma for proof obligation in ghost code.
       The consistency of the lemma with proof obligation will be checked by VeriFast later *)
   let check_proof_obligation gh_decls po =
@@ -2530,25 +2555,21 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let adt_defs_cpn = VfMirRd.adt_defs_get vf_mir_cpn in
       let* adt_defs_cpn = CapnpAux.ind_list_get_list adt_defs_cpn in
       let* adt_defs = ListAux.try_map translate_adt_def adt_defs_cpn in
-      let adt_defs = List.rev adt_defs in
+      (* Todo @Nima: External definitions and their corresponding ghost headers inclusion should be handled in a better way *)
       (* Todo @Nima: The MIR exporter encodes `ADT`s and adds the `ADT` declarations used in them later in the same array.
          For a Tree hierarchy of types just reversing the array works but obviously
          for more complicated scenarios we need to add all of the declarations without definitions first
          and then add all of the complete declarations
+         Note that the following `fold_left` also reverses the list
       *)
-      (* Todo @Nima: External definitions and their corresponding ghost headers inclusion should be handled in a better way *)
-      let local_adt_defs =
-        List.filter
-          (fun adt ->
-            let (Some n) = AstAux.decl_name adt in
-            not (String.starts_with "std_" n))
-          adt_defs
+      let adt_defs, adts_full_bor_content_preds, adts_proof_obligs =
+        List.fold_left
+          (fun (defs, fbors, pos) Mir.{ def; full_bor_content; proof_obligs } ->
+            (def :: defs, full_bor_content :: fbors, proof_obligs :: pos))
+          ([], [], []) adt_defs
       in
-      let* adts_fbor_content_preds =
-        ListAux.try_map gen_adt_full_borrow_content local_adt_defs
-      in
-      let* adts_proof_obligs =
-        ListAux.try_map gen_adt_proof_obligs local_adt_defs
+      let adts_full_bor_content_preds =
+        List.filter_map Fun.id adts_full_bor_content_preds
       in
       let adts_proof_obligs = List.flatten adts_proof_obligs in
       let ghost_decl_batches_cpn =
@@ -2575,7 +2596,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let debug_infos = VF0.DbgInfoRustFe debug_infos in
       let decls = AstDecls.decls () in
       let decls =
-        decls @ adt_defs @ adts_fbor_content_preds @ adts_proof_obligs
+        decls @ adt_defs @ adts_full_bor_content_preds @ adts_proof_obligs
         @ ghost_decls @ body_sigs @ body_decls
       in
       (* Todo @Nima: we should add necessary inclusions during translation *)
