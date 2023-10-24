@@ -607,9 +607,19 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let (w, tp) = check_expr (pn,ilist) tparams tenv e in
       let sn = match tp with PtrType (StructType sn) -> sn | _ -> static_error l "The argument of close_struct must be of type pointer-to-struct." None in
       eval_h h env w $. fun h env pointerTerm ->
-      with_context (Executing (h, env, l, "Consuming character array")) $. fun () ->
-      consume_chunk rules h ghostenv [] [] l ((if name = "close_struct" then chars__pred_symb () else chars_pred_symb ()), true) [] real_unit dummypat (Some 2) [TermPat pointerTerm; TermPat (struct_size l sn); SrcPat DummyPat] $. fun _ h coef [_; _; elems] _ _ _ _ ->
-      if not (definitely_equal coef real_unit) then assert_false h env l "Closing a struct requires full permission to the character array." None;
+      begin fun cont ->
+      match dialect with
+        Some Rust ->
+        with_context (Executing (h, env, l, "Consuming u8 array")) $. fun () ->
+        consume_chunk rules h ghostenv [] [] l ((if name = "close_struct" then integers___symb () else integers__symb ()), true) [] real_unit dummypat (Some 4) [TermPat pointerTerm; TermPat (ctxt#mk_intlit 1); TermPat false_term; TermPat (struct_size l sn); SrcPat DummyPat] $. fun _ h coef [_; _; _; _; elems] _ _ _ _ ->
+        if not (definitely_equal coef real_unit) then assert_false h env l "Closing a struct requires full permission to the u8 array." None;
+        cont h elems
+      | _ ->
+        with_context (Executing (h, env, l, "Consuming character array")) $. fun () ->
+        consume_chunk rules h ghostenv [] [] l ((if name = "close_struct" then chars__pred_symb () else chars_pred_symb ()), true) [] real_unit dummypat (Some 2) [TermPat pointerTerm; TermPat (struct_size l sn); SrcPat DummyPat] $. fun _ h coef [_; _; elems] _ _ _ _ ->
+        if not (definitely_equal coef real_unit) then assert_false h env l "Closing a struct requires full permission to the character array." None;
+        cont h elems
+      end $. fun h elems ->
       let init =
         match name with
           "close_struct" -> Unspecified
@@ -631,7 +641,14 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let Some (_, _, _, _, length_symb) = try_assoc' Ghost (pn,ilist) "length" purefuncmap in
       let size = struct_size l sn in
       assume (ctxt#mk_eq (mk_app length_symb [cs]) size) $. fun () ->
-      cont (Chunk ((chars__pred_symb (), true), [], real_unit, [pointerTerm; size; cs], None)::h) env
+      let chunk =
+        match dialect with
+          Some Rust ->
+          Chunk ((integers___symb (), true), [], real_unit, [pointerTerm; ctxt#mk_intlit 1; false_term; size; cs], None)
+        | _ ->
+          Chunk ((chars__pred_symb (), true), [], real_unit, [pointerTerm; size; cs], None)
+      in
+      cont (chunk::h) env
     | ExprStmt (CallExpr (l, "free", [], [], args,Static) as e) ->
       let args = List.map (function LitPat e -> e | _ -> static_error l "No patterns allowed here" None ) args in
       begin

@@ -674,6 +674,7 @@ cd tests
       verifast -c scalars.rs
       verifast -c alloc.rs
       verifast -c reverse.rs
+      verifast -c account.rs
     cd ..
     cd safe_abstraction
       verifast -c cell_u32.rs
