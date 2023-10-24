@@ -56,11 +56,20 @@ module Make (Args : VF_MIR_ANNOT_PARSER_ARGS) = struct
     VfParser.parse_spec_clauses tk_stream
 
   let parse_ghost_stmt (annot : src_pos * string) =
-    let _, ts = token_stream_from_annot annot in
-    ts |> Parser.noop_preprocessor |> VfParser.parse_stmt
+    let loc, ts = token_stream_from_annot annot in
+    try
+      ts |> Parser.noop_preprocessor |> VfParser.parse_stmt
+    with
+      Lexer.Stream.Error msg -> raise (Lexer.ParseException (Lexed (loc()), msg))
+    | Lexer.Stream.Failure -> raise (Lexer.ParseException (Lexed (loc()), "Parse error"))
   (* Todo @Nima: This can parse all statements. Maybe we should rename this module to just a parser *)
 
   let parse_ghost_decl_batch (annot : src_pos * string) =
-    let _, ts = token_stream_from_annot annot in
-    ts |> Parser.noop_preprocessor |> VfParser.parse_decls
+    let loc, ts = token_stream_from_annot annot in
+    try
+      ts |> Parser.noop_preprocessor |> VfParser.parse_decls
+    with
+      Lexer.Stream.Error msg -> raise (Lexer.ParseException (Lexed (loc()), msg))
+    | Lexer.Stream.Failure -> raise (Lexer.ParseException (Lexed (loc()), "Parse error"))
+      
 end
