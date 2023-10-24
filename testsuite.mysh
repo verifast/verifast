@@ -675,6 +675,7 @@ cd tests
       verifast -c alloc.rs
       verifast -c reverse.rs
       verifast -c account.rs
+      verifast -c deque.rs
     cd ..
     cd safe_abstraction
       verifast -c cell_u32.rs
