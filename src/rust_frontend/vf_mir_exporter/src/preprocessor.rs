@@ -1,5 +1,61 @@
-pub fn preprocess(input: &str) -> String {
-    let mut cs = input.chars().peekable();
+#[derive(Copy, Clone, Debug)]
+pub struct SrcPos {
+    line: i32, // 1-based
+    column: i32 // 1-based
+}
+
+struct TextIterator<'a> {
+    chars: std::iter::Peekable<std::str::Chars<'a>>,
+    pos: SrcPos,
+    last_char_was_cr: bool,
+}
+
+impl<'a> TextIterator<'a> {
+    fn peek(&mut self) -> Option<char> {
+        match self.chars.peek() {
+            None => None,
+            Some(c) => Some(*c)
+        }
+    }
+
+    fn next(&mut self) -> Option<char> {
+        match self.chars.next() {
+            None => None,
+            Some(c) => {
+                match c {
+                    '\r' => {
+                        self.last_char_was_cr = true;
+                        self.pos.line += 1;
+                        self.pos.column = 1;
+                    }
+                    '\n' => {
+                        if !self.last_char_was_cr {
+                            self.pos.line += 1;
+                            self.pos.column = 1;
+                        }
+                        self.last_char_was_cr = false;
+                    }
+                    c => {
+                        self.last_char_was_cr = false;
+                        self.pos.column += 1;
+                    }
+                };
+                Some(c)
+            }
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct GhostRange {
+    in_fn_body: bool,
+    start: SrcPos, // position of first character of contents *before preprocessing*
+    end: SrcPos, // position after last character of contents *before preprocessing*
+    contents: String, // not including the ghost range delimiters (//@, /*@, @*/)
+}
+
+pub fn preprocess(input: &str, ghost_ranges: &mut Vec<GhostRange>) -> String {
+    let mut cs = TextIterator { chars: input.chars().peekable(), pos: SrcPos { line: 1, column: 1 }, last_char_was_cr: false };
     let mut output = String::new();
     let mut inside_word = false;
     let mut brace_depth = 0;
@@ -8,13 +64,7 @@ pub fn preprocess(input: &str) -> String {
     loop {
         let was_inside_word = inside_word;
         inside_word = false;
-        fn peek(cs: &mut std::iter::Peekable<std::str::Chars>) -> Option<char> {
-            match cs.peek() {
-                None => None,
-                Some(c) => Some(*c)
-            }
-        }
-        match peek(&mut cs) {
+        match cs.peek() {
             None => {
                 output.push_str("\n\nfn VeriFast_ghost_command() {}\n");
                 return output;
@@ -41,31 +91,61 @@ pub fn preprocess(input: &str) -> String {
                     }
                     '/' => {
                         cs.next();
-                        match peek(&mut cs) {
+                        match cs.peek() {
                             Some('/') => {
                                 cs.next();
-                                match peek(&mut cs) {
-                                    Some('@') if fn_body_brace_depth != -1 => {
+                                match cs.peek() {
+                                    Some('@') => {
                                         cs.next();
-                                        output.push_str("VeriFast_ghost_command();//@");
+                                        let start = cs.pos;
+                                        let in_fn_body = fn_body_brace_depth != -1;
+                                        if in_fn_body {
+                                            output.push_str("VeriFast_ghost_command();");
+                                        }
+                                        output.push_str("//@");
+                                        let mut contents = String::new();
+                                        loop {
+                                            match cs.peek() {
+                                                None | Some('\n') | Some('\r') => { break; }
+                                                Some(c) => {
+                                                    cs.next();
+                                                    output.push(c);
+                                                    contents.push(c);
+                                                }
+                                            }
+                                        }
+                                        ghost_ranges.push(GhostRange { in_fn_body, start, end: cs.pos, contents });
                                     }
                                     _ => {
                                         output.push_str("//");
-                                    }
-                                };
-                                loop {
-                                    match peek(&mut cs) {
-                                        None | Some('\n') | Some('\r') => { break; }
-                                        Some(c) => { cs.next(); output.push(c); }
+                                        loop {
+                                            match cs.peek() {
+                                                None | Some('\n') | Some('\r') => { break; }
+                                                Some(c) => { cs.next(); output.push(c); }
+                                            }
+                                        }
                                     }
                                 }
                             }
                             Some('*') => {
                                 cs.next();
-                                match peek(&mut cs) {
-                                    Some('@') if fn_body_brace_depth != -1 => {
+                                let mut ghost_range = GhostRange {
+                                    in_fn_body: false,
+                                    start: SrcPos { line: -1, column: -1 },
+                                    end: SrcPos { line: -1, column: -1 },
+                                    contents: String::new()
+                                };
+                                let mut is_ghost_range = false;
+                                match cs.peek() {
+                                    Some('@') => {
                                         cs.next();
-                                        output.push_str("VeriFast_ghost_command();/*@");
+                                        is_ghost_range = true;
+                                        ghost_range.in_fn_body = fn_body_brace_depth != -1;
+                                        ghost_range.start = cs.pos;
+                                        if ghost_range.in_fn_body {
+                                            output.push_str("VeriFast_ghost_command();");
+                                        }
+                                        output.push_str("/*@");
                                     }
                                     _ => {
                                         output.push_str("/*");
@@ -73,16 +153,18 @@ pub fn preprocess(input: &str) -> String {
                                 };
                                 let mut nesting_depth = 0;
                                 loop {
-                                    match peek(&mut cs) {
+                                    match cs.peek() {
                                         None => { panic!("EOF inside multiline comment"); }
                                         Some('*') => {
                                             cs.next();
                                             output.push('*');
-                                            match peek(&mut cs) {
+                                            ghost_range.contents.push('*');
+                                            match cs.peek() {
                                                 None => { panic!("EOF inside multiline comment"); }
                                                 Some('/') => {
                                                     cs.next();
                                                     output.push('/');
+                                                    ghost_range.contents.push('/');
                                                     if nesting_depth == 0 {
                                                         break;
                                                     } else {
@@ -95,11 +177,13 @@ pub fn preprocess(input: &str) -> String {
                                         Some('/') => {
                                             cs.next();
                                             output.push('/');
-                                            match peek(&mut cs) {
+                                            ghost_range.contents.push('/');
+                                            match cs.peek() {
                                                 None => { panic!("EOF inside multiline comment"); }
                                                 Some('*') => {
                                                     cs.next();
                                                     output.push('*');
+                                                    ghost_range.contents.push('*');
                                                     nesting_depth += 1;
                                                 }
                                                 _ => {}
@@ -108,8 +192,20 @@ pub fn preprocess(input: &str) -> String {
                                         Some(c) => {
                                             cs.next();
                                             output.push(c);
+                                            ghost_range.contents.push(c);
                                         }
                                     }
+                                }
+                                if is_ghost_range {
+                                    // Get rid of the */
+                                    ghost_range.end = cs.pos;
+                                    ghost_range.end.column -= 2;
+                                    ghost_range.contents.truncate(ghost_range.contents.len() - 2);
+                                    if ghost_range.contents.ends_with("@") {
+                                        ghost_range.contents.truncate(ghost_range.contents.len() - 1);
+                                        ghost_range.end.column -= 1;
+                                    }
+                                    ghost_ranges.push(ghost_range);
                                 }
                             }
                             _ => {
@@ -120,12 +216,12 @@ pub fn preprocess(input: &str) -> String {
                     '\'' => {
                         cs.next();
                         output.push('\'');
-                        match peek(&mut cs) {
+                        match cs.peek() {
                             None => { panic!("EOF inside character literal"); }
                             Some('\\') => {
                                 cs.next();
                                 output.push('\\');
-                                match peek(&mut cs) {
+                                match cs.peek() {
                                     None => { panic!("EOF inside character literal"); }
                                     Some(c) => {
                                         cs.next();
@@ -138,7 +234,7 @@ pub fn preprocess(input: &str) -> String {
                                 output.push(c);
                             }
                         }
-                        match peek(&mut cs) {
+                        match cs.peek() {
                             Some('\'') => {
                                 cs.next();
                                 output.push('\'');
@@ -150,7 +246,7 @@ pub fn preprocess(input: &str) -> String {
                         cs.next();
                         output.push('"');
                         loop {
-                            match peek(&mut cs) {
+                            match cs.peek() {
                                 None => { panic!("EOF inside string literal"); }
                                 Some('"') => {
                                     cs.next();
@@ -160,7 +256,7 @@ pub fn preprocess(input: &str) -> String {
                                 Some('\\') => {
                                     cs.next();
                                     output.push('\\');
-                                    match peek(&mut cs) {
+                                    match cs.peek() {
                                         None => { panic!("EOF inside string literal"); }
                                         Some(c) => {
                                             cs.next();
@@ -182,7 +278,7 @@ pub fn preprocess(input: &str) -> String {
                         let mut nb_hashes = 0;
                     'stringLoop:
                         loop {
-                            match peek(&mut cs) {
+                            match cs.peek() {
                                 Some('#') => {
                                     cs.next();
                                     output.push('#');
@@ -194,7 +290,7 @@ pub fn preprocess(input: &str) -> String {
                                     output.push('"');
                                     inside_word = false;
                                     loop {
-                                        match peek(&mut cs) {
+                                        match cs.peek() {
                                             None => { panic!("EOF inside string literal"); }
                                             Some('"') => {
                                                 cs.next();
@@ -204,7 +300,7 @@ pub fn preprocess(input: &str) -> String {
                                                     if nb_hashes_seen == nb_hashes {
                                                         break 'stringLoop;
                                                     }
-                                                    match peek(&mut cs) {
+                                                    match cs.peek() {
                                                         Some('#') => {
                                                             cs.next();
                                                             output.push('#');
@@ -229,11 +325,11 @@ pub fn preprocess(input: &str) -> String {
                         cs.next();
                         output.push('f');
                         inside_word = true;
-                        match peek(&mut cs) {
+                        match cs.peek() {
                             Some('n') => {
                                 cs.next();
                                 output.push('n');
-                                match peek(&mut cs) {
+                                match cs.peek() {
                                     Some('A'..='Z'|'a'..='z'|'_'|'0'..='9') => {}
                                     _ => {
                                         next_block_is_fn_body = true;

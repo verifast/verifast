@@ -70,7 +70,7 @@ pub fn run_compiler() -> i32 {
         // Todo @Nima: Find the correct sysroot by yourself. for now we get it as an argument.
         // See filesearch::get_or_default_sysroot()
 
-        let mut callbacks = CompilerCalls::default();
+        let mut callbacks = CompilerCalls { ghost_ranges: Vec::new() };
         // Call the Rust compiler with our callbacks.
         trace!("Calling the Rust Compiler with args: {:?}", rustc_args);
         rustc_driver::RunCompiler::new(&rustc_args, &mut callbacks).run()
@@ -78,7 +78,9 @@ pub fn run_compiler() -> i32 {
 }
 
 #[derive(Default)]
-struct CompilerCalls;
+struct CompilerCalls {
+    ghost_ranges: Vec<preprocessor::GhostRange>
+}
 
 impl rustc_driver::Callbacks for CompilerCalls {
     // In this callback we override the mir_borrowck query.
@@ -89,7 +91,7 @@ impl rustc_driver::Callbacks for CompilerCalls {
                 _ => { panic!("File expected"); }
             };
         let contents = std::fs::read_to_string(&path).unwrap();
-        let preprocessed_contents = preprocessor::preprocess(contents.as_str());
+        let preprocessed_contents = preprocessor::preprocess(contents.as_str(), &mut self.ghost_ranges);
         config.input = rustc_session::config::Input::Str {
             name: rustc_span::FileName::Real(rustc_span::RealFileName::LocalPath(path)),
             input: preprocessed_contents
@@ -135,6 +137,7 @@ impl rustc_driver::Callbacks for CompilerCalls {
                 .collect();
 
             let mut vf_mir_capnp_builder = vf_mir_builder::VfMirCapnpBuilder::new(tcx);
+            trace!("{:?}", self.ghost_ranges);
             //vf_mir_capnp_builder.add_comments([]);
             vf_mir_capnp_builder.add_bodies(bodies.as_slice());
             let msg_cpn = vf_mir_capnp_builder.build();
