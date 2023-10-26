@@ -399,7 +399,7 @@ _build/default/dlsymtool/dlsymtool.exe: .FORCE
 	dune build $@
 
 ../bin/dlsymtool$(DOTEXE): _build/default/dlsymtool/dlsymtool.exe
-	if [ ! -e $@ -o @< -nt $@ ]; then cp -f $< $@; fi
+	if [ ! -e $@ -o $< -nt $@ ]; then cp -f $< $@; fi
 
 _build/default/main_class/main_class.exe: .FORCE
 	@echo "  DUNE " $@
