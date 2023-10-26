@@ -4,7 +4,7 @@
  (library_flags
   -cclib "-Xlinker -headerpad_max_install_names"
   -cclib "-L ../../../lib")
- (libraries num z3 json perf java_frontend cxx_frontend))
+ (libraries num Z3 json perf java_frontend cxx_frontend))
 (env
   (dev
     (flags (:standard -warn-error -A -w -8-9-27 -thread))))
