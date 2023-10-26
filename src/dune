@@ -7,4 +7,4 @@
  (libraries num z3 json perf java_frontend cxx_frontend))
 (env
   (dev
-    (flags (:standard -warn-error -A -thread))))
+    (flags (:standard -warn-error -A -w -8-9-27 -thread))))
