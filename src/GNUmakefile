@@ -567,6 +567,7 @@ vfide.cmx: SExpressionEmitter.cmx
 #------------------------------- Tests --------------------------------------#
 testsuite: $(STDLIB) $(TOOLS_EXCEPT_VFIDE)
 	@echo "  RUN " json_tests
+	dune build json_tests/json_tests.exe
 	dune exec json_tests/json_tests.exe
 	@echo "  MYSH     " testsuite
 	$(SET_ENV); \
