@@ -16,6 +16,8 @@ CAPNP_INCLUDE := "$(shell cygpath -w $(CAPNP_INCLUDE))"
 CAPNP_LIBS := "$(shell cygpath -w $(CAPNP_LIBS))"
 endif
 
+export CAPNP_INCLUDE
+
 # we specify rules here if we don't want the makefile in src to compile specific files
 
 # ---- stubs ----

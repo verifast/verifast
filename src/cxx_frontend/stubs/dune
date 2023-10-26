@@ -5,4 +5,4 @@
 (rule
  (targets stubs_ast.mli stubs_ast.ml)
  (deps (:schema stubs_ast.capnp))
- (action (run capnp compile -o ocaml %{schema})))
+ (action (run capnp compile -I %{env:CAPNP_INCLUDE=CAPNP_INCLUDE} -o ocaml %{schema})))
