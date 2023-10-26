@@ -12,7 +12,7 @@ CAPNP_LINK_FLAGS	= -package capnp,capnp.unix
 
 
 ifeq ($(OS), Windows_NT)
-CAPNP_INCLUDE := "$(shell cygpath -w $(CAPNP_INCLUDE))"
+CAPNP_INCLUDE := $(shell cygpath -w $(CAPNP_INCLUDE))
 CAPNP_LIBS := "$(shell cygpath -w $(CAPNP_LIBS))"
 endif
 
