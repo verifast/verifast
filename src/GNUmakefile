@@ -32,6 +32,9 @@ help:
 
 -include ../GNUmakefile.settings
 
+clean::
+	-rm -Rf _build
+
 # Note: OS is defined by the operating system as Windows_NT on Windows.
 ifeq ($(OS), Linux)
 else ifeq ($(OS), Darwin)
@@ -101,7 +104,6 @@ ifdef Z3V4DOT5
   else
     Z3_DLL_DIR ?= $(Z3_OCAML)/../..
   endif
-  Z3DEPS := z3$(Z3VERSION)prover.cmx verifastPluginZ3$(Z3VERSION).ml verifastPluginReduxZ3$(Z3VERSION).ml verifastPluginZ3$(Z3VERSION)Smtlib.ml
   ifeq ($(OS), Darwin)
     Z3DEPS := $(Z3DEPS) ../lib/libz3.dylib
   else ifeq ($(OS), Windows_NT)
@@ -241,16 +243,6 @@ env:
 
 
 #------------------------------- Includes   ---------------------------------#
-ifeq ($(OS), Linux)
-  include linux/GNUmakefile
-endif
-ifeq ($(OS), Darwin)
-  include linux/GNUmakefile
-endif
-ifeq ($(OS), Windows_NT)
-  include win/GNUmakefile
-endif
-
 include java_frontend/GNUmakefile
 
 # Path variables, for (de)serialization between C++ and Ocaml,
@@ -389,11 +381,46 @@ tabhunt:
 	${OCAML} tabhunter.ml
 .PHONY: tabhunt
 
-../bin/mysh$(DOTEXE): vfconfig.cmx mysh.ml
-	@echo "  OCAMLOPT " $@
-	$(COMPILE) -thread -o ../bin/mysh$(DOTEXE) -linkpkg -package unix,threads vfconfig.cmx mysh.ml
+.FORCE:
+.PHONY: .FORCE
+
+_build/default/mysh/mysh.exe: .FORCE
+	@echo "  DUNE " $@
+	dune build mysh/mysh.exe
+
+../bin/mysh$(DOTEXE): _build/default/mysh/mysh.exe
+	if [ ! -e $@ -o $< -nt $@ ]; then cp -f $< $@; fi
+
 mysh: ../bin/mysh$(DOTEXE)
 .PHONY: mysh
+
+_build/default/dlsymtool/dlsymtool.exe: .FORCE
+	@echo "  DUNE " $@
+	dune build $@
+
+../bin/dlsymtool$(DOTEXE): _build/default/dlsymtool/dlsymtool.exe
+	if [ ! -e $@ -o @< -nt $@ ]; then cp -f $< $@; fi
+
+_build/default/main_class/main_class.exe: .FORCE
+	@echo "  DUNE " $@
+	dune build $@
+
+../bin/main_class$(DOTEXE): _build/default/main_class/main_class.exe
+	if [ ! -e $@ -o $< -nt $@ ]; then cp -f $< $@; fi
+
+_build/default/java_card_applet/java_card_applet.exe: .FORCE
+	@echo "  DUNE " $@
+	dune build $@
+
+../bin/vfstrip$(DOTEXE): _build/default/vfstrip/vfstrip.exe
+	if [ ! -e $@ -o $< -nt $@ ]; then cp -f $< $@; fi
+
+_build/default/vfstrip/vfstrip.exe: .FORCE
+	@echo "  DUNE " $@
+	dune build $@
+
+../bin/java_card_applet$(DOTEXE): _build/default/java_card_applet/java_card_applet.exe
+	if [ ! -e $@ -o $< -nt $@ ]; then cp -f $< $@; fi
 
 ifdef WITHOUT_GTKSOURCEVIEW
 macos/GSourceView2.cmx: macos/GSourceView2.ml
@@ -442,44 +469,29 @@ else ifeq ($(OS), Linux)
   OCAMLOPT_LINKFLAGS += -cclib -Wl,-rpath='$$ORIGIN'
 endif
 
-../bin/vfide$(DOTEXE): vfide.cmx $(VERIFAST_PLUGINS:%=verifastPlugin%.cmx) $(Z3DEPS) $(GTKSOURCEVIEW_DEPS)
-	@echo "  OCAMLOPT " $@
-ifndef WITHOUT_GTKSOURCEVIEW
-	cd linemarks; make linemarks.cmxa
-endif
-	$(SET_LDD); $(COMPILE) $(OCAMLOPT_LINKFLAGS) $(CAPNP_LINK_FLAGS) -warn-error F -o ../bin/vfide$(DOTEXE)	\
-	  $(LABLGTK_FLAGS) $(GTKSOURCEVIEW_LFLAGS) \
-	  $(INCLUDES) Perf.cmxa proverapi.cmx dynlink.cmxa \
-	  util.cmx ast.cmx ocaml_expr.cmx ocaml_expr_of_ast.cmx ocaml_expr_formatter.cmx stats.cmx lexer.cmx \
-	  parser.cmx ${JAVA_FE_INCLS} $(CXX_FE_DEPS) verifast0.cmx verifast1.cmx assertions.cmx \
-	  verify_expr.cmx verifast.cmx combineprovers.cmx \
-          simplex.cmx redux.cmx verifastPluginRedux.cmx \
-          smtlib.cmx smtlibprover.cmx verifastPluginCvc4.cmx verifastPluginExternalZ3.cmx verifastPluginReduxSmtlib.cmx \
-          $(Z3ARGS_EARLY) \
-	  shape_analysis/shape_analysis_backend.cmx \
-	  shape_analysis/changelog.cmx shape_analysis/shape_analysis_frontend.cmx \
-	  $(Z3ARGS) branchleft_png.cmx branchright_png.cmx vfconfig.cmx vfide.cmx
+../bin/vfide$(DOTEXE): _build/default/vfide/vfide.exe
+	if [ ! -e $@ -o $< -nt $@ ]; then cp -f $< $@; fi
 ifeq ($(OS), Darwin)
 	DYLD_LIBRARY_PATH=../lib DYLD_PRINT_LIBRARIES=1 ../bin/vfide -verify_and_quit ../examples/busywaiting/ioliveness/echo_live_mt.c > vfide-libraries.log 2>&1
 	! grep /usr/local vfide-libraries.log
 endif
+
+_build/default/vfide/vfide.exe: $(Z3DEPS) $(GTKSOURCEVIEW_DEPS) .FORCE
+	@echo "  DUNE " $@
+ifndef WITHOUT_GTKSOURCEVIEW
+	make -C linemarks OCAMLOPT=${OCAMLOPT} OCAMLCFLAGS="${OCAMLCFLAGS}" LABLGTK_FLAGS="$(LABLGTK_FLAGS_)" linemarks.cmxa
 endif
-ifneq ($(OS), Windows_NT)
-  ../bin/vfide$(DOTEXE): linux/libPerf_cobjs.a
+	$(SET_LDD); OCAMLPATH="$$OCAMLPATH:$(shell pwd)" dune build $@
 endif
 vfide: ../bin/vfide$(DOTEXE) $(STDLIB)
 .PHONY: vfide
 
-../bin/verifast$(DOTEXE): vfconsole.cmx $(VERIFAST_PLUGINS:%=verifastPlugin%.cmx) $(Z3DEPS)
-	@echo "  OCAMLOPT " $@
-	$(COMPILE) $(OCAMLOPT_LINKFLAGS) $(CAPNP_LINK_FLAGS) -warn-error F -o ../bin/verifast$(DOTEXE) \
-	$(INCLUDES) Perf.cmxa proverapi.cmx \
-	  util.cmx ast.cmx ocaml_expr.cmx ocaml_expr_of_ast.cmx ocaml_expr_formatter.cmx stats.cmx lexer.cmx parser.cmx \
-	  ${JAVA_FE_INCLS} $(CXX_FE_DEPS) verifast0.cmx verifast1.cmx assertions.cmx \
-	  verify_expr.cmx verifast.cmx simplex.cmx redux.cmx combineprovers.cmx \
-          smtlib.cmx smtlibprover.cmx verifastPluginCvc4.cmx verifastPluginExternalZ3.cmx verifastPluginReduxSmtlib.cmx \
-          $(Z3ARGS_EARLY) \
-	  verifastPluginRedux.cmx $(Z3ARGS) json.cmx vfconsole.cmx
+_build/default/vfconsole/vfconsole.exe: $(Z3DEPS) .FORCE
+	@echo "  DUNE " $@
+	dune build $@
+
+../bin/verifast$(DOTEXE): _build/default/vfconsole/vfconsole.exe
+	if [ ! -e $@ -o $< -nt $@ ]; then cp -f $< $@; fi
 ifeq ($(OS), Darwin)
 	install_name_tool -change libz3.dylib @executable_path/../lib/libz3.dylib ../bin/verifast
 endif
@@ -530,22 +542,13 @@ clean::
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-../bin/explorer$(DOTEXE): explorer.cmx $(VERIFAST_PLUGINS:%=verifastPlugin%.cmx) $(Z3DEPS)
-	@echo "  OCAMLOPT " $@
-	$(COMPILE) $(OCAMLOPT_LINKFLAGS) $(CAPNP_LINK_FLAGS) -warn-error F -o ../bin/explorer$(DOTEXE) \
-	$(INCLUDES) Perf.cmxa proverapi.cmx \
-	  util.cmx ast.cmx stats.cmx lexer.cmx parser.cmx \
-	  ${JAVA_FE_INCLS} $(CXX_FE_DEPS) verifast0.cmx verifast1.cmx assertions.cmx \
-	  verify_expr.cmx verifast.cmx simplex.cmx redux.cmx combineprovers.cmx \
-          smtlib.cmx smtlibprover.cmx verifastPluginCvc4.cmx verifastPluginExternalZ3.cmx verifastPluginReduxSmtlib.cmx \
-          $(Z3ARGS_EARLY) \
-	  verifastPluginRedux.cmx $(Z3ARGS) explorer.cmx
+_build/default/explorer/explorer.exe: .FORCE
+	@echo "  DUNE " $@
+	dune build $@
 
-ifneq ($(OS), Windows_NT)
-  ../bin/verifast$(DOTEXE): linux/libPerf_cobjs.a
-else
-  ../bin/verifast$(DOTEXE): win/Perf.cmxa
-endif
+../bin/explorer$(DOTEXE): _build/default/explorer/explorer.exe
+	if [ ! -e $@ -o $< -nt $@ ]; then cp -f $< $@; fi
+
 verifast: ../bin/verifast$(DOTEXE) $(STDLIB)
 .PHONY: verifast
 
@@ -563,8 +566,8 @@ vfide.cmx: SExpressionEmitter.cmx
 
 #------------------------------- Tests --------------------------------------#
 testsuite: $(STDLIB) $(TOOLS_EXCEPT_VFIDE)
-	@echo "  OCAMLOPT " json_tests
-	$(COMPILE) -o json_tests$(DOTEXE) json.cmx json_tests.ml && ./json_tests$(DOTEXE)
+	@echo "  RUN " json_tests
+	dune exec json_tests/json_tests.exe
 	@echo "  MYSH     " testsuite
 	$(SET_ENV); \
         cd ..; bin/mysh -cpus $(NUMCPU) < testsuite.mysh

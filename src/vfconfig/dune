@@ -1,0 +1,6 @@
+(library
+ (name vfconfig)
+ (wrapped false))
+(rule
+ (targets vfconfig.ml)
+ (action (run ./generator/vfconfig_generator.exe %{system})))

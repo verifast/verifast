@@ -154,6 +154,7 @@ src/cxx_frontend/stubs/stubs_ast.capnp.h
 
 src/cxx_frontend/stubs/*.ml*
 
+_build
 _opam
 .vscode
 .merlin

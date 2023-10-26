@@ -9,6 +9,8 @@ open GMain
 open Shape_analysis_frontend
 open Vfconfig
 
+let () = Register_provers.register_provers ()
+
 type layout = FourThree | Widescreen
 
 let include_paths: string list ref = ref []
