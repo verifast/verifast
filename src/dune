@@ -3,6 +3,7 @@
  (wrapped false)
  (library_flags
   -cclib "-Xlinker -headerpad_max_install_names"
+  -cclib "-L ../../../bin"
   -cclib "-L ../../../lib")
  (libraries num Z3 json perf java_frontend cxx_frontend))
 (env
