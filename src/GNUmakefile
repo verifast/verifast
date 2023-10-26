@@ -462,12 +462,14 @@ endif
 
 VERIFAST_PLUGINS=Redux Cvc4 ExternalZ3 ReduxSmtlib
 
-OCAMLOPT_LINKFLAGS = -package num,unix,str,camlp-streams -linkpkg
 ifeq ($(OS), Darwin)
+  OCAMLOPT_CCLIB_FLAGS += -Xlinker -headerpad_max_install_names
   OCAMLOPT_LINKFLAGS += -cclib "-Xlinker -headerpad_max_install_names"
 else ifeq ($(OS), Linux)
+  OCAMLOPT_CCLIB_FLAGS += -Wl,-rpath='$$ORIGIN'
   OCAMLOPT_LINKFLAGS += -cclib -Wl,-rpath='$$ORIGIN'
 endif
+export OCAMLOPT_CCLIB_FLAGS
 
 ../bin/vfide$(DOTEXE): _build/default/vfide/vfide.exe
 	if [ ! -e $@ -o $< -nt $@ ]; then cp -f $< $@; fi

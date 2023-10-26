@@ -1,10 +1,10 @@
 (library
  (name verifast)
  (wrapped false)
- (library_flags
-  -cclib "-Xlinker -headerpad_max_install_names"
-  -cclib "-L ../../../bin"
-  -cclib "-L ../../../lib")
+ (c_library_flags
+  %{env:OCAMLOPT_CCLIB_FLAGS=OCAMLOPT_CCLIB_FLAGS}
+  -L ../../../bin
+  -L ../../../lib)
  (libraries num Z3 json perf java_frontend cxx_frontend))
 (env
   (dev
