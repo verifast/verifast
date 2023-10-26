@@ -466,7 +466,7 @@ ifeq ($(OS), Darwin)
   OCAMLOPT_CCLIB_FLAGS += -Xlinker -headerpad_max_install_names
   OCAMLOPT_LINKFLAGS += -cclib "-Xlinker -headerpad_max_install_names"
 else ifeq ($(OS), Linux)
-  OCAMLOPT_CCLIB_FLAGS += -Wl,-rpath='$$ORIGIN'
+  OCAMLOPT_CCLIB_FLAGS += -Wl,-rpath=$$ORIGIN
   OCAMLOPT_LINKFLAGS += -cclib -Wl,-rpath='$$ORIGIN'
 endif
 export OCAMLOPT_CCLIB_FLAGS
