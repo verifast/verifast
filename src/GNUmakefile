@@ -468,6 +468,8 @@ ifeq ($(OS), Darwin)
 else ifeq ($(OS), Linux)
   OCAMLOPT_CCLIB_FLAGS += -Wl,-rpath=$$ORIGIN
   OCAMLOPT_LINKFLAGS += -cclib -Wl,-rpath='$$ORIGIN'
+else
+  OCAMLOPT_CCLIB_FLAGS =
 endif
 export OCAMLOPT_CCLIB_FLAGS
 
