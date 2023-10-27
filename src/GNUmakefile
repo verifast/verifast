@@ -343,7 +343,6 @@ clean::
 clean::
 	rm -f *.cmo
 	cd java_frontend && rm -f *.cmo
-	cd linux && rm -f *.cmo
 
 clean::
 	rm -f *.annot
@@ -666,7 +665,7 @@ cleantest::
 # Thus typing dependencies by hand is replaced by typing "make depend",
 # which is less error-prone.
 META_DEPS = \
-  $(wildcard *.ml *.mli linux/*.ml linux/*.mli \
+  $(wildcard *.ml *.mli \
   java_frontend/*.ml java_frontend/*.mli \
   cxx_frontend/*.ml cxx_frontend/*.mli \
   shape_analysis/*.ml shape_analysis/*.mli)

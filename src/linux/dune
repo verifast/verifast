@@ -1,6 +1,0 @@
-(library
- (name perf)
- (foreign_stubs
-  (language c)
-  (names caml_stopwatch))
- (wrapped false))
