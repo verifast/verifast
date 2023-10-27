@@ -1,0 +1,5 @@
+(library
+ (name frontend)
+ (wrapped false)
+ (preprocess (pps ppx_parser))
+ (libraries camlp-streams perf stopwatch))

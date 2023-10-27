@@ -1,0 +1,10 @@
+(library
+ (name verifast)
+ (wrapped false)
+ (c_library_flags
+  %{env:OCAMLOPT_CCLIB_FLAGS=}
+  -L %{env:Z3_DLL_DIR=../../../lib})
+ (libraries num Z3 json perf java_frontend cxx_frontend))
+(env
+  (dev
+    (flags (:standard -warn-error -A -w -8-9-27 -thread))))

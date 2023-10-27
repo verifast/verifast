@@ -1,0 +1,5 @@
+(library
+ (name java_frontend)
+ (wrapped false)
+ (preprocess (pps ppx_parser))
+ (libraries num str threads unix frontend))

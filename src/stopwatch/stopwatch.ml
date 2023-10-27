@@ -8,7 +8,7 @@ external lock_process_to_processor_1: unit -> unit = "caml_lock_process_to_proce
 external processor_ticks: unit -> int64 = "caml_stopwatch_processor_ticks"
 
 (** The type of stopwatches. *)
-type t = Obj.t
+type t
 
 external create: unit -> t = "caml_stopwatch_create"
 external start: t -> unit = "caml_stopwatch_start"

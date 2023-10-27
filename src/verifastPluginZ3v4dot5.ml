@@ -1,4 +1,4 @@
-let _ =
+let register_plugin () =
   Verifast.register_prover "Z3v4.5"
     "the Z3 SMT solver <https://github.com/Z3Prover/z3> by Leonardo de Moura and Nikolaj Bjorner at Microsoft Research, and contributors."
     (

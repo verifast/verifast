@@ -1,0 +1,8 @@
+(library
+ (name perf)
+ (libraries
+  (select
+   perf.ml
+   from
+   (perf_unix -> perf.unix.ml)
+   (perf_win -> perf.win.ml))))

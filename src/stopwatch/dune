@@ -1,0 +1,15 @@
+(copy_files
+ (enabled_if
+  (= %{os_type} Unix))
+ (files unix/*))
+
+(copy_files
+ (enabled_if
+  (<> %{os_type} Unix))
+ (files win/*))
+
+(library
+ (name stopwatch)
+ (foreign_stubs
+  (language c)
+  (names caml_stopwatch)))

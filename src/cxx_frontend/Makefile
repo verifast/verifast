@@ -12,9 +12,11 @@ CAPNP_LINK_FLAGS	= -package capnp,capnp.unix
 
 
 ifeq ($(OS), Windows_NT)
-CAPNP_INCLUDE := "$(shell cygpath -w $(CAPNP_INCLUDE))"
+CAPNP_INCLUDE := $(shell cygpath -w $(CAPNP_INCLUDE))
 CAPNP_LIBS := "$(shell cygpath -w $(CAPNP_LIBS))"
 endif
+
+export CAPNP_INCLUDE
 
 # we specify rules here if we don't want the makefile in src to compile specific files
 
@@ -26,7 +28,7 @@ $(CXX_FE_STUBS_DIR)/stubs_ast.cmx: $(CXX_FE_STUBS_DIR)/stubs_ast.mli $(CXX_FE_ST
 	$(COMPILE) -c -w -53-55 -I $(CXX_FE_STUBS_DIR) -package capnp $^
 
 $(CXX_FE_STUBS_DIR)/stubs_ast.mli $(CXX_FE_STUBS_DIR)/stubs_ast.ml &:: $(CXX_FE_STUBS_DIR)/stubs_ast.capnp
-	DYLD_LIBRARY_PATH=$(CAPNP_LIBS) capnp compile -I $(CAPNP_INCLUDE) -o ocaml:$(CXX_FE_STUBS_DIR) $<
+	DYLD_LIBRARY_PATH=$(CAPNP_LIBS) capnp compile -I "$(CAPNP_INCLUDE)" -o ocaml:$(CXX_FE_STUBS_DIR) $<
 
 # ---- translator ----
 CXX_TRANSL_DEPS = $(CXX_FE_STUBS_DIR)/stubs_ast.cmx $(CXX_FE_DIR)/cxx_annotation_parser.cmx $(CXX_FE_DIR)/cxx_ast_translator.ml $(CXX_FE_DIR)/cxx_ast_translator.ml
@@ -39,7 +41,7 @@ CXX_FE_DEPS = $(CXX_FE_STUBS_DIR)/stubs_ast.cmx $(CXX_FE_DIR)/cxx_annotation_par
 
 # ---- ast-exporter ----
 $(CXX_FE_STUBS_DIR)/stubs_ast.capnp.h $(CXX_FE_STUBS_DIR)/stubs_ast.capnp.c++ &:: $(CXX_FE_STUBS_DIR)/stubs_ast.capnp
-	DYLD_LIBRARY_PATH=$(CAPNP_LIBS) capnp compile -I $(CAPNP_INCLUDE) -o c++ $<
+	DYLD_LIBRARY_PATH=$(CAPNP_LIBS) capnp compile -I "$(CAPNP_INCLUDE)" -o c++ $<
 
 ../bin/libstdc++-6.dll: /usr/x86_64-w64-mingw32/sys-root/mingw/bin/libstdc++-6.dll
 	cp -f $< $@

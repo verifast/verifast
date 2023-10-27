@@ -1,0 +1,2 @@
+(executable
+ (name java_card_applet))

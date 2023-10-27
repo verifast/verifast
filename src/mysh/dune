@@ -1,0 +1,3 @@
+(executable
+ (name mysh)
+ (libraries threads unix vfconfig))

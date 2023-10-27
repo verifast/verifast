@@ -1,0 +1,4 @@
+(library
+ (name shape_analysis)
+ (wrapped false)
+ (libraries frontend))

@@ -1,0 +1,7 @@
+(library
+ (name perf_win)
+ (enabled_if
+  (<> %{os_type} Unix))
+ (foreign_stubs
+  (language c)
+  (names caml_perf)))

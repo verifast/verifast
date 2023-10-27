@@ -1,0 +1,5 @@
+(library
+ (name cxx_frontend)
+ (wrapped false)
+ (preprocess (pps ppx_parser))
+ (libraries frontend cxx_frontend_stubs))

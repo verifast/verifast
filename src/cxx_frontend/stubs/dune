@@ -1,0 +1,8 @@
+(library
+ (name cxx_frontend_stubs)
+ (libraries capnp capnp.unix)
+ (wrapped false))
+(rule
+ (targets stubs_ast.mli stubs_ast.ml)
+ (deps (:schema stubs_ast.capnp))
+ (action (run capnp compile -I %{env:CAPNP_INCLUDE=CAPNP_INCLUDE} -o ocaml %{schema})))

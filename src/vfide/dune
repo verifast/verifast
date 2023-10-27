@@ -1,0 +1,3 @@
+(executable
+ (name vfide)
+ (libraries lablgtk2.sourceview2 linemarks verifast vfconfig shape_analysis))

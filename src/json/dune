@@ -1,0 +1,3 @@
+(library
+ (name json)
+ (wrapped false))
