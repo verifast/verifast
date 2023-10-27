@@ -12,7 +12,7 @@ predicate thread_token(thread_id_t t); // Non-atomic token with Top mask ([NaInv
 // Full borrow
 predicate full_borrow(lifetime_t k, predicate() P);
 
-predicate close_full_borrow_token(predicate() P, real q, lifetime_t k);
+predicate close_full_borrow_token(predicate() P, real q, lifetime_t k); // accessor closing inheritance
 
 lemma void open_full_borrow(lifetime_t k, predicate() P);
     requires full_borrow(k, P) &*& [?q]lifetime_token(k);
@@ -31,21 +31,21 @@ lemma void full_borrow_implies(lifetime_t k, predicate() P, predicate() P1);
     ensures full_borrow(k, P1) &*& is_implies(f, P, P1) &*& is_implies(f1, P1, P);
 
 // Non-atomic persistent borrow
-predicate nonatomic_borrow(lifetime_t k, thread_id_t t, void *l, predicate() P); // Non-atomic borrow with mask Nshr.l
+predicate nonatomic_borrow(lifetime_t k, thread_id_t t, predicate() P);
 
-lemma void full_borrow_into_nonatomic_borrow(lifetime_t k, thread_id_t t, void *l, predicate() P);
+lemma void full_borrow_into_nonatomic_borrow(lifetime_t k, thread_id_t t, predicate() P);
     requires full_borrow(k, P);
-    ensures [_]nonatomic_borrow(k, t, l, P);
+    ensures [_]nonatomic_borrow(k, t, P);
 
-lemma void nonatomic_borrow_mono(lifetime_t k, lifetime_t k1, thread_id_t t, void *l, predicate() P);
-    requires [_]nonatomic_borrow(k, t, l, P) &*& lifetime_inclusion(k1, k) == true;
-    ensures [_]nonatomic_borrow(k1, t, l, P);
+lemma void nonatomic_borrow_mono(lifetime_t k, lifetime_t k1, thread_id_t t, predicate() P);
+    requires [_]nonatomic_borrow(k, t, P) &*& lifetime_inclusion(k1, k) == true;
+    ensures [_]nonatomic_borrow(k1, t, P);
 
 predicate close_nonatomic_borrow_token(predicate() P, real q, lifetime_t k, thread_id_t t);
 
-// Rule LftL-na-acc with N = Nshr.l and requiring NaInv: t.Top instead of NaInv: t.N
-lemma void open_nonatomic_borrow(lifetime_t k, thread_id_t t, void *l, real q);
-    requires [_]nonatomic_borrow(k, t, l, ?P) &*& [q]lifetime_token(k) &*& thread_token(t);
+// Rule LftL-Na-Acc with N = Nshr.l and requiring [NaInv:t.Top] instead of [NaInv:t.N]
+lemma void open_nonatomic_borrow(lifetime_t k, thread_id_t t, real q);
+    requires [_]nonatomic_borrow(k, t, ?P) &*& [q]lifetime_token(k) &*& thread_token(t);
     ensures P() &*& close_nonatomic_borrow_token(P, q, k, t);
 
 lemma void close_nonatomic_borrow();

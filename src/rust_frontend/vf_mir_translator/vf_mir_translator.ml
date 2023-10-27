@@ -778,6 +778,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       | Undefined _ -> Error (`TrUIntTy "Unknown Rust unsigned int type")
     in
     let own tid vs = Ok (True loc) in
+    (* Todo @Nima: This shared predicate is not correct. We should write a SimpleType interpretation
+       constructor in RustBelt module to call to for creating the interpretation for u_int and other simple types.
+       It needs extending VeriFast with generic predicate constructors *)
     let shr lft tid l = Ok (True loc) in
     let ty_info =
       Mir.TyInfoBasic
@@ -1809,6 +1812,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let open Ast in
       let bind_pat_b n = VarPat (contract_loc, n) in
       let lit_pat_b n = LitPat (Var (contract_loc, n)) in
+      (* Todo @Nima: Move RustBelt token, etc. constructors like the following to the RustBelt module so
+         The hard-coded names will be in the same place and the code will be reusable *)
       let nonatomic_token_b pat =
         CallExpr
           ( contract_loc,

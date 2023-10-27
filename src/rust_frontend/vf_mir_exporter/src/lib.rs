@@ -698,6 +698,7 @@ mod vf_mir_builder {
             hir_gens: &hir::Generics,
             mut hir_gens_cpn: hir_generics_cpn::Builder<'_>,
         ) {
+            debug!("Encoding HIR generics {:?}", hir_gens);
             let len = hir_gens.params.len();
             let len = len.try_into().expect(&format!(
                 "{} HIR generics cannot be stored in a Cpnp message",
