@@ -1,0 +1,10 @@
+(library
+ ;; Optional: only available if either the default or fallback implementation is present
+ (optional)
+ (name linemarks)
+ (libraries
+  (select
+   linemarks.ml
+   from
+   (linemarks_default -> linemarks.default.ml)
+   (linemarks_fallback -> linemarks.fallback.ml))))

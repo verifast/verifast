@@ -9,14 +9,16 @@ class source_view (source_buffer: source_buffer) view () =
     inherit GText.view view#as_view
     val mutable show_line_numbers = false
     val mutable draw_spaces: [ `SPACE | `TAB ] list = []
+    val mutable tab_width = 4
     method source_buffer = source_buffer
     method show_line_numbers = show_line_numbers
     method set_show_line_numbers (enable:bool) = show_line_numbers <- enable
     method draw_spaces = draw_spaces
     method set_draw_spaces flags = draw_spaces <- flags
-    method set_tab_width (size: int) = ()
+    method set_tab_width (size: int) = tab_width <- size
     method show_right_margin = false
     method set_show_right_margin (value: bool) = ()
+    method tab_width = tab_width
   end
 
 let source_buffer () = new source_buffer (GText.buffer ())

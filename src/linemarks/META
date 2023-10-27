@@ -1,4 +1,0 @@
-version = "1.0.0"
-description = "Add line marks to GtkSourceView editors"
-requires = "lablgtk2"
-archive(native) = "linemarks.cmxa"

@@ -1,0 +1,10 @@
+(executable
+ (name linemarks_flags_generator)
+ (libraries dune-configurator vfconfig))
+
+(rule
+ (deps
+  (:gen linemarks_flags_generator.exe))
+ (targets linemarks_cflags.sexp linemarks_lflags.sexp)
+ (action
+  (run ./%{gen})))
