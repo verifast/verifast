@@ -311,7 +311,7 @@ build-cxx-ast-exporter: ../bin/vf-cxx-ast-exporter$(DOTEXE)
 
 distclean:: clean
 
-INCLUDES = -I $(INCLUDE_OS_DIR) -I java_frontend -I shape_analysis -I cxx_frontend
+INCLUDES = -I java_frontend -I shape_analysis -I cxx_frontend
 
 #------------------------------- Build normal case --------------------------#
 
