@@ -147,6 +147,8 @@ else
   Z3PRESENT=false
 endif
 
+export Z3_DLL_DIR
+
 clean::
 	rm -Rf ../lib
 	-rm -f ../bin/libz3.dll
@@ -480,12 +482,20 @@ ifeq ($(OS), Darwin)
 	! grep /usr/local vfide-libraries.log
 endif
 
+ifeq ($(OS), Windows_NT)
+  PROJDIR:=$(shell cygpath -m `pwd`)
+  export OCAMLPATH += ;$(PROJDIR)
+else
+  PROJDIR:=$(shell pwd)
+  export OCAMLPATH += :$(PROJDIR)
+endif
+
 _build/default/vfide/vfide.exe: $(Z3DEPS) $(GTKSOURCEVIEW_DEPS) .FORCE
 	@echo "  DUNE " $@
 ifndef WITHOUT_GTKSOURCEVIEW
 	make -C linemarks OCAMLOPT=${OCAMLOPT} OCAMLCFLAGS="${OCAMLCFLAGS}" LABLGTK_FLAGS="$(LABLGTK_FLAGS_)" linemarks.cmxa
 endif
-	$(SET_LDD); OCAMLPATH="$$OCAMLPATH:$(shell pwd)" dune build $@
+	$(SET_LDD); dune build $@
 endif
 vfide: ../bin/vfide$(DOTEXE) $(STDLIB)
 .PHONY: vfide
