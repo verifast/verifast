@@ -423,43 +423,7 @@ _build/default/vfstrip/vfstrip.exe: .FORCE
 ../bin/java_card_applet$(DOTEXE): _build/default/java_card_applet/java_card_applet.exe
 	if [ ! -e $@ -o $< -nt $@ ]; then cp -f $< $@; fi
 
-ifdef WITHOUT_GTKSOURCEVIEW
-macos/GSourceView2.cmx: macos/GSourceView2.ml
-	@echo "  OCAMLOPT " $@
-	cd macos; $(COMPILE) -c -I +lablgtk2 GSourceView2.ml
-
-macos/GLineMarks.cmx: macos/GLineMarks.ml
-	@echo "  OCAMLOPT " $@
-	cd macos; $(COMPILE) -c -I +lablgtk2 GLineMarks.ml
-endif
-clean::
-	rm -f macos/*.cm* macos/*.o
-
 ifndef WITHOUT_LABLGTK
-
-clean::
-	cd linemarks; make clean
-
-branchleft_png.ml: branch-left.png
-	gdk_pixbuf_mlsource branch-left.png > branchleft_png.ml
-
-branchleft_png.cmx: branchleft_png.ml
-	$(COMPILE) -c $(LABLGTK_FLAGS) branchleft_png.ml
-
-branchright_png.ml: branch-right.png
-	gdk_pixbuf_mlsource branch-right.png > branchright_png.ml
-
-branchright_png.cmx: branchright_png.ml
-	$(COMPILE) -c $(LABLGTK_FLAGS) branchright_png.ml
-
-# Also depend on "vfide.ml": Make ignores our dependency "%.cmx: %.ml".
-vfide.cmx: branchleft_png.cmx branchright_png.cmx vfide.ml $(GTKSOURCEVIEW_DEPS)
-	@echo "  OCAMLOPT " $@
-ifndef WITHOUT_GTKSOURCEVIEW
-	make -C linemarks OCAMLOPT=${OCAMLOPT} OCAMLCFLAGS="${OCAMLCFLAGS}" LABLGTK_FLAGS="$(LABLGTK_FLAGS_)" linemarks.cmxa
-endif
-	$(SET_LDD); $(COMPILE) -thread -c -w p -warn-error +F+S+U -c $(INCLUDES) \
-	-package num,threads $(LABLGTK_FLAGS) $(GTKSOURCEVIEW_LFLAGS) vfide.ml
 
 VERIFAST_PLUGINS=Redux Cvc4 ExternalZ3 ReduxSmtlib
 
@@ -491,10 +455,19 @@ endif
 
 _build/default/vfide/vfide.exe: $(Z3DEPS) $(GTKSOURCEVIEW_DEPS) .FORCE
 	@echo "  DUNE " $@
-ifndef WITHOUT_GTKSOURCEVIEW
-	make -C linemarks OCAMLOPT=${OCAMLOPT} OCAMLCFLAGS="${OCAMLCFLAGS}" LABLGTK_FLAGS="$(LABLGTK_FLAGS_)" linemarks.cmxa
-endif
 	$(SET_LDD); dune build $@
+
+_build/default/linemarks/default/hello_vala/hello_vala.exe: .FORCE
+	@echo "  DUNE " $@
+	$(SET_LDD); dune build $@
+
+_build/default/linemarks/default/hello_vala/hello_vala_ml.exe: .FORCE
+	@echo "  DUNE " $@
+	$(SET_LDD); dune build $@
+
+hello_vala: _build/default/linemarks/default/hello_vala/hello_vala.exe
+hello_vala_ml: _build/default/linemarks/default/hello_vala/hello_vala_ml.exe
+.PHONY: hello_vala hello_vala_ml
 endif
 vfide: ../bin/vfide$(DOTEXE) $(STDLIB)
 .PHONY: vfide
@@ -575,7 +548,6 @@ clean::
 # Dependencies of these files seem to be harder to autodetect, so
 # written by hand for now.
 vfconfig.cmx: vfconfig.ml
-vfide.cmx: SExpressionEmitter.cmx
 
 #------------------------------- Tests --------------------------------------#
 testsuite: $(STDLIB) $(TOOLS_EXCEPT_VFIDE)

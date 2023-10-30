@@ -8,6 +8,8 @@ open Verifast
 open GMain
 open Shape_analysis_frontend
 open Vfconfig
+open Linemarks
+open Branch_png
 
 let () = Register_provers.register_provers ()
 
@@ -626,7 +628,7 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
     let textScroll =
       GBin.scrolled_window ~hpolicy:`AUTOMATIC ~vpolicy:`AUTOMATIC ~shadow_type:`IN
         ~packing:textVbox#add () in
-    let srcText = (*GText.view*) GSourceView2.source_view ~source_buffer:buffer ~packing:textScroll#add () in
+    let srcText = (*GText.view*) SourceView.source_view ~source_buffer:buffer ~packing:textScroll#add () in
     lineMarksTable#show_in_source_view srcText;
     stmtExecCountsColumn#show_in_source_view srcText;
     srcText#misc#modify_font_by_name !scaledCodeFont;
@@ -671,7 +673,7 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
   in
   let add_buffer() =
     let path = ref None in
-    let buffer = GSourceView2.source_buffer () in
+    let buffer = SourceView.source_buffer () in
     let lineMarksTable = GLineMarks.table () in
     let stmtExecCountsColumn = GLineMarks.source_gutter_text_column "99x" 1.0 in
     buffer#begin_not_undoable_action (); (* Disable the source view's undo manager since we handle undos ourselves. *)
@@ -812,7 +814,7 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
       buffer#delete ~start:buffer#start_iter ~stop:buffer#end_iter;
       let gIter = buffer#start_iter in
       tab#eol := eol;
-      (buffer: GSourceView2.source_buffer)#insert ~iter:gIter text;
+      (buffer: SourceView.source_buffer)#insert ~iter:gIter text;
       let {tab_size=tabSize} = try get_file_options text with FileOptionsError _ -> default_file_options in
       tab#mainView#view#set_tab_width tabSize;
       tab#subView#view#set_tab_width tabSize;
@@ -843,7 +845,7 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
   end;
   let store tab thePath =
     let chan = open_out_bin thePath in
-    let text = (tab#buffer: GSourceView2.source_buffer)#get_text () in
+    let text = (tab#buffer: SourceView.source_buffer)#get_text () in
     output_string chan (utf8_to_file (convert_eol !(tab#eol) text));
     flush chan;
     (* let mtime = out_channel_last_modification_time chan in *)

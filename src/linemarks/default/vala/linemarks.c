@@ -2086,4 +2086,3 @@ _vala_array_free (gpointer array,
 }
 
 
-

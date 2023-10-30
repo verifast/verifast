@@ -1,0 +1,23 @@
+(rule
+ (alias gen_c_linemarks)
+ (enabled_if %{bin-available:valac})
+ (mode fallback)
+ (deps
+  (:source linemarks.vala)
+  mystuff.vapi)
+ (targets linemarks.c linemarks.h)
+ (action
+  (no-infer
+   (run
+    valac
+    --enable-deprecated
+    --vapidir
+    .
+    -C
+    -H
+    linemarks.h
+    --pkg
+    gtksourceview-2.0
+    --pkg
+    mystuff
+    %{source}))))

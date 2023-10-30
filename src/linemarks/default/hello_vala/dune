@@ -1,0 +1,38 @@
+(copy_files ../vala/linemarks.vala)
+
+(copy_files ../vala/mystuff.vapi)
+
+(copy_files %{project_root}/branch_png/*.png)
+
+(rule
+ (enabled_if %{bin-available:valac})
+ (deps
+  (:sources linemarks.vala hello-vala.vala)
+  mystuff.vapi
+  branch-left.png
+  branch-right.png)
+ ;; Note:
+ ;; The executable loads the png's from the location where it is being executed.
+ ;; Hence, you first have to 'cd' to its location before invoking it.
+ (target hello_vala.exe)
+ (action
+  (no-infer
+   (run
+    valac
+    -o
+    %{target}
+    --enable-deprecated
+    --vapidir
+    .
+    --pkg
+    gtksourceview-2.0
+    --pkg
+    mystuff
+    %{sources}))))
+
+(executable
+ ;; Optional: only available if default linemarks and branch_png are present
+ (optional)
+ (name hello_vala_ml)
+ (libraries linemarks_default branch_png)
+ (modes native))
