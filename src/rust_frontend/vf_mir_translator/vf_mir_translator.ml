@@ -26,8 +26,7 @@ module IntAux = struct
       let i = to_int a in
       if a = of_int i then Ok i else Error `IntAuxToInt
 
-    let rec to_big_int (a : t) =
-      Big_int.big_int_of_string (to_string a)
+    let rec to_big_int (a : t) = Big_int.big_int_of_string (to_string a)
   end
 
   module Int8 = Make (Stdint.Int8)
@@ -415,7 +414,6 @@ module Mir = struct
   }
 
   type fn_call_dst_data = { dst : Ast.expr; dst_bblock_id : string }
-
   type int_ty = ISize | I8 | I16 | I32 | I64 | I128
 
   let int_ty_bits_len (it : int_ty) =
@@ -1227,12 +1225,13 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       match get s_cpn with
       | Bool b -> failwith "Todo: Scalar::Bool"
       | Char code ->
-        let open Ast in
-        Ok
-          ( CastExpr
-              ( loc,
-                ManifestTypeExpr (loc, Int (Unsigned, FixedWidthRank 2)),
-                IntLit ( loc, IntAux.Uint32.to_big_int code, true, true, LLSuffix ) ) )
+          let open Ast in
+          Ok
+            (CastExpr
+               ( loc,
+                 ManifestTypeExpr (loc, Int (Unsigned, FixedWidthRank 2)),
+                 IntLit
+                   (loc, IntAux.Uint32.to_big_int code, true, true, LLSuffix) ))
       | Int int_cpn -> translate_scalar_int int_cpn ty loc
       | Uint u_int_cpn -> translate_scalar_u_int u_int_cpn ty loc
       | Float float_cpn -> failwith "Todo: Scalar::Float"
@@ -1288,9 +1287,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             Ok (`TrTypedConstantRvalueBinderBuilder rvalue_binder_builder)
       | Ast.FuncType _ -> Ok (`TrTypedConstantFn ty_info)
       | Ast.Int (_, _) ->
-        let val_cpn = val_get ty_const_cpn in
-        let* const_expr = translate_ty_const_kind val_cpn ty_expr loc in
-        Ok (`TrTypedConstantScalar const_expr)
+          let val_cpn = val_get ty_const_cpn in
+          let* const_expr = translate_ty_const_kind val_cpn ty_expr loc in
+          Ok (`TrTypedConstantScalar const_expr)
       | _ -> failwith "Todo: Constant of unsupported type"
 
     let translate_constant_kind (constant_kind_cpn : ConstantKindRd.t)
@@ -1419,28 +1418,31 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                     (`TrFnCallRExpr
                       "Invalid (generic) arg(s) for std::ptr::mut_ptr::<impl \
                        *mut T>::is_null"))
-          | "std_ptr_const_ptr_<impl *const T>_offset" | "std_ptr_mut_ptr_<impl *mut T>_offset" -> (
-            match (substs, args_cpn) with
-            | [ Mir.GenArgType gen_arg_ty_info ], [ arg1_cpn; arg2_cpn ] ->
-              let* tmp_rvalue_binders, [ arg1; arg2 ] =
-                translate_operands [ (arg1_cpn, fn_loc); (arg2_cpn, fn_loc) ]
-              in
-              Ok
-                ( tmp_rvalue_binders,
-                  Ast.Operation ( fn_loc, Ast.Add, [ arg1; arg2 ] ) )
-            | _ ->
-                Error
-                  (`TrFnCallRExpr
-                    (Printf.sprintf "Invalid (generic) arg(s) for %s" fn_name)))
+          | "std_ptr_const_ptr_<impl *const T>_offset"
+          | "std_ptr_mut_ptr_<impl *mut T>_offset" -> (
+              match (substs, args_cpn) with
+              | [ Mir.GenArgType gen_arg_ty_info ], [ arg1_cpn; arg2_cpn ] ->
+                  let* tmp_rvalue_binders, [ arg1; arg2 ] =
+                    translate_operands
+                      [ (arg1_cpn, fn_loc); (arg2_cpn, fn_loc) ]
+                  in
+                  Ok
+                    ( tmp_rvalue_binders,
+                      Ast.Operation (fn_loc, Ast.Add, [ arg1; arg2 ]) )
+              | _ ->
+                  Error
+                    (`TrFnCallRExpr
+                      (Printf.sprintf "Invalid (generic) arg(s) for %s" fn_name))
+              )
           | "std_ptr_null_mut" ->
-            Ok
-              ( [],
-                IntLit
-                  ( fn_loc,
-                    Big_int.zero_big_int,
-                    (*decimal*) true,
-                    (*U suffix*) false,
-                    (*int literal*) Ast.NoLSuffix ) )
+              Ok
+                ( [],
+                  IntLit
+                    ( fn_loc,
+                      Big_int.zero_big_int,
+                      (*decimal*) true,
+                      (*U suffix*) false,
+                      (*int literal*) Ast.NoLSuffix ) )
           | _ ->
               failwith
                 ("Todo: Generic functions are not supported yet. Function: "
@@ -1860,7 +1862,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let kind_cpn = kind_get statement_cpn in
       translate_statement_kind kind_cpn loc
 
-  let translate_basic_block (ret_place_id : string)
+    let translate_basic_block (ret_place_id : string)
         (bblock_cpn : BasicBlockRd.t) =
       let open BasicBlockRd in
       let id_cpn = id_get bblock_cpn in
@@ -1925,10 +1927,13 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let nonatomic_token_b pat =
         CallExpr
           ( contract_loc,
-            "thread_token",
+            "nonatomic_inv_complement_token",
             [] (*type arguments*),
             [] (*indices*),
-            [ pat ] (*arguments*),
+            [
+              pat; lit_pat_b "Nshr"; LitPat (InitializerList (contract_loc, []));
+            ]
+            (*arguments*),
             Static )
       in
       let thread_id_name = "_t" in
