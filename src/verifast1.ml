@@ -5331,7 +5331,13 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | _ -> static_error l (Printf.sprintf "Ambiguous instance predicate assertion: multiple predicates named '%s' in scope" g) None
   
   let get_pred_symb p = let (_, _, _, _, symb, _, _) = List.assoc p predfammap in symb
-  let get_pure_func_symb g = let (_, _, _, _, symb) = List.assoc g purefuncmap in symb
+  let get_pure_func_symb g =
+    let (_, _, _, _, symb) =
+      try
+        List.assoc g purefuncmap
+      with Not_found -> failwith (Printf.sprintf "Pure function %s missing in the runtime library" g)
+    in
+    symb
   let get_pred_symb_from_map p m = let _, (_, _, _, _, symb, _, _) = List.assoc p m in symb
   let try_get_pred_symb_from_map p m = try_assoc p m |> option_map @@ fun (_, (_, _, _, _, symb, _, _)) -> symb
   

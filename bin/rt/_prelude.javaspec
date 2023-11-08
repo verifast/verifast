@@ -1,0 +1,7 @@
+/*@
+
+fixpoint real box_level(box id);
+
+predicate current_box_level(real level);
+
+@*/
