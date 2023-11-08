@@ -1478,11 +1478,13 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     process_decls [] enumdeclmap
   
   let functypenames = 
-    let ds=match ps with
-        [PackageDecl(_,"",[],ds)] -> ds
-      | _ when file_type path=Java -> []
-    in
-    flatmap (function (FuncTypeDecl (l, gh, _, g, tps, ftps, _, _)) -> [g, (l, gh, tps, ftps)] | _ -> []) ds
+    ps |> flatmap begin function
+      PackageDecl (_, pn, _, ds) ->
+      ds |> flatmap begin function
+        FuncTypeDecl (l, gh, _, g, tps, ftps, _, _) -> [full_name pn g, (l, gh, tps, ftps)]
+      | _ -> []
+      end
+    end
   
   let inductivedeclmap=
     let rec iter pn idm ds =
