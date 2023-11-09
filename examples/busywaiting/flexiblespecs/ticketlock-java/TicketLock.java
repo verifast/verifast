@@ -3,24 +3,24 @@
 
 typedef lemma void Ticketlock_acquire_op(Ticketlock l, predicate() P, predicate(int) Q)();
   requires l.state(?owner, ?held) &*& P();
-  ensures l.state(owner, true) &*& Q(owner);
+  ensures l.state(owner, true) &*& !held &*& Q(owner);
 
-typedef lemma void Ticketlock_acquire_ghost_op(Ticketlock l, list<int> ns, predicate() pre, predicate(int) post)();
+typedef lemma void Ticketlock_acquire_ghost_op(Ticketlock l, list<int> ns, predicate() pre, predicate(int) post)(Ticketlock_acquire_op *op);
   requires
     atomic_spaces(?spaces) &*& forall(map(fst, spaces), (is_prefix_of)(ns)) == true &*&
-    is_Ticketlock_acquire_op(?op, l, ?P, ?Q) &*& P() &*& pre();
+    is_Ticketlock_acquire_op(op, l, ?P, ?Q) &*& P() &*& pre();
   ensures
     atomic_spaces(spaces) &*&
     is_Ticketlock_acquire_op(op, l, P, Q) &*& Q(?ticket) &*& post(ticket);
 
 typedef lemma void Ticketlock_release_op(Ticketlock l, long ticket, predicate() P, predicate() Q)();
-  requires l.state(ticket, true) &*& P();
-  ensures l.state(ticket + 1, false) &*& Q();
+  requires l.state(?owner, ?held) &*& P();
+  ensures l.state(ticket + 1, false) &*& owner == ticket &*& held &*& Q();
 
-typedef lemma void Ticketlock_release_ghost_op(Ticketlock l, list<int> ns, long ticket, predicate() pre, predicate() post)();
+typedef lemma void Ticketlock_release_ghost_op(Ticketlock l, list<int> ns, long ticket, predicate() pre, predicate() post)(Ticketlock_release_op *op);
   requires
     atomic_spaces(?spaces) &*& forall(map(fst, spaces), (is_prefix_of)(ns)) == true &*&
-    is_Ticketlock_release_op(?op, l, ticket, ?P, ?Q) &*& P() &*& pre();
+    is_Ticketlock_release_op(op, l, ticket, ?P, ?Q) &*& P() &*& pre();
   ensures
     atomic_spaces(spaces) &*&
     is_Ticketlock_release_op(op, l, ticket, P, Q) &*& Q() &*& post();
@@ -143,7 +143,8 @@ public final class Ticketlock {
             close Q(owner_);
           } {
             close P();
-            ghop();
+            assert is_Ticketlock_acquire_op(?op_, _, _, _);
+            ghop(op_);
             open Q(_);
           }
           close waiting_threads(this, ns, {}, owner_ + 1, owner_);
@@ -282,7 +283,8 @@ public final class Ticketlock {
             close Q();
           } {
             close P();
-            ghop();
+            assert is_Ticketlock_release_op(?op_, _, _, _, _);
+            ghop(op_);
             open Q();
           }
         }
@@ -314,7 +316,8 @@ public final class Ticketlock {
               close Q(ticket + 1);
             } {
               close P();
-              aop();
+              assert is_Ticketlock_acquire_op(?op_, _, _, _);
+              aop(op_);
               open Q(_);
             }
           }
