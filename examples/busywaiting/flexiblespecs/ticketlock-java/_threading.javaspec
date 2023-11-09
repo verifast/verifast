@@ -1,0 +1,20 @@
+interface Runnable {
+  //@ predicate valid();
+  public void run();
+  //@ requires valid();
+  //@ ensures true;
+}
+
+class Thread {
+
+  //@ predicate valid(Runnable runnable);
+  
+  public Thread(Runnable runnable);
+  //@ requires true;
+  //@ ensures valid(runnable);
+
+  public void start();
+  //@ requires valid(?runnable) &*& runnable.valid();
+  //@ ensures true;
+
+}
