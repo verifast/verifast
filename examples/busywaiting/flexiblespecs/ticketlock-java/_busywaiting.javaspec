@@ -1,0 +1,7 @@
+/*@
+
+predicate cp(int threadId, Class c) = call_below_perm_(threadId, ?c0) &*& Class_lt(c, c0) == true;
+
+predicate cp_lex(int threadId, Class c, list<int> indices);
+
+@*/

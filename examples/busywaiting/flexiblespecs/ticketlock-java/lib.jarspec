@@ -2,3 +2,4 @@ ghost_cells.javaspec
 listex.javaspec
 _atomics_.javaspec
 _threading.javaspec
+_busywaiting.javaspec

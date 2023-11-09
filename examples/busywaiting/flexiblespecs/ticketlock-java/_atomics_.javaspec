@@ -49,19 +49,19 @@ final class AtomicLong {
 
   //@ predicate state(long value);
 
-  public AtomicLong()
+  public AtomicLong();
   //@ requires true;
   //@ ensures state(0);
-  { throw new RuntimeException(); }
+  //@ terminates;
 
-  public long get()
+  public long get();
   //@ requires is_AtomicLong_get_ghost_op(?ghop, this, ?pre, ?post) &*& pre();
   //@ ensures post(result);
-  { throw new RuntimeException(); }
+  //@ terminates;
 
-  public long getAndIncrement()
+  public long getAndIncrement();
   //@ requires is_AtomicLong_getAndIncrement_ghost_op(?ghop, this, ?pre, ?post) &*& pre();
   //@ ensures post(result);
-  { throw new RuntimeException(); }
+  //@ terminates;
 
 }

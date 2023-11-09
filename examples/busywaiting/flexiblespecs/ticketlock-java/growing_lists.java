@@ -69,7 +69,7 @@ lemma void ghost_cells_match<t>(int index)
 }
 
 predicate growing_list<t>(box id; list<t> elems) = growing_list0(id, ?ids) &*& ghost_cells(ids, elems) &*& length(ids) == length(elems);
-predicate has_at<t>(handle h, box listId, int index, t elem) = has_at0(h, listId, index, ?id) &*& [_]ghost_cell(id, elem);
+predicate has_at<t>(handle h; box listId, int index, t elem) = has_at0(h, listId, index, ?id) &*& [_]ghost_cell(id, elem);
 
 lemma box create_growing_list<t>()
     requires true;
