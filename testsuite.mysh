@@ -9,6 +9,7 @@ cd bin
   cd ..
 cd ..
 cd examples
+  verifast -c mutually_recursive_fns_simple.c
   verifast -shared uniqueness.c
   verifast -read_options_from_source_file unions.c
   verifast unions2.c
