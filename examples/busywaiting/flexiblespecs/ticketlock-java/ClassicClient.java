@@ -11,8 +11,8 @@ final class Flipper implements Runnable {
   TicketlockClassic lock;
   //@ predicate valid() = [_]flag |-> ?flag_ &*& [_]lock |-> ?lock_ &*& [_]lock_.valid(L, Flag_valid(flag_));
   public void run()
-  //@ requires valid();
-  //@ ensures true;
+  //@ requires obs(currentThread, ?p, {}) &*& valid();
+  //@ ensures obs(currentThread, p, {});
   {
     lock.acquire();
     //@ open Flag_valid(flag)();
@@ -29,7 +29,7 @@ final class ClassicClient {
   {
     Flag flag = new Flag();
     //@ close Flag_valid(flag)();
-    //@ close exists(Flag_valid(flag));
+    //@ close exists(pair(L, Flag_valid(flag)));
     TicketlockClassic lock = new TicketlockClassic();
     Flipper flipper = new Flipper();
     flipper.flag = flag;

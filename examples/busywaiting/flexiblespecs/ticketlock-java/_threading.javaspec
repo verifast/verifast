@@ -1,8 +1,8 @@
 interface Runnable {
   //@ predicate valid();
   public void run();
-  //@ requires valid();
-  //@ ensures true;
+  //@ requires obs(currentThread, ?p, {}) &*& valid();
+  //@ ensures obs(currentThread, p, {});
 }
 
 class Thread {

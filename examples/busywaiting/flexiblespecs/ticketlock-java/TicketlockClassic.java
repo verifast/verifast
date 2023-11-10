@@ -9,7 +9,7 @@ predicate_ctor TicketlockClassic_inv(TicketlockClassic l)() =
   [_]l.lock |-> ?lock &*& lock.state(?owner, ?held) &*&
   [_]l.level |-> ?level &*&
   [_]l.signalsId |-> ?signalsId &*& growing_list<void *>(signalsId, ?signals) &*& length(signals) == owner + (held ? 1 : 0) &*&
-  held ? signal(nth(owner, signals), sublevel(level, {0}), false) : inv();
+  held ? signal(nth(owner, signals), level, false) : inv();
 
 fixpoint list<int> LOCK_NS() { return {0}; }
 fixpoint list<int> SPACE_NS() { return {1}; }
@@ -17,7 +17,7 @@ fixpoint list<int> SPACE_NS() { return {1}; }
 predicate TicketlockClassic_held(TicketlockClassic l, pair<void *, level> ob) =
     [_]l.lock |-> ?lock &*& lock.held(?ticket) &*&
     [_]l.level |-> ?level &*&
-    [_]l.signalsId |-> ?signalsId &*& has_at<void *>(_, signalsId, ticket, ?signal) &*& ob == pair(signal, sublevel(level, {0}));
+    [_]l.signalsId |-> ?signalsId &*& has_at<void *>(_, signalsId, ticket, ?signal) &*& ob == pair(signal, level);
 
 @*/
 
@@ -32,7 +32,7 @@ final class TicketlockClassic {
     [_]this.level |-> level &*& TicketlockClassic_level_nb_dims <= level_subspace_nb_dims(level) &*&
     [_]this.inv_ |-> wrapper(inv) &*&
     [_]this.signalsId |-> _ &*&
-    [_]this.lock |-> ?lock &*& [_]lock.valid(LOCK_NS, sublevel(level, {1})) &*&
+    [_]this.lock |-> ?lock &*& [_]lock.valid(LOCK_NS, level) &*&
     [_]atomic_space_(SPACE_NS, TicketlockClassic_inv(this));
   @*/
   
@@ -41,7 +41,7 @@ final class TicketlockClassic {
   //@ ensures [_]valid(level, inv);
   {
     //@ assert level == level(_, cons(_, _));
-    //@ close exists(pair(LOCK_NS, sublevel(level, {1})));
+    //@ close exists(pair(LOCK_NS, level));
     lock = new Ticketlock();
     //@ this.level = level;
     //@ this.inv_ = wrapper(inv);
@@ -54,7 +54,7 @@ final class TicketlockClassic {
 
   public void acquire()
   //@ requires obs(currentThread, ?p, ?obs) &*& [_]valid(?level, ?inv) &*& forall(map(snd, obs), (level_subspace_lt)(level)) == true;
-  //@ ensures obs(currentThread, p, cons(?ob, obs)) &*& TicketlockClassic_held(this, ob) &*& level_lt(level, level_of(ob)) == true &*& inv();
+  //@ ensures obs(currentThread, p, cons(?ob, obs)) &*& TicketlockClassic_held(this, ob) &*& level_le(level, level_of(ob)) == true &*& inv();
   {
     Ticketlock lock = this.lock;
     //@ box signalsId = this.signalsId;
@@ -69,15 +69,21 @@ final class TicketlockClassic {
         oldOwner == -1 ?
           true
         :
-          has_at(_, signalsId, oldOwner, ?signal) &*& wait_perm(p, signal, sublevel(level, {0}), Ticketlock_targetClass);
+          exists(?signalHandle) &*&
+          has_at(signalHandle, signalsId, oldOwner, ?signal) &*& wait_perm(p, signal, level, Ticketlock_targetClass);
       predicate post(int result) =
         has_at(_, signalsId, result, ?signal) &*&
-        obs(currentThread, p, cons(pair(signal, sublevel(level, {0})), obs)) &*&
+        obs(currentThread, p, cons(pair(signal, level), obs)) &*&
         inv();
       @*/
       /*@
-      produce_lemma_function_pointer_chunk Ticketlock_wait_ghost_op(p, lock, LOCK_NS, sublevel(level, {1}), 1, waitInv, currentThread)(owner, newRound, op) {
+      produce_lemma_function_pointer_chunk Ticketlock_wait_ghost_op(p, lock, LOCK_NS, level, 1, waitInv, currentThread)(owner, newRound, op) {
         open waitInv(?oldOwner);
+        handle signalHandle;
+        if (oldOwner != -1) {
+          open exists(?signalHandle_);
+          signalHandle = signalHandle_;
+        }
         assert atomic_spaces(?spaces);
         if (mem(pair(SPACE_NS, TicketlockClassic_inv(this)), spaces)) {
           mem_map(pair(SPACE_NS, TicketlockClassic_inv(this)), spaces, fst);
@@ -93,15 +99,17 @@ final class TicketlockClassic {
         if (newRound) {
           open cp_lex(?t, ?c, {1});
           call_below_perm_lex_weaken({0});
-          create_wait_perm(signal, sublevel(level, {0}), c);
+          create_wait_perm(signal, level, c);
+          signalHandle = create_has_at(signalsId, owner);
         } else {
           match_has_at(signalsId);
         }
         is_ancestor_of_refl(p);
-        if (!forall(map(snd, obs), (level_lt)(sublevel(level, {0}))) {
-          level badLevel = not_forall(map(snd, obs), (level_lt)(sublevel(level, {1}
         wait(signal);
+        close exists(signalHandle);
         close waitInv(owner);
+        close TicketlockClassic_inv(this)();
+        close_atomic_space(SPACE_NS, TicketlockClassic_inv(this));
       };
       @*/
       /*@
@@ -117,7 +125,7 @@ final class TicketlockClassic {
         open TicketlockClassic_inv(this)();
         op();
         void *signal = create_signal();
-        init_signal(signal, sublevel(level, {0}));
+        init_signal(signal, level);
         assert growing_list(signalsId, ?signals);
         growing_list_add(signalsId, signal);
         nth_append_r(signals, {signal}, 0);
@@ -128,33 +136,33 @@ final class TicketlockClassic {
       };
       @*/
       //@ close waitInv(-1);
-      /*@
-      if (!forall(map(snd, obs), (level_subspace_lt)(sublevel(level, {1})))) {
-        level badLevel = not_forall(map(snd, obs), (level_subspace_lt)(sublevel(level, {1})));
-        forall_elim(map(snd, obs), (level_subspace_lt)(level), badLevel);
-        level_subspace_lt_sublevel(level, {1}, badLevel);
-        assert false;
-      }
-      @*/
+      //@ produce_call_below_perm_();
+      //@ call_below_perm__weaken(Ticketlock.class);
       lock.acquire();
-      //@ open post(_);
+      //@ open post(?ticket);
+      //@ assert has_at(_, signalsId, ticket, ?signal);
+      //@ close TicketlockClassic_held(this, pair(signal, level));
     }
   }
 
   public void release()
-  //@ requires obs(currentThread, ?p, ?obs) &*& [_]valid(?level, ?inv) &*& TicketlockClassic_held(this, ?ob) &*& inv();
+  //@ requires obs(currentThread, ?p, ?obs) &*& [_]valid(?level, ?inv) &*& TicketlockClassic_held(this, ?ob) &*& inv() &*& mem(ob, obs) == true;
   //@ ensures obs(currentThread, p, remove(ob, obs));
   {
     Ticketlock lock = this.lock;
-    //@ open held();
+    //@ open TicketlockClassic_held(this, pair(?signal, _));
     //@ assert lock.held(?ticket);
     {
       /*@
       predicate pre() =
+        obs(currentThread, p, obs) &*&
         [_]this.lock |-> lock &*&
+        [_]this.level |-> level &*&
         [_]this.inv_ |-> wrapper(inv) &*&
-        [_]atomic_space_(SPACE_NS, TicketlockClassic_inv(this)) &*& inv();
-      predicate post() = true;
+        [_]this.signalsId |-> ?signalsId &*&
+        [_]atomic_space_(SPACE_NS, TicketlockClassic_inv(this)) &*& inv() &*&
+        has_at(_, signalsId, ticket, signal);
+      predicate post() = obs(currentThread, p, remove(ob, obs));
       @*/
       /*@
       produce_lemma_function_pointer_chunk Ticketlock_release_ghost_op(lock, LOCK_NS, ticket, pre, post)(op) {
@@ -168,6 +176,8 @@ final class TicketlockClassic {
         open_atomic_space(SPACE_NS, TicketlockClassic_inv(this));
         open TicketlockClassic_inv(this)();
         op();
+        match_has_at(signalsId);
+        set_signal(signal);
         close TicketlockClassic_inv(this)();
         close_atomic_space(SPACE_NS, TicketlockClassic_inv(this));
         close post();

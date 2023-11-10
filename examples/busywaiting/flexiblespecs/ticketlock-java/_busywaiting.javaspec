@@ -237,6 +237,10 @@ lemma void call_perm__weaken(Class c1, Class c2);
     requires call_perm_(?thread, c1) &*& Class_lt(c2, c1) == true;
     ensures call_perm_(thread, c2);
 
+lemma void call_below_perm__weaken(Class c);
+    requires call_below_perm_(?thread, ?c0) &*& Class_lt(c, c0) == true;
+    ensures call_below_perm_(thread, c);
+
 predicate call_below_perm(list<pathcomp> path, Class c;);
 
 lemma void call_below_perm_weaken_path(list<pathcomp> p1);
@@ -323,6 +327,10 @@ fixpoint boolean le(int x, int y) { return x <= y; }
 
 fixpoint boolean level_lt(level l1, level l2) {
     return Class_lt(l1._class, l2._class) || l1._class == l2._class && lex_lt(l1.localLevel, l2.localLevel);
+}
+
+fixpoint boolean level_le(level l1, level l2) {
+    return l1 == l2 || level_lt(l1, l2);
 }
 
 fixpoint int level_subspace_nb_dims(level l) {
