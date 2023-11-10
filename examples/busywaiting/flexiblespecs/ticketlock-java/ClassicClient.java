@@ -2,12 +2,14 @@ final class Flag {
   int value;
 }
 
+//@ fixpoint level L() { return level(ClassicClient.class, {TicketlockClassic_level_nb_dims}); }
+
 //@ predicate_ctor Flag_valid(Flag flag)() = flag.value |-> ?v &*& v == 0 || v == 1;
 
 final class Flipper implements Runnable {
   Flag flag;
   TicketlockClassic lock;
-  //@ predicate valid() = [_]flag |-> ?flag_ &*& [_]lock |-> ?lock_ &*& [_]lock_.valid(Flag_valid(flag_));
+  //@ predicate valid() = [_]flag |-> ?flag_ &*& [_]lock |-> ?lock_ &*& [_]lock_.valid(L, Flag_valid(flag_));
   public void run()
   //@ requires valid();
   //@ ensures true;

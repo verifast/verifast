@@ -166,14 +166,10 @@ fixpoint bool lex_subspace_lt(int nb_dims, list<int> l1, list<int> l2) {
     }
 }
 
-fixpoint bool is_prefix_of<t>(list<t> xs, list<t> ys) {
-    switch (xs) {
-        case nil: return true;
-        case cons(hxs, txs): return
-            switch (ys) {
-                case nil: return false;
-                case cons(hys, tys): return hxs == hys && is_prefix_of(txs, tys);
-            };
+fixpoint int lex_subspace_nb_dims(list<int> l) {
+    switch (l) {
+        case nil: return -1;
+        case cons(max_length, l0): return max_length - length(l0);
     }
 }
 
@@ -192,6 +188,48 @@ fixpoint bool lex_lt(list<int> l1, list<int> l2) {
 
 //@ inductive level = level(void *func, list<int> localLevel);
 
+/*@
+
+fixpoint level level_append(level level, list<int> localIndices) {
+    return level(level->func, append(level->localLevel, localIndices));
+}
+
+
+
+lemma void level_lt_append(level level, list<int> is1, list<int> is2)
+    requires lex0_lt(level_subspace_nb_dims(level), is1, is2) == true;
+    ensures level_lt(level_append(level, is1), level_append(level, is2)) == true;
+{
+    switch (is1) { case nil: case cons(h, t): }
+    switch (is2) { case nil: case cons(h, t): }
+    assert level == level(?f, cons(?maxLength, ?level0));
+    lex0_lt_append(maxLength, level0, is1, is2);
+}
+
+lemma void level_lt_trans(level l1, level l2, level l3)
+    requires level_lt(l1, l2) && level_lt(l2, l3);
+    ensures level_lt(l1, l3) == true;
+{
+    assert l1 == level(?f1, ?ll1);
+    assert l2 == level(?f2, ?ll2);
+    assert l3 == level(?f3, ?ll3);
+    if (func_lt(f1, f2)) {
+        if (func_lt(f2, f3)) {
+        } else {
+        }
+    } else {
+        if (func_lt(f2, f3)) {
+        } else {
+            assert ll1 == cons(?maxLength, ?ll01);
+            assert ll2 == cons(maxLength, ?ll02);
+            assert ll3 == cons(maxLength, ?ll03);
+            lex0_lt_trans(maxLength, ll01, ll02, ll03);
+        }
+    }
+}
+
+@*/
+
 //@ predicate obs_(int thread, list<pathcomp> path, list<pair<void *, level> > obs);
 
 /*@
@@ -209,6 +247,10 @@ lemma void call_perm__weaken(void *f1, void *f2);
     ensures call_perm_(thread, f2);
 
 predicate call_below_perm(list<pathcomp> path, void *f;);
+
+lemma void call_below_perm_weaken_path(list<pathcomp> p1);
+    requires call_below_perm(?p0, ?f) &*& is_ancestor_of(p0, p1) == true;
+    ensures call_below_perm(p1, f);
 
 predicate call_below_perms(int n, list<pathcomp> path, void *f;) =
     n <= 0 ?
@@ -231,9 +273,36 @@ lemma void call_below_perms_weaken(int m)
 
 predicate call_below_perm_lex(list<pathcomp> path, void *f, list<int> localDegree;);
 
+predicate call_below_perms_lex(int n, list<pathcomp> path, void *f, list<int> localDegree;) =
+    n <= 0 ?
+        true
+    :
+        call_below_perm_lex(path, f, localDegree) &*& call_below_perms_lex(n - 1, path, f, localDegree);
+
+lemma void call_below_perms_lex_weaken(int m)
+    requires call_below_perms_lex(?n, ?p, ?f, ?d) &*& m <= n;
+    ensures call_below_perms_lex(m, p, f, d);
+{
+    open call_below_perms_lex(_, _, _, _);
+    if (n <= 0 || n == m)
+        close call_below_perms_lex(m, p, f, d);
+    else {
+        leak call_below_perm_lex(_, _, _);
+        call_below_perms_lex_weaken(m);
+    }
+}
+
 lemma void call_below_perm_lex_weaken(list<int> newLocalDegree);
     requires call_below_perm_lex(?p, ?f, ?d) &*& lexprod_lt(newLocalDegree, d) == true;
     ensures call_below_perm(p, f) &*& call_below_perm_lex(p, f, newLocalDegree);
+
+lemma void call_below_perm_lex_weaken_path(list<pathcomp> p1);
+    requires call_below_perm_lex(?p, ?f, ?d) &*& is_ancestor_of(p, p1) == true;
+    ensures call_below_perm_lex(p1, f, d);
+
+lemma void call_below_perm_lex_weaken_multi(int m, int n, list<int> newLocalDegree);
+    requires call_below_perm_lex(?p, ?f, ?d) &*& lexprod_lt(newLocalDegree, d) == true;
+    ensures call_below_perms(m, p, f) &*& call_below_perms_lex(n, p, f, newLocalDegree);
 
 lemma void pathize_call_below_perm_();
   requires obs_(?thread, ?p, ?obs) &*& call_below_perm_(thread, ?f);
@@ -246,6 +315,10 @@ lemma void pathize_call_below_perm__multi(int n);
 lemma void pathize_call_below_perm__lex(list<int> d);
   requires obs_(?thread, ?p, ?obs) &*& call_below_perm_(thread, ?f);
   ensures obs_(thread, p, obs) &*& call_below_perm_lex(p, f, d) &*& call_below_perm(p, f);
+
+lemma void pathize_call_below_perm__lex_multi(int n, list<int> d);
+  requires obs_(?thread, ?p, ?obs) &*& call_below_perm_(thread, ?f);
+  ensures obs_(thread, p, obs) &*& call_below_perms_lex(n, p, f, d);
 
 fixpoint bool lt(int x, int y) { return x < y; }
 
@@ -287,8 +360,20 @@ fixpoint bool all_sublevels_lt(int nbDims, level l1, level l2) {
     return func_lt(l1->func, l2->func) || l1->func == l2->func && lex_subspace_lt(nbDims, l1->localLevel, l2->localLevel);
 }
 
+lemma void all_sublevels_lt_append(int nbDims1, level la, level lb, int nbDims2, list<int> is)
+    requires all_sublevels_lt(nbDims1, la, lb) == true &*& length(is) + nbDims2 <= nbDims1;
+    ensures all_sublevels_lt(nbDims2, level_append(la, is), lb) == true;
+{
+    if (func_lt(la->func, lb->func)) {
+    } else {
+        assert la == level(_, cons(?maxLength, ?la0));
+        assert lb == level(_, cons(maxLength, ?lb0));
+        lex0_subspace_lt_append_l(la0, is, lb0);
+    }
+}
+
 fixpoint int level_subspace_nb_dims(level l) {
-    return head(l->localLevel) - length(tail(l->localLevel));
+    return lex_subspace_nb_dims(l->localLevel);
 }
 
 fixpoint level sublevel(level l, list<int> ks) {
@@ -335,6 +420,10 @@ predicate wait_perm(list<pathcomp> path, void *signal, level level, void *func;)
 lemma void create_wait_perm(void *s, level level, void *f);
   requires call_below_perm(?p, ?f0) &*& func_lt(f, f0) == true;
   ensures wait_perm(p, s, level, f);
+
+lemma void wait_perm_weaken(list<pathcomp> p1);
+  requires wait_perm(?p0, ?s, ?level, ?f) &*& is_ancestor_of(p0, p1) == true;
+  ensures wait_perm(p1, s, level, f);
 
 lemma void wait(void *s);
   requires
