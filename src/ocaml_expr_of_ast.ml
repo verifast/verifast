@@ -10,12 +10,6 @@ let of_option f x =
 
 let of_loc l = Loc l
 
-let of_constant_value = function
-  IntConst n -> C ("IntConst", [BigInt n])
-| BoolConst b -> C ("BoolConst", [B b])
-| StringConst s -> C ("StringConst", [S s])
-| NullConst -> c "NullConst"
-
 let of_inductiveness = function
   Inductiveness_Inductive -> c "Inductiveness_Inductive"
 | Inductiveness_CoInductive -> c "Inductiveness_CoInductive"
@@ -948,3 +942,10 @@ and of_ctor = function
   ])
 and of_struct_attr = function
   Packed -> c "Packed"
+and of_constant_value = function
+  IntConst n -> C ("IntConst", [BigInt n])
+| BoolConst b -> C ("BoolConst", [B b])
+| StringConst s -> C ("StringConst", [S s])
+| NullConst -> c "NullConst"
+| GhostConst e -> C ("GhostConst", [of_expr e])
+

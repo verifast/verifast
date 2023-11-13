@@ -82,14 +82,6 @@ let rec string_of_loc l =
   | MacroExpansion (lcall, lbody) -> Printf.sprintf "%s (body token %s)" (string_of_loc lcall) (string_of_loc lbody)
   | MacroParamExpansion (lparam, larg) -> Printf.sprintf "%s (argument token %s)" (string_of_loc lparam) (string_of_loc larg)
 
-(* Some types for dealing with constants *)
-
-type constant_value = (* ?constant_value *)
-  IntConst of big_int
-| BoolConst of bool
-| StringConst of string
-| NullConst
-
 exception NotAConstant
 
 (* Region: ASTs *)
@@ -930,6 +922,12 @@ and
 and
   struct_attr =
   | Packed
+and constant_value = (* ?constant_value *)
+  IntConst of big_int
+| BoolConst of bool
+| StringConst of string
+| NullConst
+| GhostConst of expr
 
 let func_kind_of_ghostness gh =
   match gh with

@@ -462,10 +462,18 @@ and
         | [ (_, Kwd "static") ] -> Static 
         | [ ] -> Instance)
         ]; 
+        [%l final = function%parser
+        | [ (_, Kwd "final") ] -> true
+        | [ ] -> false
+        ];
         parse_type as t; 
         (l, Ident x); 
+        [%l init = opt begin function%parser
+          | [ (_, Kwd "="); parse_expr as e ] -> e
+          end
+        ];
         (_, Kwd ";") 
-      ] -> FieldMember [Field (l, Ghost, t, x, binding, vis, false, None)]
+      ] -> FieldMember [Field (l, Ghost, t, x, binding, vis, final, init)]
     end
     ]
   ] -> m

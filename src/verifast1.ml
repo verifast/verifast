@@ -4988,7 +4988,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             begin function
               (f, ({fgh; ft; fbinding=Static; finit=Some e} as fd)) ->
                 let e = check_expr_t (pn,ilist) [] [current_class, ClassOrInterfaceName cn] (Some (fgh = Ghost)) e ft in
-                check_static_field_initializer e;
+                if fgh = Real then check_static_field_initializer e;
                 (f, {fd with finit=Some e})
             | fd -> fd
             end
@@ -5003,7 +5003,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let fds = fds |> List.map begin function
           (f, ({fgh; ft; fbinding=Static; finit=Some e} as fd)) ->
           let e = check_expr_t (pn,ilist) [] [current_class, ClassOrInterfaceName itf] (Some (fgh = Ghost)) e ft in
-          check_static_field_initializer e;
+          if fgh = Real then check_static_field_initializer e;
           (f, {fd with finit=Some e})
         | fd -> fd
         end
@@ -5135,7 +5135,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         Some (InterfaceInfo (li, fields, meths, preds, interfs, tparams)) -> eval_field_body (f::callers) (List.assoc fn fields)
       | None ->
       assert false
-    and eval_field_body callers {fbinding; ffinal; finit; fvalue} =
+    and eval_field_body callers {fgh; fbinding; ffinal; finit; fvalue} =
       match !fvalue with
         Some None -> raise NotAConstant
       | Some (Some v) -> v
@@ -5143,7 +5143,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         match (fbinding, ffinal, finit) with
           (Static, true, Some e) ->
           begin try
-            let v = eval callers e in
+            let v = match fgh with Ghost -> GhostConst e | Real -> eval callers e in
             fvalue := Some (Some v);
             v
           with NotAConstant -> fvalue := Some None; raise NotAConstant
@@ -7323,20 +7323,20 @@ let check_if_list_is_defined () =
       cont state (ctxt#mk_app arraylength_symbol [t])
     | WRead(l, e, fparent, fname, frange, fstatic, fvalue, fghost) ->
       if fstatic then
-        cont state
-          begin match !fvalue with
-            Some (Some v) ->
-            begin match v with
-              IntConst n -> ctxt#mk_intlit_of_string (string_of_big_int n)
-            | BoolConst b -> if b then ctxt#mk_true else ctxt#mk_false
-            | StringConst s -> static_error l "String constants are not yet supported." None
-            | NullConst -> ctxt#mk_intlit 0
-            end
-          | _ ->
-            match read_field with
-              None -> static_error l "Cannot use field read expression in this context." None
-            | Some (read_field, read_static_field, deref_pointer, read_array) -> read_static_field l fparent fname
+        begin match !fvalue with
+          Some (Some v) ->
+          begin match v with
+            IntConst n -> cont state (ctxt#mk_intlit_of_string (string_of_big_int n))
+          | BoolConst b -> cont state (if b then ctxt#mk_true else ctxt#mk_false)
+          | StringConst s -> static_error l "String constants are not yet supported." None
+          | NullConst -> cont state (ctxt#mk_intlit 0)
+          | GhostConst e -> ev state e $. cont
           end
+        | _ ->
+          match read_field with
+            None -> static_error l "Cannot use field read expression in this context." None
+          | Some (read_field, read_static_field, deref_pointer, read_array) -> cont state (read_static_field l fparent fname)
+        end
       else
         ev state e $. fun state v ->
         begin
