@@ -23,6 +23,10 @@ fixpoint boolean is_prefix_of<t>(list<t> xs, list<t> ys) {
   return take(length(xs), ys) == xs;
 }
 
+fixpoint boolean not_is_prefix_of<t>(list<t> xs, list<t> ys) {
+  return take(length(xs), ys) != xs;
+}
+
 @*/
 
 /*@
@@ -58,6 +62,10 @@ final class AtomicLong {
   //@ requires is_AtomicLong_get_ghost_op(?ghop, this, ?pre, ?post) &*& pre();
   //@ ensures post(result);
   //@ terminates;
+  
+  public long getPlain();
+  //@ requires [?f]state(?value);
+  //@ ensures [f]state(value) &*& result == value;
 
   public long getAndIncrement();
   //@ requires is_AtomicLong_getAndIncrement_ghost_op(?ghop, this, ?pre, ?post) &*& pre();

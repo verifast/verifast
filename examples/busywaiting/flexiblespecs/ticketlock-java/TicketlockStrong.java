@@ -58,7 +58,7 @@ predicate grabbed_cell(int cellId) = ghost_cell(cellId, thread_info(_, _, true))
 
 predicate_ctor TicketlockStrong_inv(TicketlockStrong l)() =
   [_]l.ns |-> ?ns &*&
-  [_]l.owner |-> ?owner_ &*& owner_.state(?owner) &*& 0 <= owner &*&
+  [_]l.owner |-> ?owner_ &*& [1/2]owner_.state(?owner) &*& 0 <= owner &*&
   [_]l.next |-> ?next_ &*& next_.state(?next) &*&
   [1/4]l.owner_ |-> owner &*& owner <= next &*&
   [1/4]l.held |-> ?held &*&
@@ -67,10 +67,13 @@ predicate_ctor TicketlockStrong_inv(TicketlockStrong l)() =
   owner < next ?
     waiting_threads(l, ns, drop(owner + 1, cellIds), owner + 1, owner) &*&
     [1/2]ghost_cell(nth(owner, cellIds), thread_info(?waitInv, ?post, ?grabbed)) &*&
-    (grabbed ? [1/2]ghost_cell<thread_info>(nth(owner, cellIds), _) : post(owner) &*& [1/4]l.owner_ |-> owner &*& [1/4]l.held |-> true) &*&
+    (grabbed ? [1/2]ghost_cell<thread_info>(nth(owner, cellIds), _) : post(owner) &*& [1/2]owner_.state(owner) &*& [1/4]l.owner_ |-> owner &*& [1/4]l.held |-> true) &*&
     held
   :
-    !held &*& [1/4]l.owner_ |-> owner &*& [1/4]l.held |-> false;
+    !held &*& [1/2]owner_.state(owner) &*& [1/4]l.owner_ |-> owner &*& [1/4]l.held |-> false;
+
+predicate TicketlockStrong_not_alone(TicketlockStrong lock, int owner) =
+  [_]lock.growingListId |-> ?growingListId &*& has_at<int>(_, growingListId, owner + 1, _);
 
 @*/
 
@@ -93,6 +96,8 @@ public final class TicketlockStrong {
   
   /*@
   predicate held(long ticket) =
+    [_]owner |-> ?owner &*&
+    [1/2]owner.state(ticket) &*&
     [1/4]owner_ |-> ticket &*&
     [1/4]held |-> true &*&
     [_]growingListId |-> ?growingListId;
@@ -152,7 +157,7 @@ public final class TicketlockStrong {
         0 <= result &*&
         exists<boolean>(?alreadyOwner) &*&
         alreadyOwner ?
-          post(result) &*& [1/4]this.owner_ |-> result &*& [1/4]this.held |-> true
+          post(result) &*& [1/2]owner.state(result) &*& [1/4]this.owner_ |-> result &*& [1/4]this.held |-> true
         :
           has_at(_, growingListId, result, cellId) &*& [1/2]ghost_cell(cellId, thread_info(waitInv, post, false));
       @*/
@@ -161,7 +166,7 @@ public final class TicketlockStrong {
         open pre_();
         open_atomic_space(ns, TicketlockStrong_inv(this));
         open TicketlockStrong_inv(this)();
-        assert owner.state(?owner_) &*& next.state(?next_);
+        assert [_]owner.state(?owner_) &*& next.state(?next_);
         assert growing_list<int>(growingListId, ?cellIds);
         op();
         growing_list_add(growingListId, cellId);
@@ -229,7 +234,7 @@ public final class TicketlockStrong {
       [_]atomic_space_(ns, TicketlockStrong_inv(this)) &*&
       exists(?alreadyOwner) &*&
       alreadyOwner ?
-        post(ticket) &*& [1/4]this.owner_ |-> ticket &*& [1/4]held |-> true
+        post(ticket) &*& [1/2]owner.state(ticket) &*& [1/4]this.owner_ |-> ticket &*& [1/4]held |-> true
       :
         is_TicketlockStrong_wait_ghost_op(wop, this, ns, waitInv, currentThread) &*&
         has_at(?cellHandle, growingListId, ticket, cellId) &*& [1/2]ghost_cell(cellId, thread_info(waitInv, post, false));
@@ -246,13 +251,13 @@ public final class TicketlockStrong {
           [_]this.growingListId |-> growingListId &*&
           [_]atomic_space_(ns, TicketlockStrong_inv(this)) &*&
           alreadyOwner ?
-            post(ticket) &*& [1/4]this.owner_ |-> ticket &*& [1/4]held |-> true
+            post(ticket) &*& [1/2]owner.state(ticket) &*& [1/4]this.owner_ |-> ticket &*& [1/4]held |-> true
           :
             is_TicketlockStrong_wait_ghost_op(wop, this, ns, waitInv, currentThread) &*&
             has_at(?cellHandle, growingListId, ticket, cellId) &*& [1/2]ghost_cell(cellId, thread_info(waitInv, post, false));
         predicate post_(long result) =
           result == ticket ?
-            post(ticket) &*& [1/4]this.owner_ |-> ticket &*& [1/4]held |-> true
+            post(ticket) &*& [1/2]owner.state(ticket) &*& [1/4]this.owner_ |-> ticket &*& [1/4]held |-> true
           :
             is_TicketlockStrong_wait_ghost_op(wop, this, ns, waitInv, currentThread) &*&
             call_perm_(currentThread, TicketlockStrong.class) &*&
@@ -263,7 +268,7 @@ public final class TicketlockStrong {
           open pre_();
           open_atomic_space(ns, TicketlockStrong_inv(this));
           open TicketlockStrong_inv(this)();
-          assert owner.state(?owner_);
+          assert [_]owner.state(?owner_);
           assert growing_list(growingListId, ?cellIds);
           op();
           if (!alreadyOwner && owner_ == ticket) {
@@ -342,6 +347,87 @@ public final class TicketlockStrong {
       //@ close exists(false);
     }
   }
+  
+  public boolean alone()
+  //@ requires [_]valid(?ns) &*& held(?ticket);
+  //@ ensures held(ticket) &*& result ? true : TicketlockStrong_not_alone(this, ticket);
+  {
+    AtomicLong next = this.next;
+    //@ box growingListId = this.growingListId;
+    long next_;
+    //@ open valid(ns);
+    {
+      /*@
+      predicate pre() =
+        [_]this.owner |-> ?owner &*&
+        [_]this.next |-> next &*&
+        [_]this.ns |-> ns &*&
+        [_]this.growingListId |-> growingListId &*&
+        [1/4]this.owner_ |-> ticket &*& [1/4]held |-> true &*&
+        [_]atomic_space_(ns, TicketlockStrong_inv(this));
+      predicate post(long result) =
+        [1/4]this.owner_ |-> ticket &*& [1/4]held |-> true &*&
+        0 <= result &*& 0 <= ticket &*& ticket < result &*&
+        ticket + 1 < result ?
+          TicketlockStrong_not_alone(this, ticket)
+        :
+          true;
+      @*/
+      /*@
+      produce_lemma_function_pointer_chunk AtomicLong_get_ghost_op(this.next, pre, post)(op) {
+        open pre();
+        open_atomic_space(ns, TicketlockStrong_inv(this));
+        open TicketlockStrong_inv(this)();
+        assert next.state(?next0);
+        assert growing_list(growingListId, ?cellIds);
+        op();
+        if (ticket + 1 < next0) {
+          create_has_at(growingListId, ticket + 1);
+          close TicketlockStrong_not_alone(this, ticket);
+        }
+        close TicketlockStrong_inv(this)();
+        close_atomic_space(ns, TicketlockStrong_inv(this));
+        close post(next0);
+      };
+      @*/
+      //@ close pre();
+      next_ = this.next.get();
+      //@ open post(_);
+    }
+    return next_ - owner.getPlain() <= 1;
+  }
+  
+  /*@
+  public lemma void not_alone_elim()
+    requires
+      [_]valid(?ns) &*&
+      atomic_spaces(?spaces) &*& forall(map(fst, spaces), (not_is_prefix_of)(ns)) == true &*&
+      TicketlockStrong_not_alone(this, ?ticket) &*&
+      state(?owner, ?held);
+    ensures
+      atomic_spaces(spaces) &*&
+      TicketlockStrong_not_alone(this, ticket) &*&
+      state(owner, held) &*& owner != ticket || held;
+  {
+    open valid(ns);
+    if (mem(pair(ns, TicketlockStrong_inv(this)), spaces)) {
+      mem_map(pair(ns, TicketlockStrong_inv(this)), spaces, fst);
+      forall_elim(map(fst, spaces), (not_is_prefix_of)(ns), ns);
+      assert false;
+    }
+    open_atomic_space(ns, TicketlockStrong_inv(this));
+    open TicketlockStrong_inv(this)();
+    
+    open state(owner, held);
+    open TicketlockStrong_not_alone(this, ticket);
+    match_has_at(growingListId);
+    close TicketlockStrong_not_alone(this, ticket);
+    close state(owner, held);
+    
+    close TicketlockStrong_inv(this)();
+    close_atomic_space(ns, TicketlockStrong_inv(this));
+  }
+  @*/
 
   public void release()
   //@ requires [_]valid(?ns) &*& held(?ticket) &*& is_TicketlockStrong_release_ghost_op(?ghop, this, ns, ticket, ?pre, ?post) &*& pre();
@@ -360,7 +446,7 @@ public final class TicketlockStrong {
         [_]this.next |-> next &*&
         [_]this.ns |-> ns &*&
         [_]this.growingListId |-> growingListId &*&
-        [1/4]this.owner_ |-> ticket &*& [1/4]held |-> true &*&
+        [1/2]owner.state(ticket) &*& [1/4]this.owner_ |-> ticket &*& [1/4]held |-> true &*&
         [_]atomic_space_(ns, TicketlockStrong_inv(this)) &*&
         is_TicketlockStrong_release_ghost_op(ghop, this, ns, ticket, pre, post) &*& pre();
       predicate post_(long result) =
