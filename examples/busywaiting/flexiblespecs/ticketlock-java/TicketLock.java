@@ -1,3 +1,5 @@
+// tab_size:2
+
 /*@
 
 fixpoint int Ticketlock_level_nb_dims() { return 1; }
@@ -50,6 +52,26 @@ typedef lemma void Ticketlock_release_ghost_op(Ticketlock l, list<int> ns, long 
   ensures
     atomic_spaces(spaces) &*&
     is_Ticketlock_release_op(op, l, ticket, P, Q) &*& Q() &*& post();
+
+predicate Ticketlock_not_alone(Ticketlock lock, int owner) = [_]lock.lock |-> ?lock_ &*& TicketlockStrong_not_alone(lock_, owner);
+
+lemma void Ticketlock_not_alone_elim(Ticketlock this)
+  requires
+    [_]this.valid(?ns, ?level) &*&
+    atomic_spaces(?spaces) &*& forall(map(fst, spaces), (not_is_prefix_of)(ns)) == true &*&
+    Ticketlock_not_alone(this, ?ticket) &*&
+    this.state(?owner, ?held);
+  ensures
+    atomic_spaces(spaces) &*&
+    Ticketlock_not_alone(this, ticket) &*&
+    this.state(owner, held) &*& owner != ticket || held;
+{
+  open this.valid(ns, level);
+  open this.state(owner, held);
+  open Ticketlock_not_alone(this, ticket);
+  TicketlockStrong_not_alone_elim(this.lock);
+  close Ticketlock_not_alone(this, ticket);
+}
 
 @*/
 
@@ -170,6 +192,17 @@ public final class Ticketlock {
     }
   }
 
+  public boolean alone()
+  //@ requires [_]valid(?ns, ?level) &*& held(?ticket);
+  //@ ensures held(ticket) &*& result ? true : Ticketlock_not_alone(this, ticket);
+  {
+    //@ open valid(ns, level);
+    //@ open held(ticket);
+    boolean result = lock.alone();
+    //@ if (!result) close Ticketlock_not_alone(this, ticket);
+    return result;
+  }
+  
   public void release()
   //@ requires [_]valid(?ns, ?level) &*& held(?ticket) &*& is_Ticketlock_release_ghost_op(?ghop, this, ns, ticket, ?pre, ?post) &*& pre();
   //@ ensures post();

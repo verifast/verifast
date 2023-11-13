@@ -1,3 +1,4 @@
+// tab_size:2
 
 /*@
 
@@ -74,6 +75,36 @@ predicate_ctor TicketlockStrong_inv(TicketlockStrong l)() =
 
 predicate TicketlockStrong_not_alone(TicketlockStrong lock, int owner) =
   [_]lock.growingListId |-> ?growingListId &*& has_at<int>(_, growingListId, owner + 1, _);
+
+lemma void TicketlockStrong_not_alone_elim(TicketlockStrong this)
+  requires
+    [_]this.valid(?ns) &*&
+    atomic_spaces(?spaces) &*& forall(map(fst, spaces), (not_is_prefix_of)(ns)) == true &*&
+    TicketlockStrong_not_alone(this, ?ticket) &*&
+    this.state(?owner, ?held);
+  ensures
+    atomic_spaces(spaces) &*&
+    TicketlockStrong_not_alone(this, ticket) &*&
+    this.state(owner, held) &*& owner != ticket || held;
+{
+  open this.valid(ns);
+  if (mem(pair(ns, TicketlockStrong_inv(this)), spaces)) {
+    mem_map(pair(ns, TicketlockStrong_inv(this)), spaces, fst);
+    forall_elim(map(fst, spaces), (not_is_prefix_of)(ns), ns);
+    assert false;
+  }
+  open_atomic_space(ns, TicketlockStrong_inv(this));
+  open TicketlockStrong_inv(this)();
+  
+  open this.state(owner, held);
+  open TicketlockStrong_not_alone(this, ticket);
+  match_has_at(growingListId);
+  close TicketlockStrong_not_alone(this, ticket);
+  close this.state(owner, held);
+  
+  close TicketlockStrong_inv(this)();
+  close_atomic_space(ns, TicketlockStrong_inv(this));
+}
 
 @*/
 
@@ -397,38 +428,6 @@ public final class TicketlockStrong {
     return next_ - owner.getPlain() <= 1;
   }
   
-  /*@
-  public lemma void not_alone_elim()
-    requires
-      [_]valid(?ns) &*&
-      atomic_spaces(?spaces) &*& forall(map(fst, spaces), (not_is_prefix_of)(ns)) == true &*&
-      TicketlockStrong_not_alone(this, ?ticket) &*&
-      state(?owner, ?held);
-    ensures
-      atomic_spaces(spaces) &*&
-      TicketlockStrong_not_alone(this, ticket) &*&
-      state(owner, held) &*& owner != ticket || held;
-  {
-    open valid(ns);
-    if (mem(pair(ns, TicketlockStrong_inv(this)), spaces)) {
-      mem_map(pair(ns, TicketlockStrong_inv(this)), spaces, fst);
-      forall_elim(map(fst, spaces), (not_is_prefix_of)(ns), ns);
-      assert false;
-    }
-    open_atomic_space(ns, TicketlockStrong_inv(this));
-    open TicketlockStrong_inv(this)();
-    
-    open state(owner, held);
-    open TicketlockStrong_not_alone(this, ticket);
-    match_has_at(growingListId);
-    close TicketlockStrong_not_alone(this, ticket);
-    close state(owner, held);
-    
-    close TicketlockStrong_inv(this)();
-    close_atomic_space(ns, TicketlockStrong_inv(this));
-  }
-  @*/
-
   public void release()
   //@ requires [_]valid(?ns) &*& held(?ticket) &*& is_TicketlockStrong_release_ghost_op(?ghop, this, ns, ticket, ?pre, ?post) &*& pre();
   //@ ensures post();
