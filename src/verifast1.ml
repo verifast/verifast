@@ -5182,7 +5182,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       begin match e with
         CallExpr (l, g, [], [], pats, Static) ->
         begin match resolve Ghost (pn,ilist) l g purefuncmap with
-          Some (_, (_, _, rt, _, _)) ->
+          Some (g_resolved, (_, _, rt, _, _)) ->
           begin match rt with
             InductiveType (i, _) ->
             let (_, inductive_tparams, ctormap, _, _, _, _, _) = List.assoc i inductivemap in
@@ -5197,7 +5197,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               let (pats, tenv') = check_pats_core (pn,ilist) l tparams tenv ts pats in
               let args = List.map (fun (LitPat arg | WCtorPat (_, _, _, _, _, _, _, Some arg)) -> arg) pats in
               let args = List.map2 (fun arg (t, t0) -> box arg t t0) args (List.combine ts ts0) in
-              let e = WPureFunCall (l, g, targs, args) in
+              let e = WPureFunCall (l, g_resolved, targs, args) in
               (WCtorPat (l, i, targs, g, ts0, ts, pats, Some e), tenv')
             | None ->
               fallback ()
