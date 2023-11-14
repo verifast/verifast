@@ -261,8 +261,8 @@ predicate_ctor Cohort_inv(Cohort cohort)() =
     [_]cohort.acquireSignalsId |-> ?acquireSignalsId &*&
     [_]cohort.globalOwnersId |-> ?globalOwnersId &*&
     [_]cohort.releaseSignalsId |-> ?releaseSignalsId &*&
-    [1/8]cohort.owner |-> ?owner &*& 0 <= owner &*&
-    [1/8]cohort.held_ |-> ?held &*&
+    [5/8]cohort.owner |-> ?owner &*& 0 <= owner &*&
+    [5/8]cohort.held_ |-> ?held &*&
     [1/4]cohort._passing |-> ?passing &*& (held ? true : cohort.passing |-> passing) &*&
     [1/4]cohort._passCount |-> ?passCount &*& 0 <= passCount &*& (held ? true : cohort.passCount |-> passCount) &*&
     [1/2]cohort.releasing |-> ?releasing &*&
@@ -543,6 +543,7 @@ final class Cohort {
 		        [_]this.ticketlock |-> ticketlock &*& [_]ticketlock.valid(COHORT_TICKETLOCK_NS, LL_LEVEL) &*&
 		        [_]lock.ns |-> ns &*&
 		        [_]lock.level |-> level &*&
+		        [_]lock.ticketlock |-> globalLock &*&
 		        [_]lock.notAloneListId |-> notAloneListId &*&
 		        [_]lock.roundsInfoId |-> roundsInfoId &*&
 		        [_]lock.clientRoundsInfoId |-> clientRoundsInfoId &*&
@@ -563,7 +564,7 @@ final class Cohort {
 		            post(?clientOwner) &*&
 		            globalLock.held(?globalOwner) &*&
 		            client_owner_info(?globalOwnerHandle, ?globalRoundInfoHandle) &*&
-		            has_at(globalOwnerHandle, globalOwnersId, ticket, globalOwner) &*&
+		            has_at<int>(globalOwnerHandle, globalOwnersId, ticket, globalOwner) &*&
 		            has_at(globalRoundInfoHandle, roundsInfoId, globalOwner, global_round_info(cohort, ?passCountIncrBoxId, ?initialClientOwner, ?initialLocalOwner)) &*&
 		            clientOwner == initialClientOwner + (ticket - initialLocalOwner)
 		        :
@@ -573,6 +574,7 @@ final class Cohort {
 		    @*/
 		    /*@
 		    produce_lemma_function_pointer_chunk Ticketlock_wait_ghost_op(p, ticketlock, append(ns, {TICKETLOCK_NS_}), LL_LEVEL, cpDegrees + 1, wait_inv_, currentThread)(cohortOwner, newRound, op) {
+		        assume(false);
 		        assert atomic_spaces(?spaces);
 		        assert obs(_, p, ?obs1);
 		        open wait_inv_(?oldCohortOwner);
@@ -855,16 +857,14 @@ final class Cohort {
 		    };
 		    @*/
 		    /*@
-		    produce_lemma_function_pointer_chunk ticketlock_acquire_ghost_op(obs, append(ns, {TICKETLOCK_NS_}), LL_LEVEL, cohort_ticketlock_inv(cohort), wait_inv_, post_, currentThread)() {
+		    produce_lemma_function_pointer_chunk Ticketlock_acquire_ghost_op(p, obs, ticketlock, append(ns, {TICKETLOCK_NS_}), wait_inv_, post_, currentThread)(cohortOwner, op) {
 		        assert atomic_spaces(?spaces);
-		        assert obs_(?callerThread, ?p1, obs);
-		        open cohort_ticketlock_inv(cohort)(?cohortOwner, false);
-		        open wait_inv_(_, _, ?p0);
-		        leak wait_inv_core(_, _, _, ?oldClientOwner, ?oldClientf, ?oldClientp);
-		        is_ancestor_of_trans(oldClientp, p0, p1);
+		        assert obs(?callerThread, p, obs);
+		        open wait_inv_(_);
+		        leak wait_inv_core(_, ?oldClientOwner);
 		        
 		        if (!forall(map(fst, spaces), (is_prefix_of)(ns))) {
-		            list<void *> badName = not_forall(map(fst, spaces), (is_prefix_of)(ns));
+		            list<int> badName = not_forall(map(fst, spaces), (is_prefix_of)(ns));
 		            forall_elim(map(fst, spaces), (is_prefix_of)(append(ns, {TICKETLOCK_NS_})), badName);
 		            append_drop_take(badName, length(append(ns, {TICKETLOCK_NS_})));
 		            assert badName == append(append(ns, {TICKETLOCK_NS_}), drop(length(ns) + 1, badName));
@@ -872,20 +872,20 @@ final class Cohort {
 		            take_append(length(ns), ns, cons(TICKETLOCK_NS_, drop(length(ns) + 1, badName)));
 		            assert false;
 		        }
-		        if (mem(pair(COHORTLOCK_NS, COHORTLOCK_INV), spaces)) {
-		            mem_map(pair(COHORTLOCK_NS, COHORTLOCK_INV), spaces, fst);
+		        if (mem(pair(COHORTLOCK_NS, CohortLock_inv(lock)), spaces)) {
+		            mem_map(pair(COHORTLOCK_NS, CohortLock_inv(lock)), spaces, fst);
 		            forall_elim(map(fst, spaces), (is_prefix_of)(append(ns, {TICKETLOCK_NS_})), COHORTLOCK_NS);
 		            assert false;
 		        }
-		        drop_append(length(ns), ns, {COHORT_NS_});
-		        drop_append(length(ns), ns, {COHORTLOCK_NS_});
-		        if (mem(pair(COHORT_NS, COHORT_INV), spaces)) {
-		            mem_map(pair(COHORT_NS, COHORT_INV), spaces, fst);
+		        drop_append(ns, {COHORT_NS_});
+		        drop_append(ns, {CohortLock.NS_});
+		        if (mem(pair(COHORT_NS, Cohort_inv(this)), spaces)) {
+		            mem_map(pair(COHORT_NS, Cohort_inv(this)), spaces, fst);
 		            forall_elim(map(fst, spaces), (is_prefix_of)(append(ns, {TICKETLOCK_NS_})), COHORT_NS);
 		            assert false;
 		        }
-		        open_atomic_space(COHORT_NS, COHORT_INV);
-		        open COHORT_INV();
+		        open_atomic_space(COHORT_NS, Cohort_inv(this));
+		        open Cohort_inv(this)();
 		        
 		        assert growing_list<void *>(acquireSignalsId, ?acquireSignals);
 		        void *acquireSignal = create_signal();
@@ -894,39 +894,56 @@ final class Cohort {
 		        
 		        if (cohort._passing) {
 		            leak signal_uninit(acquireSignal);
-		            open_atomic_space(COHORTLOCK_NS, COHORTLOCK_INV);
-		            open COHORTLOCK_INV();
+		            open_atomic_space(COHORTLOCK_NS, CohortLock_inv(lock));
+		            open CohortLock_inv(lock)();
 		            assert passing_global_owner_handle(?passingGlobalOwnerHandle);
 		            match_has_at_<global_round_info>(passingGlobalOwnerHandle);
 		            merge_fractions cohort.owner |-> _;
-		            merge_fractions cohort.held |-> _;
-		            assert inv(?clientOwner, false);
-		            leak ticketlock_not_alone(cohortIdentity, cohortOwner);
-		        
-		            cohort.held = true;
+		            merge_fractions cohort.held_ |-> _;
+		            merge_fractions cohort.ticketlock |-> _;
+		            assert [_]lock.clientOwner |-> ?clientOwner;
 		            
-		            is_prefix_of_append(ns, {}, {COHORTLOCK_NS_});
+		            op();
+		            
+		            cohort.held_ = true;
+		            
+		            is_prefix_of_append(ns, {}, {CohortLock.NS_});
 		            is_prefix_of_append(ns, {}, {COHORT_NS_});
-		            aop();
-		            leak is_cohortlock_acquire_ghost_op(_, _, _, _, _, _, _, _);
+		            {
+		                predicate P_() = [1/2]lock.clientOwner |-> clientOwner &*& [1/2]lock.clientHeld |-> false;
+		                predicate Q_() = [1/2]lock.clientOwner |-> clientOwner &*& [1/2]lock.clientHeld |-> true;
+		                produce_lemma_function_pointer_chunk CohortLock_acquire_op(lock, clientOwner, P_, Q_)() {
+		                    open P_();
+		                    open lock.state(_, _);
+		                    lock.clientHeld = true;
+		                    close lock.state(_, _);
+		                    close Q_();
+		                } {
+		                    close P_();
+		                    assert is_CohortLock_acquire_op(?op_, _, _, _, _);
+    		                aop(clientOwner, op_);
+    		                open Q_();
+    		            }
+		            }
+		            leak is_CohortLock_acquire_ghost_op(_, _, _, _, _, _, _, _);
 		            
 		            handle globalOwnerHandle = create_has_at<int>(globalOwnersId, cohortOwner);
 		            assert has_at<int>(globalOwnerHandle, globalOwnersId, cohortOwner, ?globalOwner);
 		            handle globalRoundInfoId = create_has_at<global_round_info>(roundsInfoId, globalOwner);
 		            close client_owner_info(globalOwnerHandle, globalRoundInfoId);
 		            
-		            close COHORTLOCK_INV();
-		            close_atomic_space(COHORTLOCK_NS, COHORTLOCK_INV);
+		            close CohortLock_inv(lock)();
+		            close_atomic_space(COHORTLOCK_NS, CohortLock_inv(lock));
 		        } else {
-		            cohort.held = true;
+		            op();
+		            cohort.held_ = true;
 		            
 		            init_signal(acquireSignal, sublevel(level, SIG_LEVEL));
 		        }
 		        
-		        close COHORT_INV();
-		        close_atomic_space(COHORT_NS, COHORT_INV);
+		        close Cohort_inv(this)();
+		        close_atomic_space(COHORT_NS, Cohort_inv(this));
 		        
-		        close cohort_ticketlock_inv(cohort)(cohortOwner, true);
 		        close post_(cohortOwner);
 		    };
 		    @*/
