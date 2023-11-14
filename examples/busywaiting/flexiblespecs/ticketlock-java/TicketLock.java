@@ -59,18 +59,18 @@ lemma void Ticketlock_not_alone_elim(Ticketlock this)
   requires
     [_]this.valid(?ns, ?level) &*&
     atomic_spaces(?spaces) &*& forall(map(fst, spaces), (not_is_prefix_of)(ns)) == true &*&
-    Ticketlock_not_alone(this, ?ticket) &*&
-    this.state(?owner, ?held);
+    this.state(?owner, ?held) &*&
+    Ticketlock_not_alone(this, owner - 1);
   ensures
     atomic_spaces(spaces) &*&
-    Ticketlock_not_alone(this, ticket) &*&
-    this.state(owner, held) &*& owner != ticket || held;
+    Ticketlock_not_alone(this, owner - 1) &*&
+    this.state(owner, held) &*& held;
 {
   open this.valid(ns, level);
   open this.state(owner, held);
-  open Ticketlock_not_alone(this, ticket);
+  open Ticketlock_not_alone(this, owner - 1);
   TicketlockStrong_not_alone_elim(this.lock);
-  close Ticketlock_not_alone(this, ticket);
+  close Ticketlock_not_alone(this, owner - 1);
 }
 
 @*/

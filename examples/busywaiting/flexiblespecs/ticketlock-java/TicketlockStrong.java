@@ -85,7 +85,7 @@ lemma void TicketlockStrong_not_alone_elim(TicketlockStrong this)
   ensures
     atomic_spaces(spaces) &*&
     TicketlockStrong_not_alone(this, ticket) &*&
-    this.state(owner, held) &*& owner != ticket || held;
+    this.state(owner, held) &*& owner != ticket + 1 || held;
 {
   open this.valid(ns);
   if (mem(pair(ns, TicketlockStrong_inv(this)), spaces)) {

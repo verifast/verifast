@@ -4,3 +4,4 @@ TicketlockStrong.java
 Ticketlock.java
 TicketlockClassic.java
 ClassicClient.java
+CohortLock.java

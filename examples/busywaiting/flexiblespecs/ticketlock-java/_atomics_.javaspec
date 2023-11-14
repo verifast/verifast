@@ -23,6 +23,17 @@ fixpoint boolean is_prefix_of<t>(list<t> xs, list<t> ys) {
   return take(length(xs), ys) == xs;
 }
 
+lemma_auto void is_prefix_of_append<t>(list<t> xs, list<t> ys, list<t> zs)
+  requires true;
+  ensures is_prefix_of(append(xs, ys), append(xs, zs)) == is_prefix_of(ys, zs);
+{
+  switch (xs) {
+    case nil:
+    case cons(h, t):
+      is_prefix_of_append(t, ys, zs);
+  }
+}
+
 fixpoint boolean not_is_prefix_of<t>(list<t> xs, list<t> ys) {
   return take(length(xs), ys) != xs;
 }
