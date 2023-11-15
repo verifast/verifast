@@ -1276,16 +1276,42 @@ final class Cohort {
 		{
 		    /*@
 		    predicate pre_() =
+		        [_]this.lock |-> lock &*&
+		        [_]this.globalOwnersId |-> globalOwnersId &*&
 		        [_]lock.ticketlock |-> globalLock &*&
+		        [_]lock.roundsInfoId |-> roundsInfoId &*&
 		        [_]lock.notAloneListId |-> notAloneListId &*&
+		        [_]atomic_space_(append(ns, {Cohort.NS_}), Cohort_inv(this)) &*&
 		        [_]atomic_space_(append(ns, {CohortLock.NS_}), CohortLock_inv(lock)) &*&
+				[1/4]this._passing |-> true &*&
+				[1/4]this._passCount |-> passCount &*&
+				[1/8]this.held_ |-> true &*&
+				[1/8]this.owner |-> cohortTicket &*&
+				[1/2]this.releasing |-> false &*&
+				has_at<int>(globalOwnerHandle, globalOwnersId, cohortTicket, globalTicket) &*&
+		        has_at(globalRoundInfoHandle, roundsInfoId, globalTicket, global_round_info(this, passCountIncrBoxId, initialClientOwner, initialLocalOwner)) &*&
 		        [1/2]lock.notAloneLocally |-> _;
 		    predicate post_() =
+				[1/4]this._passing |-> true &*&
+				[1/4]this._passCount |-> passCount &*&
+				[1/8]this.held_ |-> true &*&
+				[1/8]this.owner |-> cohortTicket &*&
+				[1/2]this.releasing |-> false &*&
+				has_at<int>(globalOwnerHandle, globalOwnersId, cohortTicket, globalTicket) &*&
+		        has_at(globalRoundInfoHandle, roundsInfoId, globalTicket, global_round_info(this, passCountIncrBoxId, initialClientOwner, initialLocalOwner)) &*&
 		        [1/2]lock.notAloneLocally |-> true;
 		    @*/
 		    /*@
 		    produce_lemma_function_pointer_chunk Ticketlock_alone_ghost_op(globalLock, append(ns, {CohortLock.TICKETLOCK_NS_}), globalTicket, pre_, post_)(op) {
 			    open pre_();
+			    assert atomic_spaces(?spaces);
+			    if (mem(pair(append(ns, {Cohort.NS_}), Cohort_inv(this)), spaces)) {
+			        mem_map(pair(append(ns, {Cohort.NS_}), Cohort_inv(this)), spaces, fst);
+			        drop_append(ns, {CohortLock.TICKETLOCK_NS_});
+			        drop_append(ns, {Cohort.NS_});
+			        forall_elim(map(fst, spaces), (is_prefix_of)(append(ns, {CohortLock.TICKETLOCK_NS_})), append(ns, {Cohort.NS_}));
+			        assert false;
+			    }
 			    if (mem(pair(append(ns, {CohortLock.NS_}), CohortLock_inv(lock)), spaces)) {
 			        mem_map(pair(append(ns, {CohortLock.NS_}), CohortLock_inv(lock)), spaces, fst);
 			        drop_append(ns, {CohortLock.TICKETLOCK_NS_});
@@ -1293,17 +1319,37 @@ final class Cohort {
 			        forall_elim(map(fst, spaces), (is_prefix_of)(append(ns, {CohortLock.TICKETLOCK_NS_})), append(ns, {CohortLock.NS_}));
 			        assert false;
 			    }
+			    drop_append(ns, {Cohort.NS_});
+			    drop_append(ns, {CohortLock.TICKETLOCK_NS_});
+			    open_atomic_space(append(ns, {Cohort.NS_}), Cohort_inv(this));
+			    open Cohort_inv(this)();
+			    
+			    match_has_at_<int>(globalOwnerHandle);
+			    assert passing_global_owner_handle(?passingGlobalOwnerHandle);
+			    
 		        open_atomic_space(append(ns, {CohortLock.NS_}), CohortLock_inv(lock));
 		        open CohortLock_inv(lock)();
 		        
+		        match_has_at_(passingGlobalOwnerHandle);
+		        merge_fractions this.owner |-> _;
+		        merge_fractions this.held_ |-> _;
+		        merge_fractions this.ticketlock |-> _;
+		        
+		        match_has_at_<global_round_info>(globalRoundInfoHandle);
+		        assert [_]lock.held_ |-> true;
+		        assert [_]lock.owner |-> globalTicket;
+		        
 		        if (!lock.notAloneLocally) {
-		            assert growing_list(notAloneListId, ?notAloneList);
+		            assert growing_list<boolean>(notAloneListId, ?notAloneList);
 		            if (length(notAloneList) > lock.clientOwner) {
 		                op();
 		                assert false;
 		            }
 		            lock.notAloneLocally = true;
 		        }
+		        
+		        close Cohort_inv(this)();
+		        close_atomic_space(append(ns, {Cohort.NS_}), Cohort_inv(this));
 		        
 		        close CohortLock_inv(lock)();
 		        close_atomic_space(append(ns, {CohortLock.NS_}), CohortLock_inv(lock));
@@ -1314,9 +1360,9 @@ final class Cohort {
 		    globalAlone = globalLock.alone();
 		    //@ if (globalAlone) open post_(); else open pre_();
 		}
-	    if (!globalLock.alone()) {
+	    if (!globalAlone) {
 	        /*@
-	        predicate pre() =
+	        predicate pre_() =
 	            [_]this.lock |-> lock &*& [_]lock.valid(ns, level) &*&
 	            [_]this.ticketlock |-> ticketlock &*&
 	            [_]this.globalOwnersId |-> globalOwnersId &*&
@@ -1332,8 +1378,9 @@ final class Cohort {
 	            [1/2]this.releasing |-> false &*&
 				has_at<int>(globalOwnerHandle, globalOwnersId, cohortTicket, globalTicket) &*&
 				has_at(globalRoundInfoHandle, roundsInfoId, globalTicket, global_round_info(this, passCountIncrBoxId, initialClientOwner, initialLocalOwner)) &*&
+				[1/2]lock.notAloneLocally |-> _ &*&
 	            Ticketlock_not_alone(globalLock, globalTicket);
-	        predicate post() =
+	        predicate post_() =
 	            [1/4]this._passing |-> true &*&
 	            [1/4]this._passCount |-> passCount &*&
 	            [1/8]this.held_ |-> true &*&
@@ -1341,11 +1388,12 @@ final class Cohort {
 	            [1/2]this.releasing |-> false &*&
 				has_at<int>(globalOwnerHandle, globalOwnersId, cohortTicket, globalTicket) &*&
 				has_at(globalRoundInfoHandle, roundsInfoId, globalTicket, global_round_info(this, passCountIncrBoxId, initialClientOwner, initialLocalOwner)) &*&
+				[1/2]lock.notAloneLocally |-> _ &*&
 	            CohortLock_not_alone(lock, owner);
 	        @*/
 	        /*@
-	        produce_lemma_function_pointer_chunk atomic_noop_ghost_op(pre, post)() {
-	            open pre();
+	        produce_lemma_function_pointer_chunk atomic_noop_ghost_op(pre_, post_)() {
+	            open pre_();
 	            open_atomic_space(append(ns, {Cohort.NS_}), Cohort_inv(this));
 	            open Cohort_inv(this)();
 	            
@@ -1365,7 +1413,7 @@ final class Cohort {
 	            assert growing_list<boolean>(notAloneListId, ?notAloneList);
 	            if (length(notAloneList) == lock.clientOwner) {
 	                growing_list_add<boolean>(notAloneListId, true);
-	                close not_alone_locally(false);
+	                lock.notAloneLocally = false;
 	            }
 	            handle notAloneHandle = create_has_at<boolean>(notAloneListId, lock.clientOwner);
 	            close exists(notAloneHandle);
@@ -1376,26 +1424,224 @@ final class Cohort {
 	            
 	            close Cohort_inv(this)();
 	            close_atomic_space(append(ns, {Cohort.NS_}), Cohort_inv(this));
-	            close post();
+	            close post_();
 	        };
 	        @*/
-	        //@ close pre();
+	        //@ close pre_();
 	        //@ atomic_noop();
-	        //@ open post();
+	        //@ open post_();
 	        //@ close Cohort_held(this, owner);
 	        return false;
 	    }
-	    if (ticketlock.alone()) {
+	    boolean localAlone;
+	    {
+		    /*@
+		    predicate pre_() =
+    		    is_CohortLock_alone_ghost_op(ghop, lock_, ns, owner, pre, post) &*& pre() &*&
+		        [_]this.lock |-> lock &*&
+		        [_]this.globalOwnersId |-> globalOwnersId &*&
+		        [_]this.ticketlock |-> ticketlock &*&
+		        [_]lock.ticketlock |-> globalLock &*&
+		        [_]lock.roundsInfoId |-> roundsInfoId &*&
+		        [_]lock.notAloneListId |-> notAloneListId &*&
+		        [_]atomic_space_(append(ns, {Cohort.NS_}), Cohort_inv(this)) &*&
+		        [_]atomic_space_(append(ns, {CohortLock.NS_}), CohortLock_inv(lock)) &*&
+				[1/4]this._passing |-> true &*&
+				[1/4]this._passCount |-> passCount &*&
+				[1/8]this.held_ |-> true &*&
+				[1/8]this.owner |-> cohortTicket &*&
+				[1/2]this.releasing |-> false &*&
+				has_at<int>(globalOwnerHandle, globalOwnersId, cohortTicket, globalTicket) &*&
+		        has_at(globalRoundInfoHandle, roundsInfoId, globalTicket, global_round_info(this, passCountIncrBoxId, initialClientOwner, initialLocalOwner)) &*&
+		        [1/2]lock.notAloneLocally |-> true;
+		    predicate post_() =
+		        post() &*&
+				[1/4]this._passing |-> true &*&
+				[1/4]this._passCount |-> passCount &*&
+				[1/8]this.held_ |-> true &*&
+				[1/8]this.owner |-> cohortTicket &*&
+				[1/2]this.releasing |-> false &*&
+				has_at<int>(globalOwnerHandle, globalOwnersId, cohortTicket, globalTicket) &*&
+		        has_at(globalRoundInfoHandle, roundsInfoId, globalTicket, global_round_info(this, passCountIncrBoxId, initialClientOwner, initialLocalOwner)) &*&
+		        [1/2]lock.notAloneLocally |-> _;
+		    @*/
+		    /*@
+		    produce_lemma_function_pointer_chunk Ticketlock_alone_ghost_op(ticketlock, append(ns, {Cohort.TICKETLOCK_NS_}), cohortTicket, pre_, post_)(op) {
+			    open pre_();
+			    assert atomic_spaces(?spaces);
+			    if (mem(pair(append(ns, {Cohort.NS_}), Cohort_inv(this)), spaces)) {
+			        mem_map(pair(append(ns, {Cohort.NS_}), Cohort_inv(this)), spaces, fst);
+			        drop_append(ns, {CohortLock.TICKETLOCK_NS_});
+			        drop_append(ns, {Cohort.NS_});
+			        forall_elim(map(fst, spaces), (is_prefix_of)(append(ns, {Cohort.TICKETLOCK_NS_})), append(ns, {Cohort.NS_}));
+			        assert false;
+			    }
+			    if (mem(pair(append(ns, {CohortLock.NS_}), CohortLock_inv(lock)), spaces)) {
+			        mem_map(pair(append(ns, {CohortLock.NS_}), CohortLock_inv(lock)), spaces, fst);
+			        drop_append(ns, {CohortLock.TICKETLOCK_NS_});
+			        drop_append(ns, {CohortLock.NS_});
+			        forall_elim(map(fst, spaces), (is_prefix_of)(append(ns, {Cohort.TICKETLOCK_NS_})), append(ns, {CohortLock.NS_}));
+			        assert false;
+			    }
+			    drop_append(ns, {Cohort.NS_});
+			    drop_append(ns, {CohortLock.TICKETLOCK_NS_});
+			    open_atomic_space(append(ns, {Cohort.NS_}), Cohort_inv(this));
+			    open Cohort_inv(this)();
+			    
+			    match_has_at_<int>(globalOwnerHandle);
+			    assert passing_global_owner_handle(?passingGlobalOwnerHandle);
+			    
+		        open_atomic_space(append(ns, {CohortLock.NS_}), CohortLock_inv(lock));
+		        open CohortLock_inv(lock)();
+		        
+		        match_has_at_(passingGlobalOwnerHandle);
+		        merge_fractions this.owner |-> _;
+		        merge_fractions this.held_ |-> _;
+		        merge_fractions this.ticketlock |-> _;
+		        
+		        match_has_at_<global_round_info>(globalRoundInfoHandle);
+		        assert [_]lock.held_ |-> true;
+		        assert [_]lock.owner |-> globalTicket;
+		        
+	            assert growing_list<boolean>(notAloneListId, ?notAloneList);
+	            if (length(notAloneList) > lock.clientOwner) {
+	                op();
+	                assert false;
+	            }
+	            {
+	                predicate P_() = [_]lock.notAloneListId |-> notAloneListId &*& growing_list(notAloneListId, notAloneList);
+	                produce_lemma_function_pointer_chunk CohortLock_alone_op(lock, owner, P_)() {
+	                    open P_();
+	                    open CohortLock_not_alone(lock, owner);
+	                    match_has_at(notAloneListId);
+	                    assert false;
+	                } {
+	                    close P_();
+	                    assert is_CohortLock_alone_op(?op_, _, _, _);
+	                    is_prefix_of_append(ns, {}, {Cohort.NS_});
+	                    is_prefix_of_append(ns, {}, {CohortLock.NS_});
+						if (!forall(map(fst, spaces), (is_prefix_of)(ns))) {
+							list<int> badName = not_forall(map(fst, spaces), (is_prefix_of)(ns));
+							forall_elim(map(fst, spaces), (is_prefix_of)(append(ns, {Cohort.TICKETLOCK_NS_})), badName);
+							length_take_(length(ns) + 1, badName);
+							append_drop_take(badName, length(append(ns, {CohortLock.TICKETLOCK_NS_})));
+							assert badName == append(append(ns, {Cohort.TICKETLOCK_NS_}), drop(length(ns) + 1, badName));
+							append_assoc(ns, {Cohort.TICKETLOCK_NS_}, drop(length(ns) + 1, badName));
+							take_append(length(ns), ns, cons(Cohort.TICKETLOCK_NS_, drop(length(ns) + 1, badName)));
+							assert false;
+						}
+	                    ghop(op_);
+	                    open P_();
+	                }
+	            }
+		        
+		        close Cohort_inv(this)();
+		        close_atomic_space(append(ns, {Cohort.NS_}), Cohort_inv(this));
+		        
+		        close CohortLock_inv(lock)();
+		        close_atomic_space(append(ns, {CohortLock.NS_}), CohortLock_inv(lock));
+		        close post_();
+		    };
+		    @*/
+		    //@ close pre_();
+	        localAlone = ticketlock.alone();
+		    //@ if (localAlone) open post_(); else open pre_();
+	    }
+	    if (localAlone) {
 	        //@ close Cohort_held(this, owner);
 	        return true;
 	    }
 	    if (passCount == MAX_PASS_COUNT) {
+		    /*@
+		    predicate pre_() =
+    		    is_CohortLock_alone_ghost_op(ghop, lock_, ns, owner, pre, post) &*& pre() &*&
+		        [_]this.lock |-> lock &*&
+		        [_]this.globalOwnersId |-> globalOwnersId &*&
+		        [_]this.ticketlock |-> ticketlock &*&
+		        [_]lock.ticketlock |-> globalLock &*&
+		        [_]lock.roundsInfoId |-> roundsInfoId &*&
+		        [_]lock.notAloneListId |-> notAloneListId &*&
+		        [_]atomic_space_(append(ns, {Cohort.NS_}), Cohort_inv(this)) &*&
+		        [_]atomic_space_(append(ns, {CohortLock.NS_}), CohortLock_inv(lock)) &*&
+				[1/4]this._passing |-> true &*&
+				[1/4]this._passCount |-> passCount &*&
+				[1/8]this.held_ |-> true &*&
+				[1/8]this.owner |-> cohortTicket &*&
+				[1/2]this.releasing |-> false &*&
+				has_at<int>(globalOwnerHandle, globalOwnersId, cohortTicket, globalTicket) &*&
+		        has_at(globalRoundInfoHandle, roundsInfoId, globalTicket, global_round_info(this, passCountIncrBoxId, initialClientOwner, initialLocalOwner)) &*&
+		        [1/2]lock.notAloneLocally |-> true;
+		    predicate post_() =
+		        post() &*&
+				[1/4]this._passing |-> true &*&
+				[1/4]this._passCount |-> passCount &*&
+				[1/8]this.held_ |-> true &*&
+				[1/8]this.owner |-> cohortTicket &*&
+				[1/2]this.releasing |-> false &*&
+				has_at<int>(globalOwnerHandle, globalOwnersId, cohortTicket, globalTicket) &*&
+		        has_at(globalRoundInfoHandle, roundsInfoId, globalTicket, global_round_info(this, passCountIncrBoxId, initialClientOwner, initialLocalOwner)) &*&
+		        [1/2]lock.notAloneLocally |-> _;
+		    @*/
+		    /*@
+		    produce_lemma_function_pointer_chunk atomic_noop_ghost_op(pre_, post_)() {
+			    open pre_();
+			    drop_append(ns, {Cohort.NS_});
+			    drop_append(ns, {CohortLock.TICKETLOCK_NS_});
+			    open_atomic_space(append(ns, {Cohort.NS_}), Cohort_inv(this));
+			    open Cohort_inv(this)();
+			    
+			    match_has_at_<int>(globalOwnerHandle);
+			    assert passing_global_owner_handle(?passingGlobalOwnerHandle);
+			    
+		        open_atomic_space(append(ns, {CohortLock.NS_}), CohortLock_inv(lock));
+		        open CohortLock_inv(lock)();
+		        
+		        match_has_at_(passingGlobalOwnerHandle);
+		        merge_fractions this.owner |-> _;
+		        merge_fractions this.held_ |-> _;
+		        merge_fractions this.ticketlock |-> _;
+		        
+		        match_has_at_<global_round_info>(globalRoundInfoHandle);
+		        assert [_]lock.held_ |-> true;
+		        assert [_]lock.owner |-> globalTicket;
+		        
+	            assert growing_list<boolean>(notAloneListId, ?notAloneList);
+	            assert length(notAloneList) == lock.clientOwner;
+	            
+	            {
+	                predicate P_() = [_]lock.notAloneListId |-> notAloneListId &*& growing_list(notAloneListId, notAloneList);
+	                produce_lemma_function_pointer_chunk CohortLock_alone_op(lock, owner, P_)() {
+	                    open P_();
+	                    open CohortLock_not_alone(lock, owner);
+	                    match_has_at(notAloneListId);
+	                    assert false;
+	                } {
+	                    close P_();
+	                    assert is_CohortLock_alone_op(?op_, _, _, _);
+	                    is_prefix_of_append(ns, {}, {Cohort.NS_});
+	                    is_prefix_of_append(ns, {}, {CohortLock.NS_});
+	                    ghop(op_);
+	                    open P_();
+	                }
+	            }
+		        
+		        close Cohort_inv(this)();
+		        close_atomic_space(append(ns, {Cohort.NS_}), Cohort_inv(this));
+		        
+		        close CohortLock_inv(lock)();
+		        close_atomic_space(append(ns, {CohortLock.NS_}), CohortLock_inv(lock));
+		        close post_();
+		    };
+		    @*/
+		    //@ close pre_();
+		    //@ atomic_noop();
+		    //@ open post_();
 	        //@ close Cohort_held(this, owner);
 	        return true;
 	    }
 	    {
 	        /*@
-	        predicate pre() =
+	        predicate pre_() =
 	            [_]this.lock |-> lock &*& [_]lock.valid(ns, level) &*&
 	            [_]this.ticketlock |-> ticketlock &*&
 	            [_]this.globalOwnersId |-> globalOwnersId &*&
@@ -1411,8 +1657,9 @@ final class Cohort {
 	            [1/2]this.releasing |-> false &*&
 				has_at<int>(globalOwnerHandle, globalOwnersId, cohortTicket, globalTicket) &*&
 				has_at(globalRoundInfoHandle, roundsInfoId, globalTicket, global_round_info(this, passCountIncrBoxId, initialClientOwner, initialLocalOwner)) &*&
-	            Ticketlock_not_alone(ticketlock, cohortTicket);
-	        predicate post() =
+	            Ticketlock_not_alone(ticketlock, cohortTicket) &*&
+	            [1/2]lock.notAloneLocally |-> _;
+	        predicate post_() =
 	            [1/4]this._passing |-> true &*&
 	            [1/4]this._passCount |-> passCount &*&
 	            [1/8]this.held_ |-> true &*&
@@ -1420,11 +1667,12 @@ final class Cohort {
 	            [1/2]this.releasing |-> false &*&
 				has_at<int>(globalOwnerHandle, globalOwnersId, cohortTicket, globalTicket) &*&
 				has_at(globalRoundInfoHandle, roundsInfoId, globalTicket, global_round_info(this, passCountIncrBoxId, initialClientOwner, initialLocalOwner)) &*&
-	            CohortLock_not_alone(lock, owner);
+	            CohortLock_not_alone(lock, owner) &*&
+	            [1/2]lock.notAloneLocally |-> _;
 	        @*/
 	        /*@
-	        produce_lemma_function_pointer_chunk atomic_noop_ghost_op(pre, post)() {
-	            open pre();
+	        produce_lemma_function_pointer_chunk atomic_noop_ghost_op(pre_, post_)() {
+	            open pre_();
 	            open_atomic_space(append(ns, {Cohort.NS_}), Cohort_inv(this));
 	            open Cohort_inv(this)();
 	            
@@ -1444,7 +1692,7 @@ final class Cohort {
 	            assert growing_list<boolean>(notAloneListId, ?notAloneList);
 	            if (length(notAloneList) == lock.clientOwner) {
 	                growing_list_add<boolean>(notAloneListId, true);
-	                close not_alone_locally(true);
+	                lock.notAloneLocally = true;
 	            }
 	            handle notAloneHandle = create_has_at<boolean>(notAloneListId, lock.clientOwner);
 	            close exists(notAloneHandle);
@@ -1455,12 +1703,12 @@ final class Cohort {
 	            
 	            close Cohort_inv(this)();
 	            close_atomic_space(append(ns, {Cohort.NS_}), Cohort_inv(this));
-	            close post();
+	            close post_();
 	        };
 	        @*/
-	        //@ close pre();
+	        //@ close pre_();
 	        //@ atomic_noop();
-	        //@ open post();
+	        //@ open post_();
 	    }
         //@ close Cohort_held(this, owner);
 		return false;
