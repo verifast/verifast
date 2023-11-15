@@ -207,9 +207,9 @@ predicate_ctor CohortLock_inv(CohortLock lock)() =
     [_]lock.roundsInfoId |-> ?roundsInfoId &*&
     [_]lock.clientRoundsInfoId |-> ?clientRoundsInfoId &*&
     [_]lock.notAloneListId |-> ?notAloneListId &*&
-    [1/4]lock.owner |-> owner &*& 0 <= owner &*&
+    [3/4]lock.owner |-> owner &*& 0 <= owner &*&
     incr_box(ownerIncrBox, owner) &*&
-    [1/4]lock.held_ |-> held &*&
+    [3/4]lock.held_ |-> held &*&
     growing_list<global_round_info>(roundsInfoId, ?roundsInfo) &*&
     length(roundsInfo) == owner + (held ? 1 : 0) &*&
     growing_list<boolean>(notAloneListId, ?notAloneList) &*&
@@ -238,6 +238,7 @@ predicate_ctor CohortLock_inv(CohortLock lock)() =
             :
                 Ticketlock_not_alone(globalLock, owner)
     :
+        length(clientRoundsInfo) == clientOwner &*&
         [1/4]lock.owner |-> owner &*& [1/4]lock.held_ |-> held &*& !clientHeld &*& 0 <= clientOwner &*&
         length(notAloneList) == clientOwner &*&
         clientOwner > 0 && nth(clientOwner - 1, notAloneList) ?
@@ -313,7 +314,7 @@ predicate Cohort_held(Cohort cohort, int ticket) =
     has_at<int>(globalOwnerHandle, globalOwnersId, cohortTicket, globalTicket) &*&
     has_at(globalRoundInfoHandle, roundsInfoId, globalTicket, global_round_info(cohort, ?passCountIncrBoxId, ?initialClientOwner, ?initialLocalOwner)) &*&
     ticket == initialClientOwner + (cohortTicket - initialLocalOwner) &*&
-    [1/4]cohort._passing |-> ?passing &*& cohort.passing |-> passing &*&
+    [1/4]cohort._passing |-> ?passing &*& cohort.passing |-> _ &*&
     [1/4]cohort._passCount |-> ?passCount &*& cohort.passCount |-> passCount &*&
     [1/8]cohort.held_ |-> true &*&
     [1/8]cohort.owner |-> cohortTicket &*&
@@ -571,12 +572,13 @@ final class Cohort {
 		            clientOwner == initialClientOwner + (ticket - initialLocalOwner)
 		        :
 		            obs(currentThread, p, cons(pair(?acquireSignal, sublevel(level, SIG_LEVEL)), obs)) &*&
+		            has_at(_, acquireSignalsId, ticket, acquireSignal) &*&
 		            wait_inv(_) &*&
+    		        is_CohortLock_wait_ghost_op(wop, p, lock, ns, level, cpDegrees, wait_inv, currentThread) &*&
 		            is_CohortLock_acquire_ghost_op(aop, p, obs, lock, ns, wait_inv, post, currentThread);
 		    @*/
 		    /*@
 		    produce_lemma_function_pointer_chunk Ticketlock_wait_ghost_op(p, ticketlock, append(ns, {TICKETLOCK_NS_}), LL_LEVEL, cpDegrees + 1, wait_inv_, currentThread)(cohortOwner, newRound, op) {
-		        assume(false);
 		        assert atomic_spaces(?spaces);
 		        assert obs(_, p, ?obs1);
 		        open wait_inv_(?oldCohortOwner);
@@ -966,12 +968,19 @@ final class Cohort {
 		    ticketlock.acquire();
 		    //@ open post_(?ticket);
 		}
+		//@ assert [1/8]cohort.owner |-> ?ticket;
 		if (!cohort.passing) {
 		    //@ assert obs(currentThread, p, cons(pair(?acquireSignal, sublevel(level, SIG_LEVEL)), obs));
 		    {
 				/*@
 				predicate global_round_handle(handle globalRoundHandle, handle passCountHandle) = true;
 				predicate wait_inv_(int oldGlobalOwner) =
+				    [1/4]cohort._passing |-> false &*&
+				    [1/4]cohort._passCount |-> ?passCount &*& cohort.passCount |-> passCount &*&
+				    [1/8]cohort.held_ |-> true &*&
+				    [1/8]cohort.owner |-> ticket &*&
+				    [1/2]cohort.releasing |-> false &*&
+				    has_at(_, acquireSignalsId, ticket, acquireSignal) &*&
 				    [_]this.lock |-> lock &*&
 				    [_]this.ticketlock |-> ticketlock &*& [_]ticketlock.valid(COHORT_TICKETLOCK_NS, LL_LEVEL) &*&
 				    [_]lock.ns |-> ns &*&
@@ -996,7 +1005,16 @@ final class Cohort {
 				        is_lower_bound(passCountHandle, oldPassCountIncrBox, ?oldPassCount) &*& oldPassCount <= MAX_PASS_COUNT &*&
 				        oldClientOwner == oldInitialClientOwner + oldPassCount &*&
 				        call_below_perms_lex(MAX_PASS_COUNT - oldPassCount, p, ?c1, {cpDegrees}) &*& Class_lt(Ticketlock_targetClass, c1) == true;
-				predicate post_(int globalTicket) = true;
+				predicate post_(int globalTicket) =
+				    [1/4]cohort._passing |-> true &*&
+				    [1/4]cohort._passCount |-> 0 &*& cohort.passCount |-> 0 &*&
+				    [1/8]cohort.held_ |-> true &*&
+				    [1/8]cohort.owner |-> ticket &*&
+				    [1/2]cohort.releasing |-> false &*&
+		            post(?clientOwner) &*&
+		            client_owner_info(?globalOwnerHandle, ?globalRoundInfoHandle) &*&
+		            has_at<int>(globalOwnerHandle, globalOwnersId, ticket, globalTicket) &*&
+		            has_at(globalRoundInfoHandle, roundsInfoId, globalTicket, global_round_info(cohort, ?passCountIncrBoxId, clientOwner, ticket));
 				@*/
 				/*@
 				produce_lemma_function_pointer_chunk Ticketlock_wait_ghost_op(p, globalLock, append(ns, {CohortLock.TICKETLOCK_NS_}), sublevel(level, CohortLock.LEVEL), cpDegrees + 1, wait_inv_, currentThread)(globalOwner, newRound, op) {
@@ -1106,21 +1124,109 @@ final class Cohort {
 				};
 				@*/
 				/*@
-				produce_lemma_function_pointer_chunk ticketlock_acquire_ghost_op(cons(pair(acquireSignal, sublevel(level, SIG_LEVEL)), obs), append(ns, {CohortLock.TICKETLOCK_NS_}), sublevel(level, CohortLock.LEVEL), cohortlock_ticketlock_inv, wait_inv_, post_, currentThread)() {
+				produce_lemma_function_pointer_chunk Ticketlock_acquire_ghost_op(p, cons(pair(acquireSignal, sublevel(level, SIG_LEVEL)), obs), globalLock, append(ns, {CohortLock.TICKETLOCK_NS_}), wait_inv_, post_, currentThread)(globalOwner, op) {
+				    open wait_inv_(?oldGlobalOwner);
+				    assert atomic_spaces(?spaces);
+				    if (mem(pair(COHORTLOCK_NS, CohortLock_inv(lock)), spaces)) {
+				        mem_map(pair(COHORTLOCK_NS, CohortLock_inv(lock)), spaces, fst);
+				        forall_elim(map(fst, spaces), (is_prefix_of)(append(ns, {CohortLock.TICKETLOCK_NS_})), COHORTLOCK_NS);
+				        assert false;
+				    }
+				    open_atomic_space(COHORTLOCK_NS, CohortLock_inv(lock));
+				    open CohortLock_inv(lock)();
+				    
+				    is_prefix_of_append(ns, {}, {CohortLock.NS_});
+
+				    if (!forall(map(fst, spaces), (is_prefix_of)(ns))) {
+				        list<int> badName = not_forall(map(fst, spaces), (is_prefix_of)(ns));
+				        forall_elim(map(fst, spaces), (is_prefix_of)(append(ns, {CohortLock.TICKETLOCK_NS_})), badName);
+				        append_drop_take(badName, length(append(ns, {CohortLock.TICKETLOCK_NS_})));
+				        assert badName == append(append(ns, {CohortLock.TICKETLOCK_NS_}), drop(length(ns) + 1, badName));
+				        append_assoc(ns, {CohortLock.TICKETLOCK_NS_}, drop(length(ns) + 1, badName));
+				        take_append(length(ns), ns, cons(CohortLock.TICKETLOCK_NS_, drop(length(ns) + 1, badName)));
+				        assert false;
+				    }
+				    				    
+				    op();
+				    
+				    is_prefix_of_append(ns, {CohortLock.NS_}, {Cohort.NS_});
+				    if (mem(pair(COHORT_NS, Cohort_inv(this)), spaces)) {
+				        mem_map(pair(COHORT_NS, Cohort_inv(this)), spaces, fst);
+				        forall_elim(map(fst, spaces), (is_prefix_of)(append(ns, {CohortLock.TICKETLOCK_NS_})), COHORT_NS);
+				        is_prefix_of_append(ns, {CohortLock.TICKETLOCK_NS_}, {Cohort.NS_});
+				        assert false;
+				    }
+				    open_atomic_space(COHORT_NS, Cohort_inv(this));
+				    open Cohort_inv(this)();
+				    
+				    match_has_at(acquireSignalsId);
+				    
+				    set_signal(acquireSignal);
+				    
+				    lock.held_ = true;
+				    
+				    assert [_]lock.clientOwner |-> ?clientOwner;
+				    
+		            is_prefix_of_append(ns, {}, {CohortLock.NS_});
+		            is_prefix_of_append(ns, {}, {COHORT_NS_});
+		            {
+		                predicate P_() = [1/2]lock.clientOwner |-> clientOwner &*& [1/2]lock.clientHeld |-> false;
+		                predicate Q_() = [1/2]lock.clientOwner |-> clientOwner &*& [1/2]lock.clientHeld |-> true;
+		                produce_lemma_function_pointer_chunk CohortLock_acquire_op(lock, clientOwner, P_, Q_)() {
+		                    open P_();
+		                    open lock.state(_, _);
+		                    lock.clientHeld = true;
+		                    close lock.state(_, _);
+		                    close Q_();
+		                } {
+		                    close P_();
+		                    assert is_CohortLock_acquire_op(?op_, _, _, _, _);
+    		                aop(clientOwner, op_);
+    		                open Q_();
+    		            }
+		            }
+		            leak is_CohortLock_acquire_ghost_op(_, _, _, _, _, _, _, _);
+		            
+		            assert growing_list<int>(globalOwnersId, ?globalOwners);
+		            growing_list_add(globalOwnersId, globalOwner);
+		            
+		            create_box passCountIncrBoxId = incr_box(0); 
+		            
+		            growing_list_add(roundsInfoId, global_round_info(this, passCountIncrBoxId, clientOwner, ticket));
+		            handle globalRoundInfoId = create_has_at<global_round_info>(roundsInfoId, globalOwner);
+		            handle globalOwnerHandle = create_has_at<int>(globalOwnersId, ticket);
+		            close client_owner_info(globalOwnerHandle, globalRoundInfoId);
+		            
+		            handle passingGlobalOwnerHandle = create_has_at<global_round_info>(roundsInfoId, globalOwner);
+		            close passing_global_owner_handle(passingGlobalOwnerHandle);
+		            
+		            _passing = true;
+		            
+		            assert growing_list<client_round_info>(clientRoundsInfoId, ?clientRoundsInfo);
+		            growing_list_add(clientRoundsInfoId, client_round_info(this, ticket));
+		            
+		            close Cohort_inv(this)();
+		            close_atomic_space(COHORT_NS, Cohort_inv(this));
+				    
+				    close CohortLock_inv(lock)();
+				    close_atomic_space(COHORTLOCK_NS, CohortLock_inv(lock));
+				    close post_(globalOwner);
 				};
 				@*/
 				//@ assert level == level(_, cons(?maxLength, ?level0));
 				//@ lex0_subspace_lt_append(level0, CohortLock.LEVEL, SIG_LEVEL);
 				/*@
-				if (!forall(map(snd, obs), (all_sublevels_lt)(ticketlock_nb_level_dims, sublevel(level, CohortLock.LEVEL)))) {
-				    level badLevel = not_forall(map(snd, obs), (all_sublevels_lt)(ticketlock_nb_level_dims, sublevel(level, CohortLock.LEVEL)));
-				    forall_elim(map(snd, obs), (all_sublevels_lt)(cohortlock_nb_level_dims, level), badLevel);
-				    all_sublevels_lt_append(cohortlock_nb_level_dims, level, badLevel, ticketlock_nb_level_dims, CohortLock.LEVEL);
+				if (!forall(map(snd, obs), (level_subspace_lt)(TL_LEVEL))) {
+				    level badLevel = not_forall(map(snd, obs), (level_subspace_lt)(TL_LEVEL));
+				    forall_elim(map(snd, obs), (level_subspace_lt)(level), badLevel);
+				    level_subspace_lt_sublevel(level, CohortLock.LEVEL, badLevel);
 				    assert false;
 				}
 				@*/
-				//@ close wait_inv(-1, 0, p1);
-				ticketlock_acquire(globalLock);
+				//@ produce_call_below_perm_();
+				//@ call_below_perm__weaken(Ticketlock.class);
+				//@ close wait_inv_(-1);
+				globalLock.acquire();
 				//@ open post_(?globalTicket);
 			}
 		}
