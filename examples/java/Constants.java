@@ -4,6 +4,8 @@ class Bar {
     public static final short BAR = (byte)0x103;
     public static final short QUUX = (short) (Foo.FOO + BAR);
     public static final short BLA = (short)QUUX;
+    //@ public static final short GHOST = 1;
+    //@ public static final pair<int, int> PAIR = pair(GHOST, 2);
 
     private Bar() 
       //@ requires true;
@@ -28,6 +30,8 @@ class Bar {
         assert Foo.FOO == 12345;
         assert BAR == 3;
         assert QUUX == 12348;
+        //@ assert GHOST == 1;
+        //@ assert PAIR == pair(1, 2);
     }
     
 }

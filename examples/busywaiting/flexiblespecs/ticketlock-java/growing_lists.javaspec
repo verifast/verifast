@@ -1,0 +1,30 @@
+// tab_size:4
+
+// Justus Fasse and Bart Jacobs. Expressive modular verification of termination for busy-waiting programs. 2023.
+
+/*@
+
+predicate growing_list<t>(box id; list<t> elems);
+predicate has_at<t>(handle h; box listId, int index, t elem);
+
+lemma box create_growing_list<t>();
+    requires true;
+    ensures growing_list<t>(result, {});
+
+lemma void growing_list_add<t>(box id, t value);
+    requires growing_list<t>(id, ?elems);
+    ensures growing_list<t>(id, append(elems, {value}));
+
+lemma handle create_has_at<t>(box id, int index);
+    requires growing_list<t>(id, ?elems) &*& 0 <= index &*& index < length(elems);
+    ensures growing_list<t>(id, elems) &*& has_at<t>(result, id, index, nth(index, elems));
+
+lemma void match_has_at_<t>(handle handleId);
+    requires has_at<t>(handleId, ?id, ?index, ?elem) &*& growing_list<t>(id, ?elems);
+    ensures growing_list<t>(id, elems) &*& has_at<t>(handleId, id, index, elem) &*& 0 <= index &*& index < length(elems) &*& nth(index, elems) == elem;
+
+lemma void match_has_at<t>(box id);
+    requires growing_list<t>(id, ?elems) &*& has_at<t>(?handleId, id, ?index, ?elem);
+    ensures growing_list<t>(id, elems) &*& has_at<t>(handleId, id, index, elem) &*& 0 <= index &*& index < length(elems) &*& nth(index, elems) == elem;
+
+@*/

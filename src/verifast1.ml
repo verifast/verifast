@@ -1478,11 +1478,13 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     process_decls [] enumdeclmap
   
   let functypenames = 
-    let ds=match ps with
-        [PackageDecl(_,"",[],ds)] -> ds
-      | _ when file_type path=Java -> []
-    in
-    flatmap (function (FuncTypeDecl (l, gh, _, g, tps, ftps, _, _)) -> [g, (l, gh, tps, ftps)] | _ -> []) ds
+    ps |> flatmap begin function
+      PackageDecl (_, pn, _, ds) ->
+      ds |> flatmap begin function
+        FuncTypeDecl (l, gh, _, g, tps, ftps, _, _) -> [full_name pn g, (l, gh, tps, ftps)]
+      | _ -> []
+      end
+    end
   
   let inductivedeclmap=
     let rec iter pn idm ds =
@@ -4986,7 +4988,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             begin function
               (f, ({fgh; ft; fbinding=Static; finit=Some e} as fd)) ->
                 let e = check_expr_t (pn,ilist) [] [current_class, ClassOrInterfaceName cn] (Some (fgh = Ghost)) e ft in
-                check_static_field_initializer e;
+                if fgh = Real then check_static_field_initializer e;
                 (f, {fd with finit=Some e})
             | fd -> fd
             end
@@ -5001,7 +5003,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let fds = fds |> List.map begin function
           (f, ({fgh; ft; fbinding=Static; finit=Some e} as fd)) ->
           let e = check_expr_t (pn,ilist) [] [current_class, ClassOrInterfaceName itf] (Some (fgh = Ghost)) e ft in
-          check_static_field_initializer e;
+          if fgh = Real then check_static_field_initializer e;
           (f, {fd with finit=Some e})
         | fd -> fd
         end
@@ -5133,7 +5135,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         Some (InterfaceInfo (li, fields, meths, preds, interfs, tparams)) -> eval_field_body (f::callers) (List.assoc fn fields)
       | None ->
       assert false
-    and eval_field_body callers {fbinding; ffinal; finit; fvalue} =
+    and eval_field_body callers {fgh; fbinding; ffinal; finit; fvalue} =
       match !fvalue with
         Some None -> raise NotAConstant
       | Some (Some v) -> v
@@ -5141,7 +5143,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         match (fbinding, ffinal, finit) with
           (Static, true, Some e) ->
           begin try
-            let v = eval callers e in
+            let v = match fgh with Ghost -> GhostConst e | Real -> eval callers e in
             fvalue := Some (Some v);
             v
           with NotAConstant -> fvalue := Some None; raise NotAConstant
@@ -5180,7 +5182,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       begin match e with
         CallExpr (l, g, [], [], pats, Static) ->
         begin match resolve Ghost (pn,ilist) l g purefuncmap with
-          Some (_, (_, _, rt, _, _)) ->
+          Some (g_resolved, (_, _, rt, _, _)) ->
           begin match rt with
             InductiveType (i, _) ->
             let (_, inductive_tparams, ctormap, _, _, _, _, _) = List.assoc i inductivemap in
@@ -5195,7 +5197,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               let (pats, tenv') = check_pats_core (pn,ilist) l tparams tenv ts pats in
               let args = List.map (fun (LitPat arg | WCtorPat (_, _, _, _, _, _, _, Some arg)) -> arg) pats in
               let args = List.map2 (fun arg (t, t0) -> box arg t t0) args (List.combine ts ts0) in
-              let e = WPureFunCall (l, g, targs, args) in
+              let e = WPureFunCall (l, g_resolved, targs, args) in
               (WCtorPat (l, i, targs, g, ts0, ts, pats, Some e), tenv')
             | None ->
               fallback ()
@@ -5329,7 +5331,13 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | _ -> static_error l (Printf.sprintf "Ambiguous instance predicate assertion: multiple predicates named '%s' in scope" g) None
   
   let get_pred_symb p = let (_, _, _, _, symb, _, _) = List.assoc p predfammap in symb
-  let get_pure_func_symb g = let (_, _, _, _, symb) = List.assoc g purefuncmap in symb
+  let get_pure_func_symb g =
+    let (_, _, _, _, symb) =
+      try
+        List.assoc g purefuncmap
+      with Not_found -> failwith (Printf.sprintf "Pure function %s missing in the runtime library" g)
+    in
+    symb
   let get_pred_symb_from_map p m = let _, (_, _, _, _, symb, _, _) = List.assoc p m in symb
   let try_get_pred_symb_from_map p m = try_assoc p m |> option_map @@ fun (_, (_, _, _, _, symb, _, _)) -> symb
   
@@ -7315,20 +7323,20 @@ let check_if_list_is_defined () =
       cont state (ctxt#mk_app arraylength_symbol [t])
     | WRead(l, e, fparent, fname, frange, fstatic, fvalue, fghost) ->
       if fstatic then
-        cont state
-          begin match !fvalue with
-            Some (Some v) ->
-            begin match v with
-              IntConst n -> ctxt#mk_intlit_of_string (string_of_big_int n)
-            | BoolConst b -> if b then ctxt#mk_true else ctxt#mk_false
-            | StringConst s -> static_error l "String constants are not yet supported." None
-            | NullConst -> ctxt#mk_intlit 0
-            end
-          | _ ->
-            match read_field with
-              None -> static_error l "Cannot use field read expression in this context." None
-            | Some (read_field, read_static_field, deref_pointer, read_array) -> read_static_field l fparent fname
+        begin match !fvalue with
+          Some (Some v) ->
+          begin match v with
+            IntConst n -> cont state (ctxt#mk_intlit_of_string (string_of_big_int n))
+          | BoolConst b -> cont state (if b then ctxt#mk_true else ctxt#mk_false)
+          | StringConst s -> static_error l "String constants are not yet supported." None
+          | NullConst -> cont state (ctxt#mk_intlit 0)
+          | GhostConst e -> ev state e $. cont
           end
+        | _ ->
+          match read_field with
+            None -> static_error l "Cannot use field read expression in this context." None
+          | Some (read_field, read_static_field, deref_pointer, read_array) -> cont state (read_static_field l fparent fname)
+        end
       else
         ev state e $. fun state v ->
         begin

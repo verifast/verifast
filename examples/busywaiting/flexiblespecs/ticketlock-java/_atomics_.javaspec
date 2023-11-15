@@ -1,0 +1,97 @@
+/*@
+
+predicate atomic_space_(list<int> ns, predicate() inv;);
+
+lemma void create_atomic_space_(list<int> ns, predicate() inv);
+  requires inv();
+  ensures atomic_space_(ns, inv);
+
+predicate atomic_spaces(list<pair<list<int>, predicate()> > spaces);
+
+lemma void open_atomic_space(list<int> ns, predicate() inv);
+  requires [?f]atomic_space_(ns, inv) &*& atomic_spaces(?spaces) &*& !mem(pair(ns, inv), spaces);
+  ensures [f]atomic_space_(ns, inv) &*& atomic_spaces(cons(pair(ns, inv), spaces)) &*& inv();
+
+lemma void close_atomic_space(list<int> ns, predicate() inv);
+  requires inv() &*& atomic_spaces(?spaces);
+  ensures atomic_spaces(remove(pair(ns, inv), spaces));
+
+fixpoint boolean is_prefix_of<t>(list<t> xs, list<t> ys) {
+  return take(length(xs), ys) == xs;
+}
+
+lemma_auto void is_prefix_of_append<t>(list<t> xs, list<t> ys, list<t> zs)
+  requires true;
+  ensures is_prefix_of(append(xs, ys), append(xs, zs)) == is_prefix_of(ys, zs);
+{
+  switch (xs) {
+    case nil:
+    case cons(h, t):
+      is_prefix_of_append(t, ys, zs);
+  }
+}
+
+fixpoint boolean not_is_prefix_of<t>(list<t> xs, list<t> ys) {
+  return take(length(xs), ys) != xs;
+}
+
+@*/
+
+/*@
+
+typedef lemma void atomic_noop_ghost_op(predicate() pre, predicate() post)();
+  requires atomic_spaces({}) &*& pre();
+  ensures atomic_spaces({}) &*& post();
+
+lemma void atomic_noop();
+  nonghost_callers_only
+  requires is_atomic_noop_ghost_op(?ghop, ?pre, ?post) &*& pre();
+  ensures post();
+
+@*/
+
+/*@
+
+typedef lemma void AtomicLong_get_op(AtomicLong l, predicate() P, predicate(long) Q)();
+  requires [?f]l.state(?value) &*& P();
+  ensures [f]l.state(value) &*& Q(value);
+
+typedef lemma void AtomicLong_get_ghost_op(AtomicLong l, predicate() pre, predicate(long) post)(AtomicLong_get_op *op);
+  requires atomic_spaces({}) &*& is_AtomicLong_get_op(op, l, ?P, ?Q) &*& P() &*& pre();
+  ensures atomic_spaces({}) &*& is_AtomicLong_get_op(op, l, P, Q) &*& Q(?value) &*& post(value);
+
+typedef lemma void AtomicLong_getAndIncrement_op(AtomicLong l, predicate() P, predicate(long) Q)();
+  requires l.state(?value) &*& P();
+  ensures l.state(value + 1) &*& Q(value); // No overflow! Sound only if no other mutators are offered!
+
+typedef lemma void AtomicLong_getAndIncrement_ghost_op(AtomicLong l, predicate() pre, predicate(long) post)(AtomicLong_getAndIncrement_op *op);
+  requires atomic_spaces({}) &*& is_AtomicLong_getAndIncrement_op(op, l, ?P, ?Q) &*& P() &*& pre();
+  ensures atomic_spaces({}) &*& is_AtomicLong_getAndIncrement_op(op, l, P, Q) &*& Q(?value) &*& post(value);
+
+@*/
+
+final class AtomicLong {
+
+  //@ predicate state(long value);
+
+  public AtomicLong();
+  //@ requires true;
+  //@ ensures state(0);
+  //@ terminates;
+
+  public long get();
+  //@ requires is_AtomicLong_get_ghost_op(?ghop, this, ?pre, ?post) &*& pre();
+  //@ ensures post(result);
+  //@ terminates;
+  
+  public long getPlain();
+  //@ requires [?f]state(?value);
+  //@ ensures [f]state(value) &*& result == value;
+  //@ terminates;
+
+  public long getAndIncrement();
+  //@ requires is_AtomicLong_getAndIncrement_ghost_op(?ghop, this, ?pre, ?post) &*& pre();
+  //@ ensures post(result);
+  //@ terminates;
+
+}

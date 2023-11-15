@@ -1,4 +1,5 @@
 verifast.internal.javaspec
+_prelude.javaspec
 _list.javaspec
 _nat.javaspec
 _quantifiers.javaspec
