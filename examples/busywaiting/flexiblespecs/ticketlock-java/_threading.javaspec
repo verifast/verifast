@@ -3,18 +3,21 @@ interface Runnable {
   public void run();
   //@ requires obs(currentThread, ?p, {}) &*& valid();
   //@ ensures obs(currentThread, p, {});
+  //@ terminates;
 }
 
-class Thread {
+final class Thread {
 
   //@ predicate valid(Runnable runnable);
   
   public Thread(Runnable runnable);
   //@ requires true;
   //@ ensures valid(runnable);
+  //@ terminates;
 
   public void start();
-  //@ requires valid(?runnable) &*& runnable.valid();
+  //@ requires valid(?runnable) &*& runnable.valid() &*& call_perm_(currentThread, runnable.getClass());
   //@ ensures true;
+  //@ terminates;
 
 }

@@ -1,3 +1,5 @@
+// Justus Fasse and Bart Jacobs. Expressive modular verification of termination for busy-waiting programs. 2023.
+
 final class Flag {
   int value;
 }
@@ -13,6 +15,7 @@ final class Flipper implements Runnable {
   public void run()
   //@ requires obs(currentThread, ?p, {}) &*& valid();
   //@ ensures obs(currentThread, p, {});
+  //@ terminates;
   {
     lock.acquire();
     //@ open Flag_valid(flag)();
@@ -24,8 +27,9 @@ final class Flipper implements Runnable {
 
 final class ClassicClient {
   public static void main(String[] args)
-  //@ requires true;
-  //@ ensures true;
+  //@ requires obs(currentThread, {}, {});
+  //@ ensures obs(currentThread, {}, {});
+  //@ terminates;
   {
     Flag flag = new Flag();
     //@ close Flag_valid(flag)();
@@ -35,7 +39,11 @@ final class ClassicClient {
     flipper.flag = flag;
     flipper.lock = lock;
     //@ leak flipper.flag |-> _ &*& flipper.lock |-> _;
+    //@ produce_call_below_perm_();
+    //@ call_below_perm__to_call_perm_(Flipper.class);
     new Thread(flipper).start();
+    //@ produce_call_below_perm_();
+    //@ call_below_perm__to_call_perm_(Flipper.class);
     new Thread(flipper).start();
   }
 }

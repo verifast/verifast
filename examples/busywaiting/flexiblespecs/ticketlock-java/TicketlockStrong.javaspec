@@ -1,0 +1,108 @@
+// tab_size:2
+
+// Justus Fasse and Bart Jacobs. Expressive modular verification of termination for busy-waiting programs. 2023.
+
+/*@
+
+typedef lemma void TicketlockStrong_wait_op(TicketlockStrong l, int owner_, predicate() P)();
+  requires l.state(?owner, ?held) &*& P();
+  ensures l.state(owner, held) &*& owner == owner_ &*& held &*& P();
+
+typedef lemma void TicketlockStrong_wait_ghost_op(TicketlockStrong l, list<int> ns, predicate(int oldOwner, int oldM) waitInv, int callerThread)(int owner, int M, TicketlockStrong_wait_op *op);
+  requires
+    atomic_spaces(?spaces) &*& forall(map(fst, spaces), (is_prefix_of)(ns)) == true &*&
+    is_TicketlockStrong_wait_op(op, l, owner, ?P) &*& P() &*&
+    0 <= owner &*& 0 <= M &*&
+    waitInv(?oldOwner, ?oldM) &*&
+    oldOwner == -1 || M < oldM || M == oldM && owner == oldOwner;
+  ensures
+    atomic_spaces(spaces) &*&
+    is_TicketlockStrong_wait_op(op, l, owner, P) &*& P() &*&
+    call_perm_(callerThread, TicketlockStrong.class) &*& waitInv(owner, M);
+
+typedef lemma void TicketlockStrong_acquire_op(TicketlockStrong l, int owner_, predicate() P, predicate() Q)();
+  requires l.state(?owner, ?held) &*& P();
+  ensures l.state(owner, true) &*& owner == owner_ &*& !held &*& Q();
+
+typedef lemma void TicketlockStrong_acquire_ghost_op(TicketlockStrong l, list<int> ns, predicate(int oldOwner, int oldM) waitInv, predicate(int) post)(int owner, TicketlockStrong_acquire_op *op);
+  requires
+    atomic_spaces(?spaces) &*& forall(map(fst, spaces), (is_prefix_of)(ns)) == true &*&
+    is_TicketlockStrong_acquire_op(op, l, owner, ?P, ?Q) &*& P() &*& 0 <= owner &*& waitInv(_, _);
+  ensures
+    atomic_spaces(spaces) &*&
+    is_TicketlockStrong_acquire_op(op, l, owner, P, Q) &*& Q() &*&
+    post(owner);
+
+typedef lemma void TicketlockStrong_alone_op(TicketlockStrong l, long ticket, predicate() P)();
+  requires TicketlockStrong_not_alone(l, ticket) &*& P();
+  ensures false;
+
+typedef lemma void TicketlockStrong_alone_ghost_op(TicketlockStrong l, list<int> ns, long ticket, predicate() pre, predicate() post)(TicketlockStrong_alone_op *op);
+  requires
+    atomic_spaces(?spaces) &*& forall(map(fst, spaces), (is_prefix_of)(ns)) == true &*&
+    is_TicketlockStrong_alone_op(op, l, ticket, ?P) &*& P() &*& pre();
+  ensures
+    atomic_spaces(spaces) &*&
+    is_TicketlockStrong_alone_op(op, l, ticket, P) &*& P() &*& post();
+
+typedef lemma void TicketlockStrong_release_op(TicketlockStrong l, long ticket, predicate() P, predicate() Q)();
+  requires l.state(?owner, ?held) &*& P();
+  ensures l.state(ticket + 1, false) &*& owner == ticket &*& held &*& Q();
+
+typedef lemma void TicketlockStrong_release_ghost_op(TicketlockStrong l, list<int> ns, long ticket, predicate() pre, predicate() post)(TicketlockStrong_release_op *op);
+  requires
+    atomic_spaces(?spaces) &*& forall(map(fst, spaces), (is_prefix_of)(ns)) == true &*&
+    is_TicketlockStrong_release_op(op, l, ticket, ?P, ?Q) &*& P() &*& pre();
+  ensures
+    atomic_spaces(spaces) &*&
+    is_TicketlockStrong_release_op(op, l, ticket, P, Q) &*& Q() &*& post();
+
+predicate TicketlockStrong_not_alone(TicketlockStrong lock, int owner);
+
+lemma void TicketlockStrong_not_alone_elim(TicketlockStrong this);
+  requires
+    [_]this.valid(?ns) &*&
+    atomic_spaces(?spaces) &*& forall(map(fst, spaces), (not_is_prefix_of)(ns)) == true &*&
+    TicketlockStrong_not_alone(this, ?ticket) &*&
+    this.state(?owner, ?held);
+  ensures
+    atomic_spaces(spaces) &*&
+    TicketlockStrong_not_alone(this, ticket) &*&
+    this.state(owner, held) &*& owner != ticket + 1 || held;
+
+@*/
+
+public final class TicketlockStrong {
+
+  //@ predicate valid(list<int> ns);
+  
+  //@ predicate held(long ticket);
+  
+  //@ predicate state(int owner, boolean held);
+
+  public TicketlockStrong();
+  //@ requires exists<list<int> >(?ns);
+  //@ ensures [_]valid(ns) &*& state(0, false);
+  //@ terminates;
+
+  public void acquire();
+  /*@
+  requires
+    [_]valid(?ns) &*&
+    is_TicketlockStrong_wait_ghost_op(?wop, this, ns, ?waitInv, currentThread) &*&
+    is_TicketlockStrong_acquire_ghost_op(?ghop, this, ns, waitInv, ?post) &*&
+    waitInv(-1, _);
+  @*/
+  //@ ensures held(?ticket) &*& post(ticket);
+  //@ terminates;
+  
+  public boolean alone();
+  //@ requires [_]valid(?ns) &*& held(?ticket) &*& is_TicketlockStrong_alone_ghost_op(?ghop, this, ns, ticket, ?pre, ?post) &*& pre();
+  //@ ensures held(ticket) &*& result ? post() : pre() &*& TicketlockStrong_not_alone(this, ticket);
+	//@ terminates;
+  
+  public void release();
+  //@ requires [_]valid(?ns) &*& held(?ticket) &*& is_TicketlockStrong_release_ghost_op(?ghop, this, ns, ticket, ?pre, ?post) &*& pre();
+  //@ ensures post();
+  //@ terminates;
+}

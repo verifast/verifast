@@ -4,11 +4,6 @@
 
 /*@
 
-lemma void note(boolean b)
-    requires b;
-    ensures b;
-{}
-
 lemma void take_take<t>(int m, int n, list<t> xs)
     requires 0 <= m &*& m <= n &*& n <= length(xs);
     ensures take(m, take(n, xs)) == take(m, xs);
@@ -58,75 +53,6 @@ box_class incr_box(int i) {
 
 /*@
 
-fixpoint int CohortLock_level_nb_dims() { return Ticketlock_level_nb_dims + 1; }
-
-lemma_auto void cohortlock_nb_level_dims_nonneg()
-    requires true;
-    ensures 0 <= CohortLock_level_nb_dims;
-{}
-
-fixpoint Class CohortLock_targetClass() { return Ticketlock_targetClass; }
-
-typedef lemma void CohortLock_wait_op(CohortLock l, int owner_, predicate() P)();
-  requires l.state(?owner, ?held) &*& P();
-  ensures l.state(owner, held) &*& owner == owner_ &*& held &*& P();
-
-typedef lemma void CohortLock_wait_ghost_op(list<pathcomp> p, CohortLock l, list<int> ns, level level, int nbDegrees, predicate(int oldOwner) waitInv, int callerThread)(int owner, boolean newRound, CohortLock_wait_op *op);
-  requires
-    obs(callerThread, p, ?obs) &*& forall(map(snd, obs), (level_lt)(level)) == true &*&
-    atomic_spaces(?spaces) &*& forall(map(fst, spaces), (is_prefix_of)(ns)) == true &*&
-    is_CohortLock_wait_op(op, l, owner, ?P) &*& P() &*&
-    0 <= owner &*&
-    waitInv(?oldOwner) &*&
-    newRound ?
-      cp_lex(p, CohortLock_targetClass, {nbDegrees})
-    :
-      owner == oldOwner;
-  ensures
-    obs(callerThread, p, obs) &*&
-    atomic_spaces(spaces) &*&
-    is_CohortLock_wait_op(op, l, owner, P) &*& P() &*&
-    call_perm_(callerThread, CohortLock_targetClass) &*& waitInv(owner);
-
-typedef lemma void CohortLock_acquire_op(CohortLock l, int owner_, predicate() P, predicate() Q)();
-  requires l.state(?owner, ?held) &*& P();
-  ensures l.state(owner, true) &*& owner == owner_ &*& !held &*& Q();
-
-typedef lemma void CohortLock_acquire_ghost_op(list<pathcomp> p, list<pair<void *, level> > obs, CohortLock l, list<int> ns, predicate(int oldOwner) waitInv, predicate(int) post, int callerThread)(int owner, CohortLock_acquire_op *op);
-  requires
-    obs(callerThread, p, obs) &*&
-    atomic_spaces(?spaces) &*& forall(map(fst, spaces), (is_prefix_of)(ns)) == true &*&
-    is_CohortLock_acquire_op(op, l, owner, ?P, ?Q) &*& P() &*& 0 <= owner &*& waitInv(_);
-  ensures
-    atomic_spaces(spaces) &*&
-    is_CohortLock_acquire_op(op, l, owner, P, Q) &*& Q() &*&
-    post(owner);
-
-typedef lemma void CohortLock_alone_op(CohortLock l, long ticket, predicate() P)();
-  requires CohortLock_not_alone(l, ticket) &*& P();
-  ensures false;
-
-typedef lemma void CohortLock_alone_ghost_op(CohortLock l, list<int> ns, long ticket, predicate() pre, predicate() post)(CohortLock_alone_op *op);
-  requires
-    atomic_spaces(?spaces) &*& forall(map(fst, spaces), (is_prefix_of)(ns)) == true &*&
-    is_CohortLock_alone_op(op, l, ticket, ?P) &*& P() &*& pre();
-  ensures
-    atomic_spaces(spaces) &*&
-    is_CohortLock_alone_op(op, l, ticket, P) &*& P() &*& post();
-
-typedef lemma void CohortLock_release_op(CohortLock l, long ticket, predicate() P, predicate() Q)();
-  requires l.state(?owner, ?held) &*& P();
-  ensures l.state(ticket + 1, false) &*& owner == ticket &*& held &*& Q();
-
-typedef lemma void CohortLock_release_ghost_op(CohortLock l, list<int> ns, level level, long ticket, predicate() pre, predicate(list<pathcomp> p, list<pair<void *, level> > obs) post, int callerThread)(CohortLock_release_op *op);
-  requires
-    atomic_spaces(?spaces) &*& forall(map(fst, spaces), (is_prefix_of)(ns)) == true &*&
-    is_CohortLock_release_op(op, l, ticket, ?P, ?Q) &*& P() &*& pre();
-  ensures
-    atomic_spaces(spaces) &*&
-    is_CohortLock_release_op(op, l, ticket, P, Q) &*& Q() &*&
-    obs(callerThread, ?p, ?obs) &*& post(p, obs) &*& forall(map(snd, obs), (level_subspace_lt)(level)) == true;
-
 lemma void CohortLock_not_alone_elim(CohortLock this)
   requires
     [_]this.valid(?ns, ?level) &*&
@@ -170,7 +96,6 @@ lemma void CohortLock_not_alone_elim(CohortLock this)
                     length_take_(length(ns) + 1, badNs);
                     take_take(length(ns), length(ns) + 1, badNs);
                     take_append(length(ns), ns, {Cohort.TICKETLOCK_NS_});
-                    assert is_prefix_of(ns, badNs) == true;
                     assert false;
                 }
                 Ticketlock_not_alone_elim(ownerCohort.ticketlock);
@@ -188,7 +113,6 @@ lemma void CohortLock_not_alone_elim(CohortLock this)
                 length_take_(length(ns) + 1, badNs);
                 take_take(length(ns), length(ns) + 1, badNs);
                 take_append(length(ns), ns, {CohortLock.TICKETLOCK_NS_});
-                assert is_prefix_of(ns, badNs) == true;
                 assert false;
             }
             Ticketlock_not_alone_elim(globalLock);
@@ -380,7 +304,7 @@ final class CohortLock {
 
 	CohortLock()
 	//@ requires exists<pair<list<int>, level> >(pair(?ns, ?level)) &*& CohortLock_level_nb_dims <= level_subspace_nb_dims(level);
-	//@ ensures [_]valid(ns, level);
+	//@ ensures [_]valid(ns, level) &*& state(0, false);
 	//@ terminates;
 	{
 		//@ open exists(pair(ns, level));
@@ -855,13 +779,6 @@ final class Cohort {
 		                    case releasing_state(releaseSignalHandle):
 		                        assert has_at<void *>(releaseSignalHandle, releaseSignalsId, oldCohortOwner, ?releaseSignal);
 		                        match_has_at_<void *>(releaseSignalHandle);
-		                        if (!forall(map(snd, obs1), (level_lt)(sublevel(level, SIG_LEVEL)))) {
-		                            level badLevel = not_forall(map(snd, obs1), (level_lt)(sublevel(level, SIG_LEVEL)));
-		                            forall_elim(map(snd, obs1), (level_lt)(LL_LEVEL), badLevel);
-		                            level_lt_append(level, SIG_LEVEL, LL_LEVEL_);
-		                            level_lt_trans(sublevel(level, SIG_LEVEL), LL_LEVEL, badLevel);
-		                            assert false;
-		                        }
 		                        is_ancestor_of_refl(p);
 		                        wait(releaseSignal);
 		                        close exists(oldCohortLeaderState);
@@ -1065,7 +982,6 @@ final class Cohort {
 				        append_drop_take(badName, length(append(ns, {CohortLock.TICKETLOCK_NS_})));
 				        assert badName == append(append(ns, {CohortLock.TICKETLOCK_NS_}), drop(length(ns) + 1, badName));
 				        append_assoc(ns, {CohortLock.TICKETLOCK_NS_}, drop(length(ns) + 1, badName));
-				        take_append(length(ns), ns, cons(CohortLock.TICKETLOCK_NS_, drop(length(ns) + 1, badName)));
 				        assert false;
 				    }
 				    				    
@@ -1115,7 +1031,6 @@ final class Cohort {
 			                list<int> badNs = not_forall(map(fst, spaces), (not_is_prefix_of)(append(ns, {Cohort.TICKETLOCK_NS_})));
 			                forall_elim(map(fst, spaces), (is_prefix_of)(append(ns, {CohortLock.TICKETLOCK_NS_})), badNs);
 			                drop_append(ns, {Cohort.TICKETLOCK_NS_});
-			                drop_append(ns, {CohortLock.TICKETLOCK_NS_});
 			                assert false;
 			            }
 			            Ticketlock_not_alone_elim(ownerCohort.ticketlock);
@@ -1162,7 +1077,6 @@ final class Cohort {
 				        append_drop_take(badName, length(append(ns, {CohortLock.TICKETLOCK_NS_})));
 				        assert badName == append(append(ns, {CohortLock.TICKETLOCK_NS_}), drop(length(ns) + 1, badName));
 				        append_assoc(ns, {CohortLock.TICKETLOCK_NS_}, drop(length(ns) + 1, badName));
-				        take_append(length(ns), ns, cons(CohortLock.TICKETLOCK_NS_, drop(length(ns) + 1, badName)));
 				        assert false;
 				    }
 				    				    
@@ -1172,7 +1086,6 @@ final class Cohort {
 				    if (mem(pair(COHORT_NS, Cohort_inv(this)), spaces)) {
 				        mem_map(pair(COHORT_NS, Cohort_inv(this)), spaces, fst);
 				        forall_elim(map(fst, spaces), (is_prefix_of)(append(ns, {CohortLock.TICKETLOCK_NS_})), COHORT_NS);
-				        is_prefix_of_append(ns, {CohortLock.TICKETLOCK_NS_}, {Cohort.NS_});
 				        assert false;
 				    }
 				    open_atomic_space(COHORT_NS, Cohort_inv(this));
@@ -1526,7 +1439,6 @@ final class Cohort {
 							append_drop_take(badName, length(append(ns, {CohortLock.TICKETLOCK_NS_})));
 							assert badName == append(append(ns, {Cohort.TICKETLOCK_NS_}), drop(length(ns) + 1, badName));
 							append_assoc(ns, {Cohort.TICKETLOCK_NS_}, drop(length(ns) + 1, badName));
-							take_append(length(ns), ns, cons(Cohort.TICKETLOCK_NS_, drop(length(ns) + 1, badName)));
 							assert false;
 						}
 	                    ghop(op_);
@@ -1914,7 +1826,6 @@ final class Cohort {
 								append_drop_take(badName, length(append(ns, {Cohort.TICKETLOCK_NS_})));
 								assert badName == append(append(ns, {Cohort.TICKETLOCK_NS_}), drop(length(ns) + 1, badName));
 								append_assoc(ns, {Cohort.TICKETLOCK_NS_}, drop(length(ns) + 1, badName));
-								take_append(length(ns), ns, cons(Cohort.TICKETLOCK_NS_, drop(length(ns) + 1, badName)));
 								assert false;
 							}
 		                    ghop(op_);
@@ -2059,7 +1970,6 @@ final class Cohort {
 								append_drop_take(badName, length(append(ns, {CohortLock.TICKETLOCK_NS_})));
 								assert badName == append(append(ns, {CohortLock.TICKETLOCK_NS_}), drop(length(ns) + 1, badName));
 								append_assoc(ns, {CohortLock.TICKETLOCK_NS_}, drop(length(ns) + 1, badName));
-								take_append(length(ns), ns, cons(CohortLock.TICKETLOCK_NS_, drop(length(ns) + 1, badName)));
 								assert false;
 							}
 		                    ghop(op_);

@@ -233,6 +233,10 @@ lemma void level_lt_trans(level l1, level l2, level l3)
 
 /*@
 
+lemma void call_below_perm__to_call_perm_(Class c);
+    requires call_below_perm_(?thread, ?c1) &*& Class_lt(c, c1) == true;
+    ensures call_perm_(thread, c);
+
 lemma void call_perm__weaken(Class c1, Class c2);
     requires call_perm_(?thread, c1) &*& Class_lt(c2, c1) == true;
     ensures call_perm_(thread, c2);

@@ -1,59 +1,8 @@
 // tab_size:2
 
+// Justus Fasse and Bart Jacobs. Expressive modular verification of termination for busy-waiting programs. 2023.
+
 /*@
-
-typedef lemma void TicketlockStrong_wait_op(TicketlockStrong l, int owner_, predicate() P)();
-  requires l.state(?owner, ?held) &*& P();
-  ensures l.state(owner, held) &*& owner == owner_ &*& held &*& P();
-
-typedef lemma void TicketlockStrong_wait_ghost_op(TicketlockStrong l, list<int> ns, predicate(int oldOwner, int oldM) waitInv, int callerThread)(int owner, int M, TicketlockStrong_wait_op *op);
-  requires
-    atomic_spaces(?spaces) &*& forall(map(fst, spaces), (is_prefix_of)(ns)) == true &*&
-    is_TicketlockStrong_wait_op(op, l, owner, ?P) &*& P() &*&
-    0 <= owner &*& 0 <= M &*&
-    waitInv(?oldOwner, ?oldM) &*&
-    oldOwner == -1 || M < oldM || M == oldM && owner == oldOwner;
-  ensures
-    atomic_spaces(spaces) &*&
-    is_TicketlockStrong_wait_op(op, l, owner, P) &*& P() &*&
-    call_perm_(callerThread, TicketlockStrong.class) &*& waitInv(owner, M);
-
-typedef lemma void TicketlockStrong_acquire_op(TicketlockStrong l, int owner_, predicate() P, predicate() Q)();
-  requires l.state(?owner, ?held) &*& P();
-  ensures l.state(owner, true) &*& owner == owner_ &*& !held &*& Q();
-
-typedef lemma void TicketlockStrong_acquire_ghost_op(TicketlockStrong l, list<int> ns, predicate(int oldOwner, int oldM) waitInv, predicate(int) post)(int owner, TicketlockStrong_acquire_op *op);
-  requires
-    atomic_spaces(?spaces) &*& forall(map(fst, spaces), (is_prefix_of)(ns)) == true &*&
-    is_TicketlockStrong_acquire_op(op, l, owner, ?P, ?Q) &*& P() &*& 0 <= owner &*& waitInv(_, _);
-  ensures
-    atomic_spaces(spaces) &*&
-    is_TicketlockStrong_acquire_op(op, l, owner, P, Q) &*& Q() &*&
-    post(owner);
-
-typedef lemma void TicketlockStrong_alone_op(TicketlockStrong l, long ticket, predicate() P)();
-  requires TicketlockStrong_not_alone(l, ticket) &*& P();
-  ensures false;
-
-typedef lemma void TicketlockStrong_alone_ghost_op(TicketlockStrong l, list<int> ns, long ticket, predicate() pre, predicate() post)(TicketlockStrong_alone_op *op);
-  requires
-    atomic_spaces(?spaces) &*& forall(map(fst, spaces), (is_prefix_of)(ns)) == true &*&
-    is_TicketlockStrong_alone_op(op, l, ticket, ?P) &*& P() &*& pre();
-  ensures
-    atomic_spaces(spaces) &*&
-    is_TicketlockStrong_alone_op(op, l, ticket, P) &*& P() &*& post();
-
-typedef lemma void TicketlockStrong_release_op(TicketlockStrong l, long ticket, predicate() P, predicate() Q)();
-  requires l.state(?owner, ?held) &*& P();
-  ensures l.state(ticket + 1, false) &*& owner == ticket &*& held &*& Q();
-
-typedef lemma void TicketlockStrong_release_ghost_op(TicketlockStrong l, list<int> ns, long ticket, predicate() pre, predicate() post)(TicketlockStrong_release_op *op);
-  requires
-    atomic_spaces(?spaces) &*& forall(map(fst, spaces), (is_prefix_of)(ns)) == true &*&
-    is_TicketlockStrong_release_op(op, l, ticket, ?P, ?Q) &*& P() &*& pre();
-  ensures
-    atomic_spaces(spaces) &*&
-    is_TicketlockStrong_release_op(op, l, ticket, P, Q) &*& Q() &*& post();
 
 inductive thread_info = thread_info(predicate(int, int) waitInv, predicate(int) post, boolean grabbed);
 

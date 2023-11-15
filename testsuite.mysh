@@ -38,6 +38,9 @@ cd examples
       cd ticketlock-stronger
         verifast -c -I ../.. ghost_lists.c ticketlock_strong.c ticketlock.c ticketlock_classic.c simple_classic_client.c simple_cross_thread_client.c cohortlock.c
       cd ..
+      cd ticketlock-java
+        verifast -c growing_lists.jarsrc ticketlockstrong.jarsrc ticketlock.jarsrc ticketlockclassic.jarsrc classicclient.jarsrc cohortlock.jarsrc
+      cd ..
     cd ..
   cd ..
   cd jayanti

@@ -1,70 +1,8 @@
 // tab_size:2
 
+// Justus Fasse and Bart Jacobs. Expressive modular verification of termination for busy-waiting programs. 2023.
+
 /*@
-
-fixpoint int Ticketlock_level_nb_dims() { return 1; }
-
-fixpoint Class Ticketlock_targetClass() { return TicketlockStrong.class; }
-
-typedef lemma void Ticketlock_wait_op(Ticketlock l, int owner_, predicate() P)();
-  requires l.state(?owner, ?held) &*& P();
-  ensures l.state(owner, held) &*& owner == owner_ &*& held &*& P();
-
-typedef lemma void Ticketlock_wait_ghost_op(list<pathcomp> p, Ticketlock l, list<int> ns, level level, int nbDegrees, predicate(int oldOwner) waitInv, int callerThread)(int owner, boolean newRound, Ticketlock_wait_op *op);
-  requires
-    obs(callerThread, p, ?obs) &*& forall(map(snd, obs), (level_lt)(level)) == true &*&
-    atomic_spaces(?spaces) &*& forall(map(fst, spaces), (is_prefix_of)(ns)) == true &*&
-    is_Ticketlock_wait_op(op, l, owner, ?P) &*& P() &*&
-    0 <= owner &*&
-    waitInv(?oldOwner) &*&
-    newRound ?
-      cp_lex(p, Ticketlock_targetClass, {nbDegrees})
-    :
-      owner == oldOwner;
-  ensures
-    obs(callerThread, p, obs) &*&
-    atomic_spaces(spaces) &*&
-    is_Ticketlock_wait_op(op, l, owner, P) &*& P() &*&
-    call_perm_(callerThread, Ticketlock_targetClass) &*& waitInv(owner);
-
-typedef lemma void Ticketlock_acquire_op(Ticketlock l, int owner_, predicate() P, predicate() Q)();
-  requires l.state(?owner, ?held) &*& P();
-  ensures l.state(owner, true) &*& owner == owner_ &*& !held &*& Q();
-
-typedef lemma void Ticketlock_acquire_ghost_op(list<pathcomp> p, list<pair<void *, level> > obs, Ticketlock l, list<int> ns, predicate(int oldOwner) waitInv, predicate(int) post, int callerThread)(int owner, Ticketlock_acquire_op *op);
-  requires
-    obs(callerThread, p, obs) &*&
-    atomic_spaces(?spaces) &*& forall(map(fst, spaces), (is_prefix_of)(ns)) == true &*&
-    is_Ticketlock_acquire_op(op, l, owner, ?P, ?Q) &*& P() &*& 0 <= owner &*& waitInv(_);
-  ensures
-    atomic_spaces(spaces) &*&
-    is_Ticketlock_acquire_op(op, l, owner, P, Q) &*& Q() &*&
-    post(owner);
-
-typedef lemma void Ticketlock_alone_op(Ticketlock l, long ticket, predicate() P)();
-  requires Ticketlock_not_alone(l, ticket) &*& P();
-  ensures false;
-
-typedef lemma void Ticketlock_alone_ghost_op(Ticketlock l, list<int> ns, long ticket, predicate() pre, predicate() post)(Ticketlock_alone_op *op);
-  requires
-    atomic_spaces(?spaces) &*& forall(map(fst, spaces), (is_prefix_of)(ns)) == true &*&
-    is_Ticketlock_alone_op(op, l, ticket, ?P) &*& P() &*& pre();
-  ensures
-    atomic_spaces(spaces) &*&
-    is_Ticketlock_alone_op(op, l, ticket, P) &*& P() &*& post();
-
-typedef lemma void Ticketlock_release_op(Ticketlock l, long ticket, predicate() P, predicate() Q)();
-  requires l.state(?owner, ?held) &*& P();
-  ensures l.state(ticket + 1, false) &*& owner == ticket &*& held &*& Q();
-
-typedef lemma void Ticketlock_release_ghost_op(Ticketlock l, list<int> ns, level level, long ticket, predicate() pre, predicate(list<pathcomp> p, list<pair<void *, level> > obs) post, int callerThread)(Ticketlock_release_op *op);
-  requires
-    atomic_spaces(?spaces) &*& forall(map(fst, spaces), (is_prefix_of)(ns)) == true &*&
-    is_Ticketlock_release_op(op, l, ticket, ?P, ?Q) &*& P() &*& pre();
-  ensures
-    atomic_spaces(spaces) &*&
-    is_Ticketlock_release_op(op, l, ticket, P, Q) &*& Q() &*&
-    obs(callerThread, ?p, ?obs) &*& post(p, obs) &*& forall(map(snd, obs), (level_subspace_lt)(level)) == true;
 
 predicate Ticketlock_not_alone(Ticketlock lock, int owner) = [_]lock.lock |-> ?lock_ &*& TicketlockStrong_not_alone(lock_, owner);
 
@@ -89,6 +27,7 @@ lemma void Ticketlock_not_alone_elim(Ticketlock this)
 @*/
 
 public final class Ticketlock {
+
   TicketlockStrong lock;
   //@ level level;
 

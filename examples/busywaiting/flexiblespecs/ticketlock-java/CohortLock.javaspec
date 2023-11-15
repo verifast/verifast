@@ -1,0 +1,137 @@
+// tab_size:4
+
+// Justus Fasse and Bart Jacobs. Expressive modular verification of termination for busy-waiting programs. 2023.
+
+/*@
+
+fixpoint int CohortLock_level_nb_dims() { return Ticketlock_level_nb_dims + 1; } // TODO: Hide this definition. VeriFast does not yet support hiding fixpoint bodies.
+
+fixpoint Class CohortLock_targetClass() { return Ticketlock_targetClass; } // TODO: Hide this definition. VeriFast does not yet support hiding fixpoint bodies.
+
+typedef lemma void CohortLock_wait_op(CohortLock l, int owner_, predicate() P)();
+  requires l.state(?owner, ?held) &*& P();
+  ensures l.state(owner, held) &*& owner == owner_ &*& held &*& P();
+
+typedef lemma void CohortLock_wait_ghost_op(list<pathcomp> p, CohortLock l, list<int> ns, level level, int nbDegrees, predicate(int oldOwner) waitInv, int callerThread)(int owner, boolean newRound, CohortLock_wait_op *op);
+  requires
+    obs(callerThread, p, ?obs) &*& forall(map(snd, obs), (level_lt)(level)) == true &*&
+    atomic_spaces(?spaces) &*& forall(map(fst, spaces), (is_prefix_of)(ns)) == true &*&
+    is_CohortLock_wait_op(op, l, owner, ?P) &*& P() &*&
+    0 <= owner &*&
+    waitInv(?oldOwner) &*&
+    newRound ?
+      cp_lex(p, CohortLock_targetClass, {nbDegrees})
+    :
+      owner == oldOwner;
+  ensures
+    obs(callerThread, p, obs) &*&
+    atomic_spaces(spaces) &*&
+    is_CohortLock_wait_op(op, l, owner, P) &*& P() &*&
+    call_perm_(callerThread, CohortLock_targetClass) &*& waitInv(owner);
+
+typedef lemma void CohortLock_acquire_op(CohortLock l, int owner_, predicate() P, predicate() Q)();
+  requires l.state(?owner, ?held) &*& P();
+  ensures l.state(owner, true) &*& owner == owner_ &*& !held &*& Q();
+
+typedef lemma void CohortLock_acquire_ghost_op(list<pathcomp> p, list<pair<void *, level> > obs, CohortLock l, list<int> ns, predicate(int oldOwner) waitInv, predicate(int) post, int callerThread)(int owner, CohortLock_acquire_op *op);
+  requires
+    obs(callerThread, p, obs) &*&
+    atomic_spaces(?spaces) &*& forall(map(fst, spaces), (is_prefix_of)(ns)) == true &*&
+    is_CohortLock_acquire_op(op, l, owner, ?P, ?Q) &*& P() &*& 0 <= owner &*& waitInv(_);
+  ensures
+    atomic_spaces(spaces) &*&
+    is_CohortLock_acquire_op(op, l, owner, P, Q) &*& Q() &*&
+    post(owner);
+
+typedef lemma void CohortLock_alone_op(CohortLock l, long ticket, predicate() P)();
+  requires CohortLock_not_alone(l, ticket) &*& P();
+  ensures false;
+
+typedef lemma void CohortLock_alone_ghost_op(CohortLock l, list<int> ns, long ticket, predicate() pre, predicate() post)(CohortLock_alone_op *op);
+  requires
+    atomic_spaces(?spaces) &*& forall(map(fst, spaces), (is_prefix_of)(ns)) == true &*&
+    is_CohortLock_alone_op(op, l, ticket, ?P) &*& P() &*& pre();
+  ensures
+    atomic_spaces(spaces) &*&
+    is_CohortLock_alone_op(op, l, ticket, P) &*& P() &*& post();
+
+typedef lemma void CohortLock_release_op(CohortLock l, long ticket, predicate() P, predicate() Q)();
+  requires l.state(?owner, ?held) &*& P();
+  ensures l.state(ticket + 1, false) &*& owner == ticket &*& held &*& Q();
+
+typedef lemma void CohortLock_release_ghost_op(CohortLock l, list<int> ns, level level, long ticket, predicate() pre, predicate(list<pathcomp> p, list<pair<void *, level> > obs) post, int callerThread)(CohortLock_release_op *op);
+  requires
+    atomic_spaces(?spaces) &*& forall(map(fst, spaces), (is_prefix_of)(ns)) == true &*&
+    is_CohortLock_release_op(op, l, ticket, ?P, ?Q) &*& P() &*& pre();
+  ensures
+    atomic_spaces(spaces) &*&
+    is_CohortLock_release_op(op, l, ticket, P, Q) &*& Q() &*&
+    obs(callerThread, ?p, ?obs) &*& post(p, obs) &*& forall(map(snd, obs), (level_subspace_lt)(level)) == true;
+
+predicate CohortLock_not_alone(CohortLock lock, int owner);
+
+lemma void CohortLock_not_alone_elim(CohortLock this);
+  requires
+    [_]this.valid(?ns, ?level) &*&
+    atomic_spaces(?spaces) &*& forall(map(fst, spaces), (not_is_prefix_of)(ns)) == true &*&
+    this.state(?owner, ?held) &*&
+    CohortLock_not_alone(this, owner - 1);
+  ensures
+    atomic_spaces(spaces) &*&
+    CohortLock_not_alone(this, owner - 1) &*&
+    this.state(owner, held) &*& held;
+
+predicate Cohort_held(Cohort cohort, int ticket);
+
+@*/
+
+final class CohortLock {
+    
+    //@ predicate valid(list<int> ns, level level);
+
+    //@ predicate state(int owner, boolean held);
+
+    CohortLock();
+    //@ requires exists<pair<list<int>, level> >(pair(?ns, ?level)) &*& CohortLock_level_nb_dims <= level_subspace_nb_dims(level);
+    //@ ensures [_]valid(ns, level) &*& state(0, false);
+    //@ terminates;
+
+}
+
+final class Cohort {
+    
+    //@ predicate valid(CohortLock lock);
+    
+    Cohort(CohortLock lock);
+    //@ requires [_]lock.valid(?ns, ?level);
+    //@ ensures [_]valid(lock);
+    //@ terminates;
+
+    void acquire();
+    /*@
+    requires
+        [_]valid(?lock) &*& [_]lock.valid(?ns, ?level) &*&
+        obs(currentThread, ?p, ?obs) &*& 
+        forall(map(snd, obs), (level_subspace_lt)(level)) == true &*&
+        is_CohortLock_wait_ghost_op(?wop, p, lock, ns, level, ?cpDegrees, ?wait_inv, currentThread) &*& 0 <= cpDegrees &*&
+        is_CohortLock_acquire_ghost_op(?aop, p, obs, lock, ns, wait_inv, ?post, currentThread) &*&
+        wait_inv(-1);
+    @*/
+    //@ ensures Cohort_held(this, ?ticket) &*& post(ticket);
+    //@ terminates;
+
+    boolean alone();
+    //@ requires [_]valid(?lock_) &*& [_]lock_.valid(?ns, ?level) &*& Cohort_held(this, ?owner) &*& is_CohortLock_alone_ghost_op(?ghop, lock_, ns, owner, ?pre, ?post) &*& pre();
+    //@ ensures Cohort_held(this, owner) &*& result ? post() : pre() &*& CohortLock_not_alone(lock_, owner);
+    //@ terminates;
+
+    void release();
+    /*@
+    requires
+        [_]valid(?lock_) &*& [_]lock_.valid(?ns, ?level) &*&
+        Cohort_held(this, ?ticket) &*& is_CohortLock_release_ghost_op(?ghop, lock_, ns, level, ticket, ?pre, ?post, currentThread) &*& pre();
+    @*/
+    //@ ensures post(?p, ?obs) &*& obs(currentThread, p, obs);
+    //@ terminates;
+
+}

@@ -1,0 +1,33 @@
+// Justus Fasse and Bart Jacobs. Expressive modular verification of termination for busy-waiting programs. 2023.
+
+/*@
+
+fixpoint int TicketlockClassic_level_nb_dims() { return Ticketlock_level_nb_dims + 1; } // TODO: Hide this definition. VeriFast does not yet support hiding fixpoint bodies.
+
+predicate TicketlockClassic_held(TicketlockClassic l, pair<void *, level> ob);
+
+@*/
+
+final class TicketlockClassic {
+
+  //@ predicate valid(level level, predicate() inv);
+  
+  public TicketlockClassic();
+  //@ requires exists<pair<level, predicate()> >(pair(?level, ?inv)) &*& inv() &*& TicketlockClassic_level_nb_dims <= level_subspace_nb_dims(level);
+  //@ ensures [_]valid(level, inv);
+  //@ terminates;
+
+  public void acquire();
+  //@ requires obs(currentThread, ?p, ?obs) &*& [_]valid(?level, ?inv) &*& forall(map(snd, obs), (level_subspace_lt)(level)) == true;
+  //@ ensures obs(currentThread, p, cons(?ob, obs)) &*& TicketlockClassic_held(this, ob) &*& level_le(level, level_of(ob)) == true &*& inv();
+  //@ terminates;
+
+  public void release();
+  /*@
+  requires
+    obs(currentThread, ?p, ?obs) &*& [_]valid(?level, ?inv) &*& TicketlockClassic_held(this, ?ob) &*& inv() &*& mem(ob, obs) == true &*&
+    forall(map(snd, remove(ob, obs)), (level_subspace_lt)(level)) == true;
+  @*/
+  //@ ensures obs(currentThread, p, remove(ob, obs));
+  //@ terminates;
+}

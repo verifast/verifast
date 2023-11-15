@@ -2,22 +2,19 @@
 
 predicate atomic_space_(list<int> ns, predicate() inv;);
 
-lemma void create_atomic_space_(list<int> ns, predicate() inv)
+lemma void create_atomic_space_(list<int> ns, predicate() inv);
   requires inv();
   ensures atomic_space_(ns, inv);
-{ assume(false); }
 
 predicate atomic_spaces(list<pair<list<int>, predicate()> > spaces);
 
-lemma void open_atomic_space(list<int> ns, predicate() inv)
+lemma void open_atomic_space(list<int> ns, predicate() inv);
   requires [?f]atomic_space_(ns, inv) &*& atomic_spaces(?spaces) &*& !mem(pair(ns, inv), spaces);
   ensures [f]atomic_space_(ns, inv) &*& atomic_spaces(cons(pair(ns, inv), spaces)) &*& inv();
-{ assume(false); }
 
-lemma void close_atomic_space(list<int> ns, predicate() inv)
+lemma void close_atomic_space(list<int> ns, predicate() inv);
   requires inv() &*& atomic_spaces(?spaces);
   ensures atomic_spaces(remove(pair(ns, inv), spaces));
-{ assume(false); }
 
 fixpoint boolean is_prefix_of<t>(list<t> xs, list<t> ys) {
   return take(length(xs), ys) == xs;

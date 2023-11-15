@@ -1,8 +1,8 @@
+// Justus Fasse and Bart Jacobs. Expressive modular verification of termination for busy-waiting programs. 2023.
+
 /*@
 
 inductive wrapper<t> = wrapper(t);
-
-fixpoint int TicketlockClassic_level_nb_dims() { return Ticketlock_level_nb_dims + 1; }
 
 predicate_ctor TicketlockClassic_inv(TicketlockClassic l)() =
   [_]l.inv_ |-> wrapper(?inv) &*&
@@ -39,6 +39,7 @@ final class TicketlockClassic {
   public TicketlockClassic()
   //@ requires exists<pair<level, predicate()> >(pair(?level, ?inv)) &*& inv() &*& TicketlockClassic_level_nb_dims <= level_subspace_nb_dims(level);
   //@ ensures [_]valid(level, inv);
+  //@ terminates;
   {
     //@ assert level == level(_, cons(_, _));
     //@ close exists(pair(LOCK_NS, level));
@@ -55,6 +56,7 @@ final class TicketlockClassic {
   public void acquire()
   //@ requires obs(currentThread, ?p, ?obs) &*& [_]valid(?level, ?inv) &*& forall(map(snd, obs), (level_subspace_lt)(level)) == true;
   //@ ensures obs(currentThread, p, cons(?ob, obs)) &*& TicketlockClassic_held(this, ob) &*& level_le(level, level_of(ob)) == true &*& inv();
+  //@ terminates;
   {
     Ticketlock lock = this.lock;
     //@ box signalsId = this.signalsId;
@@ -152,6 +154,7 @@ final class TicketlockClassic {
     forall(map(snd, remove(ob, obs)), (level_subspace_lt)(level)) == true;
   @*/
   //@ ensures obs(currentThread, p, remove(ob, obs));
+  //@ terminates;
   {
     Ticketlock lock = this.lock;
     //@ open TicketlockClassic_held(this, pair(?signal, _));
