@@ -42,6 +42,19 @@ fixpoint boolean not_is_prefix_of<t>(list<t> xs, list<t> ys) {
 
 /*@
 
+typedef lemma void atomic_noop_ghost_op(predicate() pre, predicate() post)();
+  requires atomic_spaces({}) &*& pre();
+  ensures atomic_spaces({}) &*& post();
+
+lemma void atomic_noop();
+  nonghost_callers_only
+  requires is_atomic_noop_ghost_op(?ghop, ?pre, ?post) &*& pre();
+  ensures post();
+
+@*/
+
+/*@
+
 typedef lemma void AtomicLong_get_op(AtomicLong l, predicate() P, predicate(long) Q)();
   requires [?f]l.state(?value) &*& P();
   ensures [f]l.state(value) &*& Q(value);
