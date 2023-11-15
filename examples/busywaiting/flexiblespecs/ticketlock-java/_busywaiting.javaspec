@@ -373,6 +373,13 @@ lemma void all_sublevels_lt_append(int nbDims1, level la, level lb, int nbDims2,
     }
 }
 
+lemma void level_subspace_lt_sublevels(level l, list<int> is1, list<int> is2)
+    requires lex0_subspace_lt(is1, is2) == true &*& l == level(_, cons(?maxLength, ?ll));
+    ensures level_subspace_lt(sublevel(l, is1), sublevel(l, is2)) == true;
+{
+    lex0_subspace_lt_append(ll, is1, is2);
+}
+
 lemma void level_subspace_lt_sublevel(level l1, list<int> is, level l2)
     requires level_subspace_lt(l1, l2) == true &*& length(is) <= level_subspace_nb_dims(l1);
     ensures level_subspace_lt(sublevel(l1, is), l2) == true;

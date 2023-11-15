@@ -90,6 +90,7 @@ final class AtomicLong {
   public long getPlain();
   //@ requires [?f]state(?value);
   //@ ensures [f]state(value) &*& result == value;
+  //@ terminates;
 
   public long getAndIncrement();
   //@ requires is_AtomicLong_getAndIncrement_ghost_op(?ghop, this, ?pre, ?post) &*& pre();

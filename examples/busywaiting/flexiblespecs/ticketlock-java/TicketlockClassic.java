@@ -146,7 +146,11 @@ final class TicketlockClassic {
   }
 
   public void release()
-  //@ requires obs(currentThread, ?p, ?obs) &*& [_]valid(?level, ?inv) &*& TicketlockClassic_held(this, ?ob) &*& inv() &*& mem(ob, obs) == true;
+  /*@
+  requires
+    obs(currentThread, ?p, ?obs) &*& [_]valid(?level, ?inv) &*& TicketlockClassic_held(this, ?ob) &*& inv() &*& mem(ob, obs) == true &*&
+    forall(map(snd, remove(ob, obs)), (level_subspace_lt)(level)) == true;
+  @*/
   //@ ensures obs(currentThread, p, remove(ob, obs));
   {
     Ticketlock lock = this.lock;
@@ -162,10 +166,10 @@ final class TicketlockClassic {
         [_]this.signalsId |-> ?signalsId &*&
         [_]atomic_space_(SPACE_NS, TicketlockClassic_inv(this)) &*& inv() &*&
         has_at(_, signalsId, ticket, signal);
-      predicate post() = obs(currentThread, p, remove(ob, obs));
+      predicate post(list<pathcomp> p_, list<pair<void *, level> > obs_) = p_ == p &*& obs_ == remove(ob, obs);
       @*/
       /*@
-      produce_lemma_function_pointer_chunk Ticketlock_release_ghost_op(lock, LOCK_NS, ticket, pre, post)(op) {
+      produce_lemma_function_pointer_chunk Ticketlock_release_ghost_op(lock, LOCK_NS, level, ticket, pre, post, currentThread)(op) {
         open pre();
         assert atomic_spaces(?spaces);
         if (mem(pair(SPACE_NS, TicketlockClassic_inv(this)), spaces)) {
@@ -180,12 +184,12 @@ final class TicketlockClassic {
         set_signal(signal);
         close TicketlockClassic_inv(this)();
         close_atomic_space(SPACE_NS, TicketlockClassic_inv(this));
-        close post();
+        close post(p, remove(ob, obs));
       };
       @*/
       //@ close pre();
       lock.release();
-      //@ open post();
+      //@ open post(_, _);
     }
   }
 }

@@ -41,17 +41,30 @@ typedef lemma void Ticketlock_acquire_ghost_op(list<pathcomp> p, list<pair<void 
     is_Ticketlock_acquire_op(op, l, owner, P, Q) &*& Q() &*&
     post(owner);
 
+typedef lemma void Ticketlock_alone_op(Ticketlock l, long ticket, predicate() P)();
+  requires Ticketlock_not_alone(l, ticket) &*& P();
+  ensures false;
+
+typedef lemma void Ticketlock_alone_ghost_op(Ticketlock l, list<int> ns, long ticket, predicate() pre, predicate() post)(Ticketlock_alone_op *op);
+  requires
+    atomic_spaces(?spaces) &*& forall(map(fst, spaces), (is_prefix_of)(ns)) == true &*&
+    is_Ticketlock_alone_op(op, l, ticket, ?P) &*& P() &*& pre();
+  ensures
+    atomic_spaces(spaces) &*&
+    is_Ticketlock_alone_op(op, l, ticket, P) &*& P() &*& post();
+
 typedef lemma void Ticketlock_release_op(Ticketlock l, long ticket, predicate() P, predicate() Q)();
   requires l.state(?owner, ?held) &*& P();
   ensures l.state(ticket + 1, false) &*& owner == ticket &*& held &*& Q();
 
-typedef lemma void Ticketlock_release_ghost_op(Ticketlock l, list<int> ns, long ticket, predicate() pre, predicate() post)(Ticketlock_release_op *op);
+typedef lemma void Ticketlock_release_ghost_op(Ticketlock l, list<int> ns, level level, long ticket, predicate() pre, predicate(list<pathcomp> p, list<pair<void *, level> > obs) post, int callerThread)(Ticketlock_release_op *op);
   requires
     atomic_spaces(?spaces) &*& forall(map(fst, spaces), (is_prefix_of)(ns)) == true &*&
     is_Ticketlock_release_op(op, l, ticket, ?P, ?Q) &*& P() &*& pre();
   ensures
     atomic_spaces(spaces) &*&
-    is_Ticketlock_release_op(op, l, ticket, P, Q) &*& Q() &*& post();
+    is_Ticketlock_release_op(op, l, ticket, P, Q) &*& Q() &*&
+    obs(callerThread, ?p, ?obs) &*& post(p, obs) &*& forall(map(snd, obs), (level_subspace_lt)(level)) == true;
 
 predicate Ticketlock_not_alone(Ticketlock lock, int owner) = [_]lock.lock |-> ?lock_ &*& TicketlockStrong_not_alone(lock_, owner);
 
@@ -193,19 +206,48 @@ public final class Ticketlock {
   }
 
   public boolean alone()
-  //@ requires [_]valid(?ns, ?level) &*& held(?ticket);
-  //@ ensures held(ticket) &*& result ? true : Ticketlock_not_alone(this, ticket);
+  //@ requires [_]valid(?ns, ?level) &*& held(?ticket) &*& is_Ticketlock_alone_ghost_op(?ghop, this, ns, ticket, ?pre, ?post) &*& pre();
+  //@ ensures held(ticket) &*& result ? post() : pre() &*& Ticketlock_not_alone(this, ticket);
+	//@ terminates;
   {
     //@ open valid(ns, level);
     //@ open held(ticket);
-    boolean result = lock.alone();
-    //@ if (!result) close Ticketlock_not_alone(this, ticket);
+    TicketlockStrong lock = this.lock;
+    boolean result;
+    {
+      /*@
+      predicate pre_() = [_]this.lock |-> lock &*& is_Ticketlock_alone_ghost_op(ghop, this, ns, ticket, pre, post) &*& pre();
+      @*/
+      /*@
+      produce_lemma_function_pointer_chunk TicketlockStrong_alone_ghost_op(lock, ns, ticket, pre_, post)(op) {
+        open pre_();
+        assert is_TicketlockStrong_alone_op(op, lock, ticket, ?P);
+        {
+          predicate P_() = [_]this.lock |-> lock &*& is_TicketlockStrong_alone_op(op, lock, ticket, P) &*& P();
+          produce_lemma_function_pointer_chunk Ticketlock_alone_op(this, ticket, P_)() {
+            open P_();
+            open Ticketlock_not_alone(this, ticket);
+            op();
+            assert false;
+          } {
+            close P_();
+            assert is_Ticketlock_alone_op(?op_, this, ticket, P_);
+            ghop(op_);
+            open P_();
+          }
+        }
+      };
+      @*/
+      //@ close pre_();
+      result = lock.alone();
+      //@ if (!result) { open pre_(); close Ticketlock_not_alone(this, ticket); }
+    }
     return result;
   }
   
   public void release()
-  //@ requires [_]valid(?ns, ?level) &*& held(?ticket) &*& is_Ticketlock_release_ghost_op(?ghop, this, ns, ticket, ?pre, ?post) &*& pre();
-  //@ ensures post();
+  //@ requires [_]valid(?ns, ?level) &*& held(?ticket) &*& is_Ticketlock_release_ghost_op(?ghop, this, ns, level, ticket, ?pre, ?post, currentThread) &*& pre();
+  //@ ensures post(?p, ?obs) &*& obs(currentThread, p, obs);
   //@ terminates;
   {
     TicketlockStrong lock = this.lock;
@@ -213,10 +255,12 @@ public final class Ticketlock {
     //@ open held(ticket);
     {
       /*@
-      predicate pre_() = [_]this.lock |-> lock &*& is_Ticketlock_release_ghost_op(ghop, this, ns, ticket, pre, post) &*& pre();
+      predicate pre_() = [_]this.lock |-> lock &*& is_Ticketlock_release_ghost_op(ghop, this, ns, level, ticket, pre, post, currentThread) &*& pre();
+      predicate post_() =
+          post(?p, ?obs) &*& obs(currentThread, p, obs);
       @*/
       /*@
-      produce_lemma_function_pointer_chunk TicketlockStrong_release_ghost_op(lock, ns, ticket, pre_, post)(op) {
+      produce_lemma_function_pointer_chunk TicketlockStrong_release_ghost_op(lock, ns, ticket, pre_, post_)(op) {
         open pre_();
         assert is_TicketlockStrong_release_op(op, lock, ticket, ?P, ?Q);
         {
@@ -235,10 +279,12 @@ public final class Ticketlock {
             open Q_();
           }
         }
+        close post_();
       };
       @*/
       //@ close pre_();
       lock.release();
+      //@ open post_();
     }
   }
 }

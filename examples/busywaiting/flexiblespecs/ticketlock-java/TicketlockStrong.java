@@ -31,6 +31,18 @@ typedef lemma void TicketlockStrong_acquire_ghost_op(TicketlockStrong l, list<in
     is_TicketlockStrong_acquire_op(op, l, owner, P, Q) &*& Q() &*&
     post(owner);
 
+typedef lemma void TicketlockStrong_alone_op(TicketlockStrong l, long ticket, predicate() P)();
+  requires TicketlockStrong_not_alone(l, ticket) &*& P();
+  ensures false;
+
+typedef lemma void TicketlockStrong_alone_ghost_op(TicketlockStrong l, list<int> ns, long ticket, predicate() pre, predicate() post)(TicketlockStrong_alone_op *op);
+  requires
+    atomic_spaces(?spaces) &*& forall(map(fst, spaces), (is_prefix_of)(ns)) == true &*&
+    is_TicketlockStrong_alone_op(op, l, ticket, ?P) &*& P() &*& pre();
+  ensures
+    atomic_spaces(spaces) &*&
+    is_TicketlockStrong_alone_op(op, l, ticket, P) &*& P() &*& post();
+
 typedef lemma void TicketlockStrong_release_op(TicketlockStrong l, long ticket, predicate() P, predicate() Q)();
   requires l.state(?owner, ?held) &*& P();
   ensures l.state(ticket + 1, false) &*& owner == ticket &*& held &*& Q();
@@ -380,8 +392,9 @@ public final class TicketlockStrong {
   }
   
   public boolean alone()
-  //@ requires [_]valid(?ns) &*& held(?ticket);
-  //@ ensures held(ticket) &*& result ? true : TicketlockStrong_not_alone(this, ticket);
+  //@ requires [_]valid(?ns) &*& held(?ticket) &*& is_TicketlockStrong_alone_ghost_op(?ghop, this, ns, ticket, ?pre, ?post) &*& pre();
+  //@ ensures held(ticket) &*& result ? post() : pre() &*& TicketlockStrong_not_alone(this, ticket);
+	//@ terminates;
   {
     AtomicLong next = this.next;
     //@ box growingListId = this.growingListId;
@@ -389,24 +402,25 @@ public final class TicketlockStrong {
     //@ open valid(ns);
     {
       /*@
-      predicate pre() =
+      predicate pre_() =
+        is_TicketlockStrong_alone_ghost_op(ghop, this, ns, ticket, pre, post) &*& pre() &*&
         [_]this.owner |-> ?owner &*&
         [_]this.next |-> next &*&
         [_]this.ns |-> ns &*&
         [_]this.growingListId |-> growingListId &*&
         [1/4]this.owner_ |-> ticket &*& [1/4]held |-> true &*&
         [_]atomic_space_(ns, TicketlockStrong_inv(this));
-      predicate post(long result) =
+      predicate post_(long result) =
         [1/4]this.owner_ |-> ticket &*& [1/4]held |-> true &*&
         0 <= result &*& 0 <= ticket &*& ticket < result &*&
         ticket + 1 < result ?
-          TicketlockStrong_not_alone(this, ticket)
+          pre() &*& TicketlockStrong_not_alone(this, ticket)
         :
-          true;
+          post();
       @*/
       /*@
-      produce_lemma_function_pointer_chunk AtomicLong_get_ghost_op(this.next, pre, post)(op) {
-        open pre();
+      produce_lemma_function_pointer_chunk AtomicLong_get_ghost_op(this.next, pre_, post_)(op) {
+        open pre_();
         open_atomic_space(ns, TicketlockStrong_inv(this));
         open TicketlockStrong_inv(this)();
         assert next.state(?next0);
@@ -415,15 +429,28 @@ public final class TicketlockStrong {
         if (ticket + 1 < next0) {
           create_has_at(growingListId, ticket + 1);
           close TicketlockStrong_not_alone(this, ticket);
+        } else {
+          predicate P() = [_]this.growingListId |-> growingListId &*& growing_list(growingListId, cellIds);
+          produce_lemma_function_pointer_chunk TicketlockStrong_alone_op(this, ticket, P)() {
+            open P();
+            open TicketlockStrong_not_alone(this, ticket);
+            match_has_at(growingListId);
+            assert false;
+          } {
+            close P();
+            assert is_TicketlockStrong_alone_op(?op_, _, _, _);
+            ghop(op_);
+            open P();
+          }
         }
         close TicketlockStrong_inv(this)();
         close_atomic_space(ns, TicketlockStrong_inv(this));
-        close post(next0);
+        close post_(next0);
       };
       @*/
-      //@ close pre();
+      //@ close pre_();
       next_ = this.next.get();
-      //@ open post(_);
+      //@ open post_(_);
     }
     return next_ - owner.getPlain() <= 1;
   }
