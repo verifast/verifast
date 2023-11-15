@@ -503,7 +503,6 @@ final class Cohort {
 	//@ ensures Cohort_held(this, ?ticket) &*& post(ticket);
 	//@ terminates;
 	{
-	    // assume(false);
 	    Cohort cohort = this;
 	    //@ list<int> COHORTLOCK_NS = append(ns, {CohortLock.NS_});
 	    //@ list<int> COHORT_TICKETLOCK_NS = append(ns, {TICKETLOCK_NS_});
@@ -1728,7 +1727,9 @@ final class Cohort {
 	    //@ box globalOwnersId = this.globalOwnersId;
 	    //@ box releaseSignalsId = this.releaseSignalsId;
 	    //@ open lock.valid(ns, level);
+	    //@ box notAloneListId = lock.notAloneListId;
 	    //@ box roundsInfoId = lock.roundsInfoId;
+	    //@ box clientRoundsInfoId = lock.clientRoundsInfoId;
 	    Ticketlock ticketlock = this.ticketlock;
 	    Ticketlock globalLock = lock.ticketlock;
 	    //@ open Cohort_held(this, ticket);
@@ -1737,21 +1738,237 @@ final class Cohort {
 	    //@ assert globalLock.held(?globalTicket);
 	    //@ open client_owner_info(?globalOwnerHandle, ?globalRoundInfoHandle);
 	    //@ assert has_at(globalRoundInfoHandle, roundsInfoId, globalTicket, global_round_info(this, ?passCountIncrBoxId, ?initialClientOwner, ?initialLocalOwner));
-		if (passing = (!ticketlock.alone() && passCount < MAX_PASS_COUNT)) {
+	    boolean localAlone;
+	    {
+		    /*@
+		    predicate pre_() =
+		        [_]this.lock |-> lock &*&
+		        [_]this.globalOwnersId |-> globalOwnersId &*&
+		        [_]this.ticketlock |-> ticketlock &*&
+		        [_]lock.ticketlock |-> globalLock &*&
+		        [_]lock.roundsInfoId |-> roundsInfoId &*&
+		        [_]lock.notAloneListId |-> notAloneListId &*&
+		        [_]atomic_space_(append(ns, {Cohort.NS_}), Cohort_inv(this)) &*&
+		        [_]atomic_space_(append(ns, {CohortLock.NS_}), CohortLock_inv(lock)) &*&
+				[1/4]this._passing |-> true &*&
+				[1/4]this._passCount |-> passCount &*&
+				[1/8]this.held_ |-> true &*&
+				[1/8]this.owner |-> cohortTicket &*&
+				[1/2]this.releasing |-> false &*&
+				has_at<int>(globalOwnerHandle, globalOwnersId, cohortTicket, globalTicket) &*&
+		        has_at(globalRoundInfoHandle, roundsInfoId, globalTicket, global_round_info(this, passCountIncrBoxId, initialClientOwner, initialLocalOwner)) &*&
+		        [1/2]lock.notAloneLocally |-> _;
+		    predicate post_() =
+				[1/4]this._passing |-> true &*&
+				[1/4]this._passCount |-> passCount &*&
+				[1/8]this.held_ |-> true &*&
+				[1/8]this.owner |-> cohortTicket &*&
+				[1/2]this.releasing |-> false &*&
+				has_at<int>(globalOwnerHandle, globalOwnersId, cohortTicket, globalTicket) &*&
+		        has_at(globalRoundInfoHandle, roundsInfoId, globalTicket, global_round_info(this, passCountIncrBoxId, initialClientOwner, initialLocalOwner)) &*&
+		        [1/2]lock.notAloneLocally |-> false;
+		    @*/
+		    /*@
+		    produce_lemma_function_pointer_chunk Ticketlock_alone_ghost_op(ticketlock, append(ns, {Cohort.TICKETLOCK_NS_}), cohortTicket, pre_, post_)(op) {
+			    open pre_();
+			    assert atomic_spaces(?spaces);
+			    if (mem(pair(append(ns, {Cohort.NS_}), Cohort_inv(this)), spaces)) {
+			        mem_map(pair(append(ns, {Cohort.NS_}), Cohort_inv(this)), spaces, fst);
+			        drop_append(ns, {CohortLock.TICKETLOCK_NS_});
+			        drop_append(ns, {Cohort.NS_});
+			        forall_elim(map(fst, spaces), (is_prefix_of)(append(ns, {Cohort.TICKETLOCK_NS_})), append(ns, {Cohort.NS_}));
+			        assert false;
+			    }
+			    if (mem(pair(append(ns, {CohortLock.NS_}), CohortLock_inv(lock)), spaces)) {
+			        mem_map(pair(append(ns, {CohortLock.NS_}), CohortLock_inv(lock)), spaces, fst);
+			        drop_append(ns, {CohortLock.TICKETLOCK_NS_});
+			        drop_append(ns, {CohortLock.NS_});
+			        forall_elim(map(fst, spaces), (is_prefix_of)(append(ns, {Cohort.TICKETLOCK_NS_})), append(ns, {CohortLock.NS_}));
+			        assert false;
+			    }
+			    drop_append(ns, {Cohort.NS_});
+			    drop_append(ns, {CohortLock.TICKETLOCK_NS_});
+			    open_atomic_space(append(ns, {Cohort.NS_}), Cohort_inv(this));
+			    open Cohort_inv(this)();
+			    
+			    match_has_at_<int>(globalOwnerHandle);
+			    assert passing_global_owner_handle(?passingGlobalOwnerHandle);
+			    
+		        open_atomic_space(append(ns, {CohortLock.NS_}), CohortLock_inv(lock));
+		        open CohortLock_inv(lock)();
+		        
+		        match_has_at_(passingGlobalOwnerHandle);
+		        merge_fractions this.owner |-> _;
+		        merge_fractions this.held_ |-> _;
+		        merge_fractions this.ticketlock |-> _;
+		        
+		        match_has_at_<global_round_info>(globalRoundInfoHandle);
+		        assert [_]lock.held_ |-> true;
+		        assert [_]lock.owner |-> globalTicket;
+		        
+	            assert growing_list<boolean>(notAloneListId, ?notAloneList);
+	            if (lock.notAloneLocally && length(notAloneList) > lock.clientOwner) {
+	                op();
+	                assert false;
+	            }
+	            lock.notAloneLocally = false;
+		        
+		        close Cohort_inv(this)();
+		        close_atomic_space(append(ns, {Cohort.NS_}), Cohort_inv(this));
+		        
+		        close CohortLock_inv(lock)();
+		        close_atomic_space(append(ns, {CohortLock.NS_}), CohortLock_inv(lock));
+		        close post_();
+		    };
+		    @*/
+		    //@ close pre_();
+	        localAlone = ticketlock.alone();
+		    //@ if (localAlone) open post_(); else open pre_();
+	    }
+		if (passing = (!localAlone && passCount < MAX_PASS_COUNT)) {
 		    this.passCount++;
 			{
-		        /*@
-		        predicate pre_() = true;
-		        predicate post_() = true;
+			    /*@
+			    predicate pre_() =
+		            is_CohortLock_release_ghost_op(ghop, lock, ns, level, ticket, pre, post, currentThread) &*& pre() &*&
+		            [_]this.lock |-> lock &*&
+		            [_]this.ticketlock |-> ticketlock &*&
+		            [_]this.globalOwnersId |-> globalOwnersId &*&
+		            [_]this.releaseSignalsId |-> releaseSignalsId &*&
+		            [_]lock.ns |-> ns &*&
+		            [_]lock.level |-> level &*&
+		            [_]lock.ticketlock |-> globalLock &*&
+		            [_]lock.notAloneListId |-> notAloneListId &*&
+		            [_]lock.roundsInfoId |-> roundsInfoId &*&
+		            [_]lock.clientRoundsInfoId |-> clientRoundsInfoId &*&
+		            [_]atomic_space_(append(ns, {Cohort.NS_}), Cohort_inv(this)) &*&
+		            [_]atomic_space_(append(ns, {CohortLock.NS_}), CohortLock_inv(lock)) &*&
+					has_at<int>(globalOwnerHandle, globalOwnersId, cohortTicket, globalTicket) &*&
+					has_at(globalRoundInfoHandle, roundsInfoId, globalTicket, global_round_info(this, passCountIncrBoxId, initialClientOwner, initialLocalOwner)) &*&
+					[1/4]this._passing |-> true &*& this.passing |-> true &*&
+					[1/4]this._passCount |-> passCount &*& this.passCount |-> passCount + 1 &*&
+					[1/8]this.held_ |-> true &*&
+					[1/8]this.owner |-> cohortTicket &*&
+					[1/2]lock.notAloneLocally |-> _ &*&
+					Ticketlock_not_alone(ticketlock, cohortTicket) &*&
+					globalLock.held(globalTicket) &*&
+					[1/2]this.releasing |-> false;
+		        predicate post_(list<pathcomp> p, list<pair<void *, level> > obs) =
+		            post(p, obs) &*&
+		            forall(map(snd, obs), (level_subspace_lt)(level)) == true;
 		        @*/
 		        /*@
-		        produce_lemma_function_pointer_chunk Ticketlock_release_ghost_op(ticketlock, append(ns, {Cohort.TICKETLOCK_NS_}), cohortTicket, pre_, post_)(op) {
+		        produce_lemma_function_pointer_chunk Ticketlock_release_ghost_op(ticketlock, append(ns, {Cohort.TICKETLOCK_NS_}), sublevel(level, LEVEL), cohortTicket, pre_, post_, currentThread)(op) {
+		            open pre_();
+		            assert atomic_spaces(?spaces);
+				    if (mem(pair(append(ns, {CohortLock.NS_}), CohortLock_inv(lock)), spaces)) {
+				        mem_map(pair(append(ns, {CohortLock.NS_}), CohortLock_inv(lock)), spaces, fst);
+				        drop_append(ns, {CohortLock.TICKETLOCK_NS_});
+				        drop_append(ns, {CohortLock.NS_});
+				        forall_elim(map(fst, spaces), (is_prefix_of)(append(ns, {Cohort.TICKETLOCK_NS_})), append(ns, {CohortLock.NS_}));
+				        assert false;
+				    }
+				    drop_append(ns, {NS_});
+				    drop_append(ns, {CohortLock.NS_});
+				    if (mem(pair(append(ns, {Cohort.NS_}), Cohort_inv(this)), spaces)) {
+				        mem_map(pair(append(ns, {Cohort.NS_}), Cohort_inv(this)), spaces, fst);
+				        forall_elim(map(fst, spaces), (is_prefix_of)(append(ns, {Cohort.TICKETLOCK_NS_})), append(ns, {Cohort.NS_}));
+				        assert false;
+				    }
+		            open_atomic_space(append(ns, {Cohort.NS_}), Cohort_inv(this));
+		            open Cohort_inv(this)();
+		            match_has_at_<int>(globalOwnerHandle);
+		            assert passing_global_owner_handle(?passingGlobalOwnerHandle);
+		            
+		            open_atomic_space(append(ns, {CohortLock.NS_}), CohortLock_inv(lock));
+		            open CohortLock_inv(lock)();
+		            match_has_at_(globalRoundInfoHandle);
+		            match_has_at_(passingGlobalOwnerHandle);
+		            merge_fractions this.owner |-> _;
+		            merge_fractions this.held_ |-> _;
+		            merge_fractions this._passing |-> _;
+		            merge_fractions this._passCount |-> _;
+		            merge_fractions this.ticketlock |-> _;
+		            
+		            int clientOwner = lock.clientOwner;
+		            
+		            {
+		                predicate P_() = [1/2]lock.clientOwner |-> clientOwner &*& [1/2]lock.clientHeld |-> true;
+		                predicate Q_() = [1/2]lock.clientOwner |-> clientOwner + 1 &*& [1/2]lock.clientHeld |-> false;
+		                produce_lemma_function_pointer_chunk CohortLock_release_op(lock, clientOwner, P_, Q_)() {
+		                    open P_();
+		                    open lock.state(_, _);
+		                    lock.clientOwner++;
+		                    lock.clientHeld = false;
+		                    close lock.state(_, _);
+		                    close Q_();
+		                } {
+		                    close P_();
+		                    assert is_CohortLock_release_op(?op_, _, _, _, _);
+		                    is_prefix_of_append(ns, {}, {Cohort.NS_});
+		                    is_prefix_of_append(ns, {}, {CohortLock.NS_});
+							if (!forall(map(fst, spaces), (is_prefix_of)(ns))) {
+								list<int> badName = not_forall(map(fst, spaces), (is_prefix_of)(ns));
+								forall_elim(map(fst, spaces), (is_prefix_of)(append(ns, {Cohort.TICKETLOCK_NS_})), badName);
+								length_take_(length(ns) + 1, badName);
+								append_drop_take(badName, length(append(ns, {Cohort.TICKETLOCK_NS_})));
+								assert badName == append(append(ns, {Cohort.TICKETLOCK_NS_}), drop(length(ns) + 1, badName));
+								append_assoc(ns, {Cohort.TICKETLOCK_NS_}, drop(length(ns) + 1, badName));
+								take_append(length(ns), ns, cons(Cohort.TICKETLOCK_NS_, drop(length(ns) + 1, badName)));
+								assert false;
+							}
+		                    ghop(op_);
+		                    open Q_();
+		                }
+		            }
+		            
+		            op();
+		            
+		            this.owner++;
+		            this.held_ = false;
+		            this._passCount++;
+		            
+		            growing_list_add<int>(globalOwnersId, globalTicket);
+		            void *releaseSignal = create_signal();
+		            growing_list_add<void *>(releaseSignalsId, releaseSignal);
+		            
+		            assert growing_list<boolean>(notAloneListId, ?notAloneList);
+		            if (length(notAloneList) == clientOwner) {
+		                growing_list_add(notAloneListId, false);
+		            }
+		            
+		            assert growing_list<client_round_info>(clientRoundsInfoId, ?clientRoundsInfo);
+		            growing_list_add(clientRoundsInfoId, client_round_info(this, cohortTicket + 1));
+		            nth_append_r(clientRoundsInfo, {client_round_info(this, cohortTicket + 1)}, 0);
+		            
+		            consuming_box_predicate incr_box(passCountIncrBoxId, passCount)
+		            perform_action incr() {}
+		            producing_box_predicate incr_box(passCount + 1);
+		            
+		            close CohortLock_inv(lock)();
+		            close_atomic_space(append(ns, {CohortLock.NS_}), CohortLock_inv(lock));
+		            
+		            assert obs(_, ?p, ?clientObs);
+		            
+		            close Cohort_inv(this)();
+		            close_atomic_space(append(ns, {Cohort.NS_}), Cohort_inv(this));
+		            assert obs(_, _, ?obs);
+		            close post_(p, obs);
+		            
+		            if (!forall(map(snd, clientObs), (level_subspace_lt)(sublevel(level, Cohort.LEVEL)))) {
+		                level badLevel = not_forall(map(snd, clientObs), (level_subspace_lt)(sublevel(level, Cohort.LEVEL)));
+		                forall_elim(map(snd, clientObs), (level_subspace_lt)(level), badLevel);
+		                level_subspace_lt_sublevel(level, Cohort.LEVEL, badLevel);
+		                assert false;
+		            }
 		        };
 		        @*/
+		        //@ close pre_();
 				ticketlock.release();
+		        //@ open post_(_, _);
 			}
 		} else {
-		    passCount = 0;
+		    this.passCount = 0;
 		    {
 		        /*@
 		        predicate pre_() =
@@ -1762,6 +1979,7 @@ final class Cohort {
 		            [_]lock.ns |-> ns &*&
 		            [_]lock.level |-> level &*&
 		            [_]lock.ticketlock |-> globalLock &*&
+		            [_]lock.notAloneListId |-> notAloneListId &*&
 		            [_]lock.roundsInfoId |-> roundsInfoId &*&
 		            [_]atomic_space_(append(ns, {Cohort.NS_}), Cohort_inv(this)) &*&
 		            [_]atomic_space_(append(ns, {CohortLock.NS_}), CohortLock_inv(lock)) &*&
@@ -1771,9 +1989,11 @@ final class Cohort {
 					[1/4]this._passCount |-> passCount &*& this.passCount |-> 0 &*&
 					[1/8]this.held_ |-> true &*&
 					[1/8]this.owner |-> cohortTicket &*&
+					[1/2]lock.notAloneLocally |-> ?notAloneLocally &*& !notAloneLocally || passCount >= MAX_PASS_COUNT &*&
 					[1/2]this.releasing |-> false;
 		        predicate post_(list<pathcomp> p, list<pair<void *, level> > obs) =
 		            post(p, ?clientObs) &*&
+		            forall(map(snd, clientObs), (level_subspace_lt)(level)) == true &*&
 					[1/4]this._passing |-> false &*& this.passing |-> false &*&
 					[1/4]this._passCount |-> 0 &*& this.passCount |-> 0 &*&
 					[1/8]this.held_ |-> true &*&
@@ -1813,6 +2033,7 @@ final class Cohort {
 		            merge_fractions this.held_ |-> _;
 		            merge_fractions this._passing |-> _;
 		            merge_fractions this._passCount |-> _;
+		            merge_fractions this.ticketlock |-> _;
 		            
 		            int clientOwner = lock.clientOwner;
 		            
@@ -1856,7 +2077,6 @@ final class Cohort {
 		            perform_action incr() {}
 		            producing_box_predicate incr_box(globalTicket + 1);
 		            
-		            box notAloneListId = lock.notAloneListId;
 		            assert growing_list<boolean>(notAloneListId, ?notAloneList);
 		            if (length(notAloneList) == clientOwner) {
 		                growing_list_add(notAloneListId, false);
@@ -1891,18 +2111,70 @@ final class Cohort {
 		            }
 		        };
 		        @*/
+		        //@ close pre_();
 		        globalLock.release();
+		        //@ open post_(_, _);
 		    }
+		    //@ assert post(?p, ?obs);
+		    //@ assert has_at(?releaseSignalHandle, releaseSignalsId, cohortTicket, ?releaseSignal);
 			{
 		        /*@
-		        predicate pre_() = true;
-		        predicate post_() = true;
+		        predicate pre_() =
+		            obs(currentThread, p, cons(pair(releaseSignal, sublevel(level, SIG_LEVEL)), obs)) &*&
+		            has_at(releaseSignalHandle, releaseSignalsId, cohortTicket, releaseSignal) &*&
+		            [_]this.lock |-> lock &*&
+		            [_]this.globalOwnersId |-> globalOwnersId &*&
+		            [_]this.releaseSignalsId |-> releaseSignalsId &*&
+		            [_]this.ticketlock |-> ticketlock &*&
+		            [_]lock.ns |-> ns &*&
+		            [_]lock.level |-> level &*&
+		            [_]lock.ticketlock |-> globalLock &*&
+		            [_]lock.notAloneListId |-> notAloneListId &*&
+		            [_]lock.roundsInfoId |-> roundsInfoId &*&
+		            [_]atomic_space_(append(ns, {Cohort.NS_}), Cohort_inv(this)) &*&
+		            [_]atomic_space_(append(ns, {CohortLock.NS_}), CohortLock_inv(lock)) &*&
+					[1/4]this._passing |-> false &*& this.passing |-> false &*&
+					[1/4]this._passCount |-> 0 &*& this.passCount |-> 0 &*&
+					[1/8]this.held_ |-> true &*&
+					[1/8]this.owner |-> cohortTicket &*&
+					[1/2]this.releasing |-> true;
+		        predicate post_(list<pathcomp> p_, list<pair<void *, level> > obs_) = p_ == p &*& obs_ == obs;
 		        @*/
 		        /*@
-		        produce_lemma_function_pointer_chunk Ticketlock_release_ghost_op(ticketlock, append(ns, {Cohort.TICKETLOCK_NS_}), cohortTicket, pre_, post_)(op) {
+		        produce_lemma_function_pointer_chunk Ticketlock_release_ghost_op(ticketlock, append(ns, {Cohort.TICKETLOCK_NS_}), sublevel(level, Cohort.LEVEL), cohortTicket, pre_, post_, currentThread)(op) {
+		            open pre_();
+		            assert atomic_spaces(?spaces);
+				    if (mem(pair(append(ns, {Cohort.NS_}), Cohort_inv(this)), spaces)) {
+				        mem_map(pair(append(ns, {Cohort.NS_}), Cohort_inv(this)), spaces, fst);
+				        forall_elim(map(fst, spaces), (is_prefix_of)(append(ns, {Cohort.TICKETLOCK_NS_})), append(ns, {Cohort.NS_}));
+				        assert false;
+				    }
+		            open_atomic_space(append(ns, {Cohort.NS_}), Cohort_inv(this));
+		            open Cohort_inv(this)();
+		            
+		            match_has_at_(releaseSignalHandle);
+		            
+		            op();
+		            this.owner++;
+		            this.held_ = false;
+		            this.releasing = false;
+		            
+		            set_signal(releaseSignal);
+		        
+		            close Cohort_inv(this)();
+		            close_atomic_space(append(ns, {Cohort.NS_}), Cohort_inv(this));
+		            close post_(p, obs);
+		            if (!forall(map(snd, obs), (level_subspace_lt)(sublevel(level, Cohort.LEVEL)))) {
+		                level badLevel = not_forall(map(snd, obs), (level_subspace_lt)(sublevel(level, Cohort.LEVEL)));
+		                forall_elim(map(snd, obs), (level_subspace_lt)(level), badLevel);
+		                level_subspace_lt_sublevel(level, Cohort.LEVEL, badLevel);
+		                assert false;
+		            }
 		        };
 		        @*/
+		        //@ close pre_();
 				ticketlock.release();
+				//@ open post_(_, _);
 			}
 		}
 	}
