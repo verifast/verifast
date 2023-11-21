@@ -239,4 +239,11 @@ lemma void foreachp_join<t>(list<t> xs, list<t> ys);
     requires foreachp<t>(xs, ?p) &*& foreachp<t>(ys, p);
     ensures foreachp<t>(append(xs, ys), p);
 
+fixpoint option<t> get_pred<t>(fixpoint(t, bool) f, list<t> xs) {
+  switch(xs) {
+    case nil: return none;
+    case cons(x0, xs0): return f(x0) ? some(x0) : get_pred(f, xs0);
+  }
+}
+
 #endif
