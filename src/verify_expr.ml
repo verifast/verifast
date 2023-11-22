@@ -1361,14 +1361,14 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       ds |> List.iter begin fun (_, tp, x, e, (_, blockPtr)) ->
         begin match e, tp with 
         | None, _ -> () 
-        | Some (Var (l, x) | WVar (l, x, _)), LValueRefTypeExpr _ -> mark_if_local locals x
+        | Some (Var (l, x) | WVar (l, x, _)), Some LValueRefTypeExpr _ -> mark_if_local locals x
         | Some(e), _ -> expr_mark_addr_taken e locals 
         end;
         blockPtr := Some block
       end;
       (* filter out lvalue ref decls: don't mark them as 'addr_taken' so we don't try to consume their chunks at the end of their scope/block *)
       let locals_wo_lvalue_refs = ds 
-        |> List.filter (fun (_, tx, _, _, _) -> is_lvalue_ref_type_expr tx |> not) 
+        |> List.filter (function (_, Some tx, _, _, _) -> is_lvalue_ref_type_expr tx |> not | _ -> true)
         |> List.map @@ fun (_, _, x, _, (addr_taken, _)) -> x, addr_taken 
       in
       cont ((block, locals_wo_lvalue_refs @ mylocals) :: rest)

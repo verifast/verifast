@@ -1164,7 +1164,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         ( loc,
           [
             ( loc,
-              ty,
+              Some ty,
               id,
               None,
               ( (* indicates whether address is taken *) ref false,
@@ -1292,7 +1292,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                 ( loc,
                   [
                     ( loc,
-                      ty_expr,
+                      Some ty_expr,
                       tmp_var_name,
                       Some (Ast.InitializerList (loc, [])),
                       ( (*indicates whether address is taken*) ref false,

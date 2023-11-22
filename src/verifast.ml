@@ -305,14 +305,17 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 | ExprStmt (CallExpr (lc, "call", [], [], [], Static))::ss_after ->(List.rev ss_before, Some (lc, None, ss_after))
                 | DeclStmt (ld, [lx, tx, x, Some(CallExpr (lc, "call", [], [], [], Static)), _])::ss_after ->
                   if List.mem_assoc x tenv then static_error ld "Variable hides existing variable" None;
-                  let t = check_pure_type (pn,ilist) tparams gh tx in
+                  let t = option_map (check_pure_type (pn,ilist) tparams gh) tx in
                   let Some (funenv1, rt1, xmap1, pre1, post1, terminates1) = funcinfo_opt in
-                  begin match rt1 with
-                    None -> static_error ld "Function does not return a value" None
-                  | Some rt1 ->
+                  let t = match t, rt1 with
+                    _, None -> static_error ld "Function does not return a value" None
+                  | Some t, Some rt1 ->
                     expect_type ld (Some true) rt1 t;
-                    (List.rev ss_before, Some (ld, Some (x, t), ss_after))
-                  end
+                    t
+                  | None, Some rt1 ->
+                    rt1
+                  in
+                  (List.rev ss_before, Some (ld, Some (x, t), ss_after))
                 | s::ss_after -> iter (s::ss_before) ss_after
               in
               iter [] ss
@@ -840,9 +843,22 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         match xs with
           [] -> tcont sizemap tenv ghostenv h env
         | (l, te, x, e, (address_taken, blockPtr))::xs ->
-          let t = check_pure_type (pn,ilist) tparams (if pure then Ghost else Real) te in
+          let t = option_map (check_pure_type (pn,ilist) tparams (if pure then Ghost else Real)) te in
           if List.mem_assoc x tenv then static_error l ("Declaration hides existing local variable '" ^ x ^ "'.") None;
           let ghostenv = if pure then x::ghostenv else List.filter (fun y -> y <> x) ghostenv in
+          match t with
+            None ->
+            let w, t =
+              match e with
+                None -> static_error l "auto variable declaration must have initializer" None
+              | Some e -> check_expr (pn,ilist) tparams tenv e
+            in
+            begin fun cont ->
+              verify_expr false h env (Some x) w cont econt
+            end $. fun h env v ->
+            if !address_taken then static_error l "Taking the address of an auto variable is not yet supported" None;
+            iter h ((x, t)::tenv) ghostenv ((x, v)::env) xs
+          | Some t ->
           let produce_object envTp =
             if pure then static_error l "Cannot declare a variable of this type in a ghost context." None;
             begin let Some block = !blockPtr in if not (List.mem x !block) then block := x::!block end;

@@ -323,9 +323,9 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
     ty, name, init_opt
 
   (* used in declaration statements *)
-  and transl_var_decl_local (loc: VF.loc) (var: R.Decl.Var.t): VF.loc * VF.type_expr * string * VF.expr option * (bool ref * string list ref option ref) =
+  and transl_var_decl_local (loc: VF.loc) (var: R.Decl.Var.t): VF.loc * VF.type_expr option * string * VF.expr option * (bool ref * string list ref option ref) =
     let ty, name, init_opt = transl_var var in
-    loc, ty, name, init_opt, (ref false, ref None)
+    loc, Some ty, name, init_opt, (ref false, ref None)
 
   (* used at global level, i.e., outside functions, methods... *)
   and transl_var_decl_global (loc: VF.loc) (var: R.Decl.Var.t): VF.decl =
