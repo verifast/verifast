@@ -70,7 +70,9 @@ pub fn run_compiler() -> i32 {
         // Todo @Nima: Find the correct sysroot by yourself. for now we get it as an argument.
         // See filesearch::get_or_default_sysroot()
 
-        let mut callbacks = CompilerCalls { ghost_ranges: Vec::new() };
+        let mut callbacks = CompilerCalls {
+            ghost_ranges: Vec::new(),
+        };
         // Call the Rust compiler with our callbacks.
         trace!("Calling the Rust Compiler with args: {:?}", rustc_args);
         rustc_driver::RunCompiler::new(&rustc_args, &mut callbacks).run()
@@ -79,22 +81,24 @@ pub fn run_compiler() -> i32 {
 
 #[derive(Default)]
 struct CompilerCalls {
-    ghost_ranges: Vec<preprocessor::GhostRange>
+    ghost_ranges: Vec<preprocessor::GhostRange>,
 }
 
 impl rustc_driver::Callbacks for CompilerCalls {
     // In this callback we override the mir_borrowck query.
     fn config(&mut self, config: &mut Config) {
-        let path =
-            match &config.input {
-                rustc_session::config::Input::File(path) => path.clone(),
-                _ => { panic!("File expected"); }
-            };
+        let path = match &config.input {
+            rustc_session::config::Input::File(path) => path.clone(),
+            _ => {
+                panic!("File expected");
+            }
+        };
         let contents = std::fs::read_to_string(&path).unwrap();
-        let preprocessed_contents = preprocessor::preprocess(contents.as_str(), &mut self.ghost_ranges);
+        let preprocessed_contents =
+            preprocessor::preprocess(contents.as_str(), &mut self.ghost_ranges);
         config.input = rustc_session::config::Input::Str {
             name: rustc_span::FileName::Real(rustc_span::RealFileName::LocalPath(path)),
-            input: preprocessed_contents
+            input: preprocessed_contents,
         };
         assert!(config.override_queries.is_none());
         config.override_queries = Some(override_queries);
@@ -1425,7 +1429,10 @@ mod vf_mir_builder {
                     let target_cpn = terminator_kind_cpn.init_goto();
                     Self::encode_basic_block_id(*target, target_cpn);
                 }
-                mir::TerminatorKind::FalseUnwind { real_target, unwind } => {
+                mir::TerminatorKind::FalseUnwind {
+                    real_target,
+                    unwind,
+                } => {
                     let target_cpn = terminator_kind_cpn.init_goto();
                     Self::encode_basic_block_id(*real_target, target_cpn);
                 }
@@ -1712,7 +1719,7 @@ mod vf_mir_builder {
                     let cv = scalar.to_char().expect(err_msg);
                     scalar_cpn.set_char(cv as u32);
                 }
-                ty::TyKind::Int(int_ty) =>  {
+                ty::TyKind::Int(int_ty) => {
                     let mut int_val_cpn = scalar_cpn.init_int();
                     match int_ty {
                         ty::IntTy::Isize => {
