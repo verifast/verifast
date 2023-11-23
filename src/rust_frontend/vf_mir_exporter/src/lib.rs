@@ -141,8 +141,11 @@ impl rustc_driver::Callbacks for CompilerCalls {
                 .collect();
 
             let mut vf_mir_capnp_builder = vf_mir_builder::VfMirCapnpBuilder::new(tcx);
-            trace!("{:?}", self.ghost_ranges);
-            //vf_mir_capnp_builder.add_comments([]);
+            trace!("Ghost Ranges:\n{:#?}", self.ghost_ranges);
+            for gr in &self.ghost_ranges {
+                debug!("{:?}", gr.span());
+            }
+            vf_mir_capnp_builder.add_comments(&mut self.ghost_ranges);
             vf_mir_capnp_builder.add_bodies(bodies.as_slice());
             let msg_cpn = vf_mir_capnp_builder.build();
             capnp::serialize::write_message(&mut ::std::io::stdout(), msg_cpn.borrow_inner());
@@ -235,6 +238,7 @@ fn get_bodies<'tcx>(tcx: TyCtxt<'tcx>) -> Vec<(String, BodyWithBorrowckFacts<'tc
 
 mod vf_mir_builder {
     mod capnp_utils;
+    use crate::preprocessor::GhostRange;
     use crate::vf_mir_capnp::annotation as annot_cpn;
     use crate::vf_mir_capnp::body as body_cpn;
     use crate::vf_mir_capnp::hir as hir_cpn;
@@ -317,14 +321,14 @@ mod vf_mir_builder {
         req_adts: Vec<&'tcx ty::AdtDef>,
         tcx: TyCtxt<'tcx>,
         mode: EncKind<'tcx, 'a>,
-        annots: LinkedList<Comment>,
+        annots: LinkedList<GhostRange>,
     }
 
     impl<'tcx, 'a> EncCtx<'tcx, 'a> {
         pub fn new(
             tcx: TyCtxt<'tcx>,
             mode: EncKind<'tcx, 'a>,
-            annots: LinkedList<Comment>,
+            annots: LinkedList<GhostRange>,
         ) -> Self {
             Self {
                 req_adts: Vec::new(),
@@ -353,7 +357,7 @@ mod vf_mir_builder {
     pub struct VfMirCapnpBuilder<'tcx, 'a> {
         tcx: TyCtxt<'tcx>,
         bodies: Vec<&'a mir::Body<'tcx>>,
-        annots: LinkedList<Comment>,
+        annots: LinkedList<GhostRange>,
     }
 
     impl<'tcx: 'a, 'a> VfMirCapnpBuilder<'tcx, 'a> {
@@ -365,13 +369,12 @@ mod vf_mir_builder {
             }
         }
 
-        pub fn add_comments(&mut self, mut comments: Vec<Comment>) {
+        pub fn add_comments(&mut self, annots: &mut Vec<GhostRange>) {
             self.annots.extend(
-                comments
-                    .drain_filter(|cmt| crate::vf_annot_utils::is_vf_annot(cmt))
+                annots
+                    .drain_filter(|annot| !annot.is_dummy())
                     .collect::<LinkedList<_>>(),
             );
-            // Todo @Nima: Defensive checks for duplicates
         }
 
         pub fn add_bodies(&mut self, bodies: &[&'a mir::Body<'tcx>]) {
@@ -400,7 +403,12 @@ mod vf_mir_builder {
                 let annots = self
                     .annots
                     .drain_filter(|annot| {
-                        body_span.contains(crate::span_utils::comment_span(&annot))
+                        body_span.contains(
+                            annot
+                                .span()
+                                .expect("Dummy annot found during serialization")
+                                .data(),
+                        )
                     })
                     .collect::<LinkedList<_>>();
                 let mut enc_ctx = EncCtx::new(self.tcx, EncKind::Body(body), annots);
@@ -413,7 +421,9 @@ mod vf_mir_builder {
             let ghost_decl_batches = self
                 .annots
                 .drain_filter(|annot| {
-                    let annot_span = crate::span_utils::comment_span(annot).span();
+                    let annot_span = annot
+                        .span()
+                        .expect("Dummy annotation found during serialization");
                     if let Some(body) = bodies.iter().find(|body| body.span.overlaps(annot_span)) {
                         panic!(
                             "Overlapping Ghost Declaration Block at {:?} and Function at {:?}",
@@ -600,7 +610,7 @@ mod vf_mir_builder {
             let contract_annots = enc_ctx
                 .annots
                 .drain_filter(|annot| {
-                    body_contract_span.contains(crate::span_utils::comment_span(&annot))
+                    body_contract_span.contains(annot.span().expect("Dummy span").data())
                 })
                 .collect::<LinkedList<_>>();
             Self::encode_contract(tcx, contract_annots, &body_contract_span, contract_cpn);
@@ -666,7 +676,7 @@ mod vf_mir_builder {
             let ghost_stmts = enc_ctx
                 .annots
                 .drain_filter(|annot| {
-                    imp_span_data.contains(crate::span_utils::comment_span(&annot))
+                    imp_span_data.contains(annot.span().expect("Dummy ghost range").data())
                 })
                 .collect::<LinkedList<_>>();
             assert!(
@@ -896,7 +906,7 @@ mod vf_mir_builder {
 
         fn encode_contract(
             tcx: TyCtxt<'tcx>,
-            contract_annots: LinkedList<Comment>,
+            contract_annots: LinkedList<GhostRange>,
             body_contract_span: &rustc_span::SpanData,
             mut contract_cpn: contract_cpn::Builder<'_>,
         ) {
@@ -914,14 +924,21 @@ mod vf_mir_builder {
 
         fn encode_annotation(
             tcx: TyCtxt<'tcx>,
-            annot: Comment,
+            annot: GhostRange,
             mut annot_cpn: annot_cpn::Builder<'_>,
         ) {
-            let annot_string = annot.lines.join("\n");
-            annot_cpn.set_raw(&annot_string);
+            annot_cpn.set_raw(annot.contents());
 
-            let span_cpn = annot_cpn.init_span();
-            Self::encode_span_data(tcx, &crate::span_utils::comment_span(&annot), span_cpn);
+            let span_cpn = annot_cpn.reborrow().init_span();
+            Self::encode_span_data(
+                tcx,
+                &annot.span().expect("Dummy ghost range ").data(),
+                span_cpn,
+            );
+            annot_cpn.set_start_line(annot.start_pos().line.try_into().unwrap());
+            annot_cpn.set_start_col(annot.start_pos().column.try_into().unwrap());
+            annot_cpn.set_end_line(annot.end_pos().line.try_into().unwrap());
+            annot_cpn.set_end_col(annot.end_pos().column.try_into().unwrap());
         }
 
         fn encode_local_decl(

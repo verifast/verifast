@@ -57,8 +57,9 @@ lemma void CellU32_share_full(lifetime_t k, thread_id_t t, void *l)
 @*/
 
 fn new(u: u32) -> CellU32 {
-    CellU32 { v: u }
+    let c = CellU32 { v: u };
     //@ close CellU32_own(_t, u);
+    c
 }
 
 /* VeriFast generates the contract of the safe functions based on the function's semantic type */
@@ -67,10 +68,11 @@ fn get<'a>(c: &'a CellU32) -> u32 {
     //@ nonatomic_inv_complement_token_split(_t, Nshr, {c});
     //@ open_nonatomic_borrow(a, Tlns(_t, Nshr, {c}), _q_a);
     //@ open CellU32_nonatomic_borrow_content(c, _t)();
-    c.v
+    let v = c.v;
     //@ close CellU32_nonatomic_borrow_content(c, _t)();
     //@ close_nonatomic_borrow();
     //@ nonatomic_inv_complement_token_merge(_t, Nshr, {c});
+    v
 }
 
 /* User can also write the contract of public functions to have it explicit.

@@ -24,8 +24,8 @@ unsafe fn reverseAppend(list1: *mut *mut u8, list2: *mut *mut u8) -> *mut *mut u
         let next = *list1 as *mut *mut u8;
         *list1 = list2 as *mut u8;
         //@ close list(list1, cons(list1, nodes2));
-        return reverseAppend(next, list1);
         //@ append_assoc(reverse(tail(nodes1)), {list1}, nodes2);
+        return reverseAppend(next, list1);
     }
 }
 

@@ -113,6 +113,10 @@ struct Visibility {
 struct Annotation {
     raw @0: Text;
     span @1: SpanData;
+    startLine @2: UInt64;
+    startCol @3: UInt64;
+    endLine @4: UInt64;
+    endCol @5: UInt64;
 }
 
 struct Hir {

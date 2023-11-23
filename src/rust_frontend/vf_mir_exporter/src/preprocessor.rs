@@ -1,7 +1,14 @@
 #[derive(Copy, Clone, Debug)]
 pub struct SrcPos {
-    line: i32,   // 1-based
-    column: i32, // 1-based
+    pub line: i32,   // 1-based
+    pub column: i32, // 1-based
+    byte_pos: u32,   // 0-based
+}
+
+impl SrcPos {
+    pub fn is_dummy(&self) -> bool {
+        self.line == -1 || self.column == -1
+    }
 }
 
 struct TextIterator<'a> {
@@ -22,6 +29,7 @@ impl<'a> TextIterator<'a> {
         match self.chars.next() {
             None => None,
             Some(c) => {
+                self.pos.byte_pos += 1;
                 match c {
                     '\r' => {
                         self.last_char_was_cr = true;
@@ -54,10 +62,42 @@ pub struct GhostRange {
     contents: String, // not including the ghost range delimiters (//@, /*@, @*/)
 }
 
+impl GhostRange {
+    pub fn is_dummy(&self) -> bool {
+        self.start.is_dummy() || self.end.is_dummy()
+    }
+    pub fn span(&self) -> Option<rustc_span::Span> {
+        use rustc_span::{BytePos, Span, SyntaxContext};
+        if self.is_dummy() {
+            None
+        } else {
+            Some(Span::new(
+                BytePos(self.start.byte_pos),
+                BytePos(self.end.byte_pos),
+                SyntaxContext::root(),
+                None,
+            ))
+        }
+    }
+    pub fn contents(&self) -> &str {
+        &self.contents
+    }
+    pub fn start_pos(&self) -> SrcPos {
+        self.start
+    }
+    pub fn end_pos(&self) -> SrcPos {
+        self.end
+    }
+}
+
 pub fn preprocess(input: &str, ghost_ranges: &mut Vec<GhostRange>) -> String {
     let mut cs = TextIterator {
         chars: input.chars().peekable(),
-        pos: SrcPos { line: 1, column: 1 },
+        pos: SrcPos {
+            line: 1,
+            column: 1,
+            byte_pos: 0,
+        },
         last_char_was_cr: false,
     };
     let mut output = String::new();
@@ -101,29 +141,47 @@ pub fn preprocess(input: &str, ghost_ranges: &mut Vec<GhostRange>) -> String {
                                 match cs.peek() {
                                     Some('@') => {
                                         cs.next();
+                                        cs.pos.byte_pos -= 3;
+                                        cs.pos.column -= 3;
                                         let start = cs.pos;
                                         let in_fn_body = fn_body_brace_depth != -1;
                                         if in_fn_body {
                                             output.push_str("VeriFast_ghost_command();");
+                                            cs.pos.byte_pos += 25;
                                         }
-                                        output.push_str("//@");
                                         let mut contents = String::new();
+                                        output.push_str("//@");
+                                        contents.push_str("//@");
+                                        cs.pos.byte_pos += 3;
+                                        cs.pos.column += 3;
+                                        let end;
                                         loop {
                                             match cs.peek() {
-                                                None | Some('\n') | Some('\r') => {
+                                                None => {
+                                                    end = cs.pos;
                                                     break;
                                                 }
                                                 Some(c) => {
-                                                    cs.next();
                                                     output.push(c);
-                                                    contents.push(c);
+
+                                                    if (c == '\r' || c == '\n') {
+                                                        end = SrcPos {
+                                                            byte_pos: cs.pos.byte_pos - 1,
+                                                            ..cs.pos
+                                                        };
+                                                        cs.next();
+                                                        break;
+                                                    } else {
+                                                        contents.push(c);
+                                                        cs.next();
+                                                    }
                                                 }
                                             }
                                         }
                                         ghost_ranges.push(GhostRange {
                                             in_fn_body,
                                             start,
-                                            end: cs.pos,
+                                            end,
                                             contents,
                                         });
                                     }
@@ -131,12 +189,15 @@ pub fn preprocess(input: &str, ghost_ranges: &mut Vec<GhostRange>) -> String {
                                         output.push_str("//");
                                         loop {
                                             match cs.peek() {
-                                                None | Some('\n') | Some('\r') => {
+                                                None => {
                                                     break;
                                                 }
                                                 Some(c) => {
                                                     cs.next();
                                                     output.push(c);
+                                                    if c == '\n' || c == '\r' {
+                                                        break;
+                                                    }
                                                 }
                                             }
                                         }
@@ -150,10 +211,12 @@ pub fn preprocess(input: &str, ghost_ranges: &mut Vec<GhostRange>) -> String {
                                     start: SrcPos {
                                         line: -1,
                                         column: -1,
+                                        byte_pos: 0,
                                     },
                                     end: SrcPos {
                                         line: -1,
                                         column: -1,
+                                        byte_pos: 0,
                                     },
                                     contents: String::new(),
                                 };
@@ -161,13 +224,19 @@ pub fn preprocess(input: &str, ghost_ranges: &mut Vec<GhostRange>) -> String {
                                 match cs.peek() {
                                     Some('@') => {
                                         cs.next();
+                                        cs.pos.column -= 3;
+                                        cs.pos.byte_pos -= 3;
                                         is_ghost_range = true;
                                         ghost_range.in_fn_body = fn_body_brace_depth != -1;
                                         ghost_range.start = cs.pos;
                                         if ghost_range.in_fn_body {
                                             output.push_str("VeriFast_ghost_command();");
+                                            cs.pos.byte_pos += 25;
                                         }
                                         output.push_str("/*@");
+                                        ghost_range.contents.push_str("/*@");
+                                        cs.pos.column += 3;
+                                        cs.pos.byte_pos += 3;
                                     }
                                     _ => {
                                         output.push_str("/*");
@@ -227,16 +296,16 @@ pub fn preprocess(input: &str, ghost_ranges: &mut Vec<GhostRange>) -> String {
                                 if is_ghost_range {
                                     // Get rid of the */
                                     ghost_range.end = cs.pos;
-                                    ghost_range.end.column -= 2;
-                                    ghost_range
-                                        .contents
-                                        .truncate(ghost_range.contents.len() - 2);
-                                    if ghost_range.contents.ends_with("@") {
-                                        ghost_range
-                                            .contents
-                                            .truncate(ghost_range.contents.len() - 1);
-                                        ghost_range.end.column -= 1;
-                                    }
+                                    // ghost_range.end.column -= 2;
+                                    // ghost_range
+                                    //     .contents
+                                    //     .truncate(ghost_range.contents.len() - 2);
+                                    // if ghost_range.contents.ends_with("@") {
+                                    //     ghost_range
+                                    //         .contents
+                                    //         .truncate(ghost_range.contents.len() - 1);
+                                    //     ghost_range.end.column -= 1;
+                                    // }
                                     ghost_ranges.push(ghost_range);
                                 }
                             }

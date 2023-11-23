@@ -177,6 +177,7 @@ module LocAux = struct
     | None ->
         Error (`TryCompareLoc "Cannot compare source spans in different files")
     | Overlapping { kind = _ } ->
+        print_endline (string_of_loc0 l1 ^ string_of_loc0 l2);
         Error (`TryCompareLoc "Not strictly ordered locations")
 
   let compare_err_desc ei =
@@ -705,6 +706,12 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let raw = raw_get annot_cpn in
     let span_cpn = span_get annot_cpn in
     let* span = translate_span_data span_cpn in
+    let (Ast.Lexed ((sf_name, sl, sc), (ef_name, el, ec))) = span in
+    let* sl = IntAux.Uint64.try_to_int (start_line_get annot_cpn) in
+    let* sc = IntAux.Uint64.try_to_int (start_col_get annot_cpn) in
+    let* el = IntAux.Uint64.try_to_int (end_line_get annot_cpn) in
+    let* ec = IntAux.Uint64.try_to_int (end_col_get annot_cpn) in
+    let span = Ast.Lexed ((sf_name, sl, sc), (ef_name, el, ec)) in
     let annot : Mir.annot = { span; raw } in
     Ok annot
 
@@ -1493,14 +1500,40 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         | Undefined _ -> Error (`TrFnCall "Unknown Option kind")
       in
       let full_call_stmt =
-        if ListAux.is_empty fn_call_tmp_rval_ctx then call_stmt
-        else
-          Ast.BlockStmt
-            ( loc,
-              (*decl list*) [],
-              fn_call_tmp_rval_ctx @ [ call_stmt ],
-              loc,
-              ref [] )
+        match fn_call_rexpr with
+        | Ast.CallExpr
+            ( call_loc,
+              "VeriFast_ghost_command",
+              [] (*type arguments*),
+              [] (*indices, in case this is really a predicate assertion*),
+              [],
+              Ast.Static (*method_binding*) ) ->
+            print_endline ("Ghost call site: " ^ Ast.string_of_loc call_loc);
+            let get_start_loc loc =
+              let (_, ln, col), _ = loc in
+              (ln, col)
+            in
+            let phl = get_start_loc (Ast.lexed_loc call_loc) in
+            let ghost_stmt =
+              List.find
+                (fun gs ->
+                  print_endline
+                    ("Gstmt loc: " ^ Ast.(string_of_loc (stmt_loc gs)));
+                  let gsl = get_start_loc Ast.(gs |> stmt_loc |> lexed_loc) in
+                  let (gsl_l, gsl_c), (phl_l, phl_c) = (gsl, phl) in
+                  gsl_l = phl_l)
+                !State.ghost_stmts
+            in
+            ghost_stmt
+        | _ ->
+            if ListAux.is_empty fn_call_tmp_rval_ctx then call_stmt
+            else
+              Ast.BlockStmt
+                ( loc,
+                  (*decl list*) [],
+                  fn_call_tmp_rval_ctx @ [ call_stmt ],
+                  loc,
+                  ref [] )
       in
       match next_bblock_stmt_op with
       | None -> Ok [ full_call_stmt ]
@@ -1884,13 +1917,13 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       if ListAux.is_empty trm then
         Error (`TrToVfBBlock "Basic block without any terminator")
       else
-        let embed_ghost_stmts all_stmts stmt =
-          let loc_stmt = stmt |> Ast.stmt_loc |> Ast.lexed_loc in
-          let* ghost_stmts = State.fetch_ghost_stmts_before loc_stmt in
-          Ok (all_stmts @ ghost_stmts @ [ stmt ])
-        in
+        (* let embed_ghost_stmts all_stmts stmt =
+             let loc_stmt = stmt |> Ast.stmt_loc |> Ast.lexed_loc in
+             let* ghost_stmts = State.fetch_ghost_stmts_before loc_stmt in
+             Ok (all_stmts @ ghost_stmts @ [ stmt ])
+           in *)
         let stmts = stmts @ trm in
-        let* stmts = ListAux.try_fold_left embed_ghost_stmts [] stmts in
+        (* let* stmts = ListAux.try_fold_left embed_ghost_stmts [] stmts in *)
         let loc = stmts |> List.hd |> Ast.stmt_loc in
         Ok (Ast.LabelStmt (loc, id) :: stmts)
 
