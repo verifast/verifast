@@ -473,6 +473,7 @@ module Mir = struct
 
   type adt_def_tr = {
     def : Ast.decl;
+    aux_decls : Ast.decl list;
     full_bor_content : Ast.decl option;
     proof_obligs : Ast.decl list;
   }
@@ -738,8 +739,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       else
         let* annots = ListAux.try_map translate_annotation annots_cpn in
         let annots = List.map translate_annot_to_vf_parser_inp annots in
-        try Ok (Some (VfMirAnnotParser.parse_func_contract annots))
-        with _ -> Error (`TrContract "Parser failed")
+        Ok (Some (VfMirAnnotParser.parse_func_contract annots))
     in
     Ok (loc, contract_opt)
 
@@ -2642,7 +2642,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let* vis = translate_visibility vis_cpn in
     let is_local = is_local_get adt_def_cpn in
     let kind_cpn = kind_get adt_def_cpn in
-    let* def =
+    let* (def, aux_decls) =
       match AdtKindRd.get kind_cpn with
       | StructKind ->
           let* field_defs =
@@ -2661,7 +2661,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                     (*is polymorphic*) false ),
                 (*struct_attr list*) [] )
           in
-          Ok struct_decl
+          Ok (struct_decl, [Ast.TypedefDecl (def_loc, StructTypeExpr (def_loc, Some name, None, []), name)])
       | EnumKind -> failwith "Todo: AdtDef::Enum"
       | UnionKind -> failwith "Todo: AdtDef::Union"
       | Undefined _ -> Error (`TrAdtDef "Unknown ADT kind")
@@ -2679,7 +2679,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           let* proof_obligs = gen_adt_proof_obligs def in
           Ok (Some full_bor_content, proof_obligs)
     in
-    Ok Mir.{ def; full_bor_content; proof_obligs }
+    Ok Mir.{ def; aux_decls; full_bor_content; proof_obligs }
 
   (** Checks for the existence of a lemma for proof obligation in ghost code.
       The consistency of the lemma with proof obligation will be checked by VeriFast later *)
@@ -2722,11 +2722,11 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
          and then add all of the complete declarations
          Note that the following `fold_left` also reverses the list
       *)
-      let adt_defs, adts_full_bor_content_preds, adts_proof_obligs =
+      let adt_defs, aux_decls, adts_full_bor_content_preds, adts_proof_obligs =
         List.fold_left
-          (fun (defs, fbors, pos) Mir.{ def; full_bor_content; proof_obligs } ->
-            (def :: defs, full_bor_content :: fbors, proof_obligs :: pos))
-          ([], [], []) adt_defs
+          (fun (defs, auxDecls, fbors, pos) Mir.{ def; aux_decls; full_bor_content; proof_obligs } ->
+            (def::defs, aux_decls::auxDecls, full_bor_content :: fbors, proof_obligs :: pos))
+          ([], [], [], []) adt_defs
       in
       let adts_full_bor_content_preds =
         List.filter_map Fun.id adts_full_bor_content_preds
@@ -2762,7 +2762,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let debug_infos = VF0.DbgInfoRustFe debug_infos in
       let decls = AstDecls.decls () in
       let decls =
-        decls @ adt_defs @ adts_full_bor_content_preds @ adts_proof_obligs
+        decls @ adt_defs @ List.flatten aux_decls @ adts_full_bor_content_preds @ adts_proof_obligs
         @ ghost_decls @ body_sigs @ body_decls
       in
       (* Todo @Nima: we should add necessary inclusions during translation *)

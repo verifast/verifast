@@ -99,6 +99,19 @@ let rust_keywords = [
   "'a" (* this pseudo-keyword is a hack; its presence signals to the lexer that tokens of the form 'abc (i.e. Rust lifetime tokens) are allowed *)
 ]
 
+let rust_ghost_keywords = [
+  "assert";
+  "pred"; "copred"; "req"; "|->"; "&*&"; "inductive"; "fix";
+  "ens"; "close"; "lem"; "open"; "emp"; "inv"; "lem_auto";
+  "_"; "@*/"; "pred_fam"; "pred_fam_inst"; "pred_ctor"; "leak"; "@";
+  "box_class"; "action"; "handle_pred"; "preserved_by"; "consuming_box_pred"; "consuming_handle_pred"; "perform_action"; "nonghost_callers_only";
+  "create_box"; "above"; "below"; "and_handle"; "and_fresh_handle"; "create_handle"; "create_fresh_handle"; "dispose_box"; 
+  "produce_lem_ptr_chunk"; "dup_lem_ptr_chunk"; "produce_fn_ptr_chunk";
+  "producing_box_pred"; "producing_handle_pred"; "producing_fresh_handle_pred"; "box"; "handle"; "any"; "split_fraction"; "by"; "merge_fractions";
+  "unloadable_module"; "decreases"; "forall_"; "import_module"; "require_module"; ".."; "extends"; "permbased";
+  "terminates"; "abstract_type"; "fix_auto"; "typeid"; "activating"; "truncating"; "typedef"
+]
+
 let java_keywords = [
   (* JLS6 keywords *)
   "abstract"; "assert"; "boolean"; "break"; "byte"; "case"; "catch"; "char"; "class"; "const";

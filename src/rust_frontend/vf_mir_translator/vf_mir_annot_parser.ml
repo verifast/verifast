@@ -5,23 +5,14 @@ module type VF_MIR_ANNOT_PARSER_ARGS = sig
 end
 
 module Make (Args : VF_MIR_ANNOT_PARSER_ARGS) = struct
-  module VfParser = Parser.Parser (struct
-    let language = Ast.CLang
-
-    (* If it is false the parser adds "requires false" and "ensures true" as the contract to functions without one.
-       It does not matter here because we are just parsing annotations *)
-    let enforce_annotations = true
-    let data_model = Args.data_model_opt
-  end)
-
   type src_pos = Ast.srcpos
   type src_span = Ast.loc0
 
   let token_stream_from_annot ((start_pos, text) : src_pos * string) =
     let get_current_loc, _, token_stream, _, _ =
       Lexer.make_lexer_core
-        (Parser.common_keywords @ Parser.c_keywords)
-        Parser.ghost_keywords start_pos
+        Parser.rust_keywords
+        Parser.rust_ghost_keywords start_pos
         (* append a newline to be able to parse //@ annotations *)
         (text ^ "\n")
         Args.report_range (* inComment *) false (* inGhostRange *) false
@@ -32,10 +23,10 @@ module Make (Args : VF_MIR_ANNOT_PARSER_ARGS) = struct
 
   let token_stream_from_annots (annots : (src_pos * string) list) =
     let tk_strs_ref = annots |> List.map token_stream_from_annot |> ref in
-    (* let get_current_loc () =
-         let get_current_loc, _ = List.hd !tk_strs_ref in
-         get_current_loc ()
-       in *)
+    let get_current_loc () =
+      let get_current_loc, _ = List.hd !tk_strs_ref in
+      get_current_loc ()
+    in
     let rec next_tk n =
       match !tk_strs_ref with
       | [] -> None
@@ -48,17 +39,27 @@ module Make (Args : VF_MIR_ANNOT_PARSER_ARGS) = struct
               Lexer.Stream.junk current_tk_str;
               some_tk)
     in
-    Lexer.Stream.from next_tk
+    get_current_loc, Lexer.Stream.from next_tk
+
+  let parse_fully parser_ stream =
+    let v = parser_ stream in
+    match Lexer.Stream.peek stream with
+      None | Some (_, Lexer.Eof) -> v
+    | Some (l, _) -> raise (Lexer.ParseException (l, "Parse error"))
 
   let parse_func_contract (annots : (src_pos * string) list) =
-    let tk_stream = token_stream_from_annots annots in
+    let loc, tk_stream = token_stream_from_annots annots in
     let tk_stream = Parser.noop_preprocessor tk_stream in
-    VfParser.parse_spec_clauses tk_stream
+    try
+      parse_fully Rust_parser.parse_spec_clauses tk_stream
+    with
+      Lexer.Stream.Error msg -> raise (Lexer.ParseException (Lexed (loc()), msg))
+    | Lexer.Stream.Failure -> raise (Lexer.ParseException (Lexed (loc()), "Parse error"))
 
   let parse_ghost_stmt (annot : src_pos * string) =
     let loc, ts = token_stream_from_annot annot in
     try
-      ts |> Parser.noop_preprocessor |> VfParser.parse_stmt
+      ts |> Parser.noop_preprocessor |> Rust_parser.parse_stmt
     with
       Lexer.Stream.Error msg -> raise (Lexer.ParseException (Lexed (loc()), msg))
     | Lexer.Stream.Failure -> raise (Lexer.ParseException (Lexed (loc()), "Parse error"))
@@ -67,7 +68,7 @@ module Make (Args : VF_MIR_ANNOT_PARSER_ARGS) = struct
   let parse_ghost_decl_batch (annot : src_pos * string) =
     let loc, ts = token_stream_from_annot annot in
     try
-      ts |> Parser.noop_preprocessor |> VfParser.parse_decls
+      ts |> Parser.noop_preprocessor |> parse_fully Rust_parser.parse_ghost_decl_block
     with
       Lexer.Stream.Error msg -> raise (Lexer.ParseException (Lexed (loc()), msg))
     | Lexer.Stream.Failure -> raise (Lexer.ParseException (Lexed (loc()), "Parse error"))

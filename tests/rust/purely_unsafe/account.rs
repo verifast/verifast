@@ -1,6 +1,6 @@
 unsafe fn assert(b: bool)
-//@ requires b;
-//@ ensures true;
+//@ req b;
+//@ ens true;
 {}
 
 struct Account {
@@ -9,15 +9,15 @@ struct Account {
 
 /*@
 
-predicate Account(struct Account *account; int balance) =
-    malloc_block(account, sizeof(struct Account)) &*& struct_Account_padding(account) &*&
-    account->balance |-> balance;
+pred Account(account: *Account; balance: i32) =
+    alloc_block(account, std::mem::size_of::<Account>()) &*& struct_Account_padding(account) &*&
+    (*account).balance |-> balance;
 
 @*/
 
 unsafe fn create_account() -> *mut Account
-//@ requires true;
-//@ ensures Account(result, 0);
+//@ req true;
+//@ ens Account(result, 0);
 {
     let account = std::alloc::alloc(std::alloc::Layout::new::<Account>()) as *mut Account;
     if account.is_null() {
@@ -29,22 +29,22 @@ unsafe fn create_account() -> *mut Account
 }
 
 unsafe fn account_get_balance(account: *mut Account) -> i32
-//@ requires Account(account, ?balance);
-//@ ensures Account(account, balance) &*& result == balance;
+//@ req Account(account, ?balance);
+//@ ens Account(account, balance) &*& result == balance;
 {
     return (*account).balance;
 }
 
 unsafe fn account_deposit(account: *mut Account, amount: i32)
-//@ requires Account(account, ?balance) &*& 0 <= amount &*& balance + amount <= 2000000000;
-//@ ensures Account(account, balance + amount);
+//@ req Account(account, ?balance) &*& 0 <= amount &*& balance + amount <= 2000000000;
+//@ ens Account(account, balance + amount);
 {
     (*account).balance += amount;
 }
 
 unsafe fn account_dispose(account: *mut Account)
-//@ requires Account(account, _);
-//@ ensures true;
+//@ req Account(account, _);
+//@ ens true;
 {
     //@ open_struct(account);
     std::alloc::dealloc(account as *mut u8, std::alloc::Layout::new::<Account>());

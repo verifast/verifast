@@ -4308,6 +4308,14 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | CallExpr (l, "getClass", [], [], [LitPat target], Instance) when language = Java ->
       let w = checkt target javaLangObject in
       (WMethodCall (l, "java.lang.Object", "getClass", [], [w], Instance, []), ObjType ("java.lang.Class", []), None)
+    | CallExpr (l, "#list", [], [], pats, Static) ->
+      let rec to_list_expr pats =
+        match pats with
+          [] -> CallExpr (l, "nil", [], [], [], Static)
+        | LitPat e::pats -> CallExpr (l, "cons", [], [], [LitPat e; LitPat (to_list_expr pats)], Static)
+        | _ -> static_error l "List expression must not contain patterns" None
+      in
+      check (to_list_expr pats)
     | ExprCallExpr (l, e, es) ->
       let (w, t, _) = check e in
       begin match (t, es) with

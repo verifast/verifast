@@ -1,23 +1,24 @@
 unsafe fn assert(_b: bool)
-//@ requires _b;
-//@ ensures true;
+//@ req _b;
+//@ ens true;
 {}
 
 /*@
 
-predicate zstr(unsigned __int8 *p; list<unsigned __int8> cs) =
+pred zstr(p: *u8; cs: list<u8>) =
     *p |-> ?c &*&
-    c == 0 ?
-        cs == {}
-    :
+    if c == 0 {
+        cs == []
+    } else {
         zstr(p + 1, ?cs0) &*&
-        cs == cons(c, cs0);
+        cs == cons(c, cs0)
+    };
 
 @*/
 
 unsafe fn strlen(mut p: *const u8) -> i32
-//@ requires [?f]zstr(p, ?cs);
-//@ ensures [f]zstr(p, cs) &*& result == length(cs);
+//@ req [?f]zstr(p, ?cs);
+//@ ens [f]zstr(p, cs) &*& result == length(cs);
 {
     //@ open zstr(p, cs);
     if *p == 0 {

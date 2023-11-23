@@ -1,6 +1,6 @@
 unsafe fn assert(b: bool)
-//@ requires b;
-//@ ensures true;
+//@ req b;
+//@ ens true;
 {}
 
 fn test_alloc_i8()
