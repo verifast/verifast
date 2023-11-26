@@ -215,6 +215,7 @@ module LocAux = struct
 end
 
 module AstAux = struct
+  open Ocaml_aux
   open Ast
 
   let list_to_sep_conj asns init =
@@ -302,6 +303,14 @@ module AstAux = struct
     match adt with
     | StructType name | UnionType name -> Ok name
     | _ -> Error (`AdtTyName "Not an ADT")
+
+  let sort_decls_lexically ds =
+    ListAux.try_sort LocAux.compare_err_desc
+      (fun d d1 ->
+        LocAux.try_compare_loc
+          (Ast.lexed_loc @@ decl_loc @@ d)
+          (Ast.lexed_loc @@ decl_loc @@ d1))
+      ds
 end
 
 module SizeAux : sig
@@ -2744,6 +2753,12 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         ListAux.split3 bodies_tr_res
       in
       let body_sigs = List.filter_map Fun.id body_sig_opts in
+      (* Todo @Nima @Bart: `vfide` relies on the similarity of the order of function declarations
+         over several calls to `verifast` hence we are sorting them since `rustc` does not keep that order the same.
+         It is not a permanent solution and `vfide` should be fixed as the lexical sort does not work with nested function declarations.
+      *)
+      let* body_sigs = AstAux.sort_decls_lexically body_sigs in
+      let* body_decls = AstAux.sort_decls_lexically body_decls in
       let debug_infos = VF0.DbgInfoRustFe debug_infos in
       let decls = AstDecls.decls () in
       let decls =
