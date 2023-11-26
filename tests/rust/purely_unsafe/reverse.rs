@@ -9,10 +9,29 @@ pred list(n: **u8; nodes: list< **u8 >) =
     if n == 0 {
         nodes == nil
     } else {
+        alloc_block(n, std::mem::size_of::< * u8>()) &*&
         *n |-> ?next &*& list(next as **u8, ?nodes1) &*& nodes == cons(n, nodes1)
     };
 
 @*/
+
+unsafe fn dispose_list(mut n: *mut *mut u8)
+//@ req list(n, _);
+//@ ens true;
+{
+    loop {
+        //@ inv list(n, _);
+        //@ open list(n, _);
+        if n.is_null() {
+            break;
+        } else {
+            let next = *n as *mut *mut u8;
+            //@ pointer_to_u8s(n);
+            std::alloc::dealloc(n as *mut u8, std::alloc::Layout::new::<*mut u8>());
+            n = next;
+        }
+    }
+}        
 
 unsafe fn reverseAppend(list1: *mut *mut u8, list2: *mut *mut u8) -> *mut *mut u8
 //@ req list(list1, ?nodes1) &*& list(list2, ?nodes2);

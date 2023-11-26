@@ -216,6 +216,7 @@ let parse_spec_clauses = function%parser
 let rec parse_stmt = function%parser
   [ (Lexed (sp1, _), Kwd "/*@"); parse_stmt as s; (Lexed (_, sp2), Kwd "@*/") ] ->
   PureStmt (Lexed (sp1, sp2), s)
+| [ (l, Kwd "inv"); parse_asn as p; (_, Kwd ";") ] -> InvariantStmt (l, p)
 | [ (l, Kwd "open");
     [%let coef = opt parse_coef];
     parse_expr as e;
