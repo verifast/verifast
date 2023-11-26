@@ -56,52 +56,56 @@ lem CellU32_share_full(k: lifetime_t, t: thread_id_t, l: *CellU32)
 }
 @*/
 
-fn new(u: u32) -> CellU32 {
-    let c = CellU32 { v: u };
-    //@ close CellU32_own(_t, u);
-    c
-}
+impl CellU32 {
 
-/* VeriFast generates the contract of the safe functions based on the function's semantic type */
-fn get<'a>(c: &'a CellU32) -> u32 {
-    //@ open CellU32_share(a, _t, c);
-    //@ nonatomic_inv_complement_token_split(_t, Nshr, [c]);
-    //@ open_nonatomic_borrow(a, Tlns(_t, Nshr, [c]), _q_a);
-    //@ open CellU32_nonatomic_borrow_content(c, _t)();
-    let v = c.v;
-    //@ close CellU32_nonatomic_borrow_content(c, _t)();
-    //@ close_nonatomic_borrow();
-    //@ nonatomic_inv_complement_token_merge(_t, Nshr, [c]);
-    v
-}
-
-/* User can also write the contract of public functions to have it explicit.
-Verifast would check the compatibility of the contract with the function semantic type. */
-fn set<'a>(c: &'a CellU32, u: u32)
-//@ req nonatomic_inv_complement_token(?t, Nshr, []) &*& [?q]lifetime_token(?a) &*& CellU32_share(a, t, c);
-//@ ens nonatomic_inv_complement_token(t, Nshr, []) &*& [q]lifetime_token(a);
-{
-    let p = &c.v as *const u32 as *mut u32;
-    //@ open CellU32_share(a, t, c);
-    //@ nonatomic_inv_complement_token_split(t, Nshr, [c]);
-    //@ open_nonatomic_borrow(a, Tlns(t, Nshr, [c]), q);
-    //@ open CellU32_nonatomic_borrow_content(c, t)();
-    unsafe {
-        *p = u;
+    fn new(u: u32) -> CellU32 {
+        let c = CellU32 { v: u };
+        //@ close CellU32_own(_t, u);
+        c
     }
-    //@ open CellU32_own(t, _);
-    //@ close CellU32_own(t, u);
-    //@ close CellU32_nonatomic_borrow_content(c, t)();
-    //@ close_nonatomic_borrow();
-    //@ nonatomic_inv_complement_token_merge(t, Nshr, [c]);
-}
 
-// fn swap<'a, 'b>(c1: &'a CellU32, c2: &'b CellU32) {
-//     let p1 = &c1.v as *const u32 as *mut u32;
-//     let p2 = &c2.v as *const u32 as *mut u32;
-//     unsafe {
-//         let temp = *p1;
-//         *p1 = *p2;
-//         *p2 = temp;
-//     }
-// }
+    /* VeriFast generates the contract of the safe functions based on the function's semantic type */
+    fn get<'a>(&'a self) -> u32 {
+        //@ open CellU32_share(a, _t, self);
+        //@ nonatomic_inv_complement_token_split(_t, Nshr, [self]);
+        //@ open_nonatomic_borrow(a, Tlns(_t, Nshr, [self]), _q_a);
+        //@ open CellU32_nonatomic_borrow_content(self, _t)();
+        let v = self.v;
+        //@ close CellU32_nonatomic_borrow_content(self, _t)();
+        //@ close_nonatomic_borrow();
+        //@ nonatomic_inv_complement_token_merge(_t, Nshr, [self]);
+        v
+    }
+
+    /* User can also write the contract of public functions to have it explicit.
+    Verifast would check the compatibility of the contract with the function semantic type. */
+    fn set<'a>(&'a self, u: u32)
+    //@ req nonatomic_inv_complement_token(?t, Nshr, []) &*& [?q]lifetime_token(?a) &*& CellU32_share(a, t, self);
+    //@ ens nonatomic_inv_complement_token(t, Nshr, []) &*& [q]lifetime_token(a);
+    {
+        let p = &self.v as *const u32 as *mut u32;
+        //@ open CellU32_share(a, t, self);
+        //@ nonatomic_inv_complement_token_split(t, Nshr, [self]);
+        //@ open_nonatomic_borrow(a, Tlns(t, Nshr, [self]), q);
+        //@ open CellU32_nonatomic_borrow_content(self, t)();
+        unsafe {
+            *p = u;
+        }
+        //@ open CellU32_own(t, _);
+        //@ close CellU32_own(t, u);
+        //@ close CellU32_nonatomic_borrow_content(self, t)();
+        //@ close_nonatomic_borrow();
+        //@ nonatomic_inv_complement_token_merge(t, Nshr, [self]);
+    }
+
+    // fn swap<'a, 'b>(c1: &'a CellU32, c2: &'b CellU32) {
+    //     let p1 = &c1.v as *const u32 as *mut u32;
+    //     let p2 = &c2.v as *const u32 as *mut u32;
+    //     unsafe {
+    //         let temp = *p1;
+    //         *p1 = *p2;
+    //         *p2 = temp;
+    //     }
+    // }
+
+}

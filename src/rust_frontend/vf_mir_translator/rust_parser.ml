@@ -134,6 +134,7 @@ and parse_suffix e = function%parser
 | [] -> e
 and parse_primary_expr = function%parser
   [ (l, Ident x); [%let e = parse_path_rest l x] ] -> e
+| [ (l, Kwd "self") ] -> Var (l, "self")
 | [ (l, Int (i, dec, usuffix, lsuffix, _)) ] -> IntLit (l, i, dec, usuffix, lsuffix)
 | [ (l, String s) ] -> StringLit (l, s)
 | [ (l, Kwd "true") ] -> True l
