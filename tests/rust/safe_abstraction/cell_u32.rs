@@ -6,7 +6,7 @@ pub struct CellU32 {
 // Interpretation
 // `OWN` for Cell<u32>
 // [[cell(tau)]].OWN(t, vs) = [[tau]].OWN(t, vs)
-pred CellU32_own(t: thread_id_t, v: uint32_t) = true; // The `v` parameter type carries the info
+pred CellU32_own(t: thread_id_t, v: u32) = true; // The `v` parameter type carries the info
 
 /* A note on `|= cell(tau) copy` judgement:
 In RustBelt `|= tau copy => |= cell(tau) copy` but it is not the case in Rust as it is prohibited

@@ -179,7 +179,7 @@ let parse_coef = function%parser
 
 let parse_pure_spec_clause = function%parser
   [ (_, Kwd "nonghost_callers_only") ] -> NonghostCallersOnlyClause
-| [ (l, Kwd "terminates") ] -> TerminatesClause l
+| [ (l, Kwd "terminates"); (_, Kwd ";") ] -> TerminatesClause l
 | [ (_, Kwd "req"); parse_asn as p; (_, Kwd ";") ] -> RequiresClause p
 | [ (_, Kwd "ens"); parse_asn as p; (_, Kwd ";") ] -> EnsuresClause p
 
@@ -296,11 +296,21 @@ let parse_pred_body = function%parser
 
 let parse_func_rest k = function%parser
   [ (l, Ident g); (_, Kwd "("); [%let ps = rep_comma parse_param]; (_, Kwd ")");
-    [%let (nonghost_callers_only, ft, co, terminates) = parse_spec_clauses];
-    (_, Kwd "{");
-    parse_stmts as ss;
-    (closeBraceLoc, Kwd "}")
-  ] -> Func (l, k, [], None, g, ps, nonghost_callers_only, ft, co, terminates, Some (ss, closeBraceLoc), false, [])
+    [%let rt = function%parser
+      [ (_, Kwd "->"); parse_type as t ] -> Some t
+    | [ ] -> if k = Regular then Some (StructTypeExpr (l, Some "std_tuple_0_", None, [])) else None
+    ];
+    [% let d = function%parser
+      [ (_, Kwd ";");
+        [%let (nonghost_callers_only, ft, co, terminates) = parse_spec_clauses]
+      ] -> Func (l, k, [], rt, g, ps, nonghost_callers_only, ft, co, terminates, None, false, [])
+    | [ [%let (nonghost_callers_only, ft, co, terminates) = parse_spec_clauses];
+        (_, Kwd "{");
+        parse_stmts as ss;
+        (closeBraceLoc, Kwd "}")
+      ] -> Func (l, k, [], rt, g, ps, nonghost_callers_only, ft, co, terminates, Some (ss, closeBraceLoc), false, [])
+    ]
+  ] -> d
 
 let parse_ghost_decl = function%parser
 | [ (l, Kwd "pred"); (li, Ident g);
@@ -322,3 +332,20 @@ let parse_ghost_decls stream = List.flatten (rep parse_ghost_decl stream)
 
 let parse_ghost_decl_block = function%parser
   [ (_, Kwd "/*@"); parse_ghost_decls as ds; (_, Kwd "@*/") ] -> ds
+
+let prefix_decl_name l prefix = function
+  Func (l, k, tparams, rt, g, ps, nonghost_callers_only, ft, co, terminates, body, isVirtual, overrides) ->
+  Func (l, k, tparams, rt, prefix ^ g, ps, nonghost_callers_only, ft, co, terminates, body, isVirtual, overrides)
+| _ -> static_error l "Items other than functions are not yet supported here" None
+
+let rec parse_decl = function%parser
+  [ (l, Kwd ("impl"|"mod")); (lx, Ident x); (_, Kwd "{");
+    [%let ds = rep parse_decl];
+    (_, Kwd "}")
+  ] ->
+  let prefix = x ^ "::" in
+  ds |> List.flatten |> List.map (prefix_decl_name l prefix)
+| [ (l, Kwd "fn"); [%let d = parse_func_rest Regular] ] -> [d]
+
+let parse_decls = function%parser
+  [ [%let ds = rep parse_decl] ] -> List.flatten ds

@@ -517,9 +517,12 @@ module TrName = struct
   let tag_internal (n : string) = "$" ^ n
 
   let translate_def_path (dp : string) =
+    (*
     let open Str in
     let r = regexp {|::|} in
     global_replace r "_" dp
+    *)
+    dp
 
   let make_tmp_var_name base_name = tag_internal "temp_var_" ^ base_name
 
@@ -628,10 +631,26 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         let header_path = Filename.concat Args.aux_headers_dir header_name in
         (* Todo @Nima: should we catch the exceptions and return Error here? *)
         let headers, decls =
-          Parser.parse_header_file Args.report_macro_call header_path
-            Args.report_range Args.report_should_fail Args.verbosity
-            (*include paths*) [] (*define macros*) []
-            (*enforce annotation*) true Args.data_model_opt
+          if Filename.check_suffix header_name ".rsspec" then
+            let prefix =
+              if Filename.check_suffix header_name "/lib.rsspec" then
+                let dirname = String.sub header_name 0 (String.length header_name - String.length "/lib.rsspec") in
+                let crateName = Filename.basename dirname in
+                crateName ^ "::"
+              else
+                ""
+            in
+            let ds = VfMirAnnotParser.parse_rsspec_file header_path in
+            let pos = (header_path, 1, 1) in
+            let loc = Ast.Lexed ((pos, pos)) in
+            let ds = if prefix = "" then ds else ds |> List.map (Rust_parser.prefix_decl_name loc prefix) in
+            let ps = [Ast.PackageDecl (Ast.dummy_loc, "", [], ds)] in
+            [], ps
+          else
+            Parser.parse_header_file Args.report_macro_call header_path
+              Args.report_range Args.report_should_fail Args.verbosity
+              (*include paths*) [] (*define macros*) []
+              (*enforce annotation*) true Args.data_model_opt
         in
         let header_names = List.map (fun (_, (_, _, h), _, _) -> h) headers in
         let headers =
@@ -1392,7 +1411,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           match fn_name with
           (* Todo @Nima: For cases where we inline an expression instead of a function call,
              there is a problem with extending the implementation for clean-up paths *)
-          | "std_alloc_Layout_new" -> (
+          | "std::alloc::Layout::new" -> (
               if not (ListAux.is_empty args_cpn) then
                 Error
                   (`TrFnCallRExpr
@@ -1409,7 +1428,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                       (`TrFnCallRExpr
                         "Invalid generic argument(s) for \
                          std::alloc::Layout::new"))
-          | "std_ptr_mut_ptr_<impl *mut T>_is_null" -> (
+          | "std::ptr::mut_ptr::<impl *mut T>::is_null" -> (
               match (substs, args_cpn) with
               | [ Mir.GenArgType gen_arg_ty_info ], [ arg_cpn ] ->
                   let* tmp_rvalue_binders, [ arg ] =
@@ -1434,8 +1453,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                     (`TrFnCallRExpr
                       "Invalid (generic) arg(s) for std::ptr::mut_ptr::<impl \
                        *mut T>::is_null"))
-          | "std_ptr_const_ptr_<impl *const T>_offset"
-          | "std_ptr_mut_ptr_<impl *mut T>_offset" -> (
+          | "std::ptr::const_ptr::<impl *const T>::offset"
+          | "std::ptr::mut_ptr::<impl *mut T>::offset" -> (
               match (substs, args_cpn) with
               | [ Mir.GenArgType gen_arg_ty_info ], [ arg1_cpn; arg2_cpn ] ->
                   let* tmp_rvalue_binders, [ arg1; arg2 ] =
@@ -1450,7 +1469,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                     (`TrFnCallRExpr
                       (Printf.sprintf "Invalid (generic) arg(s) for %s" fn_name))
               )
-          | "std_ptr_null_mut" ->
+          | "std::ptr::null_mut" ->
               Ok
                 ( [],
                   IntLit
@@ -2767,7 +2786,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       in
       (* Todo @Nima: we should add necessary inclusions during translation *)
       let _ =
-        List.iter Headers.add_decl [ "rust/std/alloc.h"; "rust/std/process.h" ]
+        List.iter Headers.add_decl [ "rust/std/lib.rsspec" ]
       in
       let header_names = Headers.decls () in
       let* headers = ListAux.try_map HeadersAux.parse_header header_names in
