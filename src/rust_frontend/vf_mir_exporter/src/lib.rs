@@ -583,7 +583,7 @@ mod vf_mir_builder {
 
             let kind = tcx.def_kind(def_id);
             match kind {
-                hir::def::DefKind::Fn => {
+                hir::def::DefKind::Fn|hir::def::DefKind::AssocFn => {
                     let mut def_kind_cpn = body_cpn.reborrow().init_def_kind();
                     def_kind_cpn.set_fn(());
                 }
