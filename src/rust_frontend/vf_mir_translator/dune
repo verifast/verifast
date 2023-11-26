@@ -1,0 +1,3 @@
+(library
+ (name vf_mir_translator)
+ (libraries capnp frontend vf_mir verifast_core))

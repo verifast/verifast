@@ -191,11 +191,9 @@ OCAMLDEP     = $(firstword $(wildcard ${OCAMLBIN}/ocamldep.opt ${OCAMLBIN}/ocaml
 # Do we build with "-I ./linux" or "-I ./win":
 ifeq ($(OS), Windows_NT)
   INCLUDE_OS_DIR = win
-  OS_OBJECTS = SetErrorMode.cmx
 else
 # Also for mac.
   INCLUDE_OS_DIR = linux
-  OS_OBJECTS =
 endif
 
 # Number of CPUs
