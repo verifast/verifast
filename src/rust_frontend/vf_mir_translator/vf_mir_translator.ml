@@ -634,18 +634,23 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           if Filename.check_suffix header_name ".rsspec" then
             let prefix =
               if Filename.check_suffix header_name "/lib.rsspec" then
-                let dirname = String.sub header_name 0 (String.length header_name - String.length "/lib.rsspec") in
+                let dirname =
+                  String.sub header_name 0
+                    (String.length header_name - String.length "/lib.rsspec")
+                in
                 let crateName = Filename.basename dirname in
                 crateName ^ "::"
-              else
-                ""
+              else ""
             in
             let ds = VfMirAnnotParser.parse_rsspec_file header_path in
             let pos = (header_path, 1, 1) in
-            let loc = Ast.Lexed ((pos, pos)) in
-            let ds = if prefix = "" then ds else ds |> List.map (Rust_parser.prefix_decl_name loc prefix) in
-            let ps = [Ast.PackageDecl (Ast.dummy_loc, "", [], ds)] in
-            [], ps
+            let loc = Ast.Lexed (pos, pos) in
+            let ds =
+              if prefix = "" then ds
+              else ds |> List.map (Rust_parser.prefix_decl_name loc prefix)
+            in
+            let ps = [ Ast.PackageDecl (Ast.dummy_loc, "", [], ds) ] in
+            ([], ps)
           else
             Parser.parse_header_file Args.report_macro_call header_path
               Args.report_range Args.report_should_fail Args.verbosity
@@ -1988,13 +1993,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let nonatomic_token_b pat =
         CallExpr
           ( contract_loc,
-            "nonatomic_inv_complement_token",
+            "thread_token",
             [] (*type arguments*),
             [] (*indices*),
-            [
-              pat; lit_pat_b "Nshr"; LitPat (InitializerList (contract_loc, []));
-            ]
-            (*arguments*),
+            [ pat ] (*arguments*),
             Static )
       in
       let thread_id_name = "_t" in
@@ -2661,7 +2663,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let* vis = translate_visibility vis_cpn in
     let is_local = is_local_get adt_def_cpn in
     let kind_cpn = kind_get adt_def_cpn in
-    let* (def, aux_decls) =
+    let* def, aux_decls =
       match AdtKindRd.get kind_cpn with
       | StructKind ->
           let* field_defs =
@@ -2680,7 +2682,12 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                     (*is polymorphic*) false ),
                 (*struct_attr list*) [] )
           in
-          Ok (struct_decl, [Ast.TypedefDecl (def_loc, StructTypeExpr (def_loc, Some name, None, []), name)])
+          Ok
+            ( struct_decl,
+              [
+                Ast.TypedefDecl
+                  (def_loc, StructTypeExpr (def_loc, Some name, None, []), name);
+              ] )
       | EnumKind -> failwith "Todo: AdtDef::Enum"
       | UnionKind -> failwith "Todo: AdtDef::Union"
       | Undefined _ -> Error (`TrAdtDef "Unknown ADT kind")
@@ -2743,8 +2750,12 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       *)
       let adt_defs, aux_decls, adts_full_bor_content_preds, adts_proof_obligs =
         List.fold_left
-          (fun (defs, auxDecls, fbors, pos) Mir.{ def; aux_decls; full_bor_content; proof_obligs } ->
-            (def::defs, aux_decls::auxDecls, full_bor_content :: fbors, proof_obligs :: pos))
+          (fun (defs, auxDecls, fbors, pos)
+               Mir.{ def; aux_decls; full_bor_content; proof_obligs } ->
+            ( def :: defs,
+              aux_decls :: auxDecls,
+              full_bor_content :: fbors,
+              proof_obligs :: pos ))
           ([], [], [], []) adt_defs
       in
       let adts_full_bor_content_preds =
@@ -2781,13 +2792,11 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let debug_infos = VF0.DbgInfoRustFe debug_infos in
       let decls = AstDecls.decls () in
       let decls =
-        decls @ adt_defs @ List.flatten aux_decls @ adts_full_bor_content_preds @ adts_proof_obligs
-        @ ghost_decls @ body_sigs @ body_decls
+        decls @ adt_defs @ List.flatten aux_decls @ adts_full_bor_content_preds
+        @ adts_proof_obligs @ ghost_decls @ body_sigs @ body_decls
       in
       (* Todo @Nima: we should add necessary inclusions during translation *)
-      let _ =
-        List.iter Headers.add_decl [ "rust/std/lib.rsspec" ]
-      in
+      let _ = List.iter Headers.add_decl [ "rust/std/lib.rsspec" ] in
       let header_names = Headers.decls () in
       let* headers = ListAux.try_map HeadersAux.parse_header header_names in
       let headers = List.concat headers in
