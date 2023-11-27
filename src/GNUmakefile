@@ -372,14 +372,6 @@ clean::
 	rm -f $(STDLIB)
 	rm -f $(STDLIB_FILES_GEN)
 
-#------------------------------- Auto code generation -----------------------#
-
-VFCONFIG_CONTENT=let z3_present = $(Z3PRESENT);; let z3v4dot5_present = $(Z3V4DOT5PRESENT);; type platform = Windows | MacOS | Linux;; let platform = $(PLATFORM)
-vfconfig.ml:
-	echo "$(VFCONFIG_CONTENT)" > vfconfig.ml
-clean::
-	rm -f vfconfig.ml
-
 #------------------------------- Build special cases ------------------------#
 
 tabhunt:
@@ -550,10 +542,6 @@ z3v4dot5prover.cmx: $(INCLUDE_OS_DIR)/Perf.cmxa proverapi.cmx z3v4dot5prover.ml
 clean::
 	rm -f shape_analysis/*.cm[ix] shape_analysis/*.cmo
 
-# Dependencies of these files seem to be harder to autodetect, so
-# written by hand for now.
-vfconfig.cmx: vfconfig.ml
-
 #------------------------------- Tests --------------------------------------#
 testsuite: $(STDLIB) $(TOOLS_EXCEPT_VFIDE)
 	@echo "  RUN " json_tests
@@ -647,7 +635,6 @@ META_DEPS = \
   java_frontend/*.ml java_frontend/*.mli \
   cxx_frontend/*.ml cxx_frontend/*.mli \
   shape_analysis/*.ml shape_analysis/*.mli) \
-  vfconfig.ml \
   $(META_DEPS_RUST_FE)
 
 depend: $(META_DEPS)
