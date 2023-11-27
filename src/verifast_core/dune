@@ -1,4 +1,0 @@
-(library
- (name verifast_core)
- (wrapped false)
- (libraries frontend))

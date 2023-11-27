@@ -2,4 +2,4 @@
  (name vf_mir_translator)
  (preprocess
   (pps ppx_parser))
- (libraries capnp frontend vf_mir verifast_core))
+ (libraries capnp frontend vf_mir))
