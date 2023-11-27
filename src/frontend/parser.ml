@@ -99,6 +99,19 @@ let rust_keywords = [
   "'a" (* this pseudo-keyword is a hack; its presence signals to the lexer that tokens of the form 'abc (i.e. Rust lifetime tokens) are allowed *)
 ]
 
+let rust_ghost_keywords = [
+  "assert";
+  "pred"; "copred"; "req"; "|->"; "&*&"; "inductive"; "fix";
+  "ens"; "close"; "lem"; "open"; "emp"; "inv"; "lem_auto";
+  "_"; "@*/"; "pred_fam"; "pred_fam_inst"; "pred_ctor"; "leak"; "@";
+  "box_class"; "action"; "handle_pred"; "preserved_by"; "consuming_box_pred"; "consuming_handle_pred"; "perform_action"; "nonghost_callers_only";
+  "create_box"; "above"; "below"; "and_handle"; "and_fresh_handle"; "create_handle"; "create_fresh_handle"; "dispose_box"; 
+  "produce_lem_ptr_chunk"; "dup_lem_ptr_chunk"; "produce_fn_ptr_chunk";
+  "producing_box_pred"; "producing_handle_pred"; "producing_fresh_handle_pred"; "box"; "handle"; "any"; "split_fraction"; "by"; "merge_fractions";
+  "unloadable_module"; "decreases"; "forall_"; "import_module"; "require_module"; ".."; "extends"; "permbased";
+  "terminates"; "abstract_type"; "fix_auto"; "typeid"; "activating"; "truncating"; "typedef"
+]
+
 let java_keywords = [
   (* JLS6 keywords *)
   "abstract"; "assert"; "boolean"; "break"; "byte"; "case"; "catch"; "char"; "class"; "const";
@@ -137,6 +150,7 @@ let ghost_keywords = [
 ]
 
 exception CompilationError of string
+exception CompilationErrorWithDetails of string * string
 
 let file_specs path =
   begin
@@ -148,6 +162,7 @@ let file_specs path =
     else if Filename.check_suffix (Filename.basename path) ".javaspec" then Java, None
     else if Filename.check_suffix (Filename.basename path) ".scala" then Java, None
     else if Filename.check_suffix (Filename.basename path) ".h" then CLang, None
+    else if Filename.check_suffix (Filename.basename path) ".rs" then CLang, Some(Rust)
     else raise (CompilationError ("unknown extension: " ^ (Filename.basename path)))
   end
 let file_type path =
@@ -271,7 +286,7 @@ module Scala = struct
     parse_expr stream = parse_rel_expr stream
   and
     parse_stmt = function%parser
-      [ (l, Kwd "var"); (_, Ident x); parse_type_ann as t; (_, Kwd "="); parse_expr as e; (_, Kwd ";") ] -> DeclStmt (l, [l, t, x, Some(e), (ref false, ref None)])
+      [ (l, Kwd "var"); (_, Ident x); parse_type_ann as t; (_, Kwd "="); parse_expr as e; (_, Kwd ";") ] -> DeclStmt (l, [l, Some t, x, Some(e), (ref false, ref None)])
     | [ (l, Kwd "assert"); parse_asn as a; (_, Kwd ";") ] -> Assert (l, a)
 
 end
@@ -526,7 +541,7 @@ and
                 (_, Kwd ";")
               ] ->
               let fds =
-              ((l, tx, x, init, (ref false, ref None))::ds) |> List.map begin fun (l, tx, x, init, _) ->
+              ((l, Some tx, x, init, (ref false, ref None))::ds) |> List.map begin fun (l, Some tx, x, init, _) ->
                 Field (l, Real, tx, x, binding, vis, final, init)
               end
               in
@@ -622,7 +637,7 @@ and
     | _ -> tx
   in
   register_varname x;
-  (l, tx, x, init, (ref false, ref None))
+  (l, Some tx, x, init, (ref false, ref None))
 and
   parse_method_rest l = function%parser
   [ parse_paramlist as ps;
@@ -1958,7 +1973,7 @@ and
         AssignExpr (l, Operation (llhs, Mul, [Var (lt, t); e1]), rhs) -> 
         let rec iter te e1 =
           match e1 with
-            Var (lx, x) -> register_varname x; DeclStmt (l, [l, te, x, Some(rhs), (ref false, ref None)])
+            Var (lx, x) -> register_varname x; DeclStmt (l, [l, Some te, x, Some(rhs), (ref false, ref None)])
           | Deref (ld, e2) -> iter (PtrTypeExpr (ld, te)) e2
           | _ -> ExprStmt e
         in
@@ -1966,7 +1981,7 @@ and
       | Operation (l, Mul, [Var (lt, t); e1]) ->
         let rec iter te e1 =
           match e1 with
-            Var (lx, x) -> register_varname x; DeclStmt (lx, [lx, te, x, None, (ref false, ref None)])
+            Var (lx, x) -> register_varname x; DeclStmt (lx, [lx, Some te, x, None, (ref false, ref None)])
           | Deref (ld, e2) -> iter (PtrTypeExpr (ld, te)) e2
           | _ -> ExprStmt e
         in
@@ -1979,6 +1994,8 @@ and
       ] -> register_varname x; s
     ]
   ] -> s
+| [ (l, Kwd "auto"); (lx, Ident x); (_, Kwd "="); parse_expr as e; (_, Kwd ";") ] ->
+  DeclStmt (l, [lx, None, x, Some e, (ref false, ref None)])
 (* parse variable declarations: *)
 | [ parse_type as te; 
     (lx, Ident x); 
@@ -2097,7 +2114,7 @@ and
     | [ [%l rhs = parse_declaration_rhs te]; 
         [%l ds = comma_rep (parse_declarator (get_ultimate_pointee_type te))]; 
         (_, Kwd ";") 
-      ] -> DeclStmt (l, (l, te, x, Some(rhs), (ref false, ref None))::ds)
+      ] -> DeclStmt (l, (l, Some te, x, Some(rhs), (ref false, ref None))::ds)
     ]
   ] -> s
 | [ [%l tx = parse_array_braces te];
@@ -2117,7 +2134,7 @@ and
         StaticArrayTypeExpr (l, elemTp, List.length es)
       | _ -> tx
     in
-    DeclStmt(type_expr_loc te, (lx, tx, x, init, (ref false, ref None))::ds)
+    DeclStmt(type_expr_loc te, (lx, Some tx, x, init, (ref false, ref None))::ds)
 and
   parse_switch_stmt_clauses = function%parser
 | [ parse_switch_stmt_clause as c; 

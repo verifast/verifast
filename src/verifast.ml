@@ -305,14 +305,17 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 | ExprStmt (CallExpr (lc, "call", [], [], [], Static))::ss_after ->(List.rev ss_before, Some (lc, None, ss_after))
                 | DeclStmt (ld, [lx, tx, x, Some(CallExpr (lc, "call", [], [], [], Static)), _])::ss_after ->
                   if List.mem_assoc x tenv then static_error ld "Variable hides existing variable" None;
-                  let t = check_pure_type (pn,ilist) tparams gh tx in
+                  let t = option_map (check_pure_type (pn,ilist) tparams gh) tx in
                   let Some (funenv1, rt1, xmap1, pre1, post1, terminates1) = funcinfo_opt in
-                  begin match rt1 with
-                    None -> static_error ld "Function does not return a value" None
-                  | Some rt1 ->
+                  let t = match t, rt1 with
+                    _, None -> static_error ld "Function does not return a value" None
+                  | Some t, Some rt1 ->
                     expect_type ld (Some true) rt1 t;
-                    (List.rev ss_before, Some (ld, Some (x, t), ss_after))
-                  end
+                    t
+                  | None, Some rt1 ->
+                    rt1
+                  in
+                  (List.rev ss_before, Some (ld, Some (x, t), ss_after))
                 | s::ss_after -> iter (s::ss_before) ss_after
               in
               iter [] ss
@@ -607,9 +610,19 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let (w, tp) = check_expr (pn,ilist) tparams tenv e in
       let sn = match tp with PtrType (StructType sn) -> sn | _ -> static_error l "The argument of close_struct must be of type pointer-to-struct." None in
       eval_h h env w $. fun h env pointerTerm ->
-      with_context (Executing (h, env, l, "Consuming character array")) $. fun () ->
-      consume_chunk rules h ghostenv [] [] l ((if name = "close_struct" then chars__pred_symb () else chars_pred_symb ()), true) [] real_unit dummypat (Some 2) [TermPat pointerTerm; TermPat (struct_size l sn); SrcPat DummyPat] $. fun _ h coef [_; _; elems] _ _ _ _ ->
-      if not (definitely_equal coef real_unit) then assert_false h env l "Closing a struct requires full permission to the character array." None;
+      begin fun cont ->
+      match dialect with
+        Some Rust ->
+        with_context (Executing (h, env, l, "Consuming u8 array")) $. fun () ->
+        consume_chunk rules h ghostenv [] [] l ((if name = "close_struct" then integers___symb () else integers__symb ()), true) [] real_unit dummypat (Some 4) [TermPat pointerTerm; TermPat (ctxt#mk_intlit 1); TermPat false_term; TermPat (struct_size l sn); SrcPat DummyPat] $. fun _ h coef [_; _; _; _; elems] _ _ _ _ ->
+        if not (definitely_equal coef real_unit) then assert_false h env l "Closing a struct requires full permission to the u8 array." None;
+        cont h elems
+      | _ ->
+        with_context (Executing (h, env, l, "Consuming character array")) $. fun () ->
+        consume_chunk rules h ghostenv [] [] l ((if name = "close_struct" then chars__pred_symb () else chars_pred_symb ()), true) [] real_unit dummypat (Some 2) [TermPat pointerTerm; TermPat (struct_size l sn); SrcPat DummyPat] $. fun _ h coef [_; _; elems] _ _ _ _ ->
+        if not (definitely_equal coef real_unit) then assert_false h env l "Closing a struct requires full permission to the character array." None;
+        cont h elems
+      end $. fun h elems ->
       let init =
         match name with
           "close_struct" -> Unspecified
@@ -631,7 +644,14 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let Some (_, _, _, _, length_symb) = try_assoc' Ghost (pn,ilist) "length" purefuncmap in
       let size = struct_size l sn in
       assume (ctxt#mk_eq (mk_app length_symb [cs]) size) $. fun () ->
-      cont (Chunk ((chars__pred_symb (), true), [], real_unit, [pointerTerm; size; cs], None)::h) env
+      let chunk =
+        match dialect with
+          Some Rust ->
+          Chunk ((integers___symb (), true), [], real_unit, [pointerTerm; ctxt#mk_intlit 1; false_term; size; cs], None)
+        | _ ->
+          Chunk ((chars__pred_symb (), true), [], real_unit, [pointerTerm; size; cs], None)
+      in
+      cont (chunk::h) env
     | ExprStmt (CallExpr (l, "free", [], [], args,Static) as e) ->
       let args = List.map (function LitPat e -> e | _ -> static_error l "No patterns allowed here" None ) args in
       begin
@@ -823,9 +843,22 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         match xs with
           [] -> tcont sizemap tenv ghostenv h env
         | (l, te, x, e, (address_taken, blockPtr))::xs ->
-          let t = check_pure_type (pn,ilist) tparams (if pure then Ghost else Real) te in
+          let t = option_map (check_pure_type (pn,ilist) tparams (if pure then Ghost else Real)) te in
           if List.mem_assoc x tenv then static_error l ("Declaration hides existing local variable '" ^ x ^ "'.") None;
           let ghostenv = if pure then x::ghostenv else List.filter (fun y -> y <> x) ghostenv in
+          match t with
+            None ->
+            let w, t =
+              match e with
+                None -> static_error l "auto variable declaration must have initializer" None
+              | Some e -> check_expr (pn,ilist) tparams tenv e
+            in
+            begin fun cont ->
+              verify_expr false h env (Some x) w cont econt
+            end $. fun h env v ->
+            if !address_taken then static_error l "Taking the address of an auto variable is not yet supported" None;
+            iter h ((x, t)::tenv) ghostenv ((x, v)::env) xs
+          | Some t ->
           let produce_object envTp =
             if pure then static_error l "Cannot declare a variable of this type in a ghost context." None;
             begin let Some block = !blockPtr in if not (List.mem x !block) then block := x::!block end;
@@ -3512,7 +3545,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   end (* CheckFile *)
   
-  let rec check_file filepath is_import_spec include_prelude dir headers ps =
+  let rec check_file filepath is_import_spec include_prelude dir headers ps dbg_info =
     let module CF = CheckFile(struct
       let filepath = filepath
       let is_import_spec = is_import_spec
@@ -3520,6 +3553,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let dir = dir
       let headers = headers
       let ps = ps
+      let dbg_info = dbg_info
       let check_file = check_file
     end) in
     CF.result
@@ -3531,7 +3565,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let (prototypes_implemented, functypes_implemented, structures_defined, unions_defined,
        nonabstract_predicates, modules_imported) =
     let result = check_should_fail ([], [], [], [], [], []) $. fun () ->
-    let (headers, ds)=
+    let (headers, ds, dbg_info) =
       match file_specs path with
         Java, _ ->
           let l = Lexed (file_loc path) in
@@ -3569,13 +3603,16 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let javas = javas @ provide_javas in
           let context = List.map (fun (Lexed ((b, _, _), _), (_, p, _), _, _) -> Util.concat (Filename.dirname b) ((Filename.chop_extension p) ^ ".jar")) headers in
           let ds = Java_frontend_bridge.parse_java_files javas context reportRange reportShouldFail options.option_verbose options.option_enforce_annotations options.option_use_java_frontend in
-          (headers, ds)
+          (headers, ds, (*dbg_info*) None)
       | CLang, None ->
+        let headers, ds =
         if Filename.check_suffix path ".h" then
           parse_header_file reportMacroCall path reportRange reportShouldFail options.option_verbose [] define_macros options.option_enforce_annotations data_model
         else
           parse_c_file reportMacroCall path reportRange reportShouldFail options.option_verbose include_paths define_macros options.option_enforce_annotations data_model
-      | CLang, Some Cxx ->
+        in
+        (headers, ds, (*dbg_info*) None)
+      | CLang, Some Cxx -> begin
         let module Translator = Cxx_ast_translator.Make(
           struct
             let enforce_annotations = options.option_enforce_annotations
@@ -3592,15 +3629,30 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         ) 
         in
         try
-          Translator.parse_cxx_file ()
+          let headers, ds = Translator.parse_cxx_file () in (headers, ds, (*dbg_info*) None)
         with
         | Cxx_annotation_parser.CxxAnnParseException (l, msg)
         | Cxx_ast_translator.CxxAstTranslException (l, msg) -> static_error l msg None
-          
+      end
+      | CLang, Some(Rust) -> begin
+        let module RustFe = Rust_fe.Make(
+          struct
+            let data_model_opt = data_model
+            let report_should_fail = reportShouldFail
+            let report_range = reportRange
+            let report_macro_call = reportMacroCall
+          end
+        )
+        in
+        try
+          RustFe.parse_rs_file path
+        with
+        | RustFe.RustFrontend msg -> raise (CompilationErrorWithDetails ("Rust frontend failed", msg))
+      end
     in
     emitter_callback ds;
     check_should_fail ([], [], [], [], [], []) $. fun () ->
-    let (linker_info, _) = check_file path false true programDir headers ds in
+    let (linker_info, _) = check_file path false true programDir headers ds dbg_info in
     linker_info
     in
     begin

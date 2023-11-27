@@ -695,7 +695,7 @@ and of_stmt = function
     of_list begin fun (l, t, x, init, (addressTaken, addressTakenList)) ->
       T [
         of_loc l;
-        of_type_expr t;
+        of_option of_type_expr t;
         S x;
         of_option of_expr init;
         T [

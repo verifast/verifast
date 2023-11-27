@@ -602,7 +602,7 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
       apply_tag_by_name tab (tag_name_of_range_kind kind) ~start:(srcpos_iter buffer (startLine + line1, col1)) ~stop:(srcpos_iter buffer (startLine + line2, col2))
     in
     let text = start#get_text ~stop:stop in
-    let highlight keywords =
+    let highlight keywords ghost_keywords =
       let (loc, ignore_eol, tokenStream, in_comment, in_ghost_range) =
         make_lexer_helper keywords ghost_keywords "<buffer>" text reportRange startIsInComment startIsInGhostRange false (fun _ _ -> ()) annotChar in
       Stream.iter (fun _ -> ()) tokenStream;
@@ -613,10 +613,10 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
     match !(tab#path) with
       None -> ()
     | Some (path, mtime) ->
-      if Filename.check_suffix path ".c" || Filename.check_suffix path ".h" then highlight (common_keywords @ c_keywords)
-      else if Filename.check_suffix path ".java" || Filename.check_suffix path ".javaspec" then highlight (common_keywords @ java_keywords)
-      else if Filename.check_suffix path ".cpp" then highlight (common_keywords @ cxx_keywords)
-      else if Filename.check_suffix path ".rs" then highlight (common_keywords @ rust_keywords)
+      if Filename.check_suffix path ".c" || Filename.check_suffix path ".h" then highlight c_keywords ghost_keywords
+      else if Filename.check_suffix path ".java" || Filename.check_suffix path ".javaspec" then highlight java_keywords ghost_keywords
+      else if Filename.check_suffix path ".cpp" then highlight cxx_keywords ghost_keywords
+      else if Filename.check_suffix path ".rs" then highlight rust_keywords rust_ghost_keywords
       else ()
   in
   let create_editor (textNotebook: GPack.notebook) buffer lineMarksTable stmtExecCountsColumn =
@@ -1558,6 +1558,11 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
               clearTrace();
               msg := Some(emsg);
               updateMessageEntry(false)
+            | CompilationErrorWithDetails (emsg, details) ->
+              clearTrace();
+              print_endline details;
+              msg := Some (emsg ^ " (see console for details)");
+              updateMessageEntry false
             | StaticError (l, emsg, eurl) ->
               handleStaticError l emsg eurl 
             | SymbolicExecutionError (ctxts, l, emsg, eurl) ->

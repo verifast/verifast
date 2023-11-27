@@ -1,5 +1,5 @@
-#ifndef LIST_H
-#define LIST_H
+#ifndef __LIST_H
+#define __LIST_H
 
 //@ predicate list(struct list* l; list<void*> vs);
 

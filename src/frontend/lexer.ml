@@ -606,7 +606,11 @@ let make_lexer_core keywords ghostKeywords startpos text reportRange inComment i
     | ':' -> 
       start_token();
       text_junk ();
-      Some (keyword_or_error ":")
+      if text_peek () = ':' then begin
+        text_junk ();
+        Some (keyword_or_error "::")
+      end else
+        Some (keyword_or_error ":")
     | ('0'..'9' as c) ->
         start_token();
         text_junk ();
@@ -656,8 +660,8 @@ let make_lexer_core keywords ghostKeywords startpos text reportRange inComment i
     match text_peek () with
       ('A'..'Z' | 'a'..'z' | '\128'..'\255' | '0'..'9' | '_' | '\'' | '$') as c ->
       text_junk (); store c; ident ()
-    (* for C++ nested names, e.g. foo::bar *)
-    | ':' when (text_peekn 1) = ':' ->
+    (* for C++ nested names, e.g. foo::bar *) (* In Rust code, don't treat :: as part of an identifier *)
+    | ':' when (text_peekn 1) = ':' && not (Hashtbl.mem kwd_table "'a") ->
       text_junk (); text_junk (); store ':'; store ':'; ident ()
     | _ -> Some (ident_or_keyword (get_string ()) true)
   and ident2 () =

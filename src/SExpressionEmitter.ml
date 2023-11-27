@@ -784,9 +784,10 @@ let rec sexpr_of_pred (asn : asn) : sexpression =
     | SwitchAsn (_, expr, _) ->
       build_list [ Symbol "pred-switch-asn" ]
                  [ "expr", sexpr_of_expr expr]
-    | CoefAsn (_, pat, _) ->
-      build_list [ Symbol "pred-coef-asn" ]
-                 [ "expr", sexpr_of_pat pat]
+    | CoefAsn (_, pat, asn) ->
+      List [ Symbol "pred-coef-asn";
+             sexpr_of_pat pat;
+             sexpr_of_pred asn ]
     | _ -> List [ Symbol "pred"; sexpr_of_expr asn ]
 
 let rec sexpr_of_stmt (stmt : stmt) : sexpression =
@@ -882,8 +883,10 @@ let rec sexpr_of_stmt (stmt : stmt) : sexpression =
     | CreateBoxStmt _                          -> unsupported "stmt-CreateBoxStmt"
     | CreateHandleStmt _                       -> unsupported "stmt-CreateHandleStmt"
     | DisposeBoxStmt _                         -> unsupported "stmt-DisposeBoxStmt"
-    | LabelStmt _                              -> unsupported "stmt-LabelStmt"
-    | GotoStmt _                               -> unsupported "stmt-GotoStmt"
+    | LabelStmt (loc, lbl) ->
+      List [ Symbol "stmt-label"; Symbol lbl ]
+    | GotoStmt (loc, lbl) ->
+      List [ Symbol "stmt-goto"; Symbol lbl ]
     | NoopStmt _                               -> unsupported "stmt-NoopStmt"
     | InvariantStmt _                          -> unsupported "stmt-InvariantStmt"
     | ProduceLemmaFunctionPointerChunkStmt _   -> unsupported "stmt-ProduceLemmaFunctionPointerChunkStmt"

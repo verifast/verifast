@@ -247,7 +247,7 @@ env:
 #------------------------------- Includes   ---------------------------------#
 include java_frontend/GNUmakefile
 
-# Path variables, for (de)serialization between C++ and Ocaml,
+# Path variables, for (de)serialization between C++/Rust and Ocaml,
 # that are assumed to live in specific location in the vfdeps package.
 # However, one can pass them to this makefile in order to override them (in case they exist in other locations).
 ifdef CAPNP_BIN
@@ -263,6 +263,11 @@ include cxx_frontend/Makefile
 
 clean::
 	cd java_frontend; make clean; cd ..
+
+# Rust frontend component
+RUST_FE_DIR = rust_frontend
+export RUST_FE_DIR
+include $(RUST_FE_DIR)/Makefile
 
 #------------------------------- Shorthands ---------------------------------#
 
@@ -292,7 +297,7 @@ TOOLS_EXCEPT_VFIDE = ../bin/mysh$(DOTEXE) ../bin/verifast$(DOTEXE) \
         ../bin/main_class$(DOTEXE) ../bin/java_card_applet$(DOTEXE) \
         ../bin/dlsymtool$(DOTEXE) ../bin/vfstrip$(DOTEXE) ../bin/explorer$(DOTEXE)
 
-TOOLS_EXCEPT_VFIDE += ../bin/vf-cxx-ast-exporter$(DOTEXE)
+TOOLS_EXCEPT_VFIDE += ../bin/vf-cxx-ast-exporter$(DOTEXE) build-vf-rust-mir-exporter
 
 TOOLS = $(TOOLS_EXCEPT_VFIDE) ../bin/vfide$(DOTEXE)
 
@@ -311,7 +316,7 @@ build-cxx-ast-exporter: ../bin/vf-cxx-ast-exporter$(DOTEXE)
 
 distclean:: clean
 
-INCLUDES = -I java_frontend -I shape_analysis -I cxx_frontend
+INCLUDES = -I java_frontend -I shape_analysis -I cxx_frontend -I $(RUST_FE_DIR)
 
 #------------------------------- Build normal case --------------------------#
 
@@ -366,14 +371,6 @@ $(STDLIB): $(STDLIB_FILES)
 clean::
 	rm -f $(STDLIB)
 	rm -f $(STDLIB_FILES_GEN)
-
-#------------------------------- Auto code generation -----------------------#
-
-VFCONFIG_CONTENT=let z3_present = $(Z3PRESENT);; let z3v4dot5_present = $(Z3V4DOT5PRESENT);; type platform = Windows | MacOS | Linux;; let platform = $(PLATFORM)
-vfconfig.ml:
-	echo "$(VFCONFIG_CONTENT)" > vfconfig.ml
-clean::
-	rm -f vfconfig.ml
 
 #------------------------------- Build special cases ------------------------#
 
@@ -545,10 +542,6 @@ z3v4dot5prover.cmx: $(INCLUDE_OS_DIR)/Perf.cmxa proverapi.cmx z3v4dot5prover.ml
 clean::
 	rm -f shape_analysis/*.cm[ix] shape_analysis/*.cmo
 
-# Dependencies of these files seem to be harder to autodetect, so
-# written by hand for now.
-vfconfig.cmx: vfconfig.ml
-
 #------------------------------- Tests --------------------------------------#
 testsuite: $(STDLIB) $(TOOLS_EXCEPT_VFIDE)
 	@echo "  RUN " json_tests
@@ -636,11 +629,13 @@ cleantest::
 # containing the dependency graph every time you e.g. write new .ml files.
 # Thus typing dependencies by hand is replaced by typing "make depend",
 # which is less error-prone.
+META_DEPS_RUST_FE = $(wildcard $(RUST_FE_DIR)/*.ml $(RUST_FE_DIR)/*.mli)
 META_DEPS = \
   $(wildcard *.ml *.mli \
   java_frontend/*.ml java_frontend/*.mli \
   cxx_frontend/*.ml cxx_frontend/*.mli \
-  shape_analysis/*.ml shape_analysis/*.mli)
+  shape_analysis/*.ml shape_analysis/*.mli) \
+  $(META_DEPS_RUST_FE)
 
 depend: $(META_DEPS)
 	@echo "  OCAMLDEP "

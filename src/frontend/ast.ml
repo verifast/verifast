@@ -553,6 +553,7 @@ and
 and
   dialect = (* ?dialect *)
     | Cxx
+    | Rust
 and
   method_binding = (* ?method_binding *)
     Static
@@ -591,7 +592,7 @@ and
       stmt
   | DeclStmt of (* enkel declaratie *)
       loc *
-      (loc * type_expr * string * expr option * (bool ref (* indicates whether address is taken *) * string list ref option ref (* pointer to enclosing block's list of variables whose address is taken *))) list
+      (loc * type_expr option * string * expr option * (bool ref (* indicates whether address is taken *) * string list ref option ref (* pointer to enclosing block's list of variables whose address is taken *))) list
   | ExprStmt of expr
   | IfStmt of (* if  regel-conditie-branch1-branch2  *)
       loc *

@@ -257,6 +257,15 @@ let _ =
       end else begin
         print_endline msg; exit 1
       end
+    | CompilationErrorWithDetails (msg, details) ->
+      if json then begin
+        exit_with_json_result (A [S "CompilationErrorWithDetails"; S msg; S details])
+      end else begin
+        print_endline msg;
+        print_endline "Details:";
+        print_endline details;
+        exit 1
+      end
     | StaticError (l, msg, url) ->
       exit_with_msg l msg
     | SymbolicExecutionError (ctxts, l, msg, url) ->
@@ -478,7 +487,7 @@ let _ =
             ]
   in
   let process_file filename =
-    if List.exists (Filename.check_suffix filename) [ ".c"; ".cpp"; ".java"; ".scala"; ".jarsrc"; ".javaspec" ]
+    if List.exists (Filename.check_suffix filename) [ ".c"; ".cpp"; ".java"; ".scala"; ".jarsrc"; ".javaspec"; ".rs" ]
     then
       begin
         let vfbindings = !vfbindings in

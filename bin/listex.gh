@@ -1,6 +1,8 @@
 #ifndef LISTEX_H
 #define LISTEX_H
 
+#include "list.gh"
+
 /*
 
 Contents:

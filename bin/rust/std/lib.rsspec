@@ -1,0 +1,32 @@
+mod alloc {
+    impl Layout {
+
+        fn from_size_align_unchecked(size: usize, align: usize) -> usize;
+        //@ req align == 1 || align == 2 || align == 4 || align == 8 || align == 16;
+        //@ ens result == size;
+
+    }
+
+    fn alloc(size: usize) -> *u8;
+    //@ req 1 <= size;
+    /*@
+    ens
+        if result == 0 {
+            true
+        } else {
+            integers__(result, 1, false, size, _) &*& alloc_block(result, size) &*&
+            object_pointer_within_limits(result, size) == true
+        };
+    @*/
+    //@ terminates;
+
+    fn dealloc(p: *u8, size: usize);
+    //@ req alloc_block(p, size) &*& integers__(p, 1, false, size, _);
+    //@ ens true;
+    //@ terminates;
+
+    fn handle_alloc_error(layout: usize);
+    //@ req true;
+    //@ ens false;
+    //@ terminates;
+}

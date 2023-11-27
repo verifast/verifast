@@ -9,6 +9,7 @@ cd bin
   cd ..
 cd ..
 cd examples
+  verifast -c mutually_recursive_fns_simple.c
   verifast -shared uniqueness.c
   verifast -read_options_from_source_file unions.c
   verifast unions2.c
@@ -266,6 +267,7 @@ cd examples
   verifast -c wf_func2_manual.c
   verifast -c -disable_overflow_check wf_func1.c
   verifast -c wf_func2.c
+  verifast -c wf_fact_manual.c
   cd helloproc
     # Helloproc.mysh is not parallelizable.  mysh does not guarantee that 1 will be
     # the default number of cpus forever, so we explicitly specify it to be 1.
@@ -594,18 +596,18 @@ cd tests
   cd ..
   cd java
     cd generics
-    verifast -c BasicGenericClass.java
-    verifast -c GenericInheritance.java
-    verifast -c GenericType.java
-    verifast -c QualifiedGenericMethodCall.java
-    verifast -c DiamondOperator.java
-    verifast -c MethodInference.java
-    verifast -c CorrectFieldTypes.java
-    cd errors
-      verifast -c -allow_should_fail Test3.java
+      verifast -c BasicGenericClass.java
+      verifast -c GenericInheritance.java
+      verifast -c GenericType.java
+      verifast -c QualifiedGenericMethodCall.java
+      verifast -c DiamondOperator.java
+      verifast -c MethodInference.java
+      verifast -c CorrectFieldTypes.java
+      cd errors
+        verifast -c -allow_should_fail Test3.java
+      cd ..
     cd ..
   cd ..
-cd ..
   cd cxx
     cd c_copy
         verifast_both -disable_overflow_check globals.cpp
@@ -668,5 +670,18 @@ cd ..
     verifast -c -disable_overflow_check lvalue_refs.cpp
     verifast -c typeid.cpp
     verifast -c ghost_field.cpp
+  cd ..
+  cd rust
+    cd purely_unsafe
+      verifast -c scalars.rs
+      verifast -c alloc.rs
+      verifast -c reverse.rs
+      verifast -c account.rs
+      verifast -c deque.rs
+      verifast -c strlen.rs
+    cd ..
+    cd safe_abstraction
+      verifast -c cell_u32.rs
+    cd ..
   cd ..
 end_parallel

@@ -1361,14 +1361,14 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       ds |> List.iter begin fun (_, tp, x, e, (_, blockPtr)) ->
         begin match e, tp with 
         | None, _ -> () 
-        | Some (Var (l, x) | WVar (l, x, _)), LValueRefTypeExpr _ -> mark_if_local locals x
+        | Some (Var (l, x) | WVar (l, x, _)), Some LValueRefTypeExpr _ -> mark_if_local locals x
         | Some(e), _ -> expr_mark_addr_taken e locals 
         end;
         blockPtr := Some block
       end;
       (* filter out lvalue ref decls: don't mark them as 'addr_taken' so we don't try to consume their chunks at the end of their scope/block *)
       let locals_wo_lvalue_refs = ds 
-        |> List.filter (fun (_, tx, _, _, _) -> is_lvalue_ref_type_expr tx |> not) 
+        |> List.filter (function (_, Some tx, _, _, _) -> is_lvalue_ref_type_expr tx |> not | _ -> true)
         |> List.map @@ fun (_, _, x, _, (addr_taken, _)) -> x, addr_taken 
       in
       cont ((block, locals_wo_lvalue_refs @ mylocals) :: rest)
@@ -1598,14 +1598,18 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         end $. fun () ->
         produce_array_chunk h env (init = Unspecified) addr elems elemCount
       end
-    | UnionType un ->
-      produce_char_array_chunk h env addr (sizeof l tp)
+    | UnionType un -> begin
+      match language, dialect, List.assoc_opt un unionmap with
+      CLang, Some Rust, Some (_, Some ([](*fields*), _), _) -> cont h env
+      | _ -> produce_char_array_chunk h env addr (sizeof l tp)
+      end
     | StructType sn ->
       let (fields, padding_predsymb_opt) =
         match try_assoc sn structmap with
           Some (_, Some (_, fds, _), padding_predsymb_opt, _, _) -> fds, padding_predsymb_opt
         | _ -> static_error l (Printf.sprintf "Cannot produce an object of type 'struct %s' since this struct type has not been defined" sn) None
       in
+      let producePaddingChunk = match language, dialect, fields with CLang, Some Rust, [] -> false | _ -> producePaddingChunk in
       let field_values_of_struct_as_value v =
         let (_, _, getters, _) = List.assoc sn struct_accessor_map in
         getters |> List.map (fun (_, getter) -> ctxt#mk_app getter [v])
@@ -1680,7 +1684,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let consume_char_array_chunk () =
       let pats = [TermPat addr; TermPat (sizeof l tp); dummypat] in
       consume_chunk rules h [] [] [] l ((if consumeUninitChunk then chars__pred_symb() else chars_pred_symb()), true) [] real_unit coefpat (Some 2) pats $. fun chunk h _ [_; _; cs] _ _ _ _ ->
-      cont [chunk] h (get_unique_var_symb "value" tp)
+      cont [chunk] h (Some (get_unique_var_symb "value" tp))
     in
     match tp with
       StaticArrayType (elemTp, elemCount) ->
@@ -1688,24 +1692,28 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         Some (_, _, _, arrayPredSymb, _, _, _, _, _, _, _, uninitArrayPredSymb) ->
         let pats = [TermPat addr; TermPat (ctxt#mk_intlit elemCount); dummypat] in
         consume_chunk rules h [] [] [] l ((if consumeUninitChunk then uninitArrayPredSymb else arrayPredSymb), true) [] real_unit coefpat (Some 2) pats $. fun chunk h _ [_; _; elems] _ _ _ _ ->
-        cont [chunk] h elems
+        cont [chunk] h (Some elems)
       | None ->
       match int_rank_and_signedness elemTp with
         Some (k, signedness) ->
         let pats = [TermPat addr; TermPat (rank_size_term k); TermPat (mk_bool (signedness = Signed)); TermPat (ctxt#mk_intlit elemCount); dummypat] in
         consume_chunk rules h [] [] [] l ((if consumeUninitChunk then integers___symb () else integers__symb ()), true) [] real_unit coefpat (Some 4) pats $. fun chunk h _ [_; _; _; _; elems] _ _ _ _ ->
-        cont [chunk] h elems
+        cont [chunk] h (Some elems)
       | None ->
         consume_char_array_chunk ()
       end
-    | UnionType un ->
-      consume_char_array_chunk ()
+    | UnionType un -> begin
+      match language, dialect, List.assoc_opt un unionmap with
+      CLang, Some Rust, Some (_, Some ([](*fields*), _), _) -> cont [] h None
+      | _ -> consume_char_array_chunk ()
+      end
     | StructType sn ->
       let fields, padding_predsymb_opt =
         match try_assoc sn structmap with
           Some (_, Some (_, fds, _), padding_predsymb_opt, _, _) -> fds, padding_predsymb_opt
         | _ -> static_error l (Printf.sprintf "Cannot consume an object of type 'struct %s' since this struct type has not been defined" sn) None
       in
+      let consumePaddingChunk = match language, dialect, fields with CLang, Some Rust, [] -> false | _ -> consumePaddingChunk in
       begin fun cont ->
         match consumePaddingChunk, padding_predsymb_opt with
           true, Some padding_predsymb ->
@@ -1718,11 +1726,11 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         match fields with
           [] ->
           let (_, csym, _, _) = List.assoc sn struct_accessor_map in
-          cont chunks h (if consumeUninitChunk then real_unit (* dummy term; should never be used *) else ctxt#mk_app csym (List.rev vs))
+          cont chunks h (Some (if consumeUninitChunk then real_unit (* dummy term; should never be used *) else ctxt#mk_app csym (List.rev vs)))
         | (f, (lf, gh, t, offset, finit))::fields ->
           match t with
             StaticArrayType (_, _) | StructType _ | UnionType _ ->
-            consume_c_object_core_core l coefpat (field_address l addr sn f) t h true consumeUninitChunk $. fun chunks' h value ->
+            consume_c_object_core_core l coefpat (field_address l addr sn f) t h true consumeUninitChunk $. fun chunks' h (Some value) ->
             iter (chunks' @ chunks) (value::vs) h fields
           | _ ->
              let (_, (_, _, _, _, f_symb, _, _)), p__opt = List.assoc (sn, f) field_pred_map in
@@ -1738,13 +1746,13 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       iter chunks [] h fields
     | _ ->
       consume_points_to_chunk_ rules h [] [] [] l tp real_unit coefpat addr dummypat consumeUninitChunk $. fun chunk h _ value _ _ _ ->
-      cont [chunk] h value
+      cont [chunk] h (Some value)
   
   let consume_c_object_core l coefpat addr tp h consumePaddingChunk cont =
     consume_c_object_core_core l coefpat addr tp h consumePaddingChunk false cont
 
   let consume_c_object l addr tp h consumePaddingChunk cont =
-    consume_c_object_core l real_unit_pat addr tp h consumePaddingChunk $. fun chunks h value -> cont h
+    consume_c_object_core l real_unit_pat addr tp h consumePaddingChunk $. fun _ h _ -> cont h
 
   let produce_cxx_object l coef addr ty eval_h check_ctor_call init allow_ghost_fields produce_padding_chunk h env cont =
     match ty, init with 
@@ -1945,6 +1953,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let Some env' = zip ys ts in
     begin fun cont ->
       match dialect, try_assoc "this" ps with
+      (*** TODO @Nima: For now, we just ignore this check for Rust. It needs a review later *)
       | _, Some ObjType _ | Some Cxx, Some (PtrType (StructType _)) ->
         let this_term = List.assoc "this" env' in
         if not (ctxt#query (ctxt#mk_not (ctxt#mk_eq this_term (null_pointer_term ())))) then
@@ -2321,7 +2330,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | LValues.ArrayElement (l, arr, elem_tp, i) when language = CLang ->
         cont h env (read_c_array h env l arr i elem_tp)
       | LValues.Deref (l, target, pointeeType) ->
-        consume_c_object_core l dummypat target pointeeType h false $. fun chunks h value ->
+        consume_c_object_core l dummypat target pointeeType h false $. fun chunks h (Some value) ->
         cont (chunks @ h) env value
     in
     let rec write_lvalue h env lvalue value cont =

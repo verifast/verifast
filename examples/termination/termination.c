@@ -108,7 +108,7 @@ lemma void is_wf_pair_lt<a, b>(fixpoint(a, a, bool) a_lt, fixpoint(b, b, bool) b
     assert [_]is_forall_t<fixpoint(pair<a, b>, bool)>(?forall_sets);
     get_forall_t<pair<a, b> >();
     assert [_]is_forall_t<pair<a, b> >(?forall_pairs);
-    fixpoint(fixpoint(a, bool), bool) forall_a = get_forall_t<a>();
+    auto forall_a = get_forall_t<a>();
     fixpoint(fixpoint(b, bool), bool) forall_b = get_forall_t<b>();
     fixpoint(pair<a, b>, pair<a, b>, bool) lt = (pair_lt)(a_lt, b_lt);
     if (!forall_sets((has_minimal)(forall_pairs, lt))) {

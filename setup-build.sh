@@ -42,7 +42,11 @@ if [ $(uname -s) = "Linux" ]; then
        patch unzip libgtk2.0-dev \
        valac libgtksourceview2.0-dev \
        cmake build-essential ninja-build
-  
+
+  if ! rustup show home; then
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s - -y
+  fi
+
   cd /tmp
   dl_and_unzip_llvm-clang Linux f39cc6feb96ebbc5cf7cb39f304b3bf7484a32842da4859441da6f983c43f22a
   dl_and_unzip_vfdeps https://github.com/verifast/vfdeps/releases/download/23.04/$VFDEPS_NAME-linux.txz 9d108282a8a94526f8d043c3e2e4c3cac513788a42fa8d6964ee4937
@@ -75,6 +79,10 @@ elif [ $(uname -s) = "Darwin" ]; then
   sudo mkdir /usr/local/$VFDEPS_NAME
   sudo mkdir /usr/local/vf-llvm-clang-build-$VF_LLVM_CLANG_BUILD_VERSION
   sudo chown -R $(whoami):admin /usr/local/*
+
+  if ! rustup show home; then
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s - -y
+  fi
 
   cd /usr/local
   dl_and_unzip_llvm-clang MacOS 77474d414aa7ddc4e68bc00525a8dccec284c9936c45f6241157070dc5dfdfd6
