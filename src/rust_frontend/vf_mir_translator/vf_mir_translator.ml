@@ -1541,7 +1541,6 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               [] (*indices, in case this is really a predicate assertion*),
               [],
               Ast.Static (*method_binding*) ) ->
-            print_endline ("Ghost call site: " ^ Ast.string_of_loc call_loc);
             let get_start_loc loc =
               let (_, ln, col), _ = loc in
               (ln, col)
@@ -1550,8 +1549,6 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             let ghost_stmt =
               List.find
                 (fun gs ->
-                  print_endline
-                    ("Gstmt loc: " ^ Ast.(string_of_loc (stmt_loc gs)));
                   let gsl = get_start_loc Ast.(gs |> stmt_loc |> lexed_loc) in
                   let (gsl_l, gsl_c), (phl_l, phl_c) = (gsl, phl) in
                   gsl_l = phl_l)
