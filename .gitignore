@@ -38,7 +38,6 @@
 /bin/crt.dll.vfmanifest
 /src/a.out
 /src/pa_verifast.cmo
-/src/vfconfig.ml
 /bin/vf-rust-mir-exporter
 
 # release files

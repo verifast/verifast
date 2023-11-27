@@ -110,8 +110,7 @@ cd examples
     verifast_both -c gotsmanlock.c
     verifast_both -c spinlock.c
     verifast -c -target 32bit concurrentqueue.c
-    # The following test failed after including `list.gh` in the `listex.gh`
-    # verifast -c -prover z3v4.5 -target 32bit -fno-strict-aliasing -assume_no_provenance concurrentstack.c
+    verifast -c -prover z3v4.5 -target 32bit -fno-strict-aliasing -assume_no_provenance concurrentstack.c
     verifast -c concurrentstackclient.c
     verifast -target 32bit -allow_assume threading.o atomics.o concurrentqueue.c concurrentqueue_client.c
     verifast_both -c atomic_integer.c
