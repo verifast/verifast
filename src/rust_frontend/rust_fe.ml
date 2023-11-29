@@ -87,11 +87,20 @@ module Make (Args : RUST_FE_ARGS) = struct
     try
       (*** TODO @Nima: Get these names from build system *)
       let tchain_name = "nightly-2022-01-31" in
+      let rustc_driver_path =
+        match Vfconfig.platform with
+          MacOS -> "librustc_driver-e0cda07475b3448e.dylib"
+        | Windows -> "rustc_driver-147fd6cd4a861c2a.dll"
+        | Linux -> "librustc_driver-90a6e5ec2da8350e.so"
+      in
       let bin_name = "vf-rust-mir-exporter" in
       let bin_dir = Filename.dirname Sys.executable_name in
       let bin_path = bin_dir ^ "/" ^ bin_name in
       let* tchain_root = RustTChain.find_tchain_root tchain_name in
       let* tchain_lib = RustTChain.find_tchain_lib tchain_name in
+      if not (Sys.file_exists (Printf.sprintf "%s/%s" tchain_lib rustc_driver_path)) then
+        Error (`RustcDriverMissing tchain_name)
+      else
       let args = [| bin_path; rs_file_path; "--sysroot=" ^ tchain_root |] in
       let current_env = Unix.environment () in
       let* env = add_path_to_env_var current_env (match Vfconfig.platform with MacOS -> "DYLD_LIBRARY_PATH" | Windows -> "PATH" | _ -> "LD_LIBRARY_PATH") tchain_lib in
@@ -224,6 +233,7 @@ module Make (Args : RUST_FE_ARGS) = struct
               in
               Printf.sprintf "Rust MIR exporter executable %s: %s" failInfo emsg
           | `SysCallFailed emsg -> "System call failed: " ^ emsg
+          | `RustcDriverMissing tchain_name -> Printf.sprintf "To verify Rust programs, VeriFast requires the rustc-dev component of the %s Rust toolchain, but this component is currently not installed; please run 'rustup +%s component add rustc-dev' to install it." tchain_name tchain_name
         in
         raise (RustFrontend (gen_emsg ^ desc))
 end
