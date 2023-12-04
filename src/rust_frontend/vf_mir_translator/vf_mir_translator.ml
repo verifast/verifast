@@ -533,6 +533,8 @@ module TrName = struct
       if get n 0 = '\'' then lft_name_without_apostrophe (sub n 1 (len - 1))
       else Ok n
     else Error (`LftNameWithoutApostrophe "Empty string for name")
+
+  let is_from_std_lib path = String.starts_with ~prefix:"std::" path
 end
 
 module type DECLS = sig
@@ -2651,58 +2653,62 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let open AdtDefRd in
     let id_cpn = id_get adt_def_cpn in
     let def_path = translate_adt_def_id id_cpn in
-    let name = TrName.translate_def_path def_path in
-    let variants_cpn = variants_get_list adt_def_cpn in
-    let* variants = ListAux.try_map translate_variant_def variants_cpn in
-    let span_cpn = span_get adt_def_cpn in
-    let* def_loc = translate_span_data span_cpn in
-    let vis_cpn = vis_get adt_def_cpn in
-    let* vis = translate_visibility vis_cpn in
-    let is_local = is_local_get adt_def_cpn in
-    let kind_cpn = kind_get adt_def_cpn in
-    let* def, aux_decls =
-      match AdtKindRd.get kind_cpn with
-      | StructKind ->
-          let* field_defs =
-            match variants with
-            | [ field_defs ] -> Ok field_defs
-            | _ -> Error (`TrAdtDef "Struct ADT kind should have one variant")
-          in
-          let struct_decl =
-            Ast.Struct
-              ( def_loc,
-                name,
-                Some
-                  ( (*base_spec list*) [],
-                    (*field list*) field_defs,
-                    (*instance_pred_decl list*) [],
-                    (*is polymorphic*) false ),
-                (*struct_attr list*) [] )
-          in
-          Ok
-            ( struct_decl,
-              [
-                Ast.TypedefDecl
-                  (def_loc, StructTypeExpr (def_loc, Some name, None, []), name);
-              ] )
-      | EnumKind -> failwith "Todo: AdtDef::Enum"
-      | UnionKind -> failwith "Todo: AdtDef::Union"
-      | Undefined _ -> Error (`TrAdtDef "Unknown ADT kind")
-    in
-    let* full_bor_content, proof_obligs =
-      match (is_local, vis) with
-      | false, _ | true, Mir.Restricted -> Ok (None, [])
-      | true, Mir.Invisible ->
-          Error
-            (`TrAdtDef
-              ("The " ^ def_path
-             ^ " ADT definition is local and locally invisible"))
-      | true, Mir.Public ->
-          let* full_bor_content = gen_adt_full_borrow_content def in
-          let* proof_obligs = gen_adt_proof_obligs def in
-          Ok (Some full_bor_content, proof_obligs)
-    in
-    Ok Mir.{ def; aux_decls; full_bor_content; proof_obligs }
+    if TrName.is_from_std_lib def_path then Ok None
+    else
+      let name = TrName.translate_def_path def_path in
+      let variants_cpn = variants_get_list adt_def_cpn in
+      let* variants = ListAux.try_map translate_variant_def variants_cpn in
+      let span_cpn = span_get adt_def_cpn in
+      let* def_loc = translate_span_data span_cpn in
+      let vis_cpn = vis_get adt_def_cpn in
+      let* vis = translate_visibility vis_cpn in
+      let is_local = is_local_get adt_def_cpn in
+      let kind_cpn = kind_get adt_def_cpn in
+      let* def, aux_decls =
+        match AdtKindRd.get kind_cpn with
+        | StructKind ->
+            let* field_defs =
+              match variants with
+              | [ field_defs ] -> Ok field_defs
+              | _ -> Error (`TrAdtDef "Struct ADT kind should have one variant")
+            in
+            let struct_decl =
+              Ast.Struct
+                ( def_loc,
+                  name,
+                  Some
+                    ( (*base_spec list*) [],
+                      (*field list*) field_defs,
+                      (*instance_pred_decl list*) [],
+                      (*is polymorphic*) false ),
+                  (*struct_attr list*) [] )
+            in
+            Ok
+              ( struct_decl,
+                [
+                  Ast.TypedefDecl
+                    ( def_loc,
+                      StructTypeExpr (def_loc, Some name, None, []),
+                      name );
+                ] )
+        | EnumKind -> failwith "Todo: AdtDef::Enum"
+        | UnionKind -> failwith "Todo: AdtDef::Union"
+        | Undefined _ -> Error (`TrAdtDef "Unknown ADT kind")
+      in
+      let* full_bor_content, proof_obligs =
+        match (is_local, vis) with
+        | false, _ | true, Mir.Restricted -> Ok (None, [])
+        | true, Mir.Invisible ->
+            Error
+              (`TrAdtDef
+                ("The " ^ def_path
+               ^ " ADT definition is local and locally invisible"))
+        | true, Mir.Public ->
+            let* full_bor_content = gen_adt_full_borrow_content def in
+            let* proof_obligs = gen_adt_proof_obligs def in
+            Ok (Some full_bor_content, proof_obligs)
+      in
+      Ok (Some Mir.{ def; aux_decls; full_bor_content; proof_obligs })
 
   (** Checks for the existence of a lemma for proof obligation in ghost code.
       The consistency of the lemma with proof obligation will be checked by VeriFast later *)
@@ -2738,6 +2744,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let adt_defs_cpn = VfMirRd.adt_defs_get vf_mir_cpn in
       let* adt_defs_cpn = CapnpAux.ind_list_get_list adt_defs_cpn in
       let* adt_defs = ListAux.try_map translate_adt_def adt_defs_cpn in
+      let adt_defs = List.filter_map Fun.id adt_defs in
       (* Todo @Nima: External definitions and their corresponding ghost headers inclusion should be handled in a better way *)
       (* Todo @Nima: The MIR exporter encodes `ADT`s and adds the `ADT` declarations used in them later in the same array.
          For a Tree hierarchy of types just reversing the array works but obviously
