@@ -1,0 +1,112 @@
+#ifndef MASK_GH
+#define MASK_GH
+
+#include "listex.gh"
+
+/* The value constructor `MaskEmp` is here only because VeriFast does not accept the definition, as an inhabited type,
+without it, therefore, it should not be used. */
+inductive mask_t = MaskTopMinus(list<pair<void *, mask_t> >) | MaskBotPlus(list<pair<void *, mask_t> >) | MaskEmp;
+
+fixpoint bool mask_node_fst_eq(pair<void *, mask_t> mn, pair<void *, mask_t> mn1) { return fst(mn) == fst(mn1); }
+
+fixpoint bool mask_node_is_empty(pair<void *, mask_t> mn);
+lemma_auto void mask_node_is_empty_def(pair<void *, mask_t> mn);
+  requires true;
+  ensures mask_node_is_empty(mn) == switch(mn) { case pair(name, sub_mask): return mask_is_empty(sub_mask); };
+
+fixpoint pair<void *, mask_t> mask_node_merge(pair<void *, mask_t> mn, pair<void *, mask_t> mn1);
+lemma_auto void mask_node_merge_def(pair<void *, mask_t> mn, pair<void *, mask_t> mn1);
+  requires true;
+  ensures mask_node_merge(mn, mn1) == (fst(mn) == fst(mn1) ? pair(fst(mn), mask_union(snd(mn), snd(mn1))) : mn);
+
+fixpoint pair<void *, mask_t> mask_node_diff(pair<void *, mask_t> mn, pair<void *, mask_t> mn1);
+lemma_auto void mask_node_diff_def(pair<void *, mask_t> mn, pair<void *, mask_t> mn1);
+  requires true;
+  ensures mask_node_diff(mn, mn1) == (fst(mn) == fst(mn1) ? pair(fst(mn), mask_diff(snd(mn), snd(mn1))) : mn);
+
+fixpoint pair<void *, mask_t> mask_node_isect(pair<void *, mask_t> mn, pair<void *, mask_t> mn1);
+lemma_auto void mask_node_isect_def(pair<void *, mask_t> mn, pair<void *, mask_t> mn1);
+  requires true;
+  ensures mask_node_isect(mn, mn1) == (fst(mn) == fst(mn1) ? pair(fst(mn), mask_isect(snd(mn), snd(mn1))) : pair(fst(mn), MaskBotPlus({})));
+
+fixpoint list<pair<void *, mask_t> > mask_node_list_merge(list<pair<void *, mask_t> > mns) {
+  switch(mns) {
+    case nil: return nil;
+    case cons(h, t): return switch(filter((mask_node_fst_eq)(h), mask_node_list_merge(t))) {
+      case nil: return cons(h, mask_node_list_merge(t));
+      case cons(h1, t1): return cons(mask_node_merge(h, h1), remove(h1, mask_node_list_merge(t))); // t1 is nil
+    };
+  }
+}
+
+fixpoint pair<void *, mask_t> mask_node_diff_list(list<pair<void *, mask_t> > mns, pair<void *, mask_t> mn) {
+  return fold_left(mn, mask_node_diff, mns);
+}
+
+fixpoint pair<void *, mask_t> mask_node_isect_list(list<pair<void *, mask_t> > mns, pair<void *, mask_t> mn) {
+  return exists(mns, (mask_node_fst_eq)(mn)) ?
+    fold_left(mn, mask_node_isect, filter((mask_node_fst_eq)(mn), mns)) : pair(fst(mn), MaskBotPlus({}));
+}
+
+fixpoint bool mask_is_empty(mask_t m) {
+  switch(m) {
+    case MaskTopMinus(mns): return false;
+    case MaskBotPlus(mns): return forall(mns, mask_node_is_empty);
+    case MaskEmp: return true;
+  }
+}
+
+fixpoint mask_t mask_union(mask_t m, mask_t m1) {
+  switch(m) {
+    case MaskTopMinus(mns): return switch(m1) {
+      case MaskTopMinus(mns1): return MaskTopMinus(map((mask_node_isect_list)(mns1), mns));
+      case MaskBotPlus(mns1): return MaskTopMinus(map((mask_node_diff_list)(mns1), mns));
+      case MaskEmp: return m;
+    };
+    case MaskBotPlus(mns): return switch(m1) {
+      case MaskTopMinus(mns1): return MaskTopMinus(map((mask_node_diff_list)(mns), mns1));
+      case MaskBotPlus(mns1): return MaskBotPlus(mask_node_list_merge(append(mns, mns1)));
+      case MaskEmp: return m;
+    };
+    case MaskEmp: return m1;
+  }
+}
+
+fixpoint mask_t mask_diff(mask_t m, mask_t m1) {
+  switch(m) {
+    case MaskTopMinus(mns): return switch(m1) {
+      case MaskTopMinus(mns1): return MaskBotPlus(map((mask_node_diff_list)(mns), mns1));
+      case MaskBotPlus(mns1): return MaskTopMinus(mask_node_list_merge(append(mns, mns1)));
+      case MaskEmp: return m;
+    };
+    case MaskBotPlus(mns): return switch(m1) {
+      case MaskTopMinus(mns1): return MaskBotPlus(map((mask_node_isect_list)(mns1), mns));
+      case MaskBotPlus(mns1): return MaskBotPlus(map((mask_node_diff_list)(mns1), mns));
+      case MaskEmp: return m;
+    };
+    case MaskEmp: return m;
+  }
+}
+
+fixpoint mask_t mask_isect(mask_t m, mask_t m1) {
+  switch(m) {
+    case MaskTopMinus(mns): return switch(m1) {
+      case MaskTopMinus(mns1): return MaskTopMinus(mask_node_list_merge(append(mns, mns1)));
+      case MaskBotPlus(mns1): return MaskBotPlus(map((mask_node_diff_list)(mns), mns1));
+      case MaskEmp: return MaskBotPlus({});
+    };
+    case MaskBotPlus(mns): return switch(m1) {
+      case MaskTopMinus(mns1): return MaskBotPlus(map((mask_node_diff_list)(mns1), mns));
+      case MaskBotPlus(mns1): return MaskBotPlus(map((mask_node_isect_list)(mns1), mns));
+      case MaskEmp: return MaskBotPlus({});
+    };
+    case MaskEmp: return MaskBotPlus({});
+  }
+}
+
+// m <= m1
+fixpoint bool mask_is_sub(mask_t m, mask_t m1) {
+  return mask_is_empty(mask_diff(m, m1));
+}
+
+#endif
