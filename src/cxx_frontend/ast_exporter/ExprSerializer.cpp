@@ -329,4 +329,14 @@ bool ExprSerializer::VisitCXXDefaultInitExpr(
   return true;
 }
 
+bool ExprSerializer::VisitExprWithCleanups(const clang::ExprWithCleanups *expr) {
+  serialize(expr->getSubExpr());
+  return true;
+}
+
+bool ExprSerializer::VisitCXXBindTemporaryExpr(const clang::CXXBindTemporaryExpr *expr) {
+  serialize(expr->getSubExpr());
+  return true;
+}
+
 } // namespace vf

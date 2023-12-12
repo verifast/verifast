@@ -303,7 +303,15 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | Some (pre, post) ->
         let (wpre, pre_tenv) = check_asn (pn,ilist) tparams1 tenv pre in
         let pre_tenv = List.remove_assoc "#pre" pre_tenv in
-        let postmap = match rt with None -> pre_tenv | Some rt -> ("result", rt)::pre_tenv in
+        let postmap = 
+          match rt, dialect with
+          | Some ((StructType _) as rt), Some Cxx ->
+            ("result", RefType rt) :: pre_tenv
+          | Some rt, _ ->
+            ("result", rt) :: pre_tenv
+          | None, _ ->
+            pre_tenv
+        in
         let (wpost, tenv) = check_asn (pn,ilist) tparams1 postmap post in
         (wpre, pre_tenv, wpost)
     in
@@ -2665,6 +2673,12 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               produce_chunk h (get_pred_symb "new_block", true) [] real_unit None [result; sizeof l ty] None cont
           end
         end
+    | WCxxConstruct (l, mangled_name, ((StructType sn) as result_type), arg_exprs) when not pure ->
+      let symb_name = Option.value xo ~default:sn in
+      let result = get_unique_var_symb_non_ghost symb_name (RefType result_type) in
+      let verify_call loc args params pre post terminates h env target_struct cont = verify_call funcmap eval_h loc (pn, ilist) xo None [] args ([], None, params, ["this", result], pre, post, None, terminates, false) false false (Some target_struct) leminfo sizemap h [] tenv ghostenv env cont @@ fun _ _ _ _ _ -> assert false in
+      produce_cxx_object l real_unit result result_type eval_h verify_call (Expr e) false true h env @@ fun h env ->
+      cont h env result
     | NewObject (l, cn, args, targs) ->
       inheritance_check cn l;
       if pure then static_error l "Object creation is not allowed in a pure context" None;

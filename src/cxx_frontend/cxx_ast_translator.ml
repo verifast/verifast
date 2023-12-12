@@ -7,7 +7,7 @@ open Big_int
 type 'a capnp_arr = (Stubs_ast.ro, 'a, R.array_t) Capnp.Array.t
 
 (**
-  [capnp_arr_map f arr] applies [f] to every element of cap'n proto array [arr] and return a new list containing those elements.
+  [capnp_arr_map f arr] applies [f] to every element of cap'n proto array [arr] and returns a new list containing those elements.
 *)
 let capnp_arr_map (f: 'a -> 'b) (arr: 'a capnp_arr): 'b list =
   (* map array to list first, the map function of capnp traverses the array in reverse order *)
@@ -77,7 +77,7 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
       -D<macros>                            Define macros <macros>
     *)
     let cmd = 
-      Printf.sprintf "%s/vf-cxx-ast-exporter %s -allow_macro_expansion=%s -- -x%s -I%s -D%s %s" 
+      Printf.sprintf "%s/vf-cxx-ast-exporter %s -allow_macro_expansion=%s -- -x%s -std=c++17 -I%s -D%s %s" 
       bin_dir 
       file 
       (String.concat "," allow_expansions) 
@@ -201,6 +201,8 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
     | LValueToRValue l    -> transl_lvalue_to_rvalue_expr loc l
     | DerivedToBase e     -> transl_derived_to_base_expr loc e
     | OperatorCall o      -> transl_operator_call_expr loc o
+    | Cleanups c          -> transl_cleanups_expr loc c
+    | BindTemporary t     -> transl_bind_temporary_expr loc t
     | Undefined _         -> failwith "Undefined expression"
     | _                   -> error loc "Unsupported expression."
 
@@ -690,6 +692,12 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
     let sub_expr = expr_get e |> transl_expr in
     let ty = type_get e |> transl_type loc in
     VF.CxxDerivedToBase (loc, sub_expr, ty)
+
+  and transl_cleanups_expr (loc: VF.loc) (e: R.Node.t): VF.expr =
+    failwith "todo"
+
+  and transl_bind_temporary_expr (loc: VF.loc) (e: R.Node.t) =
+    failwith "todo"
 
   (**************)
   (* statements *)

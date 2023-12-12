@@ -191,6 +191,11 @@ let rec of_type_expr = function
     of_loc l;
     of_list of_type_expr tps
   ])
+| LValueRefTypeExpr (l, tp) ->
+  C ("LValueRefTypeExpr", [
+    of_loc l;
+    of_type_expr tp
+  ])
 and of_operator = function
   MinValue t -> C ("MinValue", [of_type t])
 | MaxValue t -> C ("MaxValue", [of_type t])
@@ -871,15 +876,15 @@ and of_decl = function
     S p;
     of_list s tparams;
     of_list (fun (l, x) -> T [of_loc l; S x]) indices;
-    of_list (fun (t, x) -> T [of_type_expr t; S x]) params;
+    of_params params;
     of_expr body
   ])
 | PredCtorDecl (l, p, ctorParams, predParams, inputParamCount, body) ->
   C ("PredCtorDecl", [
     of_loc l;
     S p;
-    of_list (fun (t, x) -> T [of_type_expr t; S x]) ctorParams;
-    of_list (fun (t, x) -> T [of_type_expr t; S x]) predParams;
+    of_params ctorParams;
+    of_params predParams;
     of_option i inputParamCount;
     of_expr body
   ])
@@ -890,7 +895,7 @@ and of_decl = function
     of_list s tparams;
     of_option of_type_expr rt;
     S g;
-    of_list (fun (t, x) -> T [of_type_expr t; S x]) xs;
+    of_params xs;
     B nonghostCallersOnly;
     of_option begin fun (ftn, targs, args) ->
       T [
@@ -899,14 +904,9 @@ and of_decl = function
         of_list (fun (l, x) -> T [of_loc l; S x]) args
       ]
     end funcTypeClause;
-    of_option (fun (pre, post) -> T [of_expr pre; of_expr post]) spec;
+    of_option of_spec spec;
     B terminates;
-    of_option begin fun (ss, closeBraceLoc) ->
-      T [
-        of_list of_stmt ss;
-        of_loc closeBraceLoc
-      ]
-    end body;
+    of_option of_body_ss body;
     B isVirtual;
     of_list s overrides
   ])
@@ -927,6 +927,63 @@ and of_decl = function
       B terminates
     ]
   ])
+| CxxCtor (l, mangled_name, params, contract_opt, terminates, body_opt, implicit, tp) ->
+  C ("CxxCtor", [
+    of_loc l;
+    S mangled_name;
+    of_params params;
+    of_option of_spec contract_opt;
+    B terminates;
+    body_opt |> of_option (fun (init_list, body_ss) ->
+      T [
+        init_list |> of_list (fun (x, init_opt) ->
+          T [
+            S x;
+            init_opt |> of_option (fun (e, is_written) ->
+              T [
+                of_expr e;
+                B is_written
+              ]  
+            )
+          ]  
+        );
+        of_body_ss body_ss
+      ]
+    );
+    B implicit;
+    of_type tp
+  ])
+| CxxDtor (l, mangled_name, contract_opt, terminates, body_opt, implicit, tp, is_virtual, overrides) ->
+  C ("CxxDtor", [
+    of_loc l;
+    S mangled_name;
+    of_option of_spec contract_opt;
+    B terminates;
+    of_option of_body_ss body_opt;
+    B implicit;
+    of_type tp;
+    B is_virtual;
+    overrides |> of_list (fun s -> S s)
+  ])
+| Global (l, tp_expr, name, expr_opt) ->
+  C ("Global", [
+    of_loc l;
+    of_type_expr tp_expr;
+    S name;
+    of_option of_expr expr_opt
+  ])
+and of_params params = 
+  params |> of_list @@ fun (t, x) -> T [of_type_expr t; S x]
+and of_body_ss (ss, close_brace_loc) =
+  T [ 
+    of_list of_stmt ss; 
+    of_loc close_brace_loc
+  ]
+and of_spec (pre, post) =
+  T [
+    of_expr pre;
+    of_expr post;
+  ]
 and of_ghostness = function
   Ghost -> c "Ghost"
 | Real -> c "Real"
