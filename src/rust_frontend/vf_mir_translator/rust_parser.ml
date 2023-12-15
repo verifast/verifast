@@ -315,7 +315,40 @@ let parse_func_rest k = function%parser
     ]
   ] -> d
 
+let rec parse_ctors = function%parser
+  [ (l, Ident cn);
+    [%let ts = function%parser
+     | [ (_, Kwd "(");
+         [%let ts = rep_comma parse_type_with_opt_name];
+         (_, Kwd ")")
+       ] -> ts
+     | [ ] -> []
+    ];
+    parse_ctors_suffix as cs
+  ] -> Ctor (l, cn, ts)::cs
+and parse_ctors_suffix = function%parser
+| [ (_, Kwd "|"); parse_ctors as cs ] -> cs
+| [ ] -> []
+and parse_type_with_opt_name = function%parser
+  [ parse_type as t;
+    [%let (x, t) = function%parser
+     | [ (_, Kwd ":"); parse_type as t1 ] ->
+       begin match t with
+         IdentTypeExpr (lt, None, x) -> (x, t1)
+       | _ -> raise (ParseException (type_expr_loc t, "Identifier expected"))
+       end
+     | [ ] -> ("", t)
+    ]
+  ] -> (x, t)
+
 let parse_ghost_decl = function%parser
+| [ (l, Kwd "inductive"); (li, Ident i); (_, Kwd "=");
+    [%let cs = function%parser
+     | [ parse_ctors as cs ] -> cs
+     | [ parse_ctors_suffix as cs ] -> cs
+    ];
+    (_, Kwd ";")
+  ] -> [Inductive (l, i, [], cs)]
 | [ (l, Kwd "pred"); (li, Ident g);
     [%let (ps, inputParamCount) = parse_pred_paramlist ];
     [%let body = opt parse_pred_body ];
