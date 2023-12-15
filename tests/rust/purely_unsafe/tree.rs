@@ -1,3 +1,8 @@
+unsafe fn assert(b: bool)
+//@ req b;
+//@ ens true;
+{}
+
 struct Tree {
     left: *mut Tree,
     right: *mut Tree,
@@ -175,9 +180,7 @@ fn main() {
         let root = Tree::new_with_children(left_child, right_child);
 
         Tree::mark(root);
-        if !(*root).mark {
-            (*(*root).parent).parent = std::ptr::null_mut(); // Null dereference
-        }
+        assert((*root).mark);
         //@ close Tree(root, true, _);
         Tree::dispose(root);
     }
