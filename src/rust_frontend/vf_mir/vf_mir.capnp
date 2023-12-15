@@ -420,6 +420,17 @@ struct Body {
                 operandr @2: Operand;
             }
 
+            struct UnaryOpData {
+                struct UnOp {
+                    union {
+                        not @0: Void;
+                        neg @1: Void;
+                    }
+                }
+                operator @0: UnOp;
+                operand @1: Operand;
+            }
+
             struct RefData {
                 struct BorrowKind {
                     union {
@@ -476,6 +487,7 @@ struct Body {
                 addressOf @2: AddressOfData;
                 cast @3: CastData;
                 binaryOp @4: BinaryOpData;
+                unaryOp @6: UnaryOpData;
                 aggregate @5: AggregateData;
             }
         }

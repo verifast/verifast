@@ -60,7 +60,9 @@ module VarDebugInfoContentsRd = VarDebugInfoRd.VarDebugInfoContents
 module ConstValueRd = BodyRd.ConstValue
 module ScalarRd = BodyRd.Scalar
 module BinaryOpDataRd = RvalueRd.BinaryOpData
+module UnaryOpDataRd = RvalueRd.UnaryOpData
 module BinOpRd = BinaryOpDataRd.BinOp
+module UnOpRd = UnaryOpDataRd.UnOp
 module AggregateDataRd = RvalueRd.AggregateData
 module AggregateKindRd = AggregateDataRd.AggregateKind
 

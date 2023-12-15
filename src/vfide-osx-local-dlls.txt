@@ -3,7 +3,7 @@
 /usr/local/opt/gtk+/lib/libgdk-quartz-2.0.0.dylib
 /usr/local/opt/pango/lib/libpangocairo-1.0.0.dylib
 /usr/local/opt/pango/lib/libpango-1.0.0.dylib
-/usr/local/opt/atk/lib/libatk-1.0.0.dylib
+/usr/local/opt/at-spi2-core/lib/libatk-1.0.0.dylib
 /usr/local/opt/cairo/lib/libcairo.2.dylib
 /usr/local/opt/gdk-pixbuf/lib/libgdk_pixbuf-2.0.0.dylib
 /usr/local/opt/glib/lib/libgio-2.0.0.dylib

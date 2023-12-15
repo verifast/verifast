@@ -256,6 +256,7 @@ mod vf_mir_builder {
     use basic_block_cpn::statement as statement_cpn;
     use basic_block_cpn::terminator as terminator_cpn;
     use binary_op_data_cpn::bin_op as bin_op_cpn;
+    use unary_op_data_cpn::un_op as un_op_cpn;
     use body_cpn::basic_block as basic_block_cpn;
     use body_cpn::basic_block_id as basic_block_id_cpn;
     use body_cpn::const_value as const_value_cpn;
@@ -285,6 +286,7 @@ mod vf_mir_builder {
     use rustc_middle::{mir, ty::TyCtxt};
     use rvalue_cpn::aggregate_data::aggregate_kind as aggregate_kind_cpn;
     use rvalue_cpn::binary_op_data as binary_op_data_cpn;
+    use rvalue_cpn::unary_op_data as unary_op_data_cpn;
     use rvalue_cpn::cast_data::cast_kind as cast_kind_cpn;
     use rvalue_cpn::ref_data as ref_data_cpn;
     use source_file_cpn::file_name as file_name_cpn;
@@ -1303,7 +1305,13 @@ mod vf_mir_builder {
                 }
                 mir::Rvalue::CheckedBinaryOp(bin_op, box (operandl, operandr)) => todo!(),
                 mir::Rvalue::NullaryOp(null_op, ty) => todo!(),
-                mir::Rvalue::UnaryOp(un_op, operand) => todo!(),
+                mir::Rvalue::UnaryOp(un_op, operand) => {
+                    let mut un_op_data_cpn = rvalue_cpn.init_unary_op();
+                    let un_op_cpn = un_op_data_cpn.reborrow().init_operator();
+                    Self::encode_un_op(*un_op, un_op_cpn);
+                    let operand_cpn = un_op_data_cpn.reborrow().init_operand();
+                    Self::encode_operand(tcx, enc_ctx, operand, operand_cpn);
+                }
                 // Read the discriminant of an ADT.
                 mir::Rvalue::Discriminant(place) => todo!(),
                 // Creates an aggregate value, like a tuple or struct.
@@ -1420,6 +1428,13 @@ mod vf_mir_builder {
                 mir::BinOp::Ge => bin_op_cpn.set_ge(()),
                 mir::BinOp::Gt => bin_op_cpn.set_gt(()),
                 mir::BinOp::Offset => bin_op_cpn.set_offset(()),
+            }
+        }
+
+        fn encode_un_op(un_op: mir::UnOp, mut un_op_cpn: un_op_cpn::Builder<'_>) {
+            match un_op {
+                mir::UnOp::Not => un_op_cpn.set_not(()),
+                mir::UnOp::Neg => un_op_cpn.set_neg(()),
             }
         }
 
