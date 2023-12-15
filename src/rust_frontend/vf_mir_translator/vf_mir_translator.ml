@@ -1265,7 +1265,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         (loc : Ast.loc) =
       let open ScalarRd in
       match get s_cpn with
-      | Bool b -> failwith "Todo: Scalar::Bool"
+      | Bool b -> Ok (if b then Ast.True loc else Ast.False loc)
       | Char code ->
           let open Ast in
           Ok
@@ -1328,7 +1328,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             in
             Ok (`TrTypedConstantRvalueBinderBuilder rvalue_binder_builder)
       | Ast.FuncType _ -> Ok (`TrTypedConstantFn ty_info)
-      | Ast.Int (_, _) ->
+      | Ast.Int (_, _) | Ast.Bool ->
           let val_cpn = val_get ty_const_cpn in
           let* const_expr = translate_ty_const_kind val_cpn ty_expr loc in
           Ok (`TrTypedConstantScalar const_expr)
@@ -1673,6 +1673,13 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       | Offset -> failwith "Todo: BinOp::Offset"
       | Undefined _ -> Error (`TrBinOp "Unknown binary operator")
 
+    let translate_un_op (un_op_cpn : UnOpRd.t) =
+      let open UnOpRd in
+      match get un_op_cpn with
+      | Not -> Ok Ast.Not
+      | Neg -> Ok Ast.Sub
+      | Undefined _ -> Error (`TrUnOp "Unknown unary operator")
+    
     let translate_binary_operation (bin_op_data_cpn : BinaryOpDataRd.t)
         (loc : Ast.loc) =
       let open BinaryOpDataRd in
@@ -1683,6 +1690,15 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let operandr_cpn = operandr_get bin_op_data_cpn in
       let* operandr = translate_operand operandr_cpn loc in
       Ok (operator, operandl, operandr)
+    
+    let translate_unary_operation (un_op_data_cpn : UnaryOpDataRd.t)
+        (loc : Ast.loc) =
+      let open UnaryOpDataRd in
+      let operator_cpn = operator_get un_op_data_cpn in
+      let* operator = translate_un_op operator_cpn in
+      let operand_cpn = operand_get un_op_data_cpn in
+      let* operand = translate_operand operand_cpn loc in
+      Ok (operator, operand)
 
     let translate_aggregate_kind (agg_kind_cpn : AggregateKindRd.t) =
       let open AggregateKindRd in
@@ -1799,6 +1815,12 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           let* operandl = tr_operand operandl in
           let* operandr = tr_operand operandr in
           Ok (`TrRvalueBinaryOp (operator, operandl, operandr))
+      | UnaryOp un_op_data_cpn ->
+          let* operator, operand =
+            translate_unary_operation un_op_data_cpn loc
+          in
+          let* operand = tr_operand operand in
+          Ok (`TrRvalueUnaryOp (operator, operand))
       | Aggregate agg_data_cpn ->
           let* tmp_rvalue_binders, fields_init =
             translate_aggregate agg_data_cpn loc
@@ -1838,6 +1860,39 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                     ref [] )
               in
               Ok [ block_stmt ]
+          | `TrRvalueUnaryOp (operator, operand) -> (
+              let rvalue_binder_stmts, expr =
+                match operand with
+                | `TrRvalueExpr expr -> ([], expr)
+                | `TrRvalueRvalueBinderBuilder rvalue_binder_builder ->
+                  let tmp_var_name = TrName.make_tmp_var_name "operand" in
+                  let rvalue_binder_stmt =
+                    rvalue_binder_builder tmp_var_name
+                  in
+                  ([ rvalue_binder_stmt ], Ast.Var (loc, tmp_var_name))
+              in
+              let assign_stmt =
+                Ast.ExprStmt
+                  (Ast.AssignExpr
+                     ( loc,
+                       lhs_place,
+                       Ast.Operation (loc, operator,
+                         match operator with
+                         | Sub -> [ IntLit (loc, Big_int.zero_big_int, true, false, NoLSuffix); expr ]
+                         | _ -> [ expr ]) ))
+              in
+              match rvalue_binder_stmts with
+              | [] -> Ok [ assign_stmt ]
+              | _ ->
+                  let block_stmt =
+                    Ast.BlockStmt
+                      ( loc,
+                        (*decl list*) [],
+                        rvalue_binder_stmts @ [ assign_stmt ],
+                        loc,
+                        ref [] )
+                  in
+                  Ok [ block_stmt ])
           | `TrRvalueBinaryOp (operator, operandl, operandr) -> (
               let rvalue_binder_stmts, exprl, exprr =
                 match (operandl, operandr) with

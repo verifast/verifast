@@ -16,6 +16,7 @@ let rec parse_type = function%parser
 | [ (l, Ident "u64") ] -> ManifestTypeExpr (l, Int (Unsigned, FixedWidthRank 3))
 | [ (l, Ident "u128") ] -> ManifestTypeExpr (l, Int (Unsigned, FixedWidthRank 4))
 | [ (l, Ident "usize") ] -> ManifestTypeExpr (l, Int (Unsigned, PtrRank))
+| [ (l, Ident "bool") ] -> ManifestTypeExpr (l, Bool)
 | [ (l, Ident x);
     [%let t = function%parser
       [ (_, Kwd "<"); [%let targs = rep_comma parse_type]; (_, Kwd ">") ] -> ConstructedTypeExpr (l, x, targs)
