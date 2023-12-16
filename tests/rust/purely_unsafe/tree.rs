@@ -21,6 +21,13 @@ fix node_count(tree: tree) -> i32 {
     }
 }
 
+fix tree_root(tree: tree) -> *mut Tree {
+    match tree {
+        empty(node) => node,
+        nonempty(node, left, right) => node
+    }
+}
+
 lem_auto node_count_positive(tree: tree)
     req true;
     ens node_count(tree) >= 1;
@@ -52,9 +59,9 @@ pred Tree(node: *mut Tree, marked: bool; parent: *mut Tree, shape: tree) =
         shape == nonempty(node, leftShape, rightShape)
     };
 
-lem Tree_inv()
+lem_auto Tree_inv()
     req Tree(?node, ?marked, ?parent, ?shape);
-    ens Tree(node, marked, parent, shape) &*& node != 0;
+    ens Tree(node, marked, parent, shape) &*& node != 0 &*& node == tree_root(shape);
 {
     open Tree(node, marked, parent, shape);
     close Tree(node, marked, parent, shape);
@@ -213,6 +220,8 @@ fn main() {
 
         Tree::mark(root);
         assert((*root).mark);
+        assert((*left_child).mark);
+        assert((*right_child).mark);
         //@ close Tree(root, true, _, _);
         Tree::dispose(root);
     }
