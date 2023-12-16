@@ -14,6 +14,26 @@ struct Tree {
 
 inductive tree = empty(node: *mut Tree) | nonempty(node: *mut Tree, left: tree, right: tree);
 
+fix node_count(tree: tree) -> i32 {
+    match tree {
+        empty(node) => 1,
+        nonempty(node, left, right) => 1 + node_count(left) + node_count(right)
+    }
+}
+
+lem_auto node_count_positive(tree: tree)
+    req true;
+    ens node_count(tree) >= 1;
+{
+    match tree {
+        empty(node) => {}
+        nonempty(node, left, right) => {
+            node_count_positive(left);
+            node_count_positive(right);
+        }
+    }
+}
+
 pred Tree(node: *mut Tree, marked: bool; parent: *mut Tree, shape: tree) =
     node != 0 &*&
     alloc_block(node, std::mem::size_of::<Tree>()) &*&
@@ -40,11 +60,12 @@ lem Tree_inv()
     close Tree(node, marked, parent, shape);
 }
 
-pred stack(parent: *mut Tree, current: *mut Tree, cShape: tree, root: *mut Tree, rootShape: tree) =
+pred stack(parent: *mut Tree, current: *mut Tree, cShape: tree, root: *mut Tree, rootShape: tree, stepsLeft: i32) =
     current != 0 &*&
     if parent == 0 {
         root == current &*&
-        rootShape == cShape
+        rootShape == cShape &*&
+        stepsLeft == 0
     } else {
         parent != 0 &*&
         alloc_block(parent, std::mem::size_of::<Tree>()) &*&
@@ -56,18 +77,23 @@ pred stack(parent: *mut Tree, current: *mut Tree, cShape: tree, root: *mut Tree,
         exists::<bool>(?currentIsLeftChild) &*&
         if currentIsLeftChild {
             Tree(left, false, parent, ?rightShape) &*& left != 0 &*&
-            stack(right, parent, nonempty(parent, cShape, rightShape), root, rootShape)
+            stack(right, parent, nonempty(parent, cShape, rightShape), root, rootShape, ?stepsLeft1) &*&
+            stepsLeft1 >= 0 &*&
+            stepsLeft == node_count(rightShape) * 2 + 1 + stepsLeft1
         } else {
             Tree(right, true, parent, ?leftShape) &*& right != 0 &*&
-            stack(left, parent, nonempty(parent, leftShape, cShape), root, rootShape)
+            stack(left, parent, nonempty(parent, leftShape, cShape), root, rootShape, ?stepsLeft1) &*&
+            stepsLeft1 >= 0 &*& stepsLeft == 1 + stepsLeft1
         }
     };
 
-pred inv_(xIsNew: bool, x: *mut Tree, root: *mut Tree, rootShape: tree) =
+pred inv_(xIsNew: bool, x: *mut Tree, root: *mut Tree, rootShape: tree, stepsLeft: i32) =
     if xIsNew {
-        Tree(x, false, ?parent, ?xShape) &*& stack(parent, x, xShape, root, rootShape)
+        Tree(x, false, ?parent, ?xShape) &*& stack(parent, x, xShape, root, rootShape, ?stepsLeft1) &*&
+        stepsLeft1 >= 0 &*& stepsLeft == node_count(xShape) * 2 - 1 + stepsLeft1
     } else {
-        stack(x, ?child, ?childShape, root, rootShape) &*& Tree(child, true, x, childShape)
+        stack(x, ?child, ?childShape, root, rootShape, stepsLeft) &*& stepsLeft >= 0 &*&
+        Tree(child, true, x, childShape)
     };
 
 @*/
@@ -120,16 +146,16 @@ impl Tree {
     //@ ens Tree(root, true, 0, rootShape);
     {
         //@ Tree_inv();
-        //@ close stack(0, root, rootShape, root, rootShape);
-        //@ close inv_(true, x, root, rootShape);
+        //@ close stack(0, root, rootShape, root, rootShape, 0);
+        //@ close inv_(true, x, root, rootShape, _);
         loop {
-            //@ inv inv_(?xIsNew, x, root, rootShape) &*& x != 0;
-            //@ open inv_(_, _, _, _);
-            //@ if xIsNew == false { open stack(x, _, _, _, _); }
+            //@ inv inv_(?xIsNew, x, root, rootShape, ?stepsLeft) &*& x != 0;
+            //@ open inv_(_, _, _, _, _);
+            //@ if xIsNew == false { open stack(x, _, _, _, _, _); }
             (*x).mark = true;
             if (*x).left.is_null() && (*x).right.is_null() {
                 x = (*x).parent;
-                //@ close inv_(false, x, root, rootShape);
+                //@ close inv_(false, x, root, rootShape, _);
             } else {
                 let y = (*x).left;
                 (*x).left = (*x).right;
@@ -139,18 +165,18 @@ impl Tree {
                 if xIsNew {
                     assert Tree(y, false, x, ?leftShape);
                     close exists(true);
-                    close stack(x, y, leftShape, root, rootShape);
-                    close inv_(true, y, root, rootShape);
+                    close stack(x, y, leftShape, root, rootShape, ?stepsLeft1);
+                    close inv_(true, y, root, rootShape, _);
                 } else {
                     open exists(?markedLeftSubtree);
                     if markedLeftSubtree {
                         close exists(false);
                         assert Tree(y, false, x, ?rightShape);
                         Tree_inv();
-                        close stack(x, y, rightShape, root, rootShape);
-                        close inv_(true, y, root, rootShape);
+                        close stack(x, y, rightShape, root, rootShape, _);
+                        close inv_(true, y, root, rootShape, _);
                     } else {
-                        close inv_(false, y, root, rootShape);
+                        close inv_(false, y, root, rootShape, _);
                     }
                 }
                 @*/
@@ -159,9 +185,10 @@ impl Tree {
             if x.is_null() {
                 break;
             }
+            //@ assert inv_(_, _, _, _, ?stepsLeft1) &*& stepsLeft1 < stepsLeft;
         }
-        //@ open inv_(_, _, _, _);
-        //@ open stack(_, _, _, _, _);
+        //@ open inv_(_, _, _, _, _);
+        //@ open stack(_, _, _, _, _, _);
     }
 
     unsafe fn dispose(tree: *mut Tree)
