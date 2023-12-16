@@ -3,6 +3,11 @@ open Ast
 open Parser
 open Big_int
 
+let is_expr_with_block = function
+  IfExpr (_, _, _, _) -> true
+| SwitchExpr (_, _, _, _) -> true
+| _ -> false
+
 let rec parse_type = function%parser
   [ (l, Ident "i8") ] -> ManifestTypeExpr (l, Int (Signed, FixedWidthRank 0))
 | [ (l, Ident "i16") ] -> ManifestTypeExpr (l, Int (Signed, FixedWidthRank 1))
@@ -146,8 +151,37 @@ and parse_primary_expr = function%parser
     (_, Kwd "else");
     parse_block_expr as falseBranch;
   ] -> IfExpr (l, cond, trueBranch, falseBranch)
+| [ (l, Kwd "match");
+    parse_expr as scrutinee;
+    (_, Kwd "{");
+    parse_match_expr_rest as arms
+  ] -> SwitchExpr (l, scrutinee, arms, None)
 | [ (_, Kwd "("); parse_expr as e; (_, Kwd ")") ] -> e
 | [ (l, Kwd "["); [%let pats = rep_comma parse_pat]; (_, Kwd "]") ] -> CallExpr (l, "#list", [], [], pats, Static)
+and parse_match_arm = function%parser
+  [ parse_expr as pat; (l, Kwd "=>"); parse_expr as rhs ] ->
+  begin match pat with
+    CallExpr (lc, x, [], [], pats, Static) ->
+    let pats =
+      pats |>
+      List.map begin function
+        LitPat (Var (_, x)) -> x
+      | _ -> raise (ParseException (lc, "Match arm pattern arguments must be variable names"))
+      end
+    in
+    SwitchExprClause (l, x, pats, rhs)
+  | _ -> raise (ParseException (expr_loc pat, "Match arm pattern must be constructor application"))
+  end
+and parse_match_expr_rest = function%parser
+  [ (_, Kwd "}") ] -> []
+| [ parse_match_arm as arm;
+    [%let arms = function%parser
+       [ (_, Kwd "}") ] -> []
+     | [ (_, Kwd ","); parse_match_expr_rest as arms ] -> arms
+     | [ parse_match_expr_rest as arms ] when let SwitchExprClause (_, _, _, body) = arm in is_expr_with_block body -> arms
+     | [ ] -> raise (Stream.Error "Comma expected")
+    ]
+  ] -> arm::arms
 and parse_path_rest l x = function%parser
   [ (_, Kwd "::");
     [%let e = function%parser
@@ -253,6 +287,10 @@ let rec parse_stmt = function%parser
     | [] -> IfStmt (l, e, [s1], [])
     ]
   ] -> s
+| [ (l, Kwd "match"); parse_expr as e; (_, Kwd "{");
+    [%let cs = rep parse_match_stmt_arm];
+    (_, Kwd "}")
+  ] -> SwitchStmt (l, e, cs)
 | [ (l, Kwd "assert"); parse_asn as p; (_, Kwd ";") ] -> Assert (l, p)
 | [ (l, Kwd "leak"); parse_asn as p; (_, Kwd ";") ] -> Leak (l, p)
 | [ (l, Kwd "produce_lem_ptr_chunk");
@@ -264,6 +302,8 @@ let rec parse_stmt = function%parser
   ] -> ProduceLemmaFunctionPointerChunkStmt (l, None, Some ftclause, body)
 | [ parse_block_stmt as s ] -> s
 | [ parse_expr as e; (_, Kwd ";") ] -> ExprStmt e
+and parse_match_stmt_arm = function%parser
+  [ parse_expr as pat; (l, Kwd "=>"); parse_block_stmt as s ] -> SwitchStmtClause (l, pat, [s])
 and parse_produce_lemma_function_pointer_chunk_stmt_function_type_clause = function%parser
   [ (li, Ident ftn);
     (_, Kwd "("); [%let args = rep_comma parse_expr]; (_, Kwd ")");
@@ -297,13 +337,17 @@ let parse_pred_paramlist = function%parser
 let parse_pred_body = function%parser
   [ (_, Kwd "="); parse_asn as p ] -> p
 
-let parse_func_rest k = function%parser
+let parse_func_header k = function%parser
   [ (l, Ident g); (_, Kwd "("); [%let ps = rep_comma parse_param]; (_, Kwd ")");
     [%let rt = function%parser
       [ (_, Kwd "->"); parse_type as t ] -> Some t
     | [ ] -> if k = Regular then Some (StructTypeExpr (l, Some "std_tuple_0_", None, [])) else None
-    ];
-    [% let d = function%parser
+    ]
+  ] -> (l, g, ps, rt)
+
+let parse_func_rest k = function%parser
+  [ [%let (l, g, ps, rt) = parse_func_header k];
+    [%let d = function%parser
       [ (_, Kwd ";");
         [%let (nonghost_callers_only, ft, co, terminates) = parse_spec_clauses]
       ] -> Func (l, k, [], rt, g, ps, nonghost_callers_only, ft, co, terminates, None, false, [])
@@ -341,6 +385,15 @@ and parse_type_with_opt_name = function%parser
     ]
   ] -> (x, t)
 
+let parse_lemma_keyword = function%parser
+  [ (_, Kwd "lem") ] -> Lemma (false, None)
+| [ (_, Kwd "lem_auto");
+    [%let trigger = function%parser
+       [ (_, Kwd "("); parse_expr as e; (_, Kwd ")") ] -> Some e
+     | [ ] -> None
+    ]
+  ] -> Lemma (true, trigger)
+
 let parse_ghost_decl = function%parser
 | [ (l, Kwd "inductive"); (li, Ident i); (_, Kwd "=");
     [%let cs = function%parser
@@ -362,7 +415,19 @@ let parse_ghost_decl = function%parser
     parse_pred_body as p;
     (_, Kwd ";")
   ] -> [PredCtorDecl (l, g, ps1, ps2, inputParamCount, p)]
-| [ (_, Kwd "lem"); [%let d = parse_func_rest (Lemma (false, None)) ] ] -> [d]
+| [ parse_lemma_keyword as k; [%let d = parse_func_rest k ] ] -> [d]
+| [ (_, Kwd "fix"); [%let (l, g, ps, rt) = parse_func_header Fixpoint]; (_, Kwd "{"); parse_expr as e; (closeBraceLoc, Kwd "}") ] ->
+  let ss =
+    match e with
+      SwitchExpr (l, e, cs, None) ->
+      let cs = cs |> List.map begin function
+        SwitchExprClause (l, cn, xs, e) ->
+        SwitchStmtClause (l, CallExpr (l, cn, [], [], List.map (fun x -> LitPat (Var (l, x))) xs, Static), [ReturnStmt (expr_loc e, Some e)])
+      end in
+      [SwitchStmt (l, e, cs)]
+    | _ -> [ReturnStmt (expr_loc e, Some e)]
+  in
+  [Func (l, Fixpoint, [], rt, g, ps, false, None, None, false, Some (ss, closeBraceLoc), false, [])]
 
 let parse_ghost_decls stream = List.flatten (rep parse_ghost_decl stream)
 
