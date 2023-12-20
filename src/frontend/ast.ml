@@ -125,6 +125,7 @@ type type_ = (* ?type_ *)
   | UnionType of string
   | PtrType of type_
   | FuncType of string   (* The name of a typedef whose body is a C function type. *)
+  | InlineFuncType of type_ (* Return type only *)
   | InductiveType of string * type_ list
   | PredType of string list * type_ list * int option * inductiveness (* if None, not necessarily precise; if Some n, precise with n input parameters *)
   | PureFuncType of type_ * type_  (* Curried *)
@@ -362,7 +363,7 @@ and
       loc *
       expr *
       expr list
-  | WFunPtrCall of loc * expr * string (* function type name *) * expr list
+  | WFunPtrCall of loc * expr * string option (* function type name *) * expr list
   | WPureFunCall of loc * string * type_ list * expr list
   | WPureFunValueCall of loc * expr * expr list
   | WFunCall of loc * string * type_ list * expr list * method_binding
@@ -1131,6 +1132,7 @@ let type_expr_loc t =
   | ArrayTypeExpr(l, te) -> l
   | PredTypeExpr(l, te, _) -> l
   | PureFuncTypeExpr (l, tes) -> l
+  | FuncTypeExpr (l, _, _) -> l
 
 let expr_fold_open iter state e =
   let rec iters state es =

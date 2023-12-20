@@ -1013,7 +1013,12 @@ mod vf_mir_builder {
                     let fn_def_ty_cpn = ty_kind_cpn.init_fn_def();
                     Self::encode_ty_fn_def(tcx, enc_ctx, def_id, substs, fn_def_ty_cpn);
                 }
-                ty::TyKind::FnPtr(_) => todo!("Function pointer type kind"),
+                ty::TyKind::FnPtr(binder) => {
+                    let fn_ptr_ty_cpn = ty_kind_cpn.init_fn_ptr();
+                    let fn_sig = binder.no_bound_vars().expect("TODO: Function pointer types with bound variables");
+                    let output_cpn = fn_ptr_ty_cpn.init_output();
+                    Self::encode_ty(tcx, enc_ctx, fn_sig.output(), output_cpn);
+                }
                 ty::TyKind::Never => ty_kind_cpn.set_never(()),
                 ty::TyKind::Tuple(substs) => {
                     let len = substs.len().try_into().expect(&format!(
@@ -1569,23 +1574,6 @@ mod vf_mir_builder {
         ) {
             let func_cpn = fn_call_data_cpn.reborrow().init_func();
             Self::encode_operand(tcx, enc_ctx, func, func_cpn);
-            // Todo @Nima: Are these checks necessary
-            let ty = match func {
-                mir::Operand::Constant(box mir::Constant {
-                    literal: mir::ConstantKind::Ty(ty::Const { ty, .. }),
-                    ..
-                }) => ty,
-                _ => bug!("Function call terminator with callee operand {:?}", func),
-            };
-
-            let ty_kind = ty.kind();
-            match ty_kind {
-                ty::FnDef(..) | ty::FnPtr(_) => (),
-                _ => bug!(
-                    "Function call terminator with unexpected type kind {:?}",
-                    ty_kind
-                ),
-            }
 
             // Encoding args
             let args_len = args.len().try_into().expect(&format!(

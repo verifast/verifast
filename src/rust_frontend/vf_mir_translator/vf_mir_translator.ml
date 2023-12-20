@@ -1016,6 +1016,17 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                  interp = RustBelt.emp_ty_interp loc;
                })
 
+  and translate_fn_ptr_ty (fn_ptr_ty_cpn : FnPtrTyRd.t) (loc : Ast.loc) =     
+    let open FnPtrTyRd in
+    let output_cpn = output_get fn_ptr_ty_cpn in
+    let* TyInfoBasic {vf_ty=output_ty} = translate_ty output_cpn loc in
+    Ok
+      (Mir.TyInfoBasic
+         {
+           vf_ty = FuncTypeExpr (loc, output_ty, []); (* Only the return type matters *)
+           interp = RustBelt.emp_ty_interp loc
+         })
+
   and translate_raw_ptr_ty (raw_ptr_ty_cpn : RawPtrTyRd.t) (loc : Ast.loc) =
     let open RawPtrTyRd in
     let mut_cpn = mutability_get raw_ptr_ty_cpn in
@@ -1095,6 +1106,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | RawPtr raw_ptr_ty_cpn -> translate_raw_ptr_ty raw_ptr_ty_cpn loc
     | Ref ref_ty_cpn -> translate_ref_ty ref_ty_cpn loc
     | FnDef fn_def_ty_cpn -> translate_fn_def_ty fn_def_ty_cpn loc
+    | FnPtr fn_ptr_ty_cpn -> translate_fn_ptr_ty fn_ptr_ty_cpn loc
     | Never ->
         let vf_ty = ManifestTypeExpr (loc, UnionType "std_empty_") in
         let size =
@@ -1389,108 +1401,117 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let* oprs = ListAux.try_map translate_opr oprs in
       Ok (!tmp_rvalue_binders, oprs)
 
-    let translate_fn_call_rexpr (callee_ty_info : Mir.ty_info)
+    let translate_fn_call_rexpr (callee_cpn : OperandRd.t)
         (args_cpn : OperandRd.t list) (call_loc : Ast.loc) (fn_loc : Ast.loc) =
-      match callee_ty_info with
-      | Mir.TyInfoBasic
-          { vf_ty = Ast.ManifestTypeExpr ((*loc*) _, Ast.FuncType fn_name) } ->
-          (* Todo @Nima: There should be a way to get separated source spans for args *)
-          let args = List.map (fun arg_cpn -> (arg_cpn, fn_loc)) args_cpn in
-          let* tmp_rvalue_binders, args = translate_operands args in
-          let args = List.map (fun expr -> Ast.LitPat expr) args in
-          let call_expr =
-            Ast.CallExpr
-              ( call_loc,
-                fn_name,
-                [] (*type arguments*),
-                [] (*indices, in case this is really a predicate assertion*),
-                args,
-                Ast.Static (*method_binding*) )
-          in
-          Ok (tmp_rvalue_binders, call_expr)
-      | Mir.TyInfoGeneric
-          {
-            vf_ty = Ast.ManifestTypeExpr ((*loc*) _, Ast.FuncType fn_name);
-            substs;
-            vf_ty_mono =
-              Ast.ManifestTypeExpr ((*loc*) _, Ast.FuncType fn_name_mono);
-          } -> (
-          match fn_name with
-          (* Todo @Nima: For cases where we inline an expression instead of a function call,
-             there is a problem with extending the implementation for clean-up paths *)
-          | "std::alloc::Layout::new" -> (
-              if not (ListAux.is_empty args_cpn) then
-                Error
-                  (`TrFnCallRExpr
-                    "Invalid number of arguments for std::alloc::Layout::new")
-              else
-                match substs with
-                | [ Mir.GenArgType ty_info ] ->
-                    let ty_expr = Mir.basic_type_of ty_info in
+      let translate_regular_fn_call fn_name =
+        (* Todo @Nima: There should be a way to get separated source spans for args *)
+        let args = List.map (fun arg_cpn -> (arg_cpn, fn_loc)) args_cpn in
+        let* tmp_rvalue_binders, args = translate_operands args in
+        let args = List.map (fun expr -> Ast.LitPat expr) args in
+        let call_expr =
+          Ast.CallExpr
+            ( call_loc,
+              fn_name,
+              [] (*type arguments*),
+              [] (*indices, in case this is really a predicate assertion*),
+              args,
+              Ast.Static (*method_binding*) )
+        in
+        Ok (tmp_rvalue_binders, call_expr)
+      in
+      let* callee = translate_operand callee_cpn call_loc in
+      match callee with
+      | `TrOperandMove (Var (_, fn_name)) -> translate_regular_fn_call fn_name
+      | `TrTypedConstantFn ty_info ->
+        begin match ty_info with
+        | Mir.TyInfoBasic
+            { vf_ty = Ast.ManifestTypeExpr ((*loc*) _, Ast.FuncType fn_name) } ->
+            translate_regular_fn_call fn_name
+        | Mir.TyInfoGeneric
+            {
+              vf_ty = Ast.ManifestTypeExpr ((*loc*) _, Ast.FuncType fn_name);
+              substs;
+              vf_ty_mono =
+                Ast.ManifestTypeExpr ((*loc*) _, Ast.FuncType fn_name_mono);
+            } -> (
+            match fn_name with
+            (* Todo @Nima: For cases where we inline an expression instead of a function call,
+               there is a problem with extending the implementation for clean-up paths *)
+            | "std::alloc::Layout::new" -> (
+                if not (ListAux.is_empty args_cpn) then
+                  Error
+                    (`TrFnCallRExpr
+                      "Invalid number of arguments for std::alloc::Layout::new")
+                else
+                  match substs with
+                  | [ Mir.GenArgType ty_info ] ->
+                      let ty_expr = Mir.basic_type_of ty_info in
+                      Ok
+                        ( (*tmp_rvalue_binders*) [],
+                          Ast.SizeofExpr (call_loc, Ast.TypeExpr ty_expr) )
+                  | _ ->
+                      Error
+                        (`TrFnCallRExpr
+                          "Invalid generic argument(s) for \
+                           std::alloc::Layout::new"))
+            | "std::ptr::mut_ptr::<impl *mut T>::is_null" -> (
+                match (substs, args_cpn) with
+                | [ Mir.GenArgType gen_arg_ty_info ], [ arg_cpn ] ->
+                    let* tmp_rvalue_binders, [ arg ] =
+                      translate_operands [ (arg_cpn, fn_loc) ]
+                    in
                     Ok
-                      ( (*tmp_rvalue_binders*) [],
-                        Ast.SizeofExpr (call_loc, Ast.TypeExpr ty_expr) )
+                      ( tmp_rvalue_binders,
+                        Ast.Operation
+                          ( fn_loc,
+                            Ast.Eq,
+                            [
+                              arg;
+                              IntLit
+                                ( fn_loc,
+                                  Big_int.zero_big_int,
+                                  (*decimal*) true,
+                                  (*U suffix*) false,
+                                  (*int literal*) Ast.NoLSuffix );
+                            ] ) )
                 | _ ->
                     Error
                       (`TrFnCallRExpr
-                        "Invalid generic argument(s) for \
-                         std::alloc::Layout::new"))
-          | "std::ptr::mut_ptr::<impl *mut T>::is_null" -> (
-              match (substs, args_cpn) with
-              | [ Mir.GenArgType gen_arg_ty_info ], [ arg_cpn ] ->
-                  let* tmp_rvalue_binders, [ arg ] =
-                    translate_operands [ (arg_cpn, fn_loc) ]
-                  in
-                  Ok
-                    ( tmp_rvalue_binders,
-                      Ast.Operation
-                        ( fn_loc,
-                          Ast.Eq,
-                          [
-                            arg;
-                            IntLit
-                              ( fn_loc,
-                                Big_int.zero_big_int,
-                                (*decimal*) true,
-                                (*U suffix*) false,
-                                (*int literal*) Ast.NoLSuffix );
-                          ] ) )
-              | _ ->
-                  Error
-                    (`TrFnCallRExpr
-                      "Invalid (generic) arg(s) for std::ptr::mut_ptr::<impl \
-                       *mut T>::is_null"))
-          | "std::ptr::const_ptr::<impl *const T>::offset"
-          | "std::ptr::mut_ptr::<impl *mut T>::offset" -> (
-              match (substs, args_cpn) with
-              | [ Mir.GenArgType gen_arg_ty_info ], [ arg1_cpn; arg2_cpn ] ->
-                  let* tmp_rvalue_binders, [ arg1; arg2 ] =
-                    translate_operands
-                      [ (arg1_cpn, fn_loc); (arg2_cpn, fn_loc) ]
-                  in
-                  Ok
-                    ( tmp_rvalue_binders,
-                      Ast.Operation (fn_loc, Ast.Add, [ arg1; arg2 ]) )
-              | _ ->
-                  Error
-                    (`TrFnCallRExpr
-                      (Printf.sprintf "Invalid (generic) arg(s) for %s" fn_name))
-              )
-          | "std::ptr::null_mut" ->
-              Ok
-                ( [],
-                  IntLit
-                    ( fn_loc,
-                      Big_int.zero_big_int,
-                      (*decimal*) true,
-                      (*U suffix*) false,
-                      (*int literal*) Ast.NoLSuffix ) )
-          | _ ->
-              failwith
-                ("Todo: Generic functions are not supported yet. Function: "
-               ^ fn_name))
-      | _ ->
-          Error (`TrFnCallRExpr "Invalid function definition type translation")
+                        "Invalid (generic) arg(s) for std::ptr::mut_ptr::<impl \
+                         *mut T>::is_null"))
+            | "std::ptr::const_ptr::<impl *const T>::offset"
+            | "std::ptr::mut_ptr::<impl *mut T>::offset" -> (
+                match (substs, args_cpn) with
+                | [ Mir.GenArgType gen_arg_ty_info ], [ arg1_cpn; arg2_cpn ] ->
+                    let* tmp_rvalue_binders, [ arg1; arg2 ] =
+                      translate_operands
+                        [ (arg1_cpn, fn_loc); (arg2_cpn, fn_loc) ]
+                    in
+                    Ok
+                      ( tmp_rvalue_binders,
+                        Ast.Operation (fn_loc, Ast.Add, [ arg1; arg2 ]) )
+                | _ ->
+                    Error
+                      (`TrFnCallRExpr
+                        (Printf.sprintf "Invalid (generic) arg(s) for %s" fn_name))
+                )
+            | "std::ptr::null_mut" ->
+                Ok
+                  ( [],
+                    IntLit
+                      ( fn_loc,
+                        Big_int.zero_big_int,
+                        (*decimal*) true,
+                        (*U suffix*) false,
+                        (*int literal*) Ast.NoLSuffix ) )
+            | _ ->
+                failwith
+                  ("Todo: Generic functions are not supported yet. Function: "
+                 ^ fn_name))
+        | _ ->
+            Error (`TrFnCallRExpr "Invalid function definition type translation")
+        end
+      | _ -> Error (`TrFnCall "Invalid callee operand for function call")
 
     let translate_basic_block_id (bblock_id_cpn : BasicBlockIdRd.t) =
       BasicBlockIdRd.name_get bblock_id_cpn
@@ -1508,17 +1529,11 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let translate_fn_call (fn_call_data_cpn : FnCallDataRd.t) (loc : Ast.loc) =
       let open FnCallDataRd in
       let func_cpn = func_get fn_call_data_cpn in
-      let* callee_ty_info = translate_operand func_cpn loc in
-      let* callee_ty_info =
-        match callee_ty_info with
-        | `TrTypedConstantFn ty_info -> Ok ty_info
-        | _ -> Error (`TrFnCall "Invalid typed constant for function call")
-      in
       let fn_span_cpn = fn_span_get fn_call_data_cpn in
       let* fn_loc = translate_span_data fn_span_cpn in
       let args_cpn = args_get_list fn_call_data_cpn in
       let* fn_call_tmp_rval_ctx, fn_call_rexpr =
-        translate_fn_call_rexpr callee_ty_info args_cpn loc fn_loc
+        translate_fn_call_rexpr func_cpn args_cpn loc fn_loc
       in
       let destination_cpn = destination_get fn_call_data_cpn in
       let* call_stmt, next_bblock_stmt_op =
@@ -1806,8 +1821,13 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           | `TrTypedConstantRvalueBinderBuilder rvalue_binder_builder ->
               failwith "Todo: Rvalue::Cast"
               (*Todo @Nima: We need a better design (refactor) for passing different results of operand translation*)
-          | `TrTypedConstantFn _ ->
-              Error (`TrRvalue "Invalid operand translation for Rvalue::Cast"))
+          | `TrTypedConstantFn ty_info ->
+              begin match ty_info with
+              | Mir.TyInfoBasic
+                  { vf_ty = Ast.ManifestTypeExpr ((*loc*) _, Ast.FuncType fn_name) } ->
+                  Ok (`TrRvalueExpr (Ast.CastExpr (loc, ty, Var (loc, fn_name))))
+              | _ -> Error (`TrRvalue "Invalid operand translation for Rvalue::Cast")
+              end)
       | BinaryOp bin_op_data_cpn ->
           let* operator, operandl, operandr =
             translate_binary_operation bin_op_data_cpn loc

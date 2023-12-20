@@ -310,11 +310,11 @@ and of_expr = function
     of_expr ef;
     of_list of_expr args
   ])
-| WFunPtrCall (l, ef, ftn, args) ->
+| WFunPtrCall (l, ef, ftn_opt, args) ->
   C ("WFunPtrCall", [
     of_loc l;
     of_expr ef;
-    S ftn;
+    of_option s ftn_opt;
     of_list of_expr args
   ])
 | WPureFunCall (l, f, targs, args) ->
@@ -763,6 +763,18 @@ and of_stmt = function
 | GotoStmt (l, lbl) -> C ("GotoStmt", [of_loc l; S lbl])
 | NoopStmt l -> C ("NoopStmt", [of_loc l])
 | InvariantStmt (l, a) -> C ("InvariantStmt", [of_loc l; of_expr a])
+| ProduceFunctionPointerChunkStmt (l, ftn, e, targs, ftargs, ps, openBraceLoc, ss, closeBraceLoc) ->
+  C ("ProduceFunctionPointerChunkStmt", [
+    of_loc l;
+    S ftn;
+    of_expr e;
+    of_list of_type_expr targs;
+    of_list of_expr ftargs;
+    of_list (fun (l, x) -> T [of_loc l; S x]) ps;
+    of_loc openBraceLoc;
+    of_list of_stmt ss;
+    of_loc closeBraceLoc
+  ])
 | Throw (l, e) -> C ("Throw", [of_loc l; of_expr e])
 | TryCatch (l, ss, ccs) ->
   C ("TryCatch", [

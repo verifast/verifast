@@ -74,6 +74,7 @@ module AdtTyRd = TyRd.AdtTy
 module AdtKindRd = TyRd.AdtKind
 module AdtDefIdRd = TyRd.AdtDefId
 module FnDefTyRd = TyRd.FnDefTy
+module FnPtrTyRd = TyRd.FnPtrTy
 module FnDefIdRd = TyRd.FnDefId
 module GenArgRd = TyRd.GenArg
 module GenArgKindRd = GenArgRd.GenArgKind

@@ -85,6 +85,7 @@ let rec string_of_type t =
   | UnionType un -> "union " ^ un
   | PtrType t -> string_of_type t ^ " *"
   | FuncType ft -> ft
+  | InlineFuncType rt -> Printf.sprintf "fn(?) -> %s" (string_of_type rt)
   | PredType (tparams, ts, inputParamCount, inductiveness) ->
     let tparamsText = if tparams = [] then "" else "<" ^ String.concat ", " tparams ^ ">" in
     let paramTypesText =

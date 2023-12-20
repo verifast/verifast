@@ -103,11 +103,14 @@ pub fn preprocess(input: &str, ghost_ranges: &mut Vec<GhostRange>) -> String {
     let mut output = String::new();
     let mut inside_word = false;
     let mut brace_depth = 0;
+    let mut last_token_was_fn = false;
     let mut next_block_is_fn_body = false;
     let mut fn_body_brace_depth = -1;
     loop {
         let was_inside_word = inside_word;
         inside_word = false;
+        let old_last_token_was_fn = last_token_was_fn;
+        last_token_was_fn = false;
         match cs.peek() {
             None => {
                 output.push_str("\n\nfn VeriFast_ghost_command() {}\n");
@@ -138,6 +141,7 @@ pub fn preprocess(input: &str, ghost_ranges: &mut Vec<GhostRange>) -> String {
                         match cs.peek() {
                             Some('/') => {
                                 cs.next();
+                                last_token_was_fn = old_last_token_was_fn;
                                 match cs.peek() {
                                     Some('@') => {
                                         cs.next();
@@ -206,6 +210,7 @@ pub fn preprocess(input: &str, ghost_ranges: &mut Vec<GhostRange>) -> String {
                             }
                             Some('*') => {
                                 cs.next();
+                                last_token_was_fn = old_last_token_was_fn;
                                 let mut ghost_range = GhostRange {
                                     in_fn_body: false,
                                     start: SrcPos {
@@ -431,13 +436,17 @@ pub fn preprocess(input: &str, ghost_ranges: &mut Vec<GhostRange>) -> String {
                                         }
                                     }
                                 }
-                                _ => break,
+                                _ => {
+                                    next_block_is_fn_body |= old_last_token_was_fn;
+                                    break;
+                                }
                             }
                         }
                     }
                     'f' if !was_inside_word => {
                         cs.next();
                         output.push('f');
+                        next_block_is_fn_body |= old_last_token_was_fn;
                         inside_word = true;
                         match cs.peek() {
                             Some('n') => {
@@ -446,7 +455,7 @@ pub fn preprocess(input: &str, ghost_ranges: &mut Vec<GhostRange>) -> String {
                                 match cs.peek() {
                                     Some('A'..='Z' | 'a'..='z' | '_' | '0'..='9') => {}
                                     _ => {
-                                        next_block_is_fn_body = true;
+                                        last_token_was_fn = true;
                                     }
                                 }
                             }
@@ -456,11 +465,22 @@ pub fn preprocess(input: &str, ghost_ranges: &mut Vec<GhostRange>) -> String {
                     c @ ('A'..='Z' | 'a'..='z' | '_') => {
                         cs.next();
                         output.push(c);
+                        next_block_is_fn_body |= old_last_token_was_fn;
                         inside_word = true;
+                    }
+                    '(' => {
+                        cs.next();
+                        output.push(c);
+                    }
+                    c @ (' ' | '\n' | '\r' | '\t') => {
+                        cs.next();
+                        output.push(c);
+                        last_token_was_fn = old_last_token_was_fn;
                     }
                     c => {
                         cs.next();
                         output.push(c);
+                        next_block_is_fn_body |= old_last_token_was_fn;
                     }
                 }
             }

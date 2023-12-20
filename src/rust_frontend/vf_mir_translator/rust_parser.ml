@@ -28,10 +28,29 @@ let rec parse_type = function%parser
     | [ ] -> IdentTypeExpr (l, None, x)
     ]
   ] -> t
+| [ (l, Kwd "pred"); (_, Kwd "(");
+    [%let ts = rep_comma parse_type_with_opt_name];
+    [%let (ts, inputParamCount) = function%parser
+       [ (_, Kwd ";"); [%let ts' = rep_comma parse_type_with_opt_name] ] -> (ts @ ts', Some (List.length ts))
+     | [ ] -> (ts, None)
+    ];
+    (_, Kwd ")")
+  ] -> PredTypeExpr (l, List.map snd ts, inputParamCount)
 | [ (l, Kwd "*");
     [%let mutability = opt (function%parser [ (_, Kwd "const") ] -> () | [ (_, Kwd "mut") ] -> ()) ];
     parse_type as t
   ] -> ignore mutability; PtrTypeExpr (l, t)
+and parse_type_with_opt_name = function%parser
+  [ parse_type as t;
+    [%let (x, t) = function%parser
+     | [ (_, Kwd ":"); parse_type as t1 ] ->
+       begin match t with
+         IdentTypeExpr (lt, None, x) -> (x, t1)
+       | _ -> raise (ParseException (type_expr_loc t, "Identifier expected"))
+       end
+     | [ ] -> ("", t)
+    ]
+  ] -> (x, t)
 
 let rec parse_expr stream = parse_sep_expr stream
 and parse_sep_expr = function%parser
@@ -300,6 +319,24 @@ let rec parse_stmt = function%parser
     | [ parse_stmt as s ] -> Some s
     ]
   ] -> ProduceLemmaFunctionPointerChunkStmt (l, None, Some ftclause, body)
+| [ (l, Kwd "produce_fn_ptr_chunk"); 
+    (li, Ident ftn);
+    [%let targs = function%parser
+      [ (_, Kwd "<"); [%let targs = rep_comma parse_type]; (_, Kwd ">") ] -> targs
+    | [ ] -> []
+    ];
+    (_, Kwd "(");
+    parse_expr as fpe;
+    (_, Kwd ")");
+    (_, Kwd "("); [%let args = rep_comma parse_expr]; (_, Kwd ")");
+    (_, Kwd "(");
+    [%let params = rep_comma (function%parser [ (l, Ident x) ] -> (l, x)) ];
+    (_, Kwd ")");
+    (openBraceLoc, Kwd "{");
+    parse_stmts as ss;
+    (closeBraceLoc, Kwd "}")
+  ] ->
+  ProduceFunctionPointerChunkStmt (l, ftn, fpe, targs, args, params, openBraceLoc, ss, closeBraceLoc)
 | [ parse_block_stmt as s ] -> s
 | [ parse_expr as e; (_, Kwd ";") ] -> ExprStmt e
 and parse_match_stmt_arm = function%parser
@@ -373,17 +410,6 @@ let rec parse_ctors = function%parser
 and parse_ctors_suffix = function%parser
 | [ (_, Kwd "|"); parse_ctors as cs ] -> cs
 | [ ] -> []
-and parse_type_with_opt_name = function%parser
-  [ parse_type as t;
-    [%let (x, t) = function%parser
-     | [ (_, Kwd ":"); parse_type as t1 ] ->
-       begin match t with
-         IdentTypeExpr (lt, None, x) -> (x, t1)
-       | _ -> raise (ParseException (type_expr_loc t, "Identifier expected"))
-       end
-     | [ ] -> ("", t)
-    ]
-  ] -> (x, t)
 
 let parse_lemma_keyword = function%parser
   [ (_, Kwd "lem") ] -> Lemma (false, None)
@@ -428,6 +454,24 @@ let parse_ghost_decl = function%parser
     | _ -> [ReturnStmt (expr_loc e, Some e)]
   in
   [Func (l, Fixpoint, [], rt, g, ps, false, None, None, false, Some (ss, closeBraceLoc), false, [])]
+| [ (l, Kwd "fn_type"); (lftn, Ident ftn); (_, Kwd "("); [%let ftps = rep_comma parse_param]; (_, Kwd ")"); (_, Kwd "=");
+    [%let unsafe = function%parser
+       [ (_, Kwd "unsafe") ] -> true
+     | [ ] -> false
+    ];
+    (_, Kwd "fn"); (_, Kwd "("); [%let ps = rep_comma parse_param]; (_, Kwd ")"); 
+    [%let rt = function%parser
+      [ (_, Kwd "->"); parse_type as t ] -> Some t
+    | [ ] -> Some (StructTypeExpr (l, Some "std_tuple_0_", None, []))
+    ];
+    (_, Kwd ";");
+    (_, Kwd "req"); parse_asn as pre; (_, Kwd ";");
+    (_, Kwd "ens"); parse_asn as post; (_, Kwd ";");
+    [%let terminates = function%parser
+       [ (_, Kwd "terminates"); (_, Kwd ";") ] -> true
+     | [ ] -> false
+    ]
+  ] -> [FuncTypeDecl (l, Real, rt, ftn, [], ftps, ps, (pre, post, terminates))]
 
 let parse_ghost_decls stream = List.flatten (rep parse_ghost_decl stream)
 

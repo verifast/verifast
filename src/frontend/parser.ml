@@ -109,7 +109,7 @@ let rust_ghost_keywords = [
   "produce_lem_ptr_chunk"; "dup_lem_ptr_chunk"; "produce_fn_ptr_chunk";
   "producing_box_pred"; "producing_handle_pred"; "producing_fresh_handle_pred"; "box"; "handle"; "any"; "split_fraction"; "by"; "merge_fractions";
   "unloadable_module"; "decreases"; "forall_"; "import_module"; "require_module"; ".."; "extends"; "permbased";
-  "terminates"; "abstract_type"; "fix_auto"; "typeid"; "activating"; "truncating"; "typedef"
+  "terminates"; "abstract_type"; "fix_auto"; "typeid"; "activating"; "truncating"; "typedef"; "fn_type"
 ]
 
 let java_keywords = [

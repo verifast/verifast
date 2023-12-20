@@ -422,7 +422,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | ArrayType t -> ProverInt
     | StaticArrayType (t, s) -> ProverInductive
     | PtrType t -> ProverInductive
-    | FuncType _ -> ProverInt
+    | FuncType _ | InlineFuncType _ -> ProverInt
     | PredType (tparams, ts, inputParamCount, _) -> ProverInductive
     | PureFuncType _ -> ProverInductive
     | BoxIdType -> ProverInt
@@ -1971,6 +1971,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | EnumTypeExpr (l, Some en, None) ->
       intType
     | PtrTypeExpr (l, FuncTypeExpr (_, _, _)) -> PtrType Void
+    | FuncTypeExpr (l, rt, []) when dialect = Some Rust -> InlineFuncType (check rt)
     | FuncTypeExpr (_, _, _) -> PtrType Void
     | PtrTypeExpr (l, te) -> PtrType (check te)
     | PredTypeExpr (l, tes, inputParamCount) ->
@@ -2781,6 +2782,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       for_all2 unify ts1 ts2 && inputParamCount1 = inputParamCount2 && inductiveness1 = inductiveness2
     | (ArrayType t1, ArrayType t2) -> unify t1 t2
     | (PtrType t1, PtrType t2) -> compatible_pointees t1 t2
+    | (InlineFuncType _, PtrType _) -> true
+    | (PtrType _, InlineFuncType _) -> true
     | (t1, t2) -> t1 = t2
   
   let width_group w =
@@ -2950,7 +2953,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       begin fun (g, (l, gh, tparams, rt, ftxmap, xmap, g0, pn, ilist, pre, post, terminates)) ->
         let predfammaps =
           if gh = Ghost || ftxmap <> [] || tparams <> [] then
-            let paramtypes = [PtrType (FuncType g)] @ List.map snd ftxmap in
+            let fun_ptr_type =
+              if dialect = Some Rust then InlineFuncType (match rt with None -> Void | Some rt -> rt) else PtrType (FuncType g) in
+            let paramtypes = fun_ptr_type::List.map snd ftxmap in
             [mk_predfam (full_name pn ("is_" ^ g0)) l tparams 0 paramtypes (Some (List.length paramtypes)) Inductiveness_Inductive]
           else
             []
@@ -4328,7 +4333,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           | Some info -> info
         in
         let rt = match rt with None -> Void | Some rt -> rt in (* This depends on the fact that the return type does not mention type parameters. *)
-        (WFunPtrCall (l, w, ftn, es), rt, None)
+        (WFunPtrCall (l, w, Some ftn, es), rt, None)
       | _ -> static_error l "The callee of a call of this form must be a pure function value." None
       end 
     | CallExpr (l, g, targes, [], pats, fb) ->
@@ -4356,7 +4361,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             | Some info -> info
           in
           let rt = match rt with None -> Void | Some rt -> rt in (* This depends on the fact that the return type does not mention type parameters. *)
-          (WFunPtrCall (l, WVar (l, g, LocalVar), ftn, es), rt, None)
+          (WFunPtrCall (l, WVar (l, g, LocalVar), Some ftn, es), rt, None)
+        | Some (InlineFuncType rt) ->
+          (WFunPtrCall (l, WVar (l, g, LocalVar), None, es), rt, None)
         | Some ((PureFuncType (t1, t2) as t)) ->
           if targes <> [] then static_error l "Pure function value does not have type parameters." None;
           check_pure_fun_value_call l (WVar (l, g, LocalVar)) t es

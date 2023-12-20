@@ -363,12 +363,12 @@ let rec sexpr_of_expr (expr : expr) : sexpression =
           "expr", sexpr_of_expr expr;
           "args", sexpr_of_list sexpr_of_expr args
         ]
-    | WFunPtrCall (_, callee, ftn, exprs) ->
+    | WFunPtrCall (_, callee, ftn_opt, exprs) ->
       build_list
         [ Symbol "expr-w-func-ptr-call" ]
         [
           "callee", sexpr_of_expr callee;
-          "function-type", Symbol ftn;
+          "function-type", sexpr_of_option (fun ftn -> Symbol ftn) ftn_opt;
           "exprs", sexpr_of_list sexpr_of_expr exprs
         ]
     | WPureFunCall (_, name, typs, exprs) ->

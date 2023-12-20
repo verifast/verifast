@@ -249,6 +249,10 @@ struct Ty {
         substs @2: List(GenArg);
     }
 
+    struct FnPtrTy {
+        output @0: Ty; # We only need the return type for now
+    }
+
     struct RawPtrTy {
         ty @0: Ty;
         mutability @1: Mutability;
@@ -270,6 +274,7 @@ struct Ty {
             rawPtr @4: RawPtrTy;
             ref @5: RefTy;
             fnDef @6: FnDefTy;
+            fnPtr @10: FnPtrTy;
             never @7: Void;
             tuple @8: List(GenArg);
         }

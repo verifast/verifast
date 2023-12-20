@@ -2552,6 +2552,42 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | WFunPtrCall (l, e, ftn, args) ->
       has_heap_effects ();
       eval_h h env e $. fun h env fterm ->
+      let ftn =
+        match ftn with
+          Some ftn -> ftn
+        | None ->
+        (* First try a fast identity-based search *)
+        let ftn =
+          h |> head_flatmap_option begin fun (Chunk ((p, _), _, _, arg::_, _)) ->
+            if arg == fterm then
+              functypemap |> head_flatmap_option begin function
+                (ftn, (_, _, _, _, _, _, _, _, _, [(_, (_, _, _, _, p', _, _))])) when p' == p -> Some ftn
+              | _ -> None
+              end
+            else
+              None
+          end
+        in
+        match ftn with
+          Some ftn -> ftn
+        | None ->
+        (* Slow, equality-based path *)
+        let ftn =
+          h |> head_flatmap_option begin fun (Chunk ((p, _), _, _, arg::_, _)) ->
+            if definitely_equal arg fterm then
+              functypemap |> head_flatmap_option begin function
+                (ftn, (_, _, _, _, _, _, _, _, _, [(_, (_, _, _, _, p', _, _))])) when definitely_equal p' p -> Some ftn
+              | _ -> None
+              end
+            else
+              None
+          end
+        in
+        match ftn with
+          Some ftn -> ftn
+        | None ->
+        assert_false h env l (Printf.sprintf "No function type chunk found in the heap for function pointer %s" (ctxt#pprint fterm)) None
+      in
       let (_, gh, fttparams, rt, ftxmap, xmap, pre, post, terminates, ft_predfammaps) = List.assoc ftn functypemap in
       if pure && gh = Real then static_error l "Cannot call regular function pointer in a pure context." None;
       let check_call targs h args0 cont =
@@ -2851,10 +2887,10 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         (* 'E = ++E + 1' has undefined behavior. This is true for any lvalue E. *)
         (* We interpret the C standard as saying that 'E = f(++E)' does not have undefined behavior because argument expression evaluation is sequenced before function call. *)
         match (lhs, rhs) with
-          (WVar (_, _, _), WFunCall (_, _, _, _, _)) -> false (* Is this OK when the variable is a global? *)
+          (WVar (_, _, _), (WFunCall (_, _, _, _, _)|WFunPtrCall (_, _, _, _))) -> false (* Is this OK when the variable is a global? *)
         | (WVar (_, _, LocalVar), _) -> false
         | (WRead (l, WVar (_, _, LocalVar), fparent, fname, tp, false, fvalue, fghost), WFunCall (_, _, _, _, _)) -> false
-        | (WDeref (l, WVar (_, _, LocalVar), _), WFunCall (_, _, _, _, _)) -> false
+        | (WDeref (l, WVar (_, _, LocalVar), _), (WFunCall (_, _, _, _, _)|WFunPtrCall (_, _, _, _))) -> false
         | _ -> true
       in
       verify_expr (true, rhsHeapReadOnly) h env varName rhs $. fun h env vrhs ->
