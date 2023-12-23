@@ -120,7 +120,7 @@ impl rustc_driver::Callbacks for CompilerCalls {
             trace!("Collecting MIR bodies");
             // Collect definition ids of bodies.
             let hir = tcx.hir();
-            let mut visitor = HirVisitor { bodies: Vec::new() };
+            let mut visitor = HirVisitor { trait_impls: Vec::new(), bodies: Vec::new() };
             hir.visit_all_item_likes(&mut visitor);
 
             // Trigger borrow checking of all bodies.
@@ -146,6 +146,7 @@ impl rustc_driver::Callbacks for CompilerCalls {
                 debug!("{:?}", gr.span());
             }
             vf_mir_capnp_builder.add_comments(&mut self.ghost_ranges);
+            vf_mir_capnp_builder.set_trait_impls(visitor.trait_impls);
             vf_mir_capnp_builder.add_bodies(bodies.as_slice());
             let msg_cpn = vf_mir_capnp_builder.build();
             capnp::serialize::write_message(&mut ::std::io::stdout(), msg_cpn.borrow_inner());
@@ -188,17 +189,39 @@ fn mir_borrowck<'tcx>(tcx: TyCtxt<'tcx>, def_id: LocalDefId) -> mir_borrowck<'tc
     original_mir_borrowck(tcx, def_id)
 }
 
+struct TraitImplInfo {
+    of_trait: rustc_hir::def_id::DefId,
+    self_ty: rustc_hir::def_id::DefId,
+    items: Vec<String>,
+}
+
 /// Visitor that collects all body definition ids mentioned in the program.
 struct HirVisitor {
+    trait_impls: Vec<TraitImplInfo>,
     bodies: Vec<LocalDefId>,
 }
 
 impl<'tcx> ItemLikeVisitor<'tcx> for HirVisitor {
     fn visit_item(&mut self, item: &rustc_hir::Item) {
-        match item.kind {
+        match &item.kind {
             rustc_hir::ItemKind::Fn(..) => self.bodies.push(item.def_id),
             // We cannot send DefId of a struct to optimize_mir query
             rustc_hir::ItemKind::Struct(..) => (),
+            rustc_hir::ItemKind::Impl(impl_) => {
+                if let Some(trait_ref) = &impl_.of_trait {
+                    if let Some(of_trait) = trait_ref.trait_def_id() {
+                        if let rustc_hir::TyKind::Path(rustc_hir::QPath::Resolved(None, self_ty_path)) = impl_.self_ty.kind {
+                            if let rustc_hir::def::Res::Def(rustc_hir::def::DefKind::Struct, self_ty) = self_ty_path.res {
+                                let mut items = Vec::<String>::new();
+                                for item in impl_.items {
+                                    items.push(item.ident.to_string());
+                                }
+                                self.trait_impls.push(TraitImplInfo { of_trait, self_ty, items });
+                            }
+                        }
+                    }
+                }
+            },
             _ => (),
         }
     }
@@ -358,6 +381,7 @@ mod vf_mir_builder {
 
     pub struct VfMirCapnpBuilder<'tcx, 'a> {
         tcx: TyCtxt<'tcx>,
+        trait_impls: Vec<super::TraitImplInfo>,
         bodies: Vec<&'a mir::Body<'tcx>>,
         annots: LinkedList<GhostRange>,
     }
@@ -366,6 +390,7 @@ mod vf_mir_builder {
         pub fn new(tcx: TyCtxt<'tcx>) -> VfMirCapnpBuilder {
             VfMirCapnpBuilder {
                 tcx,
+                trait_impls: Vec::new(),
                 bodies: Vec::new(),
                 annots: LinkedList::new(),
             }
@@ -379,15 +404,34 @@ mod vf_mir_builder {
             );
         }
 
+        pub(super) fn set_trait_impls(&mut self, trait_impls: Vec<super::TraitImplInfo>) {
+            self.trait_impls = trait_impls;
+        }
+
         pub fn add_bodies(&mut self, bodies: &[&'a mir::Body<'tcx>]) {
             self.bodies.extend_from_slice(bodies)
         }
 
         pub fn build(mut self) -> ::capnp::message::TypedBuilder<vf_mir_cpn::Owned> {
             let mut msg_cpn = ::capnp::message::TypedBuilder::<vf_mir_cpn::Owned>::new_default();
-            let vf_mir_cpn = msg_cpn.init_root();
+            let mut vf_mir_cpn = msg_cpn.init_root();
+            self.encode_trait_impls(&mut vf_mir_cpn);
             self.encode_mir(vf_mir_cpn);
             msg_cpn
+        }
+
+        fn encode_trait_impls(&mut self, vf_mir_cpn: &mut vf_mir_cpn::Builder<'_>) {
+            let mut trait_impls_cpn = vf_mir_cpn.reborrow().init_trait_impls(self.trait_impls.len().try_into().unwrap());
+            for (idx, trait_impl) in self.trait_impls.iter().enumerate() {
+                trace!("Encoding trait impl");
+                let mut trait_impl_cpn = trait_impls_cpn.reborrow().get(idx.try_into().unwrap());
+                trait_impl_cpn.set_of_trait(&self.tcx.def_path_str(trait_impl.of_trait));
+                trait_impl_cpn.set_self_ty(&self.tcx.def_path_str(trait_impl.self_ty));
+                let mut items_cpn = trait_impl_cpn.init_items(trait_impl.items.len().try_into().unwrap());
+                for (idx, item) in trait_impl.items.iter().enumerate() {
+                    items_cpn.set(idx.try_into().unwrap(), &item)
+                }
+            }
         }
 
         fn encode_mir(&mut self, mut vf_mir_cpn: vf_mir_cpn::Builder<'_>) {
@@ -1031,6 +1075,9 @@ mod vf_mir_builder {
                     } else {
                         todo!("Tuple types");
                     }
+                }
+                ty::TyKind::Param(param_ty) => {
+                    ty_kind_cpn.set_param(&param_ty.to_string());
                 }
                 _ => todo!("Unsupported type kind"),
             }

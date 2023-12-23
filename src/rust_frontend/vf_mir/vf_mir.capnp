@@ -277,6 +277,7 @@ struct Ty {
             fnPtr @10: FnPtrTy;
             never @7: Void;
             tuple @8: List(GenArg);
+            param @11: Text;
         }
     }
 
@@ -591,11 +592,18 @@ struct Body {
     # Todo @Nima: Add Visibility data
 }
 
+struct TraitImpl {
+    ofTrait @0: Text;
+    selfTy @1: Text;
+    items @2: List(Text);
+}
+
 struct VfMir {
     # Todo @Nima: We are using an inductive list to encode ADT definitions because the total size of `List`s
     # shoule be determined before initializing them which is not the case for ADT definitions. The standard way to
     # do this is capnp `orphans` which are not supported for Rust plugin at the time.
     adtDefs @0: IndList(Ty.AdtDef);
+    traitImpls @3: List(TraitImpl);
     bodies @1: List(Body);
     ghostDeclBatches @2: List(Annotation);
 }

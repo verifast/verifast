@@ -1123,6 +1123,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | Tuple substs_cpn ->
         let substs_cpn = Capnp.Array.to_list substs_cpn in
         translate_tuple_ty substs_cpn loc
+    | Param name ->
+        Ok (Mir.TyInfoBasic { vf_ty = IdentTypeExpr (loc, None, name); interp = RustBelt.emp_ty_interp loc })
     | Undefined _ -> Error (`TrTy "Unknown Rust type kind")
 
   type body_tr_defs_ctx = { adt_defs : Ast.decl list }
@@ -1505,9 +1507,13 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                         (*U suffix*) false,
                         (*int literal*) Ast.NoLSuffix ) )
             | _ ->
+                (* Ignore the generic args for now *)
+                translate_regular_fn_call fn_name)
+                (*
                 failwith
                   ("Todo: Generic functions are not supported yet. Function: "
                  ^ fn_name))
+                *)
         | _ ->
             Error (`TrFnCallRExpr "Invalid function definition type translation")
         end
@@ -2808,6 +2814,16 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         (`ChekProofObligationFailed
           (loc, "Lemma " ^ po_name ^ " Should be proven"))
 
+  type trait_impl = { of_trait: string; self_ty: string; items: string list }
+
+  let translate_trait_impls (trait_impls_cpn : TraitImplRd.t list) =
+    trait_impls_cpn |> List.map begin fun trait_impl_cpn ->
+      let of_trait = TraitImplRd.of_trait_get trait_impl_cpn in
+      let self_ty = TraitImplRd.self_ty_get trait_impl_cpn in
+      let items = TraitImplRd.items_get_list trait_impl_cpn in
+      { of_trait; self_ty; items }
+    end
+
   let translate_vf_mir (vf_mir_cpn : VfMirRd.t) =
     let job _ =
       let module HeadersAux = HeadersAux.Make (struct
@@ -2868,10 +2884,21 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       *)
       let* body_sigs = AstAux.sort_decls_lexically body_sigs in
       let* body_decls = AstAux.sort_decls_lexically body_decls in
+      let trait_impls = translate_trait_impls (VfMirRd.trait_impls_get_list vf_mir_cpn) in
       let debug_infos = VF0.DbgInfoRustFe debug_infos in
       let decls = AstDecls.decls () in
+      let trait_impl_prototypes = trait_impls |> Util.flatmap begin fun { of_trait; self_ty; items } ->
+        items |> Util.flatmap begin fun item ->
+          let trait_fn_name = Printf.sprintf "%s::%s" of_trait item in
+          let impl_fn_name = Printf.sprintf "<%s as %s>::%s" self_ty of_trait item in
+          body_decls |> Util.flatmap begin function Ast.Func (lf, Regular, tparams, rt, name, ps, false, None, spec, terminates, body, false, []) when name = trait_fn_name ->
+            [Ast.Func (lf, Regular, tparams, rt, impl_fn_name, ps, false, None, spec, terminates, None, false, [])]
+          | _ -> []
+          end
+        end
+      end in
       let decls =
-        decls @ adt_defs @ List.flatten aux_decls @ adts_full_bor_content_preds
+        trait_impl_prototypes @ decls @ adt_defs @ List.flatten aux_decls @ adts_full_bor_content_preds
         @ adts_proof_obligs @ ghost_decls @ body_sigs @ body_decls
       in
       (* Todo @Nima: we should add necessary inclusions during translation *)
