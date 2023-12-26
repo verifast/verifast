@@ -201,8 +201,8 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
     | LValueToRValue l    -> transl_lvalue_to_rvalue_expr loc l
     | DerivedToBase e     -> transl_derived_to_base_expr loc e
     | OperatorCall o      -> transl_operator_call_expr loc o
-    | Cleanups c          -> transl_cleanups_expr loc c
-    | BindTemporary t     -> transl_bind_temporary_expr loc t
+    | Cleanups c          -> transl_cleanups_expr c
+    | BindTemporary t     -> transl_bind_temporary_expr t
     | Undefined _         -> failwith "Undefined expression"
     | _                   -> error loc "Unsupported expression."
 
@@ -693,11 +693,11 @@ module Make (Args: Cxx_fe_sig.CXX_TRANSLATOR_ARGS) : Cxx_fe_sig.Cxx_Ast_Translat
     let ty = type_get e |> transl_type loc in
     VF.CxxDerivedToBase (loc, sub_expr, ty)
 
-  and transl_cleanups_expr (loc: VF.loc) (e: R.Node.t): VF.expr =
-    failwith "todo"
+  and transl_cleanups_expr (e: R.Node.t): VF.expr =
+    transl_expr e
 
-  and transl_bind_temporary_expr (loc: VF.loc) (e: R.Node.t) =
-    failwith "todo"
+  and transl_bind_temporary_expr (e: R.Node.t) =
+    transl_expr e
 
   (**************)
   (* statements *)

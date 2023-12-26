@@ -866,7 +866,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let addr = get_unique_var_symb_non_ghost addr_name (PtrType Void) in
             match e, dialect with
             | Some (CallExpr _ as e), Some Cxx ->
-              let w, _ = check_expr (pn, ilist) tparams tenv e in
+              let w = check_expr_t (pn, ilist) tparams tenv e t in
               verify_expr false h env (Some addr_name) w (fun h env v -> 
                 assume_eq v addr @@ fun () ->
                   iter h ((x, envTp) :: tenv) ghostenv ((x, addr) :: env) xs
