@@ -279,6 +279,10 @@ struct ExprSerializer : public NodeSerializer<stubs::Expr, clang::Expr>,
 
   bool VisitCXXDefaultInitExpr(const clang::CXXDefaultInitExpr *expr);
 
+  bool VisitExprWithCleanups(const clang::ExprWithCleanups *expr);
+
+  bool VisitCXXBindTemporaryExpr(const clang::CXXBindTemporaryExpr *expr);
+
 private:
   bool serializeUnaryOperator(stubs::Expr::UnaryOp::Builder &builder,
                               const clang::UnaryOperator *uo);

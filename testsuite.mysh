@@ -660,6 +660,12 @@ cd tests
         verifast -c -allow_should_fail -allow_dead_code non_virtual_base_dtor.cpp
         verifast -c no_pointee_pred_no_struct.cpp
     cd ..
+    cd elision
+        verifast -c -disable_overflow_check -allow_should_fail copy_ctor_side_effect.cpp
+        verifast -c copy_ctor_no_side_effect.cpp
+        verifast -c -disable_overflow_check copy_global.cpp
+        verifast -c -disable_overflow_check copy_param.cpp
+    cd ..
     verifast -c main_implicit_return.cpp
     verifast -c new_class.cpp
     verifast -c new_primitives.cpp

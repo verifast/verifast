@@ -416,6 +416,8 @@ struct Expr {
     derivedToBase @17 :StructToStruct;
     baseToDerived @18 :StructToStruct;
     operatorCall @19 :Call;
+    cleanups @20 :ExprNode;
+    bindTemporary @21 :ExprNode;
   }
 }
 

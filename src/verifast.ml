@@ -864,14 +864,22 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             begin let Some block = !blockPtr in if not (List.mem x !block) then block := x::!block end;
             let addr_name = x ^ "_addr" in 
             let addr = get_unique_var_symb_non_ghost addr_name (PtrType Void) in
-            let init =
-              match e with
-              | None -> Unspecified
-              | Some e -> Expr (check_c_initializer check_expr_t (pn,ilist) tparams tenv e t)
-            in
-            let verify_ctor_call = verify_ctor_call (pn, ilist) leminfo funcmap predinstmap sizemap tenv ghostenv h env addr (Some addr_name) in
-            produce_cxx_object l real_unit addr t eval_h verify_ctor_call init true true h env @@ fun h env ->
-            iter h ((x, envTp)::tenv) ghostenv ((x, addr)::env) xs
+            match e, dialect with
+            | Some (CallExpr _ as e), Some Cxx ->
+              let w = check_expr_t (pn, ilist) tparams tenv e t in
+              verify_expr false h env (Some addr_name) w (fun h env v -> 
+                assume_eq v addr @@ fun () ->
+                  iter h ((x, envTp) :: tenv) ghostenv ((x, addr) :: env) xs
+              ) econt
+            | _ ->
+              let init =
+                match e with
+                | None -> Unspecified
+                | Some e -> Expr (check_c_initializer check_expr_t (pn,ilist) tparams tenv e t)
+              in
+              let verify_ctor_call = verify_ctor_call (pn, ilist) leminfo funcmap predinstmap sizemap tenv ghostenv h env addr (Some addr_name) in
+              produce_cxx_object l real_unit addr t eval_h verify_ctor_call init true true h env @@ fun h env ->
+              iter h ((x, envTp)::tenv) ghostenv ((x, addr)::env) xs
           in
           match t with
             StaticArrayType (elemTp, elemCount) ->
@@ -2361,7 +2369,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     if pure && not (List.mem "#result" ghostenv) then static_error l "Cannot return from a regular function in a pure context." None;
     begin fun cont ->
       match eo with
-        None -> cont h None
+        None -> cont h None []
       | Some e ->
         let tp = match try_assoc "#result" tenv with None -> static_error l "Void function cannot return a value: " None | Some tp -> tp in
         let e, tp = match tp with
@@ -2369,9 +2377,37 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | _ -> e, tp 
         in
         let w = check_expr_t_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (Some pure) e tp in
-        verify_expr false (pn,ilist) tparams pure leminfo funcmap sizemap tenv ghostenv h env None w (fun h env v ->
-        cont h (Some v)) econt
-    end $. fun h retval ->
+        let verify_return_expr w no_cleanups = verify_expr false (pn,ilist) tparams pure leminfo funcmap sizemap tenv ghostenv h env None w (fun h env v ->
+          cont h (Some v) no_cleanups) econt
+        in
+        match dialect, tp, w, leminfo with
+        | Some Cxx, StructType sn, WCxxConstruct (_, _, StructType sn', [Var (var_l, var_name) as var]), RealFuncInfo (_, func_name, _) when sn = sn' -> 
+          let wvar, skip_elision_check =
+            match check_expr_t_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (Some pure) var tp with
+            | WVar (l, _, GlobalName) as wvar -> 
+              wvar, true
+            | WDeref (_, (WVar (_, _, var_scope) as wvar), _) ->
+              let FuncInfo (_, _, _, _, _, _, params, _, _, _, _, _, _, _, _, _) = List.assoc func_name funcmap in
+              let is_param = params |> List.exists (fun (param_name, _) -> param_name = var_name) in
+              wvar, is_param
+          in
+          if skip_elision_check then verify_return_expr w []
+          else
+            (* 
+              Implementation is allowed to omit copy/move construction of a class object if 
+              the function has the same return type as the named object that is being returned. 
+              It does so by constructing the object directly at the call-site.
+              The object must not be a function parameter. 
+              (https://eel.is/c++draft/class.copy.elision#1.1)
+              
+              Verify both options.
+            *)
+            branch
+              (fun () -> verify_return_expr w [])
+              (fun () -> verify_return_expr wvar [var_name])
+        | _ ->
+          verify_return_expr w []
+    end $. fun h retval no_cleanups ->
     begin fun cont ->
       if not pure && unloadable then
         let codeCoef = List.assoc "currentCodeFraction" env in
@@ -2383,7 +2419,9 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     begin fun cont ->
       verify_cont (pn,ilist) blocks_done lblenv tparams boxes true leminfo funcmap predinstmap sizemap tenv ghostenv h env epilog cont (fun _ _ -> assert false) econt
     end $. fun sizemap tenv ghostenv h env ->
-    return_cont h tenv env retval
+      (* Remove no_cleanups from env. We do not want the destructor to be called for these. *)
+      let env = env |> List.filter (fun (n, _) -> not (List.mem n no_cleanups)) in
+      return_cont h tenv env retval
   and
     verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss cont return_cont econt =
     let (decls, ss) =
@@ -2827,8 +2865,15 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         in
         let do_return h env_post =
           consume_asn rules [] h ghostenv env_post post true real_unit @@ fun _ h ghostenv env size_first ->
-          cleanup_heapy_locals (pn, ilist) closeBraceLoc h env heapy_ps varargsLastParam @@ fun h ->
-          check_leaks h env closeBraceLoc "Function leaks heap chunks."
+            (* 
+              Only do the cleanup for locals that are still in env. 
+              Usually all heapy_ps are in env. However, this might not be the case when 
+              verifying copy elision in a return statement: the local that is being returned must not be cleaned
+              and is therefore not part of env to mark this.
+            *)
+            let heapy_ps = heapy_ps |> List.filter (fun (_, n, _, _) -> List.mem_assoc n env_post) in
+            cleanup_heapy_locals (pn, ilist) closeBraceLoc h env heapy_ps varargsLastParam @@ fun h ->
+            check_leaks h env closeBraceLoc "Function leaks heap chunks."
         in
         let return_cont h tenv2 env2 retval =
           match (rt, retval) with
