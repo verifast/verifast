@@ -3,14 +3,14 @@ unsafe fn assert(_b: bool)
 //@ ens true;
 {
     if !_b { //~allow_dead_code
-        assert(_b); //~allow_dead_code // Cause stack overflow
+        assert(_b); //~allow_dead_code
     }
 }
 
 trait Adder {
 
     unsafe fn add(x: i32, y: i32) -> i32
-    //@ req -0x80000000 <= x + y &*& x + y <= 0x7fffffff;
+    //@ req x + y <= 0x7fffffff;
     //@ ens result == x + y;
     {
         Self::add(x, y)
@@ -30,7 +30,7 @@ struct MyAdder;
 impl Adder for MyAdder {
 
     unsafe fn add(x: i32, y: i32) -> i32
-    //@ req -0x80000000 <= x + y &*& x + y <= 0x7fffffff;
+    //@ req -0x80000000 <= x + y &*& x + y <= 0x7fffffff; //~should_fail
     //@ ens result == x + y;
     {
         x + y

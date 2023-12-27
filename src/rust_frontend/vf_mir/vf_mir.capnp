@@ -599,6 +599,7 @@ struct TraitImpl {
 }
 
 struct VfMir {
+    directives @4: List(Annotation);
     # Todo @Nima: We are using an inductive list to encode ADT definitions because the total size of `List`s
     # shoule be determined before initializing them which is not the case for ADT definitions. The standard way to
     # do this is capnp `orphans` which are not supported for Rust plugin at the time.

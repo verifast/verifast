@@ -2824,7 +2824,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       { of_trait; self_ty; items }
     end
 
-  let translate_vf_mir (vf_mir_cpn : VfMirRd.t) =
+  let translate_vf_mir (vf_mir_cpn : VfMirRd.t) (report_should_fail : string -> Ast.loc0 -> unit) =
     let job _ =
       let module HeadersAux = HeadersAux.Make (struct
         include Args
@@ -2832,6 +2832,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         let aux_headers_dir = Filename.dirname Sys.executable_name
         let verbosity = 0
       end) in
+      let directives_cpn = VfMirRd.directives_get_list vf_mir_cpn in
+      let* directives = ListAux.try_map translate_annotation directives_cpn in
+      directives |> List.iter (fun ({ span; raw } : Mir.annot) -> report_should_fail raw (Ast.lexed_loc span));
       let adt_defs_cpn = VfMirRd.adt_defs_get vf_mir_cpn in
       let* adt_defs_cpn = CapnpAux.ind_list_get_list adt_defs_cpn in
       let* adt_defs = ListAux.try_map translate_adt_def adt_defs_cpn in
