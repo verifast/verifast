@@ -90,7 +90,7 @@ impl GhostRange {
     }
 }
 
-pub fn preprocess(input: &str, ghost_ranges: &mut Vec<GhostRange>) -> String {
+pub fn preprocess(input: &str, directives: &mut Vec<GhostRange>, ghost_ranges: &mut Vec<GhostRange>) -> String {
     let mut cs = TextIterator {
         chars: input.chars().peekable(),
         pos: SrcPos {
@@ -188,6 +188,52 @@ pub fn preprocess(input: &str, ghost_ranges: &mut Vec<GhostRange>) -> String {
                                             end,
                                             contents,
                                         });
+                                    }
+                                    Some('~') => {
+                                        cs.next();
+                                        cs.pos.byte_pos -= 3;
+                                        cs.pos.column -= 3;
+                                        let start = cs.pos;
+                                        let in_fn_body = fn_body_brace_depth != -1;
+                                        let mut contents = String::new();
+                                        output.push_str("//~");
+                                        cs.pos.byte_pos += 3;
+                                        cs.pos.column += 3;
+                                        let end;
+                                        loop {
+                                            match cs.peek() {
+                                                Some(c @ ('A'..='Z' | 'a'..='z' | '_')) => {
+                                                    output.push(c);
+
+                                                    contents.push(c);
+                                                    cs.next();
+                                                }
+                                                _ => {
+                                                    end = cs.pos;
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                        directives.push(GhostRange {
+                                            in_fn_body,
+                                            start,
+                                            end,
+                                            contents,
+                                        });
+                                        loop {
+                                            match cs.peek() {
+                                                None => {
+                                                    break;
+                                                }
+                                                Some(c) => {
+                                                    cs.next();
+                                                    output.push(c);
+                                                    if c == '\n' || c == '\r' {
+                                                        break;
+                                                    }
+                                                }
+                                            }
+                                        }
                                     }
                                     _ => {
                                         output.push_str("//");

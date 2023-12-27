@@ -46,7 +46,7 @@ module LocHashtbl = Hashtbl.Make(HashedLoc)
 
 module HashedLine = struct
   type t = string * int
-  let equal (p1, l1) (p2, l2) = p1 == p2 && l1 = l2
+  let equal (p1, l1) (p2, l2) = p1 = p2 && l1 = l2
   let hash (path, line) = line
 end
 module LineHashtbl = Hashtbl.Make(HashedLine)

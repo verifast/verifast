@@ -207,7 +207,7 @@ module Make (Args : RUST_FE_ARGS) = struct
 
   let parse_rs_file (rs_file_path : string) =
     match get_vf_mir_rd rs_file_path with
-    | Ok vf_mir_rd -> VfMirTr.translate_vf_mir vf_mir_rd
+    | Ok vf_mir_rd -> VfMirTr.translate_vf_mir vf_mir_rd Args.report_should_fail
     | Error einfo ->
         let gen_emsg = "Rust frontend failed to generate VF MIR: " in
         let desc =

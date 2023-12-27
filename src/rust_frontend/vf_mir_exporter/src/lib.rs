@@ -71,6 +71,7 @@ pub fn run_compiler() -> i32 {
         // See filesearch::get_or_default_sysroot()
 
         let mut callbacks = CompilerCalls {
+            directives: Vec::new(),
             ghost_ranges: Vec::new(),
         };
         // Call the Rust compiler with our callbacks.
@@ -81,6 +82,7 @@ pub fn run_compiler() -> i32 {
 
 #[derive(Default)]
 struct CompilerCalls {
+    directives: Vec<preprocessor::GhostRange>,
     ghost_ranges: Vec<preprocessor::GhostRange>,
 }
 
@@ -95,7 +97,7 @@ impl rustc_driver::Callbacks for CompilerCalls {
         };
         let contents = std::fs::read_to_string(&path).unwrap();
         let preprocessed_contents =
-            preprocessor::preprocess(contents.as_str(), &mut self.ghost_ranges);
+            preprocessor::preprocess(contents.as_str(), &mut self.directives, &mut self.ghost_ranges);
         config.input = rustc_session::config::Input::Str {
             name: rustc_span::FileName::Real(rustc_span::RealFileName::LocalPath(path)),
             input: preprocessed_contents,
@@ -146,6 +148,7 @@ impl rustc_driver::Callbacks for CompilerCalls {
                 debug!("{:?}", gr.span());
             }
             vf_mir_capnp_builder.add_comments(&mut self.ghost_ranges);
+            vf_mir_capnp_builder.set_directives(std::mem::replace(&mut self.directives, Vec::new()));
             vf_mir_capnp_builder.set_trait_impls(visitor.trait_impls);
             vf_mir_capnp_builder.add_bodies(bodies.as_slice());
             let msg_cpn = vf_mir_capnp_builder.build();
@@ -381,6 +384,7 @@ mod vf_mir_builder {
 
     pub struct VfMirCapnpBuilder<'tcx, 'a> {
         tcx: TyCtxt<'tcx>,
+        directives: Vec<GhostRange>,
         trait_impls: Vec<super::TraitImplInfo>,
         bodies: Vec<&'a mir::Body<'tcx>>,
         annots: LinkedList<GhostRange>,
@@ -390,10 +394,15 @@ mod vf_mir_builder {
         pub fn new(tcx: TyCtxt<'tcx>) -> VfMirCapnpBuilder {
             VfMirCapnpBuilder {
                 tcx,
+                directives: Vec::new(),
                 trait_impls: Vec::new(),
                 bodies: Vec::new(),
                 annots: LinkedList::new(),
             }
+        }
+
+        pub(super) fn set_directives(&mut self, directives: Vec<GhostRange>) {
+            self.directives = directives;
         }
 
         pub fn add_comments(&mut self, annots: &mut Vec<GhostRange>) {
@@ -463,6 +472,13 @@ mod vf_mir_builder {
                 req_adt_defs.extend(enc_ctx.get_req_adts());
             }
 
+            // Encode directives
+            let mut directives_cpn = vf_mir_cpn.reborrow().init_directives(self.directives.len().try_into().unwrap());
+            for (idx, directive) in self.directives.iter().enumerate() {
+                let directive_cpn = directives_cpn.reborrow().get(idx.try_into().unwrap());
+                Self::encode_annotation(self.tcx, directive, directive_cpn);
+            }
+
             // Encode Ghost Declarations
             let ghost_decl_batches = self
                 .annots
@@ -487,7 +503,7 @@ mod vf_mir_builder {
             let mut gh_decl_bs_cpn = vf_mir_cpn.reborrow().init_ghost_decl_batches(len);
             for (idx, gh_decl_b) in ghost_decl_batches.into_iter().enumerate() {
                 let gh_decl_b_cpn = gh_decl_bs_cpn.reborrow().get(idx.try_into().unwrap());
-                Self::encode_annotation(self.tcx, gh_decl_b, gh_decl_b_cpn);
+                Self::encode_annotation(self.tcx, &gh_decl_b, gh_decl_b_cpn);
             }
 
             // Encode Required Definitions
@@ -738,7 +754,7 @@ mod vf_mir_builder {
             let mut ghost_stmts_cpn = body_cpn.init_ghost_stmts(len);
             for (idx, ghost_stmt) in ghost_stmts.into_iter().enumerate() {
                 let ghost_stmt_cpn = ghost_stmts_cpn.reborrow().get(idx.try_into().unwrap());
-                Self::encode_annotation(tcx, ghost_stmt, ghost_stmt_cpn);
+                Self::encode_annotation(tcx, &ghost_stmt, ghost_stmt_cpn);
             }
         }
 
@@ -964,13 +980,13 @@ mod vf_mir_builder {
             let mut annots_cpn = contract_cpn.init_annotations(len);
             for (idx, annot) in contract_annots.into_iter().enumerate() {
                 let annot_cpn = annots_cpn.reborrow().get(idx.try_into().unwrap());
-                Self::encode_annotation(tcx, annot, annot_cpn);
+                Self::encode_annotation(tcx, &annot, annot_cpn);
             }
         }
 
         fn encode_annotation(
             tcx: TyCtxt<'tcx>,
-            annot: GhostRange,
+            annot: &GhostRange,
             mut annot_cpn: annot_cpn::Builder<'_>,
         ) {
             annot_cpn.set_raw(annot.contents());
