@@ -2394,7 +2394,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           if skip_elision_check then verify_return_expr w []
           else
             (* 
-              Implementation is allowed to emit copy/move construction of a class object if 
+              Implementation is allowed to omit copy/move construction of a class object if 
               the function has the same return type as the named object that is being returned. 
               It does so by constructing the object directly at the call-site.
               The object must not be a function parameter. 
@@ -2420,7 +2420,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       verify_cont (pn,ilist) blocks_done lblenv tparams boxes true leminfo funcmap predinstmap sizemap tenv ghostenv h env epilog cont (fun _ _ -> assert false) econt
     end $. fun sizemap tenv ghostenv h env ->
       (* Remove no_cleanups from env. We do not want the destructor to be called for these. *)
-      let env = env |> List.filter (fun (n, _) -> no_cleanups |> List.mem n |> not ) in
+      let env = env |> List.filter (fun (n, _) -> not (List.mem n no_cleanups)) in
       return_cont h tenv env retval
   and
     verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss cont return_cont econt =
