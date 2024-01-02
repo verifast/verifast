@@ -19,7 +19,7 @@ trait Adder {
     }
 
     unsafe fn subtract(x: i32, y: i32) -> i32;
-    //@ req -0x8000000 <= x - y &*& x - y <= 0x7fffffff;
+    //@ req x - y <= 0x7fffffff;
     //@ ens result == x - y;
 
 }
@@ -43,7 +43,7 @@ impl Adder for MyAdder {
     }
 
     unsafe fn subtract(x: i32, y: i32) -> i32
-    //@ req -0x8000000 <= x - y &*& x - y <= 0x7fffffff;
+    //@ req 0x8000000 <= x - y &*& x - y <= 0x7fffffff; //~should_fail
     //@ ens result == x - y;
     {
         x - y

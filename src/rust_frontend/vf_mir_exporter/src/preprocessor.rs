@@ -2,7 +2,7 @@
 pub struct SrcPos {
     pub line: i32,   // 1-based
     pub column: i32, // 1-based
-    byte_pos: u32,   // 0-based
+    pub byte_pos: u32,   // 0-based
 }
 
 impl SrcPos {
@@ -29,7 +29,8 @@ impl<'a> TextIterator<'a> {
         match self.chars.next() {
             None => None,
             Some(c) => {
-                self.pos.byte_pos += 1;
+                let len: u32 = c.len_utf8().try_into().unwrap();
+                self.pos.byte_pos += len;
                 match c {
                     '\r' => {
                         self.last_char_was_cr = true;
@@ -57,9 +58,10 @@ impl<'a> TextIterator<'a> {
 #[derive(Debug)]
 pub struct GhostRange {
     in_fn_body: bool,
-    start: SrcPos,    // position of first character of contents *before preprocessing*
-    end: SrcPos,      // position after last character of contents *before preprocessing*
-    contents: String, // not including the ghost range delimiters (//@, /*@, @*/)
+    pub end_of_preceding_token: SrcPos,
+    start: SrcPos,
+    end: SrcPos,
+    contents: String,
 }
 
 impl GhostRange {
@@ -106,9 +108,14 @@ pub fn preprocess(input: &str, directives: &mut Vec<GhostRange>, ghost_ranges: &
     let mut last_token_was_fn = false;
     let mut next_block_is_fn_body = false;
     let mut fn_body_brace_depth = -1;
+    let mut inside_whitespace = true;
+    let mut start_of_whitespace = cs.pos; // Only meaningful when inside whitespace. Note: comments
+                                          // count as whitespace.
     loop {
         let was_inside_word = inside_word;
         inside_word = false;
+        let was_inside_whitespace = inside_whitespace;
+        inside_whitespace = false;
         let old_last_token_was_fn = last_token_was_fn;
         last_token_was_fn = false;
         match cs.peek() {
@@ -142,6 +149,12 @@ pub fn preprocess(input: &str, directives: &mut Vec<GhostRange>, ghost_ranges: &
                             Some('/') => {
                                 cs.next();
                                 last_token_was_fn = old_last_token_was_fn;
+                                inside_whitespace = true;
+                                if !was_inside_whitespace {
+                                    start_of_whitespace = cs.pos;
+                                    start_of_whitespace.byte_pos -= 2;
+                                    start_of_whitespace.column -= 2;
+                                }
                                 match cs.peek() {
                                     Some('@') => {
                                         cs.next();
@@ -184,6 +197,7 @@ pub fn preprocess(input: &str, directives: &mut Vec<GhostRange>, ghost_ranges: &
                                         }
                                         ghost_ranges.push(GhostRange {
                                             in_fn_body,
+                                            end_of_preceding_token: start_of_whitespace,
                                             start,
                                             end,
                                             contents,
@@ -216,6 +230,7 @@ pub fn preprocess(input: &str, directives: &mut Vec<GhostRange>, ghost_ranges: &
                                         }
                                         directives.push(GhostRange {
                                             in_fn_body,
+                                            end_of_preceding_token: start_of_whitespace,
                                             start,
                                             end,
                                             contents,
@@ -257,8 +272,15 @@ pub fn preprocess(input: &str, directives: &mut Vec<GhostRange>, ghost_ranges: &
                             Some('*') => {
                                 cs.next();
                                 last_token_was_fn = old_last_token_was_fn;
+                                inside_whitespace = true;
+                                if !was_inside_whitespace {
+                                    start_of_whitespace = cs.pos;
+                                    start_of_whitespace.byte_pos -= 2;
+                                    start_of_whitespace.column -= 2;
+                                }
                                 let mut ghost_range = GhostRange {
                                     in_fn_body: false,
+                                    end_of_preceding_token: start_of_whitespace,
                                     start: SrcPos {
                                         line: -1,
                                         column: -1,
@@ -519,6 +541,10 @@ pub fn preprocess(input: &str, directives: &mut Vec<GhostRange>, ghost_ranges: &
                         output.push(c);
                     }
                     c @ (' ' | '\n' | '\r' | '\t') => {
+                        inside_whitespace = true;
+                        if !was_inside_whitespace {
+                            start_of_whitespace = cs.pos;
+                        }
                         cs.next();
                         output.push(c);
                         last_token_was_fn = old_last_token_was_fn;
