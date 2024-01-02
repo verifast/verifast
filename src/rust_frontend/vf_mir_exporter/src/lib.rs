@@ -443,7 +443,66 @@ mod vf_mir_builder {
             }
         }
 
+        fn encode_traits(&mut self, req_adt_defs: &mut Vec<&'tcx ty::AdtDef>, mut vf_mir_cpn: vf_mir_cpn::Builder<'_>) {
+            let mut enc_ctx = EncCtx::new(self.tcx, EncKind::Adt, LinkedList::new());
+            let mut traits_cpn = vf_mir_cpn.reborrow().init_traits();
+            for trait_def_id in self.tcx.all_traits() {
+                if trait_def_id.krate != rustc_hir::def_id::LOCAL_CRATE {
+                    break; // We assume that the local crate's traits come first.
+                }
+                let mut traits_cons_cpn = traits_cpn.init_cons();
+                let mut trait_cpn = traits_cons_cpn.reborrow().init_h();
+                let name = self.tcx.def_path_str(trait_def_id);
+                trait_cpn.set_name(&name);
+                let mut required_fns_cpn = trait_cpn.reborrow().init_required_fns();
+                for item in self.tcx.associated_items(trait_def_id).in_definition_order() {
+                    if item.kind.as_def_kind() == rustc_hir::def::DefKind::AssocFn {
+                        let hir_item = self.tcx.hir().expect_trait_item(item.def_id.expect_local());
+                        match &hir_item.kind {
+                            hir::TraitItemKind::Fn(fn_sig, trait_fn) => {
+                                if let hir::TraitFn::Required(arg_names) = trait_fn {
+                                    let polysig = self.tcx.fn_sig(item.def_id);
+                                    if let Some(sig) = polysig.no_bound_vars() {
+                                        let mut required_fns_cons_cpn = required_fns_cpn.init_cons();
+                                        let mut required_fn_cpn = required_fns_cons_cpn.reborrow().init_h();
+                                        required_fn_cpn.set_name(&item.name.to_string());
+                                        Self::encode_span_data(self.tcx, &hir_item.ident.span.data(), required_fn_cpn.reborrow().init_name_span());
+                                        Self::encode_unsafety(fn_sig.header.unsafety, required_fn_cpn.reborrow().init_unsafety());
+                                        let inputs = sig.inputs();
+                                        let mut inputs_cpn = required_fn_cpn.reborrow().init_inputs(inputs.len().try_into().unwrap());
+                                        for (idx, input) in inputs.iter().enumerate() {
+                                            let input_cpn = inputs_cpn.reborrow().get(idx.try_into().unwrap());
+                                            Self::encode_ty(self.tcx, &mut enc_ctx, input, input_cpn);
+                                        }
+                                        Self::encode_ty(self.tcx, &mut enc_ctx, sig.output(), required_fn_cpn.reborrow().init_output());
+                                        let mut arg_names_cpn = required_fn_cpn.reborrow().init_arg_names(arg_names.len().try_into().unwrap());
+                                        for (idx, arg_name) in arg_names.iter().enumerate() {
+                                            arg_names_cpn.set(idx.try_into().unwrap(), arg_name.as_str());
+                                        }
+                                        let contract: Vec<GhostRange> = self.annots.drain_filter(|annot| annot.end_of_preceding_token.byte_pos == hir_item.span.hi().0).collect();
+                                        let mut contract_cpn = required_fn_cpn.reborrow().init_contract(contract.len().try_into().unwrap());
+                                        for (idx, annot) in contract.iter().enumerate() {
+                                            Self::encode_annotation(self.tcx, annot, contract_cpn.reborrow().get(idx.try_into().unwrap()));
+                                        }
+                                        required_fns_cpn = required_fns_cons_cpn.init_t();
+                                    }
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+                traits_cpn = traits_cons_cpn.init_t();
+            }
+            req_adt_defs.extend(enc_ctx.get_req_adts());
+        }
+
         fn encode_mir(&mut self, mut vf_mir_cpn: vf_mir_cpn::Builder<'_>) {
+            let mut req_adt_defs = Vec::new();
+
+            // Encode traits (consumes annotations)
+            self.encode_traits(&mut req_adt_defs, vf_mir_cpn.reborrow());
+
             let bodies = &self.bodies;
             let len = bodies.len();
             let len = len.try_into().expect(&format!(
@@ -452,7 +511,6 @@ mod vf_mir_builder {
             ));
             let mut bodies_cpn = vf_mir_cpn.reborrow().init_bodies(len);
 
-            let mut req_adt_defs = Vec::new();
             for (idx, body) in bodies.iter().enumerate() {
                 let body_span = body.span.data();
                 let annots = self

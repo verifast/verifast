@@ -2293,6 +2293,49 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let* loc = translate_span_data span_cpn in
     Ok (params, loc)
 
+  let translate_trait_required_fn (trait_name: string) (required_fn_cpn : TraitRd.RequiredFn.t) =
+    let open TraitRd.RequiredFn in
+    let name = name_get required_fn_cpn in
+    let* loc = translate_span_data (name_span_get required_fn_cpn) in
+    let* inputs = inputs_get_list required_fn_cpn |> ListAux.try_map (fun ty_cpn -> translate_ty ty_cpn loc) in
+    let inputs = inputs |> List.map Mir.basic_type_of in
+    let* output = translate_ty (output_get required_fn_cpn) loc in
+    let ret_ty = Mir.basic_type_of output in
+    let arg_names = arg_names_get_list required_fn_cpn in
+    let Some vf_param_decls = Util.zip inputs arg_names in
+    let* unsafe = translate_unsafety (unsafety_get required_fn_cpn) in
+    if not unsafe then raise (Ast.StaticError (loc, "Non-unsafe trait required functions are not yet supported", None));
+    let* annots = ListAux.try_map translate_annotation (contract_get_list required_fn_cpn) in
+    let annots = List.map translate_annot_to_vf_parser_inp annots in
+    let ( (nonghost_callers_only : bool),
+          (fn_type_clause : _ option),
+          (pre_post : _ option),
+          (terminates : bool) ) =
+      VfMirAnnotParser.parse_func_contract annots
+    in
+    let decl =
+      Ast.Func
+        ( loc,
+          Ast.Regular,
+          (*type params*) [],
+          Some ret_ty,
+          Printf.sprintf "%s::%s" trait_name name,
+          vf_param_decls,
+          nonghost_callers_only,
+          fn_type_clause,
+          pre_post,
+          terminates,
+          None,
+          (*virtual*) false,
+          (*overrides*) [] )
+    in
+    Ok decl
+
+  let translate_trait (trait_cpn : TraitRd.t) =
+    let name = TraitRd.name_get trait_cpn in
+    let* required_fns = CapnpAux.ind_list_get_list (TraitRd.required_fns_get trait_cpn) in
+    ListAux.try_map (translate_trait_required_fn name) required_fns
+
   let translate_body (body_tr_defs_ctx : body_tr_defs_ctx) (body_cpn : BodyRd.t)
       =
     let open BodyRd in
@@ -2872,6 +2915,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           (fun po -> check_proof_obligation ghost_decls po)
           adts_proof_obligs
       in
+      let* traits_cpn = CapnpAux.ind_list_get_list (VfMirRd.traits_get vf_mir_cpn) in
+      let* traits_decls = ListAux.try_map translate_trait traits_cpn in
+      let traits_decls = List.flatten traits_decls in
       let bodies_cpn = VfMirRd.bodies_get_list vf_mir_cpn in
       let body_tr_defs_ctx = { adt_defs } in
       let* bodies_tr_res =
@@ -2887,21 +2933,25 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       *)
       let* body_sigs = AstAux.sort_decls_lexically body_sigs in
       let* body_decls = AstAux.sort_decls_lexically body_decls in
+      let traits_and_body_decls = traits_decls @ body_decls in
       let trait_impls = translate_trait_impls (VfMirRd.trait_impls_get_list vf_mir_cpn) in
       let debug_infos = VF0.DbgInfoRustFe debug_infos in
       let decls = AstDecls.decls () in
       let trait_impl_prototypes = trait_impls |> Util.flatmap begin fun { of_trait; self_ty; items } ->
-        items |> Util.flatmap begin fun item ->
+        items |> List.map begin fun item ->
           let trait_fn_name = Printf.sprintf "%s::%s" of_trait item in
           let impl_fn_name = Printf.sprintf "<%s as %s>::%s" self_ty of_trait item in
-          body_decls |> Util.flatmap begin function Ast.Func (lf, Regular, tparams, rt, name, ps, false, None, spec, terminates, body, false, []) when name = trait_fn_name ->
-            [Ast.Func (lf, Regular, tparams, rt, impl_fn_name, ps, false, None, spec, terminates, None, false, [])]
-          | _ -> []
-          end
+          let Some prototype =
+            traits_and_body_decls |> Util.head_flatmap_option begin function Ast.Func (lf, Regular, tparams, rt, name, ps, false, None, spec, terminates, body, false, []) when name = trait_fn_name ->
+              Some (Ast.Func (lf, Regular, tparams, rt, impl_fn_name, ps, false, None, spec, terminates, None, false, []))
+            | _ -> None
+            end
+          in
+          prototype
         end
       end in
       let decls =
-        trait_impl_prototypes @ decls @ adt_defs @ List.flatten aux_decls @ adts_full_bor_content_preds
+        traits_decls @ trait_impl_prototypes @ decls @ adt_defs @ List.flatten aux_decls @ adts_full_bor_content_preds
         @ adts_proof_obligs @ ghost_decls @ body_sigs @ body_decls
       in
       (* Todo @Nima: we should add necessary inclusions during translation *)

@@ -34,6 +34,7 @@ module HirGenericParamKindRd = HirGenericParamRd.GenericParamKind
 
 (* Bodies *)
 module BodyRd = VfMirStub.Reader.Body
+module TraitRd = VfMirStub.Reader.Trait
 module TraitImplRd = VfMirStub.Reader.TraitImpl
 module ContractRd = BodyRd.Contract
 module LocalDeclRd = BodyRd.LocalDecl

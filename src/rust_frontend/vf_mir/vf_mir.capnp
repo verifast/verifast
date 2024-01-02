@@ -592,6 +592,21 @@ struct Body {
     # Todo @Nima: Add Visibility data
 }
 
+struct Trait {
+    struct RequiredFn {
+        name @0: Text;
+        nameSpan @6: SpanData;
+        unsafety @4: Unsafety;
+        inputs @1: List(Ty);
+        output @2: Ty;
+        argNames @3: List(Text);
+        contract @5: List(Annotation);
+    }
+
+    name @0: Text;
+    requiredFns @1: IndList(RequiredFn);
+}
+
 struct TraitImpl {
     ofTrait @0: Text;
     selfTy @1: Text;
@@ -604,6 +619,7 @@ struct VfMir {
     # shoule be determined before initializing them which is not the case for ADT definitions. The standard way to
     # do this is capnp `orphans` which are not supported for Rust plugin at the time.
     adtDefs @0: IndList(Ty.AdtDef);
+    traits @5: IndList(Trait);
     traitImpls @3: List(TraitImpl);
     bodies @1: List(Body);
     ghostDeclBatches @2: List(Annotation);
