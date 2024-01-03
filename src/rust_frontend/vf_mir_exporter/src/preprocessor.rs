@@ -181,7 +181,7 @@ pub fn preprocess(input: &str, directives: &mut Vec<GhostRange>, ghost_ranges: &
                                                 Some(c) => {
                                                     output.push(c);
 
-                                                    if (c == '\r' || c == '\n') {
+                                                    if c == '\r' || c == '\n' {
                                                         end = SrcPos {
                                                             byte_pos: cs.pos.byte_pos - 1,
                                                             ..cs.pos

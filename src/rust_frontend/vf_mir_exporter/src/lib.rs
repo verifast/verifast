@@ -3,6 +3,9 @@
 #![feature(box_patterns)]
 #![feature(split_array)]
 
+#![allow(unused_imports)]
+#![allow(unused_variables)]
+
 /***
  * Todo @Nima:
  * 1- Is it really necessary to register queries? read mir pretty printer.
@@ -152,7 +155,7 @@ impl rustc_driver::Callbacks for CompilerCalls {
             vf_mir_capnp_builder.set_trait_impls(visitor.trait_impls);
             vf_mir_capnp_builder.add_bodies(bodies.as_slice());
             let msg_cpn = vf_mir_capnp_builder.build();
-            capnp::serialize::write_message(&mut ::std::io::stdout(), msg_cpn.borrow_inner());
+            capnp::serialize::write_message(&mut ::std::io::stdout(), msg_cpn.borrow_inner()).unwrap();
         });
         Compilation::Stop
     }
@@ -2001,13 +2004,6 @@ mod mir_utils {
     use rustc_middle::mir;
     use rustc_middle::ty::TyCtxt;
 
-    pub fn mir_def_ids(tcx: TyCtxt<'_>) -> Vec<DefId> {
-        tcx.mir_keys(())
-            .iter()
-            .map(|local_def_id| local_def_id.to_def_id())
-            .collect()
-    }
-
     pub fn mir_body_pretty_string<'tcx>(tcx: TyCtxt<'tcx>, body: &mir::Body<'tcx>) -> String {
         use rustc_middle::mir::pretty::write_mir_fn;
         let mut buf: Vec<u8> = Vec::new();
@@ -2083,48 +2079,8 @@ mod span_utils {
         cspan.data()
     }
 
-    /** BUG @Nima: In the case of BlockComment this calculation is wrong. We cannot calculate the span rightly.
-     * The new line characters have been removed from the lines of the comment and we do not know if they are '\n' or "\r\n".
-     * Moreover, the function that gathers comments removes the common whitespaces before all the lines of a BlockComment.
-     * Thus, it is not possible to calculate the right span for a BlockComment using the rustc_ast::util::comments module.
-     * Possible solutions are either writing a comment utility module ourselves or using macros to annotate Rust code in the way that Prusti does.
-     * See rustc_ast::util::comments::split_block_comment_into_lines.
-     */
-
-    pub fn comment_span(cmt: &Comment) -> SpanData {
-        let len: usize = cmt.lines.iter().map(|line| line.as_bytes().len()).sum();
-        let hi = cmt.pos.0 as usize + len;
-        let hi = BytePos(
-            hi.try_into()
-                .expect("The length of comment cannot fit in a BytePos type"),
-        );
-        SpanData {
-            lo: cmt.pos,
-            hi,
-            //Todo @Nima: Check if the values we assign to below fields are sound
-            ctxt: SyntaxContext::root(),
-            parent: None,
-        }
-    }
 }
 
-mod vf_annot_utils {
-    use rustc_ast::util::comments::Comment;
-
-    pub fn is_vf_annot(cmt: &Comment) -> bool {
-        if let Some(first_line) = cmt.lines.first() {
-            if first_line.starts_with("//@") {
-                return true;
-            } else if first_line.starts_with("/*@") {
-                let last_line = cmt.lines.last().unwrap();
-                if last_line.ends_with("@*/") {
-                    return true;
-                }
-            }
-        }
-        false
-    }
-}
 // Todo @Nima: Some mut vars might not need to be mut.
 // Todo @Nima: The encoding functions need to be turned to method to prevent passing context around
 // Todo @Nima: Change the encode functions that require the EncCtx as a parameter to methods of EncCtx
