@@ -5,6 +5,7 @@
 
 #![allow(unused_imports)]
 #![allow(unused_variables)]
+#![deny(warnings)]
 
 /***
  * Todo @Nima:
