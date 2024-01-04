@@ -30,3 +30,11 @@ mod alloc {
     //@ ens false;
     //@ terminates;
 }
+
+mod process {
+    fn abort();
+    //@ req true;
+    //@ ens false;
+    //@ terminates;
+}
+//Todo @Nima: Edit Rust parser so it substitutes `!` type with std_empty_ union

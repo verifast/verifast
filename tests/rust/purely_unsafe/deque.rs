@@ -1,7 +1,8 @@
 unsafe fn assert(b: bool)
 //@ req b;
 //@ ens true;
-{}
+{
+}
 
 struct Node {
     prev: *mut Node,
@@ -65,7 +66,7 @@ lem Nodes_join_last(n: *Node)
 
 struct Deque {
     sentinel: *mut Node,
-    size: i32
+    size: i32,
 }
 
 /*@
@@ -83,9 +84,8 @@ pred Deque(deque: *Deque; elems: list<i32>) =
 @*/
 
 impl Deque {
-
     unsafe fn new() -> *mut Deque
-    //@ req true;
+//@ req true;
     //@ ens Deque(result, []);
     {
         let deque = std::alloc::alloc(std::alloc::Layout::new::<Deque>()) as *mut Deque;
@@ -106,7 +106,7 @@ impl Deque {
     }
 
     unsafe fn get_size(deque: *mut Deque) -> i32
-    //@ req Deque(deque, ?elems);
+//@ req Deque(deque, ?elems);
     //@ ens Deque(deque, elems) &*& result == length(elems);
     {
         return (*deque).size;
@@ -168,7 +168,7 @@ impl Deque {
     }
 
     unsafe fn pop_front(deque: *mut Deque) -> i32
-    //@ req Deque(deque, cons(?elem, ?elems));
+//@ req Deque(deque, cons(?elem, ?elems));
     //@ ens Deque(deque, elems) &*& result == elem;
     {
         let node = (*(*deque).sentinel).next;
@@ -184,7 +184,7 @@ impl Deque {
     }
 
     unsafe fn pop_back(deque: *mut Deque) -> i32
-    //@ req Deque(deque, ?elems) &*& 1 <= length(elems);
+//@ req Deque(deque, ?elems) &*& 1 <= length(elems);
     //@ ens Deque(deque, take(length(elems) - 1, elems)) &*& result == nth(length(elems) - 1, elems);
     {
         //@ let sentinel = (*deque ) . sentinel;
@@ -193,14 +193,14 @@ impl Deque {
         let node = (*(*deque).sentinel).prev;
         let result = (*node).value;
         /*@
-       if 2 <= length(elems) {
-            Nodes_split_last(first);
-            append_take_drop_n(take(length(elems) - 1, elems), length(elems) - 2);
-            drop_n_plus_one(length(elems) - 2, take(length(elems) - 1, elems));
-        } else {
-            open Nodes(first, sentinel, ?last1, ?last, _);
-        }
-        @*/
+        if 2 <= length(elems) {
+             Nodes_split_last(first);
+             append_take_drop_n(take(length(elems) - 1, elems), length(elems) - 2);
+             drop_n_plus_one(length(elems) - 2, take(length(elems) - 1, elems));
+         } else {
+             open Nodes(first, sentinel, ?last1, ?last, _);
+         }
+         @*/
         (*(*node).prev).next = (*node).next;
         (*(*node).next).prev = (*node).prev;
         //@ open_struct(node);
@@ -219,12 +219,26 @@ impl Deque {
     //@ ens true;
     {
         //@ open_struct((*deque ) . sentinel);
-        std::alloc::dealloc((*deque).sentinel as *mut u8, std::alloc::Layout::new::<Node>());
+        std::alloc::dealloc(
+            (*deque).sentinel as *mut u8,
+            std::alloc::Layout::new::<Node>(),
+        );
         //@ open_struct(deque);
         std::alloc::dealloc(deque as *mut u8, std::alloc::Layout::new::<Deque>());
         //@ open Nodes(_, _, _, _, _);
     }
 
+    unsafe fn swap(d: *mut Deque, d1: *mut Deque)
+    //@ req Deque(d, ?elems) &*& Deque(d1, ?elems1);
+    //@ ens Deque(d, elems1) &*& Deque(d1, elems);
+    {
+        let temp_sen = (*d).sentinel;
+        let temp_sz = (*d).size;
+        (*d).sentinel = (*d1).sentinel;
+        (*d).size = (*d1).size;
+        (*d1).sentinel = temp_sen;
+        (*d1).size = temp_sz;
+    }
 }
 
 fn main() {
