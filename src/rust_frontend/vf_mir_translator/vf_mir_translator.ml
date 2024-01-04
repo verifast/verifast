@@ -480,10 +480,12 @@ module Mir = struct
 end
 
 module TrTyTuple = struct
+  let tuple0_name = "std_tuple_0_"
+
   let make_tuple_type_name tys =
     if List.length tys != 0 then
       failwith "Todo: Tuple Ty is not implemented yet"
-    else "std_tuple_0_"
+    else tuple0_name
 
   let make_tuple_type_decl name tys loc =
     if List.length tys != 0 then
@@ -978,7 +980,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | Type ty_cpn ->
         let* ty_info = translate_ty ty_cpn loc in
         Ok (Mir.GenArgType ty_info)
-    | Const -> failwith "Todo: Generic arg. constant is not supported yet"
+    | Const _ -> Ok Mir.GenArgConst
     | Undefined _ -> Error (`TrGenArg "Unknown generic arg. kind")
 
   and translate_fn_def_ty (fn_def_ty_cpn : FnDefTyRd.t) (loc : Ast.loc) =
@@ -1294,11 +1296,35 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       | FnDef -> failwith "Todo: Scalar::FnDef"
       | Undefined _ -> Error (`TrScalar "Unknown Scalar kind")
 
-    let translate_const_value (cv_cpn : ConstValueRd.t) (ty : Ast.type_expr)
+      let translate_unit_constant (loc : Ast.loc) =
+        let rvalue_binder_builder tmp_var_name =
+          Ast.DeclStmt
+            ( loc,
+              [
+                ( loc,
+                  Some (Ast.ManifestTypeExpr (loc, Ast.StructType TrTyTuple.tuple0_name)),
+                  tmp_var_name,
+                  Some (Ast.InitializerList (loc, [])),
+                  ( (*indicates whether address is taken*) ref false,
+                    (*pointer to enclosing block's list of variables whose address is taken*)
+                    ref None ) );
+              ] )
+        in
+        Ok (`TrTypedConstantRvalueBinderBuilder rvalue_binder_builder)
+  
+      let translate_const_value (cv_cpn : ConstValueRd.t) (ty : Ast.type_expr)
         (loc : Ast.loc) =
       let open ConstValueRd in
       match get cv_cpn with
-      | Scalar scalar_cpn -> translate_scalar scalar_cpn ty loc
+      | Scalar scalar_cpn ->
+        let* expr = translate_scalar scalar_cpn ty loc in
+        Ok (`TrTypedConstantScalar expr)
+      | ZeroSized ->
+        begin match ty with
+          Ast.ManifestTypeExpr (_, Ast.StructType sn) when sn = TrTyTuple.tuple0_name ->
+          translate_unit_constant loc
+        | _ -> failwith "Todo: ConstValue::ZeroSized"
+        end
       | Slice -> failwith "Todo: ConstValue::Slice"
       | Undefined _ -> Error (`TrConstValue "Unknown ConstValue")
 
@@ -1327,41 +1353,40 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               ("Todo: Constants of type struct " ^ st_name
              ^ " are not supported yet")
           else
-            let rvalue_binder_builder tmp_var_name =
-              Ast.DeclStmt
-                ( loc,
-                  [
-                    ( loc,
-                      Some ty_expr,
-                      tmp_var_name,
-                      Some (Ast.InitializerList (loc, [])),
-                      ( (*indicates whether address is taken*) ref false,
-                        (*pointer to enclosing block's list of variables whose address is taken*)
-                        ref None ) );
-                  ] )
-            in
-            Ok (`TrTypedConstantRvalueBinderBuilder rvalue_binder_builder)
+            translate_unit_constant loc
       | Ast.FuncType _ -> Ok (`TrTypedConstantFn ty_info)
       | Ast.Int (_, _) | Ast.Bool ->
-          let val_cpn = val_get ty_const_cpn in
-          let* const_expr = translate_ty_const_kind val_cpn ty_expr loc in
-          Ok (`TrTypedConstantScalar const_expr)
+          let kind_cpn = kind_get ty_const_cpn in
+          translate_ty_const_kind kind_cpn ty_expr loc
       | _ -> failwith "Todo: Constant of unsupported type"
 
-    let translate_constant_kind (constant_kind_cpn : ConstantKindRd.t)
+    let translate_const (constant_kind_cpn : ConstRd.t)
         (loc : Ast.loc) =
-      let open ConstantKindRd in
+      let open ConstRd in
       match get constant_kind_cpn with
       | Ty ty_const_cpn -> translate_typed_constant ty_const_cpn loc
-      | Val -> failwith "Todo: ConstantKind::Val"
+      | Val val_cpn ->
+        let open ConstRd.Val in
+        let* ty_info = translate_ty (ty_get val_cpn) loc in
+        let ty_expr = Mir.raw_type_of ty_info in
+        let ty =
+          match ty_expr with
+          | Ast.ManifestTypeExpr ((*loc*) _, ty) -> ty
+          | _ -> failwith "Todo: Unsupported type_expr"
+        in
+        begin match ty with
+        | Ast.FuncType _ -> Ok (`TrTypedConstantFn ty_info)
+        | _ ->
+          translate_const_value (const_value_get val_cpn) ty_expr loc
+        end
       | Undefined _ -> Error (`TrConstantKind "Unknown ConstantKind")
 
-    let translate_constant (constant_cpn : ConstantRd.t) =
-      let open ConstantRd in
+    let translate_const_operand (constant_cpn : ConstOperandRd.t) =
+      let open ConstOperandRd in
       let span_cpn = span_get constant_cpn in
       let* loc = translate_span_data span_cpn in
-      let literal_cpn = literal_get constant_cpn in
-      translate_constant_kind literal_cpn loc
+      let const_cpn = const_get constant_cpn in
+      translate_const const_cpn loc
 
     let translate_operand (operand_cpn : OperandRd.t) (loc : Ast.loc) =
       let open OperandRd in
@@ -1376,7 +1401,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       | Move place_cpn ->
           let* place = translate_place place_cpn loc in
           Ok (`TrOperandMove place)
-      | Constant constant_cpn -> translate_constant constant_cpn
+      | Constant constant_cpn -> translate_const_operand constant_cpn
       | Undefined _ -> Error (`TrOperand "Unknown Mir Operand kind")
 
     let translate_operands (oprs : (OperandRd.t * Ast.loc) list) =
@@ -1446,7 +1471,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                       "Invalid number of arguments for std::alloc::Layout::new")
                 else
                   match substs with
-                  | [ Mir.GenArgType ty_info ] ->
+                  | [ Mir.GenArgType ty_info; Mir.GenArgConst ] ->
                       let ty_expr = Mir.basic_type_of ty_info in
                       Ok
                         ( (*tmp_rvalue_binders*) [],
@@ -1458,7 +1483,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                            std::alloc::Layout::new"))
             | "std::ptr::mut_ptr::<impl *mut T>::is_null" -> (
                 match (substs, args_cpn) with
-                | [ Mir.GenArgType gen_arg_ty_info ], [ arg_cpn ] ->
+                | [ Mir.GenArgType gen_arg_ty_info; Mir.GenArgConst ], [ arg_cpn ] ->
                     let* tmp_rvalue_binders, [ arg ] =
                       translate_operands [ (arg_cpn, fn_loc) ]
                     in
@@ -1484,7 +1509,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             | "std::ptr::const_ptr::<impl *const T>::offset"
             | "std::ptr::mut_ptr::<impl *mut T>::offset" -> (
                 match (substs, args_cpn) with
-                | [ Mir.GenArgType gen_arg_ty_info ], [ arg1_cpn; arg2_cpn ] ->
+                | [ Mir.GenArgType gen_arg_ty_info; Mir.GenArgConst ], [ arg1_cpn; arg2_cpn ] ->
                     let* tmp_rvalue_binders, [ arg1; arg2 ] =
                       translate_operands
                         [ (arg1_cpn, fn_loc); (arg2_cpn, fn_loc) ]
@@ -1813,7 +1838,6 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           Ok (`TrRvalueExpr expr)
       | Cast cast_data_cpn -> (
           let open CastData in
-          let cast_kind_cpn = cast_kind_get cast_data_cpn in
           let operand_cpn = operand_get cast_data_cpn in
           let* operand = translate_operand operand_cpn loc in
           let ty_cpn = ty_get cast_data_cpn in

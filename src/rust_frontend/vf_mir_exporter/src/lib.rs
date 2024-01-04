@@ -1,5 +1,5 @@
 #![feature(rustc_private)]
-#![feature(drain_filter)]
+#![feature(extract_if)]
 #![feature(box_patterns)]
 #![feature(split_array)]
 
@@ -46,12 +46,9 @@ mod preprocessor;
 use rustc_borrowck::consumers::BodyWithBorrowckFacts;
 use rustc_driver::Compilation;
 use rustc_hir::def_id::LocalDefId;
-use rustc_hir::itemlikevisit::ItemLikeVisitor;
 use rustc_interface::interface::Compiler;
 use rustc_interface::{Config, Queries};
 use rustc_middle::mir;
-use rustc_middle::ty::query::query_values::mir_borrowck;
-use rustc_middle::ty::query::{ExternProviders, Providers};
 use rustc_middle::ty::{self, TyCtxt};
 use rustc_session::Session;
 use std::cell::RefCell;
@@ -69,7 +66,7 @@ pub fn run_compiler() -> i32 {
         // We must pass -Zpolonius so that the borrowck information is computed.
         rustc_args.push("-Zpolonius".to_owned());
         // To have MIR dump annotated with lifetimes
-        rustc_args.push("-Zverbose".to_owned());
+        //rustc_args.push("-Zverbose".to_owned()); // This option is no longer supported.
 
         // Todo @Nima: Find the correct sysroot by yourself. for now we get it as an argument.
         // See filesearch::get_or_default_sysroot()
@@ -117,8 +114,8 @@ impl rustc_driver::Callbacks for CompilerCalls {
         compiler: &Compiler,
         queries: &'tcx Queries<'tcx>,
     ) -> Compilation {
-        compiler.session().abort_if_errors();
-        queries.global_ctxt().unwrap().peek_mut().enter(|tcx| {
+        compiler.sess.parse_sess.dcx.abort_if_errors();
+        queries.global_ctxt().unwrap().enter(|tcx| {
             /*** Collecting Annotations */
             // TODO: Get comments from preprocessor
 
@@ -127,7 +124,7 @@ impl rustc_driver::Callbacks for CompilerCalls {
             // Collect definition ids of bodies.
             let hir = tcx.hir();
             let mut visitor = HirVisitor { trait_impls: Vec::new(), bodies: Vec::new() };
-            hir.visit_all_item_likes(&mut visitor);
+            hir.visit_all_item_likes_in_crate(&mut visitor);
 
             // Trigger borrow checking of all bodies.
             for def_id in visitor.bodies {
@@ -140,7 +137,7 @@ impl rustc_driver::Callbacks for CompilerCalls {
             let bodies: Vec<_> = bodies_and_facts
                 .iter()
                 .map(|(def_path, body)| {
-                    assert!(body.input_facts.cfg_edge.len() > 0);
+                    assert!(body.input_facts.as_ref().unwrap().cfg_edge.len() > 0);
                     debug!("We have body for {}", def_path);
                     &body.body
                 })
@@ -162,8 +159,8 @@ impl rustc_driver::Callbacks for CompilerCalls {
     }
 }
 
-fn override_queries(_session: &Session, local: &mut Providers, _external: &mut ExternProviders) {
-    local.mir_borrowck = mir_borrowck;
+fn override_queries(_session: &Session, local: &mut rustc_middle::util::Providers) {
+    local.queries.mir_borrowck = mir_borrowck;
 }
 
 // Since mir_borrowck does not have access to any other state, we need to use a
@@ -178,10 +175,11 @@ thread_local! {
         RefCell::new(HashMap::new());
 }
 
-fn mir_borrowck<'tcx>(tcx: TyCtxt<'tcx>, def_id: LocalDefId) -> mir_borrowck<'tcx> {
+fn mir_borrowck<'tcx>(tcx: TyCtxt<'tcx>, def_id: LocalDefId) -> rustc_middle::query::queries::mir_borrowck::ProvidedValue<'tcx> {
     let body_with_facts = rustc_borrowck::consumers::get_body_with_borrowck_facts(
         tcx,
-        ty::WithOptConstParam::unknown(def_id),
+        def_id,
+        rustc_borrowck::consumers::ConsumerOptions::PoloniusOutputFacts
     );
     // SAFETY: The reader casts the 'static lifetime to 'tcx before using it.
     let body_with_facts: BodyWithBorrowckFacts<'static> =
@@ -190,7 +188,7 @@ fn mir_borrowck<'tcx>(tcx: TyCtxt<'tcx>, def_id: LocalDefId) -> mir_borrowck<'tc
         let mut map = state.borrow_mut();
         assert!(map.insert(def_id, body_with_facts).is_none());
     });
-    let mut providers = Providers::default();
+    let mut providers = rustc_middle::util::Providers::default();
     rustc_borrowck::provide(&mut providers);
     let original_mir_borrowck = providers.mir_borrowck;
     original_mir_borrowck(tcx, def_id)
@@ -208,10 +206,10 @@ struct HirVisitor {
     bodies: Vec<LocalDefId>,
 }
 
-impl<'tcx> ItemLikeVisitor<'tcx> for HirVisitor {
+impl<'tcx> rustc_hir::intravisit::Visitor<'tcx> for HirVisitor {
     fn visit_item(&mut self, item: &rustc_hir::Item) {
         match &item.kind {
-            rustc_hir::ItemKind::Fn(..) => self.bodies.push(item.def_id),
+            rustc_hir::ItemKind::Fn(..) => self.bodies.push(item.owner_id.def_id),
             // We cannot send DefId of a struct to optimize_mir query
             rustc_hir::ItemKind::Struct(..) => (),
             rustc_hir::ItemKind::Impl(impl_) => {
@@ -236,14 +234,14 @@ impl<'tcx> ItemLikeVisitor<'tcx> for HirVisitor {
     fn visit_trait_item(&mut self, trait_item: &rustc_hir::TraitItem) {
         if let rustc_hir::TraitItemKind::Fn(_, trait_fn) = &trait_item.kind {
             if let rustc_hir::TraitFn::Provided(_) = trait_fn {
-                self.bodies.push(trait_item.def_id);
+                self.bodies.push(trait_item.owner_id.def_id);
             }
         }
     }
 
     fn visit_impl_item(&mut self, impl_item: &rustc_hir::ImplItem) {
         if let rustc_hir::ImplItemKind::Fn(..) = impl_item.kind {
-            self.bodies.push(impl_item.def_id);
+            self.bodies.push(impl_item.owner_id.def_id);
         }
     }
 
@@ -255,12 +253,13 @@ fn get_bodies<'tcx>(tcx: TyCtxt<'tcx>) -> Vec<(String, BodyWithBorrowckFacts<'tc
     MIR_BODIES.with(|state| {
         let mut map = state.borrow_mut();
         map.drain()
-            .map(|(def_id, body)| {
+            .map(|(def_id, body): (LocalDefId, BodyWithBorrowckFacts<'static>)| {
                 let def_path = tcx.def_path(def_id.to_def_id());
                 // SAFETY: For soundness we need to ensure that the bodies have
                 // the same lifetime (`'tcx`), which they had before they were
                 // stored in the thread local.
-                (def_path.to_string_no_crate_verbose(), body)
+                let body_tcx: BodyWithBorrowckFacts<'tcx> = unsafe { std::mem::transmute(body) };
+                (def_path.to_string_no_crate_verbose(), body_tcx)
             })
             .collect()
     })
@@ -290,7 +289,7 @@ mod vf_mir_builder {
     use body_cpn::basic_block as basic_block_cpn;
     use body_cpn::basic_block_id as basic_block_id_cpn;
     use body_cpn::const_value as const_value_cpn;
-    use body_cpn::constant as constant_cpn;
+    use body_cpn::const_operand as const_operand_cpn;
     use body_cpn::contract as contract_cpn;
     use body_cpn::local_decl as local_decl_cpn;
     use body_cpn::local_decl_id as local_decl_id_cpn;
@@ -298,7 +297,7 @@ mod vf_mir_builder {
     use body_cpn::scalar as scalar_cpn;
     use body_cpn::source_info as source_info_cpn;
     use body_cpn::var_debug_info as var_debug_info_cpn;
-    use constant_cpn::constant_kind as constant_kind_cpn;
+    use body_cpn::const_operand::const_ as const_cpn;
     use file_name_cpn::real_file_name as real_file_name_cpn;
     use hir_cpn::generics as hir_generics_cpn;
     use hir_generic_param_cpn::generic_param_kind as hir_generic_param_kind_cpn;
@@ -317,7 +316,6 @@ mod vf_mir_builder {
     use rvalue_cpn::aggregate_data::aggregate_kind as aggregate_kind_cpn;
     use rvalue_cpn::binary_op_data as binary_op_data_cpn;
     use rvalue_cpn::unary_op_data as unary_op_data_cpn;
-    use rvalue_cpn::cast_data::cast_kind as cast_kind_cpn;
     use rvalue_cpn::ref_data as ref_data_cpn;
     use source_file_cpn::file_name as file_name_cpn;
     use span_data_cpn::loc as loc_cpn;
@@ -350,7 +348,7 @@ mod vf_mir_builder {
         Adt,
     }
     struct EncCtx<'tcx, 'a> {
-        req_adts: Vec<&'tcx ty::AdtDef>,
+        req_adts: Vec<&'tcx ty::AdtDef<'tcx>>,
         tcx: TyCtxt<'tcx>,
         mode: EncKind<'tcx, 'a>,
         annots: LinkedList<GhostRange>,
@@ -369,13 +367,13 @@ mod vf_mir_builder {
                 annots,
             }
         }
-        pub fn add_req_adt(&mut self, adt: &'tcx ty::AdtDef) {
+        pub fn add_req_adt(&mut self, adt: &'tcx ty::AdtDef<'tcx>) {
             /* Todo @Nima: It is necessary to encode the dependency between the required definitions.
                 Because the order of definitions will matter in most of the analyzers.
             */
             self.req_adts.push(adt);
         }
-        pub fn get_req_adts(&self) -> &Vec<&'tcx ty::AdtDef> {
+        pub fn get_req_adts(&self) -> &Vec<&'tcx ty::AdtDef<'tcx>> {
             &self.req_adts
         }
         pub fn body(&self) -> &'a mir::Body<'tcx> {
@@ -412,7 +410,7 @@ mod vf_mir_builder {
         pub fn add_comments(&mut self, annots: &mut Vec<GhostRange>) {
             self.annots.extend(
                 annots
-                    .drain_filter(|annot| !annot.is_dummy())
+                    .extract_if(|annot| !annot.is_dummy())
                     .collect::<LinkedList<_>>(),
             );
         }
@@ -447,7 +445,7 @@ mod vf_mir_builder {
             }
         }
 
-        fn encode_traits(&mut self, req_adt_defs: &mut Vec<&'tcx ty::AdtDef>, mut vf_mir_cpn: vf_mir_cpn::Builder<'_>) {
+        fn encode_traits(&mut self, req_adt_defs: &mut Vec<&'tcx ty::AdtDef<'tcx>>, mut vf_mir_cpn: vf_mir_cpn::Builder<'_>) {
             let mut enc_ctx = EncCtx::new(self.tcx, EncKind::Adt, LinkedList::new());
             let mut traits_cpn = vf_mir_cpn.reborrow().init_traits();
             for trait_def_id in self.tcx.all_traits() {
@@ -466,29 +464,31 @@ mod vf_mir_builder {
                             hir::TraitItemKind::Fn(fn_sig, trait_fn) => {
                                 if let hir::TraitFn::Required(arg_names) = trait_fn {
                                     let polysig = self.tcx.fn_sig(item.def_id);
-                                    if let Some(sig) = polysig.no_bound_vars() {
-                                        let mut required_fns_cons_cpn = required_fns_cpn.init_cons();
-                                        let mut required_fn_cpn = required_fns_cons_cpn.reborrow().init_h();
-                                        required_fn_cpn.set_name(&item.name.to_string());
-                                        Self::encode_span_data(self.tcx, &hir_item.ident.span.data(), required_fn_cpn.reborrow().init_name_span());
-                                        Self::encode_unsafety(fn_sig.header.unsafety, required_fn_cpn.reborrow().init_unsafety());
-                                        let inputs = sig.inputs();
-                                        let mut inputs_cpn = required_fn_cpn.reborrow().init_inputs(inputs.len().try_into().unwrap());
-                                        for (idx, input) in inputs.iter().enumerate() {
-                                            let input_cpn = inputs_cpn.reborrow().get(idx.try_into().unwrap());
-                                            Self::encode_ty(self.tcx, &mut enc_ctx, input, input_cpn);
+                                    if let Some(sig0) = polysig.no_bound_vars() {
+                                        if let Some(sig) = sig0.no_bound_vars() {
+                                            let mut required_fns_cons_cpn = required_fns_cpn.init_cons();
+                                            let mut required_fn_cpn = required_fns_cons_cpn.reborrow().init_h();
+                                            required_fn_cpn.set_name(&item.name.to_string());
+                                            Self::encode_span_data(self.tcx, &hir_item.ident.span.data(), required_fn_cpn.reborrow().init_name_span());
+                                            Self::encode_unsafety(fn_sig.header.unsafety, required_fn_cpn.reborrow().init_unsafety());
+                                            let inputs = sig.inputs();
+                                            let mut inputs_cpn = required_fn_cpn.reborrow().init_inputs(inputs.len().try_into().unwrap());
+                                            for (idx, input) in inputs.iter().enumerate() {
+                                                let input_cpn = inputs_cpn.reborrow().get(idx.try_into().unwrap());
+                                                Self::encode_ty(self.tcx, &mut enc_ctx, *input, input_cpn);
+                                            }
+                                            Self::encode_ty(self.tcx, &mut enc_ctx, sig.output(), required_fn_cpn.reborrow().init_output());
+                                            let mut arg_names_cpn = required_fn_cpn.reborrow().init_arg_names(arg_names.len().try_into().unwrap());
+                                            for (idx, arg_name) in arg_names.iter().enumerate() {
+                                                arg_names_cpn.set(idx.try_into().unwrap(), arg_name.as_str());
+                                            }
+                                            let contract: Vec<GhostRange> = self.annots.extract_if(|annot| annot.end_of_preceding_token.byte_pos == hir_item.span.hi().0).collect();
+                                            let mut contract_cpn = required_fn_cpn.reborrow().init_contract(contract.len().try_into().unwrap());
+                                            for (idx, annot) in contract.iter().enumerate() {
+                                                Self::encode_annotation(self.tcx, annot, contract_cpn.reborrow().get(idx.try_into().unwrap()));
+                                            }
+                                            required_fns_cpn = required_fns_cons_cpn.init_t();
                                         }
-                                        Self::encode_ty(self.tcx, &mut enc_ctx, sig.output(), required_fn_cpn.reborrow().init_output());
-                                        let mut arg_names_cpn = required_fn_cpn.reborrow().init_arg_names(arg_names.len().try_into().unwrap());
-                                        for (idx, arg_name) in arg_names.iter().enumerate() {
-                                            arg_names_cpn.set(idx.try_into().unwrap(), arg_name.as_str());
-                                        }
-                                        let contract: Vec<GhostRange> = self.annots.drain_filter(|annot| annot.end_of_preceding_token.byte_pos == hir_item.span.hi().0).collect();
-                                        let mut contract_cpn = required_fn_cpn.reborrow().init_contract(contract.len().try_into().unwrap());
-                                        for (idx, annot) in contract.iter().enumerate() {
-                                            Self::encode_annotation(self.tcx, annot, contract_cpn.reborrow().get(idx.try_into().unwrap()));
-                                        }
-                                        required_fns_cpn = required_fns_cons_cpn.init_t();
                                     }
                                 }
                             }
@@ -519,7 +519,7 @@ mod vf_mir_builder {
                 let body_span = body.span.data();
                 let annots = self
                     .annots
-                    .drain_filter(|annot| {
+                    .extract_if(|annot| {
                         body_span.contains(
                             annot
                                 .span()
@@ -544,7 +544,7 @@ mod vf_mir_builder {
             // Encode Ghost Declarations
             let ghost_decl_batches = self
                 .annots
-                .drain_filter(|annot| {
+                .extract_if(|annot| {
                     let annot_span = annot
                         .span()
                         .expect("Dummy annotation found during serialization");
@@ -612,26 +612,26 @@ mod vf_mir_builder {
         ) {
             debug!("Encoding ADT definition {:?}", adt_def);
             let id_cpn = adt_def_cpn.reborrow().init_id();
-            Self::encode_adt_def_id(enc_ctx, adt_def.did, id_cpn);
-            let len = adt_def.variants.len();
+            Self::encode_adt_def_id(enc_ctx, adt_def.did(), id_cpn);
+            let len = adt_def.variants().len();
             let len = len.try_into().expect(&format!(
                 "{} Variants cannot be stored in a Capnp message",
                 len
             ));
             let mut variants_cpn = adt_def_cpn.reborrow().init_variants(len);
-            for (idx, variant) in adt_def.variants.iter_enumerated() {
+            for (idx, variant) in adt_def.variants().iter_enumerated() {
                 let variant_cpn = variants_cpn.reborrow().get(idx.try_into().unwrap());
                 Self::encode_variant_def(tcx, enc_ctx, variant, variant_cpn);
             }
             let kind_cpn = adt_def_cpn.reborrow().init_kind();
             Self::encode_adt_kind(adt_def.adt_kind(), kind_cpn);
             let span_cpn = adt_def_cpn.reborrow().init_span();
-            let span = tcx.def_span(adt_def.did);
+            let span = tcx.def_span(adt_def.did());
             Self::encode_span_data(tcx, &span.data(), span_cpn);
             let vis_cpn = adt_def_cpn.reborrow().init_vis();
-            let vis = tcx.visibility(adt_def.did);
+            let vis = tcx.visibility(adt_def.did());
             Self::encode_visibility(vis, vis_cpn);
-            let is_local = adt_def.did.is_local();
+            let is_local = adt_def.did().is_local();
             adt_def_cpn.set_is_local(is_local);
             debug!(
                 "Adt def {:?} Visibility:{:?} Local:{}",
@@ -675,8 +675,8 @@ mod vf_mir_builder {
             let name_cpn = fdef_cpn.reborrow().init_name();
             Self::encode_symbol(&fdef.name, name_cpn);
             let ty_cpn = fdef_cpn.reborrow().init_ty();
-            let ty = tcx.type_of(fdef.did);
-            Self::encode_ty(tcx, enc_ctx, &ty, ty_cpn);
+            let ty = tcx.type_of(fdef.did).no_bound_vars().unwrap();
+            Self::encode_ty(tcx, enc_ctx, ty, ty_cpn);
             let vis_cpn = fdef_cpn.reborrow().init_vis();
             Self::encode_visibility(fdef.vis, vis_cpn);
             let span_cpn = fdef_cpn.init_span();
@@ -684,11 +684,10 @@ mod vf_mir_builder {
             Self::encode_span_data(tcx, &span.data(), span_cpn);
         }
 
-        fn encode_visibility(vis: ty::Visibility, mut vis_cpn: visibility_cpn::Builder<'_>) {
+        fn encode_visibility(vis: ty::Visibility<rustc_hir::def_id::DefId>, mut vis_cpn: visibility_cpn::Builder<'_>) {
             match vis {
                 ty::Visibility::Public => vis_cpn.set_public(()),
                 ty::Visibility::Restricted(_did) => vis_cpn.set_restricted(()),
-                ty::Visibility::Invisible => vis_cpn.set_invisible(()),
             }
         }
 
@@ -718,7 +717,7 @@ mod vf_mir_builder {
             body_cpn.set_def_path(&def_path);
 
             Self::encode_unsafety(
-                tcx.fn_sig(def_id).unsafety(),
+                tcx.fn_sig(def_id).skip_binder().unsafety(),
                 body_cpn.reborrow().init_unsafety(),
             );
 
@@ -733,7 +732,7 @@ mod vf_mir_builder {
             let body_contract_span = crate::span_utils::body_contract_span(tcx, body);
             let contract_annots = enc_ctx
                 .annots
-                .drain_filter(|annot| {
+                .extract_if(|annot| {
                     body_contract_span.contains(annot.span().expect("Dummy span").data())
                 })
                 .collect::<LinkedList<_>>();
@@ -763,7 +762,7 @@ mod vf_mir_builder {
                 Self::encode_local_decl(tcx, enc_ctx, local_decl_idx, local_decl, local_decl_cpn);
             }
 
-            let basic_blocks = body.basic_blocks();
+            let basic_blocks = &body.basic_blocks;
             let basic_block_count = basic_blocks.len().try_into().expect(&format!(
                 "The number of basic blocks of {} cannot be stored in a Capnp message",
                 def_path
@@ -799,7 +798,7 @@ mod vf_mir_builder {
 
             let ghost_stmts = enc_ctx
                 .annots
-                .drain_filter(|annot| {
+                .extract_if(|annot| {
                     imp_span_data.contains(annot.span().expect("Dummy ghost range").data())
                 })
                 .collect::<LinkedList<_>>();
@@ -853,7 +852,7 @@ mod vf_mir_builder {
             mut p_cpn: hir_generic_param_cpn::Builder<'_>,
         ) {
             let name_cpn = p_cpn.reborrow().init_name();
-            Self::encode_hir_generic_param_name(enc_ctx, &p.name, name_cpn);
+            Self::encode_hir_generic_param_name(enc_ctx, p.def_id,&p.name, name_cpn);
             let span_cpn = p_cpn.reborrow().init_span();
             Self::encode_span_data(enc_ctx.tcx, &p.span.data(), span_cpn);
             p_cpn.set_pure_wrt_drop(p.pure_wrt_drop);
@@ -874,6 +873,7 @@ mod vf_mir_builder {
 
         fn encode_hir_generic_param_name(
             enc_ctx: &mut EncCtx<'tcx, 'a>,
+            def_id: rustc_span::def_id::LocalDefId,
             n: &hir::ParamName,
             n_cpn: hir_generic_param_name_cpn::Builder<'_>,
         ) {
@@ -882,9 +882,9 @@ mod vf_mir_builder {
                     let ident_cpn = n_cpn.init_plain();
                     Self::encode_ident(enc_ctx, ident, ident_cpn);
                 }
-                hir::ParamName::Fresh(id) => {
+                hir::ParamName::Fresh => {
                     let id_cpn = n_cpn.init_fresh();
-                    capnp_utils::encode_u_int128((*id).try_into().unwrap(), id_cpn);
+                    capnp_utils::encode_u_int128(def_id.local_def_index.as_usize().try_into().unwrap(), id_cpn);
                 }
                 hir::ParamName::Error => bug!(),
             }
@@ -918,7 +918,7 @@ mod vf_mir_builder {
                 }
                 mir::VarDebugInfoContents::Const(constant) => {
                     let constant_cpn = vdi_contents_cpn.init_const();
-                    Self::encode_constant(tcx, enc_ctx, constant, constant_cpn)
+                    Self::encode_const_operand(tcx, enc_ctx, constant, constant_cpn)
                 }
             }
         }
@@ -1129,7 +1129,7 @@ mod vf_mir_builder {
                 }
                 ty::TyKind::Ref(region, ty, mutability) => {
                     let ref_ty_cpn = ty_kind_cpn.init_ref();
-                    Self::encode_ty_ref(tcx, enc_ctx, region, ty, *mutability, ref_ty_cpn);
+                    Self::encode_ty_ref(tcx, enc_ctx, *region, *ty, *mutability, ref_ty_cpn);
                 }
                 ty::TyKind::FnDef(def_id, substs) => {
                     let fn_def_ty_cpn = ty_kind_cpn.init_fn_def();
@@ -1187,12 +1187,12 @@ mod vf_mir_builder {
             tcx: TyCtxt<'tcx>,
             enc_ctx: &mut EncCtx<'tcx, 'a>,
             adt_def: &'tcx ty::AdtDef,
-            substs: ty::subst::SubstsRef<'tcx>,
+            substs: &'tcx &'tcx ty::List<ty::GenericArg<'tcx>>,
             mut adt_ty_cpn: adt_ty_cpn::Builder<'_>,
         ) {
             debug!("Encoding algebraic data type {:?}", adt_def);
             let adt_did_cpn = adt_ty_cpn.reborrow().init_id();
-            Self::encode_adt_def_id(enc_ctx, adt_def.did, adt_did_cpn);
+            Self::encode_adt_def_id(enc_ctx, adt_def.did(), adt_did_cpn);
 
             let len = substs.len().try_into().expect(&format!(
                 "The number of generic args of {:?} cannot be stored in a Capnp message",
@@ -1239,7 +1239,7 @@ mod vf_mir_builder {
             tcx: TyCtxt<'tcx>,
             enc_ctx: &mut EncCtx<'tcx, 'a>,
             def_id: &hir::def_id::DefId,
-            substs: ty::subst::SubstsRef<'tcx>,
+            substs: &'tcx &'tcx ty::List<ty::GenericArg<'tcx>>,
             mut fn_def_ty_cpn: fn_def_ty_cpn::Builder<'_>,
         ) {
             let def_path = tcx.def_path_str(*def_id);
@@ -1250,7 +1250,7 @@ mod vf_mir_builder {
             if substs.is_empty() {
                 id_mono_cpn.set_nothing(());
             } else {
-                let def_path_mono = tcx.def_path_str_with_substs(*def_id, substs);
+                let def_path_mono = tcx.def_path_str_with_args(*def_id, substs);
                 debug!("Mono: {}", def_path_mono);
                 let mut id_mono_cpn = id_mono_cpn.init_something();
                 id_mono_cpn.set_name(&def_path_mono);
@@ -1268,37 +1268,37 @@ mod vf_mir_builder {
             debug!("Encoding region {:?}", region);
             // MIR borrow-checker changes all regions to fresh `ReVar` and generates constraints for them and then tries to resolve the constraints
             // We do not expect to receive any other kind of `Region` because we are getting borrow-checked MIR
-            match region {
-                ty::RegionKind::ReEarlyBound(_early_bound_region) => bug!(),
-                ty::RegionKind::ReLateBound(_debruijn_index, _bound_region) => bug!(),
-                ty::RegionKind::ReFree(_free_region) => bug!(),
+            match region.kind() {
+                ty::RegionKind::ReEarlyParam(_early_bound_region) => bug!(),
+                ty::RegionKind::ReLateParam(_debruijn_index) => bug!(),
                 ty::RegionKind::ReStatic => bug!(),
                 ty::RegionKind::ReVar(_region_vid) => {
                     // Todo @Nima: We should find a mapping of `RegionVid`s and lifetime variable names at `hir`
                     region_cpn.set_id(/*&format!("{:?}", region)*/ "a");
                 }
                 ty::RegionKind::RePlaceholder(_placeholder_region) => bug!(),
-                ty::RegionKind::ReEmpty(_universe_index) => bug!(),
-                ty::RegionKind::ReErased => bug!(),
+                _ => bug!(),
             }
         }
 
         fn encode_gen_arg(
             tcx: TyCtxt<'tcx>,
             enc_ctx: &mut EncCtx<'tcx, 'a>,
-            gen_arg: &ty::subst::GenericArg<'tcx>,
+            gen_arg: &ty::GenericArg<'tcx>,
             gen_arg_cpn: gen_arg_cpn::Builder<'_>,
         ) {
             debug!("Encoding generic arg {:?}", gen_arg);
             let kind_cpn = gen_arg_cpn.init_kind();
             let kind = gen_arg.unpack();
             match kind {
-                ty::subst::GenericArgKind::Lifetime(_) => todo!("Lifetime generic arg"),
-                ty::subst::GenericArgKind::Type(ty) => {
+                ty::GenericArgKind::Lifetime(_) => todo!("Lifetime generic arg"),
+                ty::GenericArgKind::Type(ty) => {
                     let ty_cpn = kind_cpn.init_type();
                     Self::encode_ty(tcx, enc_ctx, ty, ty_cpn);
                 }
-                ty::subst::GenericArgKind::Const(_) => todo!("Const generic arg"),
+                ty::GenericArgKind::Const(ty_const) => {
+                    Self::encode_typed_constant(tcx, enc_ctx, &ty_const, kind_cpn.init_const());
+                }
             }
         }
 
@@ -1400,7 +1400,7 @@ mod vf_mir_builder {
                 mir::Rvalue::Ref(region, bor_kind, place) => {
                     let mut ref_data_cpn = rvalue_cpn.init_ref();
                     let region_cpn = ref_data_cpn.reborrow().init_region();
-                    Self::encode_region(region, region_cpn);
+                    Self::encode_region(*region, region_cpn);
                     let bor_kind_cpn = ref_data_cpn.reborrow().init_bor_kind();
                     Self::encode_borrow_kind(bor_kind, bor_kind_cpn);
                     let place_cpn = ref_data_cpn.init_place();
@@ -1417,12 +1417,10 @@ mod vf_mir_builder {
                 mir::Rvalue::Len(place) => todo!(),
                 mir::Rvalue::Cast(cast_kind, operand, ty) => {
                     let mut cast_data_cpn = rvalue_cpn.init_cast();
-                    let cast_kind_cpn = cast_data_cpn.reborrow().init_cast_kind();
-                    Self::encode_cast_kind(cast_kind, cast_kind_cpn);
                     let operand_cpn = cast_data_cpn.reborrow().init_operand();
                     Self::encode_operand(tcx, enc_ctx, operand, operand_cpn);
                     let ty_cpn = cast_data_cpn.init_ty();
-                    Self::encode_ty(tcx, enc_ctx, ty, ty_cpn);
+                    Self::encode_ty(tcx, enc_ctx, *ty, ty_cpn);
                 }
                 mir::Rvalue::BinaryOp(bin_op, box (operandl, operandr)) => {
                     let mut bin_op_data_cpn = rvalue_cpn.init_binary_op();
@@ -1462,12 +1460,13 @@ mod vf_mir_builder {
                 }
                 // Transmutes a `*mut u8` into shallow-initialized `Box<T>`.
                 mir::Rvalue::ShallowInitBox(operand, ty) => todo!(),
+                mir::Rvalue::CopyForDeref(place) => todo!(),
             }
         }
 
         fn encode_ty_args(
             enc_ctx: &mut EncCtx<'tcx, 'a>,
-            targs: ty::subst::SubstsRef<'tcx>,
+            targs: &ty::List<ty::GenericArg<'tcx>>,
             mut targs_cpn: capnp::struct_list::Builder<'_, gen_arg_cpn::Owned>,
         ) {
             for (idx, targ) in targs.iter().enumerate() {
@@ -1514,28 +1513,15 @@ mod vf_mir_builder {
                     Self::encode_ty_args(enc_ctx, substs, substs_cpn);
                 }
                 mir::AggregateKind::Closure(_def_id, _substs) => todo!(),
-                mir::AggregateKind::Generator(_def_id, _substs, _movability) => todo!(),
-            }
-        }
-
-        fn encode_cast_kind(ck: &mir::CastKind, mut ck_cpn: cast_kind_cpn::Builder<'_>) {
-            match ck {
-                mir::CastKind::Misc => ck_cpn.set_misc(()),
-                mir::CastKind::Pointer(_pointer_cast) => ck_cpn.set_pointer(()),
+                _ => todo!(),
             }
         }
 
         fn encode_borrow_kind(bk: &mir::BorrowKind, mut bk_cpn: borrow_kind_cpn::Builder<'_>) {
             match bk {
                 mir::BorrowKind::Shared => bk_cpn.set_shared(()),
-                mir::BorrowKind::Shallow => bk_cpn.set_shallow(()),
-                mir::BorrowKind::Unique => bk_cpn.set_unique(()),
-                mir::BorrowKind::Mut {
-                    allow_two_phase_borrow,
-                } => {
-                    let mut mut_data_cpn = bk_cpn.init_mut();
-                    mut_data_cpn.set_allow_two_phase_borrow(*allow_two_phase_borrow);
-                }
+                mir::BorrowKind::Mut { kind } => bk_cpn.set_mut(()),
+                _ => todo!(),
             }
         }
 
@@ -1558,6 +1544,7 @@ mod vf_mir_builder {
                 mir::BinOp::Ge => bin_op_cpn.set_ge(()),
                 mir::BinOp::Gt => bin_op_cpn.set_gt(()),
                 mir::BinOp::Offset => bin_op_cpn.set_offset(()),
+                _ => todo!(),
             }
         }
 
@@ -1600,10 +1587,10 @@ mod vf_mir_builder {
                 }
                 mir::TerminatorKind::SwitchInt {
                     discr,
-                    switch_ty,
                     targets,
                 } => {
                     let switch_int_data_cpn = terminator_kind_cpn.init_switch_int();
+                    let switch_ty = discr.ty(enc_ctx.body(), tcx);
                     Self::encode_switch_int_data(
                         tcx,
                         enc_ctx,
@@ -1613,14 +1600,15 @@ mod vf_mir_builder {
                         switch_int_data_cpn,
                     );
                 }
-                mir::TerminatorKind::Resume => terminator_kind_cpn.set_resume(()),
+                mir::TerminatorKind::UnwindResume => terminator_kind_cpn.set_resume(()),
                 mir::TerminatorKind::Return => terminator_kind_cpn.set_return(()),
                 mir::TerminatorKind::Call {
                     func,
                     args,
                     destination,
-                    cleanup,
-                    from_hir_call,
+                    target,
+                    unwind,
+                    call_source,
                     fn_span,
                 } => {
                     let fn_call_data_cpn = terminator_kind_cpn.init_call();
@@ -1630,8 +1618,7 @@ mod vf_mir_builder {
                         func,
                         args,
                         destination,
-                        cleanup,
-                        *from_hir_call,
+                        target,
                         fn_span,
                         fn_call_data_cpn,
                     );
@@ -1644,8 +1631,8 @@ mod vf_mir_builder {
             tcx: TyCtxt<'tcx>,
             enc_ctx: &mut EncCtx<'tcx, 'a>,
             discr: &mir::Operand<'tcx>,
-            discr_ty: &ty::Ty<'tcx>,
-            targets: &mir::terminator::SwitchTargets,
+            discr_ty: ty::Ty<'tcx>,
+            targets: &mir::SwitchTargets,
             mut switch_int_data_cpn: switch_int_data_cpn::Builder<'_>,
         ) {
             let discr_cpn = switch_int_data_cpn.reborrow().init_discr();
@@ -1657,7 +1644,7 @@ mod vf_mir_builder {
         }
 
         fn encode_switch_targets(
-            targets: &mir::terminator::SwitchTargets,
+            targets: &mir::SwitchTargets,
             mut targets_cpn: switch_targets_cpn::Builder<'_>,
         ) {
             debug!("Encoding Switch targets {:?}", targets);
@@ -1691,9 +1678,8 @@ mod vf_mir_builder {
             enc_ctx: &mut EncCtx<'tcx, 'a>,
             func: &mir::Operand<'tcx>,
             args: &Vec<mir::Operand<'tcx>>,
-            destination: &Option<(mir::Place<'tcx>, mir::BasicBlock)>,
-            cleanup: &Option<mir::BasicBlock>,
-            from_hir_call: bool,
+            destination: &mir::Place<'tcx>,
+            target: &Option<mir::BasicBlock>,
             fn_span: &rustc_span::Span,
             mut fn_call_data_cpn: fn_call_data_cpn::Builder<'_>,
         ) {
@@ -1712,18 +1698,17 @@ mod vf_mir_builder {
 
             // Encode destination
             let mut destination_cpn = fn_call_data_cpn.reborrow().init_destination();
-            match destination {
+            match target {
                 Option::None => destination_cpn.set_nothing(()), // diverging call
-                Option::Some((dest_place, dest_bblock_id)) => {
+                Option::Some(dest_bblock_id) => {
                     let mut destination_data_cpn = destination_cpn.init_something();
                     let place_cpn = destination_data_cpn.reborrow().init_place();
-                    Self::encode_place(enc_ctx, dest_place, place_cpn);
+                    Self::encode_place(enc_ctx, destination, place_cpn);
                     let basic_block_id_cpn = destination_data_cpn.init_basic_block_id();
                     Self::encode_basic_block_id(*dest_bblock_id, basic_block_id_cpn);
                 }
             }
 
-            fn_call_data_cpn.set_from_hir_call(from_hir_call);
             let fn_span_data_cpn = fn_call_data_cpn.init_fn_span();
             Self::encode_span_data(tcx, &fn_span.data(), fn_span_data_cpn);
         }
@@ -1746,35 +1731,40 @@ mod vf_mir_builder {
                 }
                 mir::Operand::Constant(box constant) => {
                     let constant_cpn = operand_cpn.init_constant();
-                    Self::encode_constant(tcx, enc_ctx, constant, constant_cpn);
+                    Self::encode_const_operand(tcx, enc_ctx, constant, constant_cpn);
                 }
             }
         }
 
-        fn encode_constant(
+        fn encode_const_operand(
             tcx: TyCtxt<'tcx>,
             enc_ctx: &mut EncCtx<'tcx, 'a>,
-            constant: &mir::Constant<'tcx>,
-            mut constant_cpn: constant_cpn::Builder<'_>,
+            const_operand: &mir::ConstOperand<'tcx>,
+            mut const_operand_cpn: const_operand_cpn::Builder<'_>,
         ) {
-            let span_data_cpn = constant_cpn.reborrow().init_span();
-            Self::encode_span_data(tcx, &constant.span.data(), span_data_cpn);
-            let literal_cpn = constant_cpn.init_literal();
-            Self::encode_constant_kind(tcx, enc_ctx, &constant.literal, literal_cpn);
+            let span_data_cpn = const_operand_cpn.reborrow().init_span();
+            Self::encode_span_data(tcx, &const_operand.span.data(), span_data_cpn);
+            let const_cpn = const_operand_cpn.init_const();
+            Self::encode_const(tcx, enc_ctx, &const_operand.const_, const_cpn);
         }
 
-        fn encode_constant_kind(
+        fn encode_const(
             tcx: TyCtxt<'tcx>,
             enc_ctx: &mut EncCtx<'tcx, 'a>,
-            constant_kind: &mir::ConstantKind<'tcx>,
-            constant_kind_cpn: constant_kind_cpn::Builder<'_>,
+            const_: &mir::Const<'tcx>,
+            const_cpn: const_cpn::Builder<'_>,
         ) {
-            match constant_kind {
-                mir::ConstantKind::Ty(ty_const) => {
-                    let ty_const_cpn = constant_kind_cpn.init_ty();
+            match const_ {
+                mir::Const::Ty(ty_const) => {
+                    let ty_const_cpn = const_cpn.init_ty();
                     Self::encode_typed_constant(tcx, enc_ctx, ty_const, ty_const_cpn);
                 }
-                mir::ConstantKind::Val(const_val, ty) => todo!(),
+                mir::Const::Val(const_value, ty) => {
+                    let mut val_cpn = const_cpn.init_val();
+                    Self::encode_const_value(tcx, *ty, const_value, val_cpn.reborrow().init_const_value());
+                    Self::encode_ty(tcx, enc_ctx, *ty, val_cpn.init_ty());
+                }
+                _ => todo!()
             }
         }
 
@@ -1786,10 +1776,10 @@ mod vf_mir_builder {
         ) {
             debug!("Encoding typed constant {:?}", ty_const);
             let ty_cpn = ty_const_cpn.reborrow().init_ty();
-            Self::encode_ty(tcx, enc_ctx, ty_const.ty, ty_cpn);
+            Self::encode_ty(tcx, enc_ctx, ty_const.ty(), ty_cpn);
 
-            let val_cpn = ty_const_cpn.init_val();
-            Self::encode_const_kind(tcx, ty_const.ty, &ty_const.val, val_cpn);
+            let kind_cpn = ty_const_cpn.init_kind();
+            Self::encode_const_kind(tcx, ty_const.ty(), &ty_const.kind(), kind_cpn);
         }
 
         fn encode_const_kind(
@@ -1812,42 +1802,67 @@ mod vf_mir_builder {
                 // variants when the code is monomorphic enough for that.
                 CK::Unevaluated(unevaluated) => todo!(),
                 // Used to hold computed value.
-                CK::Value(const_value) => {
+                CK::Value(val_tree) => {
                     let const_value_cpn = const_kind_cpn.init_value();
-                    Self::encode_const_value(tcx, ty, const_value, const_value_cpn);
+                    Self::encode_val_tree(tcx, ty, val_tree, const_value_cpn);
                 }
                 // A placeholder for a const which could not be computed; this is
                 // propagated to avoid useless error messages.
                 CK::Error(delay_span_bug_emitted) => todo!(),
+                _ => todo!(),
+            }
+        }
+
+        fn encode_val_tree(
+            tcx: TyCtxt<'tcx>,
+            ty: ty::Ty<'tcx>,
+            val_tree: &ty::ValTree<'tcx>,
+            const_value_cpn: const_value_cpn::Builder<'_>,
+        ) {
+            use ty::ValTree as VT;
+            match val_tree {
+                // Used only for types with `layout::abi::Scalar` ABI and ZSTs.
+                VT::Leaf(scalar_int) => {
+                    // `Scalar`s are a limited number of primitives.
+                    // It is easier to encode the value itself instead of its internal representation in the compiler
+                    let scalar_cpn = const_value_cpn.init_scalar();
+                    Self::encode_scalar_int(tcx, ty, scalar_int, scalar_cpn);
+                }
+                // Used only for `&[u8]` and `&str`
+                VT::Branch(_) => todo!(),
             }
         }
 
         fn encode_const_value(
             tcx: TyCtxt<'tcx>,
             ty: ty::Ty<'tcx>,
-            const_value: &mir::interpret::ConstValue<'tcx>,
-            const_value_cpn: const_value_cpn::Builder<'_>,
+            const_value: &mir::ConstValue<'tcx>,
+            mut const_value_cpn: const_value_cpn::Builder<'_>,
         ) {
-            use mir::interpret::ConstValue as CV;
+            use mir::ConstValue as CV;
             match const_value {
                 // Used only for types with `layout::abi::Scalar` ABI and ZSTs.
-                CV::Scalar(scalar) => {
+                CV::Scalar(rustc_middle::mir::interpret::Scalar::Int(scalar_int)) => {
                     // `Scalar`s are a limited number of primitives.
                     // It is easier to encode the value itself instead of its internal representation in the compiler
                     let scalar_cpn = const_value_cpn.init_scalar();
-                    Self::encode_scalar(tcx, ty, scalar, scalar_cpn);
+                    Self::encode_scalar_int(tcx, ty, scalar_int, scalar_cpn);
+                }
+                CV::Scalar(rustc_middle::mir::interpret::Scalar::Ptr(_, _)) => todo!(),
+                CV::ZeroSized => {
+                    trace!("mir::ConstValue::ZeroSized for type {:?}", ty);
+                    const_value_cpn.set_zero_sized(());
                 }
                 // Used only for `&[u8]` and `&str`
-                CV::Slice { data, start, end } => todo!(),
-                // A value not represented/representable by `Scalar` or `Slice`
-                CV::ByRef { alloc, offset } => todo!(),
+                CV::Slice { .. } => todo!(),
+                CV::Indirect { alloc_id, offset } => todo!(),
             }
         }
 
-        fn encode_scalar(
+        fn encode_scalar_int(
             tcx: TyCtxt<'tcx>,
             ty: ty::Ty<'tcx>,
-            scalar: &mir::interpret::Scalar,
+            scalar: &rustc_middle::ty::ScalarInt,
             mut scalar_cpn: scalar_cpn::Builder<'_>,
         ) {
             let gen_err_msg = "Failed to encode scalar";
@@ -1857,41 +1872,41 @@ mod vf_mir_builder {
             );
             match ty.kind() {
                 ty::TyKind::Bool => {
-                    let bv = scalar.to_bool().expect(err_msg);
+                    let bv = scalar.try_to_bool().expect(err_msg);
                     scalar_cpn.set_bool(bv);
                 }
                 ty::TyKind::Char => {
-                    let cv = scalar.to_char().expect(err_msg);
+                    let cv = scalar.try_to_u32().expect(err_msg);
                     scalar_cpn.set_char(cv as u32);
                 }
                 ty::TyKind::Int(int_ty) => {
                     let mut int_val_cpn = scalar_cpn.init_int();
                     match int_ty {
                         ty::IntTy::Isize => {
-                            let visz = scalar.to_machine_isize(&tcx).expect(err_msg);
+                            let visz = scalar.try_to_i64().expect(err_msg);
                             capnp_utils::encode_int128(
                                 visz.try_into().unwrap(),
                                 int_val_cpn.init_isize(),
                             );
                         }
                         ty::IntTy::I8 => {
-                            let vi8 = scalar.to_i8().expect(err_msg);
+                            let vi8 = scalar.try_to_i8().expect(err_msg);
                             int_val_cpn.set_i8(vi8);
                         }
                         ty::IntTy::I16 => {
-                            let vi16 = scalar.to_i16().expect(err_msg);
+                            let vi16 = scalar.try_to_i16().expect(err_msg);
                             int_val_cpn.set_i16(vi16);
                         }
                         ty::IntTy::I32 => {
-                            let vi32 = scalar.to_i32().expect(err_msg);
+                            let vi32 = scalar.try_to_i32().expect(err_msg);
                             int_val_cpn.set_i32(vi32);
                         }
                         ty::IntTy::I64 => {
-                            let vi64 = scalar.to_i64().expect(err_msg);
+                            let vi64 = scalar.try_to_i64().expect(err_msg);
                             int_val_cpn.set_i64(vi64);
                         }
                         ty::IntTy::I128 => {
-                            let vi128 = scalar.to_i128().expect(err_msg);
+                            let vi128 = scalar.try_to_i128().expect(err_msg);
                             capnp_utils::encode_int128(vi128, int_val_cpn.init_i128());
                         }
                     }
@@ -1900,30 +1915,30 @@ mod vf_mir_builder {
                     let mut uint_val_cpn = scalar_cpn.init_uint();
                     match uint_ty {
                         ty::UintTy::Usize => {
-                            let vusz = scalar.to_machine_usize(&tcx).expect(err_msg);
+                            let vusz = scalar.try_to_u64().expect(err_msg);
                             capnp_utils::encode_u_int128(
                                 vusz.try_into().unwrap(),
                                 uint_val_cpn.init_usize(),
                             );
                         }
                         ty::UintTy::U8 => {
-                            let vu8 = scalar.to_u8().expect(err_msg);
+                            let vu8 = scalar.try_to_u8().expect(err_msg);
                             uint_val_cpn.set_u8(vu8);
                         }
                         ty::UintTy::U16 => {
-                            let vu16 = scalar.to_u16().expect(err_msg);
+                            let vu16 = scalar.try_to_u16().expect(err_msg);
                             uint_val_cpn.set_u16(vu16);
                         }
                         ty::UintTy::U32 => {
-                            let vu32 = scalar.to_u32().expect(err_msg);
+                            let vu32 = scalar.try_to_u32().expect(err_msg);
                             uint_val_cpn.set_u32(vu32);
                         }
                         ty::UintTy::U64 => {
-                            let vu64 = scalar.to_u64().expect(err_msg);
+                            let vu64 = scalar.try_to_u64().expect(err_msg);
                             uint_val_cpn.set_u64(vu64);
                         }
                         ty::UintTy::U128 => {
-                            let vu128 = scalar.to_u128().expect(err_msg);
+                            let vu128 = scalar.try_to_u128().expect(err_msg);
                             capnp_utils::encode_u_int128(vu128, uint_val_cpn.init_u128());
                         }
                     }
@@ -1979,11 +1994,11 @@ mod vf_mir_builder {
                     let adt_def = ty
                         .ty_adt_def()
                         .expect(&format!("{:?} type for a PlaceElem::Field projection", ty));
-                    let name = adt_def.non_enum_variant().fields[field.index()].name;
+                    let name = adt_def.non_enum_variant().fields[*field].name;
                     let name_cpn = field_data_cpn.reborrow().init_name();
                     Self::encode_symbol(&name, name_cpn);
                     let ty_cpn = field_data_cpn.init_ty();
-                    Self::encode_ty(enc_ctx.tcx, enc_ctx, fty, ty_cpn);
+                    Self::encode_ty(enc_ctx.tcx, enc_ctx, *fty, ty_cpn);
                     /* Todo @Nima: When `encode_ty` becomes a method of `EncCtx` there would not be
                      * such strange arguments `enc_ctx.tcx` and `enc_tcx`
                      */
