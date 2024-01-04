@@ -203,7 +203,7 @@ impl Tree {
             if x_is_new {
                 visitor(visitor_data, x);
             }
-            if (*x).left.is_null() && (*x).right.is_null() {
+            if (*x).left.is_null() {
                 x = (*x).parent;
                 x_is_new = false;
                 //@ close inv_(false, x, root, rootShape, _, _);

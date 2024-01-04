@@ -86,19 +86,18 @@ module Make (Args : RUST_FE_ARGS) = struct
   let run_vf_mir_exporter (rs_file_path : string) =
     try
       (*** TODO @Nima: Get these names from build system *)
-      let tchain_name = "nightly-2022-01-31" in
-      let rustc_driver_path =
+      let tchain_name = "nightly-2023-12-31" in
+      let rustc_driver_prefix =
         match Vfconfig.platform with
-          MacOS -> "librustc_driver-e0cda07475b3448e.dylib"
-        | Windows -> "rustc_driver-147fd6cd4a861c2a.dll"
-        | Linux -> "librustc_driver-90a6e5ec2da8350e.so"
+        | Windows -> "rustc_driver-"
+        | _ -> "librustc_driver-"
       in
       let bin_name = "vf-rust-mir-exporter" in
       let bin_dir = Filename.dirname Sys.executable_name in
       let bin_path = bin_dir ^ "/" ^ bin_name in
       let* tchain_root = RustTChain.find_tchain_root tchain_name in
       let* tchain_lib = RustTChain.find_tchain_lib tchain_name in
-      if not (Sys.file_exists (Printf.sprintf "%s/%s" tchain_lib rustc_driver_path)) then
+      if not (Array.exists (String.starts_with ~prefix:rustc_driver_prefix) (Sys.readdir tchain_lib)) then
         Error (`RustcDriverMissing tchain_name)
       else
       let args = [| bin_path; rs_file_path; "--sysroot=" ^ tchain_root |] in

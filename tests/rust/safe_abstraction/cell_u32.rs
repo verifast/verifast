@@ -1,4 +1,6 @@
 #![allow(dead_code)]
+#![allow(invalid_reference_casting)]
+
 pub struct CellU32 {
     v: u32,
 }

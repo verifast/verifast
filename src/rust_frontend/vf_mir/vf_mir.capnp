@@ -159,7 +159,7 @@ struct Ty {
     # Typed constant value
     struct Const {
         ty @0: Ty;
-        val @1: ConstKind;
+        kind @1: ConstKind;
     }
 
     struct Region {
@@ -171,7 +171,7 @@ struct Ty {
             union {
                 lifetime @0: Void;
                 type @1: Ty;
-                const @2: Void;
+                const @2: Const;
             }
         }
         kind @0: GenArgKind;
@@ -364,20 +364,24 @@ struct Body {
     struct ConstValue {
         union {
             scalar @0: Scalar;
+            zeroSized @2: Void;
             slice @1: Void;
         }
     }
 
-    struct Constant {
-        struct ConstantKind {
+    struct ConstOperand {
+        struct Const {
             union {
                 ty @0: Ty.Const;
-                val @1: Void;
+                val :group {
+                    constValue @1: ConstValue;
+                    ty @2: Ty;
+                }
             }
         }
 
         span @0: SpanData;
-        literal @1: ConstantKind;
+        const @1: Const;
     }
 
     struct BasicBlockId {
@@ -389,7 +393,7 @@ struct Body {
             union {
                 copy @0: Place;
                 move @1: Place;
-                constant @2: Constant;
+                constant @2: ConstOperand;
             }
         }
 
@@ -441,11 +445,7 @@ struct Body {
                 struct BorrowKind {
                     union {
                         shared @0: Void;
-                        shallow @1: Void;
-                        unique @2: Void;
-                        mut :group {
-                            allowTwoPhaseBorrow @3: Bool;
-                        }
+                        mut @1: Void;
                     }
                 }
                 region @0: Ty.Region;
@@ -454,15 +454,8 @@ struct Body {
             }
 
             struct CastData {
-                struct CastKind {
-                    union {
-                        misc @0: Void;
-                        pointer @1: Void;
-                    }
-                }
-                castKind @0: CastKind;
-                operand @1: Operand;
-                ty @2: Ty;
+                operand @0: Operand;
+                ty @1: Ty;
             }
 
             struct AggregateData {
@@ -540,10 +533,8 @@ struct Body {
                     func @0: Operand;
                     args @1: List(Operand);
                     destination @2: Option(DestinationData);
-                    cleanup @3: Option(BasicBlockId);
-                    fromHirCall @4: Bool;
                     # The span of the function, without the dot and receiver e.g. `foo(a, b)` in `x.foo(a, b)`
-                    fnSpan @5: SpanData;
+                    fnSpan @3: SpanData;
                 }
 
                 union {
@@ -569,7 +560,7 @@ struct Body {
         struct VarDebugInfoContents {
             union {
                 place @0: Place;
-                const @1: Constant;
+                const @1: ConstOperand;
             }
         }
         name @0: Symbol;
