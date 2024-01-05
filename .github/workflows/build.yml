@@ -13,10 +13,10 @@ jobs:
           fetch-depth: 0
 
       - name: Build setup
-        run: ./setup-build.sh 2>&1 | while read line; do echo $'\033'"[38;5;239m$(date -u +%M:%S)"$'\033'"[0m $line"; done
+        run: ./setup-build.sh
 
       - name: Build
-        run: ./build.sh 2>&1 | while read line; do echo $'\033'"[38;5;239m$(date -u +%M:%S)"$'\033'"[0m $line"; done
+        run: ./build.sh
 
       - name: Rename artifact
         id: rename_artifact
@@ -135,10 +135,10 @@ jobs:
         run: rm /usr/local/bin/2to3
 
       - name: Build setup
-        run: ./setup-build.sh 2>&1 | while read line; do echo $'\033'"[38;5;239m$(date -u +%M:%S)"$'\033'"[0m $line"; done
+        run: ./setup-build.sh
 
       - name: Build
-        run: ./build.sh 2>&1 | while read line; do echo $'\033'"[38;5;239m$(date -u +%M:%S)"$'\033'"[0m $line"; done
+        run: ./build.sh
 
       - name: Rename artifact
         id: rename_artifact
