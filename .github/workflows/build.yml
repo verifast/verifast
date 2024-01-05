@@ -13,10 +13,10 @@ jobs:
           fetch-depth: 0
 
       - name: Build setup
-        run: ./setup-build.sh
+        run: ./setup-build.sh | while read line; do echo "$(date -Iseconds) $line"; done
 
       - name: Build
-        run: ./build.sh
+        run: ./build.sh | while read line; do echo "$(date -Iseconds) $line"; done
 
       - name: Rename artifact
         id: rename_artifact
@@ -135,10 +135,10 @@ jobs:
         run: rm /usr/local/bin/2to3
 
       - name: Build setup
-        run: ./setup-build.sh
+        run: ./setup-build.sh | while read line; do echo "$(date -Iseconds) $line"; done
 
       - name: Build
-        run: ./build.sh
+        run: ./build.sh | while read line; do echo "$(date -Iseconds) $line"; done
 
       - name: Rename artifact
         id: rename_artifact
