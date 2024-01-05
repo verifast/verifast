@@ -151,8 +151,13 @@ jobs:
       - name: Set VFDEPS_NAME and VF_LLVM_CLANG_BUILD_NAME
         run: |
           . config.sh
+          sudo mkdir /usr/local/$VFDEPS_NAME
+          sudo chown -R $(whoami):admin /usr/local/$VFDEPS_NAME
           echo "VFDEPS_NAME=$VFDEPS_NAME" >> "$GITHUB_ENV"
-          echo "VF_LLVM_CLANG_BUILD_NAME=vf-llvm-clang-build-$VF_LLVM_CLANG_BUILD_VERSION" >> "$GITHUB_ENV"
+          VF_LLVM_CLANG_BUILD_NAME=vf-llvm-clang-build-$VF_LLVM_CLANG_BUILD_VERSION
+          sudo mkdir /usr/local/$VF_LLVM_CLANG_BUILD_NAME
+          sudo chown -R $(whoami):admin /usr/local/$VF_LLVM_CLANG_BUILD_NAME
+          echo "VF_LLVM_CLANG_BUILD_NAME=$VF_LLVM_CLANG_BUILD_NAME" >> "$GITHUB_ENV"
 
       - name: Cache vfdeps and vf-llvm-clang-build
         uses: actions/cache@v3
