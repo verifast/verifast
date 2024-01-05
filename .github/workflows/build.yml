@@ -24,7 +24,7 @@ jobs:
           path: |
             /tmp/${{ env.VFDEPS_NAME }}
             /tmp/${{ env.VF_LLVM_CLANG_BUILD_NAME }}
-          key: deps:${{ env.VFDEPS_NAME }}+${{ env.VF_LLVM_CLANG_BUILD_NAME }}
+          key: deps:linux:${{ env.VFDEPS_NAME }}+${{ env.VF_LLVM_CLANG_BUILD_NAME }}
 
       - name: Build setup
         run: ./setup-build.sh 2>&1 | while read line; do echo $'\033'"[38;5;239m$(date -u +%M:%S)"$'\033'"[0m $line"; done
@@ -147,6 +147,20 @@ jobs:
 
       - name: Remove conflicting Python file (issue 223)
         run: rm /usr/local/bin/2to3
+
+      - name: Set VFDEPS_NAME and VF_LLVM_CLANG_BUILD_NAME
+        run: |
+          . config.sh
+          echo "VFDEPS_NAME=$VFDEPS_NAME" >> "$GITHUB_ENV"
+          echo "VF_LLVM_CLANG_BUILD_NAME=vf-llvm-clang-build-$VF_LLVM_CLANG_BUILD_VERSION" >> "$GITHUB_ENV"
+
+      - name: Cache vfdeps and vf-llvm-clang-build
+        uses: actions/cache@v3
+        with:
+          path: |
+            /usr/local/${{ env.VFDEPS_NAME }}
+            /usr/local/${{ env.VF_LLVM_CLANG_BUILD_NAME }}
+          key: deps:macos:${{ env.VFDEPS_NAME }}+${{ env.VF_LLVM_CLANG_BUILD_NAME }}
 
       - name: Build setup
         run: ./setup-build.sh 2>&1 | while read line; do echo $'\033'"[38;5;239m$(date -u +%M:%S)"$'\033'"[0m $line"; done
