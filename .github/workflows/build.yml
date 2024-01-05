@@ -14,7 +14,7 @@ jobs:
 
       - name: Set VFDEPS_NAME and VF_LLVM_CLANG_BUILD_NAME
         run: |
-          . vfconfig.sh
+          . config.sh
           echo "VFDEPS_NAME=$VFDEPS_NAME" >> "$GITHUB_ENV"
           echo "VF_LLVM_CLANG_BUILD_NAME=vf-llvm-clang-build-$VF_LLVM_CLANG_BUILD_VERSION" >> "$GITHUB_ENV"
 
