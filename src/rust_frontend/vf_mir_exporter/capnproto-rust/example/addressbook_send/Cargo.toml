@@ -1,0 +1,22 @@
+[package]
+
+name = "addressbook_send"
+version = "0.0.0"
+authors = [ "David Renshaw <dwrenshaw@gmail.com>"  ]
+build = "build.rs"
+edition = "2021"
+
+[[bin]]
+
+name = "addressbook_send"
+path = "addressbook_send.rs"
+
+
+[build-dependencies]
+capnpc = { path = "../../capnpc" }
+
+[dependencies]
+capnp = { path = "../../capnp" }
+
+[lints]
+workspace = true

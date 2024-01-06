@@ -1,0 +1,35 @@
+
+[package]
+name = "capnp-fuzz"
+version = "0.0.1"
+authors = ["Automatically generated"]
+publish = false
+build = "build.rs"
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies.capnp]
+path = ".."
+[dependencies.libfuzzer-sys]
+git = "https://github.com/rust-fuzz/libfuzzer-sys.git"
+
+[build-dependencies.capnpc]
+path = "../../capnpc"
+
+# Prevent this from interfering with workspaces
+[workspace]
+members = ["."]
+
+[[bin]]
+name = "canonicalize"
+path = "fuzzers/canonicalize.rs"
+
+[[bin]]
+name = "serialize_packed_read_no_alloc"
+path = "fuzzers/serialize_packed_read_no_alloc.rs"
+
+[[bin]]
+name = "test_all_types"
+path = "fuzzers/test_all_types.rs"

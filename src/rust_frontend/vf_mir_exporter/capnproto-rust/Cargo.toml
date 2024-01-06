@@ -1,0 +1,37 @@
+[workspace.package]
+rust-version = "1.65.0"
+
+[workspace]
+
+resolver = "2"
+
+members = [
+    # main crates, published on crates.io
+    "capnp",
+    "capnpc",
+    "capnp-futures",
+    "capnp-rpc",
+
+    # testing and examples
+    "async-byte-channel",
+    "benchmark",
+    "capnpc/test",
+    "capnpc/test/external-crate",
+    "capnpc/test-edition-2015",
+    "capnpc/test-edition-2018",
+    "capnpc/test-edition-2021",
+    "capnp-futures/test",
+    "capnp-rpc/examples/hello-world",
+    "capnp-rpc/examples/calculator",
+    "capnp-rpc/examples/pubsub",
+    "capnp-rpc/test",
+    "example/addressbook",
+    "example/addressbook_send",
+    "example/fill_random_values",
+]
+default-members = [
+    "capnp",
+    "capnpc",
+]
+
+[workspace.lints]

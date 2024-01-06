@@ -1,0 +1,157 @@
+name: CI
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+  schedule:
+    # run weekly
+    - cron: '0 0 * * 0'
+
+env:
+  CARGO_TERM_COLOR: always
+  minrust: 1.65.0
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        rust:
+          - nightly
+          - beta
+          - stable
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: ${{ matrix.rust }}
+
+    - name: Install Cap'n Proto
+      run: |
+          export DEBIAN_FRONTEND=noninteractive
+          sudo apt-get install -y capnproto libcapnp-dev
+
+    - name: Test feature flags
+      run: |
+          cd capnp
+          cargo test --no-default-features
+          cargo test --features sync_reader
+          cargo test --features unaligned
+          cd ../
+
+    - name: Build
+      run: cargo build --all
+
+    - name: Run tests
+      run: cargo test --all
+
+    - name: Run example
+      run: ./target/debug/addressbook write | ./target/debug/addressbook read
+
+    - name: Build in release mode
+      run: cargo build --all --release
+
+    - name: Test in release mode
+      run: cargo test --all --release
+
+    - name: Run benchmark
+      run: ./target/release/run_all_benchmarks target/release/benchmark
+
+  miri:
+    name: "Miri"
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: miri
+
+      - name: Setup miri
+        run: cargo miri setup
+
+      - name: Install Cap'n Proto
+        run: |
+            export DEBIAN_FRONTEND=noninteractive
+            sudo apt-get install -y capnproto libcapnp-dev
+
+      - name: Test default features
+        run: cargo miri test --package capnp --package capnpc-test
+
+      - name: Test no default features
+        run: cargo miri test --package capnp --package capnpc-test --no-default-features
+
+      - name: Test default features 32-bit
+        run: cargo miri test --package capnp --package capnpc-test --target i686-unknown-linux-gnu
+
+      - name: Test no default features 32-bit
+        run: cargo miri test --package capnp --package capnpc-test --no-default-features --target i686-unknown-linux-gnu
+
+      - name: Test sync_reader
+        run: cargo miri test --package capnp --package capnpc-test --features sync_reader
+
+      - name: Test unaligned
+        run: cargo miri test --package capnp --package capnpc-test --features unaligned
+
+  minrust:
+    name: minrust
+    runs-on: ubuntu-latest
+    env:
+      # see https://github.com/rust-lang/cargo/issues/10303
+      CARGO_NET_GIT_FETCH_WITH_CLI: true
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: ${{ env.minrust }}
+
+    - name: Install Cap'n Proto
+      run: |
+          export DEBIAN_FRONTEND=noninteractive
+          sudo apt-get install -y capnproto libcapnp-dev
+
+    - name: Test feature flags
+      run: |
+          cd capnp
+          cargo test --no-default-features
+          cargo test --no-default-features --features alloc
+          cargo test --no-default-features --features std
+          cargo test --features sync_reader
+          cargo test --features unaligned
+          cd ../
+
+    - name: Run tests
+      run: cargo test -p capnp -p capnpc -p capnp-futures -p capnp-rpc
+
+  fmt:
+    name: formatting
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rustfmt
+      - run: cargo fmt --all -- --check --unstable-features --error-on-unformatted
+
+  clippy:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install Cap'n Proto
+        run: |
+            export DEBIAN_FRONTEND=noninteractive
+            sudo apt-get install -y capnproto libcapnp-dev
+
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2023-11-30
+          components: clippy
+      - uses: actions-rs-plus/clippy-check@v2
+        with:
+          args: --all --all-targets
