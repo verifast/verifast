@@ -436,10 +436,7 @@ mod vf_mir_builder {
                 trace!("Encoding trait impl");
                 trait_impl_cpn.set_of_trait(&self.tcx.def_path_str(trait_impl.of_trait));
                 trait_impl_cpn.set_self_ty(&self.tcx.def_path_str(trait_impl.self_ty));
-                let mut items_cpn = trait_impl_cpn.init_items(trait_impl.items.len());
-                for (idx, item) in trait_impl.items.iter().enumerate() {
-                    items_cpn.set(idx.try_into().unwrap(), &item)
-                }
+                trait_impl_cpn.fill_items(&trait_impl.items);
             });
         }
 
@@ -473,10 +470,7 @@ mod vf_mir_builder {
                                                 Self::encode_ty(self.tcx, &mut enc_ctx, *input, input_cpn);
                                             });
                                             Self::encode_ty(self.tcx, &mut enc_ctx, sig.output(), required_fn_cpn.reborrow().init_output());
-                                            let mut arg_names_cpn = required_fn_cpn.reborrow().init_arg_names(arg_names.len());
-                                            for (idx, arg_name) in arg_names.iter().enumerate() {
-                                                arg_names_cpn.set(idx.try_into().unwrap(), arg_name.as_str());
-                                            }
+                                            required_fn_cpn.fill_arg_names(arg_names.iter().map(|n| n.as_str()));
                                             let contract: Vec<GhostRange> = self.annots.extract_if(|annot| annot.end_of_preceding_token.byte_pos == hir_item.span.hi().0).collect();
                                             required_fn_cpn.fill_contract(&contract, |annot_cpn, annot| {
                                                 Self::encode_annotation(self.tcx, annot, annot_cpn);

@@ -1136,6 +1136,18 @@ fn generate_setter(
                                     "<{builder_type}>::fill(self.builder.reborrow().get_pointer_field({offset}), elems, body)"
                                 ))));
                                 result.push(line("}"));
+                            } else if let type_::Text(()) = ot1_kind {
+                                result.push(line("#[inline]"));
+                                result.push(Line(format!(
+                                    "pub fn fill_{styled_name}<E>(&mut self, elems: E)"
+                                )));
+                                result.push(Line(format!(
+                                    "    where E: IntoIterator, E::IntoIter: ExactSizeIterator, E::Item: AsRef<str> {{"
+                                )));
+                                result.push(indent(Line(format!(
+                                    "<{builder_type}>::fill(self.builder.reborrow().get_pointer_field({offset}), elems)"
+                                ))));
+                                result.push(line("}"));
                             }
                             (
                                 Some(reg_field.get_type()?.type_string(ctx, Leaf::Reader("'a"))?),
