@@ -1445,7 +1445,7 @@ impl<VatId> ConnectionState<VatId> {
                     if let Some(export_id) = Self::write_descriptor(
                         state,
                         cap.clone(),
-                        cap_table_builder.reborrow().get(idx as u32),
+                        cap_table_builder.reborrow().get(idx),
                     )
                     .unwrap()
                     {
@@ -1453,7 +1453,7 @@ impl<VatId> ConnectionState<VatId> {
                     }
                 }
                 None => {
-                    cap_table_builder.reborrow().get(idx as u32).set_none(());
+                    cap_table_builder.reborrow().get(idx).set_none(());
                 }
             }
         }
@@ -1582,7 +1582,7 @@ impl<VatId> ConnectionState<VatId> {
     ) -> ::capnp::Result<Vec<Option<Box<dyn ClientHook>>>> {
         let mut result = Vec::new();
         for idx in 0..cap_table.len() {
-            result.push(Self::receive_cap(state, cap_table.get(idx))?);
+            result.push(Self::receive_cap(state, cap_table.get(idx as usize))?);
         }
         Ok(result)
     }
@@ -2927,7 +2927,7 @@ impl<VatId> Client<VatId> {
                     {
                         transform
                             .reborrow()
-                            .get(idx as u32)
+                            .get(idx)
                             .set_get_pointer_field(ordinal);
                     }
                 }
@@ -2962,7 +2962,7 @@ impl<VatId> Client<VatId> {
                     {
                         transform
                             .reborrow()
-                            .get(idx as u32)
+                            .get(idx)
                             .set_get_pointer_field(ordinal);
                     }
                 }

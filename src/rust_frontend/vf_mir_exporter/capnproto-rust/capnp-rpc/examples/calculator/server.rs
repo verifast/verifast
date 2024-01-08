@@ -65,7 +65,7 @@ fn evaluate_impl(
                 .map(|v| Ok(v?.get()?.get_value())),
         ),
         calculator::expression::Parameter(p) => match params {
-            Some(params) if p < params.len() => Promise::ok(params.get(p)),
+            Some(params) if p < params.len() => Promise::ok(params.get(p as usize)),
             _ => Promise::err(Error::failed(format!("bad parameter: {p}"))),
         },
         calculator::expression::Call(call) => {
@@ -79,9 +79,9 @@ fn evaluate_impl(
                 let param_values = eval_params.await?;
                 let mut request = func.call_request();
                 {
-                    let mut params = request.get().init_params(param_values.len() as u32);
+                    let mut params = request.get().init_params(param_values.len());
                     for (ii, value) in param_values.iter().enumerate() {
-                        params.set(ii as u32, *value);
+                        params.set(ii, *value);
                     }
                 }
                 Ok(request.send().promise.await?.get()?.get_value())

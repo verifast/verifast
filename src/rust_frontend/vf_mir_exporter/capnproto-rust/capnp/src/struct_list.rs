@@ -122,7 +122,7 @@ where
     T: crate::traits::OwnedStruct,
 {
     fn index_move(&self, index: u32) -> T::Reader<'a> {
-        self.get(index)
+        self.get(index as usize)
     }
 }
 
@@ -132,9 +132,10 @@ where
 {
     /// Gets the element at position `index`. Panics if `index` is greater than or
     /// equal to `len()`.
-    pub fn get(self, index: u32) -> T::Reader<'a> {
-        assert!(index < self.len());
-        self.reader.get_struct_element(index).into()
+    pub fn get(self, index: usize) -> T::Reader<'a> {
+        let index_u32 = index.try_into().expect("Index exceeds length");
+        assert!(index_u32 < self.len());
+        self.reader.get_struct_element(index_u32).into()
     }
 
     /// Gets the element at position `index`. Returns `None` if `index`
@@ -203,6 +204,22 @@ where
 
 impl<'a, T> Builder<'a, T>
 where
+    T: crate::traits::OwnedStruct + 'a,
+{
+    pub fn fill<E, F>(builder: PointerBuilder<'a>, elems: E, mut body: F)
+        where F: FnMut(T::Builder<'_>, E::Item), E: IntoIterator, E::IntoIter: ExactSizeIterator
+    {
+        let iter = elems.into_iter();
+        let mut list_builder = Self::init_pointer_with_usize_length(builder, iter.len());
+        for (idx, elem) in iter.enumerate() {
+            let elem_cpn = list_builder.reborrow().get(idx);
+            body(elem_cpn, elem);
+        }
+    }
+}
+
+impl<'a, T> Builder<'a, T>
+where
     T: crate::traits::OwnedStruct,
 {
     pub fn reborrow(&mut self) -> Builder<'_, T> {
@@ -240,9 +257,10 @@ where
 {
     /// Gets the element at position `index`. Panics if `index` is greater than or
     /// equal to `len()`.
-    pub fn get(self, index: u32) -> T::Builder<'a> {
-        assert!(index < self.len());
-        self.builder.get_struct_element(index).into()
+    pub fn get(self, index: usize) -> T::Builder<'a> {
+        let index_u32: u32 = index.try_into().expect("index exceeds length");
+        assert!(index_u32 < self.len());
+        self.builder.get_struct_element(index_u32).into()
     }
 
     /// Gets the element at position `index`. Returns `None` if `index`

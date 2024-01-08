@@ -258,7 +258,7 @@ impl<'a> RustTypeInfo for type_::Reader<'a> {
                 type_::any_pointer::Parameter(def) => {
                     let the_struct = &ctx.node_map[&def.get_scope_id()];
                     let parameters = the_struct.get_parameters()?;
-                    let parameter = parameters.get(u32::from(def.get_parameter_index()));
+                    let parameter = parameters.get(usize::from(def.get_parameter_index()));
                     let parameter_name = parameter.get_name()?.to_str()?;
                     match module {
                         Leaf::Owned => Ok(parameter_name.to_string()),

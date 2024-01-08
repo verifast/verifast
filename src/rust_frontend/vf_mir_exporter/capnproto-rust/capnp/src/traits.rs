@@ -74,6 +74,9 @@ pub trait Pipelined {
 
 pub trait FromPointerBuilder<'a>: Sized {
     fn init_pointer(builder: PointerBuilder<'a>, length: u32) -> Self;
+    fn init_pointer_with_usize_length(builder: PointerBuilder<'a>, length: usize) -> Self {
+        Self::init_pointer(builder, length.try_into().expect("maximum length exceeded"))
+    }
     fn get_from_pointer(
         builder: PointerBuilder<'a>,
         default: Option<&'a [crate::Word]>,

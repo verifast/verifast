@@ -41,10 +41,10 @@ impl crate::TestCase for CatRank {
         let count = rng.next_less_than(1000);
         let mut good_count: i32 = 0;
 
-        let mut list = request.init_results(count);
+        let mut list = request.init_results(count as usize);
 
         for i in 0..count {
-            let mut result = list.reborrow().get(i);
+            let mut result = list.reborrow().get(i as usize);
             result.set_score(1000.0 - i as f64);
             let url_size = rng.next_less_than(100);
 
@@ -99,7 +99,7 @@ impl crate::TestCase for CatRank {
 
         let results = request.get_results()?;
         for i in 0..results.len() {
-            let result = results.get(i);
+            let result = results.get(i as usize);
             let mut score = result.get_score();
             let snippet = result.get_snippet()?.to_str()?;
             if snippet.contains(" cat ") {
@@ -120,13 +120,13 @@ impl crate::TestCase for CatRank {
             }
         });
 
-        let mut list = response.init_results(scored_results.len() as u32);
+        let mut list = response.init_results(scored_results.len());
         for i in 0..list.len() {
-            let mut item = list.reborrow().get(i);
+            let mut item = list.reborrow().get(i as usize);
             let result = scored_results[i as usize];
             item.set_score(result.score);
-            item.set_url(result.result.get_url()?);
-            item.set_snippet(result.result.get_snippet()?);
+            item.set_url(result.result.get_url()?.to_str()?);
+            item.set_snippet(result.result.get_snippet()?.to_str()?);
         }
 
         Ok(())

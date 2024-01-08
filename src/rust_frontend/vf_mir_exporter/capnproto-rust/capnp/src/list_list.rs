@@ -92,7 +92,7 @@ where
     T: crate::traits::Owned,
 {
     fn index_move(&self, index: u32) -> Result<T::Reader<'a>> {
-        self.get(index)
+        self.get(index as usize)
     }
 }
 
@@ -117,9 +117,10 @@ where
 {
     /// Gets the element at position `index`. Panics if `index` is greater than or
     /// equal to `len()`.
-    pub fn get(self, index: u32) -> Result<T::Reader<'a>> {
-        assert!(index < self.len());
-        FromPointerReader::get_from_pointer(&self.reader.get_pointer_element(index), None)
+    pub fn get(self, index: usize) -> Result<T::Reader<'a>> {
+        let index_u32: u32 = index.try_into().expect("index out of bounds");
+        assert!(index_u32 < self.len());
+        FromPointerReader::get_from_pointer(&self.reader.get_pointer_element(index_u32), None)
     }
 
     /// Gets the element at position `index`. Returns `None` if `index`
@@ -177,8 +178,10 @@ impl<'a, T> Builder<'a, T>
 where
     T: crate::traits::Owned,
 {
-    pub fn init(self, index: u32, size: u32) -> T::Builder<'a> {
-        FromPointerBuilder::init_pointer(self.builder.get_pointer_element(index), size)
+    pub fn init(self, index: usize, size: usize) -> T::Builder<'a> {
+        let index_u32: u32 = index.try_into().expect("index out of bounds");
+        let size_u32: u32 = size.try_into().expect("maximum size exceeded");
+        FromPointerBuilder::init_pointer(self.builder.get_pointer_element(index_u32), size_u32)
     }
 }
 
@@ -221,9 +224,10 @@ where
 {
     /// Gets the element at position `index`. Panics if `index` is greater than or
     /// equal to `len()`.
-    pub fn get(self, index: u32) -> Result<T::Builder<'a>> {
-        assert!(index < self.len());
-        FromPointerBuilder::get_from_pointer(self.builder.get_pointer_element(index), None)
+    pub fn get(self, index: usize) -> Result<T::Builder<'a>> {
+        let index_u32: u32 = index.try_into().expect("index out of bounds");
+        assert!(index_u32 < self.len());
+        FromPointerBuilder::get_from_pointer(self.builder.get_pointer_element(index_u32), None)
     }
 
     /// Gets the element at position `index`. Returns `None` if `index`

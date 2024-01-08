@@ -163,7 +163,7 @@ impl FieldList {
 
     pub fn get(self, index: u16) -> Field {
         Field {
-            proto: self.fields.get(index as u32),
+            proto: self.fields.get(index as usize),
             index,
             parent: self.parent,
         }
@@ -209,7 +209,7 @@ impl FieldSubset {
     pub fn get(self, index: u16) -> Field {
         let index = self.indices[index as usize];
         Field {
-            proto: self.fields.get(index as u32),
+            proto: self.fields.get(index as usize),
             index,
             parent: self.parent,
         }
@@ -330,7 +330,7 @@ impl EnumerantList {
 
     pub fn get(self, ordinal: u16) -> Enumerant {
         Enumerant {
-            proto: self.enumerants.get(ordinal as u32),
+            proto: self.enumerants.get(ordinal as usize),
             ordinal,
             parent: self.parent,
         }
@@ -398,7 +398,7 @@ impl AnnotationList {
     }
 
     pub fn get(self, index: u32) -> Annotation {
-        let proto = self.annotations.get(index);
+        let proto = self.annotations.get(index as usize);
         let ty = (self.get_annotation_type)(self.child_index, index);
         Annotation { proto, ty }
     }

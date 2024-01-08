@@ -90,16 +90,17 @@ impl<'a, T: PrimitiveElement> FromPointerReader<'a> for Reader<'a, T> {
 
 impl<'a, T: PrimitiveElement> IndexMove<u32, T> for Reader<'a, T> {
     fn index_move(&self, index: u32) -> T {
-        self.get(index)
+        self.get(index as usize)
     }
 }
 
 impl<'a, T: PrimitiveElement> Reader<'a, T> {
     /// Gets the `T` at position `index`. Panics if `index` is greater than or
     /// equal to `len()`.
-    pub fn get(&self, index: u32) -> T {
-        assert!(index < self.len());
-        PrimitiveElement::get(&self.reader, index)
+    pub fn get(&self, index: usize) -> T {
+        let index_u32: u32 = index.try_into().expect("index out of bounds");
+        assert!(index_u32 < self.len());
+        PrimitiveElement::get(&self.reader, index_u32)
     }
 
     /// Gets the `T` at position `index`. Returns `None` if `index`
@@ -167,9 +168,10 @@ where
         }
     }
 
-    pub fn set(&mut self, index: u32, value: T) {
-        assert!(index < self.len());
-        PrimitiveElement::set(&self.builder, index, value);
+    pub fn set(&mut self, index: usize, value: T) {
+        let index_u32: u32 = index.try_into().expect("Index exceeds length");
+        assert!(index_u32 < self.len());
+        PrimitiveElement::set(&self.builder, index_u32, value);
     }
 
     #[cfg(target_endian = "little")]
@@ -213,9 +215,10 @@ impl<'a, T: PrimitiveElement> FromPointerBuilder<'a> for Builder<'a, T> {
 impl<'a, T: PrimitiveElement> Builder<'a, T> {
     /// Gets the `T` at position `index`. Panics if `index` is greater than or
     /// equal to `len()`.
-    pub fn get(&self, index: u32) -> T {
-        assert!(index < self.len());
-        PrimitiveElement::get_from_builder(&self.builder, index)
+    pub fn get(&self, index: usize) -> T {
+        let index_u32: u32 = index.try_into().expect("index is out of bounds");
+        assert!(index_u32 < self.len());
+        PrimitiveElement::get_from_builder(&self.builder, index_u32)
     }
 
     /// Gets the `T` at position `index`. Returns `None` if `index`

@@ -40,7 +40,7 @@ macro_rules! car_value_impl(
                     {
                         let mut wheels = self.reborrow().get_wheels()?;
                         for ii in 0..wheels.len() {
-                            let mut wheel = wheels.reborrow().get(ii);
+                            let mut wheel = wheels.reborrow().get(ii as usize);
                             result += wheel.reborrow().get_diameter() as u64 * wheel.reborrow().get_diameter() as u64;
                             result += if wheel.reborrow().get_snow_tires() { 100 } else { 0 };
                         }
@@ -96,7 +96,7 @@ pub fn random_car(rng: &mut FastRand, mut car: car::Builder) {
     {
         let mut wheels = car.reborrow().init_wheels(4);
         for ii in 0..wheels.len() {
-            let mut wheel = wheels.reborrow().get(ii);
+            let mut wheel = wheels.reborrow().get(ii as usize);
             wheel.set_diameter(25 + rng.next_less_than(15) as u16);
             wheel.set_air_pressure((30.0 + rng.next_double(20.0)) as f32);
             wheel.set_snow_tires(rng.next_less_than(16) == 0);
@@ -139,9 +139,9 @@ impl crate::TestCase for CarSales {
 
     fn setup_request(&self, rng: &mut FastRand, request: parking_lot::Builder) -> u64 {
         let mut result = 0;
-        let mut cars = request.init_cars(rng.next_less_than(200));
+        let mut cars = request.init_cars(rng.next_less_than(200) as usize);
         for ii in 0..cars.len() {
-            let mut car = cars.reborrow().get(ii);
+            let mut car = cars.reborrow().get(ii as usize);
             random_car(rng, car.reborrow());
             result += car.car_value().unwrap();
         }

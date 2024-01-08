@@ -1104,9 +1104,9 @@ fn generate_setter(
                     setter_interior.push(
                         Line(fmt!(ctx,"{capnp}::traits::SetPointerBuilder::set_pointer_builder(self.builder.reborrow().get_pointer_field({offset}), value, false)")));
 
-                    initter_params.push("size: u32");
+                    initter_params.push("size: usize");
                     initter_interior.push(
-                        Line(fmt!(ctx,"{capnp}::traits::FromPointerBuilder::init_pointer(self.builder.get_pointer_field({offset}), size)")));
+                        Line(fmt!(ctx,"{capnp}::traits::FromPointerBuilder::init_pointer_with_usize_length(self.builder.get_pointer_field({offset}), size)")));
 
                     match ot1.get_element_type()?.which()? {
                         type_::List(_) => (
@@ -1117,14 +1117,33 @@ fn generate_setter(
                                     .type_string(ctx, Leaf::Builder("'a"))?,
                             ),
                         ),
-                        _ => (
-                            Some(reg_field.get_type()?.type_string(ctx, Leaf::Reader("'a"))?),
-                            Some(
+                        ot1_kind => {
+                            let builder_type =
                                 reg_field
                                     .get_type()?
-                                    .type_string(ctx, Leaf::Builder("'a"))?,
-                            ),
-                        ),
+                                    .type_string(ctx, Leaf::Builder("'_"))?;
+                            if let type_::Struct(_) = ot1_kind {
+                                let elem_builder_type =
+                                    ot1.get_element_type()?.type_string(ctx, Leaf::Builder("'_"))?;
+                                result.push(line("#[inline]"));
+                                result.push(Line(format!(
+                                    "pub fn fill_{styled_name}<E, F>(&mut self, elems: E, body: F)"
+                                )));
+                                result.push(Line(format!(
+                                    "    where F: FnMut({elem_builder_type}, E::Item), E: IntoIterator, E::IntoIter: ExactSizeIterator {{"
+                                )));
+                                result.push(indent(Line(format!(
+                                    "<{builder_type}>::fill(self.builder.reborrow().get_pointer_field({offset}), elems, body)"
+                                ))));
+                                result.push(line("}"));
+                            }
+                            (
+                                Some(reg_field.get_type()?.type_string(ctx, Leaf::Reader("'a"))?),
+                                Some(reg_field
+                                    .get_type()?
+                                    .type_string(ctx, Leaf::Builder("'a"))?),
+                            )
+                        }
                     }
                 }
                 type_::Enum(e) => {
@@ -1293,7 +1312,7 @@ fn used_params_of_type(
             if let type_::any_pointer::Parameter(def) = ap.which()? {
                 let the_struct = &ctx.node_map[&def.get_scope_id()];
                 let parameters = the_struct.get_parameters()?;
-                let parameter = parameters.get(u32::from(def.get_parameter_index()));
+                let parameter = parameters.get(usize::from(def.get_parameter_index()));
                 let parameter_name = parameter.get_name()?.to_str()?;
                 used_params.insert(parameter_name.to_string());
             }
@@ -1848,7 +1867,7 @@ fn get_ty_params_of_brand(
     let mut result = String::new();
     for (scope_id, parameter_index) in acc.into_iter() {
         let node = ctx.node_map[&scope_id];
-        let p = node.get_parameters()?.get(u32::from(parameter_index));
+        let p = node.get_parameters()?.get(usize::from(parameter_index));
         result.push_str(p.get_name()?.to_str()?);
         result.push(',');
     }

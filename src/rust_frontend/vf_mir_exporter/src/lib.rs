@@ -432,17 +432,15 @@ mod vf_mir_builder {
         }
 
         fn encode_trait_impls(&mut self, vf_mir_cpn: &mut vf_mir_cpn::Builder<'_>) {
-            let mut trait_impls_cpn = vf_mir_cpn.reborrow().init_trait_impls(self.trait_impls.len().try_into().unwrap());
-            for (idx, trait_impl) in self.trait_impls.iter().enumerate() {
+            vf_mir_cpn.fill_trait_impls(&self.trait_impls, |mut trait_impl_cpn, trait_impl| {
                 trace!("Encoding trait impl");
-                let mut trait_impl_cpn = trait_impls_cpn.reborrow().get(idx.try_into().unwrap());
                 trait_impl_cpn.set_of_trait(&self.tcx.def_path_str(trait_impl.of_trait));
                 trait_impl_cpn.set_self_ty(&self.tcx.def_path_str(trait_impl.self_ty));
-                let mut items_cpn = trait_impl_cpn.init_items(trait_impl.items.len().try_into().unwrap());
+                let mut items_cpn = trait_impl_cpn.init_items(trait_impl.items.len());
                 for (idx, item) in trait_impl.items.iter().enumerate() {
                     items_cpn.set(idx.try_into().unwrap(), &item)
                 }
-            }
+            });
         }
 
         fn encode_traits(&mut self, req_adt_defs: &mut Vec<&'tcx ty::AdtDef<'tcx>>, mut vf_mir_cpn: vf_mir_cpn::Builder<'_>) {
@@ -471,22 +469,18 @@ mod vf_mir_builder {
                                             required_fn_cpn.set_name(&item.name.to_string());
                                             Self::encode_span_data(self.tcx, &hir_item.ident.span.data(), required_fn_cpn.reborrow().init_name_span());
                                             Self::encode_unsafety(fn_sig.header.unsafety, required_fn_cpn.reborrow().init_unsafety());
-                                            let inputs = sig.inputs();
-                                            let mut inputs_cpn = required_fn_cpn.reborrow().init_inputs(inputs.len().try_into().unwrap());
-                                            for (idx, input) in inputs.iter().enumerate() {
-                                                let input_cpn = inputs_cpn.reborrow().get(idx.try_into().unwrap());
+                                            required_fn_cpn.fill_inputs(sig.inputs(), |input_cpn, input| {
                                                 Self::encode_ty(self.tcx, &mut enc_ctx, *input, input_cpn);
-                                            }
+                                            });
                                             Self::encode_ty(self.tcx, &mut enc_ctx, sig.output(), required_fn_cpn.reborrow().init_output());
-                                            let mut arg_names_cpn = required_fn_cpn.reborrow().init_arg_names(arg_names.len().try_into().unwrap());
+                                            let mut arg_names_cpn = required_fn_cpn.reborrow().init_arg_names(arg_names.len());
                                             for (idx, arg_name) in arg_names.iter().enumerate() {
                                                 arg_names_cpn.set(idx.try_into().unwrap(), arg_name.as_str());
                                             }
                                             let contract: Vec<GhostRange> = self.annots.extract_if(|annot| annot.end_of_preceding_token.byte_pos == hir_item.span.hi().0).collect();
-                                            let mut contract_cpn = required_fn_cpn.reborrow().init_contract(contract.len().try_into().unwrap());
-                                            for (idx, annot) in contract.iter().enumerate() {
-                                                Self::encode_annotation(self.tcx, annot, contract_cpn.reborrow().get(idx.try_into().unwrap()));
-                                            }
+                                            required_fn_cpn.fill_contract(&contract, |annot_cpn, annot| {
+                                                Self::encode_annotation(self.tcx, annot, annot_cpn);
+                                            });
                                             required_fns_cpn = required_fns_cons_cpn.init_t();
                                         }
                                     }
@@ -507,15 +501,7 @@ mod vf_mir_builder {
             // Encode traits (consumes annotations)
             self.encode_traits(&mut req_adt_defs, vf_mir_cpn.reborrow());
 
-            let bodies = &self.bodies;
-            let len = bodies.len();
-            let len = len.try_into().expect(&format!(
-                "{} MIR bodies cannot be stored in a Capnp message",
-                len
-            ));
-            let mut bodies_cpn = vf_mir_cpn.reborrow().init_bodies(len);
-
-            for (idx, body) in bodies.iter().enumerate() {
+            vf_mir_cpn.fill_bodies(&self.bodies, |body_cpn, body| {
                 let body_span = body.span.data();
                 let annots = self
                     .annots
@@ -529,17 +515,14 @@ mod vf_mir_builder {
                     })
                     .collect::<LinkedList<_>>();
                 let mut enc_ctx = EncCtx::new(self.tcx, EncKind::Body(body), annots);
-                let body_cpn = bodies_cpn.reborrow().get(idx.try_into().unwrap());
                 Self::encode_body(&mut enc_ctx, body_cpn);
                 req_adt_defs.extend(enc_ctx.get_req_adts());
-            }
+            });
 
             // Encode directives
-            let mut directives_cpn = vf_mir_cpn.reborrow().init_directives(self.directives.len().try_into().unwrap());
-            for (idx, directive) in self.directives.iter().enumerate() {
-                let directive_cpn = directives_cpn.reborrow().get(idx.try_into().unwrap());
+            vf_mir_cpn.fill_directives(&self.directives, |directive_cpn, directive| {
                 Self::encode_annotation(self.tcx, directive, directive_cpn);
-            }
+            });
 
             // Encode Ghost Declarations
             let ghost_decl_batches = self
@@ -548,7 +531,7 @@ mod vf_mir_builder {
                     let annot_span = annot
                         .span()
                         .expect("Dummy annotation found during serialization");
-                    if let Some(body) = bodies.iter().find(|body| body.span.overlaps(annot_span)) {
+                    if let Some(body) = self.bodies.iter().find(|body| body.span.overlaps(annot_span)) {
                         panic!(
                             "Overlapping Ghost Declaration Block at {:?} and Function at {:?}",
                             annot_span, body.span
@@ -557,16 +540,9 @@ mod vf_mir_builder {
                     true
                 })
                 .collect::<LinkedList<_>>();
-            let len = ghost_decl_batches.len();
-            let len = len.try_into().expect(&format!(
-                "{} ghost declaration blocks cannot be stored in a Capnp message",
-                len
-            ));
-            let mut gh_decl_bs_cpn = vf_mir_cpn.reborrow().init_ghost_decl_batches(len);
-            for (idx, gh_decl_b) in ghost_decl_batches.into_iter().enumerate() {
-                let gh_decl_b_cpn = gh_decl_bs_cpn.reborrow().get(idx.try_into().unwrap());
+            vf_mir_cpn.fill_ghost_decl_batches(ghost_decl_batches, |gh_decl_b_cpn, gh_decl_b| {
                 Self::encode_annotation(self.tcx, &gh_decl_b, gh_decl_b_cpn);
-            }
+            });
 
             // Encode Required Definitions
             let mut adt_defs_cpn = vf_mir_cpn.init_adt_defs();
@@ -613,16 +589,9 @@ mod vf_mir_builder {
             debug!("Encoding ADT definition {:?}", adt_def);
             let id_cpn = adt_def_cpn.reborrow().init_id();
             Self::encode_adt_def_id(enc_ctx, adt_def.did(), id_cpn);
-            let len = adt_def.variants().len();
-            let len = len.try_into().expect(&format!(
-                "{} Variants cannot be stored in a Capnp message",
-                len
-            ));
-            let mut variants_cpn = adt_def_cpn.reborrow().init_variants(len);
-            for (idx, variant) in adt_def.variants().iter_enumerated() {
-                let variant_cpn = variants_cpn.reborrow().get(idx.try_into().unwrap());
+            adt_def_cpn.fill_variants(adt_def.variants(), |variant_cpn, variant| {
                 Self::encode_variant_def(tcx, enc_ctx, variant, variant_cpn);
-            }
+            });
             let kind_cpn = adt_def_cpn.reborrow().init_kind();
             Self::encode_adt_kind(adt_def.adt_kind(), kind_cpn);
             let span_cpn = adt_def_cpn.reborrow().init_span();
@@ -651,18 +620,11 @@ mod vf_mir_builder {
             tcx: TyCtxt<'tcx>,
             enc_ctx: &mut EncCtx<'tcx, 'a>,
             vdef: &ty::VariantDef,
-            vdef_cpn: variant_def_cpn::Builder<'_>,
+            mut vdef_cpn: variant_def_cpn::Builder<'_>,
         ) {
-            let len = vdef.fields.len();
-            let len = len.try_into().expect(&format!(
-                "{} Fields cannot be stored in a Capnp message",
-                len
-            ));
-            let mut fields_cpn = vdef_cpn.init_fields(len);
-            for (idx, field) in vdef.fields.iter().enumerate() {
-                let field_cpn = fields_cpn.reborrow().get(idx.try_into().unwrap());
+            vdef_cpn.fill_fields(&vdef.fields, |field_cpn, field| {
                 Self::encode_field_def(tcx, enc_ctx, field, field_cpn);
-            }
+            });
         }
 
         fn encode_field_def(
@@ -744,33 +706,18 @@ mod vf_mir_builder {
             ));
             body_cpn.set_arg_count(arg_count);
 
-            let local_decls_count = body.local_decls().len().try_into().expect(&format!(
-                "The number of local declarations of {} cannot be stored in a Capnp message",
-                def_path
-            ));
+            let local_decls_count = body.local_decls().len();
             assert!(
-                local_decls_count > arg_count,
+                local_decls_count > arg_count as usize,
                 "Local declarations of {} are not more than its args",
                 def_path
             );
 
-            let mut local_decls_cpn = body_cpn.reborrow().init_local_decls(local_decls_count);
-            for (idx, (local_decl_idx, local_decl)) in
-                body.local_decls().iter_enumerated().enumerate()
-            {
-                let local_decl_cpn = local_decls_cpn.reborrow().get(idx.try_into().unwrap());
+            body_cpn.fill_local_decls(body.local_decls().iter_enumerated(), |local_decl_cpn, (local_decl_idx, local_decl)| {
                 Self::encode_local_decl(tcx, enc_ctx, local_decl_idx, local_decl, local_decl_cpn);
-            }
+            });
 
-            let basic_blocks = &body.basic_blocks;
-            let basic_block_count = basic_blocks.len().try_into().expect(&format!(
-                "The number of basic blocks of {} cannot be stored in a Capnp message",
-                def_path
-            ));
-            let mut basic_blocks_cpn = body_cpn.reborrow().init_basic_blocks(basic_block_count);
-            for (idx, (basic_block_idx, basic_block)) in basic_blocks.iter_enumerated().enumerate()
-            {
-                let basic_block_cpn = basic_blocks_cpn.reborrow().get(idx.try_into().unwrap());
+            body_cpn.fill_basic_blocks(body.basic_blocks.iter_enumerated(), |basic_block_cpn, (basic_block_idx, basic_block)| {
                 Self::encode_basic_block(
                     tcx,
                     enc_ctx,
@@ -778,7 +725,7 @@ mod vf_mir_builder {
                     basic_block,
                     basic_block_cpn,
                 );
-            }
+            });
 
             let span_cpn = body_cpn.reborrow().init_span();
             Self::encode_span_data(tcx, &body.span.data(), span_cpn);
@@ -787,14 +734,9 @@ mod vf_mir_builder {
             let imp_span_data = crate::span_utils::body_imp_span(tcx, body);
             Self::encode_span_data(tcx, &imp_span_data, imp_span_cpn);
 
-            let vdis_len = body.var_debug_info.len().try_into().expect(
-                "The number of variables debug info entries cannot be stored in a Capnp message",
-            );
-            let mut vdis_cpn = body_cpn.reborrow().init_var_debug_info(vdis_len);
-            for (idx, vdi) in body.var_debug_info.iter().enumerate() {
-                let vdi_cpn = vdis_cpn.reborrow().get(idx.try_into().unwrap());
+            body_cpn.fill_var_debug_info(&body.var_debug_info, |vdi_cpn, vdi| {
                 Self::encode_var_debug_info(tcx, enc_ctx, vdi, vdi_cpn);
-            }
+            });
 
             let ghost_stmts = enc_ctx
                 .annots
@@ -807,16 +749,10 @@ mod vf_mir_builder {
                 "There are annotations for {} that are neither in contract nor in the body",
                 def_path
             );
-            let len = ghost_stmts.len();
-            let len = len.try_into().expect(&format!(
-                "{} ghost statements cannot be stored in a Capnp message",
-                len
-            ));
-            let mut ghost_stmts_cpn = body_cpn.init_ghost_stmts(len);
-            for (idx, ghost_stmt) in ghost_stmts.into_iter().enumerate() {
-                let ghost_stmt_cpn = ghost_stmts_cpn.reborrow().get(idx.try_into().unwrap());
+
+            body_cpn.fill_ghost_stmts(&ghost_stmts, |ghost_stmt_cpn, ghost_stmt| {
                 Self::encode_annotation(tcx, &ghost_stmt, ghost_stmt_cpn);
-            }
+            });
         }
 
         fn encode_unsafety(us: hir::Unsafety, mut us_cpn: unsafety_cpn::Builder<'_>) {
@@ -832,16 +768,9 @@ mod vf_mir_builder {
             mut hir_gens_cpn: hir_generics_cpn::Builder<'_>,
         ) {
             debug!("Encoding HIR generics {:?}", hir_gens);
-            let len = hir_gens.params.len();
-            let len = len.try_into().expect(&format!(
-                "{} HIR generics cannot be stored in a Cpnp message",
-                len
-            ));
-            let mut params_cpn = hir_gens_cpn.reborrow().init_params(len);
-            for (idx, param) in hir_gens.params.iter().enumerate() {
-                let param_cpn = params_cpn.reborrow().get(idx.try_into().unwrap());
+            hir_gens_cpn.fill_params(hir_gens.params, |param_cpn, param| {
                 Self::encode_hir_generic_param(enc_ctx, param, param_cpn);
-            }
+            });
             let span_cpn = hir_gens_cpn.init_span();
             Self::encode_span_data(enc_ctx.tcx, &hir_gens.span.data(), span_cpn);
         }
@@ -1036,14 +965,9 @@ mod vf_mir_builder {
         ) {
             let span_cpn = contract_cpn.reborrow().init_span();
             Self::encode_span_data(tcx, body_contract_span, span_cpn);
-            let len = contract_annots.len().try_into().expect(&format!(
-                "The number of contract annotations cannot be stored in a Capnp message"
-            ));
-            let mut annots_cpn = contract_cpn.init_annotations(len);
-            for (idx, annot) in contract_annots.into_iter().enumerate() {
-                let annot_cpn = annots_cpn.reborrow().get(idx.try_into().unwrap());
+            contract_cpn.fill_annotations(&contract_annots, |annot_cpn, annot| {
                 Self::encode_annotation(tcx, &annot, annot_cpn);
-            }
+            });
         }
 
         fn encode_annotation(
@@ -1143,9 +1067,7 @@ mod vf_mir_builder {
                 }
                 ty::TyKind::Never => ty_kind_cpn.set_never(()),
                 ty::TyKind::Tuple(substs) => {
-                    let len = substs.len().try_into().expect(&format!(
-                        "The number of elements of the Tuple cannot be stored in a Capnp message"
-                    ));
+                    let len = substs.len();
                     if len == 0
                     // Unit type
                     {
@@ -1194,11 +1116,7 @@ mod vf_mir_builder {
             let adt_did_cpn = adt_ty_cpn.reborrow().init_id();
             Self::encode_adt_def_id(enc_ctx, adt_def.did(), adt_did_cpn);
 
-            let len = substs.len().try_into().expect(&format!(
-                "The number of generic args of {:?} cannot be stored in a Capnp message",
-                adt_def
-            ));
-            let substs_cpn = adt_ty_cpn.reborrow().init_substs(len);
+            let substs_cpn = adt_ty_cpn.reborrow().init_substs(substs.len());
             Self::encode_ty_args(enc_ctx, substs, substs_cpn);
 
             let kind_cpn = adt_ty_cpn.init_kind();
@@ -1256,11 +1174,7 @@ mod vf_mir_builder {
                 id_mono_cpn.set_name(&def_path_mono);
             }
 
-            let len = substs.len().try_into().expect(&format!(
-                "The number of generic args for {} cannot be stored in a Capnp message",
-                def_path
-            ));
-            let substs_cpn = fn_def_ty_cpn.init_substs(len);
+            let substs_cpn = fn_def_ty_cpn.init_substs(substs.len());
             Self::encode_ty_args(enc_ctx, substs, substs_cpn);
         }
 
@@ -1312,18 +1226,9 @@ mod vf_mir_builder {
             let basic_block_id_cpn = basic_block_cpn.reborrow().init_id();
             Self::encode_basic_block_id(basic_block_idx, basic_block_id_cpn);
 
-            let statements_len = basic_block_data
-                .statements
-                .len()
-                .try_into()
-                .expect(&format!(
-                    "The number of BasicBlock Statements cannot be stored in a Capnp message"
-                ));
-            let mut statements_cpn = basic_block_cpn.reborrow().init_statements(statements_len);
-            for (idx, statement) in basic_block_data.statements.iter().enumerate() {
-                let statement_cpn = statements_cpn.reborrow().get(idx.try_into().unwrap());
+            basic_block_cpn.fill_statements(&basic_block_data.statements, |statement_cpn, statement| {
                 Self::encode_statement(tcx, enc_ctx, statement, statement_cpn);
-            }
+            });
 
             let terminator_cpn = basic_block_cpn.reborrow().init_terminator();
             Self::encode_terminator(tcx, enc_ctx, basic_block_data.terminator(), terminator_cpn);
@@ -1447,16 +1352,9 @@ mod vf_mir_builder {
                     let mut aggregate_data_cpn = rvalue_cpn.init_aggregate();
                     let aggregate_kind_cpn = aggregate_data_cpn.reborrow().init_aggregate_kind();
                     Self::encode_aggregate_kind(enc_ctx, aggregate_kind, aggregate_kind_cpn);
-                    let len = operands.len();
-                    let len = len.try_into().expect(&format!(
-                        "{} operands cannot be stored in a Capnp message",
-                        len
-                    ));
-                    let mut operands_cpn = aggregate_data_cpn.init_operands(len);
-                    for (idx, operand) in operands.iter().enumerate() {
-                        let operand_cpn = operands_cpn.reborrow().get(idx.try_into().unwrap());
+                    aggregate_data_cpn.fill_operands(operands, |operand_cpn, operand| {
                         Self::encode_operand(tcx, enc_ctx, operand, operand_cpn);
-                    }
+                    });
                 }
                 // Transmutes a `*mut u8` into shallow-initialized `Box<T>`.
                 mir::Rvalue::ShallowInitBox(operand, ty) => todo!(),
@@ -1470,7 +1368,7 @@ mod vf_mir_builder {
             mut targs_cpn: capnp::struct_list::Builder<'_, gen_arg_cpn::Owned>,
         ) {
             for (idx, targ) in targs.iter().enumerate() {
-                let targ_cpn = targs_cpn.reborrow().get(idx.try_into().unwrap());
+                let targ_cpn = targs_cpn.reborrow().get(idx);
                 Self::encode_gen_arg(enc_ctx.tcx, enc_ctx, &targ, targ_cpn);
             }
         }
@@ -1504,12 +1402,7 @@ mod vf_mir_builder {
                         v_idx_cpn,
                     );
 
-                    let len = substs.len();
-                    let len = len.try_into().expect(&format!(
-                        "{} Generic args cannot be stored in a Capnp message",
-                        len
-                    ));
-                    let substs_cpn = adt_data_cpn.reborrow().init_substs(len);
+                    let substs_cpn = adt_data_cpn.reborrow().init_substs(substs.len());
                     Self::encode_ty_args(enc_ctx, substs, substs_cpn);
                 }
                 mir::AggregateKind::Closure(_def_id, _substs) => todo!(),
@@ -1655,13 +1548,9 @@ mod vf_mir_builder {
                 .expect(&format!(
                     "Compiler invariant failed. SwitchInt must always have at least one branch"
                 ));
-            let len = len.try_into().expect(&format!(
-                "{} Switch branches cannot be stored in a Capnp message",
-                len
-            ));
             let mut branches_cpn = targets_cpn.reborrow().init_branches(len);
             for (idx, (val, target)) in targets.iter().enumerate() {
-                let mut branch_cpn = branches_cpn.reborrow().get(idx.try_into().unwrap());
+                let mut branch_cpn = branches_cpn.reborrow().get(idx);
                 let val_cpn = branch_cpn.reborrow().init_val();
                 capnp_utils::encode_u_int128(val, val_cpn);
                 let target_cpn = branch_cpn.init_target();
@@ -1687,14 +1576,9 @@ mod vf_mir_builder {
             Self::encode_operand(tcx, enc_ctx, func, func_cpn);
 
             // Encoding args
-            let args_len = args.len().try_into().expect(&format!(
-                "The number of arguments for function call cannot be stored in a Capnp message"
-            ));
-            let mut args_cpn = fn_call_data_cpn.reborrow().init_args(args_len);
-            for (idx, arg) in args.iter().enumerate() {
-                let arg_cpn = args_cpn.reborrow().get(idx.try_into().unwrap());
+            fn_call_data_cpn.fill_args(args, |arg_cpn, arg| {
                 Self::encode_operand(tcx, enc_ctx, arg, arg_cpn);
-            }
+            });
 
             // Encode destination
             let mut destination_cpn = fn_call_data_cpn.reborrow().init_destination();
@@ -1963,16 +1847,11 @@ mod vf_mir_builder {
             let local_decl_id_cpn = place_cpn.reborrow().init_local();
             Self::encode_local_decl_id(place.local, local_decl_id_cpn);
 
-            let place_elms_len = place.projection.len().try_into().expect(&format!(
-                "The number of projection elements cannot be stored in a Capnp message"
-            ));
-            let mut place_elms_cpn = place_cpn.init_projection(place_elms_len);
             let mut pty = PlaceTy::from_ty(enc_ctx.body().local_decls()[place.local].ty);
-            for (idx, place_elm) in place.projection.iter().enumerate() {
-                let place_elm_cpn = place_elms_cpn.reborrow().get(idx.try_into().unwrap());
+            place_cpn.fill_projection(place.projection, |place_elm_cpn, place_elm| {
                 Self::encode_place_element(enc_ctx, pty.ty, &place_elm, place_elm_cpn);
                 pty = pty.projection_ty(enc_ctx.tcx, place_elm);
-            }
+            });
         }
 
         fn encode_place_element(
