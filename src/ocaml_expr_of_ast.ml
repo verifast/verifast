@@ -764,10 +764,38 @@ and of_stmt = function
     of_loc closeBraceLoc;
     of_ref (of_list s) addressTaken
   ])
+| PerformActionStmt (_, _, _, _, _, _, _, _, _, _, _, _) -> failwith "TODO"
+| SplitFractionStmt (_, _, _, _, _) -> failwith "TODO"
+| MergeFractionsStmt (_, _) -> failwith "TODO"
+| CreateBoxStmt (_, _, _, _, _, _, _) -> failwith "TODO"
+| CreateHandleStmt (_, _, _, _, _) -> failwith "TODO"
+| DisposeBoxStmt (_, _, _, _) -> failwith "TODO"
 | LabelStmt (l, lbl) -> C ("LabelStmt", [of_loc l; S lbl])
 | GotoStmt (l, lbl) -> C ("GotoStmt", [of_loc l; S lbl])
 | NoopStmt l -> C ("NoopStmt", [of_loc l])
 | InvariantStmt (l, a) -> C ("InvariantStmt", [of_loc l; of_expr a])
+| ProduceLemmaFunctionPointerChunkStmt (l, e, ft_clause, scope) ->
+  C ("ProduceLemmaFunctionPointerChunkStmt", [
+    of_loc l;
+    of_option of_expr e;
+    of_option begin fun (ftn, targs, ftargs, ps, openBraceLoc, body, closeBraceLoc) ->
+      T [
+        S ftn;
+        of_list of_type_expr targs;
+        of_list of_expr ftargs;
+        of_list (fun (l, x) -> T [of_loc l; S x]) ps;
+        of_loc openBraceLoc;
+        of_list of_stmt body;
+        of_loc closeBraceLoc
+      ]
+    end ft_clause;
+    of_option of_stmt scope
+  ])
+| DuplicateLemmaFunctionPointerChunkStmt (l, e) ->
+  C ("DuplicateLemmaFunctionPointerChunkStmt", [
+    of_loc l;
+    of_expr e
+  ])
 | ProduceFunctionPointerChunkStmt (l, ftn, e, targs, ftargs, ps, openBraceLoc, ss, closeBraceLoc) ->
   C ("ProduceFunctionPointerChunkStmt", [
     of_loc l;

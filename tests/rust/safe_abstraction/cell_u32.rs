@@ -1,8 +1,7 @@
 #![allow(dead_code)]
-#![allow(invalid_reference_casting)]
 
 pub struct CellU32 {
-    v: u32,
+    v: std::cell::UnsafeCell<u32>,
 }
 /*@
 // Interpretation
@@ -60,7 +59,7 @@ lem CellU32_share_full(k: lifetime_t, t: thread_id_t, l: *CellU32)
 
 impl CellU32 {
     fn new(u: u32) -> CellU32 {
-        let c = CellU32 { v: u };
+        let c = CellU32 { v: std::cell::UnsafeCell::new(u) };
         //@ close CellU32_own(_t, u);
         c
     }
@@ -70,7 +69,7 @@ impl CellU32 {
         //@ open CellU32_share(a, _t, self);
         //@ open_nonatomic_borrow(a, _t, _q_a);
         //@ open CellU32_nonatomic_borrow_content(self, _t)();
-        let v = self.v;
+        let v = unsafe { *self.v.get() };
         //@ close CellU32_nonatomic_borrow_content(self, _t)();
         //@ close_nonatomic_borrow();
         v
@@ -82,7 +81,7 @@ impl CellU32 {
     //@ req thread_token(?t) &*& [?q]lifetime_token(?a) &*& CellU32_share(a, t, self);
     //@ ens thread_token(t) &*& [q]lifetime_token(a);
     {
-        let p = &self.v as *const u32 as *mut u32;
+        let p = self.v.get();
         //@ open CellU32_share(a, t, self);
         //@ open_nonatomic_borrow(a, t, q);
         //@ open CellU32_nonatomic_borrow_content(self, t)();
