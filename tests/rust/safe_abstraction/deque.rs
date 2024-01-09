@@ -63,42 +63,48 @@ pub struct Deque {
     size: i32,
 }
 
-// pred Deque_full_borrow_content(deque: *Deque) = Deque_sentinel(deque, ?sentinel) &*& deque->size |-> ?size &*& Deque_own(_
+/* VeriFast generates
+pred Deque_full_borrow_content(t: thread_id_t, deque: *Deque) =
+    (*deque).sentinel |-> ?sentinel &*& (*deque).size |-> ?size &*& Deque_own(t, sentinel, size);
+*/
 
 /*@
-pred Deque_own(t: thread_id_t, sentinel: *Node, size: i32) =
-  alloc_block(sentinel, std::mem::size_of::<Node>()) &*& struct_Node_padding(sentinel) &*&
-  (*sentinel).prev |-> ?last &*&
-  (*sentinel).value |-> _ &*&
-  (*sentinel).next |-> ?first &*&
-  Nodes(first, sentinel, last, sentinel, ?elems) &*&
-  size == length(elems);
+pred Deque_(sentinel: *Node; elems: list<i32> ) =
+    alloc_block(sentinel, std::mem::size_of::<Node>()) &*& struct_Node_padding(sentinel) &*&
+    (*sentinel).prev |-> ?last &*&
+    (*sentinel).value |-> _ &*&
+    (*sentinel).next |-> ?first &*&
+    Nodes(first, sentinel, last, sentinel, elems);
 
-pred Deque_share(k: lifetime_t, t: thread_id_t, l: *Deque) = true;
+pred Deque_own(t: thread_id_t, sentinel: *Node; size: i32) =
+    Deque_(sentinel, ?elems) &*& size == length(elems);
 
+pred Deque(deque: *Deque; elems: list<i32>) =
+    (*deque).sentinel |-> ?sentinel &*& (*deque).size |-> ?size &*& Deque_(sentinel, elems) &*& size == length(elems);
+
+pred Deque_share(k: lifetime_t, t: thread_id_t, l: *Deque) = true; //Todo: frac borrow
+
+// Proof obligations
 lem Deque_share_mono(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *Deque)
-  req lifetime_inclusion(k1, k) == true &*& [_]Deque_share(k, t, l);
-  ens [_]Deque_share(k1, t, l);
+    req lifetime_inclusion(k1, k) == true &*& [_]Deque_share(k, t, l);
+    ens [_]Deque_share(k1, t, l);
 {
-  close Deque_share(k1, t, l);
-  leak Deque_share(k1, t, l);
+    close Deque_share(k1, t, l);
+    leak Deque_share(k1, t, l);
 }
 
 lem Deque_share_full(k: lifetime_t, t: thread_id_t, l: *Deque)
-  req full_borrow(k, Deque_full_borrow_content(t, l)) &*& [?q]lifetime_token(k);
-  ens [_]Deque_share(k, t, l) &*& [q]lifetime_token(k);
+    req full_borrow(k, Deque_full_borrow_content(t, l)) &*& [?q]lifetime_token(k);
+    ens [_]Deque_share(k, t, l) &*& [q]lifetime_token(k);
 {
-  close Deque_share(k, t, l);
-  leak Deque_share(k, t, l);
-  leak full_borrow(_, _);
+    close Deque_share(k, t, l);
+    leak Deque_share(k, t, l);
+    leak full_borrow(_, _);
 }
 @*/
 
 impl Deque {
-    pub fn new() -> Deque
-// req true;
-    // ens Deque(result, []);
-    {
+    pub fn new() -> Deque {
         unsafe {
             let sentinel = std::alloc::alloc(std::alloc::Layout::new::<Node>()) as *mut Node;
             if sentinel.is_null() {
@@ -112,10 +118,8 @@ impl Deque {
         }
     }
 
-    fn get_size<'a>(deque: &'a mut Deque) -> i32
-// req Deque(deque, ?elems);
-        // ens Deque(deque, elems) &*& result == length(elems);
-    {
+    // Todo: implement with shared reference
+    pub fn get_size<'a>(deque: &'a mut Deque) -> i32 {
         //@ open_full_borrow(a, Deque_full_borrow_content(_t, deque));
         //@ open Deque_full_borrow_content(_t, deque)();
         let size = (*deque).size;
@@ -125,189 +129,193 @@ impl Deque {
         return size;
     }
 
-    pub fn push_front<'a>(deque: &'a mut Deque, value: i32)
-    // req Deque(deque, ?elems) &*& length(elems) < 0x7fffffff;
-    // ens Deque(deque, cons(value, elems));
+    unsafe fn unsafe_push_front(deque: *mut Deque, value: i32)
+        //@ req Deque(deque, ?elems) &*& length(elems) < 0x7fffffff;
+        //@ ens Deque(deque, cons(value, elems));
     {
-        unsafe {
-            let new_node = std::alloc::alloc(std::alloc::Layout::new::<Node>()) as *mut Node;
-            if new_node.is_null() {
-                std::alloc::handle_alloc_error(std::alloc::Layout::new::<Node>());
+        let new_node = std::alloc::alloc(std::alloc::Layout::new::<Node>()) as *mut Node;
+        if new_node.is_null() {
+            std::alloc::handle_alloc_error(std::alloc::Layout::new::<Node>());
+        }
+        //@ close_struct(new_node);
+        (*new_node).prev = (*deque).sentinel;
+        (*new_node).value = value;
+        //@ let sentinel = (*deque).sentinel;
+        //@ let first = (*sentinel).next;
+        (*new_node).next = (*(*deque).sentinel).next;
+        (*(*new_node).prev).next = new_node;
+        //@ open Nodes(first, sentinel, ?last, sentinel, elems);
+        (*(*new_node).next).prev = new_node;
+        (*deque).size += 1;
+    }
+
+    pub fn push_front<'a>(&'a mut self, value: i32) {
+        //@ open_full_borrow(a, Deque_full_borrow_content(_t, self));
+        //@ open Deque_full_borrow_content(_t, self)();
+        if (*self).size < 0x7fffffff {
+            unsafe {
+                Self::unsafe_push_front(self, value);
             }
-            //@ close_struct(new_node );
-            //@ open_full_borrow(a, Deque_full_borrow_content(_t, deque));
-            //@ open Deque_full_borrow_content(_t, deque)();
-            (*new_node).prev = (*deque).sentinel;
-            (*new_node).value = value;
-            //@ let sentinel = (*deque).sentinel;
-            //@ open Deque_own(_t, sentinel, _);
-            //@ let first = (*sentinel).next;
-            (*new_node).next = (*(*deque).sentinel).next;
-            (*(*new_node).prev).next = new_node;
-            //@ open Nodes(first, sentinel, ?last, sentinel, ?elems);
-            (*(*new_node).next).prev = new_node;
-            if (*deque).size < 0x7fffffff {
-                (*deque).size += 1;
-            } else {
-                std::process::abort();
+        } else {
+            std::process::abort();
+        }
+        //@ let sentinel = (*self).sentinel;
+        //@ close Deque_full_borrow_content(_t, self)();
+        //@ close_full_borrow();
+        //@ leak full_borrow(_, _);
+    }
+
+    unsafe fn unsafe_push_back(deque: *mut Deque, value: i32)
+        //@ req Deque(deque, ?elems) &*& length(elems) < 0x7fffffff;
+        //@ ens Deque(deque, append(elems, [value]));
+    {
+        let new_node = std::alloc::alloc(std::alloc::Layout::new::<Node>()) as *mut Node;
+        if new_node.is_null() {
+            std::alloc::handle_alloc_error(std::alloc::Layout::new::<Node>());
+        }
+        //@ close_struct(new_node);
+        //@ let sentinel = (*deque).sentinel;
+        (*new_node).prev = (*(*deque).sentinel).prev;
+        (*new_node).value = value;
+        (*new_node).next = (*deque).sentinel;
+        /*@
+        if length(elems) > 0 {
+            Nodes_split_last((*sentinel).next);
+        } else {
+            open Nodes(?first, sentinel, ?last, sentinel, elems);
+        }
+        @*/
+        (*(*new_node).prev).next = new_node;
+        (*(*new_node).next).prev = new_node;
+        (*deque).size += 1;
+        /*@
+        if length(elems) > 0 {
+            Nodes_join_last((*sentinel).next);
+            append_take_drop_n(elems, length(elems) - 1);
+            drop_n_plus_one(length(elems) - 1, elems);
+        } else {
+            close Nodes(new_node, sentinel, sentinel, new_node, []);
+        }
+        @*/
+        //@ Nodes_join_last((*sentinel).next);
+    }
+
+    pub fn push_back<'a>(&'a mut self, value: i32) {
+        //@ open_full_borrow(a, Deque_full_borrow_content(_t, self));
+        //@ open Deque_full_borrow_content(_t, self)();
+        if (*self).size < 0x7fffffff {
+            unsafe { Self::unsafe_push_back(self, value) }
+        } else {
+            std::process::abort()
+        }
+        //@ close Deque_full_borrow_content(_t, self)();
+        //@ close_full_borrow();
+        //@ leak full_borrow(_, _);
+    }
+
+    unsafe fn unsafe_pop_front(deque: *mut Deque) -> i32
+        //@ req Deque(deque, cons(?elem, ?elems));
+        //@ ens Deque(deque, elems) &*& result == elem;
+    {
+        let node = (*(*deque).sentinel).next;
+        //@ open Nodes(_, _, _, _, _);
+        let result = (*node).value;
+        (*(*node).prev).next = (*node).next;
+        //@ open Nodes(_, _, _, _, _);
+        (*(*node).next).prev = (*node).prev;
+        //@ open_struct(node);
+        std::alloc::dealloc(node as *mut u8, std::alloc::Layout::new::<Node>());
+        (*deque).size -= 1;
+        return result;
+    }
+
+    pub fn pop_front<'a>(&'a mut self) -> i32
+        //@ req thread_token(?_t) &*& [?_q]lifetime_token(?a) &*& full_borrow(a, Deque_full_borrow_content(_t, self));
+        //@ ens thread_token(_t) &*& [_q]lifetime_token(a);
+    {
+        //@ open_full_borrow(a, Deque_full_borrow_content(_t, self));
+        //@ open Deque_full_borrow_content(_t, self)();
+        if (*self).size == 0 {
+            std::process::abort();
+        } else {
+            unsafe {
+                let result = Self::unsafe_pop_front(self);
+                //@ close Deque_full_borrow_content(_t, self)();
+                //@ close_full_borrow();
+                //@ leak full_borrow(_, _);
+                return result;
             }
-            //@ close Deque_own(_t, sentinel, _);
-            //@ close Deque_full_borrow_content(_t, deque)();
-            //@ close_full_borrow();
-            //@ leak full_borrow(_, _);
         }
     }
 
-    pub fn push_back<'a>(deque: &'a mut Deque, value: i32)
-    // req Deque(deque, ?elems) &*& length(elems) < 0x7fffffff;
-    // ens Deque(deque, append(elems, [value]));
+    unsafe fn unsafe_pop_back(deque: *mut Deque) -> i32
+        //@ req Deque(deque, ?elems) &*& 1 <= length(elems);
+        //@ ens Deque(deque, take(length(elems) - 1, elems)) &*& result == nth(length(elems) - 1, elems);
     {
-        unsafe {
-            let new_node = std::alloc::alloc(std::alloc::Layout::new::<Node>()) as *mut Node;
-            if new_node.is_null() {
-                std::alloc::handle_alloc_error(std::alloc::Layout::new::<Node>());
+        //@ let sentinel = (*deque).sentinel;
+        //@ let first = (*sentinel).next;
+        //@ Nodes_split_last(first);
+        let node = (*(*deque).sentinel).prev;
+        let result = (*node).value;
+        /*@
+        if 2 <= length(elems) {
+            Nodes_split_last(first);
+            append_take_drop_n(take(length(elems) - 1, elems), length(elems) - 2);
+            drop_n_plus_one(length(elems) - 2, take(length(elems) - 1, elems));
+        } else {
+            open Nodes(first, sentinel, ?last1, ?last, _);
+        }
+        @*/
+        (*(*node).prev).next = (*node).next;
+        (*(*node).next).prev = (*node).prev;
+        //@ open_struct(node);
+        std::alloc::dealloc(node as *mut u8, std::alloc::Layout::new::<Node>());
+        (*deque).size -= 1;
+        /*@
+        if 2 <= length(elems) {
+            Nodes_join_last(first);
+        }
+        @*/
+        return result;
+    }
+
+    pub fn pop_back<'a>(&'a mut self) -> i32 {
+        //@ open_full_borrow(a, Deque_full_borrow_content(_t, self));
+        //@ open Deque_full_borrow_content(_t, self)();
+        if (*self).size == 0 {
+            std::process::abort();
+        } else {
+            unsafe {
+                let result = Self::unsafe_pop_back(self);
+                //@ close Deque_full_borrow_content(_t, self)();
+                //@ close_full_borrow();
+                //@ leak full_borrow(_, _);
+                return result;
             }
-            //@ close_struct(new_node );
-            //@ open_full_borrow(a, Deque_full_borrow_content(_t, deque));
-            //@ open Deque_full_borrow_content(_t, deque)();
-            //@ let sentinel = (*deque).sentinel;
-            //@ open Deque_own(_t, sentinel, _);
-            //@ assert Nodes(_, sentinel, _, sentinel, ?elems);
-            (*new_node).prev = (*(*deque).sentinel).prev;
-            (*new_node).value = value;
-            (*new_node).next = (*deque).sentinel;
-            /*@
-            if length(elems) > 0 {
-                Nodes_split_last((*sentinel).next);
-            } else {
-                open Nodes(?first, sentinel, ?last, sentinel, elems);
-            }
-            @*/
-            (*(*new_node).prev).next = new_node;
-            (*(*new_node).next).prev = new_node;
-            if (*deque).size < 0x7fffffff {
-                (*deque).size += 1;
-            } else {
-                std::process::abort();
-            }
-            /*@
-            if length(elems) > 0 {
-                Nodes_join_last((*sentinel).next);
-                append_take_drop_n(elems, length(elems) - 1);
-                drop_n_plus_one(length(elems) - 1, elems);
-            } else {
-                close Nodes(new_node, sentinel, sentinel, new_node, []);
-            }
-            @*/
-            //@ Nodes_join_last((*sentinel).next);
-            //@ close Deque_own(_t, sentinel, (*deque).size);
-            //@ close Deque_full_borrow_content(_t, deque)();
-            //@ close_full_borrow();
-            //@ leak full_borrow(_, _);
         }
     }
 
-    pub fn pop_front<'a>(deque: &'a mut Deque) -> i32
-// req Deque(deque, cons(?elem, ?elems));
-    // ens Deque(deque, elems) &*& result == elem;
-    {
-        unsafe {
-            //@ open_full_borrow(a, Deque_full_borrow_content(_t, deque));
-            //@ open Deque_full_borrow_content(_t, deque)();
-            if (*deque).size == 0 {
-                std::process::abort();
-            }
-            let sentinel = (*deque).sentinel;
-            //@ open Deque_own(_t, (*deque).sentinel, _);
-            let node = (*sentinel).next;
-            //@ open Nodes(_, _, _, _, _);
-            let result = (*node).value;
-            (*(*node).prev).next = (*node).next;
-            //@ open Nodes(_, _, _, _, _);
-            (*(*node).next).prev = (*node).prev;
-            //@ close Nodes((*node).next, sentinel, _, sentinel, _);
-            //@ open_struct(node);
-            std::alloc::dealloc(node as *mut u8, std::alloc::Layout::new::<Node>());
-            //@ assert (*deque).size > 0;
-            // assert (*deque).size < 0x80000000;
-            (*deque).size -= 1;
-            //@ close Deque_own(_t, sentinel, (*deque).size);
-            //@ close Deque_full_borrow_content(_t, deque)();
-            //@ close_full_borrow();
-            //@ leak full_borrow(_, _);
-            return result;
-        }
-    }
-
-    pub fn pop_back<'a>(deque: &'a mut Deque) -> i32
-// req Deque(deque, ?elems) &*& 1 <= length(elems);
-        // ens Deque(deque, take(length(elems) - 1, elems)) &*& result == nth(length(elems) - 1, elems);
-    {
-        unsafe {
-            //@ open_full_borrow(a, Deque_full_borrow_content(_t, deque));
-            //@ open Deque_full_borrow_content(_t, deque)();
-            if (*deque).size == 0 {
-                std::process::abort();
-            }
-            //@ let sentinel = (*deque ).sentinel;
-            //@ open Deque_own(_t, sentinel, _);
-            //@ let first = (*sentinel).next;
-            //@ open Nodes(first, sentinel, _, sentinel, ?elems);
-            //@ close Nodes(first, sentinel, _, sentinel, elems);
-            let node = (*(*deque).sentinel).prev;
-            //@ Nodes_split_last(first);
-            let result = (*node).value;
-            /*@
-            if 2 <= length(elems) {
-                 Nodes_split_last(first);
-                 append_take_drop_n(take(length(elems) - 1, elems), length(elems) - 2);
-                 drop_n_plus_one(length(elems) - 2, take(length(elems) - 1, elems));
-             } else {
-                 open Nodes(first, sentinel, ?last1, ?last, _);
-             }
-             @*/
-            (*(*node).prev).next = (*node).next;
-            (*(*node).next).prev = (*node).prev;
-            //@ open_struct(node);
-            std::alloc::dealloc(node as *mut u8, std::alloc::Layout::new::<Node>());
-            (*deque).size -= 1;
-            /*@
-            if 2 <= length(elems) {
-                Nodes_join_last(first);
-            }
-            @*/
-            //@ close Deque_own(_t, sentinel, (*deque).size);
-            //@ close Deque_full_borrow_content(_t, deque)();
-            //@ close_full_borrow();
-            //@ leak full_borrow(_, _);
-            return result;
-        }
-    }
-
-    unsafe fn dispose_nodes(first: *mut Node, lnext: *mut Node)
-    //@ req Nodes(first, ?fprev, ?last, lnext, ?elems) &*& Node_next(lnext, _);
-    //@ ens Node_next(lnext, _);
+    unsafe fn dispose_nodes(first: *mut Node, next: *mut Node)
+        //@ req Nodes(first, ?prev, ?last, next, ?elems) &*& Node_next(next, _);
+        //@ ens Node_next(next, _);
     {
         //@ open Nodes(_, _, _, _, _);
-        if first == lnext {
+        if first == next {
             return;
         }
-        let next = (*first).next;
+        let first1 = (*first).next;
         //@ open_struct(first);
         std::alloc::dealloc(first as *mut u8, std::alloc::Layout::new::<Node>());
-        Self::dispose_nodes(next, lnext);
+        Self::dispose_nodes(first1, next);
     }
-    
 
-    fn dispose(deque: Deque)
-    // req Deque(deque, []);
-    // ens true;
-    {
-        unsafe {
+    // Todo: Implement the Drop trait instead
+    pub fn dispose(deque: Deque) {
         //@ open Deque_own(_t, ?sentinel, ?size);
-        Self::dispose_nodes((*(deque.sentinel)).next, deque.sentinel);
-        //@ open_struct(deque.sentinel);
-        std::alloc::dealloc(deque.sentinel as *mut u8, std::alloc::Layout::new::<Node>());
+        unsafe {
+            Self::dispose_nodes((*(deque.sentinel)).next, deque.sentinel);
+            //@ open_struct(deque.sentinel);
+            std::alloc::dealloc(deque.sentinel as *mut u8, std::alloc::Layout::new::<Node>());
         }
     }
 }

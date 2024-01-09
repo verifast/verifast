@@ -120,7 +120,7 @@ impl Deque {
         if new_node.is_null() {
             std::alloc::handle_alloc_error(std::alloc::Layout::new::<Node>());
         }
-        //@ close_struct(new_node );
+        //@ close_struct(new_node);
         (*new_node).prev = (*deque).sentinel;
         (*new_node).value = value;
         //@ let sentinel = (*deque).sentinel;
@@ -140,7 +140,7 @@ impl Deque {
         if new_node.is_null() {
             std::alloc::handle_alloc_error(std::alloc::Layout::new::<Node>());
         }
-        //@ close_struct(new_node );
+        //@ close_struct(new_node);
         //@ let sentinel = (*deque).sentinel;
         (*new_node).prev = (*(*deque).sentinel).prev;
         (*new_node).value = value;
@@ -187,7 +187,7 @@ impl Deque {
 //@ req Deque(deque, ?elems) &*& 1 <= length(elems);
     //@ ens Deque(deque, take(length(elems) - 1, elems)) &*& result == nth(length(elems) - 1, elems);
     {
-        //@ let sentinel = (*deque ) . sentinel;
+        //@ let sentinel = (*deque).sentinel;
         //@ let first = (*sentinel).next;
         //@ Nodes_split_last(first);
         let node = (*(*deque).sentinel).prev;
