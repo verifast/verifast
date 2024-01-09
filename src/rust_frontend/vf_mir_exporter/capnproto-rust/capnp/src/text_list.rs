@@ -128,11 +128,12 @@ impl<'a> Builder<'a> {
         self.len() == 0
     }
 
-    pub fn set(&mut self, index: u32, value: &str) {
-        assert!(index < self.len());
+    pub fn set(&mut self, index: usize, value: &str) {
+        let index_u32: u32 = index.try_into().expect("index out of bounds");
+        assert!(index_u32 < self.len());
         self.builder
             .reborrow()
-            .get_pointer_element(index)
+            .get_pointer_element(index_u32)
             .set_text(value.into());
     }
 
@@ -145,6 +146,18 @@ impl<'a> Builder<'a> {
     pub fn reborrow<'b>(&'b mut self) -> Builder<'b> {
         Builder::<'b> {
             builder: self.builder.reborrow(),
+        }
+    }
+}
+
+impl<'a> Builder<'a> {
+    pub fn fill<E>(builder: PointerBuilder<'a>, elems: E)
+        where E: IntoIterator, E::IntoIter: ExactSizeIterator, E::Item: AsRef<str>
+    {
+        let iter = elems.into_iter();
+        let mut list_builder = Self::init_pointer_with_usize_length(builder, iter.len());
+        for (idx, elem) in iter.enumerate() {
+            list_builder.set(idx, elem.as_ref());
         }
     }
 }

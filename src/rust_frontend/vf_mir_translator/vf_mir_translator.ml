@@ -938,7 +938,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
   let translate_adt_def_id (adt_def_id_cpn : AdtDefIdRd.t) =
     AdtDefIdRd.name_get adt_def_id_cpn
 
-  let translate_adt_ty (adt_ty_cpn : AdtTyRd.t) (loc : Ast.loc) =
+  let rec translate_adt_ty (adt_ty_cpn : AdtTyRd.t) (loc : Ast.loc) =
     let open AdtTyRd in
     let open Ast in
     let def_path = translate_adt_def_id @@ id_get @@ adt_ty_cpn in
@@ -959,6 +959,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               let usz_ty_cpn = init_root () in
               u_size_set usz_ty_cpn;
               translate_u_int_ty (to_reader usz_ty_cpn) loc
+        | "std::cell::UnsafeCell" ->
+            let [arg_cpn] = substs_cpn in
+            let* (Mir.GenArgType arg_ty) = translate_generic_arg arg_cpn loc in
+            Ok arg_ty
         | _ ->
             let vf_ty = ManifestTypeExpr (loc, StructType name) in
             let sz_expr = SizeofExpr (loc, TypeExpr vf_ty) in
@@ -1006,7 +1010,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | UnionKind -> failwith "Todo: AdtTy::Union"
     | Undefined _ -> Error (`TrAdtTy "Unknown ADT kind")
 
-  let translate_tuple_ty (substs_cpn : GenArgRd.t list) (loc : Ast.loc) =
+  and translate_tuple_ty (substs_cpn : GenArgRd.t list) (loc : Ast.loc) =
     if not @@ ListAux.is_empty @@ substs_cpn then
       failwith "Todo: Tuple Ty is not implemented yet"
     else
@@ -1022,7 +1026,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       in
       Ok ty_info
 
-  let bool_ty_info loc =
+  and bool_ty_info loc =
     let open Ast in
     let vf_ty = ManifestTypeExpr (loc, Bool) in
     let size = SizeofExpr (loc, TypeExpr vf_ty) in
@@ -1049,7 +1053,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         interp = RustBelt.{ size; own; shr; full_bor_content; points_to };
       }
 
-  let char_ty_info loc =
+  and char_ty_info loc =
     let open Ast in
     let vf_ty =
       ManifestTypeExpr (loc, Int (Unsigned, FixedWidthRank 2))
@@ -1144,7 +1148,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         interp = RustBelt.{ size; own; shr; full_bor_content; points_to };
       }
 
-  let never_ty_info loc =
+  and never_ty_info loc =
     let open Ast in
     let vf_ty = ManifestTypeExpr (loc, UnionType "std_empty_") in
     let size =
@@ -1165,7 +1169,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         interp = RustBelt.{ size; own; shr; full_bor_content; points_to };
       }
 
-  let rec translate_generic_arg (gen_arg_cpn : GenArgRd.t) (loc : Ast.loc) =
+  and translate_generic_arg (gen_arg_cpn : GenArgRd.t) (loc : Ast.loc) =
     let open GenArgRd in
     let kind_cpn = kind_get gen_arg_cpn in
     let open GenArgKindRd in
@@ -1782,6 +1786,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                         (*decimal*) true,
                         (*U suffix*) false,
                         (*int literal*) Ast.NoLSuffix ) )
+            | "std::cell::UnsafeCell::<T>::new" | "std::cell::UnsafeCell::<T>::get" ->
+                let [ arg_cpn ] = args_cpn in
+                let* tmp_rvalue_binders, [ arg ] = translate_operands [ (arg_cpn, fn_loc) ] in
+                Ok ( tmp_rvalue_binders, arg )
             | _ ->
                 (* Ignore the generic args for now *)
                 translate_regular_fn_call fn_name)
