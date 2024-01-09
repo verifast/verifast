@@ -1,3 +1,5 @@
+module RustBelt = Rustbelt
+
 module IntAux = struct
   module Make (StdintMod : sig
     type t
@@ -355,28 +357,6 @@ end = struct
   let int_of_sz_bytes sb = sb
 end
 
-module RustBelt = struct
-  open Ast
-
-  type tid = expr
-  type v = expr
-  type lft = expr
-  type l = expr
-
-  type ty_interp = {
-    size : expr;
-    own : tid -> v list -> (asn, string) result;
-    shr : lft -> tid -> l -> (asn, string) result;
-  }
-
-  let emp_ty_interp loc =
-    {
-      size = True loc;
-      own = (fun _ _ -> Ok (True loc));
-      shr = (fun _ _ _ -> Ok (True loc));
-    }
-end
-
 module Hir = struct
   type generic_param = GenParamLifetime | GenParamType | GenParamConst
 end
@@ -426,6 +406,15 @@ module Mir = struct
   type fn_call_dst_data = { dst : Ast.expr; dst_bblock_id : string }
   type int_ty = ISize | I8 | I16 | I32 | I64 | I128
 
+  let int_ty_to_string (it : int_ty) =
+    match it with
+    | ISize -> "isize"
+    | I8 -> "i8"
+    | I16 -> "i16"
+    | I32 -> "i32"
+    | I64 -> "i64"
+    | I128 -> "i128"
+
   let int_ty_bits_len (it : int_ty) =
     match it with
     | ISize ->
@@ -439,6 +428,15 @@ module Mir = struct
     | I128 -> Ok 128
 
   type u_int_ty = USize | U8 | U16 | U32 | U64 | U128
+
+  let u_int_ty_to_string (uit : u_int_ty) =
+    match uit with
+    | USize -> "usize"
+    | U8 -> "u8"
+    | U16 -> "u16"
+    | U32 -> "u32"
+    | U64 -> "u64"
+    | U128 -> "u128"
 
   let u_int_ty_bits_len (uit : u_int_ty) =
     match uit with
@@ -470,6 +468,15 @@ module Mir = struct
     | _ -> Error (`DeclMirAdtKind "Not an ADT")
 
   type aggregate_kind = AggKindAdt of { name : string; def : Ast.decl }
+
+  type field_def_tr = {
+    name : string;
+    ty : ty_info;
+    vis : visibility;
+    loc : Ast.loc;
+  }
+
+  type variant_def_tr = { fields : field_def_tr list }
 
   type adt_def_tr = {
     def : Ast.decl;
@@ -804,7 +811,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
 
   let translate_int_ty (int_ty_cpn : IntTyRd.t) (loc : Ast.loc) =
     let open Ast in
-    let sz_and_rank i =
+    let sz_rank_name i =
       let open SizeAux in
       let* bits = Mir.int_ty_bits_len i in
       let* sz_bits = sz_bits_of_int bits in
@@ -818,37 +825,55 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             NoLSuffix )
       in
       let rank = FixedWidthRank (TrTyInt.calc_rank sz_bytes) in
-      Ok (sz_expr, rank)
+      Ok (sz_expr, rank, Mir.int_ty_to_string i)
     in
-    let* sz_expr, rank =
+    let* sz_expr, rank, ty_name =
       match IntTyRd.get int_ty_cpn with
       | ISize ->
           (* isize is pointer-sized *)
           let ptr_sz_expr =
             SizeofExpr (loc, TypeExpr (ManifestTypeExpr (loc, PtrType Void)))
           in
-          Ok (ptr_sz_expr, int_size_rank)
-      | I8 -> sz_and_rank Mir.I8
-      | I16 -> sz_and_rank Mir.I16
-      | I32 -> sz_and_rank Mir.I32
-      | I64 -> sz_and_rank Mir.I64
-      | I128 -> sz_and_rank Mir.I128
+          Ok (ptr_sz_expr, int_size_rank, Mir.int_ty_to_string Mir.ISize)
+      | I8 -> sz_rank_name Mir.I8
+      | I16 -> sz_rank_name Mir.I16
+      | I32 -> sz_rank_name Mir.I32
+      | I64 -> sz_rank_name Mir.I64
+      | I128 -> sz_rank_name Mir.I128
       | Undefined _ -> Error (`TrIntTy "Unknown Rust int type")
     in
     let own tid vs = Ok (True loc) in
     let shr lft tid l = Ok (True loc) in
+    let full_bor_content tid l =
+      Ok
+        (CallExpr
+           ( loc,
+             ty_name ^ "_full_borrow_content",
+             (*type arguments*) [],
+             (*indices*) [],
+             (*arguments*)
+             [ LitPat tid; LitPat l ],
+             Static ))
+    in
+    let points_to tid l vid_op =
+      (* Todo: The size and bounds of the integer that this assertion is specifying will depend on the pointer `l` type
+         which is error-prone. It is helpful if we add a sanity-check or use elevated `integer_(...)` predicates with bound infos *)
+      let* pat = RustBelt.Aux.vid_op_to_var_pat vid_op loc in
+      Ok (PointsTo (loc, l, pat))
+    in
     let ty_info =
       Mir.TyInfoBasic
         {
           vf_ty = ManifestTypeExpr (loc, Int (Signed, rank));
-          interp = RustBelt.{ size = sz_expr; own; shr };
+          interp =
+            RustBelt.{ size = sz_expr; own; shr; full_bor_content; points_to };
         }
     in
     Ok ty_info
 
   let translate_u_int_ty (u_int_ty_cpn : UIntTyRd.t) (loc : Ast.loc) =
     let open Ast in
-    let sz_and_rank ui =
+    let sz_rank_name ui =
       let open SizeAux in
       let* bits = Mir.u_int_ty_bits_len ui in
       let* sz_bits = sz_bits_of_int bits in
@@ -862,33 +887,50 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             NoLSuffix )
       in
       let rank = FixedWidthRank (TrTyInt.calc_rank sz_bytes) in
-      Ok (sz_expr, rank)
+      Ok (sz_expr, rank, Mir.u_int_ty_to_string ui)
     in
-    let* sz_expr, rank =
+    let* sz_expr, rank, ty_name =
       match UIntTyRd.get u_int_ty_cpn with
       | USize ->
           (* usize is pointer-sized *)
           let ptr_sz_expr =
             SizeofExpr (loc, TypeExpr (ManifestTypeExpr (loc, PtrType Void)))
           in
-          Ok (ptr_sz_expr, int_size_rank)
-      | U8 -> sz_and_rank Mir.U8
-      | U16 -> sz_and_rank Mir.U16
-      | U32 -> sz_and_rank Mir.U32
-      | U64 -> sz_and_rank Mir.U64
-      | U128 -> sz_and_rank Mir.U128
+          Ok (ptr_sz_expr, int_size_rank, Mir.u_int_ty_to_string Mir.USize)
+      | U8 -> sz_rank_name Mir.U8
+      | U16 -> sz_rank_name Mir.U16
+      | U32 -> sz_rank_name Mir.U32
+      | U64 -> sz_rank_name Mir.U64
+      | U128 -> sz_rank_name Mir.U128
       | Undefined _ -> Error (`TrUIntTy "Unknown Rust unsigned int type")
     in
     let own tid vs = Ok (True loc) in
     (* Todo @Nima: This shared predicate is not correct. We should write a SimpleType interpretation
-       constructor in RustBelt module to call to for creating the interpretation for u_int and other simple types.
-       It needs extending VeriFast with generic predicate constructors *)
+       constructor in RustBelt module to call to for creating the interpretation for u_int and other simple types. *)
     let shr lft tid l = Ok (True loc) in
+    let full_bor_content tid l =
+      Ok
+        (CallExpr
+           ( loc,
+             ty_name ^ "_full_borrow_content",
+             (*type arguments*) [],
+             (*indices*) [],
+             (*arguments*)
+             [ LitPat tid; LitPat l ],
+             Static ))
+    in
+    let points_to tid l vid_op =
+      (* Todo: The size and bounds of the integer that this assertion is specifying will depend on the pointer `l` type
+         which is error-prone. It is helpful if we add a sanity-check or use elevated `integer_(...)` predicates with bound infos *)
+      let* pat = RustBelt.Aux.vid_op_to_var_pat vid_op loc in
+      Ok (PointsTo (loc, l, pat))
+    in
     let ty_info =
       Mir.TyInfoBasic
         {
           vf_ty = ManifestTypeExpr (loc, Int (Unsigned, rank));
-          interp = RustBelt.{ size = sz_expr; own; shr };
+          interp =
+            RustBelt.{ size = sz_expr; own; shr; full_bor_content; points_to };
         }
     in
     Ok ty_info
@@ -899,28 +941,24 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
   let rec translate_adt_ty (adt_ty_cpn : AdtTyRd.t) (loc : Ast.loc) =
     let open AdtTyRd in
     let open Ast in
-    let id_cpn = id_get adt_ty_cpn in
-    let def_path = translate_adt_def_id id_cpn in
+    let def_path = translate_adt_def_id @@ id_get @@ adt_ty_cpn in
     let name = TrName.translate_def_path def_path in
-    let kind_cpn = kind_get adt_ty_cpn in
-    let kind = AdtKindRd.get kind_cpn in
+    let kind = AdtKindRd.get @@ kind_get @@ adt_ty_cpn in
     let substs_cpn = substs_get_list adt_ty_cpn in
     match kind with
     | StructKind -> (
         match def_path with
         | "std::alloc::Layout" ->
+            (* Todo: To handle the ADTs from std lib we should use the original definition and search for their external-specs in VeriFast headers
+               e.g. `external struct std::alloc::Layout; //@ ordinary_type` *)
             if not @@ ListAux.is_empty @@ substs_cpn then
               Error
-                (`TrAdtTy (def_path ^ " does not have any generic parameter"))
+                (`TrAdtTy (def_path ^ " should not have any generic parameter"))
             else
-              let ty_info =
-                Mir.TyInfoBasic
-                  {
-                    vf_ty = ManifestTypeExpr (loc, Int (Unsigned, int_size_rank));
-                    interp = RustBelt.emp_ty_interp loc;
-                  }
-              in
-              Ok ty_info
+              let open TyBd.UIntTy in
+              let usz_ty_cpn = init_root () in
+              u_size_set usz_ty_cpn;
+              translate_u_int_ty (to_reader usz_ty_cpn) loc
         | "std::cell::UnsafeCell" ->
             let [arg_cpn] = substs_cpn in
             let* (Mir.GenArgType arg_ty) = translate_generic_arg arg_cpn loc in
@@ -929,15 +967,14 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             let vf_ty = ManifestTypeExpr (loc, StructType name) in
             let sz_expr = SizeofExpr (loc, TypeExpr vf_ty) in
             let own tid vs =
-              let field_vs = List.map (fun v -> LitPat v) vs in
+              let args = List.map (fun x -> LitPat x) (tid :: vs) in
               Ok
                 (CallExpr
                    ( loc,
                      name ^ "_own",
                      (*type arguments*) [],
                      (*indices*) [],
-                     (*arguments*)
-                     LitPat tid :: field_vs,
+                     args,
                      Static ))
             in
             let shr lft tid l =
@@ -951,7 +988,22 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                      [ LitPat lft; LitPat tid; LitPat l ],
                      Static ))
             in
-            let interp = RustBelt.{ size = sz_expr; own; shr } in
+            let full_bor_content tid l =
+              Ok
+                (CallExpr
+                   ( loc,
+                     name ^ "_full_borrow_content",
+                     (*type arguments*) [],
+                     (*indices*) [],
+                     (*arguments*)
+                     [ LitPat tid; LitPat l ],
+                     Static ))
+            in
+            (* Todo: Nested structs *)
+            let points_to tid l vid_op = Ok (True loc) in
+            let interp =
+              RustBelt.{ size = sz_expr; own; shr; full_bor_content; points_to }
+            in
             let ty_info = Mir.TyInfoBasic { vf_ty; interp } in
             Ok ty_info)
     | EnumKind -> failwith "Todo: AdtTy::Enum"
@@ -963,7 +1015,6 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       failwith "Todo: Tuple Ty is not implemented yet"
     else
       let name = TrTyTuple.make_tuple_type_name [] in
-
       (* TODO @Nima: std_tuple_0_ type is declared in prelude_rust_.h.
          We should come up with a better arrangement for these auxiliary types. *)
       let ty_info =
@@ -974,6 +1025,149 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           }
       in
       Ok ty_info
+
+  and bool_ty_info loc =
+    let open Ast in
+    let vf_ty = ManifestTypeExpr (loc, Bool) in
+    let size = SizeofExpr (loc, TypeExpr vf_ty) in
+    let own _ _ = Ok (True loc) in
+    let shr _ _ _ = Ok (True loc) in
+    let full_bor_content tid l =
+      Ok
+        (CallExpr
+           ( loc,
+             "bool_full_borrow_content",
+             (*type arguments*) [],
+             (*indices*) [],
+             (*arguments*)
+             [ LitPat tid; LitPat l ],
+             Static ))
+    in
+    let points_to tid l vid_op =
+      let* pat = RustBelt.Aux.vid_op_to_var_pat vid_op loc in
+      Ok (PointsTo (loc, l, pat))
+    in
+    Mir.TyInfoBasic
+      {
+        vf_ty;
+        interp = RustBelt.{ size; own; shr; full_bor_content; points_to };
+      }
+
+  and char_ty_info loc =
+    let open Ast in
+    let vf_ty =
+      ManifestTypeExpr (loc, Int (Unsigned, FixedWidthRank 2))
+      (* https://doc.rust-lang.org/reference/types/textual.html *)
+    in
+    let size = SizeofExpr (loc, TypeExpr vf_ty) in
+    let own tid vs =
+      match vs with
+      | [ c ] ->
+          let c_ge_zero =
+            Operation
+              ( loc,
+                Ge,
+                [
+                  c;
+                  IntLit
+                    ( loc,
+                      Big_int.zero_big_int,
+                      (*decimal*) false,
+                      (*U suffix*) false,
+                      NoLSuffix );
+                ] )
+          in
+          let c_le_D7FF =
+            Operation
+              ( loc,
+                Le,
+                [
+                  c;
+                  IntLit
+                    (loc, Big_int.big_int_of_int 0xD7FF, false, false, NoLSuffix);
+                ] )
+          in
+          let c_ge_E000 =
+            Operation
+              ( loc,
+                Ge,
+                [
+                  c;
+                  IntLit
+                    (loc, Big_int.big_int_of_int 0xE000, false, false, NoLSuffix);
+                ] )
+          in
+          let c_le_10FFFF =
+            Operation
+              ( loc,
+                Le,
+                [
+                  c;
+                  IntLit
+                    ( loc,
+                      Big_int.big_int_of_int 0x10FFFF,
+                      false,
+                      false,
+                      NoLSuffix );
+                ] )
+          in
+          Ok
+            (Operation
+               ( loc,
+                 Or,
+                 [
+                   Sep (loc, c_ge_zero, c_le_D7FF);
+                   Sep (loc, c_ge_E000, c_le_10FFFF);
+                 ] ))
+      | _ -> Error "[[char]].own(tid, vs) should have `vs == [c]`"
+    in
+    let shr _ _ _ = Ok (True loc) in
+    let full_bor_content tid l =
+      Ok
+        (CallExpr
+           ( loc,
+             "char_full_borrow_content",
+             (*type arguments*) [],
+             (*indices*) [],
+             (*arguments*)
+             [ LitPat tid; LitPat l ],
+             Static ))
+    in
+    let points_to tid l vid_op =
+      match vid_op with
+      | Some vid when vid != "" ->
+          let var_pat = VarPat (loc, vid) in
+          let var_expr = Var (loc, vid) in
+          let* own = own tid [ var_expr ] in
+          Ok (Sep (loc, PointsTo (loc, l, var_pat), own))
+      | _ -> Error "char points_to needs a value id"
+    in
+    Mir.TyInfoBasic
+      {
+        vf_ty;
+        interp = RustBelt.{ size; own; shr; full_bor_content; points_to };
+      }
+
+  and never_ty_info loc =
+    let open Ast in
+    let vf_ty = ManifestTypeExpr (loc, UnionType "std_empty_") in
+    let size =
+      IntLit
+        ( loc,
+          Big_int.zero_big_int,
+          (*decimal*) false,
+          (*U suffix*) true,
+          NoLSuffix )
+    in
+    let own _ _ = Ok (False loc) in
+    let shr _ _ _ = Ok (False loc) in
+    let full_bor_content _ _ = Ok (False loc) in
+    let points_to _ _ _ = Ok (False loc) in
+    Mir.TyInfoBasic
+      {
+        vf_ty;
+        interp = RustBelt.{ size; own; shr; full_bor_content; points_to };
+      }
 
   and translate_generic_arg (gen_arg_cpn : GenArgRd.t) (loc : Ast.loc) =
     let open GenArgRd in
@@ -1035,97 +1229,154 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
 
   and translate_raw_ptr_ty (raw_ptr_ty_cpn : RawPtrTyRd.t) (loc : Ast.loc) =
     let open RawPtrTyRd in
+    let open Ast in
     let mut_cpn = mutability_get raw_ptr_ty_cpn in
     let* mutability = translate_mutability mut_cpn in
     let ty_cpn = ty_get raw_ptr_ty_cpn in
     let* pointee_ty_info = translate_ty ty_cpn loc in
-    let (Ast.ManifestTypeExpr ((*loc*) _, pointee_ty)) =
+    let (ManifestTypeExpr ((*loc*) _, pointee_ty)) =
       Mir.basic_type_of pointee_ty_info
+    in
+    let vf_ty = ManifestTypeExpr (loc, PtrType pointee_ty) in
+    let size_expr = SizeofExpr (loc, TypeExpr vf_ty) in
+    let own tid vs = Ok (True loc) in
+    let shr lft tid l = Ok (True loc) in
+    let full_bor_content tid l =
+      Ok
+        (CallExpr
+           ( loc,
+             "raw_ptr_full_borrow_content",
+             (*type arguments*) [],
+             (*indices*) [],
+             (*arguments*)
+             [ LitPat tid; LitPat l ],
+             Static ))
+    in
+    let points_to tid l vid_op =
+      let* pat = RustBelt.Aux.vid_op_to_var_pat vid_op loc in
+      Ok (PointsTo (loc, l, pat))
     in
     let ty_info =
       Mir.TyInfoBasic
         {
-          vf_ty = Ast.ManifestTypeExpr (loc, Ast.PtrType pointee_ty);
-          interp = RustBelt.emp_ty_interp loc;
+          vf_ty;
+          interp =
+            RustBelt.{ size = size_expr; own; shr; full_bor_content; points_to };
         }
     in
     Ok ty_info
 
   and translate_ref_ty (ref_ty_cpn : RefTyRd.t) (loc : Ast.loc) =
     let open RefTyRd in
+    let open Ast in
     let region_cpn = region_get ref_ty_cpn in
     let region = translate_region region_cpn in
-    let lft = Ast.Var (loc, region) in
+    let lft = Var (loc, region) in
     let mut_cpn = mutability_get ref_ty_cpn in
     let* mut = translate_mutability mut_cpn in
     let ty_cpn = ty_get ref_ty_cpn in
     let* pointee_ty_info = translate_ty ty_cpn loc in
-    let (Ast.ManifestTypeExpr ((*loc*) _, pointee_ty)) =
+    let (ManifestTypeExpr ((*loc*) _, pointee_ty)) =
       Mir.basic_type_of pointee_ty_info
     in
-    let sz_expr =
-      Ast.(SizeofExpr (loc, TypeExpr (ManifestTypeExpr (loc, PtrType Void))))
+    let vf_ty = ManifestTypeExpr (loc, PtrType pointee_ty) in
+    let sz_expr = SizeofExpr (loc, TypeExpr vf_ty) in
+    let RustBelt.
+          {
+            size = ptee_sz;
+            own = ptee_own;
+            shr = ptee_shr;
+            full_bor_content = ptee_fbc;
+            points_to = ptee_points_to;
+          } =
+      Mir.interp_of pointee_ty_info
     in
-    match mut with
-    | Mir.Mut -> failwith "Todo: mut ref"
-    | Mir.Not ->
-        let RustBelt.{ size = ptee_sz; own = ptee_own; shr = ptee_shr } =
-          Mir.interp_of pointee_ty_info
-        in
-        let own tid vs =
-          match vs with
-          | [ l ] -> ptee_shr lft tid l
-          | _ -> Error "[[&T]].own(tid, vs) needs to vs == [l]"
-        in
-        let shr lft tid l = Ok (Ast.True loc) in
-        let ty_info =
-          Mir.TyInfoBasic
-            {
-              vf_ty = Ast.ManifestTypeExpr (loc, Ast.PtrType pointee_ty);
-              interp = { size = sz_expr; own; shr };
-            }
-        in
-        Ok ty_info
+    let* own, shr, full_bor_content, points_to =
+      match mut with
+      | Mir.Mut ->
+          let own tid vs =
+            match vs with
+            | [ l ] ->
+                let* ptee_fbc = ptee_fbc tid l in
+                Ok
+                  (CallExpr
+                     ( loc,
+                       "full_borrow",
+                       (*type arguments*) [],
+                       (*indices*) [],
+                       (*arguments*)
+                       [ LitPat lft; LitPat ptee_fbc ],
+                       Static ))
+            | _ -> Error "[[&mut T]].own(tid, vs) needs to vs == [l]"
+          in
+          let shr lft tid l = Ok (True loc) in
+          let full_bor_content tid l =
+            (* This will need to add a definition for each mut reference type in the program because the body of the predicate will need to mention
+               [[&mut T]].own which depends on T. Another solution is to make VeriFast support Higher order predicates with non-predicate arguments *)
+            Ok (True loc)
+            (* CallExpr
+               ( loc,
+                 "mut_ref_full_borrow_content",
+                 (*type arguments*) [],
+                 (*indices*) [],
+                 (*arguments*)
+                 [ LitPat tid; LitPat l ],
+                 Static ) *)
+          in
+          let points_to tid l vid_op =
+            match vid_op with
+            | Some vid when vid != "" ->
+                let var_pat = VarPat (loc, vid) in
+                let var_expr = Var (loc, vid) in
+                let* own = own tid [ var_expr ] in
+                Ok (Sep (loc, PointsTo (loc, l, var_pat), own))
+            | _ -> Error "mut reference points_to needs a value id"
+          in
+          Ok (own, shr, full_bor_content, points_to)
+      | Mir.Not ->
+          let own tid vs =
+            match vs with
+            | [ l ] -> ptee_shr lft tid l
+            | _ -> Error "[[&T]].own(tid, vs) needs to vs == [l]"
+          in
+          let shr lft tid l = Ok (True loc) in
+          let full_bor_content tid l = Ok (True loc) in
+          let points_to tid l vid_op =
+            match vid_op with
+            | Some vid when vid != "" ->
+                let var_pat = VarPat (loc, vid) in
+                let var_expr = Var (loc, vid) in
+                let* own = own tid [ var_expr ] in
+                Ok (Sep (loc, PointsTo (loc, l, var_pat), own))
+            | _ -> Error "shared reference points_to needs a value id"
+          in
+          Ok (own, shr, full_bor_content, points_to)
+    in
+    let ty_info =
+      Mir.TyInfoBasic
+        {
+          vf_ty;
+          interp =
+            RustBelt.{ size = sz_expr; own; shr; full_bor_content; points_to };
+        }
+    in
+    Ok ty_info
 
   and translate_ty (ty_cpn : TyRd.t) (loc : Ast.loc) =
     let open Ast in
     let open TyRd in
     let kind_cpn = kind_get ty_cpn in
     match TyRd.TyKind.get kind_cpn with
-    | Bool ->
-        Ok
-          (Mir.TyInfoBasic
-             {
-               vf_ty = ManifestTypeExpr (loc, Bool);
-               interp = RustBelt.emp_ty_interp loc;
-             })
+    | Bool -> Ok (bool_ty_info loc)
     | Int int_ty_cpn -> translate_int_ty int_ty_cpn loc
     | UInt u_int_ty_cpn -> translate_u_int_ty u_int_ty_cpn loc
-    | Char ->
-        Ok
-          (Mir.TyInfoBasic
-             {
-               vf_ty = ManifestTypeExpr (loc, Int (Unsigned, FixedWidthRank 2));
-               interp = RustBelt.emp_ty_interp loc;
-             })
+    | Char -> Ok (char_ty_info loc)
     | Adt adt_ty_cpn -> translate_adt_ty adt_ty_cpn loc
     | RawPtr raw_ptr_ty_cpn -> translate_raw_ptr_ty raw_ptr_ty_cpn loc
     | Ref ref_ty_cpn -> translate_ref_ty ref_ty_cpn loc
     | FnDef fn_def_ty_cpn -> translate_fn_def_ty fn_def_ty_cpn loc
     | FnPtr fn_ptr_ty_cpn -> translate_fn_ptr_ty fn_ptr_ty_cpn loc
-    | Never ->
-        let vf_ty = ManifestTypeExpr (loc, UnionType "std_empty_") in
-        let size =
-          IntLit
-            ( loc,
-              Big_int.zero_big_int,
-              (*decimal*) true,
-              (*U suffix*) true,
-              NoLSuffix )
-        in
-        let own _ _ = Ok (False loc) in
-        let shr _ _ _ = Ok (False loc) in
-        Ok (Mir.TyInfoBasic { vf_ty; interp = RustBelt.{ size; own; shr } })
+    | Never -> Ok (never_ty_info loc)
     | Tuple substs_cpn ->
         let substs_cpn = Capnp.Array.to_list substs_cpn in
         translate_tuple_ty substs_cpn loc
@@ -2540,21 +2791,17 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let* ty_info = translate_ty ty_cpn loc in
     let vis_cpn = vis_get fdef_cpn in
     let* vis = translate_visibility vis_cpn in
-    Ok (name, ty_info, vis, loc)
+    Ok Mir.{ name; ty = ty_info; vis; loc }
 
   let translate_to_vf_field_def
-      ((name, ty_info, vis, loc) :
-        string * Mir.ty_info * Mir.visibility * Ast.loc) =
+      (Mir.{ name; ty = ty_info; vis; loc } : Mir.field_def_tr) =
     Ast.Field
       ( loc,
         Ast.Real (*ghostness*),
         Mir.basic_type_of ty_info,
         name,
         Ast.Instance (*method_binding*),
-        (* Currently, the plan is to have all fields Public as they are in C
-           and imposing constraints using separation logic *)
-        Ast.Public
-        (*visibility*),
+        Ast.Public (*visibility*),
         true (*final*),
         None (*expr option*) )
 
@@ -2562,64 +2809,51 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let open VariantDefRd in
     let fields_cpn = fields_get_list vdef_cpn in
     let* fields = ListAux.try_map translate_field_def fields_cpn in
-    let fields = List.map translate_to_vf_field_def fields in
-    Ok fields
+    Ok Mir.{ fields }
 
-  let gen_adt_full_borrow_content adt_def =
+  let gen_adt_full_borrow_content adt_kind name
+      (variants : Mir.variant_def_tr list) adt_def_loc =
     let open Ast in
-    let* adt_kind = Mir.decl_mir_adt_kind adt_def in
     match adt_kind with
     | Mir.Enum | Mir.Union ->
         failwith "Todo: Gen ADT full borrow content for Enum or Union"
     | Mir.Struct ->
-        let adt_def_loc = AstAux.decl_loc adt_def in
-        let* name =
-          Option.to_result
-            ~none:(`GenAdtFullBorContent "Failed to get ADT name")
-            (AstAux.decl_name adt_def)
-        in
         let fbor_content_name = name ^ "_full_borrow_content" in
+        let tid_param_name = "tid" in
+        let ptr_param_name = "l" in
         let fbor_content_params =
           [
-            (ManifestTypeExpr (adt_def_loc, PtrType Void), "l");
             ( IdentTypeExpr (adt_def_loc, None (*package name*), "thread_id_t"),
-              "t" );
+              tid_param_name );
+            ( ManifestTypeExpr (adt_def_loc, PtrType (StructType name)),
+              ptr_param_name );
           ]
         in
-        let* fields_opt = AstAux.decl_fields adt_def in
         let* fields =
-          Option.to_result
-            ~none:(`GenAdtFullBorContent "Failed to get ADT fields") fields_opt
+          match variants with
+          | [ variant_def ] -> Ok variant_def.fields
+          | _ ->
+              Error
+                (`GenAdtFullBorContent "Struct ADT def should have one variant")
         in
-        let field_chunk f =
-          let floc = AstAux.field_loc f in
-          let fname = AstAux.field_name f in
-          let (ManifestTypeExpr (_, fty)) = AstAux.field_ty f in
-          let _ =
-            match fty with
-            | Int _ -> ()
-            | _ ->
-                failwith
-                  ("Todo: Gen full borrow content Adt:" ^ name ^ " Field:"
-                 ^ fname)
+        let field_chunk (f : Mir.field_def_tr) =
+          let* fc =
+            (Mir.interp_of f.ty).points_to
+              (Var (f.loc, tid_param_name))
+              (Read (f.loc, Var (f.loc, ptr_param_name), f.name))
+              (Some f.name)
           in
-          ( floc,
-            CallExpr
-              ( floc,
-                name ^ "_" ^ fname,
-                (*type arguments*) [],
-                (*indices*) [],
-                (*arguments*)
-                [ LitPat (Var (floc, "l")); VarPat (floc, fname) ],
-                Static ) )
+          Ok (f.loc, fc)
         in
-        let field_chunks = List.map field_chunk fields in
-        let own_params =
-          LitPat (Var (adt_def_loc, "t"))
+        let* field_chunks =
+          match ListAux.try_map field_chunk fields with
+          | Ok field_chunks -> Ok field_chunks
+          | Error msg -> Error (`GenAdtFullBorContent msg)
+        in
+        let own_args =
+          LitPat (Var (adt_def_loc, tid_param_name))
           :: List.map
-               (fun f ->
-                 let n, l = AstAux.(field_name f, field_loc f) in
-                 LitPat (Var (l, n)))
+               (fun (f : Mir.field_def_tr) -> LitPat (Var (f.loc, f.name)))
                fields
         in
         let own_pred =
@@ -2629,7 +2863,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               (*type arguments*) [],
               (*indices*) [],
               (*arguments*)
-              own_params,
+              own_args,
               Static )
         in
         let (Some body_asn) =
@@ -2749,7 +2983,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                        (*type arguments*) [],
                        (*indices*) [],
                        (*arguments*)
-                       List.map lpat_var [ "l"; "t" ],
+                       List.map lpat_var [ "t"; "l" ],
                        Static ));
               ],
               Static )
@@ -2820,12 +3054,13 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let* vis = translate_visibility vis_cpn in
       let is_local = is_local_get adt_def_cpn in
       let kind_cpn = kind_get adt_def_cpn in
-      let* def, aux_decls =
+      let* kind, def, aux_decls =
         match AdtKindRd.get kind_cpn with
         | StructKind ->
             let* field_defs =
               match variants with
-              | [ field_defs ] -> Ok field_defs
+              | [ variant_def ] ->
+                  Ok (List.map translate_to_vf_field_def variant_def.fields)
               | _ -> Error (`TrAdtDef "Struct ADT kind should have one variant")
             in
             let struct_decl =
@@ -2839,14 +3074,11 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                       (*is polymorphic*) false ),
                   (*struct_attr list*) [] )
             in
-            Ok
-              ( struct_decl,
-                [
-                  Ast.TypedefDecl
-                    ( def_loc,
-                      StructTypeExpr (def_loc, Some name, None, []),
-                      name );
-                ] )
+            let struct_typedef_aux =
+              Ast.TypedefDecl
+                (def_loc, StructTypeExpr (def_loc, Some name, None, []), name)
+            in
+            Ok (Mir.Struct, struct_decl, [ struct_typedef_aux ])
         | EnumKind -> failwith "Todo: AdtDef::Enum"
         | UnionKind -> failwith "Todo: AdtDef::Union"
         | Undefined _ -> Error (`TrAdtDef "Unknown ADT kind")
@@ -2860,7 +3092,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                 ("The " ^ def_path
                ^ " ADT definition is local and locally invisible"))
         | true, Mir.Public ->
-            let* full_bor_content = gen_adt_full_borrow_content def in
+            let* full_bor_content =
+              gen_adt_full_borrow_content kind name variants def_loc
+            in
             let* proof_obligs = gen_adt_proof_obligs def in
             Ok (Some full_bor_content, proof_obligs)
       in
@@ -2923,18 +3157,17 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       *)
       let adt_defs, aux_decls, adts_full_bor_content_preds, adts_proof_obligs =
         List.fold_left
-          (fun (defs, auxDecls, fbors, pos)
+          (fun (defs, ads, fbors, pos)
                Mir.{ def; aux_decls; full_bor_content; proof_obligs } ->
             ( def :: defs,
-              aux_decls :: auxDecls,
+              aux_decls @ ads,
               full_bor_content :: fbors,
-              proof_obligs :: pos ))
+              proof_obligs @ pos ))
           ([], [], [], []) adt_defs
       in
       let adts_full_bor_content_preds =
         List.filter_map Fun.id adts_full_bor_content_preds
       in
-      let adts_proof_obligs = List.flatten adts_proof_obligs in
       let ghost_decl_batches_cpn =
         VfMirRd.ghost_decl_batches_get_list vf_mir_cpn
       in
@@ -2983,7 +3216,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         end
       end in
       let decls =
-        traits_decls @ trait_impl_prototypes @ decls @ adt_defs @ List.flatten aux_decls @ adts_full_bor_content_preds
+        traits_decls @ trait_impl_prototypes @ decls @ adt_defs @ aux_decls @ adts_full_bor_content_preds
         @ adts_proof_obligs @ ghost_decls @ body_sigs @ body_decls
       in
       (* Todo @Nima: we should add necessary inclusions during translation *)

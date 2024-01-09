@@ -88,3 +88,6 @@ module AdtDefRd = TyRd.AdtDef
 module VariantDefRd = AdtDefRd.VariantDef
 module FieldDefRd = VariantDefRd.FieldDef
 module RegionRd = TyRd.Region
+
+(* Builder *)
+module TyBd = VfMirStub.Builder.Ty
