@@ -85,7 +85,7 @@ pred Deque(deque: *Deque; elems: list<i32>) =
 
 impl Deque {
     unsafe fn new() -> *mut Deque
-//@ req true;
+    //@ req true;
     //@ ens Deque(result, []);
     {
         let deque = std::alloc::alloc(std::alloc::Layout::new::<Deque>()) as *mut Deque;
@@ -106,7 +106,7 @@ impl Deque {
     }
 
     unsafe fn get_size(deque: *mut Deque) -> i32
-//@ req Deque(deque, ?elems);
+    //@ req Deque(deque, ?elems);
     //@ ens Deque(deque, elems) &*& result == length(elems);
     {
         return (*deque).size;
@@ -168,7 +168,7 @@ impl Deque {
     }
 
     unsafe fn pop_front(deque: *mut Deque) -> i32
-//@ req Deque(deque, cons(?elem, ?elems));
+    //@ req Deque(deque, cons(?elem, ?elems));
     //@ ens Deque(deque, elems) &*& result == elem;
     {
         let node = (*(*deque).sentinel).next;
@@ -184,7 +184,7 @@ impl Deque {
     }
 
     unsafe fn pop_back(deque: *mut Deque) -> i32
-//@ req Deque(deque, ?elems) &*& 1 <= length(elems);
+    //@ req Deque(deque, ?elems) &*& 1 <= length(elems);
     //@ ens Deque(deque, take(length(elems) - 1, elems)) &*& result == nth(length(elems) - 1, elems);
     {
         //@ let sentinel = (*deque).sentinel;
