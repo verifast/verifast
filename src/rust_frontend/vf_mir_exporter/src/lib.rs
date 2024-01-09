@@ -545,6 +545,9 @@ mod vf_mir_builder {
                 let it = req_adt_defs.into_iter();
                 req_adt_defs = Vec::new();
                 for adt_def in it {
+                    if adt_def.is_unsafe_cell() {
+                        continue;
+                    }
                     match encoded_adt_defs
                         .iter()
                         .find(|&&enc_adt_def| enc_adt_def == adt_def)
