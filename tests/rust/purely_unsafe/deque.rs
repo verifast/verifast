@@ -194,13 +194,13 @@ impl Deque {
         let result = (*node).value;
         /*@
         if 2 <= length(elems) {
-             Nodes_split_last(first);
-             append_take_drop_n(take(length(elems) - 1, elems), length(elems) - 2);
-             drop_n_plus_one(length(elems) - 2, take(length(elems) - 1, elems));
-         } else {
-             open Nodes(first, sentinel, ?last1, ?last, _);
-         }
-         @*/
+            Nodes_split_last(first);
+            append_take_drop_n(take(length(elems) - 1, elems), length(elems) - 2);
+            drop_n_plus_one(length(elems) - 2, take(length(elems) - 1, elems));
+        } else {
+            open Nodes(first, sentinel, ?last1, ?last, _);
+        }
+        @*/
         (*(*node).prev).next = (*node).next;
         (*(*node).next).prev = (*node).prev;
         //@ open_struct(node);
