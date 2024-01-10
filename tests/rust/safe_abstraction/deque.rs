@@ -119,12 +119,12 @@ impl Deque {
     }
 
     // Todo: implement with shared reference
-    pub fn get_size<'a>(deque: &'a mut Deque) -> i32 {
-        //@ open_full_borrow(a, Deque_full_borrow_content(_t, deque));
-        //@ open Deque_full_borrow_content(_t, deque)();
-        let size = (*deque).size;
-        //@ close Deque_full_borrow_content(_t, deque)();
-        //@ close_full_borrow();
+    pub fn get_size<'a>(&'a mut self) -> i32 {
+        //@ open_full_borrow(_q_a, a, Deque_full_borrow_content(_t, self));
+        //@ open Deque_full_borrow_content(_t, self)();
+        let size = (*self).size;
+        //@ close Deque_full_borrow_content(_t, self)();
+        //@ close_full_borrow(Deque_full_borrow_content(_t, self));
         //@ leak full_borrow(_, _);
         return size;
     }
@@ -150,7 +150,7 @@ impl Deque {
     }
 
     pub fn push_front<'a>(&'a mut self, value: i32) {
-        //@ open_full_borrow(a, Deque_full_borrow_content(_t, self));
+        //@ open_full_borrow(_q_a, a, Deque_full_borrow_content(_t, self));
         //@ open Deque_full_borrow_content(_t, self)();
         if (*self).size < 0x7fffffff {
             unsafe {
@@ -161,7 +161,7 @@ impl Deque {
         }
         //@ let sentinel = (*self).sentinel;
         //@ close Deque_full_borrow_content(_t, self)();
-        //@ close_full_borrow();
+        //@ close_full_borrow(Deque_full_borrow_content(_t, self));
         //@ leak full_borrow(_, _);
     }
 
@@ -201,7 +201,7 @@ impl Deque {
     }
 
     pub fn push_back<'a>(&'a mut self, value: i32) {
-        //@ open_full_borrow(a, Deque_full_borrow_content(_t, self));
+        //@ open_full_borrow(_q_a, a, Deque_full_borrow_content(_t, self));
         //@ open Deque_full_borrow_content(_t, self)();
         if (*self).size < 0x7fffffff {
             unsafe { Self::unsafe_push_back(self, value) }
@@ -209,7 +209,7 @@ impl Deque {
             std::process::abort()
         }
         //@ close Deque_full_borrow_content(_t, self)();
-        //@ close_full_borrow();
+        //@ close_full_borrow(Deque_full_borrow_content(_t, self));
         //@ leak full_borrow(_, _);
     }
 
@@ -233,7 +233,7 @@ impl Deque {
         //@ req thread_token(?_t) &*& [?_q]lifetime_token(?a) &*& full_borrow(a, Deque_full_borrow_content(_t, self));
         //@ ens thread_token(_t) &*& [_q]lifetime_token(a);
     {
-        //@ open_full_borrow(a, Deque_full_borrow_content(_t, self));
+        //@ open_full_borrow(_q, a, Deque_full_borrow_content(_t, self));
         //@ open Deque_full_borrow_content(_t, self)();
         if (*self).size == 0 {
             std::process::abort();
@@ -241,7 +241,7 @@ impl Deque {
             unsafe {
                 let result = Self::unsafe_pop_front(self);
                 //@ close Deque_full_borrow_content(_t, self)();
-                //@ close_full_borrow();
+                //@ close_full_borrow(Deque_full_borrow_content(_t, self));
                 //@ leak full_borrow(_, _);
                 return result;
             }
@@ -280,7 +280,7 @@ impl Deque {
     }
 
     pub fn pop_back<'a>(&'a mut self) -> i32 {
-        //@ open_full_borrow(a, Deque_full_borrow_content(_t, self));
+        //@ open_full_borrow(_q_a, a, Deque_full_borrow_content(_t, self));
         //@ open Deque_full_borrow_content(_t, self)();
         if (*self).size == 0 {
             std::process::abort();
@@ -288,7 +288,7 @@ impl Deque {
             unsafe {
                 let result = Self::unsafe_pop_back(self);
                 //@ close Deque_full_borrow_content(_t, self)();
-                //@ close_full_borrow();
+                //@ close_full_borrow(Deque_full_borrow_content(_t, self));
                 //@ leak full_borrow(_, _);
                 return result;
             }
@@ -317,5 +317,24 @@ impl Deque {
             //@ open_struct(deque.sentinel);
             std::alloc::dealloc(deque.sentinel as *mut u8, std::alloc::Layout::new::<Node>());
         }
+    }
+
+    pub fn swap<'a>(&'a mut self, other: &'a mut Deque) {
+        //@ open_full_borrow(_q_a/2, a, Deque_full_borrow_content(_t, self));
+        //@ open Deque_full_borrow_content(_t, self)();
+        let tmp_sen = (*self).sentinel;
+        let tmp_sz = (*self).size;
+        //@ open_full_borrow(_q_a/2, a, Deque_full_borrow_content(_t, other));
+        //@ open Deque_full_borrow_content(_t, other)();
+        (*self).sentinel = (*other).sentinel;
+        (*self).size = (*other).size;
+        (*other).sentinel = tmp_sen;
+        (*other).size = tmp_sz;
+        //@ close Deque_full_borrow_content(_t, self)();
+        //@ close_full_borrow(Deque_full_borrow_content(_t, self));
+        //@ close Deque_full_borrow_content(_t, other)();
+        //@ close_full_borrow(Deque_full_borrow_content(_t, other));
+        //@ leak full_borrow(_, _);
+        //@ leak full_borrow(_, _);
     }
 }
