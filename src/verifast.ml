@@ -1122,14 +1122,19 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           open_instance_predicate target target_tn
         | None ->
         let open_pred_inst0 g =
-          let fns = match file_type path with
-            Java-> check_classnamelist (pn,ilist) (List.map (function LitPat (ClassLit (l, x))-> (l,x) | _ -> static_error l "Predicate family indices must be class names." None) pats0)
-          | _ -> List.map (function LitPat (Var (l, x)) -> x | _ -> static_error l "Predicate family indices must be function names." None) pats0
+          let fns = match language, dialect with
+            Java, _ ->
+            check_classnamelist (pn,ilist) (List.map (function LitPat (ClassLit (l, x))-> (l,x) | _ -> static_error l "Predicate family indices must be class names." None) pats0)
+          | CLang, Some Rust ->
+            check_structnamelist (List.map (function LitPat (Typeid (l, TypeExpr (IdentTypeExpr (_, None, x)))) -> (l, x) | _ -> static_error l "Predicate family indices must be of the form typeid(T)" None) pats0)
+          | _ ->
+            List.map (function LitPat (Var (l, x)) -> x | _ -> static_error l "Predicate family indices must be function names." None) pats0
           in
           begin
             let index_term fn =
-              match file_type path with
-                Java-> List.assoc fn classterms
+              match language, dialect with
+                Java, _ -> List.assoc fn classterms
+              | CLang, Some Rust -> term_of_pred_index fn
               | _ -> funcnameterm_of funcmap fn
             in
             match try_assoc (g, fns) predinstmap with
@@ -1425,9 +1430,13 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           close_instance_predicate target target_tn
         | None ->
         let close_pred_inst0 g =
-          let fns = match file_type path with
-            Java-> check_classnamelist (pn,ilist) (List.map (function LitPat (ClassLit (l, x)) -> (l, x) | _ -> static_error l "Predicate family indices must be class names." None) pats0)
-          | _ -> List.map (function LitPat (Var (l, x)) -> x | _ -> static_error l "Predicate family indices must be function names." None) pats0
+          let fns = match language, dialect with
+            Java, _ ->
+            check_classnamelist (pn,ilist) (List.map (function LitPat (ClassLit (l, x)) -> (l, x) | _ -> static_error l "Predicate family indices must be class names." None) pats0)
+          | CLang, Some Rust ->
+            check_structnamelist (List.map (function LitPat (Typeid (l, TypeExpr (IdentTypeExpr (_, None, x)))) -> (l, x) | _ -> static_error l "Predicate family indices must be of the form typeid(T)" None) pats0)
+          | _ ->
+            List.map (function LitPat (Var (l, x)) -> x | _ -> static_error l "Predicate family indices must be function names." None) pats0
           in
           begin
           match try_assoc (g, fns) predinstmap with
@@ -1439,8 +1448,9 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 None -> static_error l "Incorrect number of type arguments." None
               | Some bs -> bs
             in
-            let ts0 = match file_type path with
-              Java -> List.map (fun cn -> List.assoc cn classterms) fns
+            let ts0 = match language, dialect with
+              Java, _ -> List.map (fun cn -> List.assoc cn classterms) fns
+            | CLang, Some Rust -> List.map term_of_pred_index fns
             | _ -> List.map (fun fn -> funcnameterm_of funcmap fn) fns
             in
             Some (lpred, targs, tpenv, ps, predenv, (g_symb, true), body, ts0, inputParamCount)

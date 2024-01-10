@@ -123,7 +123,7 @@ impl rustc_driver::Callbacks for CompilerCalls {
             trace!("Collecting MIR bodies");
             // Collect definition ids of bodies.
             let hir = tcx.hir();
-            let mut visitor = HirVisitor { trait_impls: Vec::new(), bodies: Vec::new() };
+            let mut visitor = HirVisitor { structs: Vec::new(), trait_impls: Vec::new(), bodies: Vec::new() };
             hir.visit_all_item_likes_in_crate(&mut visitor);
 
             // Trigger borrow checking of all bodies.
@@ -150,6 +150,7 @@ impl rustc_driver::Callbacks for CompilerCalls {
             }
             vf_mir_capnp_builder.add_comments(&mut self.ghost_ranges);
             vf_mir_capnp_builder.set_directives(std::mem::replace(&mut self.directives, Vec::new()));
+            vf_mir_capnp_builder.set_structs(visitor.structs);
             vf_mir_capnp_builder.set_trait_impls(visitor.trait_impls);
             vf_mir_capnp_builder.add_bodies(bodies.as_slice());
             let msg_cpn = vf_mir_capnp_builder.build();
@@ -202,6 +203,7 @@ struct TraitImplInfo {
 
 /// Visitor that collects all body definition ids mentioned in the program.
 struct HirVisitor {
+    structs: Vec<LocalDefId>,
     trait_impls: Vec<TraitImplInfo>,
     bodies: Vec<LocalDefId>,
 }
@@ -211,7 +213,7 @@ impl<'tcx> rustc_hir::intravisit::Visitor<'tcx> for HirVisitor {
         match &item.kind {
             rustc_hir::ItemKind::Fn(..) => self.bodies.push(item.owner_id.def_id),
             // We cannot send DefId of a struct to optimize_mir query
-            rustc_hir::ItemKind::Struct(..) => (),
+            rustc_hir::ItemKind::Struct(..) => self.structs.push(item.owner_id.def_id),
             rustc_hir::ItemKind::Impl(impl_) => {
                 if let Some(trait_ref) = &impl_.of_trait {
                     if let Some(of_trait) = trait_ref.trait_def_id() {
@@ -348,7 +350,7 @@ mod vf_mir_builder {
         Adt,
     }
     struct EncCtx<'tcx, 'a> {
-        req_adts: Vec<&'tcx ty::AdtDef<'tcx>>,
+        req_adts: Vec<ty::AdtDef<'tcx>>,
         tcx: TyCtxt<'tcx>,
         mode: EncKind<'tcx, 'a>,
         annots: LinkedList<GhostRange>,
@@ -367,13 +369,13 @@ mod vf_mir_builder {
                 annots,
             }
         }
-        pub fn add_req_adt(&mut self, adt: &'tcx ty::AdtDef<'tcx>) {
+        pub fn add_req_adt(&mut self, adt: ty::AdtDef<'tcx>) {
             /* Todo @Nima: It is necessary to encode the dependency between the required definitions.
                 Because the order of definitions will matter in most of the analyzers.
             */
             self.req_adts.push(adt);
         }
-        pub fn get_req_adts(&self) -> &Vec<&'tcx ty::AdtDef<'tcx>> {
+        pub fn get_req_adts(&self) -> &Vec<ty::AdtDef<'tcx>> {
             &self.req_adts
         }
         pub fn body(&self) -> &'a mir::Body<'tcx> {
@@ -387,6 +389,7 @@ mod vf_mir_builder {
     pub struct VfMirCapnpBuilder<'tcx, 'a> {
         tcx: TyCtxt<'tcx>,
         directives: Vec<GhostRange>,
+        structs: Vec<rustc_span::def_id::LocalDefId>,
         trait_impls: Vec<super::TraitImplInfo>,
         bodies: Vec<&'a mir::Body<'tcx>>,
         annots: LinkedList<GhostRange>,
@@ -397,6 +400,7 @@ mod vf_mir_builder {
             VfMirCapnpBuilder {
                 tcx,
                 directives: Vec::new(),
+                structs: Vec::new(),
                 trait_impls: Vec::new(),
                 bodies: Vec::new(),
                 annots: LinkedList::new(),
@@ -413,6 +417,10 @@ mod vf_mir_builder {
                     .extract_if(|annot| !annot.is_dummy())
                     .collect::<LinkedList<_>>(),
             );
+        }
+
+        pub(super) fn set_structs(&mut self, structs: Vec<rustc_span::def_id::LocalDefId>) {
+            self.structs = structs;
         }
 
         pub(super) fn set_trait_impls(&mut self, trait_impls: Vec<super::TraitImplInfo>) {
@@ -440,7 +448,7 @@ mod vf_mir_builder {
             });
         }
 
-        fn encode_traits(&mut self, req_adt_defs: &mut Vec<&'tcx ty::AdtDef<'tcx>>, mut vf_mir_cpn: vf_mir_cpn::Builder<'_>) {
+        fn encode_traits(&mut self, req_adt_defs: &mut Vec<ty::AdtDef<'tcx>>, mut vf_mir_cpn: vf_mir_cpn::Builder<'_>) {
             let mut enc_ctx = EncCtx::new(self.tcx, EncKind::Adt, LinkedList::new());
             let mut traits_cpn = vf_mir_cpn.reborrow().init_traits();
             for trait_def_id in self.tcx.all_traits() {
@@ -491,6 +499,10 @@ mod vf_mir_builder {
 
         fn encode_mir(&mut self, mut vf_mir_cpn: vf_mir_cpn::Builder<'_>) {
             let mut req_adt_defs = Vec::new();
+
+            for struct_did in &self.structs {
+                req_adt_defs.push(self.tcx.adt_def(struct_did.to_def_id()));
+            }
 
             // Encode traits (consumes annotations)
             self.encode_traits(&mut req_adt_defs, vf_mir_cpn.reborrow());
@@ -557,7 +569,7 @@ mod vf_mir_builder {
                             let adt_def_cpn = adt_defs_cons_cpn.reborrow().init_h();
                             let mut enc_ctx =
                                 EncCtx::new(self.tcx, EncKind::Adt, LinkedList::new());
-                            Self::encode_adt_def(self.tcx, &mut enc_ctx, adt_def, adt_def_cpn);
+                            Self::encode_adt_def(self.tcx, &mut enc_ctx, &adt_def, adt_def_cpn);
                             req_adt_defs.extend(enc_ctx.get_req_adts());
                             encoded_adt_defs.push(adt_def);
                             adt_defs_cpn = adt_defs_cons_cpn.init_t();
@@ -1042,7 +1054,7 @@ mod vf_mir_builder {
                 ty::TyKind::Char => ty_kind_cpn.set_char(()),
                 ty::TyKind::Adt(adt_def, substs) => {
                     let adt_ty_cpn = ty_kind_cpn.init_adt();
-                    Self::encode_ty_adt(tcx, enc_ctx, adt_def, substs, adt_ty_cpn);
+                    Self::encode_ty_adt(tcx, enc_ctx, *adt_def, substs, adt_ty_cpn);
                 }
                 ty::TyKind::RawPtr(ty_and_mut) => {
                     let raw_ptr_ty_cpn = ty_kind_cpn.init_raw_ptr();
@@ -1105,7 +1117,7 @@ mod vf_mir_builder {
         fn encode_ty_adt(
             tcx: TyCtxt<'tcx>,
             enc_ctx: &mut EncCtx<'tcx, 'a>,
-            adt_def: &'tcx ty::AdtDef,
+            adt_def: ty::AdtDef<'tcx>,
             substs: &'tcx &'tcx ty::List<ty::GenericArg<'tcx>>,
             mut adt_ty_cpn: adt_ty_cpn::Builder<'_>,
         ) {

@@ -1,3 +1,9 @@
+/*@
+
+abstract_type type_info;
+
+@*/
+
 mod alloc {
     impl Layout {
 

@@ -8,6 +8,10 @@ let is_expr_with_block = function
 | SwitchExpr (_, _, _, _) -> true
 | _ -> false
 
+let rec parse_type_path_rest x = function%parser
+  [ (_, Kwd "::"); (_, Ident xx); [%let x = parse_type_path_rest (x ^ "::" ^ xx)] ] -> x
+| [ ] -> x
+
 let rec parse_type = function%parser
   [ (l, Ident "i8") ] -> ManifestTypeExpr (l, Int (Signed, FixedWidthRank 0))
 | [ (l, Ident "i16") ] -> ManifestTypeExpr (l, Int (Signed, FixedWidthRank 1))
@@ -22,7 +26,7 @@ let rec parse_type = function%parser
 | [ (l, Ident "u128") ] -> ManifestTypeExpr (l, Int (Unsigned, FixedWidthRank 4))
 | [ (l, Ident "usize") ] -> ManifestTypeExpr (l, Int (Unsigned, PtrRank))
 | [ (l, Ident "bool") ] -> ManifestTypeExpr (l, Bool)
-| [ (l, Ident x);
+| [ (l, Ident x); [%let x = parse_type_path_rest x];
     [%let t = function%parser
       [ (_, Kwd "<"); [%let targs = rep_comma parse_type]; (_, Kwd ">") ] -> ConstructedTypeExpr (l, x, targs)
     | [ ] -> IdentTypeExpr (l, None, x)
@@ -177,6 +181,7 @@ and parse_primary_expr = function%parser
   ] -> SwitchExpr (l, scrutinee, arms, None)
 | [ (_, Kwd "("); parse_expr as e; (_, Kwd ")") ] -> e
 | [ (l, Kwd "["); [%let pats = rep_comma parse_pat]; (_, Kwd "]") ] -> CallExpr (l, "#list", [], [], pats, Static)
+| [ (l, Kwd "typeid"); (_, Kwd "("); parse_type as t; (_, Kwd ")") ] -> Typeid (l, TypeExpr t)
 and parse_match_arm = function%parser
   [ parse_expr as pat; (l, Kwd "=>"); parse_expr as rhs ] ->
   begin match pat with
@@ -435,6 +440,23 @@ let parse_ghost_decl = function%parser
   ] ->
     [PredFamilyDecl (l, g, [], 0, List.map fst ps, inputParamCount, Inductiveness_Inductive)] @
     (match body with None -> [] | Some body -> [PredFamilyInstanceDecl (l, g, [], [], ps, body)])
+| [ (l, Kwd "pred_fam"); (li, Ident g);
+    (_, Kwd "("); [%let index_params = rep_comma parse_param]; (_, Kwd ")");
+    [%let (ps, inputParamCount) = parse_pred_paramlist ];
+    (_, Kwd ";")
+  ] -> [PredFamilyDecl (l, g, [], List.length index_params, List.map fst ps, inputParamCount, Inductiveness_Inductive)]
+| [ (l, Kwd "pred_fam_inst"); (li, Ident g);
+    (_, Kwd "("); [%let indices = rep_comma parse_expr]; (_, Kwd ")");
+    [%let (ps, inputParamCount) = parse_pred_paramlist ];
+    (_, Kwd "=");
+    parse_asn as body;
+    (_, Kwd ";")
+  ] ->
+    let indices = indices |> List.map @@ function
+      Typeid (l, TypeExpr (IdentTypeExpr (_, None, x))) -> (l, x)
+    | e -> raise (ParseException (expr_loc e, "typeid(T) expected"))
+    in
+    [PredFamilyInstanceDecl (l, g, [], indices, ps, body)]
 | [ (l, Kwd "pred_ctor"); (li, Ident g);
     (_, Kwd "("); [%let ps1 = rep_comma parse_param]; (_, Kwd ")");
     [%let (ps2, inputParamCount) = parse_pred_paramlist ];
@@ -472,6 +494,7 @@ let parse_ghost_decl = function%parser
      | [ ] -> false
     ]
   ] -> [FuncTypeDecl (l, Real, rt, ftn, [], ftps, ps, (pre, post, terminates))]
+| [ (l, Kwd "abstract_type"); (_, Ident tn); (_, Kwd ";") ] -> [AbstractTypeDecl (l, tn)]
 
 let parse_ghost_decls stream = List.flatten (rep parse_ghost_decl stream)
 
@@ -481,6 +504,8 @@ let parse_ghost_decl_block = function%parser
 let prefix_decl_name l prefix = function
   Func (l, k, tparams, rt, g, ps, nonghost_callers_only, ft, co, terminates, body, isVirtual, overrides) ->
   Func (l, k, tparams, rt, prefix ^ g, ps, nonghost_callers_only, ft, co, terminates, body, isVirtual, overrides)
+| AbstractTypeDecl (l, tn) ->
+  AbstractTypeDecl (l, prefix ^ tn)
 | _ -> static_error l "Items other than functions are not yet supported here" None
 
 let rec parse_decl = function%parser
@@ -491,6 +516,7 @@ let rec parse_decl = function%parser
   let prefix = x ^ "::" in
   ds |> List.flatten |> List.map (prefix_decl_name l prefix)
 | [ (l, Kwd "fn"); [%let d = parse_func_rest Regular] ] -> [d]
+| [ parse_ghost_decl_block as ds ] -> ds
 
 let parse_decls = function%parser
   [ [%let ds = rep parse_decl] ] -> List.flatten ds

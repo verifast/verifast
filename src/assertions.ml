@@ -1278,7 +1278,13 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let term_of_pred_index =
     match language with
       Java -> fun cn -> List.assoc cn classterms
-    | CLang -> fun fn -> List.assoc fn funcnameterms
+    | CLang ->
+      match dialect with
+        Some Rust ->
+        fun sn ->
+        let _, _, _, _, s = List.assoc sn structmap in
+        s
+      | _ -> fun fn -> List.assoc fn funcnameterms
   
   let predinstmap_by_predfamsymb =
     flatmap

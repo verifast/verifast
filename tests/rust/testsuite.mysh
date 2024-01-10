@@ -10,6 +10,7 @@ cd purely_unsafe
   verifast -c traits0.rs
   verifast -c -allow_should_fail -allow_dead_code traits0_error.rs
   verifast -c -allow_should_fail -allow_dead_code traits0_error2.rs
+  verifast -c pred_fam.rs
 cd ..
 cd safe_abstraction
   verifast -c cell_u32.rs

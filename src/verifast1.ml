@@ -95,7 +95,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 
   let type_info_name = "std::type_info"
   let type_info_struct_type = StructType type_info_name
-  let type_info_ref_type = RefType type_info_struct_type
+  let type_info_ref_type = match dialect with Some Rust -> PtrType (AbstractType type_info_name) | _ -> RefType type_info_struct_type
   let type_info_ptr_type = PtrType type_info_struct_type
 
   let reportMacroCall l0u l0d =
@@ -6376,9 +6376,13 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     check_predinst0 predfam_tparams arity ps psymb inputParamCount (pn, ilist) tparams tenv env l p predinst_tparams fns xs body
 
+  let check_structnamelist is =
+    is |> List.map (fun (l, sn) -> if List.mem_assoc sn structmap then sn else static_error l "No such struct" None)
+
   let mk_pred_inst l (pn, ilist) pred tparams is params body =
-    let fns = match file_type path with
-      Java-> check_classnamelist (pn,ilist) is
+    let fns = match language, dialect with
+      Java, _-> check_classnamelist (pn,ilist) is
+    | CLang, Some Rust -> check_structnamelist is
     | _ -> check_funcnamelist is 
     in
     check_predinst (pn, ilist) [] [] [] l pred tparams fns params body
