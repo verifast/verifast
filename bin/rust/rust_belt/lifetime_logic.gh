@@ -14,12 +14,12 @@ predicate full_borrow(lifetime_t k, predicate() P);
 
 predicate close_full_borrow_token(predicate() P, real q, lifetime_t k); // accessor closing inheritance
 
-lemma void open_full_borrow(lifetime_t k, predicate() P);
-    requires full_borrow(k, P) &*& [?q]lifetime_token(k);
+lemma void open_full_borrow(real q, lifetime_t k, predicate() P);
+    requires full_borrow(k, P) &*& [q]lifetime_token(k);
     ensures P() &*& close_full_borrow_token(P, q, k);
 
-lemma void close_full_borrow();
-    requires close_full_borrow_token(?P, ?q, ?k) &*& P();
+lemma void close_full_borrow(predicate() P);
+    requires close_full_borrow_token(P, ?q, ?k) &*& P();
     ensures full_borrow(k, P) &*& [q]lifetime_token(k);
 
 typedef lemma void implies(predicate() P, predicate() P1)();
