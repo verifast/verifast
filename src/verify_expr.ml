@@ -209,7 +209,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let env0_0 = List.map (function (p, t) -> (p, get_unique_var_symb p t)) xmap0 in
     let currentThreadEnv = [(current_thread_name, get_unique_var_symb current_thread_name current_thread_type)] in
     let env0 = currentThreadEnv @ env0_0 @ cenv0 in
-    produce_asn tpenv0 [] [] env0 pre0 real_unit None None (fun h _ env0 ->
+    produce_asn_with_post tpenv0 [] [] env0 pre0 real_unit None None (fun h _ env0 post0_opt ->
+      let post0 = match post0_opt with Some post0 -> post0 | None -> post0 in
       let bs = zip2 xmap env0_0 in
       let env = currentThreadEnv @ List.map (fun ((p, _), (p0, v)) -> (p, v)) bs @ env00 in
       begin match pre with
@@ -217,7 +218,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         assert_false h env l "Contract required" None
       | _ -> ()
       end;
-      consume_asn rules tpenv h [] env pre true real_unit (fun _ h _ env _ ->
+      consume_asn_with_post rules tpenv h [] env pre true real_unit (fun _ h _ env _ post_opt ->
+        let post = match post_opt with Some post -> post | None -> post in
         let (env, env0) =
           match rt with
             None -> (env, env0)
@@ -1359,6 +1361,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | ForallAsn (l, tp, i, e) -> expr_mark_addr_taken e locals; 
     | CoefAsn(_, pat, a) -> pat_expr_mark_addr_taken pat locals; ass_mark_addr_taken a locals
     | MatchAsn (l, e, pat) -> expr_mark_addr_taken e locals; pat_expr_mark_addr_taken pat locals
+    | LetTypeAsn (l, x, tp, a) -> ass_mark_addr_taken a locals
     | WMatchAsn (l, e, pat, tp) -> expr_mark_addr_taken e locals; pat_expr_mark_addr_taken pat locals
     | e -> expr_mark_addr_taken e locals
   
@@ -2202,6 +2205,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | CoefAsn (l, DummyPat, a) -> false (* TODO: Support more coefpats *)
     | EnsuresAsn (l, _) -> false
     | WMatchAsn (_, _, _, _) -> false
+    | LetTypeAsn (_, _, _, a) -> asserts_exclusive_ownership a
     | _ -> true
 
   let rec verify_expr readonly (pn,ilist) tparams pure leminfo funcmap sizemap tenv ghostenv h env xo e cont econt =

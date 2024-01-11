@@ -610,6 +610,7 @@ and of_expr = function
     of_pat pat;
     of_type t
   ])
+| LetTypeAsn (l, x, tp, a) -> C ("LetTypeAsn", [of_loc l; S x; of_type tp; of_expr a])
 and of_pat = function
   LitPat e -> C ("LitPat", [of_expr e])
 | VarPat (l, x) -> C ("VarPat", [of_loc l; S x])

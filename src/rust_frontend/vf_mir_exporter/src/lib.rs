@@ -680,6 +680,9 @@ mod vf_mir_builder {
                 hir::def::DefKind::Fn|hir::def::DefKind::AssocFn => {
                     let mut def_kind_cpn = body_cpn.reborrow().init_def_kind();
                     def_kind_cpn.set_fn(());
+                    if kind == hir::def::DefKind::AssocFn && tcx.associated_item(def_id).container == ty::AssocItemContainer::TraitContainer {
+                        body_cpn.set_is_trait_fn(true);
+                    }
                 }
                 _ => std::todo!("Unsupported definition kind"),
             }

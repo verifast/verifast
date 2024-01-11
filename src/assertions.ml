@@ -432,6 +432,8 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let f = if tp = Bool then ctxt#mk_iff v v' else ctxt#mk_eq v v' in
       assume f $. fun () ->
       cont h ghostenv env
+    | LetTypeAsn (l, x, tp, p) ->
+      produce_asn_core_with_post ((x, tp)::tpenv) h ghostenv env p coef size_first size_all assuming cont_with_post
     | Sep (l, p1, p2) ->
       produce_asn_core_with_post tpenv h ghostenv env p1 coef size_first size_all assuming $. fun h ghostenv env post ->
       if post <> None then assert_false h env l "Left-hand side of separating conjunction cannot specify a postcondition." None;
@@ -1185,6 +1187,8 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let v = ev e in
       match_pat h l ghostenv env env' false (SrcPat pat) tp tp v (fun () -> assert false) $. fun ghostenv env env' ->
       cont [] h ghostenv env env' None
+    | LetTypeAsn (l, x, tp, p) ->
+      consume_asn_core_with_post rules ((x, tp)::tpenv) h ghostenv env env' p checkDummyFracs coef cont_with_post
     | Sep (l, p1, p2) ->
       consume_asn_core_with_post rules tpenv h ghostenv env env' p1 checkDummyFracs coef (fun chunks h ghostenv env env' size post ->
         if post <> None then static_error l "Left-hand operand of separating conjunction cannot specify a postcondition." None;
