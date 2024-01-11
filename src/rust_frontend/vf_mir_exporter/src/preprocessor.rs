@@ -125,6 +125,11 @@ pub fn preprocess(input: &str, directives: &mut Vec<GhostRange>, ghost_ranges: &
             }
             Some(c) => {
                 match c {
+                    ';' => {
+                        cs.next();
+                        output.push(c);
+                        next_block_is_fn_body = false;
+                    }
                     '{' => {
                         cs.next();
                         output.push('{');

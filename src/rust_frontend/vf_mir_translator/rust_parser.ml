@@ -44,6 +44,8 @@ let rec parse_type = function%parser
     [%let mutability = opt (function%parser [ (_, Kwd "const") ] -> () | [ (_, Kwd "mut") ] -> ()) ];
     parse_type as t
   ] -> ignore mutability; PtrTypeExpr (l, t)
+| [ (l, Kwd "any") ] -> ManifestTypeExpr (l, AnyType)
+| [ (l, Kwd "Self") ] -> IdentTypeExpr (l, None, "Self")
 and parse_type_with_opt_name = function%parser
   [ parse_type as t;
     [%let (x, t) = function%parser
@@ -425,14 +427,18 @@ let parse_lemma_keyword = function%parser
     ]
   ] -> Lemma (true, trigger)
 
+let parse_type_params = function%parser
+  [ (_, Kwd "<"); [%let tparams = rep_comma (function%parser [ (_, Ident x) ] -> x)]; (_, Kwd ">") ] -> tparams
+| [ ] -> []
+
 let parse_ghost_decl = function%parser
-| [ (l, Kwd "inductive"); (li, Ident i); (_, Kwd "=");
+| [ (l, Kwd "inductive"); (li, Ident i); parse_type_params as tparams; (_, Kwd "=");
     [%let cs = function%parser
      | [ parse_ctors as cs ] -> cs
      | [ parse_ctors_suffix as cs ] -> cs
     ];
     (_, Kwd ";")
-  ] -> [Inductive (l, i, [], cs)]
+  ] -> [Inductive (l, i, tparams, cs)]
 | [ (l, Kwd "pred"); (li, Ident g);
     [%let (ps, inputParamCount) = parse_pred_paramlist ];
     [%let body = opt parse_pred_body ];

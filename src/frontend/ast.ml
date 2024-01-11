@@ -515,6 +515,7 @@ and
   | EnsuresAsn of loc * asn
   | MatchAsn of loc * expr * pat
   | WMatchAsn of loc * expr * pat * type_
+  | LetTypeAsn of loc * string * type_ * asn (* `let_type U = T in A` means A with type T substituted for type parameter U *)
 and
   asn = expr
 and
@@ -1013,6 +1014,7 @@ let rec expr_loc e =
   | ExprAsn (l, e) -> l
   | MatchAsn (l, e, pat) -> l
   | WMatchAsn (l, e, pat, tp) -> l
+  | LetTypeAsn (l, x, t, p) -> l
   | Sep (l, p1, p2) -> l
   | IfAsn (l, e, p1, p2) -> l
   | SwitchAsn (l, e, sacs) -> l

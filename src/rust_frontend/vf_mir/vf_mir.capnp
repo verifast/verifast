@@ -580,6 +580,7 @@ struct Body {
     ghostStmts @9: List(Annotation);
     unsafety @10: Unsafety;
     hirGenerics @11: Hir.Generics;
+    isTraitFn @12: Bool;
     # Todo @Nima: Add Visibility data
 }
 

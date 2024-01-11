@@ -5469,7 +5469,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       mk_app !!truncate_signed_symb [t; nbBits]
   
-  let typeid_of l = function
+  let tparam_typeid_varname tn = tn ^ "_typeid"
+
+  let typeid_of_core l env = function
     Int (Signed, CharRank) -> char_typeid_term
   | Int (Signed, ShortRank) -> short_typeid_term
   | Int (Signed, IntRank) -> int_typeid_term
@@ -5495,7 +5497,16 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   | UnionType un ->
     let _, _, s = List.assoc un unionmap in
     s
+  | GhostTypeParam tn | RealTypeParam tn  ->
+    let x = tparam_typeid_varname tn in
+    begin try
+      List.assoc x env
+    with
+      Not_found -> static_error l (Printf.sprintf "Unbound variable '%s'" x) None
+    end
   | _ -> static_error l "Taking the typeid of this type is not yet supported" None
+
+  let typeid_of l t = typeid_of_core l [] t
 
   let pointer_ctor_symb = lazy_purefuncsymb "pointer_ctor"
   let ptr_add_symb = lazy_purefuncsymb "ptr_add"
@@ -5695,7 +5706,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let list_type elemType = InductiveType ("list", [elemType])
   let option_type elemType = InductiveType ("option", [elemType])
   
-  let check_asn_core (pn,ilist) tparams tenv p =
+  let rec check_asn_core (pn,ilist) tparams tenv p =
     let pre_tenv = tenv in
     let rec check_asn tenv p =
       match p with
@@ -5973,6 +5984,12 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let (w1, t) = check_expr (pn,ilist) tparams tenv (Some true) e1 in
         let (wpat, tenv) = check_pat (pn,ilist) tparams tenv t pat in
         (WMatchAsn (l, w1, wpat, t), tenv, [])
+      | LetTypeAsn (l, x, t, p) ->
+        if List.mem x tparams then static_error l "Duplicate type parameter" None;
+        let (p, tenv, infTps) = check_asn_core (pn,ilist) (x::tparams) tenv p in
+        let tpenv = (x, t)::List.map (fun x -> (x, GhostTypeParam x)) tparams in
+        let tenv = List.map (fun (x, t) -> (x, instantiate_type tpenv t)) tenv in
+        (LetTypeAsn (l, x, t, p), tenv, infTps)
       | Sep (l, p1, p2) ->
         let (p1, tenv, infTps1) = check_asn tenv p1 in
         let (p2, tenv, infTps2) = check_asn tenv p2 in
@@ -6226,6 +6243,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         fixed_pat_fixed_vars pat @ fixed
       else
         fixed
+    | LetTypeAsn (_, _, _, p) ->
+      check_pred_precise fixed p
     | Sep (l, p1, p2) ->
       let fixed = check_pred_precise fixed p1 in
       check_pred_precise fixed p2
@@ -7263,7 +7282,7 @@ let check_if_list_is_defined () =
       cont state v
     | ClassLit (l,s) -> cont state (List.assoc s classterms)
     | TypeInfo (l, tp) ->
-      cont state (typeid_of l tp)
+      cont state (typeid_of_core l env tp)
     | StringLit (l, s) ->
       if ass_term = None then static_error l "String literals are not allowed in ghost code." None;
       cont state

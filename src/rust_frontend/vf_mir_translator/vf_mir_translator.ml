@@ -1685,16 +1685,20 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
 
     let translate_fn_call_rexpr (callee_cpn : OperandRd.t)
         (args_cpn : OperandRd.t list) (call_loc : Ast.loc) (fn_loc : Ast.loc) =
-      let translate_regular_fn_call fn_name =
+      let translate_regular_fn_call substs fn_name =
         (* Todo @Nima: There should be a way to get separated source spans for args *)
         let args = List.map (fun arg_cpn -> (arg_cpn, fn_loc)) args_cpn in
         let* tmp_rvalue_binders, args = translate_operands args in
+        let targs = Util.flatmap (function (Mir.GenArgType ty) -> [ty] | _ -> []) substs in
+        let targs = List.map Mir.raw_type_of targs in
+        let targs_args = List.map (fun ty -> Ast.Typeid (call_loc, Ast.TypeExpr ty)) targs in
+        let args = targs_args @ args in
         let args = List.map (fun expr -> Ast.LitPat expr) args in
         let call_expr =
           Ast.CallExpr
             ( call_loc,
               fn_name,
-              [] (*type arguments*),
+              targs (*type arguments*),
               [] (*indices, in case this is really a predicate assertion*),
               args,
               Ast.Static (*method_binding*) )
@@ -1703,12 +1707,12 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       in
       let* callee = translate_operand callee_cpn call_loc in
       match callee with
-      | `TrOperandMove (Var (_, fn_name)) -> translate_regular_fn_call fn_name
+      | `TrOperandMove (Var (_, fn_name)) -> translate_regular_fn_call [] fn_name
       | `TrTypedConstantFn ty_info ->
         begin match ty_info with
         | Mir.TyInfoBasic
             { vf_ty = Ast.ManifestTypeExpr ((*loc*) _, Ast.FuncType fn_name) } ->
-            translate_regular_fn_call fn_name
+            translate_regular_fn_call [] fn_name
         | Mir.TyInfoGeneric
             {
               vf_ty = Ast.ManifestTypeExpr ((*loc*) _, Ast.FuncType fn_name);
@@ -1792,7 +1796,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                 Ok ( tmp_rvalue_binders, arg )
             | _ ->
                 (* Ignore the generic args for now *)
-                translate_regular_fn_call fn_name)
+                translate_regular_fn_call substs fn_name)
                 (*
                 failwith
                   ("Todo: Generic functions are not supported yet. Function: "
@@ -2600,10 +2604,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       Ast.Func
         ( loc,
           Ast.Regular,
-          (*type params*) [],
+          (*type params*) ["Self"],
           Some ret_ty,
           Printf.sprintf "%s::%s" trait_name name,
-          vf_param_decls,
+          (ManifestTypeExpr (loc, PtrType (AbstractType "std::type_info")), "Self_typeid")::vf_param_decls,
           nonghost_callers_only,
           fn_type_clause,
           pre_post,
@@ -2662,6 +2666,13 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                 Ok (Some name)
               else Ok None)
             gens
+        in
+        let tparams = Util.flatmap (function (name, Hir.GenParamType, loc) -> [name] | _ -> []) gens in
+        let tparams =
+          if is_trait_fn_get body_cpn then
+            "Self"::tparams
+          else
+            tparams
         in
         let arg_count = arg_count_get body_cpn in
         let* arg_count = IntAux.Uint32.try_to_int arg_count in
@@ -2731,6 +2742,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         let vf_bblocks = List.concat vf_bblocks in
         let span_cpn = span_get body_cpn in
         let* loc = translate_span_data span_cpn in
+        let tparam_typeid_params =
+          List.map (fun name -> (Ast.ManifestTypeExpr (loc, Ast.PtrType (Ast.AbstractType "std::type_info")), name ^ "_typeid")) tparams
+        in
         let* closing_cbrace_loc = LocAux.get_last_col_loc loc in
         let mk_fn_decl contract body =
           let ( (nonghost_callers_only : bool),
@@ -2742,10 +2756,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           Ast.Func
             ( loc,
               Ast.Regular,
-              (*type params*) [],
+              (*type params*) tparams,
               Some ret_ty,
               name,
-              vf_param_decls,
+              tparam_typeid_params @ vf_param_decls,
               nonghost_callers_only,
               fn_type_clause,
               pre_post,
@@ -3207,8 +3221,11 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           let trait_fn_name = Printf.sprintf "%s::%s" of_trait item in
           let impl_fn_name = Printf.sprintf "<%s as %s>::%s" self_ty of_trait item in
           let Some prototype =
-            traits_and_body_decls |> Util.head_flatmap_option begin function Ast.Func (lf, Regular, tparams, rt, name, ps, false, None, spec, terminates, body, false, []) when name = trait_fn_name ->
-              Some (Ast.Func (lf, Regular, tparams, rt, impl_fn_name, ps, false, None, spec, terminates, None, false, []))
+            traits_and_body_decls |> Util.head_flatmap_option begin function Ast.Func (lf, Regular, "Self"::tparams, rt, name, (_, self_typeid_param)::ps, false, None, Some (pre, post), terminates, body, false, []) when name = trait_fn_name ->
+              let self_ty_typeid = Ast.Typeid (lf, Ast.TypeExpr (Ast.ManifestTypeExpr (lf, Ast.StructType self_ty))) in
+              let pre = Ast.LetTypeAsn (lf, "Self", Ast.StructType self_ty, Ast.Sep (lf, MatchAsn (lf, self_ty_typeid, VarPat (lf, self_typeid_param)), Ast.Sep (lf, pre, Ast.EnsuresAsn (lf, post)))) in
+              let post = Ast.EmpAsn lf in
+              Some (Ast.Func (lf, Regular, tparams, rt, impl_fn_name, ps, false, None, Some (pre, post), terminates, None, false, []))
             | _ -> None
             end
           in
