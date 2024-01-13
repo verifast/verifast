@@ -1,5 +1,7 @@
 (library
  (name cxx_frontend)
- (wrapped false)
- (preprocess (pps ppx_parser))
+ (preprocess
+  (per_module
+   ((pps ppx_parser)
+    annotation_parser)))
  (libraries frontend cxx_frontend_stubs))

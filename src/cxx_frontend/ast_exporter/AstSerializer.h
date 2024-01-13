@@ -47,7 +47,7 @@ class AstSerializer {
 
   /**
    * Serialize a declaration to this instance's declaration map of orphans.
-   * First checks for annotation declarations an d serializes them to the map
+   * First checks for annotation declarations and serializes them to the map
    * prior to serializing the declaration itself.
    * @param decl Declaration to serialize.
    * @param orphanage Orphanage to be able to create new orphans.
