@@ -1362,8 +1362,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 let prelude_name, parse_header_file = 
                   match dialect with 
                   | Some Cxx -> 
+                    let open Cxx_frontend in
                     "prelude_cxx.h", fun report_macro_call path report_range report_should_fail verbose include_paths define_macros enforce_annotations data_model -> 
-                      let module Translator = Cxx_ast_translator.Make(
+                      let module Translator = Ast_translator.Make(
                         struct 
                           let enforce_annotations = enforce_annotations
                           let data_model_opt = data_model
@@ -1381,8 +1382,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                       begin try
                         Translator.parse_cxx_file ()
                       with
-                      | Cxx_annotation_parser.CxxAnnParseException (l, msg)
-                      | Cxx_ast_translator.CxxAstTranslException (l, msg) -> static_error l msg None
+                      | Annotation_parser.CxxAnnParseException (l, msg)
+                      | Error.CxxAstTranslException (l, msg) -> static_error l msg None
                       end
                   | Some Rust -> "prelude_rust.h", parse_header_file
                   | _ -> "prelude.h", parse_header_file 

@@ -3668,7 +3668,8 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         in
         (headers, ds, (*dbg_info*) None)
       | CLang, Some Cxx -> begin
-        let module Translator = Cxx_ast_translator.Make(
+        let open Cxx_frontend in
+        let module Translator = Ast_translator.Make(
           struct
             let enforce_annotations = options.option_enforce_annotations
             let data_model_opt = data_model
@@ -3686,8 +3687,8 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         try
           let headers, ds = Translator.parse_cxx_file () in (headers, ds, (*dbg_info*) None)
         with
-        | Cxx_annotation_parser.CxxAnnParseException (l, msg)
-        | Cxx_ast_translator.CxxAstTranslException (l, msg) -> static_error l msg None
+        | Annotation_parser.CxxAnnParseException (l, msg)
+        | Error.CxxAstTranslException (l, msg) -> static_error l msg None
       end
       | CLang, Some(Rust) -> begin
         let module RustFe = Rust_fe.Make(

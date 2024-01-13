@@ -15,11 +15,6 @@ class InclusionContext {
     return m_includesStack.back();
   }
 
-  void serializeInclDirectivesCore(
-      capnp::List<stubs::Include, capnp::Kind::STRUCT>::Builder &builder,
-      const clang::SourceManager &SM,
-      const llvm::ArrayRef<IncludeDirective> inclDirectives, unsigned fd) const;
-
 public:
   explicit InclusionContext() {}
 
