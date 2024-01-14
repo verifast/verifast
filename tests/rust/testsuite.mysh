@@ -16,4 +16,5 @@ cd ..
 cd safe_abstraction
   verifast -c cell_u32.rs
   verifast -c deque.rs
+  verifast -c tree.rs
 cd ..

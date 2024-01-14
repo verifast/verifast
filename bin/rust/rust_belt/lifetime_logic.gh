@@ -1,12 +1,47 @@
 #ifndef LIFETIME_LOGIC_GH
 #define LIFETIME_LOGIC_GH
 
-abstract_type lifetime_t; // Type of lifetimes
+inductive lifetime_t = lifetime_ctor(int id); // Type of lifetimes
 abstract_type thread_id_t; // Type of thread IDs
 
+fixpoint lifetime_t lifetime_intersection(lifetime_t k, lifetime_t k1);
 fixpoint bool lifetime_inclusion(lifetime_t k, lifetime_t k1);
 
+lemma void lifetime_intersection_symm(lifetime_t k, lifetime_t k1);
+    requires true;
+    ensures lifetime_intersection(k, k1) == lifetime_intersection(k1, k);
+
+lemma_auto(lifetime_intersection(k, k1)) void lifetime_inclusion_intersection(lifetime_t k, lifetime_t k1);
+    requires true;
+    ensures lifetime_inclusion(lifetime_intersection(k, k1), k) == true;
+
 predicate lifetime_token(lifetime_t k;); // Lifetime token
+predicate lifetime_dead_token(lifetime_t k;);
+
+lemma void lifetime_token_inv(lifetime_t k);
+    requires [?q]lifetime_token(k);
+    ensures [q]lifetime_token(k) &*& 0 < q &*& q <= 1;
+
+lemma lifetime_t begin_lifetime();
+    requires true;
+    ensures lifetime_token(result);
+
+lemma void end_lifetime(lifetime_t k);
+    requires lifetime_token(k);
+    ensures [_]lifetime_dead_token(k);
+
+lemma void close_lifetime_intersection_token(real q, lifetime_t k, lifetime_t k1);
+    requires [q]lifetime_token(k) &*& [q]lifetime_token(k1);
+    ensures [q]lifetime_token(lifetime_intersection(k, k1));
+
+lemma void open_lifetime_intersection_token(real q, lifetime_t k, lifetime_t k1);
+    requires [q]lifetime_token(lifetime_intersection(k, k1));
+    ensures [q]lifetime_token(k) &*& [q]lifetime_token(k1);
+
+lemma void close_lifetime_intersection_dead_token(lifetime_t k, lifetime_t k1);
+    requires [_]lifetime_dead_token(k);
+    ensures [_]lifetime_dead_token(lifetime_intersection(k, k1));
+
 predicate thread_token(thread_id_t t); // Non-atomic token with Top mask ([NaInv: t.Top] in RustBelt)
 
 // Full borrow
@@ -21,6 +56,16 @@ lemma void open_full_borrow(real q, lifetime_t k, predicate() P);
 lemma void close_full_borrow(predicate() P);
     requires close_full_borrow_token(P, ?q, ?k) &*& P();
     ensures full_borrow(k, P) &*& [q]lifetime_token(k);
+
+predicate end_reborrow_token(lifetime_t k1, lifetime_t k, predicate() P);
+
+lemma void reborrow(lifetime_t k1, lifetime_t k, predicate() P);
+    requires lifetime_inclusion(k1, k) == true &*& full_borrow(k, P);
+    ensures full_borrow(k1, P) &*& end_reborrow_token(k1, k, P);
+
+lemma void end_reborrow(lifetime_t k1, lifetime_t k, predicate() P);
+    requires end_reborrow_token(k1, k, P) &*& [_]lifetime_dead_token(k1);
+    ensures full_borrow(k, P);
 
 typedef lemma void implies(predicate() P, predicate() P1)();
     requires P();

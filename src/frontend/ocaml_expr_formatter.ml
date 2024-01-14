@@ -87,3 +87,8 @@ let print_ocaml_expr_to_file noLocs path e =
   let chan = open_out path in
   print_tree (output_string chan) (tree_of_ocaml_expr noLocs e);
   close_out chan
+
+let string_of_ocaml_expr noLocs e =
+  let buf = Buffer.create 10 in
+  print_tree (Buffer.add_string buf) (tree_of_ocaml_expr noLocs e);
+  Buffer.contents buf
