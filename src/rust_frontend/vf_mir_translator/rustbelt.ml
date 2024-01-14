@@ -10,7 +10,7 @@ type ty_interp = {
   size : expr;
   own : tid -> v list -> (asn, string) result;
   shr : lft -> tid -> l -> (asn, string) result;
-  full_bor_content : tid -> l -> (asn, string) result;
+  full_bor_content : (string, string) result;
   points_to : tid -> l -> vid option -> (asn, string) result;
 }
 
@@ -19,7 +19,7 @@ let emp_ty_interp loc =
     size = True loc;
     own = (fun _ _ -> Ok (True loc));
     shr = (fun _ _ _ -> Ok (True loc));
-    full_bor_content = (fun _ _ -> Ok (True loc));
+    full_bor_content = Error "Not yet supported";
     points_to = (fun _ _ _ -> Ok (True loc));
   }
 
