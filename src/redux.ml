@@ -144,7 +144,7 @@ class symbol (kind: symbol_kind) (name: string) =
 and poly_symbol (name: string) (poly: num * (termnode * num) list) =
   object (self)
     inherit symbol Uninterp name
-    method as_poly = Some poly
+    method! as_poly = Some poly
   end
 and termnode (ctxt: context) s initial_children =
   object (self)
