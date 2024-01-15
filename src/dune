@@ -7,4 +7,15 @@
  (libraries num Z3 json perf java_frontend cxx_frontend rust_frontend))
 (env
   (dev
-    (flags (:standard -warn-error -A -w -8-9-27 -thread))))
+    ; OCaml warning numbers:
+    ; https://v2.ocaml.org/manual/toplevel.html#s%3Atoplevel-common-errors
+    ; 8 Missing cases in pattern-matching
+    ; 9 Missing fields in record pattern
+    ; 26 Suspicious unused variable
+    ; 27 Innocuous unused variable
+    ; 32 Unused value declaration
+    ; 33 Unused open statement
+    ; 34 Unused type declaration
+    ; 35 Unused for index
+    ; 39 Unused rec flag
+    (flags (:standard -warn-error -A -w -8-9-26-27-32-33-34-35-39 -thread))))

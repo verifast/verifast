@@ -152,12 +152,16 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     * It is an approximation because of clashes such as the clash between the second symbol ('foo0') generated for 'foo'
     * and the first symbol ('foo0') generated for 'foo0'. *)
   let used_ids = Hashtbl.create 10000
+
   (** Contains all ref cells from used_ids that need to be decremented at the next pop(). *)
   let used_ids_undo_stack = ref []
+
   (** The terms that represent coefficients of leakable chunks. These come from [_] patterns in the source code. *)
   let dummy_frac_terms = ref []
+
   (** The terms that represent predicate constructor applications. *)
   let pred_ctor_applications : (termnode * (symbol * termnode * (termnode list) * int option)) list ref = ref []
+
   (** When switching to the next symbolic execution branch, this stack is popped to forget about fresh identifiers generated in the old branch. *)
   let used_ids_stack = ref []
   
@@ -683,6 +687,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let programDir = Filename.dirname path
   let rtpath = match Vfbindings.get Vfparam_runtime vfbindings with None -> concat (rtdir()) "rt.jarspec" | Some path -> path
+
   (** Records the source lines containing //~, indicating that VeriFast is supposed to detect an error on that line. *)
   let shouldFailLocs: loc0 list ref = ref []
   
@@ -1103,6 +1108,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     val ps: package list
 
     val dbg_info: debug_info option
+
     (** For recursive calls. *)
     val check_file: string -> bool -> bool -> string -> (loc * (include_kind * string * string) * string list * package list) list -> package list -> debug_info option -> check_file_output * maps
   end
@@ -1257,7 +1263,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
        cxx_inst_pred_map @ cxx_inst_pred_map0)
     in
 
-    (** [merge_header_maps maps0 headers] returns [maps0] plus all elements transitively declared in [headers]. *)
+    (* [merge_header_maps maps0 headers] returns [maps0] plus all elements transitively declared in [headers]. *)
     let rec merge_header_maps include_prelude maps0 headers_included dir headers global_headers =
       match headers with
         [] -> (maps0, headers_included)

@@ -2482,7 +2482,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
              let y = x + 2;
              ``
              The third `x` refers to the first x but the code might be confusing for the user *)
-          failwith "Todo: Shadowed variable names";
+          failwith "Todo: Shadowed variable names"
+          (*
           let internal_name =
             TrName.tag_internal surf_name ^ string_of_int !counter
           in
@@ -2495,6 +2496,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             in
             let trs_entry : var_id_trs_entry = { id; internal_name } in
             (env_entry_opt, trs_entry, surf_names_set)
+          *)
     in
     let f_aux (env_map, trs_map, surf_names_set)
         ({ internal; surf_name } : Mir.var_debug_info) =
