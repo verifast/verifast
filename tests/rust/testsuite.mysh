@@ -14,7 +14,8 @@ cd purely_unsafe
   verifast -c tree3.rs
 cd ..
 cd safe_abstraction
-  verifast -c cell_u32.rs
+  verifast -c full_bor_primitive_types.rs
   verifast -c deque.rs
+  verifast -c cell_u32.rs
   verifast -c tree.rs
 cd ..

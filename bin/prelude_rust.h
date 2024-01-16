@@ -1,6 +1,7 @@
 #ifndef PRELUDE_RUST_H
 #define PRELUDE_RUST_H
 
+#include "rust/rust_belt/general.h"
 //@ #include "prelude_core.gh"
 //@ #include "list.gh"
 //@ #include "rust/rust_belt/lifetime_logic.gh"
