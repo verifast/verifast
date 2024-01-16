@@ -844,9 +844,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     in
     let own tid vs = Ok (True loc) in
     let shr lft tid l = Ok (True loc) in
-    let full_bor_content =
-      Ok (ty_name ^ "_full_borrow_content")
-    in
+    let full_bor_content = Ok (ty_name ^ "_full_borrow_content") in
     let points_to tid l vid_op =
       (* Todo: The size and bounds of the integer that this assertion is specifying will depend on the pointer `l` type
          which is error-prone. It is helpful if we add a sanity-check or use elevated `integer_(...)` predicates with bound infos *)
@@ -900,9 +898,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     (* Todo @Nima: This shared predicate is not correct. We should write a SimpleType interpretation
        constructor in RustBelt module to call to for creating the interpretation for u_int and other simple types. *)
     let shr lft tid l = Ok (True loc) in
-    let full_bor_content =
-      Ok (ty_name ^ "_full_borrow_content")
-    in
+    let full_bor_content = Ok (ty_name ^ "_full_borrow_content") in
     let points_to tid l vid_op =
       (* Todo: The size and bounds of the integer that this assertion is specifying will depend on the pointer `l` type
          which is error-prone. It is helpful if we add a sanity-check or use elevated `integer_(...)` predicates with bound infos *)
@@ -944,7 +940,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               u_size_set usz_ty_cpn;
               translate_u_int_ty (to_reader usz_ty_cpn) loc
         | "std::cell::UnsafeCell" ->
-            let [arg_cpn] = substs_cpn in
+            let [ arg_cpn ] = substs_cpn in
             let* (Mir.GenArgType arg_ty) = translate_generic_arg arg_cpn loc in
             Ok arg_ty
         | _ ->
@@ -972,9 +968,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                      [ LitPat lft; LitPat tid; LitPat l ],
                      Static ))
             in
-            let full_bor_content =
-              Ok (name ^ "_full_borrow_content")
-            in
+            let full_bor_content = Ok (name ^ "_full_borrow_content") in
             (* Todo: Nested structs *)
             let points_to tid l vid_op = Ok (True loc) in
             let interp =
@@ -1008,9 +1002,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let size = SizeofExpr (loc, TypeExpr vf_ty) in
     let own _ _ = Ok (True loc) in
     let shr _ _ _ = Ok (True loc) in
-    let full_bor_content =
-      Ok "bool_full_borrow_content"
-    in
+    let full_bor_content = Ok "bool_full_borrow_content" in
     let points_to tid l vid_op =
       let* pat = RustBelt.Aux.vid_op_to_var_pat vid_op loc in
       Ok (PointsTo (loc, l, pat))
@@ -1090,9 +1082,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       | _ -> Error "[[char]].own(tid, vs) should have `vs == [c]`"
     in
     let shr _ _ _ = Ok (True loc) in
-    let full_bor_content =
-      Ok "char_full_borrow_content"
-    in
+    let full_bor_content = Ok "char_full_borrow_content" in
     let points_to tid l vid_op =
       match vid_op with
       | Some vid when vid != "" ->
@@ -1121,7 +1111,11 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     in
     let own _ _ = Ok (False loc) in
     let shr _ _ _ = Ok (False loc) in
-    let full_bor_content = Error "Expressing the full borrow content of the never type is not yet supported" in
+    let full_bor_content =
+      Error
+        "Expressing the full borrow content of the never type is not yet \
+         supported"
+    in
     let points_to _ _ _ = Ok (False loc) in
     Mir.TyInfoBasic
       {
@@ -1176,15 +1170,16 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                  interp = RustBelt.emp_ty_interp loc;
                })
 
-  and translate_fn_ptr_ty (fn_ptr_ty_cpn : FnPtrTyRd.t) (loc : Ast.loc) =     
+  and translate_fn_ptr_ty (fn_ptr_ty_cpn : FnPtrTyRd.t) (loc : Ast.loc) =
     let open FnPtrTyRd in
     let output_cpn = output_get fn_ptr_ty_cpn in
-    let* TyInfoBasic {vf_ty=output_ty} = translate_ty output_cpn loc in
+    let* (TyInfoBasic { vf_ty = output_ty }) = translate_ty output_cpn loc in
     Ok
       (Mir.TyInfoBasic
          {
-           vf_ty = FuncTypeExpr (loc, output_ty, []); (* Only the return type matters *)
-           interp = RustBelt.emp_ty_interp loc
+           vf_ty = FuncTypeExpr (loc, output_ty, []);
+           (* Only the return type matters *)
+           interp = RustBelt.emp_ty_interp loc;
          })
 
   and translate_raw_ptr_ty (raw_ptr_ty_cpn : RawPtrTyRd.t) (loc : Ast.loc) =
@@ -1201,9 +1196,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let size_expr = SizeofExpr (loc, TypeExpr vf_ty) in
     let own tid vs = Ok (True loc) in
     let shr lft tid l = Ok (True loc) in
-    let full_bor_content =
-      Ok "raw_ptr_full_borrow_content"
-    in
+    let full_bor_content = Ok "raw_ptr_full_borrow_content" in
     let points_to tid l vid_op =
       let* pat = RustBelt.Aux.vid_op_to_var_pat vid_op loc in
       Ok (PointsTo (loc, l, pat))
@@ -1275,7 +1268,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           let full_bor_content =
             (* This will need to add a definition for each mut reference type in the program because the body of the predicate will need to mention
                [[&mut T]].own which depends on T. Another solution is to make VeriFast support Higher order predicates with non-predicate arguments *)
-            Error "Expressing the full borrow content of a mutable reference type is not yet supported"
+            Error
+              "Expressing the full borrow content of a mutable reference type \
+               is not yet supported"
             (* CallExpr
                ( loc,
                  "mut_ref_full_borrow_content",
@@ -1302,7 +1297,11 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             | _ -> Error "[[&T]].own(tid, vs) needs to vs == [l]"
           in
           let shr lft tid l = Ok (True loc) in
-          let full_bor_content = Error "Expressing the full borrow content of a shared reference type is not yet supported" in
+          let full_bor_content =
+            Error
+              "Expressing the full borrow content of a shared reference type \
+               is not yet supported"
+          in
           let points_to tid l vid_op =
             match vid_op with
             | Some vid when vid != "" ->
@@ -1344,13 +1343,26 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         translate_tuple_ty substs_cpn loc
     | Param name ->
         let vf_ty = ManifestTypeExpr (loc, RealTypeParam name) in
-        let interp: RustBelt.ty_interp = {
-          size = SizeofExpr (loc, TypeExpr vf_ty);
-          own = (fun t vs -> Error "Expressing the ownership predicate of a type parameter is not yet supported");
-          shr = (fun k t l -> Error "Expressing the shared ownership predicate of a type parameter is not yet supported");
-          full_bor_content = Ok (name ^ "_full_borrow_content");
-          points_to = (fun t l vid -> Error "Expressing the points-to predicate of a type parameter is not yet supported")
-        }
+        let interp : RustBelt.ty_interp =
+          {
+            size = SizeofExpr (loc, TypeExpr vf_ty);
+            own =
+              (fun t vs ->
+                Error
+                  "Expressing the ownership predicate of a type parameter is \
+                   not yet supported");
+            shr =
+              (fun k t l ->
+                Error
+                  "Expressing the shared ownership predicate of a type \
+                   parameter is not yet supported");
+            full_bor_content = Ok (name ^ "_full_borrow_content");
+            points_to =
+              (fun t l vid ->
+                Error
+                  "Expressing the points-to predicate of a type parameter is \
+                   not yet supported");
+          }
         in
         Ok (Mir.TyInfoBasic { vf_ty; interp })
     | Undefined _ -> Error (`TrTy "Unknown Rust type kind")
@@ -1522,35 +1534,37 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       | FnDef -> failwith "Todo: Scalar::FnDef"
       | Undefined _ -> Error (`TrScalar "Unknown Scalar kind")
 
-      let translate_unit_constant (loc : Ast.loc) =
-        let rvalue_binder_builder tmp_var_name =
-          Ast.DeclStmt
-            ( loc,
-              [
-                ( loc,
-                  Some (Ast.ManifestTypeExpr (loc, Ast.StructType TrTyTuple.tuple0_name)),
-                  tmp_var_name,
-                  Some (Ast.InitializerList (loc, [])),
-                  ( (*indicates whether address is taken*) ref false,
-                    (*pointer to enclosing block's list of variables whose address is taken*)
-                    ref None ) );
-              ] )
-        in
-        Ok (`TrTypedConstantRvalueBinderBuilder rvalue_binder_builder)
-  
-      let translate_const_value (cv_cpn : ConstValueRd.t) (ty : Ast.type_expr)
+    let translate_unit_constant (loc : Ast.loc) =
+      let rvalue_binder_builder tmp_var_name =
+        Ast.DeclStmt
+          ( loc,
+            [
+              ( loc,
+                Some
+                  (Ast.ManifestTypeExpr
+                     (loc, Ast.StructType TrTyTuple.tuple0_name)),
+                tmp_var_name,
+                Some (Ast.InitializerList (loc, [])),
+                ( (*indicates whether address is taken*) ref false,
+                  (*pointer to enclosing block's list of variables whose address is taken*)
+                  ref None ) );
+            ] )
+      in
+      Ok (`TrTypedConstantRvalueBinderBuilder rvalue_binder_builder)
+
+    let translate_const_value (cv_cpn : ConstValueRd.t) (ty : Ast.type_expr)
         (loc : Ast.loc) =
       let open ConstValueRd in
       match get cv_cpn with
       | Scalar scalar_cpn ->
-        let* expr = translate_scalar scalar_cpn ty loc in
-        Ok (`TrTypedConstantScalar expr)
-      | ZeroSized ->
-        begin match ty with
-          Ast.ManifestTypeExpr (_, Ast.StructType sn) when sn = TrTyTuple.tuple0_name ->
-          translate_unit_constant loc
-        | _ -> failwith "Todo: ConstValue::ZeroSized"
-        end
+          let* expr = translate_scalar scalar_cpn ty loc in
+          Ok (`TrTypedConstantScalar expr)
+      | ZeroSized -> (
+          match ty with
+          | Ast.ManifestTypeExpr (_, Ast.StructType sn)
+            when sn = TrTyTuple.tuple0_name ->
+              translate_unit_constant loc
+          | _ -> failwith "Todo: ConstValue::ZeroSized")
       | Slice -> failwith "Todo: ConstValue::Slice"
       | Undefined _ -> Error (`TrConstValue "Unknown ConstValue")
 
@@ -1578,33 +1592,29 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             failwith
               ("Todo: Constants of type struct " ^ st_name
              ^ " are not supported yet")
-          else
-            translate_unit_constant loc
+          else translate_unit_constant loc
       | Ast.FuncType _ -> Ok (`TrTypedConstantFn ty_info)
       | Ast.Int (_, _) | Ast.Bool ->
           let kind_cpn = kind_get ty_const_cpn in
           translate_ty_const_kind kind_cpn ty_expr loc
       | _ -> failwith "Todo: Constant of unsupported type"
 
-    let translate_const (constant_kind_cpn : ConstRd.t)
-        (loc : Ast.loc) =
+    let translate_const (constant_kind_cpn : ConstRd.t) (loc : Ast.loc) =
       let open ConstRd in
       match get constant_kind_cpn with
       | Ty ty_const_cpn -> translate_typed_constant ty_const_cpn loc
-      | Val val_cpn ->
-        let open ConstRd.Val in
-        let* ty_info = translate_ty (ty_get val_cpn) loc in
-        let ty_expr = Mir.raw_type_of ty_info in
-        let ty =
-          match ty_expr with
-          | Ast.ManifestTypeExpr ((*loc*) _, ty) -> ty
-          | _ -> failwith "Todo: Unsupported type_expr"
-        in
-        begin match ty with
-        | Ast.FuncType _ -> Ok (`TrTypedConstantFn ty_info)
-        | _ ->
-          translate_const_value (const_value_get val_cpn) ty_expr loc
-        end
+      | Val val_cpn -> (
+          let open ConstRd.Val in
+          let* ty_info = translate_ty (ty_get val_cpn) loc in
+          let ty_expr = Mir.raw_type_of ty_info in
+          let ty =
+            match ty_expr with
+            | Ast.ManifestTypeExpr ((*loc*) _, ty) -> ty
+            | _ -> failwith "Todo: Unsupported type_expr"
+          in
+          match ty with
+          | Ast.FuncType _ -> Ok (`TrTypedConstantFn ty_info)
+          | _ -> translate_const_value (const_value_get val_cpn) ty_expr loc)
       | Undefined _ -> Error (`TrConstantKind "Unknown ConstantKind")
 
     let translate_const_operand (constant_cpn : ConstOperandRd.t) =
@@ -1660,17 +1670,27 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         (* Todo @Nima: There should be a way to get separated source spans for args *)
         let args = List.map (fun arg_cpn -> (arg_cpn, fn_loc)) args_cpn in
         let* tmp_rvalue_binders, args = translate_operands args in
-        let targs = Util.flatmap (function (Mir.GenArgType ty) -> [ty] | _ -> []) substs in
-        let targs_args = targs |> Util.flatmap @@ fun ty ->
-          [
-            Ast.Typeid (call_loc, Ast.TypeExpr (Mir.raw_type_of ty));
-            let full_bor_content =
-              match (Mir.interp_of ty).full_bor_content with
-                Ok fbc -> fbc
-              | Error msg -> raise (Ast.StaticError (call_loc, "Cannot express the full borrow content for some of the type arguments: " ^ msg, None))
-            in
-            Ast.Var (call_loc, full_bor_content)
-          ]
+        let targs =
+          Util.flatmap (function Mir.GenArgType ty -> [ ty ] | _ -> []) substs
+        in
+        let targs_args =
+          targs
+          |> Util.flatmap @@ fun ty ->
+             [
+               Ast.Typeid (call_loc, Ast.TypeExpr (Mir.raw_type_of ty));
+               (let full_bor_content =
+                  match (Mir.interp_of ty).full_bor_content with
+                  | Ok fbc -> fbc
+                  | Error msg ->
+                      raise
+                        (Ast.StaticError
+                           ( call_loc,
+                             "Cannot express the full borrow content for some \
+                              of the type arguments: " ^ msg,
+                             None ))
+                in
+                Ast.Var (call_loc, full_bor_content));
+             ]
         in
         let targs = List.map Mir.raw_type_of targs in
         let args = targs_args @ args in
@@ -1688,104 +1708,113 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       in
       let* callee = translate_operand callee_cpn call_loc in
       match callee with
-      | `TrOperandMove (Var (_, fn_name)) -> translate_regular_fn_call [] fn_name
-      | `TrTypedConstantFn ty_info ->
-        begin match ty_info with
-        | Mir.TyInfoBasic
-            { vf_ty = Ast.ManifestTypeExpr ((*loc*) _, Ast.FuncType fn_name) } ->
-            translate_regular_fn_call [] fn_name
-        | Mir.TyInfoGeneric
-            {
-              vf_ty = Ast.ManifestTypeExpr ((*loc*) _, Ast.FuncType fn_name);
-              substs;
-              vf_ty_mono =
-                Ast.ManifestTypeExpr ((*loc*) _, Ast.FuncType fn_name_mono);
-            } -> (
-            match fn_name with
-            (* Todo @Nima: For cases where we inline an expression instead of a function call,
-               there is a problem with extending the implementation for clean-up paths *)
-            | "std::alloc::Layout::new" -> (
-                if not (ListAux.is_empty args_cpn) then
-                  Error
-                    (`TrFnCallRExpr
-                      "Invalid number of arguments for std::alloc::Layout::new")
-                else
-                  match substs with
-                  | [ Mir.GenArgType ty_info; Mir.GenArgConst ] ->
-                      let ty_expr = Mir.basic_type_of ty_info in
+      | `TrOperandMove (Var (_, fn_name)) ->
+          translate_regular_fn_call [] fn_name
+      | `TrTypedConstantFn ty_info -> (
+          match ty_info with
+          | Mir.TyInfoBasic
+              { vf_ty = Ast.ManifestTypeExpr ((*loc*) _, Ast.FuncType fn_name) }
+            ->
+              translate_regular_fn_call [] fn_name
+          | Mir.TyInfoGeneric
+              {
+                vf_ty = Ast.ManifestTypeExpr ((*loc*) _, Ast.FuncType fn_name);
+                substs;
+                vf_ty_mono =
+                  Ast.ManifestTypeExpr ((*loc*) _, Ast.FuncType fn_name_mono);
+              } -> (
+              match fn_name with
+              (* Todo @Nima: For cases where we inline an expression instead of a function call,
+                 there is a problem with extending the implementation for clean-up paths *)
+              | "std::alloc::Layout::new" -> (
+                  if not (ListAux.is_empty args_cpn) then
+                    Error
+                      (`TrFnCallRExpr
+                        "Invalid number of arguments for \
+                         std::alloc::Layout::new")
+                  else
+                    match substs with
+                    | [ Mir.GenArgType ty_info; Mir.GenArgConst ] ->
+                        let ty_expr = Mir.basic_type_of ty_info in
+                        Ok
+                          ( (*tmp_rvalue_binders*) [],
+                            Ast.SizeofExpr (call_loc, Ast.TypeExpr ty_expr) )
+                    | _ ->
+                        Error
+                          (`TrFnCallRExpr
+                            "Invalid generic argument(s) for \
+                             std::alloc::Layout::new"))
+              | "std::ptr::mut_ptr::<impl *mut T>::is_null" -> (
+                  match (substs, args_cpn) with
+                  | ( [ Mir.GenArgType gen_arg_ty_info; Mir.GenArgConst ],
+                      [ arg_cpn ] ) ->
+                      let* tmp_rvalue_binders, [ arg ] =
+                        translate_operands [ (arg_cpn, fn_loc) ]
+                      in
                       Ok
-                        ( (*tmp_rvalue_binders*) [],
-                          Ast.SizeofExpr (call_loc, Ast.TypeExpr ty_expr) )
+                        ( tmp_rvalue_binders,
+                          Ast.Operation
+                            ( fn_loc,
+                              Ast.Eq,
+                              [
+                                arg;
+                                IntLit
+                                  ( fn_loc,
+                                    Big_int.zero_big_int,
+                                    (*decimal*) true,
+                                    (*U suffix*) false,
+                                    (*int literal*) Ast.NoLSuffix );
+                              ] ) )
                   | _ ->
                       Error
                         (`TrFnCallRExpr
-                          "Invalid generic argument(s) for \
-                           std::alloc::Layout::new"))
-            | "std::ptr::mut_ptr::<impl *mut T>::is_null" -> (
-                match (substs, args_cpn) with
-                | [ Mir.GenArgType gen_arg_ty_info; Mir.GenArgConst ], [ arg_cpn ] ->
-                    let* tmp_rvalue_binders, [ arg ] =
-                      translate_operands [ (arg_cpn, fn_loc) ]
-                    in
-                    Ok
-                      ( tmp_rvalue_binders,
-                        Ast.Operation
-                          ( fn_loc,
-                            Ast.Eq,
-                            [
-                              arg;
-                              IntLit
-                                ( fn_loc,
-                                  Big_int.zero_big_int,
-                                  (*decimal*) true,
-                                  (*U suffix*) false,
-                                  (*int literal*) Ast.NoLSuffix );
-                            ] ) )
-                | _ ->
-                    Error
-                      (`TrFnCallRExpr
-                        "Invalid (generic) arg(s) for std::ptr::mut_ptr::<impl \
-                         *mut T>::is_null"))
-            | "std::ptr::const_ptr::<impl *const T>::offset"
-            | "std::ptr::mut_ptr::<impl *mut T>::offset" -> (
-                match (substs, args_cpn) with
-                | [ Mir.GenArgType gen_arg_ty_info; Mir.GenArgConst ], [ arg1_cpn; arg2_cpn ] ->
-                    let* tmp_rvalue_binders, [ arg1; arg2 ] =
-                      translate_operands
-                        [ (arg1_cpn, fn_loc); (arg2_cpn, fn_loc) ]
-                    in
-                    Ok
-                      ( tmp_rvalue_binders,
-                        Ast.Operation (fn_loc, Ast.Add, [ arg1; arg2 ]) )
-                | _ ->
-                    Error
-                      (`TrFnCallRExpr
-                        (Printf.sprintf "Invalid (generic) arg(s) for %s" fn_name))
-                )
-            | "std::ptr::null_mut" ->
-                Ok
-                  ( [],
-                    IntLit
-                      ( fn_loc,
-                        Big_int.zero_big_int,
-                        (*decimal*) true,
-                        (*U suffix*) false,
-                        (*int literal*) Ast.NoLSuffix ) )
-            | "std::cell::UnsafeCell::<T>::new" | "std::cell::UnsafeCell::<T>::get" ->
-                let [ arg_cpn ] = args_cpn in
-                let* tmp_rvalue_binders, [ arg ] = translate_operands [ (arg_cpn, fn_loc) ] in
-                Ok ( tmp_rvalue_binders, arg )
-            | _ ->
-                (* Ignore the generic args for now *)
-                translate_regular_fn_call substs fn_name)
-                (*
+                          "Invalid (generic) arg(s) for \
+                           std::ptr::mut_ptr::<impl *mut T>::is_null"))
+              | "std::ptr::const_ptr::<impl *const T>::offset"
+              | "std::ptr::mut_ptr::<impl *mut T>::offset" -> (
+                  match (substs, args_cpn) with
+                  | ( [ Mir.GenArgType gen_arg_ty_info; Mir.GenArgConst ],
+                      [ arg1_cpn; arg2_cpn ] ) ->
+                      let* tmp_rvalue_binders, [ arg1; arg2 ] =
+                        translate_operands
+                          [ (arg1_cpn, fn_loc); (arg2_cpn, fn_loc) ]
+                      in
+                      Ok
+                        ( tmp_rvalue_binders,
+                          Ast.Operation (fn_loc, Ast.Add, [ arg1; arg2 ]) )
+                  | _ ->
+                      Error
+                        (`TrFnCallRExpr
+                          (Printf.sprintf "Invalid (generic) arg(s) for %s"
+                             fn_name)))
+              | "std::ptr::null_mut" ->
+                  Ok
+                    ( [],
+                      IntLit
+                        ( fn_loc,
+                          Big_int.zero_big_int,
+                          (*decimal*) true,
+                          (*U suffix*) false,
+                          (*int literal*) Ast.NoLSuffix ) )
+              | "std::cell::UnsafeCell::<T>::new"
+              | "std::cell::UnsafeCell::<T>::get" ->
+                  let [ arg_cpn ] = args_cpn in
+                  let* tmp_rvalue_binders, [ arg ] =
+                    translate_operands [ (arg_cpn, fn_loc) ]
+                  in
+                  Ok (tmp_rvalue_binders, arg)
+              | _ ->
+                  (* Ignore the generic args for now *)
+                  translate_regular_fn_call substs fn_name
+                  (*
                 failwith
                   ("Todo: Generic functions are not supported yet. Function: "
                  ^ fn_name))
                 *)
-        | _ ->
-            Error (`TrFnCallRExpr "Invalid function definition type translation")
-        end
+              )
+          | _ ->
+              Error
+                (`TrFnCallRExpr "Invalid function definition type translation"))
       | _ -> Error (`TrFnCall "Invalid callee operand for function call")
 
     let translate_basic_block_id (bblock_id_cpn : BasicBlockIdRd.t) =
@@ -1969,7 +1998,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       | Not -> Ok Ast.Not
       | Neg -> Ok Ast.Sub
       | Undefined _ -> Error (`TrUnOp "Unknown unary operator")
-    
+
     let translate_binary_operation (bin_op_data_cpn : BinaryOpDataRd.t)
         (loc : Ast.loc) =
       let open BinaryOpDataRd in
@@ -1980,7 +2009,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let operandr_cpn = operandr_get bin_op_data_cpn in
       let* operandr = translate_operand operandr_cpn loc in
       Ok (operator, operandl, operandr)
-    
+
     let translate_unary_operation (un_op_data_cpn : UnaryOpDataRd.t)
         (loc : Ast.loc) =
       let open UnaryOpDataRd in
@@ -2095,13 +2124,18 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           | `TrTypedConstantRvalueBinderBuilder rvalue_binder_builder ->
               failwith "Todo: Rvalue::Cast"
               (*Todo @Nima: We need a better design (refactor) for passing different results of operand translation*)
-          | `TrTypedConstantFn ty_info ->
-              begin match ty_info with
+          | `TrTypedConstantFn ty_info -> (
+              match ty_info with
               | Mir.TyInfoBasic
-                  { vf_ty = Ast.ManifestTypeExpr ((*loc*) _, Ast.FuncType fn_name) } ->
-                  Ok (`TrRvalueExpr (Ast.CastExpr (loc, ty, Var (loc, fn_name))))
-              | _ -> Error (`TrRvalue "Invalid operand translation for Rvalue::Cast")
-              end)
+                  {
+                    vf_ty =
+                      Ast.ManifestTypeExpr ((*loc*) _, Ast.FuncType fn_name);
+                  } ->
+                  Ok
+                    (`TrRvalueExpr (Ast.CastExpr (loc, ty, Var (loc, fn_name))))
+              | _ ->
+                  Error
+                    (`TrRvalue "Invalid operand translation for Rvalue::Cast")))
       | BinaryOp bin_op_data_cpn ->
           let* operator, operandl, operandr =
             translate_binary_operation bin_op_data_cpn loc
@@ -2159,21 +2193,32 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                 match operand with
                 | `TrRvalueExpr expr -> ([], expr)
                 | `TrRvalueRvalueBinderBuilder rvalue_binder_builder ->
-                  let tmp_var_name = TrName.make_tmp_var_name "operand" in
-                  let rvalue_binder_stmt =
-                    rvalue_binder_builder tmp_var_name
-                  in
-                  ([ rvalue_binder_stmt ], Ast.Var (loc, tmp_var_name))
+                    let tmp_var_name = TrName.make_tmp_var_name "operand" in
+                    let rvalue_binder_stmt =
+                      rvalue_binder_builder tmp_var_name
+                    in
+                    ([ rvalue_binder_stmt ], Ast.Var (loc, tmp_var_name))
               in
               let assign_stmt =
                 Ast.ExprStmt
                   (Ast.AssignExpr
                      ( loc,
                        lhs_place,
-                       Ast.Operation (loc, operator,
-                         match operator with
-                         | Sub -> [ IntLit (loc, Big_int.zero_big_int, true, false, NoLSuffix); expr ]
-                         | _ -> [ expr ]) ))
+                       Ast.Operation
+                         ( loc,
+                           operator,
+                           match operator with
+                           | Sub ->
+                               [
+                                 IntLit
+                                   ( loc,
+                                     Big_int.zero_big_int,
+                                     true,
+                                     false,
+                                     NoLSuffix );
+                                 expr;
+                               ]
+                           | _ -> [ expr ] ) ))
               in
               match rvalue_binder_stmts with
               | [] -> Ok [ assign_stmt ]
@@ -2483,7 +2528,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
              ``
              The third `x` refers to the first x but the code might be confusing for the user *)
           failwith "Todo: Shadowed variable names"
-          (*
+      (*
           let internal_name =
             TrName.tag_internal surf_name ^ string_of_int !counter
           in
@@ -2533,7 +2578,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let open HirGenericParamNameRd in
     match get n_cpn with
     | Plain ident_cpn -> translate_ident ident_cpn
-    | Fresh id_cpn -> failwith (Printf.sprintf "Todo: ParamName::Fresh (at %s)" (Ast.string_of_loc loc))
+    | Fresh id_cpn ->
+        failwith
+          (Printf.sprintf "Todo: ParamName::Fresh (at %s)"
+             (Ast.string_of_loc loc))
     | Undefined _ -> Error (`TrHirGenericParamName "Unknown ParamName kind")
 
   let translate_hir_generic_param_kind (kind_cpn : HirGenericParamKindRd.t) =
@@ -2565,23 +2613,43 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
 
   let tparam_params loc tparam =
     [
-      Ast.ManifestTypeExpr (loc, Ast.PtrType (Ast.AbstractType "std::type_info")), tparam ^ "_typeid";
-      Ast.PureFuncTypeExpr (loc, [Ast.IdentTypeExpr (loc, None, "thread_id_t"); Ast.ManifestTypeExpr (loc, PtrType Void); PredTypeExpr (loc, [], None)]), tparam ^ "_full_borrow_content"
+      ( Ast.ManifestTypeExpr
+          (loc, Ast.PtrType (Ast.AbstractType "std::type_info")),
+        tparam ^ "_typeid" );
+      ( Ast.PureFuncTypeExpr
+          ( loc,
+            [
+              Ast.IdentTypeExpr (loc, None, "thread_id_t");
+              Ast.ManifestTypeExpr (loc, PtrType Void);
+              PredTypeExpr (loc, [], None);
+            ] ),
+        tparam ^ "_full_borrow_content" );
     ]
 
-  let translate_trait_required_fn (trait_name: string) (required_fn_cpn : TraitRd.RequiredFn.t) =
+  let translate_trait_required_fn (trait_name : string)
+      (required_fn_cpn : TraitRd.RequiredFn.t) =
     let open TraitRd.RequiredFn in
     let name = name_get required_fn_cpn in
     let* loc = translate_span_data (name_span_get required_fn_cpn) in
-    let* inputs = inputs_get_list required_fn_cpn |> ListAux.try_map (fun ty_cpn -> translate_ty ty_cpn loc) in
+    let* inputs =
+      inputs_get_list required_fn_cpn
+      |> ListAux.try_map (fun ty_cpn -> translate_ty ty_cpn loc)
+    in
     let inputs = inputs |> List.map Mir.basic_type_of in
     let* output = translate_ty (output_get required_fn_cpn) loc in
     let ret_ty = Mir.basic_type_of output in
     let arg_names = arg_names_get_list required_fn_cpn in
-    let Some vf_param_decls = Util.zip inputs arg_names in
+    let (Some vf_param_decls) = Util.zip inputs arg_names in
     let* unsafe = translate_unsafety (unsafety_get required_fn_cpn) in
-    if not unsafe then raise (Ast.StaticError (loc, "Non-unsafe trait required functions are not yet supported", None));
-    let* annots = ListAux.try_map translate_annotation (contract_get_list required_fn_cpn) in
+    if not unsafe then
+      raise
+        (Ast.StaticError
+           ( loc,
+             "Non-unsafe trait required functions are not yet supported",
+             None ));
+    let* annots =
+      ListAux.try_map translate_annotation (contract_get_list required_fn_cpn)
+    in
     let annots = List.map translate_annot_to_vf_parser_inp annots in
     let ( (nonghost_callers_only : bool),
           (fn_type_clause : _ option),
@@ -2593,7 +2661,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       Ast.Func
         ( loc,
           Ast.Regular,
-          (*type params*) ["Self"],
+          (*type params*) [ "Self" ],
           Some ret_ty,
           Printf.sprintf "%s::%s" trait_name name,
           tparam_params loc "Self" @ vf_param_decls,
@@ -2609,7 +2677,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
 
   let translate_trait (trait_cpn : TraitRd.t) =
     let name = TraitRd.name_get trait_cpn in
-    let* required_fns = CapnpAux.ind_list_get_list (TraitRd.required_fns_get trait_cpn) in
+    let* required_fns =
+      CapnpAux.ind_list_get_list (TraitRd.required_fns_get trait_cpn)
+    in
     ListAux.try_map (translate_trait_required_fn name) required_fns
 
   let translate_body (body_tr_defs_ctx : body_tr_defs_ctx) (body_cpn : BodyRd.t)
@@ -2656,12 +2726,13 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               else Ok None)
             gens
         in
-        let tparams = Util.flatmap (function (name, Hir.GenParamType, loc) -> [name] | _ -> []) gens in
         let tparams =
-          if is_trait_fn_get body_cpn then
-            "Self"::tparams
-          else
-            tparams
+          Util.flatmap
+            (function name, Hir.GenParamType, loc -> [ name ] | _ -> [])
+            gens
+        in
+        let tparams =
+          if is_trait_fn_get body_cpn then "Self" :: tparams else tparams
         in
         let arg_count = arg_count_get body_cpn in
         let* arg_count = IntAux.Uint32.try_to_int arg_count in
@@ -3088,20 +3159,28 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         match (is_local, vis) with
         | false, _ | true, Mir.Restricted ->
             let fbc_decl =
-              Ast.Func (
-                def_loc,
-                Fixpoint,
-                (*type parameters*)[],
-                (*return type*)Some (PureFuncTypeExpr (def_loc, [IdentTypeExpr (def_loc, None, "thread_id_t"); ManifestTypeExpr (def_loc, PtrType Void); PredTypeExpr (def_loc, [], None)])),
-                name ^ "_full_borrow_content",
-                (*parameters*)[],
-                (*nonghost_callers_only*)false,
-                (*functype clause*)None,
-                (*contract*)None,
-                (*terminates*)false,
-                (*body*)None,
-                (*virtual*)false,
-                (*overrides*)[])
+              Ast.Func
+                ( def_loc,
+                  Fixpoint,
+                  (*type parameters*) [],
+                  (*return type*)
+                  Some
+                    (PureFuncTypeExpr
+                       ( def_loc,
+                         [
+                           IdentTypeExpr (def_loc, None, "thread_id_t");
+                           ManifestTypeExpr (def_loc, PtrType Void);
+                           PredTypeExpr (def_loc, [], None);
+                         ] )),
+                  name ^ "_full_borrow_content",
+                  (*parameters*) [],
+                  (*nonghost_callers_only*) false,
+                  (*functype clause*) None,
+                  (*contract*) None,
+                  (*terminates*) false,
+                  (*body*) None,
+                  (*virtual*) false,
+                  (*overrides*) [] )
             in
             Ok (Some fbc_decl, [])
         | true, Mir.Invisible ->
@@ -3141,17 +3220,18 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         (`ChekProofObligationFailed
           (loc, "Lemma " ^ po_name ^ " Should be proven"))
 
-  type trait_impl = { of_trait: string; self_ty: string; items: string list }
+  type trait_impl = { of_trait : string; self_ty : string; items : string list }
 
   let translate_trait_impls (trait_impls_cpn : TraitImplRd.t list) =
-    trait_impls_cpn |> List.map begin fun trait_impl_cpn ->
-      let of_trait = TraitImplRd.of_trait_get trait_impl_cpn in
-      let self_ty = TraitImplRd.self_ty_get trait_impl_cpn in
-      let items = TraitImplRd.items_get_list trait_impl_cpn in
-      { of_trait; self_ty; items }
-    end
+    trait_impls_cpn
+    |> List.map (fun trait_impl_cpn ->
+           let of_trait = TraitImplRd.of_trait_get trait_impl_cpn in
+           let self_ty = TraitImplRd.self_ty_get trait_impl_cpn in
+           let items = TraitImplRd.items_get_list trait_impl_cpn in
+           { of_trait; self_ty; items })
 
-  let translate_vf_mir (vf_mir_cpn : VfMirRd.t) (report_should_fail : string -> Ast.loc0 -> unit) =
+  let translate_vf_mir (vf_mir_cpn : VfMirRd.t)
+      (report_should_fail : string -> Ast.loc0 -> unit) =
     let job _ =
       let module HeadersAux = HeadersAux.Make (struct
         include Args
@@ -3161,7 +3241,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       end) in
       let directives_cpn = VfMirRd.directives_get_list vf_mir_cpn in
       let* directives = ListAux.try_map translate_annotation directives_cpn in
-      directives |> List.iter (fun ({ span; raw } : Mir.annot) -> report_should_fail raw (Ast.lexed_loc span));
+      directives
+      |> List.iter (fun ({ span; raw } : Mir.annot) ->
+             report_should_fail raw (Ast.lexed_loc span));
       let adt_defs_cpn = VfMirRd.adt_defs_get vf_mir_cpn in
       let* adt_defs_cpn = CapnpAux.ind_list_get_list adt_defs_cpn in
       let* adt_defs = ListAux.try_map translate_adt_def adt_defs_cpn in
@@ -3198,7 +3280,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           (fun po -> check_proof_obligation ghost_decls po)
           adts_proof_obligs
       in
-      let* traits_cpn = CapnpAux.ind_list_get_list (VfMirRd.traits_get vf_mir_cpn) in
+      let* traits_cpn =
+        CapnpAux.ind_list_get_list (VfMirRd.traits_get vf_mir_cpn)
+      in
       let* traits_decls = ListAux.try_map translate_trait traits_cpn in
       let traits_decls = List.flatten traits_decls in
       let bodies_cpn = VfMirRd.bodies_get_list vf_mir_cpn in
@@ -3217,33 +3301,102 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let* body_sigs = AstAux.sort_decls_lexically body_sigs in
       let* body_decls = AstAux.sort_decls_lexically body_decls in
       let traits_and_body_decls = traits_decls @ body_decls in
-      let trait_impls = translate_trait_impls (VfMirRd.trait_impls_get_list vf_mir_cpn) in
+      let trait_impls =
+        translate_trait_impls (VfMirRd.trait_impls_get_list vf_mir_cpn)
+      in
       let debug_infos = VF0.DbgInfoRustFe debug_infos in
       let decls = AstDecls.decls () in
-      let trait_impl_prototypes = trait_impls |> Util.flatmap begin fun { of_trait; self_ty; items } ->
-        items |> List.map begin fun item ->
-          let trait_fn_name = Printf.sprintf "%s::%s" of_trait item in
-          let impl_fn_name = Printf.sprintf "<%s as %s>::%s" self_ty of_trait item in
-          let Some prototype =
-            traits_and_body_decls |> Util.head_flatmap_option begin function Ast.Func (lf, Regular, "Self"::tparams, rt, name, (_, self_typeid_param)::(_, self_full_bor_content_param)::ps, false, None, Some (pre, post), terminates, body, false, []) when name = trait_fn_name ->
-              let self_ty_typeid = Ast.Typeid (lf, Ast.TypeExpr (Ast.ManifestTypeExpr (lf, Ast.StructType self_ty))) in
-              let self_full_bor_content = Ast.Var (lf, self_ty ^ "_full_borrow_content") in
-              let pre =
-                Ast.LetTypeAsn (lf, "Self", Ast.StructType self_ty,
-                  Ast.Sep (lf, MatchAsn (lf, self_ty_typeid, VarPat (lf, self_typeid_param)),
-                    Ast.Sep (lf, MatchAsn (lf, self_full_bor_content, VarPat (lf, self_full_bor_content_param)),
-                      Ast.Sep (lf, pre, Ast.EnsuresAsn (lf, post))))) in
-              let post = Ast.EmpAsn lf in
-              Some (Ast.Func (lf, Regular, tparams, rt, impl_fn_name, ps, false, None, Some (pre, post), terminates, None, false, []))
-            | _ -> None
-            end
-          in
-          prototype
-        end
-      end in
+      let trait_impl_prototypes =
+        trait_impls
+        |> Util.flatmap (fun { of_trait; self_ty; items } ->
+               items
+               |> List.map (fun item ->
+                      let trait_fn_name =
+                        Printf.sprintf "%s::%s" of_trait item
+                      in
+                      let impl_fn_name =
+                        Printf.sprintf "<%s as %s>::%s" self_ty of_trait item
+                      in
+                      let (Some prototype) =
+                        traits_and_body_decls
+                        |> Util.head_flatmap_option (function
+                             | Ast.Func
+                                 ( lf,
+                                   Regular,
+                                   "Self" :: tparams,
+                                   rt,
+                                   name,
+                                   (_, self_typeid_param)
+                                   :: (_, self_full_bor_content_param)
+                                   :: ps,
+                                   false,
+                                   None,
+                                   Some (pre, post),
+                                   terminates,
+                                   body,
+                                   false,
+                                   [] )
+                               when name = trait_fn_name ->
+                                 let self_ty_typeid =
+                                   Ast.Typeid
+                                     ( lf,
+                                       Ast.TypeExpr
+                                         (Ast.ManifestTypeExpr
+                                            (lf, Ast.StructType self_ty)) )
+                                 in
+                                 let self_full_bor_content =
+                                   Ast.Var (lf, self_ty ^ "_full_borrow_content")
+                                 in
+                                 let pre =
+                                   Ast.LetTypeAsn
+                                     ( lf,
+                                       "Self",
+                                       Ast.StructType self_ty,
+                                       Ast.Sep
+                                         ( lf,
+                                           MatchAsn
+                                             ( lf,
+                                               self_ty_typeid,
+                                               VarPat (lf, self_typeid_param) ),
+                                           Ast.Sep
+                                             ( lf,
+                                               MatchAsn
+                                                 ( lf,
+                                                   self_full_bor_content,
+                                                   VarPat
+                                                     ( lf,
+                                                       self_full_bor_content_param
+                                                     ) ),
+                                               Ast.Sep
+                                                 ( lf,
+                                                   pre,
+                                                   Ast.EnsuresAsn (lf, post) )
+                                             ) ) )
+                                 in
+                                 let post = Ast.EmpAsn lf in
+                                 Some
+                                   (Ast.Func
+                                      ( lf,
+                                        Regular,
+                                        tparams,
+                                        rt,
+                                        impl_fn_name,
+                                        ps,
+                                        false,
+                                        None,
+                                        Some (pre, post),
+                                        terminates,
+                                        None,
+                                        false,
+                                        [] ))
+                             | _ -> None)
+                      in
+                      prototype))
+      in
       let decls =
-        traits_decls @ trait_impl_prototypes @ decls @ adt_defs @ aux_decls @ adts_full_bor_content_preds
-        @ adts_proof_obligs @ ghost_decls @ body_sigs @ body_decls
+        traits_decls @ trait_impl_prototypes @ decls @ adt_defs @ aux_decls
+        @ adts_full_bor_content_preds @ adts_proof_obligs @ ghost_decls
+        @ body_sigs @ body_decls
       in
       (* Todo @Nima: we should add necessary inclusions during translation *)
       let _ = List.iter Headers.add_decl [ "rust/std/lib.rsspec" ] in
