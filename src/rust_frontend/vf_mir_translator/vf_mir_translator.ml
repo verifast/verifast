@@ -1076,9 +1076,13 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                ( loc,
                  Or,
                  [
-                   Sep (loc, c_ge_zero, c_le_D7FF);
-                   Sep (loc, c_ge_E000, c_le_10FFFF);
+                   Operation (loc, And, [ c_ge_zero; c_le_D7FF ]);
+                   Operation (loc, And, [ c_ge_E000; c_le_10FFFF ]);
                  ] ))
+          (* Todo: According to https://doc.rust-lang.org/reference/types/textual.html,
+             "It is immediate Undefined Behavior to create a char that falls outside this (the above one) range".
+             So it is not enough to check char ranges in function boundaries. Miri warns about UB when reading an out-of-range character.
+             A proposal is to translate char-ptr/ref dereferences to calls to a function with a contract that checks for the range. *)
       | _ -> Error "[[char]].own(tid, vs) should have `vs == [c]`"
     in
     let shr _ _ _ = Ok (True loc) in
