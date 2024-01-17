@@ -1,0 +1,18 @@
+#ifndef PTR_RELS_GH
+#define PTR_RELS_GH
+
+fixpoint bool ptr_lt(void *l, void *r);
+
+lemma void ptr_lt_arefl(void *a);
+  requires true;
+  ensures ptr_lt(a, a) == false;
+
+lemma void ptr_lt_trans(void *a, void *b, void *c);
+  requires ptr_lt(a, b) && ptr_lt(b, c);
+  ensures ptr_lt(a, c) == true;
+
+lemma void ptr_lt_asym(void *a, void *b);
+  requires ptr_lt(a, b) == true;
+  ensures ptr_lt(b, a) == false;
+
+#endif
