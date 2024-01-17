@@ -1,6 +1,9 @@
 #ifndef LIFETIME_LOGIC_GH
 #define LIFETIME_LOGIC_GH
 
+#include "prelude_rust_core.gh"
+#include "mask.gh"
+
 inductive lifetime_t = lifetime_ctor(int id); // Type of lifetimes
 abstract_type thread_id_t; // Type of thread IDs
 
@@ -42,7 +45,25 @@ lemma void close_lifetime_intersection_dead_token(lifetime_t k, lifetime_t k1);
     requires [_]lifetime_dead_token(k);
     ensures [_]lifetime_dead_token(lifetime_intersection(k, k1));
 
-predicate thread_token(thread_id_t t); // Non-atomic token with Top mask ([NaInv: t.Top] in RustBelt)
+// Nonatomic token
+fixpoint void *Nshr() { return 0; }
+fixpoint void *Nrust() { return (void *)1; }
+fixpoint mask_t MaskNshrSingle(void *l) { return MaskBotPlus({pair(Nshr, MaskSingle(l))}); }
+
+predicate partial_thread_token(thread_id_t t, mask_t m);
+predicate thread_token(thread_id_t t) = partial_thread_token(t, MaskTop);
+
+lemma void thread_token_split(thread_id_t t, mask_t m, mask_t to_split);
+    requires partial_thread_token(t, m) &*& mask_le(to_split, m) == true;
+    ensures partial_thread_token(t, mask_diff(m, to_split)) &*& partial_thread_token(t, to_split);
+
+lemma void thread_token_merge(thread_id_t t, mask_t m, mask_t m1);
+    requires partial_thread_token(t, m) &*& partial_thread_token(t, m1); // partial_thread_token(t, m) &*& partial_thread_token(t, m1) => mask_is_empty(mask_isec(m, m1))
+    ensures partial_thread_token(t, mask_union(m, m1));
+
+lemma void thread_token_replace_eq_mask(thread_id_t t, mask_t m, mask_t m1);
+    requires partial_thread_token(t, m) &*& mask_eq(m, m1) == true;
+    ensures partial_thread_token(t, m1);
 
 // Full borrow
 predicate full_borrow(lifetime_t k, predicate() P);
@@ -76,24 +97,24 @@ lemma void full_borrow_implies(lifetime_t k, predicate() P, predicate() P1);
     ensures full_borrow(k, P1) &*& is_implies(f, P, P1) &*& is_implies(f1, P1, P);
 
 // Non-atomic persistent borrow
-predicate nonatomic_borrow(lifetime_t k, thread_id_t t, predicate() P);
+predicate nonatomic_borrow(lifetime_t k, thread_id_t t, mask_t m, predicate() P);
 
-lemma void full_borrow_into_nonatomic_borrow(lifetime_t k, thread_id_t t, predicate() P);
-    requires full_borrow(k, P);
-    ensures [_]nonatomic_borrow(k, t, P);
+lemma void full_borrow_into_nonatomic_borrow(lifetime_t k, thread_id_t t, mask_t m, predicate() P);
+    requires full_borrow(k, P) &*& !mask_is_empty(m);
+    ensures [_]nonatomic_borrow(k, t, m, P);
 
-lemma void nonatomic_borrow_mono(lifetime_t k, lifetime_t k1, thread_id_t t, predicate() P);
-    requires [_]nonatomic_borrow(k, t, P) &*& lifetime_inclusion(k1, k) == true;
-    ensures [_]nonatomic_borrow(k1, t, P);
+lemma void nonatomic_borrow_mono(lifetime_t k, lifetime_t k1, thread_id_t t, mask_t m, predicate() P);
+    requires [_]nonatomic_borrow(k, t, m, P) &*& lifetime_inclusion(k1, k) == true;
+    ensures [_]nonatomic_borrow(k1, t, m, P);
 
-predicate close_nonatomic_borrow_token(predicate() P, real q, lifetime_t k, thread_id_t t);
+predicate close_nonatomic_borrow_token(predicate() P, real q, lifetime_t k, thread_id_t t, mask_t m);
 
-// Rule LftL-Na-Acc with N = Nshr.l and requiring [NaInv:t.Top] instead of [NaInv:t.N]
-lemma void open_nonatomic_borrow(lifetime_t k, thread_id_t t, real q);
-    requires [_]nonatomic_borrow(k, t, ?P) &*& [q]lifetime_token(k) &*& thread_token(t);
-    ensures P() &*& close_nonatomic_borrow_token(P, q, k, t);
+// Rule LftL-Na-Acc
+lemma void open_nonatomic_borrow(lifetime_t k, thread_id_t t, mask_t m, real q);
+    requires [_]nonatomic_borrow(k, t, m, ?P) &*& [q]lifetime_token(k) &*& partial_thread_token(t, m);
+    ensures P() &*& close_nonatomic_borrow_token(P, q, k, t, m);
 
 lemma void close_nonatomic_borrow();
-    requires close_nonatomic_borrow_token(?P, ?q, ?k, ?t) &*& P();
-    ensures [q]lifetime_token(k) &*& thread_token(t);
+    requires close_nonatomic_borrow_token(?P, ?q, ?k, ?t, ?m) &*& P();
+    ensures [q]lifetime_token(k) &*& partial_thread_token(t, m);
 #endif
