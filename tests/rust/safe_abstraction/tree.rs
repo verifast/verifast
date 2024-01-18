@@ -146,9 +146,7 @@ pred inv_(x_is_new: bool, x: *mut Node, root: *mut Node, rootShape: tree, stepsL
 
 pub trait TreeVisitor {
 
-    fn visit<'a>(&'a mut self, node_data: *mut u8) {
-        //@ leak full_borrow(_, _);
-    }
+    fn visit<'a>(&'a mut self, node_data: *mut u8);
 
 }
 

@@ -589,6 +589,7 @@ struct Trait {
         name @0: Text;
         nameSpan @6: SpanData;
         unsafety @4: Unsafety;
+        lifetimeParams @7: List(Text);
         inputs @1: List(Ty);
         output @2: Ty;
         argNames @3: List(Text);

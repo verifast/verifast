@@ -467,25 +467,35 @@ mod vf_mir_builder {
                             hir::TraitItemKind::Fn(fn_sig, trait_fn) => {
                                 if let hir::TraitFn::Required(arg_names) = trait_fn {
                                     let polysig = self.tcx.fn_sig(item.def_id);
-                                    if let Some(sig0) = polysig.no_bound_vars() {
-                                        if let Some(sig) = sig0.no_bound_vars() {
-                                            let mut required_fns_cons_cpn = required_fns_cpn.init_cons();
-                                            let mut required_fn_cpn = required_fns_cons_cpn.reborrow().init_h();
-                                            required_fn_cpn.set_name(&item.name.to_string());
-                                            Self::encode_span_data(self.tcx, &hir_item.ident.span.data(), required_fn_cpn.reborrow().init_name_span());
-                                            Self::encode_unsafety(fn_sig.header.unsafety, required_fn_cpn.reborrow().init_unsafety());
-                                            required_fn_cpn.fill_inputs(sig.inputs(), |input_cpn, input| {
-                                                Self::encode_ty(self.tcx, &mut enc_ctx, *input, input_cpn);
-                                            });
-                                            Self::encode_ty(self.tcx, &mut enc_ctx, sig.output(), required_fn_cpn.reborrow().init_output());
-                                            required_fn_cpn.fill_arg_names(arg_names.iter().map(|n| n.as_str()));
-                                            let contract: Vec<GhostRange> = self.annots.extract_if(|annot| annot.end_of_preceding_token.byte_pos == hir_item.span.hi().0).collect();
-                                            required_fn_cpn.fill_contract(&contract, |annot_cpn, annot| {
-                                                Self::encode_annotation(self.tcx, annot, annot_cpn);
-                                            });
-                                            required_fns_cpn = required_fns_cons_cpn.init_t();
+                                    let sig0 = polysig.skip_binder();
+                                    let sig = sig0.skip_binder();
+                                    let mut required_fns_cons_cpn = required_fns_cpn.init_cons();
+                                    let mut required_fn_cpn = required_fns_cons_cpn.reborrow().init_h();
+                                    required_fn_cpn.set_name(&item.name.to_string());
+                                    Self::encode_span_data(self.tcx, &hir_item.ident.span.data(), required_fn_cpn.reborrow().init_name_span());
+                                    Self::encode_unsafety(fn_sig.header.unsafety, required_fn_cpn.reborrow().init_unsafety());
+                                    required_fn_cpn.fill_lifetime_params(sig0.bound_vars().iter().map(|bound_var| {
+                                        match bound_var {
+                                            ty::BoundVariableKind::Ty(bound_ty_kind) => todo!(),
+                                            ty::BoundVariableKind::Region(bound_region_kind) =>
+                                                match bound_region_kind {
+                                                    ty::BoundRegionKind::BrAnon => todo!(),
+                                                    ty::BoundRegionKind::BrNamed(def_id, symbol) => symbol.to_string(),
+                                                    ty::BoundRegionKind::BrEnv => todo!(),
+                                                }
+                                            ty::BoundVariableKind::Const => todo!()
                                         }
-                                    }
+                                    }));
+                                    required_fn_cpn.fill_inputs(sig.inputs(), |input_cpn, input| {
+                                        Self::encode_ty(self.tcx, &mut enc_ctx, *input, input_cpn);
+                                    });
+                                    Self::encode_ty(self.tcx, &mut enc_ctx, sig.output(), required_fn_cpn.reborrow().init_output());
+                                    required_fn_cpn.fill_arg_names(arg_names.iter().map(|n| n.as_str()));
+                                    let contract: Vec<GhostRange> = self.annots.extract_if(|annot| annot.end_of_preceding_token.byte_pos == hir_item.span.hi().0).collect();
+                                    required_fn_cpn.fill_contract(&contract, |annot_cpn, annot| {
+                                        Self::encode_annotation(self.tcx, annot, annot_cpn);
+                                    });
+                                    required_fns_cpn = required_fns_cons_cpn.init_t();
                                 }
                             }
                             _ => {}
@@ -1196,6 +1206,15 @@ mod vf_mir_builder {
             // We do not expect to receive any other kind of `Region` because we are getting borrow-checked MIR
             match region.kind() {
                 ty::RegionKind::ReEarlyParam(_early_bound_region) => bug!(),
+                ty::RegionKind::ReBound(de_bruijn_index, bound_region) => {
+                    match bound_region.kind {
+                        ty::BoundRegionKind::BrAnon => todo!(),
+                        ty::BoundRegionKind::BrNamed(def_id, symbol) => {
+                            region_cpn.set_id(symbol.as_str());
+                        }
+                        ty::BoundRegionKind::BrEnv => todo!(),
+                    }
+                }
                 ty::RegionKind::ReLateParam(_debruijn_index) => bug!(),
                 ty::RegionKind::ReStatic => bug!(),
                 ty::RegionKind::ReVar(_region_vid) => {

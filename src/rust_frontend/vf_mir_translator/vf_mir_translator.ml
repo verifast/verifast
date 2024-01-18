@@ -1371,6 +1371,22 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         Ok (Mir.TyInfoBasic { vf_ty; interp })
     | Undefined _ -> Error (`TrTy "Unknown Rust type kind")
 
+  let get_adt_def adt_defs name =
+    let adt_defs, _ =
+      List.partition
+        (fun adt_def ->
+          match AstAux.decl_name adt_def with
+          | Some n -> n = name
+          | None -> false)
+        adt_defs
+    in
+    match adt_defs with
+    | [] -> Ok None
+    | [ adt_def ] -> Ok (Some adt_def)
+    | _ ->
+        Error
+          (`GetAdtDef ("More than one definition have been found for " ^ name))
+
   type body_tr_defs_ctx = { adt_defs : Ast.decl list }
   type var_id_trs_entry = { id : string; internal_name : string }
   type var_id_trs_map = var_id_trs_entry list
@@ -1400,22 +1416,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         ghost_stmts := gs_rem;
         Ok gs_before
 
-      let get_adt_def name =
-        let adt_defs, _ =
-          List.partition
-            (fun adt_def ->
-              match AstAux.decl_name adt_def with
-              | Some n -> n = name
-              | None -> false)
-            body_tr_defs_ctx.adt_defs
-        in
-        match adt_defs with
-        | [] -> Ok None
-        | [ adt_def ] -> Ok (Some adt_def)
-        | _ ->
-            Error
-              (`GetAdtDef
-                ("More than one definition have been found for " ^ name))
+      let get_adt_def name = get_adt_def body_tr_defs_ctx.adt_defs name
     end
 
     let translate_local_decl_id (local_decl_id_cpn : LocalDeclIdRd.t) =
@@ -2379,131 +2380,132 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let value_cpn = value_get vdi_cpn in
       let* value = translate_var_debug_info_contents value_cpn src_info.span in
       Ok ({ internal = value; surf_name = name } : Mir.var_debug_info)
-
-    let gen_contract (contract_loc : Ast.loc) (lft_vars : string list)
-        (params : Mir.local_decl list) (ret : Mir.local_decl) =
-      let open Ast in
-      let bind_pat_b n = VarPat (contract_loc, n) in
-      let lit_pat_b n = LitPat (Var (contract_loc, n)) in
-      (* Todo @Nima: Move RustBelt token, etc. constructors like the following to the RustBelt module so
-         The hard-coded names will be in the same place and the code will be reusable *)
-      let nonatomic_token_b pat =
-        CallExpr
-          ( contract_loc,
-            "thread_token",
-            [] (*type arguments*),
-            [] (*indices*),
-            [ pat ] (*arguments*),
-            Static )
-      in
-      let thread_id_name = "_t" in
-      let pre_na_token = nonatomic_token_b (bind_pat_b thread_id_name) in
-      let post_na_token = nonatomic_token_b (lit_pat_b thread_id_name) in
-      let lft_token_b pat_b n =
-        let coef_n = "_q_" ^ n in
-        CoefAsn
-          ( contract_loc,
-            pat_b coef_n,
-            CallExpr
-              ( contract_loc,
-                "lifetime_token",
-                [] (*type arguments*),
-                [] (*indices*),
-                [ pat_b n ] (*arguments*),
-                Static ) )
-      in
-      let pre_lft_tks =
-        List.map (fun lft_var -> lft_token_b bind_pat_b lft_var) lft_vars
-      in
-      let post_lft_tks =
-        List.map (fun lft_var -> lft_token_b lit_pat_b lft_var) lft_vars
-      in
-      let gen_local_ty_asn (local : Mir.local_decl) =
-        let Mir.{ mutability; id; ty = ty_info; loc } = local in
-        let (Ast.ManifestTypeExpr (_ (*loc*), raw_ty)) =
-          Mir.raw_type_of ty_info
-        in
-        let* vs =
-          if not (AstAux.is_adt_ty raw_ty) then Ok [ Ast.Var (loc, id) ]
-          else
-            let* adt_name = AstAux.adt_ty_name raw_ty in
-            match adt_name with
-            (*Todo: We need to have these built-in types defined during translation and not through headers*)
-            | "std_tuple_0_" | "std_empty_" -> Ok [ Ast.Var (loc, id) ]
-            | _ -> (
-                let* adt_def_opt = State.get_adt_def adt_name in
-                let* adt_def =
-                  Option.to_result
-                    ~none:
-                      (`GenLocalTyAsn ("No declaration found for " ^ adt_name))
-                    adt_def_opt
-                in
-                let* adt_kind = Mir.decl_mir_adt_kind adt_def in
-                match adt_kind with
-                | Mir.Enum | Mir.Union ->
-                    failwith "Todo: Generate owner assertion for local ADT"
-                | Mir.Struct ->
-                    let* fields_opt = AstAux.decl_fields adt_def in
-                    let* fields =
-                      Option.to_result
-                        ~none:(`GenLocalTyAsn "ADT without fields definition")
-                        fields_opt
-                    in
-                    let vs =
-                      List.map
-                        (fun field ->
-                          Ast.Select
-                            (loc, Ast.Var (loc, id), AstAux.field_name field))
-                        fields
-                    in
-                    Ok vs)
-        in
-        let RustBelt.{ size; own; shr } = Mir.interp_of ty_info in
-        match own (Ast.Var (loc, thread_id_name)) vs with
-        | Ok asn -> Ok asn
-        | Error estr ->
-            Error (`GenLocalTyAsn ("Owner assertion function error: " ^ estr))
-      in
-      let* params_ty_asns = ListAux.try_map gen_local_ty_asn params in
-      let params_ty_asns =
-        List.filter
-          (fun asn -> match asn with True _ -> false | _ -> true)
-          params_ty_asns
-      in
-      let params_ty_asns =
-        AstAux.list_to_sep_conj
-          (List.map (fun asn -> (contract_loc, asn)) params_ty_asns)
-          None
-      in
-      let pre_asn =
-        AstAux.list_to_sep_conj
-          (List.map (fun asn -> (contract_loc, asn)) pre_lft_tks)
-          params_ty_asns
-      in
-      let pre_asn =
-        match pre_asn with
-        | None -> pre_na_token
-        | Some pre_asn -> Sep (contract_loc, pre_na_token, pre_asn)
-      in
-      let* ret_ty_asn =
-        gen_local_ty_asn
-          {
-            mutability = ret.mutability;
-            id = "result";
-            ty = ret.ty;
-            loc = ret.loc;
-          }
-      in
-      let (Some post_asn) =
-        AstAux.list_to_sep_conj
-          (List.map (fun asn -> (contract_loc, asn)) post_lft_tks)
-          (Some ret_ty_asn)
-        (*might be just True*)
-      in
-      let post_asn = Sep (contract_loc, post_na_token, post_asn) in
-      Ok (pre_asn, post_asn)
   end
   (* TrBody *)
+
+  let gen_contract (adt_defs : Ast.decl list) (contract_loc : Ast.loc)
+      (lft_vars : string list) (params : Mir.local_decl list)
+      (ret : Mir.local_decl) =
+    let open Ast in
+    let bind_pat_b n = VarPat (contract_loc, n) in
+    let lit_pat_b n = LitPat (Var (contract_loc, n)) in
+    (* Todo @Nima: Move RustBelt token, etc. constructors like the following to the RustBelt module so
+       The hard-coded names will be in the same place and the code will be reusable *)
+    let nonatomic_token_b pat =
+      CallExpr
+        ( contract_loc,
+          "thread_token",
+          [] (*type arguments*),
+          [] (*indices*),
+          [ pat ] (*arguments*),
+          Static )
+    in
+    let thread_id_name = "_t" in
+    let pre_na_token = nonatomic_token_b (bind_pat_b thread_id_name) in
+    let post_na_token = nonatomic_token_b (lit_pat_b thread_id_name) in
+    let lft_token_b pat_b n =
+      let coef_n = "_q_" ^ n in
+      CoefAsn
+        ( contract_loc,
+          pat_b coef_n,
+          CallExpr
+            ( contract_loc,
+              "lifetime_token",
+              [] (*type arguments*),
+              [] (*indices*),
+              [ pat_b n ] (*arguments*),
+              Static ) )
+    in
+    let pre_lft_tks =
+      List.map (fun lft_var -> lft_token_b bind_pat_b lft_var) lft_vars
+    in
+    let post_lft_tks =
+      List.map (fun lft_var -> lft_token_b lit_pat_b lft_var) lft_vars
+    in
+    let gen_local_ty_asn (local : Mir.local_decl) =
+      let Mir.{ mutability; id; ty = ty_info; loc } = local in
+      let (Ast.ManifestTypeExpr (_ (*loc*), raw_ty)) =
+        Mir.raw_type_of ty_info
+      in
+      let* vs =
+        if not (AstAux.is_adt_ty raw_ty) then Ok [ Ast.Var (loc, id) ]
+        else
+          let* adt_name = AstAux.adt_ty_name raw_ty in
+          match adt_name with
+          (*Todo: We need to have these built-in types defined during translation and not through headers*)
+          | "std_tuple_0_" | "std_empty_" -> Ok [ Ast.Var (loc, id) ]
+          | _ -> (
+              let* adt_def_opt = get_adt_def adt_defs adt_name in
+              let* adt_def =
+                Option.to_result
+                  ~none:
+                    (`GenLocalTyAsn ("No declaration found for " ^ adt_name))
+                  adt_def_opt
+              in
+              let* adt_kind = Mir.decl_mir_adt_kind adt_def in
+              match adt_kind with
+              | Mir.Enum | Mir.Union ->
+                  failwith "Todo: Generate owner assertion for local ADT"
+              | Mir.Struct ->
+                  let* fields_opt = AstAux.decl_fields adt_def in
+                  let* fields =
+                    Option.to_result
+                      ~none:(`GenLocalTyAsn "ADT without fields definition")
+                      fields_opt
+                  in
+                  let vs =
+                    List.map
+                      (fun field ->
+                        Ast.Select
+                          (loc, Ast.Var (loc, id), AstAux.field_name field))
+                      fields
+                  in
+                  Ok vs)
+      in
+      let RustBelt.{ size; own; shr } = Mir.interp_of ty_info in
+      match own (Ast.Var (loc, thread_id_name)) vs with
+      | Ok asn -> Ok asn
+      | Error estr ->
+          Error (`GenLocalTyAsn ("Owner assertion function error: " ^ estr))
+    in
+    let* params_ty_asns = ListAux.try_map gen_local_ty_asn params in
+    let params_ty_asns =
+      List.filter
+        (fun asn -> match asn with True _ -> false | _ -> true)
+        params_ty_asns
+    in
+    let params_ty_asns =
+      AstAux.list_to_sep_conj
+        (List.map (fun asn -> (contract_loc, asn)) params_ty_asns)
+        None
+    in
+    let pre_asn =
+      AstAux.list_to_sep_conj
+        (List.map (fun asn -> (contract_loc, asn)) pre_lft_tks)
+        params_ty_asns
+    in
+    let pre_asn =
+      match pre_asn with
+      | None -> pre_na_token
+      | Some pre_asn -> Sep (contract_loc, pre_na_token, pre_asn)
+    in
+    let* ret_ty_asn =
+      gen_local_ty_asn
+        {
+          mutability = ret.mutability;
+          id = "result";
+          ty = ret.ty;
+          loc = ret.loc;
+        }
+    in
+    let (Some post_asn) =
+      AstAux.list_to_sep_conj
+        (List.map (fun asn -> (contract_loc, asn)) post_lft_tks)
+        (Some ret_ty_asn)
+      (*might be just True*)
+    in
+    let post_asn = Sep (contract_loc, post_na_token, post_asn) in
+    Ok (pre_asn, post_asn)
 
   (** makes the mappings used for substituting the MIR level local declaration ids with names closer to variables surface name *)
   let make_var_id_name_maps (vdis : Mir.var_debug_info list) =
@@ -2630,36 +2632,51 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         tparam ^ "_full_borrow_content" );
     ]
 
-  let translate_trait_required_fn (trait_name : string)
-      (required_fn_cpn : TraitRd.RequiredFn.t) =
+  let translate_trait_required_fn (adt_defs : Ast.decl list)
+      (trait_name : string) (required_fn_cpn : TraitRd.RequiredFn.t) =
     let open TraitRd.RequiredFn in
     let name = name_get required_fn_cpn in
     let* loc = translate_span_data (name_span_get required_fn_cpn) in
-    let* inputs =
+    let* input_infos =
       inputs_get_list required_fn_cpn
       |> ListAux.try_map (fun ty_cpn -> translate_ty ty_cpn loc)
     in
-    let inputs = inputs |> List.map Mir.basic_type_of in
+    let inputs = input_infos |> List.map Mir.basic_type_of in
     let* output = translate_ty (output_get required_fn_cpn) loc in
     let ret_ty = Mir.basic_type_of output in
     let arg_names = arg_names_get_list required_fn_cpn in
     let (Some vf_param_decls) = Util.zip inputs arg_names in
     let* unsafe = translate_unsafety (unsafety_get required_fn_cpn) in
-    if not unsafe then
-      raise
-        (Ast.StaticError
-           ( loc,
-             "Non-unsafe trait required functions are not yet supported",
-             None ));
-    let* annots =
-      ListAux.try_map translate_annotation (contract_get_list required_fn_cpn)
-    in
+    let contract = contract_get_list required_fn_cpn in
+    let* annots = ListAux.try_map translate_annotation contract in
     let annots = List.map translate_annot_to_vf_parser_inp annots in
-    let ( (nonghost_callers_only : bool),
-          (fn_type_clause : _ option),
-          (pre_post : _ option),
-          (terminates : bool) ) =
-      VfMirAnnotParser.parse_func_contract annots
+    let* ( (nonghost_callers_only : bool),
+           (fn_type_clause : _ option),
+           (pre_post : _ option),
+           (terminates : bool) ) =
+      if unsafe then Ok (VfMirAnnotParser.parse_func_contract annots)
+      else (
+        if contract <> [] then
+          raise
+            (Ast.StaticError
+               ( loc,
+                 "An explicit spec on a safe trait required function is not \
+                  yet supported",
+                 None ));
+        let params : Mir.local_decl list =
+          List.combine arg_names input_infos
+          |> List.map (fun (arg_name, ty_info) : Mir.local_decl ->
+                 { id = arg_name; ty = ty_info; loc; mutability = Not })
+        in
+        let result : Mir.local_decl =
+          { id = "result"; ty = output; loc; mutability = Not }
+        in
+        let* pre, post =
+          gen_contract adt_defs loc
+            (lifetime_params_get_list required_fn_cpn)
+            params result
+        in
+        Ok (false, None, Some (pre, post), false))
     in
     let decl =
       Ast.Func
@@ -2679,12 +2696,12 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     in
     Ok decl
 
-  let translate_trait (trait_cpn : TraitRd.t) =
+  let translate_trait (adt_defs : Ast.decl list) (trait_cpn : TraitRd.t) =
     let name = TraitRd.name_get trait_cpn in
     let* required_fns =
       CapnpAux.ind_list_get_list (TraitRd.required_fns_get trait_cpn)
     in
-    ListAux.try_map (translate_trait_required_fn name) required_fns
+    ListAux.try_map (translate_trait_required_fn adt_defs name) required_fns
 
   let translate_body (body_tr_defs_ctx : body_tr_defs_ctx) (body_cpn : BodyRd.t)
       =
@@ -2786,8 +2803,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           else
             (*safe function*)
             let* pre_post_template =
-              gen_contract contract_loc lft_param_names param_decls
-                ret_place_decl
+              gen_contract body_tr_defs_ctx.adt_defs contract_loc
+                lft_param_names param_decls ret_place_decl
             in
             let contract_template =
               (false, None, Some pre_post_template, false)
@@ -3287,7 +3304,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let* traits_cpn =
         CapnpAux.ind_list_get_list (VfMirRd.traits_get vf_mir_cpn)
       in
-      let* traits_decls = ListAux.try_map translate_trait traits_cpn in
+      let* traits_decls =
+        ListAux.try_map (translate_trait adt_defs) traits_cpn
+      in
       let traits_decls = List.flatten traits_decls in
       let bodies_cpn = VfMirRd.bodies_get_list vf_mir_cpn in
       let body_tr_defs_ctx = { adt_defs } in
