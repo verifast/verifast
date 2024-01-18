@@ -479,6 +479,9 @@ module Mir = struct
   type variant_def_tr = { fields : field_def_tr list }
 
   type adt_def_tr = {
+    loc : Ast.loc;
+    name : string;
+    fds : field_def_tr list;
     def : Ast.decl;
     aux_decls : Ast.decl list;
     full_bor_content : Ast.decl option;
@@ -1371,23 +1374,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         Ok (Mir.TyInfoBasic { vf_ty; interp })
     | Undefined _ -> Error (`TrTy "Unknown Rust type kind")
 
-  let get_adt_def adt_defs name =
-    let adt_defs, _ =
-      List.partition
-        (fun adt_def ->
-          match AstAux.decl_name adt_def with
-          | Some n -> n = name
-          | None -> false)
-        adt_defs
-    in
-    match adt_defs with
-    | [] -> Ok None
-    | [ adt_def ] -> Ok (Some adt_def)
-    | _ ->
-        Error
-          (`GetAdtDef ("More than one definition have been found for " ^ name))
-
-  type body_tr_defs_ctx = { adt_defs : Ast.decl list }
+  type body_tr_defs_ctx = { adt_defs : Mir.adt_def_tr list }
   type var_id_trs_entry = { id : string; internal_name : string }
   type var_id_trs_map = var_id_trs_entry list
 
@@ -1416,7 +1403,11 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         ghost_stmts := gs_rem;
         Ok gs_before
 
-      let get_adt_def name = get_adt_def body_tr_defs_ctx.adt_defs name
+      let get_adt_def adt_name =
+        Ok
+          (List.find_opt
+             (fun ({ name } : Mir.adt_def_tr) -> name = adt_name)
+             body_tr_defs_ctx.adt_defs)
     end
 
     let translate_local_decl_id (local_decl_id_cpn : LocalDeclIdRd.t) =
@@ -2041,10 +2032,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               adt_def_opt
           in
           (*check it is an adt*)
-          let* _ = Mir.decl_mir_adt_kind adt_def in
+          let* _ = Mir.decl_mir_adt_kind adt_def.def in
           let variant_idx_cpn = variant_idx_get adt_data_cpn in
           let substs_cpn = substs_get_list adt_data_cpn in
-          Ok Mir.(AggKindAdt { name; def = adt_def })
+          Ok Mir.(AggKindAdt { name; def = adt_def.def })
       | Closure -> failwith "Todo: AggregateKind::Closure"
       | Generator -> failwith "Todo: AggregateKind::Generator"
       | Undefined _ -> Error (`TrAggregateKind "Unknown AggregateKind")
@@ -2383,7 +2374,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
   end
   (* TrBody *)
 
-  let gen_contract (adt_defs : Ast.decl list) (contract_loc : Ast.loc)
+  let gen_contract (adt_defs : Mir.adt_def_tr list) (contract_loc : Ast.loc)
       (lft_vars : string list) (params : Mir.local_decl list)
       (ret : Mir.local_decl) =
     let open Ast in
@@ -2435,19 +2426,17 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           (*Todo: We need to have these built-in types defined during translation and not through headers*)
           | "std_tuple_0_" | "std_empty_" -> Ok [ Ast.Var (loc, id) ]
           | _ -> (
-              let* adt_def_opt = get_adt_def adt_defs adt_name in
-              let* adt_def =
-                Option.to_result
-                  ~none:
-                    (`GenLocalTyAsn ("No declaration found for " ^ adt_name))
-                  adt_def_opt
+              let adt_def =
+                List.find
+                  (fun ({ name } : Mir.adt_def_tr) -> name = adt_name)
+                  adt_defs
               in
-              let* adt_kind = Mir.decl_mir_adt_kind adt_def in
+              let* adt_kind = Mir.decl_mir_adt_kind adt_def.def in
               match adt_kind with
               | Mir.Enum | Mir.Union ->
                   failwith "Todo: Generate owner assertion for local ADT"
               | Mir.Struct ->
-                  let* fields_opt = AstAux.decl_fields adt_def in
+                  let* fields_opt = AstAux.decl_fields adt_def.def in
                   let* fields =
                     Option.to_result
                       ~none:(`GenLocalTyAsn "ADT without fields definition")
@@ -2506,6 +2495,67 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     in
     let post_asn = Sep (contract_loc, post_na_token, post_asn) in
     Ok (pre_asn, post_asn)
+
+  let gen_drop_contract adt_defs self_ty limpl =
+    let { loc = ls; fds } : Mir.adt_def_tr =
+      List.find
+        (function ({ name } : Mir.adt_def_tr) -> name = self_ty)
+        adt_defs
+    in
+    let pre =
+      Ast.Sep
+        ( ls,
+          Ast.CallExpr
+            (ls, "thread_token", [], [], [ VarPat (ls, "_t") ], Static),
+          Ast.CallExpr
+            ( ls,
+              self_ty ^ "_full_borrow_content",
+              [],
+              [ LitPat (Var (ls, "_t")); LitPat (Var (ls, "self")) ],
+              [],
+              Static ) )
+    in
+    let post =
+      Ast.Sep
+        ( ls,
+          Ast.CallExpr
+            (ls, "thread_token", [], [], [ LitPat (Var (ls, "_t")) ], Static),
+          List.fold_right
+            (fun ({ name; ty; loc } : Mir.field_def_tr) asn ->
+              match (Mir.interp_of ty).full_bor_content with
+              | Error msg ->
+                  raise
+                    (Ast.StaticError
+                       ( limpl,
+                         "Cannot express the content of a full borrow of the \
+                          type of field " ^ name,
+                         None ))
+              | Ok fbc ->
+                  Ast.Sep
+                    ( loc,
+                      Ast.CallExpr
+                        ( loc,
+                          fbc,
+                          [],
+                          [
+                            LitPat (Ast.Var (loc, "_t"));
+                            LitPat
+                              (AddressOf
+                                 (loc, Read (loc, Var (loc, "self"), name)));
+                          ],
+                          [],
+                          Static ),
+                      asn ))
+            fds
+            (Ast.CallExpr
+               ( limpl,
+                 "struct_" ^ self_ty ^ "_padding",
+                 [],
+                 [],
+                 [ LitPat (Var (limpl, "self")) ],
+                 Static )) )
+    in
+    Ok (pre, post)
 
   (** makes the mappings used for substituting the MIR level local declaration ids with names closer to variables surface name *)
   let make_var_id_name_maps (vdis : Mir.var_debug_info list) =
@@ -2632,7 +2682,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         tparam ^ "_full_borrow_content" );
     ]
 
-  let translate_trait_required_fn (adt_defs : Ast.decl list)
+  let translate_trait_required_fn (adt_defs : Mir.adt_def_tr list)
       (trait_name : string) (required_fn_cpn : TraitRd.RequiredFn.t) =
     let open TraitRd.RequiredFn in
     let name = name_get required_fn_cpn in
@@ -2696,7 +2746,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     in
     Ok decl
 
-  let translate_trait (adt_defs : Ast.decl list) (trait_cpn : TraitRd.t) =
+  let translate_trait (adt_defs : Mir.adt_def_tr list) (trait_cpn : TraitRd.t) =
     let name = TraitRd.name_get trait_cpn in
     let* required_fns =
       CapnpAux.ind_list_get_list (TraitRd.required_fns_get trait_cpn)
@@ -2803,8 +2853,15 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           else
             (*safe function*)
             let* pre_post_template =
-              gen_contract body_tr_defs_ctx.adt_defs contract_loc
-                lft_param_names param_decls ret_place_decl
+              if is_drop_fn_get body_cpn then
+                let ({ ty = self_ty } :: _) = param_decls in
+                let (ManifestTypeExpr (_, PtrType (StructType self_ty))) =
+                  Mir.basic_type_of self_ty
+                in
+                gen_drop_contract body_tr_defs_ctx.adt_defs self_ty contract_loc
+              else
+                gen_contract body_tr_defs_ctx.adt_defs contract_loc
+                  lft_param_names param_decls ret_place_decl
             in
             let contract_template =
               (false, None, Some pre_post_template, false)
@@ -2959,8 +3016,18 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               own_args,
               Static )
         in
+        let padding_pred =
+          CallExpr
+            ( adt_def_loc,
+              Printf.sprintf "struct_%s_padding" name,
+              [],
+              [],
+              [ LitPat (Var (adt_def_loc, ptr_param_name)) ],
+              Static )
+        in
         let (Some body_asn) =
-          AstAux.list_to_sep_conj field_chunks (Some own_pred)
+          AstAux.list_to_sep_conj field_chunks
+            (Some (Ast.Sep (adt_def_loc, padding_pred, own_pred)))
         in
         let fbor_content_pred_ctor =
           PredCtorDecl
@@ -3147,15 +3214,15 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let* vis = translate_visibility vis_cpn in
       let is_local = is_local_get adt_def_cpn in
       let kind_cpn = kind_get adt_def_cpn in
-      let* kind, def, aux_decls =
+      let* kind, fds, def, aux_decls =
         match AdtKindRd.get kind_cpn with
         | StructKind ->
-            let* field_defs =
+            let* fds =
               match variants with
-              | [ variant_def ] ->
-                  Ok (List.map translate_to_vf_field_def variant_def.fields)
+              | [ variant_def ] -> Ok variant_def.fields
               | _ -> Error (`TrAdtDef "Struct ADT kind should have one variant")
             in
+            let field_defs = List.map translate_to_vf_field_def fds in
             let struct_decl =
               Ast.Struct
                 ( def_loc,
@@ -3171,7 +3238,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               Ast.TypedefDecl
                 (def_loc, StructTypeExpr (def_loc, Some name, None, []), name)
             in
-            Ok (Mir.Struct, struct_decl, [ struct_typedef_aux ])
+            Ok (Mir.Struct, fds, struct_decl, [ struct_typedef_aux ])
         | EnumKind -> failwith "Todo: AdtDef::Enum"
         | UnionKind -> failwith "Todo: AdtDef::Union"
         | Undefined _ -> Error (`TrAdtDef "Unknown ADT kind")
@@ -3216,7 +3283,18 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             let* proof_obligs = gen_adt_proof_obligs def in
             Ok (Some full_bor_content, proof_obligs)
       in
-      Ok (Some Mir.{ def; aux_decls; full_bor_content; proof_obligs })
+      Ok
+        (Some
+           Mir.
+             {
+               loc = def_loc;
+               name;
+               fds;
+               def;
+               aux_decls;
+               full_bor_content;
+               proof_obligs;
+             })
 
   (** Checks for the existence of a lemma for proof obligation in ghost code.
       The consistency of the lemma with proof obligation will be checked by VeriFast later *)
@@ -3241,15 +3319,112 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         (`ChekProofObligationFailed
           (loc, "Lemma " ^ po_name ^ " Should be proven"))
 
-  type trait_impl = { of_trait : string; self_ty : string; items : string list }
+  type trait_impl = {
+    loc : Ast.loc;
+    of_trait : string;
+    self_ty : string;
+    items : string list;
+  }
 
   let translate_trait_impls (trait_impls_cpn : TraitImplRd.t list) =
     trait_impls_cpn
-    |> List.map (fun trait_impl_cpn ->
-           let of_trait = TraitImplRd.of_trait_get trait_impl_cpn in
-           let self_ty = TraitImplRd.self_ty_get trait_impl_cpn in
-           let items = TraitImplRd.items_get_list trait_impl_cpn in
-           { of_trait; self_ty; items })
+    |> ListAux.try_map (fun trait_impl_cpn ->
+           let open TraitImplRd in
+           let* loc = translate_span_data (span_get trait_impl_cpn) in
+           let of_trait = of_trait_get trait_impl_cpn in
+           let self_ty = self_ty_get trait_impl_cpn in
+           let items = items_get_list trait_impl_cpn in
+           Ok ({ loc; of_trait; self_ty; items } : trait_impl))
+
+  let compute_trait_impl_prototypes (adt_defs : Mir.adt_def_tr list)
+      traits_and_body_decls trait_impls =
+    trait_impls
+    |> Util.flatmap (fun { loc = limpl; of_trait; self_ty; items } ->
+           if of_trait = "std::ops::Drop" then (
+             assert (items = [ "drop" ]);
+             [] (* drop is safe *))
+           else
+             items
+             |> List.map (fun item ->
+                    let trait_fn_name = Printf.sprintf "%s::%s" of_trait item in
+                    let impl_fn_name =
+                      Printf.sprintf "<%s as %s>::%s" self_ty of_trait item
+                    in
+                    let (Some prototype) =
+                      traits_and_body_decls
+                      |> Util.head_flatmap_option (function
+                           | Ast.Func
+                               ( lf,
+                                 Regular,
+                                 "Self" :: tparams,
+                                 rt,
+                                 name,
+                                 (_, self_typeid_param)
+                                 :: (_, self_full_bor_content_param)
+                                 :: ps,
+                                 false,
+                                 None,
+                                 Some (pre, post),
+                                 terminates,
+                                 body,
+                                 false,
+                                 [] )
+                             when name = trait_fn_name ->
+                               let self_ty_typeid =
+                                 Ast.Typeid
+                                   ( lf,
+                                     Ast.TypeExpr
+                                       (Ast.ManifestTypeExpr
+                                          (lf, Ast.StructType self_ty)) )
+                               in
+                               let self_full_bor_content =
+                                 Ast.Var (lf, self_ty ^ "_full_borrow_content")
+                               in
+                               let pre =
+                                 Ast.LetTypeAsn
+                                   ( lf,
+                                     "Self",
+                                     Ast.StructType self_ty,
+                                     Ast.Sep
+                                       ( lf,
+                                         MatchAsn
+                                           ( lf,
+                                             self_ty_typeid,
+                                             VarPat (lf, self_typeid_param) ),
+                                         Ast.Sep
+                                           ( lf,
+                                             MatchAsn
+                                               ( lf,
+                                                 self_full_bor_content,
+                                                 VarPat
+                                                   ( lf,
+                                                     self_full_bor_content_param
+                                                   ) ),
+                                             Ast.Sep
+                                               ( lf,
+                                                 pre,
+                                                 Ast.EnsuresAsn (lf, post) ) )
+                                       ) )
+                               in
+                               let post = Ast.EmpAsn lf in
+                               Some
+                                 (Ast.Func
+                                    ( lf,
+                                      Regular,
+                                      tparams,
+                                      rt,
+                                      impl_fn_name,
+                                      ps,
+                                      false,
+                                      None,
+                                      Some (pre, post),
+                                      terminates,
+                                      None,
+                                      false,
+                                      [] ))
+                           | _ -> None)
+                    in
+                    prototype))
 
   let translate_vf_mir (vf_mir_cpn : VfMirRd.t)
       (report_should_fail : string -> Ast.loc0 -> unit) =
@@ -3276,7 +3451,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
          and then add all of the complete declarations
          Note that the following `fold_left` also reverses the list
       *)
-      let adt_defs, aux_decls, adts_full_bor_content_preds, adts_proof_obligs =
+      let adt_decls, aux_decls, adts_full_bor_content_preds, adts_proof_obligs =
         List.fold_left
           (fun (defs, ads, fbors, pos)
                Mir.{ def; aux_decls; full_bor_content; proof_obligs } ->
@@ -3324,100 +3499,16 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let* body_sigs = AstAux.sort_decls_lexically body_sigs in
       let* body_decls = AstAux.sort_decls_lexically body_decls in
       let traits_and_body_decls = traits_decls @ body_decls in
-      let trait_impls =
+      let* trait_impls =
         translate_trait_impls (VfMirRd.trait_impls_get_list vf_mir_cpn)
       in
       let debug_infos = VF0.DbgInfoRustFe debug_infos in
       let decls = AstDecls.decls () in
       let trait_impl_prototypes =
-        trait_impls
-        |> Util.flatmap (fun { of_trait; self_ty; items } ->
-               items
-               |> List.map (fun item ->
-                      let trait_fn_name =
-                        Printf.sprintf "%s::%s" of_trait item
-                      in
-                      let impl_fn_name =
-                        Printf.sprintf "<%s as %s>::%s" self_ty of_trait item
-                      in
-                      let (Some prototype) =
-                        traits_and_body_decls
-                        |> Util.head_flatmap_option (function
-                             | Ast.Func
-                                 ( lf,
-                                   Regular,
-                                   "Self" :: tparams,
-                                   rt,
-                                   name,
-                                   (_, self_typeid_param)
-                                   :: (_, self_full_bor_content_param)
-                                   :: ps,
-                                   false,
-                                   None,
-                                   Some (pre, post),
-                                   terminates,
-                                   body,
-                                   false,
-                                   [] )
-                               when name = trait_fn_name ->
-                                 let self_ty_typeid =
-                                   Ast.Typeid
-                                     ( lf,
-                                       Ast.TypeExpr
-                                         (Ast.ManifestTypeExpr
-                                            (lf, Ast.StructType self_ty)) )
-                                 in
-                                 let self_full_bor_content =
-                                   Ast.Var (lf, self_ty ^ "_full_borrow_content")
-                                 in
-                                 let pre =
-                                   Ast.LetTypeAsn
-                                     ( lf,
-                                       "Self",
-                                       Ast.StructType self_ty,
-                                       Ast.Sep
-                                         ( lf,
-                                           MatchAsn
-                                             ( lf,
-                                               self_ty_typeid,
-                                               VarPat (lf, self_typeid_param) ),
-                                           Ast.Sep
-                                             ( lf,
-                                               MatchAsn
-                                                 ( lf,
-                                                   self_full_bor_content,
-                                                   VarPat
-                                                     ( lf,
-                                                       self_full_bor_content_param
-                                                     ) ),
-                                               Ast.Sep
-                                                 ( lf,
-                                                   pre,
-                                                   Ast.EnsuresAsn (lf, post) )
-                                             ) ) )
-                                 in
-                                 let post = Ast.EmpAsn lf in
-                                 Some
-                                   (Ast.Func
-                                      ( lf,
-                                        Regular,
-                                        tparams,
-                                        rt,
-                                        impl_fn_name,
-                                        ps,
-                                        false,
-                                        None,
-                                        Some (pre, post),
-                                        terminates,
-                                        None,
-                                        false,
-                                        [] ))
-                             | _ -> None)
-                      in
-                      prototype))
+        compute_trait_impl_prototypes adt_defs traits_and_body_decls trait_impls
       in
       let decls =
-        traits_decls @ trait_impl_prototypes @ decls @ adt_defs @ aux_decls
+        traits_decls @ trait_impl_prototypes @ decls @ adt_decls @ aux_decls
         @ adts_full_bor_content_preds @ adts_proof_obligs @ ghost_decls
         @ body_sigs @ body_decls
       in

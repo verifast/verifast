@@ -581,6 +581,7 @@ struct Body {
     unsafety @10: Unsafety;
     hirGenerics @11: Hir.Generics;
     isTraitFn @12: Bool;
+    isDropFn @13: Bool; # Implements std::ops::Drop::drop
     # Todo @Nima: Add Visibility data
 }
 
@@ -601,6 +602,7 @@ struct Trait {
 }
 
 struct TraitImpl {
+    span @3: SpanData;
     ofTrait @0: Text;
     selfTy @1: Text;
     items @2: List(Text);

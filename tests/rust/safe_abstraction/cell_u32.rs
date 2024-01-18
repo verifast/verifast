@@ -19,7 +19,7 @@ i.e. in VeriFast the `[[u32]].OWN` is implicitly persistent.
 */
 
 pred_ctor CellU32_nonatomic_borrow_content(l: *CellU32, t: thread_id_t)() =
-  CellU32_v(l, ?v) &*& CellU32_own(t, v);
+  CellU32_v(l, ?v) &*& struct_CellU32_padding(l) &*& CellU32_own(t, v);
 
 // `SHR` for Cell<u32>
 pred CellU32_share(k: lifetime_t, t: thread_id_t, l: *CellU32) =

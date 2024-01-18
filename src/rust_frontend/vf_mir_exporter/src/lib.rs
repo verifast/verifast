@@ -51,6 +51,7 @@ use rustc_interface::{Config, Queries};
 use rustc_middle::mir;
 use rustc_middle::ty::{self, TyCtxt};
 use rustc_session::Session;
+use rustc_span::Span;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::thread_local;
@@ -196,6 +197,7 @@ fn mir_borrowck<'tcx>(tcx: TyCtxt<'tcx>, def_id: LocalDefId) -> rustc_middle::qu
 }
 
 struct TraitImplInfo {
+    span: Span,
     of_trait: rustc_hir::def_id::DefId,
     self_ty: rustc_hir::def_id::DefId,
     items: Vec<String>,
@@ -223,7 +225,7 @@ impl<'tcx> rustc_hir::intravisit::Visitor<'tcx> for HirVisitor {
                                 for item in impl_.items {
                                     items.push(item.ident.to_string());
                                 }
-                                self.trait_impls.push(TraitImplInfo { of_trait, self_ty, items });
+                                self.trait_impls.push(TraitImplInfo { span: item.span, of_trait, self_ty, items });
                             }
                         }
                     }
@@ -442,6 +444,7 @@ mod vf_mir_builder {
         fn encode_trait_impls(&mut self, vf_mir_cpn: &mut vf_mir_cpn::Builder<'_>) {
             vf_mir_cpn.fill_trait_impls(&self.trait_impls, |mut trait_impl_cpn, trait_impl| {
                 trace!("Encoding trait impl");
+                Self::encode_span_data(self.tcx, &trait_impl.span.data(), trait_impl_cpn.reborrow().init_span());
                 trait_impl_cpn.set_of_trait(&self.tcx.def_path_str(trait_impl.of_trait));
                 trait_impl_cpn.set_self_ty(&self.tcx.def_path_str(trait_impl.self_ty));
                 trait_impl_cpn.fill_items(&trait_impl.items);
@@ -690,8 +693,22 @@ mod vf_mir_builder {
                 hir::def::DefKind::Fn|hir::def::DefKind::AssocFn => {
                     let mut def_kind_cpn = body_cpn.reborrow().init_def_kind();
                     def_kind_cpn.set_fn(());
-                    if kind == hir::def::DefKind::AssocFn && tcx.associated_item(def_id).container == ty::AssocItemContainer::TraitContainer {
-                        body_cpn.set_is_trait_fn(true);
+                    if kind == hir::def::DefKind::AssocFn {
+                        let assoc_item = tcx.associated_item(def_id);
+                        if assoc_item.container == ty::AssocItemContainer::TraitContainer {
+                            body_cpn.set_is_trait_fn(true);
+                        } else {
+                            if let Some(trait_fn) = assoc_item.trait_item_def_id {
+                                if let Some(trait_did) = tcx.trait_of_item(trait_fn) {
+                                    if let Some(drop_did) = tcx.lang_items().drop_trait() {
+                                        if trait_did == drop_did {
+                                            body_cpn.set_is_drop_fn(true);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        
                     }
                 }
                 _ => std::todo!("Unsupported definition kind"),
@@ -895,7 +912,7 @@ mod vf_mir_builder {
             span_data: &rustc_span::SpanData,
             mut span_data_cpn: span_data_cpn::Builder<'_>,
         ) {
-            debug!("Encoding SpanData {:?}", span_data);
+            //debug!("Encoding SpanData {:?}", span_data);
             let sm = tcx.sess.source_map();
             let lo_cpn = span_data_cpn.reborrow().init_lo();
             let lo = sm.lookup_char_pos(span_data.lo);
@@ -906,7 +923,7 @@ mod vf_mir_builder {
         }
 
         fn encode_loc(loc: &rustc_span::Loc, mut loc_cpn: loc_cpn::Builder<'_>) {
-            debug!("Encoding Loc {:?}", loc);
+            //debug!("Encoding Loc {:?}", loc);
             let file_cpn = loc_cpn.reborrow().init_file();
             Self::encode_source_file(loc.file.as_ref(), file_cpn);
 
@@ -930,13 +947,13 @@ mod vf_mir_builder {
             src_file: &rustc_span::SourceFile,
             src_file_cpn: source_file_cpn::Builder<'_>,
         ) {
-            debug!("Encoding SourceFile {:?}", src_file);
+            //debug!("Encoding SourceFile {:?}", src_file);
             let name_cpn = src_file_cpn.init_name();
             Self::encode_file_name(&src_file.name, name_cpn);
         }
 
         fn encode_file_name(fname: &rustc_span::FileName, fname_cpn: file_name_cpn::Builder<'_>) {
-            debug!("Encoding FileName {:?}", fname);
+            //debug!("Encoding FileName {:?}", fname);
             match fname {
                 rustc_span::FileName::Real(real_fname) => {
                     let real_fname_cpn = fname_cpn.init_real();
@@ -950,7 +967,7 @@ mod vf_mir_builder {
             real_fname: &rustc_span::RealFileName,
             mut real_fname_cpn: real_file_name_cpn::Builder<'_>,
         ) {
-            debug!("Encoding RealFileName {:?}", real_fname);
+            //debug!("Encoding RealFileName {:?}", real_fname);
             fn get_path_str(path_buf: &std::path::PathBuf) -> &str {
                 path_buf.to_str().expect(&format!(
                     "Failed to get the unicode string of PathBuf {:?}",
@@ -1292,7 +1309,7 @@ mod vf_mir_builder {
             src_info: &mir::SourceInfo,
             mut src_info_cpn: source_info_cpn::Builder<'_>,
         ) {
-            debug!("Encoding SourceInfo {:?}", src_info);
+            //debug!("Encoding SourceInfo {:?}", src_info);
             let span_cpn = src_info_cpn.reborrow().init_span();
             Self::encode_span_data(tcx, &src_info.span.data(), span_cpn);
             let scope_cpn = src_info_cpn.init_scope();

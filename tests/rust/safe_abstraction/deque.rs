@@ -309,16 +309,6 @@ impl Deque {
         Self::dispose_nodes(first1, next);
     }
 
-    // Todo: Implement the Drop trait instead
-    pub fn dispose(deque: Deque) {
-        //@ open Deque_own(_t, ?sentinel, ?size);
-        unsafe {
-            Self::dispose_nodes((*(deque.sentinel)).next, deque.sentinel);
-            //@ open_struct(deque.sentinel);
-            std::alloc::dealloc(deque.sentinel as *mut u8, std::alloc::Layout::new::<Node>());
-        }
-    }
-
     pub fn swap<'a>(&'a mut self, other: &'a mut Deque) {
         //@ open_full_borrow(_q_a/2, a, Deque_full_borrow_content(_t, self));
         //@ open Deque_full_borrow_content(_t, self)();
@@ -337,4 +327,28 @@ impl Deque {
         //@ leak full_borrow(_, _);
         //@ leak full_borrow(_, _);
     }
+}
+
+impl Drop for Deque {
+
+    fn drop<'a>(&'a mut self)
+    //@ req thread_token(?_t) &*& Deque_full_borrow_content(_t, self)();
+    /*@
+    ens
+        thread_token(_t) &*&
+        raw_ptr_full_borrow_content(_t, &(*self).sentinel)() &*&
+        i32_full_borrow_content(_t, &(*self).size)() &*&
+        struct_Deque_padding(self);
+    @*/
+    {
+        unsafe {
+            //@ open Deque_full_borrow_content(_t, self)();
+            Self::dispose_nodes((*(self.sentinel)).next, self.sentinel);
+            //@ open_struct((*self).sentinel);
+            std::alloc::dealloc(self.sentinel as *mut u8, std::alloc::Layout::new::<Node>());
+            //@ close raw_ptr_full_borrow_content(_t, &(*self).sentinel)();
+            //@ close i32_full_borrow_content(_t, &(*self).size)();
+        }
+    }
+
 }
