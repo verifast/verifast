@@ -8,7 +8,7 @@ class GhostCodeAnalyzer {
   Annotation::Kind m_kind;
 
   void skipWhitespace() {
-    for (; m_pos != m_text.end() && isspace(*m_pos); ++m_pos)
+    for (; m_pos != m_text.end() && std::isspace(*m_pos); ++m_pos)
       ;
   }
 
@@ -87,11 +87,7 @@ public:
   Annotation::Kind getKind() {
     if (kindIsNotUnknown())
       return m_kind;
-    if (isTruncating())
-      return m_kind;
-    if (isContractClauseLike())
-      return m_kind;
-    if (isInclude())
+    if (isTruncating() || isContractClauseLike() || isInclude())
       return m_kind;
 
     m_kind = Annotation::Kind::Ann_other;

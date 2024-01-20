@@ -8,7 +8,7 @@ end
 
 module Make (Node_translator : Node_translator.Translator) : Translator = struct
   module Expr_translator = Expr_translator.Make (Node_translator)
-  module Misc_translator = Var_translator.Make (Node_translator)
+  module Var_translator = Var_translator.Make (Node_translator)
   module AP = Node_translator.Annotation_parser
 
   let rec translate_decomposed loc stmt_desc =
@@ -53,7 +53,7 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
     let expect_var loc desc =
       match R.Decl.get desc with
       | R.Decl.Var v ->
-          let ty, name, init_opt = Misc_translator.translate v in
+          let ty, name, init_opt = Var_translator.translate v in
           Some (loc, Some ty, name, init_opt, (ref false, ref None))
       | _ -> None
     in

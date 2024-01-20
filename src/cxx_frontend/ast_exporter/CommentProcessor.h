@@ -1,5 +1,5 @@
 #pragma once
-#include "AnnotationStore.h"
+#include "Annotation.h"
 #include "clang/Lex/Preprocessor.h"
 
 namespace vf {

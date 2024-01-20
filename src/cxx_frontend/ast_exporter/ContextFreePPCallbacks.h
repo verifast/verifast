@@ -1,5 +1,5 @@
 #pragma once
-#include "InclusionContext.h"
+#include "Inclusion.h"
 #include "kj/common.h"
 #include "clang/Lex/PPCallbacks.h"
 #include <unordered_set>
@@ -11,19 +11,23 @@ class ContextFreePPCallbacks : public clang::PPCallbacks {
   class PPDiags {
     clang::Preprocessor &m_PP;
 
+    clang::DiagnosticsEngine &getDiagsEngine() const {
+      return m_PP.getDiagnostics();
+    }
+
   public:
     explicit PPDiags(clang::Preprocessor &PP) : m_PP(PP) {}
 
     void reportMacroDivergence(const clang::Token &macroNameTok,
-                               const std::string &macroName,
-                               const clang::MacroDefinition &MD);
+                               const std::string &macroName);
 
     void reportCtxSensitiveMacroExp(const clang::Token &macroNameTok,
                                     const std::string &macroName,
-                                    const clang::SourceRange &range);
+                                    clang::SourceLocation loc);
 
     void reportUndefIsolatedMacro(const clang::Token &macroNameTok,
-                                  const std::string &macroName);
+                                  const std::string &macroName,
+                                  clang::SourceLocation loc);
   };
 
   InclusionContext &m_context;

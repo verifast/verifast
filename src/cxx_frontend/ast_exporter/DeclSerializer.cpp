@@ -1,12 +1,11 @@
 #include "AstSerializer.h"
-#include "Error.h"
 #include "FixedWidthInt.h"
 #include "clang/AST/CXXInheritance.h"
 #include "clang/AST/Decl.h"
 
 namespace vf {
 
-void serializeRecordRef(stubs::RecordRef::Builder &builder,
+void serializeRecordRef(stubs::RecordRef::Builder builder,
                         const clang::CXXRecordDecl *record) {
   builder.setName(record->getQualifiedNameAsString());
   builder.setKind(record->isStruct()  ? stubs::RecordKind::STRUC
@@ -14,7 +13,7 @@ void serializeRecordRef(stubs::RecordRef::Builder &builder,
                                       : stubs::RecordKind::UNIO);
 }
 
-void DeclSerializer::serializeFuncDecl(stubs::Decl::Function::Builder &builder,
+void DeclSerializer::serializeFuncDecl(stubs::Decl::Function::Builder builder,
                                        const clang::FunctionDecl *decl,
                                        bool serializeContract) {
   builder.setName(m_serializer.getQualifiedFuncName(decl));
@@ -83,9 +82,13 @@ bool DeclSerializer::VisitVarDecl(const clang::VarDecl *decl) {
       CASE_INIT(CInit, C_INIT)
       CASE_INIT(CallInit, CALL_INIT)
       CASE_INIT(ListInit, LIST_INIT)
-      case clang::VarDecl::InitializationStyle::ParenListInit:
-        errors().newError(decl->getSourceRange(), getSourceManager())
-          << "Parenthesized list-initialization is not supported.";
+    case clang::VarDecl::InitializationStyle::ParenListInit: {
+      auto &diagsEngine = getSerializer().getDiagsEngine();
+      auto id = diagsEngine.getCustomDiagID(
+          clang::DiagnosticsEngine::Error,
+          "Parenthesized list-initialization is not supported");
+      diagsEngine.Report(decl->getBeginLoc(), id);
+    }
     }
 
 #undef CASE_INIT
@@ -93,7 +96,7 @@ bool DeclSerializer::VisitVarDecl(const clang::VarDecl *decl) {
   return true;
 }
 
-void DeclSerializer::serializeFieldDecl(stubs::Decl::Field::Builder &builder,
+void DeclSerializer::serializeFieldDecl(stubs::Decl::Field::Builder builder,
                                         const clang::FieldDecl *decl) {
   builder.setName(decl->getDeclName().getAsString());
 
@@ -128,7 +131,7 @@ bool DeclSerializer::VisitFieldDecl(const clang::FieldDecl *decl) {
 
 void DeclSerializer::serializeBases(
     capnp::List<stubs::Node<stubs::Decl::Record::BaseSpec>,
-                capnp::Kind::STRUCT>::Builder &builder,
+                capnp::Kind::STRUCT>::Builder builder,
     clang::CXXRecordDecl::base_class_const_range bases) {
   size_t i(0);
   for (auto base : bases) {
@@ -213,7 +216,7 @@ bool DeclSerializer::VisitCXXRecordDecl(const clang::CXXRecordDecl *decl) {
   return true;
 }
 
-void DeclSerializer::serializeMethodDecl(stubs::Decl::Method::Builder &builder,
+void DeclSerializer::serializeMethodDecl(stubs::Decl::Method::Builder builder,
                                          const clang::CXXMethodDecl *decl) {
   auto isStatic = decl->isStatic();
   builder.setStatic(isStatic);
@@ -399,8 +402,11 @@ bool DeclSerializer::VisitFunctionTemplateDecl(
   for (auto *spec : decl->specializations()) {
     auto *info = spec->getTemplateSpecializationInfo();
     if (info->isExplicitInstantiationOrSpecialization()) {
-      errors().newError(spec->getSourceRange(), getSourceManager())
-          << "Explicit instantiation and specialization is not supported.";
+      auto &diagsEngine = getSerializer().getDiagsEngine();
+      auto id = diagsEngine.getCustomDiagID(
+          clang::DiagnosticsEngine::Error,
+          "Explicit instantiation and specialization is not supported");
+      diagsEngine.Report(spec->getBeginLoc(), id);
     }
     auto specBuilder = specsBuilder[i++];
     auto locBuilder = specBuilder.initLoc();

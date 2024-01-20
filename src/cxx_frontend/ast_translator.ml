@@ -177,23 +177,6 @@ module Make (Args : Sig.CXX_TRANSLATOR_ARGS) : Sig.Cxx_Ast_Translator = struct
     in
     files |> Capnp_util.arr_map transl_file
 
-  let transl_vf_err (err : R.VfError.t) : 'a =
-    let transl_err (err : R.Err.t) : 'a =
-      let open R.Err in
-      let loc = Node_translator.translate_loc @@ loc_get err in
-      let reason = reason_get err in
-      Error.error loc reason
-    in
-    let open R.VfError in
-    let tu = tu_get err in
-    (* we need the file mapping to translate the location of errors *)
-    let () =
-      R.TU.files_get tu
-      |> Capnp_util.arr_iter (fun f -> update_file_mapping f |> ignore)
-    in
-    let errors = errors_get err in
-    errors |> Capnp_util.arr_iter transl_err
-
   let transl_tu (tu : R.TU.t) : Sig.header_type list * Ast.decl list =
     let open R.TU in
     let decls_table = files_get tu |> transl_files in
@@ -211,6 +194,27 @@ module Make (Args : Sig.CXX_TRANSLATOR_ARGS) : Sig.Cxx_Ast_Translator = struct
     in
     (includes, main_decls)
 
+  let transl_ser_result result =
+    let open R.SerResult in
+    if not @@ has_tu result then
+      Error.error Ast.dummy_loc "No translatotion unit received."
+    else
+      let tu = tu_get result in
+      if has_errors result then
+        let () =
+          R.TU.files_get tu
+          |> Capnp_util.arr_iter (fun f -> update_file_mapping f |> ignore)
+        in
+        let errors = errors_get result in
+        match Capnp.Array.length errors with
+        | 0 -> Error.error Ast.dummy_loc "Expected non-empty list of errors."
+        | _ ->
+            let error = Capnp.Array.get errors 0 in
+            let open R.Error in
+            let error_loc = loc_get error |> Node_translator.translate_loc in
+            Error.error error_loc (reason_get error)
+      else transl_tu tu
+
   let parse_cxx_file () : Sig.header_type list * Ast.package list =
     (* TODO: pass macros that are whitelisted *)
     let type_macros pref =
@@ -226,24 +230,19 @@ module Make (Args : Sig.CXX_TRANSLATOR_ARGS) : Sig.Cxx_Ast_Translator = struct
     let on_error () =
       match Util.input_fully errchan with
       | "" ->
-          failwith
+          Error.error Ast.dummy_loc
             "the Cxx frontend was unable to deserialize the received message."
-      | s -> failwith @@ "Cxx AST exporter error:\n" ^ s
+      | s -> Error.error Ast.dummy_loc @@ "Cxx AST exporter error:\n" ^ s
     in
     let in_channel = stubs_ast_in_channel inchan in
     Util.do_finally
       (fun () ->
         match read_capnp_message in_channel with
         | None -> on_error ()
-        | Some res -> (
-            match res |> R.SerResult.of_message |> R.SerResult.get with
-            | R.SerResult.Undefined _ -> on_error ()
-            | R.SerResult.Ok tu ->
-                let headers, decls = transl_tu tu in
-                (headers, [ Ast.PackageDecl (Ast.dummy_loc, "", [], decls) ])
-            | R.SerResult.ClangError -> on_error ()
-            | R.SerResult.VfError err ->
-                let () = transl_vf_err err in
-                on_error ()))
+        | Some res ->
+            let headers, decls =
+              R.SerResult.of_message res |> transl_ser_result
+            in
+            (headers, [ Ast.PackageDecl (Ast.dummy_loc, "", [], decls) ]))
       (fun () -> close_channels ())
 end

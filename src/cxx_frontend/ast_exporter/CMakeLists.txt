@@ -21,7 +21,6 @@ add_executable(vf-cxx-ast-exporter
   FixedWidthInt.cpp
   AnnotationStore.cpp
   Inclusion.cpp
-  Error.cpp
 )
 
 find_package(LLVM REQUIRED CONFIG)
@@ -56,7 +55,7 @@ foreach(LIB IN LISTS CAPNP_LIBS KJ_LIBS)
   list(APPEND LIBS_PATHS ${${_LIB_VAR}})
 endforeach()
 
-set_property(TARGET vf-cxx-ast-exporter PROPERTY CXX_STANDARD 17)
+set_property(TARGET vf-cxx-ast-exporter PROPERTY CXX_STANDARD 20)
 
 target_include_directories(vf-cxx-ast-exporter
   PRIVATE

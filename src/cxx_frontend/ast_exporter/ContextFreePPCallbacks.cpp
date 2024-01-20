@@ -1,32 +1,31 @@
 #include "ContextFreePPCallbacks.h"
-#include "Error.h"
 #include "clang/Basic/FileManager.h"
 
 namespace vf {
 
 void ContextFreePPCallbacks::PPDiags::reportMacroDivergence(
-    const clang::Token &macroNameTok, const std::string &macroName,
-    const clang::MacroDefinition &MD) {
-  auto globalDef = MD.getMacroInfo();
-  errors().newError({macroNameTok.getLocation(), macroNameTok.getEndLoc()},
-                    m_PP.getSourceManager())
-      << "Definition of '" << macroName << "' has diverged. Its definition is"
-      << (globalDef ? " not " : " ") << "defined in the current context, while"
-      << (globalDef ? " " : " not ") << "defined in the parent context.";
+    const clang::Token &macroNameTok, const std::string &macroName) {
+  auto id = getDiagsEngine().getCustomDiagID(clang::DiagnosticsEngine::Error,
+                                             "Definition of '%0' has diverged");
+  getDiagsEngine().Report(macroNameTok.getLocation(), id) << macroName;
 }
 
 void ContextFreePPCallbacks::PPDiags::reportCtxSensitiveMacroExp(
-    const clang::Token &macroNameTok, const std::string &macroName, const clang::SourceRange &range) {
-  errors().newError(range, m_PP.getSourceManager())
-      << "Macro expansion of '" << macroName << "' is context sensitive.";
+    const clang::Token &macroNameTok, const std::string &macroName,
+    clang::SourceLocation loc) {
+  auto id = getDiagsEngine().getCustomDiagID(
+      clang::DiagnosticsEngine::Error,
+      "Macro expansion of '%0' is context sensitive");
+  getDiagsEngine().Report(loc, id) << macroName;
 }
 
 void ContextFreePPCallbacks::PPDiags::reportUndefIsolatedMacro(
-    const clang::Token &macroNameTok, const std::string &macroName) {
-  errors().newError({macroNameTok.getLocation(), macroNameTok.getEndLoc()},
-                    m_PP.getSourceManager())
-      << "Undefining '" << macroName
-      << "', which has no definition in the current context.";
+    const clang::Token &macroNameTok, const std::string &macroName,
+    clang::SourceLocation loc) {
+  auto id = getDiagsEngine().getCustomDiagID(
+      clang::DiagnosticsEngine::Error,
+      "'#undef %0': no definition exists in the current context");
+  getDiagsEngine().Report(loc, id) << macroName;
 }
 
 std::string
@@ -85,7 +84,7 @@ void ContextFreePPCallbacks::MacroUndefined(
   if (macroAllowed(name))
     return;
   if (undef && !m_context.currentInclusion()->ownsMacroDef(MD, SM())) {
-    m_diags.reportUndefIsolatedMacro(macroNameTok, name);
+    m_diags.reportUndefIsolatedMacro(macroNameTok, name, undef->getLocation());
   }
 }
 
@@ -98,7 +97,7 @@ void ContextFreePPCallbacks::MacroExpands(const clang::Token &macroNameTok,
     return;
   bool macroDefined = m_context.currentInclusion()->ownsMacroDef(MD, SM());
   if (!macroDefined) {
-    m_diags.reportCtxSensitiveMacroExp(macroNameTok, name, range);
+    m_diags.reportCtxSensitiveMacroExp(macroNameTok, name, range.getBegin());
   }
 }
 
@@ -128,7 +127,7 @@ void ContextFreePPCallbacks::checkDivergence(const clang::Token &macroNameTok,
   bool hasLocalDef = m_context.currentInclusion()->ownsMacroDef(MD, SM());
   bool hasGlobalDef = MD.getMacroInfo();
   if (hasLocalDef ^ hasGlobalDef) {
-    m_diags.reportMacroDivergence(macroNameTok, name, MD);
+    m_diags.reportMacroDivergence(macroNameTok, name);
   }
 }
 
