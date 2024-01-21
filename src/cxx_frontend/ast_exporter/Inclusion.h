@@ -5,6 +5,7 @@
 #include "clang/Basic/FileManager.h"
 #include "clang/Lex/Preprocessor.h"
 #include "llvm/ADT/SmallVector.h"
+#include <unordered_map>
 
 namespace vf {
 
