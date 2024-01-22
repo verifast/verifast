@@ -1,12 +1,13 @@
 #pragma once
-#include "AnnotationStore.h"
-#include "InclusionContext.h"
+#include "Annotation.h"
+#include "Inclusion.h"
 #include "NodeSerializer.h"
 #include "capnp/orphan.h"
 #include "llvm/ADT/SmallVector.h"
+#include <concepts>
 #include <kj/common.h>
-#include <unordered_map>
 #include <string.h>
+#include <unordered_map>
 
 namespace vf {
 
@@ -15,7 +16,7 @@ namespace vf {
  * orphans instead of serializing to an actual message. Holds two orphans: one
  * for the location of the node and another for the properties of the node.
  */
-template <class StubsNode> struct NodeOrphan {
+template <IsStubsNode StubsNode> struct NodeOrphan {
   using loc_orphan = capnp::Orphan<stubs::Loc>;
   using node_orphan = capnp::Orphan<StubsNode>;
   loc_orphan locOrphan;
@@ -37,9 +38,9 @@ class AstSerializer {
   clang::SourceManager &m_SM;
   InclusionContext &m_inclContext;
 
-  AnnotationSerializer m_textSerializer;
+  TextSerializer m_textSerializer;
   AnnotationStore &m_store;
-  std::unordered_map<unsigned, llvm::SmallVector<DeclNodeOrphan, 8>>
+  std::unordered_map<unsigned, llvm::SmallVector<DeclNodeOrphan>>
       m_fileDeclsMap;
   std::unordered_map<unsigned, clang::SourceLocation> m_firstDeclLocMap;
 
@@ -59,17 +60,23 @@ class AstSerializer {
 
   llvm::Optional<clang::SourceLocation> getFirstDeclLocOpt(unsigned fd) const;
 
-  void printQualifiedName(const clang::NamedDecl *decl, llvm::raw_string_ostream &os) const;
+  void printQualifiedName(const clang::NamedDecl *decl,
+                          llvm::raw_string_ostream &os) const;
 
 public:
   explicit AstSerializer(clang::ASTContext &context, AnnotationStore &store,
                          InclusionContext &inclContext,
                          bool serializeImplicitDecls)
       : m_ASTContext(context), m_SM(context.getSourceManager()),
-        m_inclContext(inclContext), m_textSerializer(context.getSourceManager()), m_store(store),
+        m_inclContext(inclContext),
+        m_textSerializer(context.getSourceManager()), m_store(store),
         m_serializeImplicitDecls(serializeImplicitDecls) {}
 
   KJ_DISALLOW_COPY(AstSerializer);
+
+  clang::DiagnosticsEngine &getDiagsEngine() const {
+    return m_ASTContext.getDiagnostics();
+  }
 
   AnnotationStore &getAnnStore() { return m_store; }
 
@@ -78,7 +85,7 @@ public:
    * @param builder builder that is used to serialize the declaration.
    * @param decl declaration that has to be serialized.
    */
-  void serializeDecl(DeclSerializer::NodeBuilder &builder,
+  void serializeDecl(DeclSerializer::NodeBuilder builder,
                      const clang::Decl *decl);
 
   /**
@@ -86,7 +93,7 @@ public:
    * @param builder builder that is used to serialize the statement.
    * @param stmt statement that has to be serialized.
    */
-  void serializeStmt(StmtSerializer::NodeBuilder &builder,
+  void serializeStmt(StmtSerializer::NodeBuilder builder,
                      const clang::Stmt *stmt);
 
   /**
@@ -94,7 +101,7 @@ public:
    * @param builder builder that is used to serialize the expression.
    * @param expr expression that has to be serialized.
    */
-  void serializeExpr(ExprSerializer::NodeBuilder &builder,
+  void serializeExpr(ExprSerializer::NodeBuilder builder,
                      const clang::Expr *expr);
 
   /**
@@ -103,7 +110,7 @@ public:
    * @param typeLoc wrapper that contains the type and source information for
    * that type.
    */
-  void serializeTypeLoc(TypeLocSerializer::NodeBuilder &builder,
+  void serializeTypeLoc(TypeLocSerializer::NodeBuilder builder,
                         const clang::TypeLoc typeLoc);
 
   /**
@@ -112,11 +119,11 @@ public:
    * @param type type to serialize.
    * that type.
    */
-  void serializeQualType(TypeSerializer::DescBuilder &builder,
+  void serializeQualType(TypeSerializer::DescBuilder builder,
                          const clang::QualType type);
 
   void serializeParams(
-      capnp::List<stubs::Param, capnp::Kind::STRUCT>::Builder &builder,
+      capnp::List<stubs::Param, capnp::Kind::STRUCT>::Builder builder,
       llvm::ArrayRef<clang::ParmVarDecl *> params);
 
   /**
@@ -128,8 +135,8 @@ public:
    * declaration.
    * @param decl declaration that has to be serialized.
    */
-  void serializeNodeDecomposed(stubs::Loc::Builder &locBuilder,
-                               stubs::Decl::Builder &builder,
+  void serializeNodeDecomposed(stubs::Loc::Builder locBuilder,
+                               stubs::Decl::Builder builder,
                                const clang::Decl *decl);
 
   /**
@@ -141,8 +148,8 @@ public:
    * statement.
    * @param stmt statement that has to be serialized.
    */
-  void serializeNodeDecomposed(stubs::Loc::Builder &locBuilder,
-                               stubs::Stmt::Builder &builder,
+  void serializeNodeDecomposed(stubs::Loc::Builder locBuilder,
+                               stubs::Stmt::Builder builder,
                                const clang::Stmt *stmt);
 
   /**
@@ -156,7 +163,7 @@ public:
    * @param builder builder that is used to serialize the translation unit.
    * @param tu translation unit to serialize.
    */
-  void serializeTU(stubs::TU::Builder &builder,
+  void serializeTU(stubs::TU::Builder builder,
                    const clang::TranslationUnitDecl *tu);
 
   /**
@@ -167,13 +174,13 @@ public:
    * @param builder builder that is used to serialize the annotation.
    * @param ann annotation to serialize.
    */
-  void serializeAnnotationClause(AnnotationSerializer::ClauseBuilder &builder,
+  void serializeAnnotationClause(TextSerializer::ClauseBuilder builder,
                                  const Annotation &ann) {
     m_textSerializer.serializeClause(builder, ann);
   }
 
   void serializeAnnotationClauses(
-      capnp::List<stubs::Clause, capnp::Kind::STRUCT>::Builder &builder,
+      capnp::List<stubs::Clause, capnp::Kind::STRUCT>::Builder builder,
       const clang::ArrayRef<Annotation> anns);
 
   /**
@@ -188,9 +195,9 @@ public:
    * text.
    * @param ann annotation to serialize.
    */
-  template <class StubsNode>
-  void serializeAnnotationDecomposed(stubs::Loc::Builder &locBuilder,
-                                     typename StubsNode::Builder &descBuilder,
+  template <IsStubsNode StubsNode>
+  void serializeAnnotationDecomposed(stubs::Loc::Builder locBuilder,
+                                     typename StubsNode::Builder descBuilder,
                                      const Annotation &ann) {
     m_textSerializer.serializeNode<StubsNode>(locBuilder, descBuilder, ann);
   }
@@ -210,7 +217,7 @@ public:
    * containing the serialized object will be added to the back of the
    * collection.
    */
-  template <class ToSerialize, class StubsNode>
+  template <class ToSerialize, IsStubsNode StubsNode>
   void
   serializeToOrphan(const ToSerialize *ser, capnp::Orphanage &orphanage,
                     llvm::SmallVectorImpl<NodeOrphan<StubsNode>> &orphans) {
@@ -233,7 +240,7 @@ public:
    * containing the serialized annotation will be added to the back of the
    * collection.
    */
-  template <class StubsNode>
+  template <IsStubsNode StubsNode>
   void
   serializeAnnToOrphan(const Annotation &ann, capnp::Orphanage &orphanage,
                        llvm::SmallVectorImpl<NodeOrphan<StubsNode>> &orphans) {
@@ -258,7 +265,7 @@ public:
    * containing the serialized annotations will be added to the back of the
    * collection.
    */
-  template <class StubsNode>
+  template <IsStubsNode StubsNode>
   void serializeAnnsToOrphans(
       const llvm::ArrayRef<Annotation> &annotations,
       capnp::Orphanage &orphanage,
@@ -275,7 +282,7 @@ public:
    * @param orphans vector of orphans that has to be adopted.
    * @param listBuilder builder of a list that will adopt the given orphans.
    */
-  template <class StubsNode>
+  template <IsStubsNode StubsNode>
   static void adoptOrphansToListBuilder(
       llvm::SmallVectorImpl<NodeOrphan<StubsNode>> &orphans,
       typename capnp::List<stubs::Node<StubsNode>, capnp::Kind::STRUCT>::Builder

@@ -1,11 +1,10 @@
 #include "AstSerializer.h"
-#include "Error.h"
 #include "FixedWidthInt.h"
 #include "clang/AST/Decl.h"
 
 namespace vf {
 
-void AstSerializer::serializeDecl(DeclSerializer::NodeBuilder &builder,
+void AstSerializer::serializeDecl(DeclSerializer::NodeBuilder builder,
                                   const clang::Decl *decl) {
   if (!m_serializeImplicitDecls && decl->isImplicit())
     return;
@@ -13,13 +12,13 @@ void AstSerializer::serializeDecl(DeclSerializer::NodeBuilder &builder,
   ser.serialize(decl);
 }
 
-void AstSerializer::serializeStmt(StmtSerializer::NodeBuilder &builder,
+void AstSerializer::serializeStmt(StmtSerializer::NodeBuilder builder,
                                   const clang::Stmt *stmt) {
   StmtSerializer ser(m_ASTContext, *this, builder);
   ser.serialize(stmt);
 }
 
-void AstSerializer::serializeExpr(ExprSerializer::NodeBuilder &builder,
+void AstSerializer::serializeExpr(ExprSerializer::NodeBuilder builder,
                                   const clang::Expr *expr) {
   auto truncatingOptional =
       m_store.queryTruncatingAnnotation(expr->getBeginLoc(), m_SM);
@@ -39,20 +38,20 @@ void AstSerializer::serializeExpr(ExprSerializer::NodeBuilder &builder,
   ser.serialize(expr);
 }
 
-void AstSerializer::serializeTypeLoc(TypeLocSerializer::NodeBuilder &builder,
+void AstSerializer::serializeTypeLoc(TypeLocSerializer::NodeBuilder builder,
                                      const clang::TypeLoc typeLoc) {
   TypeLocSerializer ser(m_ASTContext, *this, builder);
   ser.serialize(typeLoc);
 }
 
-void AstSerializer::serializeQualType(TypeSerializer::DescBuilder &builder,
+void AstSerializer::serializeQualType(TypeSerializer::DescBuilder builder,
                                       const clang::QualType type) {
   TypeSerializer ser(m_ASTContext, *this, builder);
   ser.serialize(type.getTypePtr());
 }
 
 void AstSerializer::serializeParams(
-    capnp::List<stubs::Param, capnp::Kind::STRUCT>::Builder &builder,
+    capnp::List<stubs::Param, capnp::Kind::STRUCT>::Builder builder,
     llvm::ArrayRef<clang::ParmVarDecl *> params) {
   size_t i(0);
   for (auto p : params) {
@@ -77,8 +76,8 @@ void AstSerializer::serializeParams(
   }
 }
 
-void AstSerializer::serializeNodeDecomposed(stubs::Loc::Builder &locBuilder,
-                                            stubs::Decl::Builder &builder,
+void AstSerializer::serializeNodeDecomposed(stubs::Loc::Builder locBuilder,
+                                            stubs::Decl::Builder builder,
                                             const clang::Decl *decl) {
   if (!m_serializeImplicitDecls && decl->isImplicit())
     return;
@@ -87,15 +86,15 @@ void AstSerializer::serializeNodeDecomposed(stubs::Loc::Builder &locBuilder,
   ser.serialize(decl);
 }
 
-void AstSerializer::serializeNodeDecomposed(stubs::Loc::Builder &locBuilder,
-                                            stubs::Stmt::Builder &builder,
+void AstSerializer::serializeNodeDecomposed(stubs::Loc::Builder locBuilder,
+                                            stubs::Stmt::Builder builder,
                                             const clang::Stmt *stmt) {
   StmtSerializer ser(m_ASTContext, *this, locBuilder, builder);
   ser.serialize(stmt);
 }
 
 void AstSerializer::serializeAnnotationClauses(
-    capnp::List<stubs::Clause, capnp::Kind::STRUCT>::Builder &builder,
+    capnp::List<stubs::Clause, capnp::Kind::STRUCT>::Builder builder,
     const clang::ArrayRef<Annotation> anns) {
   size_t i(0);
   for (auto &ann : anns) {
@@ -135,8 +134,9 @@ void AstSerializer::validateIncludesBeforeFirstDecl(
   if (*firstDeclLocOpt > lastDirective.getRange().getEnd()) {
     return;
   }
-  errors().newError(lastDirective.getRange(), m_SM)
-      << "An include directive cannot appear after a declaration.";
+  auto &diagsEngine = getDiagsEngine();
+  auto id = diagsEngine.getCustomDiagID(clang::DiagnosticsEngine::Error, "'#include' directive cannot appear after a declaration");
+  diagsEngine.Report(lastDirective.getRange().getBegin(), id);
 }
 
 void AstSerializer::serializeDeclToDeclMap(const clang::Decl *decl,
@@ -155,11 +155,11 @@ void AstSerializer::serializeDeclToDeclMap(const clang::Decl *decl,
   updateFirstDeclLoc(fileUID, firstDeclLoc);
 }
 
-void AstSerializer::serializeTU(stubs::TU::Builder &builder,
+void AstSerializer::serializeTU(stubs::TU::Builder builder,
                                 const clang::TranslationUnitDecl *tu) {
   auto orphanage = capnp::Orphanage::getForMessageContaining(builder);
 
-  clang::SmallVector<const clang::FileEntry *, 4> fileEntries;
+  clang::SmallVector<const clang::FileEntry *> fileEntries;
   m_SM.getFileManager().GetUniqueIDMapping(fileEntries);
   auto files = builder.initFiles(fileEntries.size());
   llvm::SmallVector<Annotation> anns;
@@ -169,7 +169,7 @@ void AstSerializer::serializeTU(stubs::TU::Builder &builder,
     auto fileEntry = fileEntries[i];
     if (fileEntry) {
       anns.clear();
-      m_store.getGhostIncludeSequence(fileEntry, anns, m_SM);
+      m_store.getGhostIncludeSequence(fileEntry, anns);
       for (auto &ann : anns) {
         m_inclContext.addGhostInclDirective(fileEntry, ann);
       }
@@ -212,9 +212,7 @@ void AstSerializer::serializeTU(stubs::TU::Builder &builder,
   size_t i(0);
   for (auto &directive : failDirectives) {
     auto directiveBuilder = failDirectivesBuilder[i++];
-    auto locBuilder = directiveBuilder.initLoc();
-    serializeSrcRange(locBuilder, directive.getRange(), m_SM);
-    directiveBuilder.setText(directive.getText().str());
+    m_textSerializer.serializeClause(directiveBuilder, directive);
   }
 }
 

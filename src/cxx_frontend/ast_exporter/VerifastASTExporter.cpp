@@ -2,7 +2,9 @@
 #include "AstSerializer.h"
 #include "CommentProcessor.h"
 #include "ContextFreePPCallbacks.h"
-#include "InclusionContext.h"
+#include "DiagnosticCollectorConsumer.h"
+#include "Inclusion.h"
+#include "Util.h"
 #include "capnp/message.h"
 #include "capnp/serialize.h"
 #include "clang/AST/ASTConsumer.h"
@@ -10,8 +12,6 @@
 #include "clang/Frontend/FrontendActions.h"
 #include "clang/Tooling/CommonOptionsParser.h"
 #include "clang/Tooling/Tooling.h"
-#include "Error.h"
-#include "Util.h"
 #ifdef _WIN32
 #include <fcntl.h>
 #include <io.h>
@@ -36,10 +36,8 @@ static llvm::cl::extrahelp
 
 namespace vf {
 
-using Builder = stubs::TU::Builder;
-
 class VerifastASTConsumer : public clang::ASTConsumer {
-  Builder &m_builder;
+  stubs::TU::Builder m_builder;
   AnnotationStore &m_store;
   InclusionContext &m_context;
 
@@ -49,17 +47,18 @@ public:
     serializer.serializeTU(m_builder, context.getTranslationUnitDecl());
   }
 
-  explicit VerifastASTConsumer(Builder &builder, AnnotationStore &store,
+  explicit VerifastASTConsumer(stubs::TU::Builder builder,
+                               AnnotationStore &store,
                                InclusionContext &context)
       : m_builder(builder), m_store(store), m_context(context) {}
-  VerifastASTConsumer(Builder &&builder, AnnotationStore &&store) = delete;
 };
 
 class VerifastFrontendAction : public clang::ASTFrontendAction {
-  Builder m_builder;
+  stubs::TU::Builder m_builder;
   AnnotationStore m_store;
   CommentProcessor m_commentProcessor;
   InclusionContext m_context;
+  DiagnosticCollectorConsumer &m_diags;
 
 public:
   std::unique_ptr<clang::ASTConsumer>
@@ -69,23 +68,28 @@ public:
     PP.addPPCallbacks(std::make_unique<ContextFreePPCallbacks>(
         m_context, PP, allowExpansions));
     PP.addCommentHandler(&m_commentProcessor);
+    compiler.getDiagnostics().setClient(&m_diags, false);
     return std::make_unique<VerifastASTConsumer>(m_builder, m_store, m_context);
   }
 
-  explicit VerifastFrontendAction(Builder builder)
-      : m_builder(builder), m_commentProcessor(m_store) {}
+  explicit VerifastFrontendAction(stubs::TU::Builder builder,
+                                  DiagnosticCollectorConsumer &diags)
+      : m_builder(builder), m_commentProcessor(m_store), m_diags(diags) {}
 };
 
 class VerifastActionFactory : public clang::tooling::FrontendActionFactory {
-  Builder &m_builder;
+  stubs::TU::Builder m_builder;
 
 public:
+  DiagnosticCollectorConsumer diags;
+
   std::unique_ptr<clang::FrontendAction> create() override {
-    return std::make_unique<VerifastFrontendAction>(m_builder);
+    return std::make_unique<VerifastFrontendAction>(m_builder, diags);
   }
 
-  explicit VerifastActionFactory(Builder &builder) : m_builder(builder) {}
-  VerifastActionFactory(Builder &&builder) = delete;
+  explicit VerifastActionFactory(stubs::SerResult::Builder builder)
+      : m_builder(builder.initTu()),
+        diags(clang::DiagnosticsEngine::Level::Error) {}
 };
 
 } // namespace vf
@@ -102,37 +106,25 @@ int main(int argc, const char **argv) {
 #ifdef _WIN32
   _setmode(1, _O_BINARY);
 #endif
-  capnp::MallocMessageBuilder result;
-  auto serResult = result.initRoot<stubs::SerResult>();
+  capnp::MallocMessageBuilder messageBuilder;
+  auto serResultBuilder = messageBuilder.initRoot<stubs::SerResult>();
 
-  auto TUOrphan = result.getOrphanage().newOrphan<stubs::TU>();
-  auto TUBuilder = TUOrphan.get();
-  vf::VerifastActionFactory factory(TUBuilder);
+  vf::VerifastActionFactory factory(serResultBuilder);
 
-  int err = tool.run(&factory);
+  auto error = tool.run(&factory);
 
-  if (err) {
-    serResult.setClangError();
-    capnp::writeMessageToFd(1, result);
-    return err;
-  }
-
-  auto nbErrors = vf::errors().size();
-  if (nbErrors > 0) {
-    auto vfErrorBuilder = serResult.initVfError();
-    auto errorsBuilder = vfErrorBuilder.initErrors(nbErrors);
-    vf::errors().forEach([&errorsBuilder](const vf::Error &err, size_t i) {
+  auto errors = factory.diags.getErrors();
+  if (errors.size() > 0) {
+    auto errorsBuilder = serResultBuilder.initErrors(errors.size());
+    size_t i(0);
+    for (; i < errors.size(); ++i) {
+      auto &error = errors[i];
       auto errorBuilder = errorsBuilder[i];
-      auto locBuilder = errorBuilder.initLoc();
-      err.range.serialize(locBuilder);
-      errorBuilder.setReason(err.reason);
-    });
-    vfErrorBuilder.adoptTu(std::move(TUOrphan));
-    capnp::writeMessageToFd(1, result);
-    return err;
+      error.serialize(errorBuilder);
+    }
   }
 
-  serResult.adoptOk(std::move(TUOrphan));  
-  capnp::writeMessageToFd(1, result);
-  return err;
+  capnp::writeMessageToFd(1, messageBuilder);
+
+  return error;
 }

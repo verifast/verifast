@@ -5,6 +5,7 @@
 #include "clang/Basic/FileManager.h"
 #include "clang/Lex/Preprocessor.h"
 #include "llvm/ADT/SmallVector.h"
+#include <unordered_map>
 
 namespace vf {
 
@@ -114,5 +115,49 @@ public:
       capnp::List<stubs::Include, capnp::Kind::STRUCT>::Builder &builder,
       const clang::SourceManager &SM, AstSerializer &serializer,
       const InclusionContext &context) const;
+};
+
+class InclusionContext {
+  std::unordered_map<unsigned, Inclusion> m_includesMap;
+  llvm::SmallVector<Inclusion *> m_includesStack;
+
+  friend class ContextFreePPCallbacks;
+  Inclusion *currentInclusion() {
+    assert(hasInclusions() && "Empty stack of inclusions");
+    return m_includesStack.back();
+  }
+
+public:
+  explicit InclusionContext() {}
+
+  KJ_DISALLOW_COPY(InclusionContext);
+
+  const Inclusion &getInclusionForFD(unsigned fd) const {
+    return m_includesMap.at(fd);
+  }
+
+  bool hasInclusions() { return !m_includesStack.empty(); }
+
+  void startInclusion(const clang::FileEntry &fileEntry);
+
+  void addRealInclDirective(clang::SourceRange range, clang::StringRef fileName,
+                            const clang::FileEntryRef fileEntry,
+                            bool isAngled) {
+    currentInclusion()->addRealInclDirective(range, fileName,
+                                             fileEntry.getUID(), isAngled);
+  }
+
+  void addGhostInclDirective(const clang::FileEntry *entry, Annotation &ann) {
+    auto uid = entry->getUID();
+    assert(m_includesMap.find(uid) != m_includesMap.end() &&
+           "File has not been preprocessed and added to inclusion context");
+    m_includesMap.at(uid).addGhostInclDirective(ann);
+  }
+
+  void endInclusion();
+
+  void serializeTUInclDirectives(stubs::TU::Builder &builder,
+                                 const clang::SourceManager &SM,
+                                 AstSerializer &serializer) const;
 };
 } // namespace vf

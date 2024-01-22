@@ -1,6 +1,5 @@
 #include "Inclusion.h"
 #include "AstSerializer.h"
-#include "InclusionContext.h"
 #include "Util.h"
 #include "llvm/ADT/STLExtras.h"
 #include <vector>
@@ -56,7 +55,7 @@ bool Inclusion::containsInclusionFile(const clang::FileEntry &fileEntry) const {
   if (m_fileUID == fileEntry.getUID()) {
     return true;
   }
-  for (auto incl : m_inclusions) {
+  for (auto *incl : m_inclusions) {
     if (incl->containsInclusionFile(fileEntry)) {
       return true;
     }

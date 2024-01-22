@@ -83,9 +83,9 @@ bool StmtSerializer::VisitNullStmt(const clang::NullStmt *stmt) {
   return true;
 }
 
-template <class While>
-bool StmtSerializer::serializeWhileStmt(stubs::Stmt::While::Builder &builder,
-                              const While *stmt) {
+template <isWhileAstNode While>
+bool StmtSerializer::serializeWhileStmt(stubs::Stmt::While::Builder builder,
+                                        const While *stmt) {
 
   auto cond = builder.initCond();
   m_serializer.serializeExpr(cond, stmt->getCond());

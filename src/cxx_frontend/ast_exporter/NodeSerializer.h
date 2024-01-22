@@ -2,19 +2,36 @@
 #include "Annotation.h"
 #include "Util.h"
 #include "clang/AST/DeclVisitor.h"
+#include "clang/AST/Stmt.h"
 #include "clang/AST/StmtVisitor.h"
 #include "clang/AST/TypeLocVisitor.h"
 #include "clang/AST/TypeVisitor.h"
 #include "clang/Lex/Preprocessor.h"
+#include <cassert>
+#include <concepts>
 
 namespace vf {
+
+template <typename T, typename... U>
+concept IsAnyOf = (std::same_as<T, U> || ...);
+
+template <typename T>
+concept IsStubsNode =
+    IsAnyOf<T, stubs::Decl, stubs::Stmt, stubs::Expr, stubs::Type>;
+
+template <typename T>
+concept IsAstNode = IsAnyOf<T, clang::Decl, clang::Stmt, clang::Expr,
+                            clang::Type, clang::TypeLoc>;
+
+template <typename T>
+concept isWhileAstNode = IsAnyOf<T, clang::WhileStmt, clang::DoStmt>;
 
 class AstSerializer;
 
 /**
  * Serializer for the actual description of a node, i.e. its properties/fields.
  */
-template <class StubsNode, class AstNode> class DescSerializer {
+template <IsStubsNode StubsNode, IsAstNode AstNode> class DescSerializer {
 public:
   using DescBuilder = typename StubsNode::Builder;
 
@@ -39,18 +56,12 @@ protected:
     return getContext().getSourceManager();
   }
 
-  [[noreturn]] void unsupported(const clang::SourceRange range,
-                                           const llvm::StringRef nodeName,
-                                           const llvm::StringRef className) {
-    llvm::report_fatal_error(nodeName + " of type '" + className + "' at '" +
-                             range.printToString(getSourceManager()) +
-                             "' is not supported.");
-  }
-
-  [[noreturn]] void unsupported(const llvm::StringRef nodeName,
-                                           const llvm::StringRef className) {
-    llvm::report_fatal_error(nodeName + " of type '" + className +
-                             "' is not supported.");
+  void unsupported(clang::SourceLocation loc, llvm::StringRef nodeName,
+                   llvm::StringRef className) {
+    auto &diagsEngine = getSerializer().getDiagsEngine();
+    auto id = diagsEngine.getCustomDiagID(clang::DiagnosticsEngine::Error,
+                                          "%0 of class '%1' is not supported");
+    diagsEngine.Report(loc, id) << nodeName << className;
   }
 };
 
@@ -65,7 +76,7 @@ protected:
  * (unwanted) effects, every description's first union field has the name
  * 'UnionNotInitialized'.
  */
-template <class StubsNode, class AstNode>
+template <IsStubsNode StubsNode, IsAstNode AstNode>
 class NodeSerializer : public DescSerializer<StubsNode, AstNode> {
   stubs::Loc::Builder m_locBuilder;
 
@@ -87,7 +98,7 @@ protected:
   void serializeNode(const AstNode *node, const llvm::StringRef nodeName,
                      const llvm::StringRef kind) {
     if (!this->serializeDesc(node))
-      this->unsupported(node->getSourceRange(), nodeName, kind);
+      this->unsupported(node->getBeginLoc(), nodeName, kind);
     serializeSrcRange(m_locBuilder, node->getSourceRange(),
                       this->getSourceManager());
   }
@@ -97,12 +108,12 @@ struct StmtSerializer : public NodeSerializer<stubs::Stmt, clang::Stmt>,
                         public clang::ConstStmtVisitor<StmtSerializer, bool> {
 
   explicit StmtSerializer(clang::ASTContext &context, AstSerializer &serializer,
-                          stubs::Loc::Builder &locBuilder,
-                          stubs::Stmt::Builder &descBuilder)
+                          stubs::Loc::Builder locBuilder,
+                          stubs::Stmt::Builder descBuilder)
       : NodeSerializer(context, serializer, locBuilder, descBuilder) {}
 
   explicit StmtSerializer(clang::ASTContext &context, AstSerializer &serializer,
-                          NodeBuilder &nodeBuilder)
+                          NodeBuilder nodeBuilder)
       : NodeSerializer(context, serializer, nodeBuilder) {}
 
   bool serializeDesc(const clang::Stmt *stmt) override {
@@ -141,8 +152,8 @@ struct StmtSerializer : public NodeSerializer<stubs::Stmt, clang::Stmt>,
   bool VisitDefaultStmt(const clang::DefaultStmt *stmt);
 
 private:
-  template <class While>
-  bool serializeWhileStmt(stubs::Stmt::While::Builder &builder,
+  template <isWhileAstNode While>
+  bool serializeWhileStmt(stubs::Stmt::While::Builder builder,
                           const While *stmt);
 };
 
@@ -151,14 +162,14 @@ struct DeclSerializer : public NodeSerializer<stubs::Decl, clang::Decl>,
   bool m_serializeImplicitDecls;
 
   explicit DeclSerializer(clang::ASTContext &context, AstSerializer &serializer,
-                          stubs::Loc::Builder &locBuilder,
-                          stubs::Decl::Builder &descBuilder,
+                          stubs::Loc::Builder locBuilder,
+                          stubs::Decl::Builder descBuilder,
                           bool serializeImplicitDecls)
       : NodeSerializer(context, serializer, locBuilder, descBuilder),
         m_serializeImplicitDecls(serializeImplicitDecls) {}
 
   explicit DeclSerializer(clang::ASTContext &context, AstSerializer &serializer,
-                          NodeBuilder &nodeBuilder, bool serializeImplicitDecls)
+                          NodeBuilder nodeBuilder, bool serializeImplicitDecls)
       : NodeSerializer(context, serializer, nodeBuilder),
         m_serializeImplicitDecls(serializeImplicitDecls) {}
 
@@ -203,18 +214,18 @@ struct DeclSerializer : public NodeSerializer<stubs::Decl, clang::Decl>,
   bool VisitFunctionTemplateDecl(const clang::FunctionTemplateDecl *decl);
 
 private:
-  void serializeFuncDecl(stubs::Decl::Function::Builder &builder,
+  void serializeFuncDecl(stubs::Decl::Function::Builder builder,
                          const clang::FunctionDecl *decl,
                          bool serializeContract = true);
 
-  void serializeFieldDecl(stubs::Decl::Field::Builder &builder,
+  void serializeFieldDecl(stubs::Decl::Field::Builder builder,
                           const clang::FieldDecl *decl);
 
-  void serializeMethodDecl(stubs::Decl::Method::Builder &builder,
+  void serializeMethodDecl(stubs::Decl::Method::Builder builder,
                            const clang::CXXMethodDecl *decl);
 
   void serializeBases(capnp::List<stubs::Node<stubs::Decl::Record::BaseSpec>,
-                                  capnp::Kind::STRUCT>::Builder &builder,
+                                  capnp::Kind::STRUCT>::Builder builder,
                       clang::CXXRecordDecl::base_class_const_range bases);
 };
 
@@ -222,12 +233,12 @@ struct ExprSerializer : public NodeSerializer<stubs::Expr, clang::Expr>,
                         public clang::ConstStmtVisitor<ExprSerializer, bool> {
 
   explicit ExprSerializer(clang::ASTContext &context, AstSerializer &serializer,
-                          stubs::Loc::Builder &locBuilder,
-                          stubs::Expr::Builder &descBuilder)
+                          stubs::Loc::Builder locBuilder,
+                          stubs::Expr::Builder descBuilder)
       : NodeSerializer(context, serializer, locBuilder, descBuilder) {}
 
   explicit ExprSerializer(clang::ASTContext &context, AstSerializer &serializer,
-                          NodeBuilder &nodeBuilder)
+                          NodeBuilder nodeBuilder)
       : NodeSerializer(context, serializer, nodeBuilder) {}
 
   bool serializeDesc(const clang::Expr *expr) override {
@@ -314,7 +325,7 @@ struct TypeSerializer : public DescSerializer<stubs::Type, clang::Type>,
 
   void serialize(const clang::Type *type) {
     if (!serializeDesc(type))
-      unsupported("Type", type->getTypeClassName());
+      unsupported({}, "Type", type->getTypeClassName());
   }
 
   bool VisitBuiltinType(const clang::BuiltinType *type);
@@ -342,21 +353,20 @@ class TypeLocSerializer
       public clang::TypeLocVisitor<TypeLocSerializer, bool> {
 
 private:
-  TypeSerializer _typeSerializer;
+  TypeSerializer m_typeSerializer;
 
 public:
   explicit TypeLocSerializer(clang::ASTContext &context,
                              AstSerializer &serializer,
-                             stubs::Loc::Builder &locBuilder,
-                             stubs::Type::Builder &descBuilder)
+                             stubs::Loc::Builder locBuilder,
+                             stubs::Type::Builder descBuilder)
       : NodeSerializer(context, serializer, locBuilder, descBuilder),
-        _typeSerializer(context, serializer, m_builder) {}
+        m_typeSerializer(context, serializer, m_builder) {}
 
   explicit TypeLocSerializer(clang::ASTContext &context,
-                             AstSerializer &serializer,
-                             NodeBuilder &nodeBuilder)
+                             AstSerializer &serializer, NodeBuilder nodeBuilder)
       : NodeSerializer(context, serializer, nodeBuilder),
-        _typeSerializer(context, serializer, m_builder) {}
+        m_typeSerializer(context, serializer, m_builder) {}
 
   void serialize(const clang::TypeLoc typeLoc) {
     serializeNode(&typeLoc, "Type location",
@@ -366,7 +376,7 @@ public:
   bool serializeDesc(const clang::TypeLoc *typeLoc) override {
     assert(typeLoc && "Type should not be null");
     if (!Visit(*typeLoc))
-      return _typeSerializer.serializeDesc(typeLoc->getTypePtr());
+      return m_typeSerializer.serializeDesc(typeLoc->getTypePtr());
     return true;
   }
 
@@ -384,26 +394,26 @@ public:
       const clang::SubstTemplateTypeParmTypeLoc type);
 };
 
-class AnnotationSerializer {
+class TextSerializer {
   clang::SourceManager &m_SM;
 
 public:
-  explicit AnnotationSerializer(clang::SourceManager &SM) : m_SM(SM) {}
+  explicit TextSerializer(clang::SourceManager &SM) : m_SM(SM) {}
 
   using ClauseBuilder = stubs::Clause::Builder;
 
-  void serializeClause(ClauseBuilder &builder, const Annotation &ann) {
+  void serializeClause(ClauseBuilder builder, const Text &text) {
     auto locBuilder = builder.initLoc();
-    serializeSrcRange(locBuilder, ann.getRange(), m_SM);
-    builder.setText(ann.getText().str());
+    serializeSrcRange(locBuilder, text.getRange(), m_SM);
+    builder.setText(text.getText().str());
   }
 
-  template <class StubsNode>
-  void serializeNode(stubs::Loc::Builder &locBuilder,
-                     typename StubsNode::Builder &descBuilder,
-                     const Annotation &ann) {
-    serializeSrcRange(locBuilder, ann.getRange(), m_SM);
-    descBuilder.setAnn(ann.getText().str());
+  template <IsStubsNode StubsNode>
+  void serializeNode(stubs::Loc::Builder locBuilder,
+                     typename StubsNode::Builder descBuilder,
+                     const Text &text) {
+    serializeSrcRange(locBuilder, text.getRange(), m_SM);
+    descBuilder.setAnn(text.getText().str());
   }
 };
 

@@ -1,4 +1,4 @@
-#include "AnnotationStore.h"
+#include "Annotation.h"
 #include "Util.h"
 #include "clang/AST/Stmt.h"
 
@@ -6,13 +6,13 @@ namespace vf {
 
 void AnnotationStore::add(Annotation &&ann, const clang::SourceManager &SM) {
   auto entry = getFileEntry(ann.getRange().getBegin(), SM);
-  getCont(entry).add(std::move(ann));
+  getContainer(entry).add(std::move(ann));
 }
 
-void AnnotationStore::AnnCont::getWhile(
+void AnnotationStore::AnnotationContainer::getWhile(
     llvm::SmallVectorImpl<Annotation> &container, AnnotationPred pred) {
-  while (m_pos < m_anns.size()) {
-    auto ann = m_anns.at(m_pos);
+  while (m_pos < m_annotations.size()) {
+    auto ann = m_annotations.at(m_pos);
     if (pred(ann)) {
       container.push_back(ann);
       ++m_pos;
@@ -22,10 +22,10 @@ void AnnotationStore::AnnCont::getWhile(
   }
 }
 
-void AnnotationStore::AnnCont::getAll(
+void AnnotationStore::AnnotationContainer::getAll(
     llvm::SmallVectorImpl<Annotation> &container) {
-  while (m_pos < m_anns.size()) {
-    container.push_back(m_anns.at(m_pos++));
+  while (m_pos < m_annotations.size()) {
+    container.push_back(m_annotations.at(m_pos++));
   }
 }
 
@@ -37,12 +37,12 @@ void AnnotationStore::getUntilLoc(llvm::SmallVectorImpl<Annotation> &container,
     // compare to 'begin' of range in case the end overlaps with the given loc
     return ann.getRange().getBegin() < expLoc;
   };
-  getCont(getFileEntry(expLoc, SM)).getWhile(container, pred);
+  getContainer(getFileEntry(expLoc, SM)).getWhile(container, pred);
 }
 
 void AnnotationStore::getAll(const clang::FileEntry *entry,
                              llvm::SmallVectorImpl<Annotation> &container) {
-  getCont(entry).getAll(container);
+  getContainer(entry).getAll(container);
 }
 
 const clang::Decl *findNextExplicitDeclInContext(const clang::Decl *decl) {
@@ -67,7 +67,7 @@ void AnnotationStore::guessContract(
     return result;
   };
   // Do best guess
-  getCont(entry).getWhile(container, pred);
+  getContainer(entry).getWhile(container, pred);
 }
 
 void AnnotationStore::getContract(const clang::FileEntry *entry,
@@ -112,7 +112,7 @@ llvm::Optional<clang::SourceRange> AnnotationStore::queryTruncatingAnnotation(
     return ann.getRange().getBegin() < currentLoc && ann.isTruncating();
   };
   llvm::SmallVector<Annotation, 1> query;
-  getCont(getFileEntry(currentLoc, SM)).getWhile(query, pred);
+  getContainer(getFileEntry(currentLoc, SM)).getWhile(query, pred);
   llvm::Optional<clang::SourceRange> result;
   if (query.empty()) {
     return result;
@@ -122,10 +122,10 @@ llvm::Optional<clang::SourceRange> AnnotationStore::queryTruncatingAnnotation(
 }
 
 void AnnotationStore::getGhostIncludeSequence(
-    const clang::FileEntry *entry, llvm::SmallVectorImpl<Annotation> &container,
-    const clang::SourceManager &SM) {
+    const clang::FileEntry *entry,
+    llvm::SmallVectorImpl<Annotation> &container) {
   auto pred = [](const Annotation &ann) { return ann.isInclude(); };
-  getCont(entry).getWhile(container, pred);
+  getContainer(entry).getWhile(container, pred);
 }
 
 } // namespace vf

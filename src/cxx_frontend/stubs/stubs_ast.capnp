@@ -447,25 +447,17 @@ struct File {
 # That's why we don't encode it as a DeclNode.
 struct TU {
   mainFd @0 :UInt16;
-  includes @1 :List(Include);
-  files @2 :List(File);
+  files @1 :List(File);
+  includes @2 :List(Include);
   failDirectives @3 :List(Clause);
 }
 
-struct Err {
+struct Error {
   loc @0 :Loc;
   reason @1 :Text;
 }
 
-struct VfError {
-  tu @0 :TU; # needed for the file mappings, the program was valid for Clang, but not for VeriFast
-  errors @1 :List(Err);
-}
-
 struct SerResult {
-  union {
-    ok @0 :TU;
-    clangError @1 :Void;
-    vfError @2 :VfError;
-  }
+  tu @0 :TU;
+  errors @1 :List(Error);
 }

@@ -1,6 +1,4 @@
-#include "InclusionContext.h"
-#include <algorithm>
-#include <vector>
+#include "Inclusion.h"
 
 namespace vf {
 
