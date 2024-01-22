@@ -719,9 +719,13 @@ and
     (_, Kwd "}")
   ] -> elems
 and
+  reinterpret_targs_as_tparams targs =
+    List.map (function (IdentTypeExpr (_, None, x)) -> x | t -> raise (ParseException (type_expr_loc t, "Type parameter expected"))) targs
+and
   parse_decl = function%parser
 | [ (l, Kwd "struct"); 
-    (_, Ident s); 
+    (ls, Ident s); 
+    [%let targs = parse_type_args ls];
     [%l
     d = function%parser
     | [ parse_fields as fs; 
@@ -734,9 +738,9 @@ and
         end
         ];
         (_, Kwd ";") 
-      ] -> Struct (l, s, Some ([], fs, [], false), attrs)
-    | [ (_, Kwd ";") ] -> Struct (l, s, None, [])
-    | [ [%l t = parse_type_suffix (StructTypeExpr (l, Some s, None, []))]; 
+      ] -> Struct (l, s, reinterpret_targs_as_tparams targs, Some ([], fs, [], false), attrs)
+    | [ (_, Kwd ";") ] -> Struct (l, s, reinterpret_targs_as_tparams targs, None, [])
+    | [ [%l t = parse_type_suffix (StructTypeExpr (l, Some s, None, [], targs))]; 
         [%l d = parse_func_rest Regular (Some t)]
       ] -> d
     ]
@@ -774,15 +778,15 @@ and
           | Some (EnumTypeExpr (le, en_opt, Some body)) ->
             let en = match en_opt with None -> g | Some en -> en in
             [EnumDecl (l, en, body); TypedefDecl (l, EnumTypeExpr (le, Some en, None), g)]
-          | Some (StructTypeExpr (ls, s_opt, Some fs, attrs)) ->
+          | Some (StructTypeExpr (ls, s_opt, Some (tparams, fs), attrs, targs)) ->
             let s = match s_opt with None -> g | Some s -> s in
-            [Struct (l, s, Some ([], fs, [], false), attrs); TypedefDecl (l, StructTypeExpr (ls, Some s, None, attrs), g)]
+            [Struct (l, s, tparams, Some ([], fs, [], false), attrs); TypedefDecl (l, StructTypeExpr (ls, Some s, None, attrs, targs), g)]
           | Some (UnionTypeExpr (ls, u_opt, Some fs)) ->
             let u = match u_opt with None -> g | Some u -> u in
             [Union (l, u, Some fs); TypedefDecl (l, UnionTypeExpr (ls, Some u, None), g)]
-          | Some PtrTypeExpr (lp, (StructTypeExpr (ls, s_opt, Some fs, attrs))) ->
+          | Some PtrTypeExpr (lp, (StructTypeExpr (ls, s_opt, Some (tparams, fs), attrs, targs))) ->
             let s = match s_opt with None -> g | Some s -> s in
-            [Struct (l, s, Some ([], fs, [], false), attrs); TypedefDecl (l, PtrTypeExpr (lp, StructTypeExpr (ls, Some s, None, attrs)), g)]
+            [Struct (l, s, tparams, Some ([], fs, [], false), attrs); TypedefDecl (l, PtrTypeExpr (lp, StructTypeExpr (ls, Some s, None, attrs, targs)), g)]
           | Some te ->
             [TypedefDecl (l, te, g)]
           end
@@ -1363,8 +1367,8 @@ and
   ] -> t0
 | [ (l, Kwd "struct"); 
     [%l
-    sn = opt (function%parser 
-    | [ (_, Ident s) ] -> s
+    sn_targs_opt = opt (function%parser 
+    | [ (ls, Ident s); [%let targs = parse_type_args ls] ] -> s, targs
     )
     ]; 
     [%l fs = opt parse_fields]; 
@@ -1377,8 +1381,13 @@ and
     end 
     ]
   ] ->
-  if sn = None && fs = None then raise (ParseException (l, "Struct name or body expected"));
-  StructTypeExpr (l, sn, fs, attrs)
+  if sn_targs_opt = None && fs = None then raise (ParseException (l, "Struct name or body expected"));
+  begin match sn_targs_opt, fs with
+    None, None -> raise (ParseException (l, "Struct name or body expected"))
+  | None, Some fs -> StructTypeExpr (l, None, Some ([], fs), attrs, [])
+  | Some (sn, targs), None -> StructTypeExpr (l, Some sn, None, attrs, targs)
+  | Some (sn, targs), Some fs -> StructTypeExpr (l, Some sn, Some (reinterpret_targs_as_tparams targs, fs), attrs, targs)
+  end
 | [ (l, Kwd "union"); 
     [%l un = opt (function%parser [ (_, Ident u) ] -> u)]; 
     [%l fs = opt parse_fields]

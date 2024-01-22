@@ -251,7 +251,7 @@ let _ =
         | Float -> "float"
         | Double -> "double"
         | LongDouble -> "long double"
-        | StructType(name) -> "struct " ^ name
+        | StructType(name, targs) -> "struct " ^ name ^ "<" ^ string_of_type_list targs ^ ">"
         | PtrType(type_in) -> string_of_type_ type_in ^ " *"
         | FuncType(name) -> name
         | InductiveType(name, type_list) -> name ^ "(" ^ string_of_type_list type_list ^ ")" 
@@ -274,7 +274,7 @@ let _ =
 
     let rec string_of_type_expr (type_expr: type_expr): string =
       match type_expr with
-        | StructTypeExpr(_, name_opt, _, _) -> (match name_opt with Some name -> name | _ -> "")
+        | StructTypeExpr(_, name_opt, tparams, _, _) -> (match name_opt with Some name -> name | _ -> "")
         | EnumTypeExpr(_, name_opt, _) -> (match name_opt with Some name -> name | _ -> "")
         | PtrTypeExpr(_, type_expr_in) -> string_of_type_expr type_expr_in ^ " *"
         | ArrayTypeExpr(_, type_expr_in) -> string_of_type_expr type_expr_in ^ "[]"
@@ -400,7 +400,7 @@ let _ =
           | Float -> (match pattern_type_ with Float -> true | _ -> false)
           | Double -> (match pattern_type_ with Double -> true | _ -> false)
           | LongDouble -> (match pattern_type_ with LongDouble -> true | _ -> false)
-          | StructType(name) -> (match pattern_type_ with StructType(pattern_name) when name = pattern_name -> true | _ -> false)
+          | StructType(name, targs) -> (match pattern_type_ with StructType(pattern_name, pattern_targs) when name = pattern_name -> check_type_equal_list targs pattern_targs | _ -> false)
           | PtrType(type_in) -> (match pattern_type_ with PtrType(pattern_type_in) -> check_type_equal type_in pattern_type_in | _ -> false)
           | FuncType(name) -> (match pattern_type_ with FuncType(pattern_name) when name = pattern_name -> true | _ -> false)
           | InductiveType(name, type_list)  -> (match pattern_type_ with InductiveType(pattern_name, pattern_type_list) when name = pattern_name -> check_type_equal_list type_list pattern_type_list | _ -> false)
@@ -432,10 +432,10 @@ let _ =
 
       let rec check_type_expr_equal (type_expr: type_expr) (pattern_type_expr: type_expr): bool =
         match type_expr with
-          | StructTypeExpr(_, name_opt, _, _) -> 
+          | StructTypeExpr(_, name_opt, tparams, _, _) -> 
             begin
               match pattern_type_expr with
-                | StructTypeExpr(_, pattern_name_opt, _, _) ->
+                | StructTypeExpr(_, pattern_name_opt, pattern_tparams, _, _) ->
                   begin
                     match name_opt with
                       | Some name -> (match pattern_name_opt with Some(pattern_name) when name = pattern_name -> true | None -> false) 

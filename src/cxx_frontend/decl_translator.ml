@@ -183,7 +183,7 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
     let vf_record =
       match kind_get record with
       | R.RecordKind.Struc | R.RecordKind.Class ->
-          Ast.Struct (loc, name, body, [])
+          Ast.Struct (loc, name, [], body, [])
       | R.RecordKind.Unio ->
           Ast.Union
             (loc, name, body |> Option.map @@ fun (_, fields, _, _) -> fields)
@@ -211,7 +211,7 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
         overrides_get meth
         |> Capnp_util.arr_map (fun ov ->
                let mangled_name = name_get ov in
-               let (Ast.StructType base) =
+               let (Ast.StructType (base, [])) =
                  base_get ov |> transl_record_ref loc
                in
                (base, mangled_name))
@@ -251,7 +251,7 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
     let open R.RecordRef in
     let name = name_get record_ref in
     match kind_get record_ref with
-    | R.RecordKind.Struc | R.RecordKind.Class -> Ast.StructType name
+    | R.RecordKind.Struc | R.RecordKind.Class -> Ast.StructType (name, [])
     | R.RecordKind.Unio -> Ast.UnionType name
     | _ -> Error.error loc "Invalid record reference"
 

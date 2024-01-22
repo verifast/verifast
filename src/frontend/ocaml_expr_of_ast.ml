@@ -35,7 +35,7 @@ let rec of_type = function
 | Float -> c "Float"
 | Double -> c "Double"
 | LongDouble -> c "LongDouble"
-| StructType s -> C ("StructType", [S s])
+| StructType (s, targs) -> C ("StructType", [S s; of_list of_type targs])
 | UnionType u -> C ("UnionType", [S u])
 | PtrType t -> C ("PtrType", [of_type t])
 | FuncType f -> C ("FuncType", [S f])
@@ -122,12 +122,13 @@ let string_of_operator = function
 | ShiftRight -> "ShiftRight"
 
 let rec of_type_expr = function
-  StructTypeExpr (l, tag, fds, attrs) ->
+  StructTypeExpr (l, tag, body, attrs, targs) ->
   C ("StructTypeExpr", [
     of_loc l;
     of_option s tag;
-    of_option (of_list of_field) fds;
-    of_list of_struct_attr attrs
+    of_option (fun (tparams, fds) -> T [of_list s tparams; of_list of_field fds]) body;
+    of_list of_struct_attr attrs;
+    of_list of_type_expr targs
   ])
 | UnionTypeExpr (l, tag, fds) ->
   C ("UnionTypeExpr", [
@@ -242,13 +243,15 @@ and of_expr = function
 | Read (l, e, f) -> C ("Read", [of_loc l; of_expr e; S f])
 | Select (l, e, f) -> C ("Select", [of_loc l; of_expr e; S f])
 | ActivatingRead (l, e, f) -> C ("ActivatingRead", [of_loc l; of_expr e; S f])
-| WRead (l, e, sn, fn, trange, isStatic, value, ghost) ->
+| WRead (l, e, sn, tparams, fn, trange, targs, isStatic, value, ghost) ->
   C ("WRead", [
     of_loc l;
     of_expr e;
     S sn;
+    of_list s tparams;
     S fn;
     of_type trange;
+    of_list of_type targs;
     B isStatic;
     of_option (of_option of_constant_value) !value;
     of_ghostness ghost
@@ -263,22 +266,26 @@ and of_expr = function
     of_type trange;
     B isActivating
   ])
-| WSelect (l, e, sn, fn, trange) ->
+| WSelect (l, e, sn, tparams, fn, trange, targs) ->
   C ("WSelect", [
     of_loc l;
     of_expr e;
     S sn;
+    of_list s tparams;
     S fn;
-    of_type trange
+    of_type trange;
+    of_list of_type targs
   ])
-| WReadInductiveField (l, e, i, cn, fn, targs) ->
+| WReadInductiveField (l, e, i, cn, fn, targs, tp0, tp) ->
   C ("WReadInductiveField", [
     of_loc l;
     of_expr e;
     S i;
     S cn;
     S fn;
-    of_list of_type targs
+    of_list of_type targs;
+    of_type tp0;
+    of_type tp
   ])
 | ReadArray (l, ea, ei) ->
   C ("ReadArray", [
@@ -861,10 +868,11 @@ and of_class_finality = function
   FinalClass -> c "FinalClass"
 | ExtensibleClass -> c "ExtensibleClass"
 and of_decl = function
-  Struct (l, sn, body, attrs) ->
+  Struct (l, sn, tparams, body, attrs) ->
   C ("Struct", [
     of_loc l;
     S sn;
+    of_list s tparams;
     of_option begin fun (bases, fds, preds, isPoly) ->
       T [
         of_list of_base_spec bases;

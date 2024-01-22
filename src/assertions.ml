@@ -127,8 +127,10 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     match (g1, g2) with
       ((g1, literal1), (g2, literal2)) -> if literal1 && literal2 then g1 == g2 else definitely_equal g1 g2
   
-  let assume_field h0 fparent fname frange fghost tp tv tcoef cont =
+  let assume_field h0 env fparent tparams fname frange targs fghost tp tv tcoef cont =
     let ((_, (_, _, _, _, symb, _, _)), p__opt) = List.assoc (fparent, fname) field_pred_map in
+    let tpenv = List.combine tparams targs in
+    let frange = instantiate_type tpenv frange in
     if fghost = Real then begin
       match tv with
         Some tv -> assume_bounds tv frange
@@ -155,16 +157,16 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let chunk =
           match tv, p__opt with
             Some tv, _ ->
-            Chunk ((symb, true), [], tcoef, [tp; tv], None)
+            Chunk ((symb, true), targs, tcoef, [tp; tv], None)
           | None, Some (_, (_, _, _, _, symb_, _, _)) ->
             let tv = get_unique_var_symb_ "dummy" (option_type frange) (fghost = Ghost) in
-            Chunk ((symb_, true), [], tcoef, [tp; tv], None)
+            Chunk ((symb_, true), targs, tcoef, [tp; tv], None)
           | None, None ->
             let tv = get_unique_var_symb_ "dummy" frange (fghost = Ghost) in
-            Chunk ((symb, true), [], tcoef, [tp; tv], None)
+            Chunk ((symb, true), targs, tcoef, [tp; tv], None)
         in
         cont (chunk::h0)
-      | Chunk (g, targs', tcoef', [tp'; tv'], _) as chunk::h when is_related_pred_symb g ->
+      | Chunk (g, targs', tcoef', [tp'; tv'], _) as chunk::h when is_related_pred_symb g && List.for_all2 unify targs targs' ->
         if tcoef == real_unit || tcoef' == real_unit then
           assume_neq (mk_ptr_address tp) (mk_ptr_address tp') (fun _ -> iter h)
         else if definitely_equal tp tp' then
@@ -174,14 +176,14 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             match tv, predname_eq g pred_symb with
               Some tv, true ->
               assume (ctxt#mk_eq tv tv') $. fun () ->
-              cont (Chunk ((symb, true), [], coef, [tp'; tv'], None))
+              cont (Chunk ((symb, true), targs, coef, [tp'; tv'], None))
             | None, true ->
-              cont (Chunk ((symb, true), [], coef, [tp'; tv'], None))
+              cont (Chunk ((symb, true), targs, coef, [tp'; tv'], None))
             | Some tv, false ->
               assume (ctxt#mk_eq (mk_some frange tv) tv') $. fun () ->
-              cont (Chunk ((symb, true), [], coef, [tp; tv], None))
+              cont (Chunk ((symb, true), targs, coef, [tp; tv], None))
             | None, false ->
-              cont (Chunk (g, [], coef, [tp'; tv'], None))
+              cont (Chunk (g, targs, coef, [tp'; tv'], None))
           in
           if tcoef == real_half && tcoef' == real_half then cont real_unit else
           if is_dummy_frac_term tcoef then
@@ -203,11 +205,11 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         else
           cont ()
       | _ ->
-        let (_, Some (_, fmap, _), _, _, _) = List.assoc fparent structmap in
-        let (_, gh, y, offset_opt, _) = List.assoc fname fmap in
+        let (_, tparams, Some (_, fmap, _), _, _) = List.assoc fparent structmap in
+        let (lf, gh, y, offset_opt, _) = List.assoc fname fmap in
         match offset_opt with
-          Some term ->
-          assume (mk_field_pointer_within_limits tp term) cont
+          Some offsetFunc ->
+          assume (mk_field_pointer_within_limits tp (ctxt#mk_app offsetFunc (List.map (typeid_of_core lf env) targs))) cont
         | None -> cont ()
     end $. fun () ->
     iter h0
@@ -314,7 +316,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     with_context_helper (fun _ ->
     let ev = eval None env in
     match p with
-    | WPointsTo (l, WRead (lr, e, fparent, fname, frange, fstatic, fvalue, fghost), tp, rhs) ->
+    | WPointsTo (l, WRead (lr, e, fparent, tparams, fname, frange, targs, fstatic, fvalue, fghost), tp, rhs) ->
       if fstatic then
         let (_, (_, _, _, _, symb, _, _)), p__opt = List.assoc (fparent, fname) field_pred_map in
         evalpat (fghost = Ghost) ghostenv env rhs tp tp $. fun ghostenv env t ->
@@ -323,7 +325,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       else
         let te = ev e in
         evalpat_ (fghost = Ghost) ghostenv env rhs tp tp $. fun ghostenv env t ->
-        assume_field h fparent fname frange fghost te t coef $. fun h ->
+        assume_field h env fparent tparams fname frange (List.map (instantiate_type tpenv) targs) fghost te t coef $. fun h ->
         cont h ghostenv env
     | WPointsTo (l, WReadArray (la, ea, _, ei), tp, rhs) ->
       let a = ev ea in
@@ -667,12 +669,12 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     match_pats h l ghostenv env env' inputParamCount 0 pats tps0 tps ts0 (fun () -> cont None) $. fun ghostenv env env' ->
     cont (match_coef ghostenv env $. fun chunk ghostenv env coef0 newChunks -> Some (chunk, coef0, ts0, size0, ghostenv, env, env', newChunks))
   
-  let lookup_points_to_chunk_core h0 f_symb t =
+  let lookup_points_to_chunk_core h0 f_symb targs t =
     let rec iter h =
       match h with
         [] -> None
-      | Chunk ((g, true), targs, coef, [t0; v], _)::_ when g == f_symb && definitely_equal t0 t -> Some v
-      | Chunk ((g, false), targs, coef, [t0; v], _):: _ when definitely_equal g f_symb && definitely_equal t0 t -> Some v
+      | Chunk ((g, true), targs', coef, [t0; v], _)::_ when g == f_symb && List.for_all2 unify targs targs' && definitely_equal t0 t -> Some v
+      | Chunk ((g, false), targs', coef, [t0; v], _):: _ when definitely_equal g f_symb && List.for_all2 unify targs targs' && definitely_equal t0 t -> Some v
       | _::h -> iter h
     in
     iter h0
@@ -690,9 +692,11 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     iter h0
 
-  let lookup_points_to_chunk h0 env l f_symb t =
-    match lookup_points_to_chunk_core h0 f_symb t with
-      None -> assert_false h0 env l ("No matching points-to chunk: " ^ (ctxt#pprint f_symb) ^ "(" ^ (ctxt#pprint t) ^ ", _)") None
+  let lookup_points_to_chunk h0 env l f_symb targs t =
+    match lookup_points_to_chunk_core h0 f_symb targs t with
+      None ->
+        let targs = if targs = [] then "" else "<" ^ String.concat ", " (List.map string_of_type targs) ^ ">" in
+        assert_false h0 env l ("No matching points-to chunk: " ^ (ctxt#pprint f_symb) ^ targs ^ "(" ^ (ctxt#pprint t) ^ ", _)") None
     | Some v -> v
 
   let lookup_integer__chunk h0 env l tp t =
@@ -705,9 +709,9 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       None -> assert_false h0 env l ("No matching points-to chunk: integer_(" ^ ctxt#pprint t ^ ", " ^ ctxt#pprint (rank_size_term k) ^ ", " ^ (if signedness = Signed then "true" else "false") ^ ", _)") None
     | Some v -> v
 
-  let read_field h env l t fparent fname =
+  let read_field h env l t fparent targs fname =
     let (_, (_, _, _, _, f_symb, _, _)), _ = List.assoc (fparent, fname) field_pred_map in
-    lookup_points_to_chunk h env l f_symb t
+    lookup_points_to_chunk h env l f_symb targs t
   
   let read_static_field h env l fparent fname =
     let (_, (_, _, _, _, f_symb, _, _)), _ = List.assoc (fparent, fname) field_pred_map in
@@ -819,7 +823,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     match slices with
       None ->
-        begin match lookup_points_to_chunk_core h predsym (mk_ptr_add_ l a i tp) with
+        begin match lookup_points_to_chunk_core h predsym [] (mk_ptr_add_ l a i tp) with
           None ->
           assert_false h env l
             (sprintf "No matching array chunk: %s(%s, 0<=%s<n, _)"
@@ -839,7 +843,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let deref_pointer h env l pointerTerm pointeeType =
     match try_pointee_pred_symb pointeeType with
       None -> lookup_integer__chunk h env l pointeeType pointerTerm
-    | Some predsym -> lookup_points_to_chunk h env l predsym pointerTerm
+    | Some predsym -> lookup_points_to_chunk h env l predsym [] pointerTerm
   
   let lists_disjoint xs ys =
     List.for_all (fun x -> not (List.mem x ys)) xs
@@ -1045,8 +1049,8 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let consume_instance_predicate_chunk rules h ghostenv env env' l symbol (target_type, target) (index_type, index) family coef coefpat pats types cont =
     let family_target, family_target_type =
       match dialect, target_type with
-      | Some Cxx, PtrType (StructType target_type_name) ->
-        base_addr l (target_type_name, target) family, PtrType (StructType family)
+      | Some Cxx, PtrType (StructType (target_type_name, [])) ->
+        base_addr l (target_type_name, target) family, PtrType (StructType (family, []))
       | _ -> 
         target, target_type
     in
@@ -1073,7 +1077,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     let points_to l coefpat e tp rhs =
       match e with
-        WRead (lr, e, fparent, fname, frange, fstatic, fvalue, fghost) ->
+        WRead (lr, e, fparent, tparams, fname, frange, targs, fstatic, fvalue, fghost) ->
         let (_, (_, _, _, _, symb, _, _)), p__opt = List.assoc (fparent, fname) field_pred_map in
         let (inputParamCount, pats) =
           if fstatic then
@@ -1088,7 +1092,8 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           | _ ->
             symb
         in
-        consume_chunk rules h ghostenv env env' l (symb_used, true) [] coef coefpat inputParamCount pats
+        let targs = List.map (instantiate_type tpenv) targs in
+        consume_chunk rules h ghostenv env env' l (symb_used, true) targs coef coefpat inputParamCount pats
           (fun chunk h coef ts size ghostenv env env' -> check_dummy_coefpat l coefpat coef; cont [chunk] h ghostenv env env' size)
       | WReadArray (la, ea, _, ei) ->
         let pats = [SrcPat (LitPat ea); SrcPat (LitPat ei); rhs] in
@@ -1162,7 +1167,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let target_type, index_type =
         match dialect with
         | Some Cxx ->
-          PtrType (StructType static_type), type_info_ref_type
+          PtrType (StructType (static_type, [])), type_info_ref_type
         | _ ->
           ObjType (tn, (List.map (fun tparam -> RealTypeParam tparam) ctparams)), ObjType ("java.lang.Class", [])
       in
@@ -1286,8 +1291,8 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       match dialect with
         Some Rust ->
         fun sn ->
-        let _, _, _, _, s = List.assoc sn structmap in
-        s
+        let _, [], _, _, s = List.assoc sn structmap in
+        ctxt#mk_app s []
       | _ -> fun fn -> List.assoc fn funcnameterms
   
   let predinstmap_by_predfamsymb =
@@ -1368,7 +1373,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let find_edges construct_edge inputParameters xs wbody0 =
     let rec iter coef conds wbody =
       match wbody with
-        WPointsTo(_, WRead(lr, e, fparent, fname, frange, fstatic, fvalue, fghost), tp, v) ->
+        WPointsTo(_, WRead(lr, e, fparent, tparams, fname, frange, targs, fstatic, fvalue, fghost), tp, v) ->
         if expr_is_fixed inputParameters e || fstatic then
           let (_, (_, _, _, _, qsymb, _, _)), p__opt = List.assoc (fparent, fname) field_pred_map in
           let qsymb_used =
@@ -1376,7 +1381,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               DummyPat, Some ((_, (_, _, _, _, qsymb_, _, _))) -> qsymb_
             | _ -> qsymb
           in
-          construct_edge qsymb_used coef None [] [] (if fstatic then [] else [e]) conds
+          construct_edge qsymb_used coef None targs [] (if fstatic then [] else [e]) conds
         else
           []
       | WPredAsn(_, q, true, qtargs, qfns, qpats) ->
@@ -1537,8 +1542,8 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     match language, dialect with
     | CLang, Some Cxx ->
       cxx_inst_pred_map |> flatmap begin fun (sn, preds_map) ->
-        let _, _, _, _, type_info = List.assoc sn structmap in
-        preds_map |> flatmap (instance_predicate_find_edges sn type_info)
+        let _, [], _, _, type_info = List.assoc sn structmap in
+        preds_map |> flatmap (instance_predicate_find_edges sn (ctxt#mk_app type_info []))
       end
     | Java, _ ->
       classmap1 |> flatmap 
@@ -1566,7 +1571,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                     begin match dialect, outer_inst_pred_info_opt, inner_inst_pred_info_opt with
                     | Some Cxx, Some _, _
                     | Some Cxx, _, Some _ ->
-                      WOperation (outer_l0, Eq, [TypeInfo (outer_l0, StructType cn); e2], type_info_ref_type)
+                      WOperation (outer_l0, Eq, [TypeInfo (outer_l0, StructType (cn, [])); e2], type_info_ref_type)
                     | _ ->
                       WOperation(dummy_loc, Eq, [WVar(dummy_loc, cn, FuncName); e2], PtrType Void)
                     end
@@ -1631,7 +1636,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           if derived_type_name = family_name then
             found_offsets
           else
-            let _, Some (bases, _, _), _, _, _ = List.assoc derived_type_name structmap in
+            let _, [], Some (bases, _, _), _, _ = List.assoc derived_type_name structmap in
             let base_name, (_, _, base_offset) = bases |> List.find @@ fun (base, _) -> 
               match List.assoc_opt base cxx_inst_pred_map with
               | None -> false
@@ -2009,15 +2014,18 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     (* rules for obtaining underscore (i.e. possibly uninitialized) field chunks *)
     field_pred_map |> List.iter begin function (_, (_, None)) -> () | ((sn, fn), ((_, (_, _, _, [_; ft], symb, _, _)), Some (_, (_, _, _, _, symb_, _, _)))) ->
-      let (_, Some (_, fmap, _), _, _, structTypeid) = List.assoc sn structmap in
+      let (_, tparams, Some (_, fmap, _), _, structTypeidFunc) = List.assoc sn structmap in
       let (_, gh, _, offset_opt, _) = List.assoc fn fmap in
       begin match offset_opt with
         None -> ()
-      | Some offset ->
+      | Some offsetFunc ->
       match try_pointee_pred_symb ft with
         Some pointee_pred_symb ->
         let pointee_chunk_to_field_chunk__rule l h wanted_targs terms_are_well_typed wanted_coef wanted_coefpat wanted_indices_and_input_ts cont =
           let [tp] = wanted_indices_and_input_ts in
+          let targ_typeids = List.map (typeid_of l) wanted_targs in
+          let structTypeid = ctxt#mk_app structTypeidFunc targ_typeids in
+          let offset = ctxt#mk_app offsetFunc targ_typeids in
           let field_address = mk_field_ptr tp structTypeid offset in
           match extract
             begin function
@@ -2028,7 +2036,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           with
             None -> cont None
           | Some ((coef, tv), h) ->
-            cont (Some (Chunk ((symb_, true), [], coef, [tp; mk_some ft tv], None)::h))
+            cont (Some (Chunk ((symb_, true), wanted_targs, coef, [tp; mk_some ft tv], None)::h))
         in
         add_rule symb_ pointee_chunk_to_field_chunk__rule
       | None ->
@@ -2039,7 +2047,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let tsigned = match signedness with Signed -> true_term | Unsigned -> false_term in
         let pointee_chunk_to_field_chunk__rule l h wanted_targs terms_are_well_typed wanted_coef wanted_coefpat wanted_indices_and_input_ts cont =
           let [tp] = wanted_indices_and_input_ts in
-          let field_address = mk_field_ptr tp structTypeid offset in
+          let field_address = mk_field_ptr_ l tp wanted_targs structTypeidFunc offsetFunc in
           match extract
             begin function
               (Chunk ((g, is_symb), [], coef, [tp'; tsize'; tsigned'; tv], _)) when
@@ -2063,15 +2071,17 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let [tp] = wanted_indices_and_input_ts in
         match extract
           begin function
-            Chunk ((g, is_symb), [], coef, [tp'; tv], _) when g == symb && definitely_equal tp' tp -> Some (coef, tv)
+            Chunk ((g, is_symb), targs', coef, [tp'; tv], _) when g == symb && List.for_all2 unify wanted_targs targs' && definitely_equal tp' tp -> Some (coef, tv)
           | _ -> None
           end
           h
         with
           None -> cont None
         | Some ((coef, tv), h) ->
+          let tpenv = List.combine tparams wanted_targs in
+          let ft = instantiate_type tpenv ft in
           let tv_ = mk_some ft tv in
-          cont (Some (Chunk ((symb_, true), [], coef, [tp; tv_], None)::h))
+          cont (Some (Chunk ((symb_, true), wanted_targs, coef, [tp; tv_], None)::h))
       in
       add_rule symb_ field_chunk_to_field_chunk__rule;
       transitive_auto_open_rules |> List.iter begin fun (to_symb, rule) ->

@@ -69,7 +69,7 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
     let name = name_get r in
     match kind_get r with
     | R.RecordKind.(Struc | Class) ->
-        Ast.StructTypeExpr (loc, Some name, None, [])
+        Ast.StructTypeExpr (loc, Some name, None, [], [])
     | R.RecordKind.Unio -> Ast.UnionTypeExpr (loc, Some name, None)
 
   and transl_enum_type (loc : Ast.loc) (name : string) : Ast.type_expr =

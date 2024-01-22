@@ -81,7 +81,7 @@ let rec sexpr_of_type_ (t : type_) : sexpression =
     | Float                   -> aux2 "type-float"
     | Double                  -> aux2 "type-double"
     | LongDouble              -> aux2 "type-long-double"
-    | StructType s            -> List [ Symbol "type-struct"; Symbol s ]
+    | StructType (s, targs)   -> List ( Symbol "type-struct" :: Symbol s :: List.map sexpr_of_type_ targs )
     | UnionType s             -> List [ Symbol "type-union"; Symbol s ]
     | PtrType t               -> List [ Symbol "type-pointer-to"; sexpr_of_type_ t ]
     | FuncType s              -> List [ Symbol "type-function"; Symbol s ]
@@ -124,8 +124,8 @@ and sexpr_of_inferred_type_state = function
   | EqConstraint t -> List [ Symbol "inferred-type-state-eq-constraint"; sexpr_of_type_ t ]
 
 let rec sexpr_of_type_expr : type_expr -> sexpression = function
-  | StructTypeExpr (_, name, _, _) ->
-      List [ Symbol "type-expr-struct"; sexpr_of_option (fun s -> Symbol s) name ]
+  | StructTypeExpr (_, name, _, _, targs) ->
+      List [ Symbol "type-expr-struct"; sexpr_of_option (fun s -> Symbol s) name; List (List.map sexpr_of_type_expr targs) ]
   | UnionTypeExpr (_, name, _) ->
       List [ Symbol "type-expr-union"; sexpr_of_option (fun s -> Symbol s) name ]
   | EnumTypeExpr (_, name, _) ->
@@ -298,25 +298,29 @@ let rec sexpr_of_expr (expr : expr) : sexpression =
         List [ Symbol "expr-read"; sexpr_of_expr expr; Symbol str ]
     | ArrayLengthExpr (_, e) ->
         List [ Symbol "expr-array-length"; sexpr_of_expr e ]
-    | WRead (_, e, par, name, range, stat, cons, ghost) ->
+    | WRead (_, e, par, tparams, name, range, targs, stat, cons, ghost) ->
         build_list
           [ Symbol "expr-w-read" ]
           [
             "e", sexpr_of_expr e;
             "par", Symbol par;
+            "tparams", List (List.map (fun x -> Symbol x) tparams);
             "name", Symbol name;
             "range", sexpr_of_type_ range;
+            "targs", List (List.map sexpr_of_type_ targs);
             "stat", sexpr_of_bool stat;
             "cons", sexpr_of_option (sexpr_of_option sexpr_of_constant_value) !cons;
             "ghost", sexpr_of_ghostness ghost
           ]
-    | WSelect (_, e, par, name, range) ->
+    | WSelect (_, e, par, tparams, name, range, targs) ->
       build_list [ Symbol "expr-w-select" ]
                  [ "e", sexpr_of_expr e
                  ; "par", Symbol par
+                 ; "tparams", List (List.map (fun x -> Symbol x) tparams)
                  ; "name", Symbol name
-                 ; "range", sexpr_of_type_ range ]
-    | WReadInductiveField (loc, e, i, c, f, targs) ->
+                 ; "range", sexpr_of_type_ range
+                 ; "targs", List (List.map sexpr_of_type_ targs) ]
+    | WReadInductiveField (loc, e, i, c, f, targs, tp0, tp) ->
       build_list
         [ Symbol "expr-wreadinductivefield" ]
         [
@@ -324,7 +328,9 @@ let rec sexpr_of_expr (expr : expr) : sexpression =
           "ind", Symbol i;
           "ctor", Symbol c;
           "field", Symbol f;
-          "targs", sexpr_of_list sexpr_of_type_ targs
+          "targs", sexpr_of_list sexpr_of_type_ targs;
+          "type", sexpr_of_type_ tp0;
+          "instantiated-type", sexpr_of_type_ tp
         ]
     | ReadArray (_, lhs, rhs) ->
       build_list
@@ -911,17 +917,19 @@ and sexpr_of_decl (decl : decl) : sexpression =
   match decl with
     | Struct (loc,
               name,
+              tparams,
               None,
               attrs) ->
         build_list [ Symbol "declare-struct"
-                   ; Symbol name ]
+                   ; Symbol name; List (List.map (fun x -> Symbol x) tparams) ]
                    [ "attrs", sexpr_of_list ~head:(Some (Symbol "attrs")) sexpr_of_attr attrs ]
     | Struct (loc,
               name,
+              tparams,
               Some (bases, fields, inst_preds, polymorphic),
               attrs) ->
         build_list [ Symbol "define-struct"
-                   ; Symbol name ]
+                   ; Symbol name; List (List.map (fun x -> Symbol x) tparams) ]
                    [ "bases", sexpr_of_list ~head:(Some (Symbol "bases")) sexpr_of_base bases
                    ; "fields", sexpr_of_list ~head:(Some (Symbol "fields")) sexpr_of_field fields
                    ; "attrs", sexpr_of_list ~head:(Some (Symbol "attrs")) sexpr_of_attr attrs

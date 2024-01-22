@@ -385,7 +385,7 @@ let parse_func_header k = function%parser
   [ (l, Ident g); (_, Kwd "("); [%let ps = rep_comma parse_param]; (_, Kwd ")");
     [%let rt = function%parser
       [ (_, Kwd "->"); parse_type as t ] -> Some t
-    | [ ] -> if k = Regular then Some (StructTypeExpr (l, Some "std_tuple_0_", None, [])) else None
+    | [ ] -> if k = Regular then Some (StructTypeExpr (l, Some "std_tuple_0_", None, [], [])) else None
     ]
   ] -> (l, g, ps, rt)
 
@@ -490,7 +490,7 @@ let parse_ghost_decl = function%parser
     (_, Kwd "fn"); (_, Kwd "("); [%let ps = rep_comma parse_param]; (_, Kwd ")"); 
     [%let rt = function%parser
       [ (_, Kwd "->"); parse_type as t ] -> Some t
-    | [ ] -> Some (StructTypeExpr (l, Some "std_tuple_0_", None, []))
+    | [ ] -> Some (StructTypeExpr (l, Some "std_tuple_0_", None, [], []))
     ];
     (_, Kwd ";");
     (_, Kwd "req"); parse_asn as pre; (_, Kwd ";");

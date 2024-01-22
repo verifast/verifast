@@ -121,7 +121,7 @@ type type_ = (* ?type_ *)
   | Float
   | Double
   | LongDouble
-  | StructType of string
+  | StructType of string * type_ list
   | UnionType of string
   | PtrType of type_
   | FuncType of string   (* The name of a typedef whose body is a C function type. *)
@@ -255,7 +255,7 @@ type float_literal_suffix = FloatFSuffix | FloatLSuffix
 
 (** Types as they appear in source code, before validity checking and resolution. *)
 type type_expr = (* ?type_expr *)
-    StructTypeExpr of loc * string option * field list option * struct_attr list
+    StructTypeExpr of loc * string option * (string list (* type parameters *) * field list) option * struct_attr list * type_expr list (* type arguments *)
   | UnionTypeExpr of loc * string option * field list option
   | EnumTypeExpr of loc * string option * (string * expr option) list option
   | PtrTypeExpr of loc * type_expr
@@ -312,8 +312,10 @@ and
       loc *
       expr *
       string (* parent *) *
+      string list (* type parameters *) *
       string (* field name *) *
-      type_ (* range *) *
+      type_ (* range, before instantiation of type parameters *) *
+      type_ list (* type arguments *) *
       bool (* static *) *
       constant_value option option ref *
       ghostness
@@ -331,8 +333,10 @@ and
       loc *
       expr *
       string (* parent *) *
+      string list * (* type parameters *)
       string (* field name *) *
-      type_ (* range *)
+      type_ (* range type, before instantiation of type parameters *) *
+      type_ list (* type arguments *)
   (* Expression which returns the value of a field of an instance of an
    * inductive data type. *)
   | WReadInductiveField of
@@ -342,7 +346,9 @@ and
       string (* inductive data type name *) *
       string (* constructor name *) *
       string (* field name *) *
-      type_ list (* type arguments *)
+      type_ list (* type arguments *) *
+      type_ (* uninstantiated field type *) *
+      type_ (* instantiated field type *)
   | ReadArray of loc * expr * expr
   | WReadArray of loc * expr * type_ * expr
   | Deref of (* pointer dereference *)
@@ -763,7 +769,8 @@ and
   decl = (* ?decl *)
     Struct of 
       loc * 
-      string * 
+      string *
+      string list * (* type parameters *) 
       (base_spec list * field list * instance_pred_decl list * bool (* is polymorphic *)) option *
       struct_attr list
   | Union of loc * string * field list option
@@ -967,10 +974,10 @@ let rec expr_loc e =
   | ActivatingRead (l, e, f)
   | Select (l, e, f) -> l
   | ArrayLengthExpr (l, e) -> l
-  | WSelect (l, _, _, _, _) -> l
-  | WRead (l, _, _, _, _, _, _, _) -> l
+  | WSelect (l, _, _, _, _, _, _) -> l
+  | WRead (l, _, _, _, _, _, _, _, _, _) -> l
   | WReadUnionMember (l, _, _, _, _, _, _) -> l
-  | WReadInductiveField(l, _, _, _, _, _) -> l
+  | WReadInductiveField(l, _, _, _, _, _, _, _) -> l
   | ReadArray (l, _, _) -> l
   | WReadArray (l, _, _, _) -> l
   | Deref (l, e) -> l
@@ -1126,7 +1133,7 @@ let stmt_iter f s = stmt_fold (fun _ s -> f s) () s
 let type_expr_loc t =
   match t with
     ManifestTypeExpr (l, t) -> l
-  | StructTypeExpr (l, sn, _, _) -> l
+  | StructTypeExpr (l, sn, _, _, _) -> l
   | UnionTypeExpr (l, un, _) -> l
   | IdentTypeExpr (l, _, x) -> l
   | ConstructedTypeExpr (l, x, targs) -> l
@@ -1176,10 +1183,10 @@ let expr_fold_open iter state e =
   | ActivatingRead (l, e0, f)
   | Select (l, e0, f) -> iter state e0
   | ArrayLengthExpr (l, e0) -> iter state e0
-  | WRead (l, e0, fparent, fname, frange, fstatic, fvalue, fghost) -> if fstatic then state else iter state e0
+  | WRead (l, e0, fparent, tparams, fname, frange, targs, fstatic, fvalue, fghost) -> if fstatic then state else iter state e0
   | WReadUnionMember (l, e0, parent, name, index, range, isActivating) -> iter state e0
-  | WSelect (l, e0, fparent, fname, frange) -> iter state e0
-  | WReadInductiveField (l, e0, ind_name, constr_name, field_name, targs) -> iter state e0
+  | WSelect (l, e0, fparent, tparams, fname, frange, targs) -> iter state e0
+  | WReadInductiveField (l, e0, ind_name, constr_name, field_name, targs, tp0, tp) -> iter state e0
   | ReadArray (l, a, i) -> let state = iter state a in let state = iter state i in state
   | WReadArray (l, a, tp, i) -> let state = iter state a in let state = iter state i in state
   | Deref (l, e0) -> iter state e0

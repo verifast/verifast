@@ -474,7 +474,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             if is_subtype_of target_tn cn then cn
             else static_error l "Target object type must be subtype of index." None
           end
-        | [LitPat (AddressOf (_, Typeid (_, TypeExpr (StructTypeExpr (_, Some x, None, [])))))] ->
+        | [LitPat (AddressOf (_, Typeid (_, TypeExpr (StructTypeExpr (_, Some x, None, [], [])))))] ->
           begin match resolve Real (pn, ilist) l x structmap with
           | None -> static_error l "Index: No such struct." None
           | Some (sn, _) ->
@@ -491,7 +491,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       let preds_opt, get_index =
         match dialect with
-        | Some Cxx -> try_assoc tn cxx_inst_pred_map, fun () -> let _, _, _, _, info = List.assoc tn structmap in info
+        | Some Cxx -> try_assoc tn cxx_inst_pred_map, fun () -> let _, [], _, _, info = List.assoc tn structmap in ctxt#mk_app info []
         | _ -> (try_assoc tn classmap |> option_map @@ fun {cpreds; _} -> cpreds), fun () -> List.assoc tn classterms
       in
       match preds_opt with
@@ -540,7 +540,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       if not pure then static_error l "This function may be called only from a pure context." None;
       let w, tp = check_expr (pn, ilist) tparams tenv e in
       begin match w with
-      | CastExpr (_, _, Upcast (derived_w, PtrType (StructType derived), PtrType (StructType base))) ->
+      | CastExpr (_, _, Upcast (derived_w, PtrType (StructType (derived, [])), PtrType (StructType (base, [])))) ->
         begin match List.assoc_opt base cxx_dtor_map with
         | None | Some (_, _, _, _, _, _, false, _) -> static_error l "The target struct must have a virtual destructor." None
         | _ ->
@@ -608,7 +608,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       require_pure ();
       let e = match (targs, args) with ([], [LitPat e]) -> e | _ -> static_error l "close_struct expects no type arguments and one argument." None in
       let (w, tp) = check_expr (pn,ilist) tparams tenv e in
-      let sn = match tp with PtrType (StructType sn) -> sn | _ -> static_error l "The argument of close_struct must be of type pointer-to-struct." None in
+      let sn, targs = match tp with PtrType (StructType (sn, targs)) -> sn, targs | _ -> static_error l "The argument of close_struct must be of type pointer-to-struct." None in
       eval_h h env w $. fun h env pointerTerm ->
       begin fun cont ->
       match dialect with
@@ -631,15 +631,15 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           if not (ctxt#query cond) then assert_false h env l ("Could not prove condition " ^ ctxt#pprint cond) None;
           Default
       in
-      produce_c_object l real_unit pointerTerm (StructType sn) eval_h init false true h env $. fun h env ->
+      produce_c_object l real_unit pointerTerm (StructType (sn, targs)) eval_h init false true h env $. fun h env ->
       cont h env
     | ExprStmt (CallExpr (l, "open_struct", targs, [], args, Static)) when language = CLang ->
       require_pure ();
       let e = match (targs, args) with ([], [LitPat e]) -> e | _ -> static_error l "open_struct expects no type arguments and one argument." None in
       let (w, tp) = check_expr (pn,ilist) tparams tenv e in
-      let sn = match tp with PtrType (StructType sn) -> sn | _ -> static_error l "The argument of open_struct must be of type pointer-to-struct." None in
+      let sn, targs = match tp with PtrType (StructType (sn, targs)) -> sn, targs | _ -> static_error l "The argument of open_struct must be of type pointer-to-struct." None in
       eval_h h env w $. fun h env pointerTerm ->
-      consume_c_object_core_core l real_unit_pat pointerTerm (StructType sn) h true true $. fun _ h _ ->
+      consume_c_object_core_core l real_unit_pat pointerTerm (StructType (sn, targs)) h true true $. fun _ h _ ->
       let cs = get_unique_var_symb "cs" (list_type (option_type charType)) in
       let Some (_, _, _, _, length_symb) = try_assoc' Ghost (pn,ilist) "length" purefuncmap in
       let size = struct_size l sn in
@@ -667,9 +667,9 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           | None ->
           consume_c_object_core_core l real_unit_pat arg t h false true $. fun _ h _ ->
           begin match t with
-            StructType sn ->
+            StructType (sn, targs) ->
             let (_, (_, _, _, _, malloc_block_symb, _, _)) = List.assoc sn malloc_block_pred_map in
-            consume_chunk rules h [] [] [] l (malloc_block_symb, true) [] real_unit real_unit_pat (Some 1) [TermPat arg] $. fun _ h _ _ _ _ _ _ ->
+            consume_chunk rules h [] [] [] l (malloc_block_symb, true) targs real_unit real_unit_pat (Some 1) [TermPat arg] $. fun _ h _ _ _ _ _ _ ->
             cont h env
           | _ ->
             consume_chunk rules h [] [] [] l (get_pred_symb "malloc_block", true) [] real_unit real_unit_pat (Some 1) [TermPat arg; TermPat (sizeof l t)] $. fun _ h _ _ _ _ _ _ ->
@@ -695,7 +695,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let verify_dtor_call = verify_dtor_call (pn, ilist) leminfo funcmap predinstmap sizemap tenv ghostenv h env addr None in
           begin fun cont ->
           match t with 
-          | StructType name ->
+          | StructType (name, []) ->
             let new_block_symb = get_pred_symb_from_map name new_block_pred_map in
             if is_polymorphic_struct name then
               consume_chunk rules h [] [] [] l (new_block_symb, true) [] real_unit real_unit_pat (Some 1) [TermPat addr; dummypat] @@ fun _ h _ [_; type_info] _ _ _ _ -> 
@@ -884,7 +884,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           match t with
             StaticArrayType (elemTp, elemCount) ->
             produce_object t
-          | StructType sn when !address_taken || e = None || (language = CLang && dialect = Some Cxx) || (let (_, body_opt, _, _, _) = List.assoc sn structmap in match body_opt with Some (_, fds, _) -> List.exists (fun (_, (_, gh, _, _, _)) -> gh = Ast.Ghost) fds | _ -> true) ->
+          | StructType (sn, targs) when !address_taken || e = None || (language = CLang && dialect = Some Cxx) || (let (_, _, body_opt, _, _) = List.assoc sn structmap in match body_opt with Some (_, fds, _) -> List.exists (fun (_, (_, gh, _, _, _)) -> gh = Ast.Ghost) fds | _ -> true) ->
             (* If the variable's address is taken or the struct type has no body or it has a ghost field, treat it like a resource. *)
             produce_object (RefType t)
           | UnionType _ -> produce_object (RefType t)
@@ -892,8 +892,9 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let rec get_initial_value h env x t e cont =
               match t, e with
                 _, None -> cont h env (get_unique_var_symb_non_ghost x t)
-              | StructType sn, Some (InitializerList (linit, es)) ->
-                let (_, Some (_, fds, _), _, _, _) = List.assoc sn structmap in
+              | StructType (sn, targs), Some (InitializerList (linit, es)) ->
+                let (_, s_tparams, Some (_, fds, _), _, _) = List.assoc sn structmap in
+                let s_tpenv = List.combine s_tparams targs in
                 let bs =
                   match zip fds es with
                     Some bs -> bs
@@ -905,8 +906,9 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                     let (_, csym, _, _) = List.assoc sn struct_accessor_map in
                     cont h env (ctxt#mk_app csym (List.rev vs))
                   | ((f, (_, _, tp, _, _)), e)::bs ->
-                    get_initial_value h env f tp (Some e) $. fun h env v ->
-                    iter h env (v::vs) bs
+                    let tp' = instantiate_type s_tpenv tp in
+                    get_initial_value h env f tp' (Some e) $. fun h env v ->
+                    iter h env (prover_convert_term v tp' tp::vs) bs
                 in
                 iter h env [] bs
               | RefType t, Some e ->
@@ -1115,7 +1117,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let (target, targetType) = check_expr (pn,ilist) tparams tenv target in
           let target_tn =
             match targetType, dialect with
-            | ObjType (tn, _), None | PtrType (StructType tn), Some Cxx -> tn
+            | ObjType (tn, _), None | PtrType (StructType (tn, _)), Some Cxx -> tn
             | _ -> static_error l pred_instance_target_type_err None
           in
           let target = ev target in
@@ -1169,7 +1171,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             None ->
             begin match try_assoc "this" tenv with
               None -> static_error l "No such predicate instance." None
-            | Some (ObjType (target_tn, _) | PtrType (StructType target_tn)) ->
+            | Some (ObjType (target_tn, _) | PtrType (StructType (target_tn, _))) ->
               let this = List.assoc "this" env in
               open_instance_predicate this target_tn
             end
@@ -1302,7 +1304,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             | Some n -> n
           in
           ((g_symb, true), inputParamCount, targs, pats, false)
-        | WPointsTo (_, WRead (_, e, fparent, fname, frange, fstatic, fvalue, fghost), _, rhs) ->
+        | WPointsTo (_, WRead (_, e, fparent, tparams, fname, frange, targs, fstatic, fvalue, fghost), _, rhs) ->
           let (p, (_, _, _, _, symb, _, _)), _ = List.assoc (fparent, fname) field_pred_map in
           let pats, inputParamCount =
             if fstatic then
@@ -1310,7 +1312,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             else
               [LitPat e; rhs], 1
           in
-          ((symb, true), inputParamCount, [], pats, true)
+          ((symb, true), inputParamCount, targs, pats, true)
         | _ -> static_error l "Only predicate assertions and field-points-to assertions are supported here at this time." None
       in
       let (inpats, outpats) = take_drop inputParamCount pats in
@@ -1423,7 +1425,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let (target, targetType) = check_expr (pn,ilist) tparams tenv target in
           let target_tn =
             match targetType, dialect with
-            | ObjType (tn, _), None | PtrType (StructType tn), Some Cxx -> tn
+            | ObjType (tn, _), None | PtrType (StructType (tn, _)), Some Cxx -> tn
             | _ -> static_error l pred_instance_target_type_err None
           in
           let target = ev target in
@@ -1472,7 +1474,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             match try_assoc' Ghost (pn,ilist) g predctormap with
               None ->
               begin match try_assoc "this" tenv with
-                Some (ObjType (tn, _) | PtrType (StructType tn)) ->
+                Some (ObjType (tn, _) | PtrType (StructType (tn, _))) ->
                 let this = List.assoc "this" env in
                 close_instance_predicate this tn
               | _ -> static_error l "No such predicate instance." None
@@ -2391,7 +2393,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           cont h (Some v) no_cleanups) econt
         in
         match dialect, tp, w, leminfo with
-        | Some Cxx, StructType sn, WCxxConstruct (_, _, StructType sn', [Var (var_l, var_name) as var]), RealFuncInfo (_, func_name, _) when sn = sn' -> 
+        | Some Cxx, StructType (sn, []), WCxxConstruct (_, _, StructType (sn', []), [Var (var_l, var_name) as var]), RealFuncInfo (_, func_name, _) when sn = sn' -> 
           let wvar, skip_elision_check =
             match check_expr_t_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (Some pure) var tp with
             | WVar (l, _, GlobalName) as wvar -> 
@@ -2859,10 +2861,10 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       begin fun cont ->
         match penv, dialect, in_pure_context with
         | ("this", this_term) :: _, Some Cxx, false ->
-          let ("this", PtrType (StructType sn)) :: _ = ps in
-          let _, _, _, _, type_info = List.assoc sn structmap in
+          let ("this", PtrType (StructType (sn, []))) :: _ = ps in
+          let _, [], _, _, type_info = List.assoc sn structmap in
           assume_neq (mk_ptr_address this_term) int_zero_term @@ fun () ->
-          cont (Some (sn, this_term)) (("thisType", type_info) :: env) ("thisType" :: ghostenv)
+          cont (Some (sn, this_term)) (("thisType", ctxt#mk_app type_info []) :: env) ("thisType" :: ghostenv)
         | _ -> 
           cont None env ghostenv
       end @@ fun this_term_opt env ghostenv -> 
@@ -2943,7 +2945,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let init_constructs this_term init_list leminfo sizemap h env ghostenv cont =
       let rec iter first init_list h =
         match init_list with 
-          | ("this", Some ((WCxxConstruct (l, _, ((StructType sn) as this_type), _)) as construct, _)) :: init_list_rest -> (* delegating or base constructor *)
+          | ("this", Some ((WCxxConstruct (l, _, ((StructType (sn, [])) as this_type), _)) as construct, _)) :: init_list_rest -> (* delegating or base constructor *)
             let this_term, delegating =
               match first, init_list_rest with 
               | true, [] when sn = struct_name -> this_term, true
@@ -2959,8 +2961,8 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 (* the base that was constructed is polymorphic, consume the vtype to block other bases from calling virtual methods from this base during construction *)
                 with_context (Executing ([], env, l, "Consuming base vtype chunk.")) @@ fun () ->
                 let vtype_symb = get_pred_symb_from_map sn cxx_vtype_map in
-                let _, _, _, _, type_info = List.assoc sn structmap in
-                consume_chunk rules h [] env [] l (vtype_symb, true) [] real_unit real_unit_pat (Some 1) [TermPat this_term; TermPat type_info] @@ fun _ h _ _ _ _ _ _ ->
+                let _, [], _, _, type_info = List.assoc sn structmap in
+                consume_chunk rules h [] env [] l (vtype_symb, true) [] real_unit real_unit_pat (Some 1) [TermPat this_term; TermPat (ctxt#mk_app type_info [])] @@ fun _ h _ _ _ _ _ _ ->
                 cont h
               else cont h
             end @@ fun h -> iter false init_list_rest h
@@ -2987,7 +2989,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     let init_fields delegated h struct_addr this_type init_list env ghostenv leminfo sizemap current_thread cont =
       let init_field h field_name field_type value struct_addr gh cont =
-        assume_field h struct_name field_name field_type gh struct_addr value real_unit cont
+        assume_field h env struct_name [] field_name field_type [] gh struct_addr value real_unit cont
       in
       (* when a delegated ctor was called, no initializeation is needed for the fields *)
       if delegated then cont h else
@@ -2997,7 +2999,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           match fields with
           | [] -> cont ()
           | (field_name, (_, Real, _, Some offset, _)) :: rest ->
-            assume (mk_field_pointer_within_limits struct_addr offset) @@ fun () -> iter rest
+            assume (mk_field_pointer_within_limits struct_addr (ctxt#mk_app offset [])) @@ fun () -> iter rest
           | _ :: rest -> iter rest
         in
         iter fields
@@ -3030,7 +3032,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 match init with 
                 | WCxxConstruct (l, mangled_name, te, args) ->
                   let eval_h h env e cont = verify_expr false (pn, ilist) [] false leminfo funcmap sizemap tenv ghostenv h env None e cont @@ fun _ _ _ _ _ -> assert false in
-                  let field_addr = field_address l struct_addr struct_name field_name in
+                  let field_addr = field_address l struct_addr struct_name [] field_name in
                   let verify_ctor_call = verify_ctor_call (pn, ilist) leminfo funcmap predinstmap sizemap tenv ghostenv h env field_addr field_addr_name in
                   produce_cxx_object l real_unit field_addr field_type eval_h verify_ctor_call (Expr init) false true h env @@ fun h env ->
                   iter h rest
@@ -3094,7 +3096,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let field_addr_name = Some (field_name ^ "_addr") in 
           begin match gh, field_type with
           | Real, (UnionType _ | StructType _) ->
-            let field_addr = field_address field_loc struct_addr struct_name field_name in
+            let field_addr = field_address field_loc struct_addr struct_name [] field_name in
             with_context (Executing (h, env, field_loc, "Executing field destructor")) @@ fun () ->
             let verify_dtor_call = verify_dtor_call (pn, ilist) leminfo funcmap predinstmap sizemap tenv ghostenv h env field_addr field_addr_name in
             consume_cxx_object field_loc real_unit_pat field_addr field_type verify_dtor_call true h env @@ fun h env ->
@@ -3129,11 +3131,11 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               with_context (Executing ([], env, loc, "Producing base vtype chunk")) @@ fun () ->
               let vtype_symb = get_pred_symb_from_map base_name cxx_vtype_map in
               let _, _, _, _, type_info = List.assoc base_name structmap in
-              produce_chunk h (vtype_symb, true) [] real_unit (Some 1) [this_addr; type_info] None cont
+              produce_chunk h (vtype_symb, true) [] real_unit (Some 1) [this_addr; ctxt#mk_app type_info []] None cont
             else cont h
           end @@ fun h ->
           let verify_dtor_call = verify_dtor_call (pn, ilist) leminfo funcmap predinstmap sizemap tenv ghostenv h env this_addr None in
-          consume_cxx_direct_base_object base_spec_loc real_unit_pat this_addr (StructType base_name) verify_dtor_call false h env @@ fun h env ->
+          consume_cxx_direct_base_object base_spec_loc real_unit_pat this_addr (StructType (base_name, [])) verify_dtor_call false h env @@ fun h env ->
           cont h env tenv
       in
       iter bases cont 
@@ -3306,12 +3308,12 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 if binding = Instance then begin
                   match init with 
                     None ->
-                    assume_field h cn f t Real this (Some (default_value t)) real_unit $. fun h ->
+                    assume_field h [] cn [] f t [] Real this (Some (default_value t)) real_unit $. fun h ->
                     iter h fds
                   | Some(e) -> 
                     with_context (Executing (h, [], expr_loc e, "Executing field initializer")) $. fun () ->
                     verify_expr false (pn,ilist) tparams false leminfo funcmap sizemap [(current_class, ClassOrInterfaceName cn); ("this", thisType); (current_thread_name, current_thread_type)] ghostenv h [("this", this); (current_thread_name, List.assoc current_thread_name env)] None e (fun h _ initial_value ->
-                      assume_field h cn f t Real this (Some initial_value) real_unit $. fun h ->
+                      assume_field h [] cn [] f t [] Real this (Some initial_value) real_unit $. fun h ->
                       iter h fds
                     ) (fun throwl h env2 exceptp excep -> assert_false h env2 throwl ("Field initializers throws exception.") None)
                 end else
@@ -3536,20 +3538,20 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
            List.iter (fun (an, _) -> if not (List.mem an pbcans) then static_error l ("No preserved_by clause for action '" ^ an ^ "'.") None) amap)
         hpmap;
       verify_funcs (pn,ilist) (bcn::boxes) gs lems ds
-    | CxxCtor (loc, name, _, _, _, Some _, _, StructType sn) :: ds ->
+    | CxxCtor (loc, name, _, _, _, Some _, _, StructType (sn, [])) :: ds ->
       let gs', lems' =
         record_fun_timing loc (sn ^ ".<ctor>") @@ fun () ->
-        let _, Some (_, fields, is_polymorphic), _, _, type_info = List.assoc sn structmap in
+        let _, [], Some (_, fields, is_polymorphic), _, type_info = List.assoc sn structmap in
         let loc, params, pre, pre_tenv, post, terminates, Some (Some (init_list, (body, close_brace_loc))) = List.assoc name cxx_ctor_map1 in
-        verify_cxx_ctor pn ilist gs lems boxes predinstmap funcmap (sn, fields, name, loc, params, init_list, pre, pre_tenv, post, terminates, body, close_brace_loc, is_polymorphic, type_info)
+        verify_cxx_ctor pn ilist gs lems boxes predinstmap funcmap (sn, fields, name, loc, params, init_list, pre, pre_tenv, post, terminates, body, close_brace_loc, is_polymorphic, ctxt#mk_app type_info [])
       in
       verify_funcs (pn, ilist) boxes gs' lems' ds
-    | CxxDtor (loc, name, _, _, Some _, _, StructType sn, _, _) :: ds ->
+    | CxxDtor (loc, name, _, _, Some _, _, StructType (sn, []), _, _) :: ds ->
       let gs', lems' =
         record_fun_timing loc (sn ^ ".<dtor>") @@ fun () ->
-        let _, Some (bases, fields, is_polymorphic), _, _, type_info = List.assoc sn structmap in
+        let _, [], Some (bases, fields, is_polymorphic), _, type_info = List.assoc sn structmap in
         let loc, pre, pre_tenv, post, terminates, Some (Some (body, close_brace_loc)), is_virtual, overrides = List.assoc sn cxx_dtor_map1 in 
-        verify_cxx_dtor pn ilist gs lems boxes predinstmap funcmap (sn, bases, fields, name, loc, pre, pre_tenv, post, terminates, body, close_brace_loc, is_polymorphic, type_info)
+        verify_cxx_dtor pn ilist gs lems boxes predinstmap funcmap (sn, bases, fields, name, loc, pre, pre_tenv, post, terminates, body, close_brace_loc, is_polymorphic, ctxt#mk_app type_info [])
       in
       verify_funcs (pn, ilist) boxes gs' lems' ds
     | _::ds -> verify_funcs (pn,ilist)  boxes gs lems ds

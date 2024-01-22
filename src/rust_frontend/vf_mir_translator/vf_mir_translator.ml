@@ -230,7 +230,7 @@ module AstAux = struct
 
   let decl_name (d : decl) =
     match d with
-    | Struct (loc, name, definition_opt, attrs) -> Some name
+    | Struct (loc, name, tparams, definition_opt, attrs) -> Some name
     | Func
         ( loc,
           kind,
@@ -250,7 +250,7 @@ module AstAux = struct
 
   let decl_fields (d : decl) =
     match d with
-    | Struct (loc, name, definition_opt, attrs) -> (
+    | Struct (loc, name, [], definition_opt, attrs) -> (
         match definition_opt with
         | Some (base_specs, fields, instance_pred_decls, is_polymorphic) ->
             Ok (Some fields)
@@ -259,7 +259,7 @@ module AstAux = struct
 
   let decl_loc (d : decl) =
     match d with
-    | Struct (loc, name, definition_opt, attrs) -> loc
+    | Struct (loc, name, tparams, definition_opt, attrs) -> loc
     | Func
         ( loc,
           kind,
@@ -303,7 +303,7 @@ module AstAux = struct
 
   let adt_ty_name (adt : type_) =
     match adt with
-    | StructType name | UnionType name -> Ok name
+    | StructType (name, _) | UnionType name -> Ok name
     | _ -> Error (`AdtTyName "Not an ADT")
 
   let sort_decls_lexically ds =
@@ -504,6 +504,7 @@ module TrTyTuple = struct
       Ast.Struct
         ( loc,
           name,
+          [],
           Some
             ( (*base_spec list*) [],
               (*field list*) [],
@@ -947,7 +948,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             let* (Mir.GenArgType arg_ty) = translate_generic_arg arg_cpn loc in
             Ok arg_ty
         | _ ->
-            let vf_ty = ManifestTypeExpr (loc, StructType name) in
+            let vf_ty = ManifestTypeExpr (loc, StructType (name, [])) in
             let sz_expr = SizeofExpr (loc, TypeExpr vf_ty) in
             let own tid vs =
               let args = List.map (fun x -> LitPat x) (tid :: vs) in
@@ -993,7 +994,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let ty_info =
         Mir.TyInfoBasic
           {
-            vf_ty = Ast.ManifestTypeExpr (loc, Ast.StructType name);
+            vf_ty = Ast.ManifestTypeExpr (loc, Ast.StructType (name, []));
             interp = RustBelt.emp_ty_interp loc;
           }
       in
@@ -1538,7 +1539,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               ( loc,
                 Some
                   (Ast.ManifestTypeExpr
-                     (loc, Ast.StructType TrTyTuple.tuple0_name)),
+                     (loc, Ast.StructType (TrTyTuple.tuple0_name, []))),
                 tmp_var_name,
                 Some (Ast.InitializerList (loc, [])),
                 ( (*indicates whether address is taken*) ref false,
@@ -1557,7 +1558,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           Ok (`TrTypedConstantScalar expr)
       | ZeroSized -> (
           match ty with
-          | Ast.ManifestTypeExpr (_, Ast.StructType sn)
+          | Ast.ManifestTypeExpr (_, Ast.StructType (sn, _))
             when sn = TrTyTuple.tuple0_name ->
               translate_unit_constant loc
           | _ -> failwith "Todo: ConstValue::ZeroSized")
@@ -1583,7 +1584,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         | _ -> failwith "Todo: Unsupported type_expr"
       in
       match ty with
-      | Ast.StructType st_name ->
+      | Ast.StructType (st_name, _) ->
           if st_name != TrTyTuple.make_tuple_type_name [] then
             failwith
               ("Todo: Constants of type struct " ^ st_name
@@ -2855,7 +2856,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             let* pre_post_template =
               if is_drop_fn_get body_cpn then
                 let ({ ty = self_ty } :: _) = param_decls in
-                let (ManifestTypeExpr (_, PtrType (StructType self_ty))) =
+                let (ManifestTypeExpr (_, PtrType (StructType (self_ty, _)))) =
                   Mir.basic_type_of self_ty
                 in
                 gen_drop_contract body_tr_defs_ctx.adt_defs self_ty contract_loc
@@ -2975,7 +2976,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           [
             ( IdentTypeExpr (adt_def_loc, None (*package name*), "thread_id_t"),
               tid_param_name );
-            ( ManifestTypeExpr (adt_def_loc, PtrType (StructType name)),
+            ( ManifestTypeExpr (adt_def_loc, PtrType (StructType (name, []))),
               ptr_param_name );
           ]
         in
@@ -3227,6 +3228,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               Ast.Struct
                 ( def_loc,
                   name,
+                  (*type parameters*) [],
                   Some
                     ( (*base_spec list*) [],
                       (*field list*) field_defs,
@@ -3236,7 +3238,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             in
             let struct_typedef_aux =
               Ast.TypedefDecl
-                (def_loc, StructTypeExpr (def_loc, Some name, None, []), name)
+                ( def_loc,
+                  StructTypeExpr (def_loc, Some name, None, [], []),
+                  name )
             in
             Ok (Mir.Struct, fds, struct_decl, [ struct_typedef_aux ])
         | EnumKind -> failwith "Todo: AdtDef::Enum"
@@ -3375,7 +3379,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                                    ( lf,
                                      Ast.TypeExpr
                                        (Ast.ManifestTypeExpr
-                                          (lf, Ast.StructType self_ty)) )
+                                          (lf, Ast.StructType (self_ty, []))) )
                                in
                                let self_full_bor_content =
                                  Ast.Var (lf, self_ty ^ "_full_borrow_content")
@@ -3384,7 +3388,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                                  Ast.LetTypeAsn
                                    ( lf,
                                      "Self",
-                                     Ast.StructType self_ty,
+                                     Ast.StructType (self_ty, []),
                                      Ast.Sep
                                        ( lf,
                                          MatchAsn

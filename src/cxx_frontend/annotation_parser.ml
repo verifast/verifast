@@ -235,7 +235,7 @@ module Make (Args : Sig.CXX_TRANSLATOR_ARGS) : Parser = struct
         ] ->
           let ps =
             ( Ast.PtrTypeExpr
-                (l, Ast.StructTypeExpr (l, Some struct_name, None, [])),
+                (l, Ast.StructTypeExpr (l, Some struct_name, None, [], [])),
               "this" )
             :: ps
           in
