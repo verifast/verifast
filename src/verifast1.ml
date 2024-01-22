@@ -575,30 +575,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     assert_sizeof double_typeid_term (width_size_term_ 3);
     assert_sizeof pointer_typeid_term (width_size_term ptr_width)
 
-  let struct_size_partial smap l sn =
-    match try_assoc sn smap with
-      Some (_, [], _, _, type_info_func) -> mk_sizeof (ctxt#mk_app type_info_func [])
-    | _ -> static_error l (sprintf "Cannot take size of undeclared struct '%s'" sn) None
-
   let union_size_partial umap l un =
     match try_assoc un umap with
       Some (_, Some (_, s), _) -> s
     | _ -> static_error l (sprintf "Cannot take size of undefined union '%s'" un) None
   
-  let rec sizeof_partial smap umap l t =
-    match t with
-      Void -> ctxt#mk_intlit 1
-    | Bool -> rank_size_term CharRank
-    | Int (_, k) -> rank_size_term k
-    (* Assume IEEE-754 *)
-    | Float -> width_size_term (LitWidth 2)
-    | Double -> width_size_term (LitWidth 3)
-    | PtrType _ -> width_size_term ptr_width
-    | StructType (sn, []) -> struct_size_partial smap l sn
-    | UnionType un -> union_size_partial umap l un
-    | StaticArrayType (elemTp, elemCount) -> ctxt#mk_mul (sizeof_partial smap umap l elemTp) (ctxt#mk_intlit elemCount)
-    | _ -> static_error l ("Taking the size of type " ^ string_of_type t ^ " is not yet supported.") None
-
   let integer_limits_table =
     Array.init (max_width + 1) begin fun k ->
       let max_unsigned_big_int = pred_big_int (shift_left_big_int unit_big_int (8 * (1 lsl k))) in
@@ -2087,9 +2068,6 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let classterms = classterms1 @ classterms0
   let interfaceterms = interfaceterms1 @ interfaceterms0
 
-  let field_size_partial smap umap = function
-    | Field (l, _, t, _, _, _, _, _) -> sizeof_partial smap umap l (check_pure_type ("", []) [] Real t)
-
   (* Region: unionmap1 *)
 
   let unionmap1 =
@@ -2125,44 +2103,17 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | (sn, (l, tparams, body_opt, attrs)) :: remaining ->
         let type_info_type_node = typenode_of_type type_info_ref_type in
         let type_info_func = mk_symbol (sn ^ "_type_info") (List.map (fun x -> type_info_type_node) tparams) type_info_type_node Uninterp in
-        let packed = ref false in
-        if tparams = [] then begin
-          let type_info = ctxt#mk_app type_info_func [] in
-          let s = mk_sizeof type_info in
-          List.iter (function
-                    | Packed ->
-                      packed := true;
-                      begin match body_opt with
-                      | Some (_, fds, _) ->
-                        ctxt#assert_term (ctxt#mk_eq s (fds |> List.map (field_size_partial smapwith0 unionmap) |> List.fold_left ctxt#mk_add (ctxt#mk_intlit 0)))
-                      | None -> static_error l "A struct declaration cannot be packed." None
-                      end
-          ) attrs;
-          ctxt#assert_term (ctxt#mk_le s max_uintptr_term);
-          ctxt#assert_term (ctxt#mk_lt (ctxt#mk_intlit 0) s)
-        end;
+        let packed = List.mem Packed attrs in
         let rec iter1 fmap fds has_ghost_fields bases is_polymorphic =
           match fds with
             [] ->
             let padding_predsym_opt =
-              if !packed || has_ghost_fields then
+              if packed || has_ghost_fields then
                 None
               else
                 Some (get_unique_var_symb ("struct_" ^ sn ^ "_padding") (PredType ([], [PtrType (StructType (sn, []))], Some 1, Inductiveness_Inductive)))
             in
             let fmap = List.rev fmap in
-            if tparams = [] then begin
-              let rec offset_iter fields current is_first =
-                begin match fields with
-                | [] -> ()
-                | (f, (lf, Real, t, Some offset, init))::fs ->
-                  if is_first || !packed then ctxt#assert_term (ctxt#mk_eq (ctxt#mk_app offset []) current);
-                  offset_iter fs (ctxt#mk_add current (sizeof_partial smapwith0 unionmap lf t)) false
-                | _::fs -> offset_iter fs current is_first
-                end
-              in
-              offset_iter fmap (ctxt#mk_intlit 0) true
-            end;
             let base_map = bases |> List.map @@ fun (CxxBaseSpec (l, base, is_virtual)) -> 
               let base_offset = get_unique_var_symb (sn ^ "_" ^ base ^ "_offset") intType in
                 ctxt#assert_term (ctxt#mk_le int_zero_term base_offset);
@@ -2192,8 +2143,6 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 
   let structmap = structmap1 @ structmap0
 
-  let sizeof = sizeof_partial structmap unionmap
-  let struct_size = struct_size_partial structmap
   let union_size = union_size_partial unionmap
 
   let is_polymorphic_struct sn =
@@ -5545,6 +5494,63 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 
   let typeid_of l t = typeid_of_core l [] t
 
+  let rec sizeof_core l env t =
+    match t with
+      Void -> ctxt#mk_intlit 1
+    | Bool -> rank_size_term CharRank
+    | Int (_, k) -> rank_size_term k
+    (* Assume IEEE-754 *)
+    | Float -> width_size_term (LitWidth 2)
+    | Double -> width_size_term (LitWidth 3)
+    | PtrType _ -> width_size_term ptr_width
+    | StructType (sn, targs) -> mk_sizeof (typeid_of_core l env t)
+    | UnionType un -> union_size_partial unionmap l un
+    | StaticArrayType (elemTp, elemCount) -> ctxt#mk_mul (sizeof_core l env elemTp) (ctxt#mk_intlit elemCount)
+    | _ -> static_error l ("Taking the size of type " ^ string_of_type t ^ " is not yet supported.") None
+  
+  let struct_size l env sn targs = sizeof_core l env (StructType (sn, targs))
+  
+  let sizeof l t = sizeof_core l [] t
+
+  let () = List.combine structmap1 structdeclmap |> List.iter begin fun ((sn, (l, tparams, body_opt, padding_predsym_opt, type_info_func)), (_, (_, _, _, attrs))) ->
+    let assume_axiom axiom =
+      if tparams = [] then
+        let type_info = ctxt#mk_app type_info_func [] in
+        let s = mk_sizeof type_info in
+        let (name, trigger, fact) = axiom [] [] s in
+        ctxt#assert_term fact
+      else begin
+        ctxt#begin_formal;
+        let targs_env = List.mapi (fun i x -> (x ^ "_typeid", ctxt#mk_bound i ctxt#type_inductive)) tparams in
+        let targs = List.map snd targs_env in
+        let type_info = ctxt#mk_app type_info_func targs in
+        let s = mk_sizeof type_info in
+        let (name, trigger, fact) = axiom targs_env targs s in
+        ctxt#end_formal;
+        ctxt#assume_forall name [trigger] (List.map (fun x -> ctxt#type_inductive) tparams) fact
+      end
+    in
+    let packed = List.mem Packed attrs in
+    assume_axiom (fun _ _ s -> (sn ^ "_size_limits", s, ctxt#mk_and (ctxt#mk_lt (ctxt#mk_intlit 0) s) (ctxt#mk_le s max_uintptr_term)));
+    match body_opt with
+    | Some (_, fmap, _) ->
+      let rec offset_iter fields current is_first =
+        begin match fields with
+        | [] -> if packed then assume_axiom (fun targs_env targs s -> (sn ^ "_packed_size", s, ctxt#mk_eq s (current targs_env)))
+        | (f, (lf, Real, t, Some offset_func, init))::fs ->
+          if is_first || packed then
+            assume_axiom begin fun targs_env targs s ->
+              let offset = ctxt#mk_app offset_func targs in
+              (sn ^ "_" ^ f ^ "_packed_offset", offset, ctxt#mk_eq offset (current targs_env))
+            end;
+          offset_iter fs (fun targs_env -> ctxt#mk_add (current targs_env) (sizeof_core lf targs_env t)) false
+        | _::fs -> offset_iter fs current is_first
+        end
+      in
+      offset_iter fmap (fun targs_env -> ctxt#mk_intlit 0) true
+    | None -> if packed then static_error l "A struct declaration cannot be packed." None
+  end
+
   let pointer_ctor_symb = lazy_purefuncsymb "pointer_ctor"
   let ptr_add_symb = lazy_purefuncsymb "ptr_add"
   let ptr_add__symb = lazy_purefuncsymb "ptr_add_"
@@ -5596,7 +5602,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let struct_has_type = mk_has_type p structTypeid in
         let eq = ctxt#mk_eq field_has_type struct_has_type in
         ctxt#end_formal;
-        ctxt#assume_forall ("has_type_field_ptr_" ^ sn ^ "_" ^ f) [field_has_type] [ctxt#type_inductive] eq
+        ctxt#assume_forall ("has_type_field_ptr_" ^ sn ^ "_" ^ f) [field_has_type] (ctxt#type_inductive::List.map (fun x -> ctxt#type_inductive) tparams) eq
       | _ -> ()
       end
     | _ -> ()
@@ -7615,7 +7621,7 @@ let check_if_list_is_defined () =
       cont state (ctxt#mk_app symbol (t::List.map (fun (x, t) -> t) env))
     | ProverTypeConversion (tfrom, tto, e) -> ev state e $. fun state v -> cont state (convert_provertype v tfrom tto)
     | SizeofExpr (l, TypeExpr (ManifestTypeExpr (_, t))) ->
-      cont state (sizeof l t)
+      cont state (sizeof_core l env t)
     | SizeofExpr (l, w) ->
       ev state w $. fun state v ->
       cont state (mk_sizeof v)

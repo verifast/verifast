@@ -165,7 +165,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           | Some addr ->
             match List.assoc x tenv with
               StaticArrayType (elemTp, elemCount) as t ->
-              consume_c_object_core_core closeBraceLoc real_unit_pat addr t h true true $. fun _ h _ ->
+              consume_c_object_core_core closeBraceLoc real_unit_pat addr t h env true true $. fun _ h _ ->
               free_locals_core h locals
             | RefType t -> (* free locals of which the address is taken *)
               let verify_dtor_call = verify_dtor_call (pn, ilist) leminfo funcmap predinstmap sizemap tenv ghostenv h env addr (Some x) in
@@ -601,9 +601,9 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       eval_h h env wtarget $. fun h env target ->
       let vp = mk_union_variant_ptr target unionName memberIndex in
-      consume_c_object_core_core l real_unit_pat vp memberType h true true $. fun _ h _ ->
+      consume_c_object_core_core l real_unit_pat vp memberType h env true true $. fun _ h _ ->
       let cs = get_unique_var_symb "cs" (list_type (option_type charType)) in
-      cont (Chunk ((chars__pred_symb (), true), [], real_unit, [target; sizeof l memberType; cs], None)::h) env
+      cont (Chunk ((chars__pred_symb (), true), [], real_unit, [target; sizeof_core l env memberType; cs], None)::h) env
     | ExprStmt (CallExpr (l, ("close_struct" | "close_struct_zero" as name), targs, [], args, Static)) when language = CLang ->
       require_pure ();
       let e = match (targs, args) with ([], [LitPat e]) -> e | _ -> static_error l "close_struct expects no type arguments and one argument." None in
@@ -614,12 +614,12 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       match dialect with
         Some Rust ->
         with_context (Executing (h, env, l, "Consuming u8 array")) $. fun () ->
-        consume_chunk rules h ghostenv [] [] l ((if name = "close_struct" then integers___symb () else integers__symb ()), true) [] real_unit dummypat (Some 4) [TermPat pointerTerm; TermPat (ctxt#mk_intlit 1); TermPat false_term; TermPat (struct_size l sn); SrcPat DummyPat] $. fun _ h coef [_; _; _; _; elems] _ _ _ _ ->
+        consume_chunk rules h ghostenv [] [] l ((if name = "close_struct" then integers___symb () else integers__symb ()), true) [] real_unit dummypat (Some 4) [TermPat pointerTerm; TermPat (ctxt#mk_intlit 1); TermPat false_term; TermPat (struct_size l env sn targs); SrcPat DummyPat] $. fun _ h coef [_; _; _; _; elems] _ _ _ _ ->
         if not (definitely_equal coef real_unit) then assert_false h env l "Closing a struct requires full permission to the u8 array." None;
         cont h elems
       | _ ->
         with_context (Executing (h, env, l, "Consuming character array")) $. fun () ->
-        consume_chunk rules h ghostenv [] [] l ((if name = "close_struct" then chars__pred_symb () else chars_pred_symb ()), true) [] real_unit dummypat (Some 2) [TermPat pointerTerm; TermPat (struct_size l sn); SrcPat DummyPat] $. fun _ h coef [_; _; elems] _ _ _ _ ->
+        consume_chunk rules h ghostenv [] [] l ((if name = "close_struct" then chars__pred_symb () else chars_pred_symb ()), true) [] real_unit dummypat (Some 2) [TermPat pointerTerm; TermPat (struct_size l env sn targs); SrcPat DummyPat] $. fun _ h coef [_; _; elems] _ _ _ _ ->
         if not (definitely_equal coef real_unit) then assert_false h env l "Closing a struct requires full permission to the character array." None;
         cont h elems
       end $. fun h elems ->
@@ -639,10 +639,10 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let (w, tp) = check_expr (pn,ilist) tparams tenv e in
       let sn, targs = match tp with PtrType (StructType (sn, targs)) -> sn, targs | _ -> static_error l "The argument of open_struct must be of type pointer-to-struct." None in
       eval_h h env w $. fun h env pointerTerm ->
-      consume_c_object_core_core l real_unit_pat pointerTerm (StructType (sn, targs)) h true true $. fun _ h _ ->
+      consume_c_object_core_core l real_unit_pat pointerTerm (StructType (sn, targs)) h env true true $. fun _ h _ ->
       let cs = get_unique_var_symb "cs" (list_type (option_type charType)) in
       let Some (_, _, _, _, length_symb) = try_assoc' Ghost (pn,ilist) "length" purefuncmap in
-      let size = struct_size l sn in
+      let size = struct_size l env sn targs in
       assume (ctxt#mk_eq (mk_app length_symb [cs]) size) $. fun () ->
       let chunk =
         match dialect with
@@ -665,14 +665,14 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             consume_chunk rules h [] [] [] l (uninitArrayPredSymb, true) [] real_unit real_unit_pat (Some 2) [TermPat arg; TermPat n; dummypat] $. fun _ h _ _ _ _ _ _ ->
             cont h env
           | None ->
-          consume_c_object_core_core l real_unit_pat arg t h false true $. fun _ h _ ->
+          consume_c_object_core_core l real_unit_pat arg t h env false true $. fun _ h _ ->
           begin match t with
             StructType (sn, targs) ->
             let (_, (_, _, _, _, malloc_block_symb, _, _)) = List.assoc sn malloc_block_pred_map in
             consume_chunk rules h [] [] [] l (malloc_block_symb, true) targs real_unit real_unit_pat (Some 1) [TermPat arg] $. fun _ h _ _ _ _ _ _ ->
             cont h env
           | _ ->
-            consume_chunk rules h [] [] [] l (get_pred_symb "malloc_block", true) [] real_unit real_unit_pat (Some 1) [TermPat arg; TermPat (sizeof l t)] $. fun _ h _ _ _ _ _ _ ->
+            consume_chunk rules h [] [] [] l (get_pred_symb "malloc_block", true) [] real_unit real_unit_pat (Some 1) [TermPat arg; TermPat (sizeof_core l env t)] $. fun _ h _ _ _ _ _ _ ->
             cont h env
           end
           end

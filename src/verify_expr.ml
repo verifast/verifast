@@ -1548,7 +1548,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     match tp with
       StaticArrayType (elemTp, elemCount) ->
-      let elemSize = sizeof l elemTp in
+      let elemSize = sizeof_core l env elemTp in
       if elemCount > 0 then begin
         let arraySize = ctxt#mk_mul (ctxt#mk_intlit elemCount) elemSize in
         ctxt#assert_term (mk_object_pointer_within_limits addr arraySize)
@@ -1613,7 +1613,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | UnionType un -> begin
       match language, dialect, List.assoc_opt un unionmap with
       CLang, Some Rust, Some (_, Some ([](*fields*), _), _) -> cont h env
-      | _ -> produce_char_array_chunk h env addr (sizeof l tp)
+      | _ -> produce_char_array_chunk h env addr (sizeof_core l env tp)
       end
     | StructType (sn, targs) ->
       let (tparams, fields, padding_predsymb_opt) =
@@ -1696,9 +1696,9 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       produce_points_to_chunk_ l h tp coef addr value $. fun h ->
       cont h env
   
-  let rec consume_c_object_core_core l coefpat addr tp h consumePaddingChunk consumeUninitChunk cont =
+  let rec consume_c_object_core_core l coefpat addr tp h env consumePaddingChunk consumeUninitChunk cont =
     let consume_char_array_chunk () =
-      let pats = [TermPat addr; TermPat (sizeof l tp); dummypat] in
+      let pats = [TermPat addr; TermPat (sizeof_core l env tp); dummypat] in
       consume_chunk rules h [] [] [] l ((if consumeUninitChunk then chars__pred_symb() else chars_pred_symb()), true) [] real_unit coefpat (Some 2) pats $. fun chunk h _ [_; _; cs] _ _ _ _ ->
       cont [chunk] h (Some (get_unique_var_symb "value" tp))
     in
@@ -1748,7 +1748,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let t = instantiate_type tpenv t0 in
           match t with
             StaticArrayType (_, _) | StructType _ | UnionType _ ->
-            consume_c_object_core_core l coefpat (field_address l addr sn targs f) t h true consumeUninitChunk $. fun chunks' h (Some value) ->
+            consume_c_object_core_core l coefpat (field_address l addr sn targs f) t h env true consumeUninitChunk $. fun chunks' h (Some value) ->
             let value =
               if consumeUninitChunk then value else prover_convert_term value t t0
             in
@@ -1772,11 +1772,11 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       consume_points_to_chunk_ rules h [] [] [] l tp real_unit coefpat addr dummypat consumeUninitChunk $. fun chunk h _ value _ _ _ ->
       cont [chunk] h (Some value)
   
-  let consume_c_object_core l coefpat addr tp h consumePaddingChunk cont =
-    consume_c_object_core_core l coefpat addr tp h consumePaddingChunk false cont
+  let consume_c_object_core l coefpat addr tp h env consumePaddingChunk cont =
+    consume_c_object_core_core l coefpat addr tp h env consumePaddingChunk false cont
 
-  let consume_c_object l addr tp h consumePaddingChunk cont =
-    consume_c_object_core l real_unit_pat addr tp h consumePaddingChunk $. fun _ h _ -> cont h
+  let consume_c_object l addr tp h env consumePaddingChunk cont =
+    consume_c_object_core l real_unit_pat addr tp h env consumePaddingChunk $. fun _ h _ -> cont h
 
   let produce_cxx_object l coef addr ty eval_h check_ctor_call init allow_ghost_fields produce_padding_chunk h env cont =
     match ty, init with 
@@ -1819,7 +1819,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       else 
         cont h env
     | _ ->
-      consume_c_object_core_core l coefpat addr ty h consume_padding_chunk true @@ fun _ h _ -> 
+      consume_c_object_core_core l coefpat addr ty h env consume_padding_chunk true @@ fun _ h _ -> 
       cont h env
   
   let consume_cxx_direct_base_object l coefpat addr ty check_dtor_call consume_padding_chunk h env cont =
@@ -2284,7 +2284,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         eval_h_core_and_activate_union_members readonly h env wr $. fun h env target ->
         let vp = mk_union_variant_ptr target unionName memberIndex in
         if isActivating then
-          let pats = [TermPat target; TermPat (sizeof l memberType); dummypat] in
+          let pats = [TermPat target; TermPat (sizeof_core l env memberType); dummypat] in
           consume_chunk rules h [] [] [] l (chars__pred_symb(), true) [] real_unit real_unit_pat (Some 2) pats $. fun _ h _ [_; _; cs] _ _ _ _ ->
           produce_c_object l real_unit vp memberType eval_h Unspecified false true h env $. fun h env ->
           cont h env vp
@@ -2361,7 +2361,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | LValues.ArrayElement (l, arr, elem_tp, i) when language = CLang ->
         cont h env (read_c_array h env l arr i elem_tp)
       | LValues.Deref (l, target, pointeeType) ->
-        consume_c_object_core l dummypat target pointeeType h false $. fun chunks h (Some value) ->
+        consume_c_object_core l dummypat target pointeeType h env false $. fun chunks h (Some value) ->
         cont (chunks @ h) env value
     in
     let rec write_lvalue h env lvalue value cont =
@@ -2482,7 +2482,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | LValues.Deref (l, target, pointeeType) ->
         has_heap_effects();
         if pure then static_error l "Cannot write in a pure context." None;
-        consume_c_object_core_core l real_unit_pat target pointeeType h true true $. fun _ h _ ->
+        consume_c_object_core_core l real_unit_pat target pointeeType h env true true $. fun _ h _ ->
         produce_c_object l real_unit target pointeeType eval_h (Term value) false true h env $. fun h env ->
         cont h env
     in
@@ -2518,7 +2518,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | _ -> static_error (expr_loc e) "Expression of integer type expected" None
       end;
       eval_h h env w $. fun h env n ->
-      let arraySize = ctxt#mk_mul n (sizeof ls elemTp) in
+      let arraySize = ctxt#mk_mul n (sizeof_core ls env elemTp) in
       if g <> "calloc" then check_overflow lmul int_zero_term arraySize max_uintptr_term (fun l t -> assert_term t h env l);
       let resultType = PtrType elemTp in
       let result = get_unique_var_symb_non_ghost (match xo with None -> "array" | Some x -> x) resultType in
@@ -2578,7 +2578,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               Some (_, _, _, _, _, arrayMallocBlockSymb, _, _, _, _, _, _) ->
               cont (Chunk ((arrayMallocBlockSymb, true), [], real_unit, [result; ctxt#mk_intlit 1], None)::h)
             | _ ->
-              cont (Chunk ((get_pred_symb "malloc_block", true), [], real_unit, [result; sizeof l t], None)::h)
+              cont (Chunk ((get_pred_symb "malloc_block", true), [], real_unit, [result; sizeof_core l env t], None)::h)
         end
     | WFunPtrCall (l, e, ftn, args) ->
       has_heap_effects ();
@@ -2693,7 +2693,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             | Some (_, _, _, _, _, _, _, array_new_block_symb, _, _, _, _) ->
               produce_chunk h (array_new_block_symb, true) [] real_unit None [result; int_unit_term] None cont
             | _ ->
-              produce_chunk h (get_pred_symb "new_block", true) [] real_unit None [result; sizeof l ty] None cont
+              produce_chunk h (get_pred_symb "new_block", true) [] real_unit None [result; sizeof_core l env ty] None cont
           end
         end
     | WCxxConstruct (l, mangled_name, ((StructType (sn, [])) as result_type), arg_exprs) when not pure ->

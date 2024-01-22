@@ -102,3 +102,23 @@ struct pair<Y, X> pair_flip<X, Y>(struct pair<X, Y> p)
   struct pair<Y, X> result = {p.snd, p.fst};
   return result;
 }
+
+void test_sizeof_pair_int_bool(struct pair<int, bool> *buf)
+//@ requires chars_((void *)buf, sizeof(struct pair<int, bool>), _);
+//@ ensures chars_((void *)buf, sizeof(struct pair<int, bool>), _);
+{
+  //@ close_struct(buf);
+  buf->fst = 42;
+  buf->snd = true;
+  //@ open_struct(buf);
+}
+
+void test_sizeof_pair<T, U>(void *T_typeid, void *U_typeid, struct pair<T, U> *buf, T fst, U snd)
+//@ requires chars_((void *)buf, sizeof(struct pair<T, U>), _);
+//@ ensures chars_((void *)buf, sizeof(struct pair<T, U>), _);
+{
+  //@ close_struct(buf);
+  buf->fst = fst;
+  buf->snd = snd;
+  //@ open_struct(buf);
+}
