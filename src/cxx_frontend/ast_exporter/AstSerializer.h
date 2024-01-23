@@ -1,10 +1,10 @@
 #pragma once
 #include "Annotation.h"
+#include "Concept.h"
 #include "Inclusion.h"
 #include "NodeSerializer.h"
 #include "capnp/orphan.h"
 #include "llvm/ADT/SmallVector.h"
-#include <concepts>
 #include <kj/common.h>
 #include <string.h>
 #include <unordered_map>
