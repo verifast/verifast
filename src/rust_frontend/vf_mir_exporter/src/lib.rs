@@ -104,8 +104,8 @@ impl rustc_driver::Callbacks for CompilerCalls {
             name: rustc_span::FileName::Real(rustc_span::RealFileName::LocalPath(path)),
             input: preprocessed_contents,
         };
-        assert!(config.override_queries.is_none());
-        config.override_queries = Some(override_queries);
+        // assert!(config.override_queries.is_none());
+        // config.override_queries = Some(override_queries);
     }
 
     // In this callback we trigger borrow checking of all functions and obtain
@@ -127,22 +127,26 @@ impl rustc_driver::Callbacks for CompilerCalls {
             let mut visitor = HirVisitor { structs: Vec::new(), trait_impls: Vec::new(), bodies: Vec::new() };
             hir.visit_all_item_likes_in_crate(&mut visitor);
 
+            let mut bodies = Vec::new();
             // Trigger borrow checking of all bodies.
             for def_id in visitor.bodies {
-                let _ = tcx.optimized_mir(def_id);
+                //let _ = tcx.optimized_mir(def_id);
+                bodies.push(tcx.mir_drops_elaborated_and_const_checked(def_id).steal())
             }
 
             // See what bodies were borrow checked.
-            let bodies_and_facts = get_bodies(tcx);
+            // let bodies_and_facts = get_bodies(tcx);
 
-            let bodies: Vec<_> = bodies_and_facts
-                .iter()
-                .map(|(def_path, body)| {
-                    assert!(body.input_facts.as_ref().unwrap().cfg_edge.len() > 0);
-                    debug!("We have body for {}", def_path);
-                    &body.body
-                })
-                .collect();
+            // let bodies: Vec<_> = bodies_and_facts
+            //     .iter()
+            //     .map(|(def_path, body)| {
+            //         assert!(body.input_facts.as_ref().unwrap().cfg_edge.len() > 0);
+            //         debug!("We have body for {}", def_path);
+            //         &body.body
+            //     })
+            //     .collect();
+
+
 
             let mut vf_mir_capnp_builder = vf_mir_builder::VfMirCapnpBuilder::new(tcx);
             trace!("Ghost Ranges:\n{:#?}", self.ghost_ranges);
@@ -153,7 +157,7 @@ impl rustc_driver::Callbacks for CompilerCalls {
             vf_mir_capnp_builder.set_directives(std::mem::replace(&mut self.directives, Vec::new()));
             vf_mir_capnp_builder.set_structs(visitor.structs);
             vf_mir_capnp_builder.set_trait_impls(visitor.trait_impls);
-            vf_mir_capnp_builder.add_bodies(bodies.as_slice());
+            vf_mir_capnp_builder.add_bodies(bodies);
             let msg_cpn = vf_mir_capnp_builder.build();
             capnp::serialize::write_message(&mut ::std::io::stdout(), msg_cpn.borrow_inner()).unwrap();
         });
@@ -161,9 +165,9 @@ impl rustc_driver::Callbacks for CompilerCalls {
     }
 }
 
-fn override_queries(_session: &Session, local: &mut rustc_middle::util::Providers) {
-    local.queries.mir_borrowck = mir_borrowck;
-}
+// fn override_queries(_session: &Session, local: &mut rustc_middle::util::Providers) {
+//     local.queries.mir_borrowck = mir_borrowck;
+// }
 
 // Since mir_borrowck does not have access to any other state, we need to use a
 // thread-local for storing the obtained MIR bodies.
@@ -171,30 +175,30 @@ fn override_queries(_session: &Session, local: &mut rustc_middle::util::Provider
 // Note: We are using 'static lifetime here, which is in general unsound.
 // Unfortunately, that is the only lifetime allowed here. Our use is safe
 // because we cast it back to `'tcx` before using.
-thread_local! {
-    pub static MIR_BODIES:
-        RefCell<HashMap<LocalDefId, BodyWithBorrowckFacts<'static>>> =
-        RefCell::new(HashMap::new());
-}
+// thread_local! {
+//     pub static MIR_BODIES:
+//         RefCell<HashMap<LocalDefId, BodyWithBorrowckFacts<'static>>> =
+//         RefCell::new(HashMap::new());
+// }
 
-fn mir_borrowck<'tcx>(tcx: TyCtxt<'tcx>, def_id: LocalDefId) -> rustc_middle::query::queries::mir_borrowck::ProvidedValue<'tcx> {
-    let body_with_facts = rustc_borrowck::consumers::get_body_with_borrowck_facts(
-        tcx,
-        def_id,
-        rustc_borrowck::consumers::ConsumerOptions::PoloniusOutputFacts
-    );
-    // SAFETY: The reader casts the 'static lifetime to 'tcx before using it.
-    let body_with_facts: BodyWithBorrowckFacts<'static> =
-        unsafe { std::mem::transmute(body_with_facts) };
-    MIR_BODIES.with(|state| {
-        let mut map = state.borrow_mut();
-        assert!(map.insert(def_id, body_with_facts).is_none());
-    });
-    let mut providers = rustc_middle::util::Providers::default();
-    rustc_borrowck::provide(&mut providers);
-    let original_mir_borrowck = providers.mir_borrowck;
-    original_mir_borrowck(tcx, def_id)
-}
+// fn mir_borrowck<'tcx>(tcx: TyCtxt<'tcx>, def_id: LocalDefId) -> rustc_middle::query::queries::mir_borrowck::ProvidedValue<'tcx> {
+//     let body_with_facts = rustc_borrowck::consumers::get_body_with_borrowck_facts(
+//         tcx,
+//         def_id,
+//         rustc_borrowck::consumers::ConsumerOptions::PoloniusOutputFacts
+//     );
+//     // SAFETY: The reader casts the 'static lifetime to 'tcx before using it.
+//     let body_with_facts: BodyWithBorrowckFacts<'static> =
+//         unsafe { std::mem::transmute(body_with_facts) };
+//     MIR_BODIES.with(|state| {
+//         let mut map = state.borrow_mut();
+//         assert!(map.insert(def_id, body_with_facts).is_none());
+//     });
+//     let mut providers = rustc_middle::util::Providers::default();
+//     rustc_borrowck::provide(&mut providers);
+//     let original_mir_borrowck = providers.mir_borrowck;
+//     original_mir_borrowck(tcx, def_id)
+// }
 
 struct TraitImplInfo {
     span: Span,
@@ -253,21 +257,21 @@ impl<'tcx> rustc_hir::intravisit::Visitor<'tcx> for HirVisitor {
 }
 
 /// Pull MIR bodies stored in the thread-local.
-fn get_bodies<'tcx>(tcx: TyCtxt<'tcx>) -> Vec<(String, BodyWithBorrowckFacts<'tcx>)> {
-    MIR_BODIES.with(|state| {
-        let mut map = state.borrow_mut();
-        map.drain()
-            .map(|(def_id, body): (LocalDefId, BodyWithBorrowckFacts<'static>)| {
-                let def_path = tcx.def_path(def_id.to_def_id());
-                // SAFETY: For soundness we need to ensure that the bodies have
-                // the same lifetime (`'tcx`), which they had before they were
-                // stored in the thread local.
-                let body_tcx: BodyWithBorrowckFacts<'tcx> = unsafe { std::mem::transmute(body) };
-                (def_path.to_string_no_crate_verbose(), body_tcx)
-            })
-            .collect()
-    })
-}
+// fn get_bodies<'tcx>(tcx: TyCtxt<'tcx>) -> Vec<(String, BodyWithBorrowckFacts<'tcx>)> {
+//     MIR_BODIES.with(|state| {
+//         let mut map = state.borrow_mut();
+//         map.drain()
+//             .map(|(def_id, body): (LocalDefId, BodyWithBorrowckFacts<'static>)| {
+//                 let def_path = tcx.def_path(def_id.to_def_id());
+//                 // SAFETY: For soundness we need to ensure that the bodies have
+//                 // the same lifetime (`'tcx`), which they had before they were
+//                 // stored in the thread local.
+//                 let body_tcx: BodyWithBorrowckFacts<'tcx> = unsafe { std::mem::transmute(body) };
+//                 (def_path.to_string_no_crate_verbose(), body_tcx)
+//             })
+//             .collect()
+//     })
+// }
 
 mod vf_mir_builder {
     mod capnp_utils;
@@ -388,16 +392,16 @@ mod vf_mir_builder {
         }
     }
 
-    pub struct VfMirCapnpBuilder<'tcx, 'a> {
+    pub struct VfMirCapnpBuilder<'tcx> {
         tcx: TyCtxt<'tcx>,
         directives: Vec<GhostRange>,
         structs: Vec<rustc_span::def_id::LocalDefId>,
         trait_impls: Vec<super::TraitImplInfo>,
-        bodies: Vec<&'a mir::Body<'tcx>>,
+        bodies: Vec<mir::Body<'tcx>>,
         annots: LinkedList<GhostRange>,
     }
 
-    impl<'tcx: 'a, 'a> VfMirCapnpBuilder<'tcx, 'a> {
+    impl<'tcx: 'a, 'a> VfMirCapnpBuilder<'tcx> {
         pub fn new(tcx: TyCtxt<'tcx>) -> VfMirCapnpBuilder {
             VfMirCapnpBuilder {
                 tcx,
@@ -429,8 +433,8 @@ mod vf_mir_builder {
             self.trait_impls = trait_impls;
         }
 
-        pub fn add_bodies(&mut self, bodies: &[&'a mir::Body<'tcx>]) {
-            self.bodies.extend_from_slice(bodies)
+        pub fn add_bodies(&mut self, bodies: Vec<mir::Body<'tcx>>) {
+            self.bodies = bodies;
         }
 
         pub fn build(mut self) -> ::capnp::message::TypedBuilder<vf_mir_cpn::Owned> {
@@ -570,7 +574,7 @@ mod vf_mir_builder {
                 let it = req_adt_defs.into_iter();
                 req_adt_defs = Vec::new();
                 for adt_def in it {
-                    if adt_def.is_unsafe_cell() {
+                    if adt_def.is_unsafe_cell() || adt_def.is_manually_drop() {
                         continue;
                     }
                     match encoded_adt_defs
@@ -1234,7 +1238,7 @@ mod vf_mir_builder {
                 }
                 ty::RegionKind::ReLateParam(_debruijn_index) => bug!(),
                 ty::RegionKind::ReStatic => bug!(),
-                ty::RegionKind::ReVar(_region_vid) => {
+                ty::RegionKind::ReVar(_) | ty::RegionKind::ReErased => {
                     // Todo @Nima: We should find a mapping of `RegionVid`s and lifetime variable names at `hir`
                     region_cpn.set_id(/*&format!("{:?}", region)*/ "a");
                 }
@@ -1406,7 +1410,11 @@ mod vf_mir_builder {
                 }
                 // Transmutes a `*mut u8` into shallow-initialized `Box<T>`.
                 mir::Rvalue::ShallowInitBox(operand, ty) => todo!(),
-                mir::Rvalue::CopyForDeref(place) => todo!(),
+                mir::Rvalue::CopyForDeref(place) => {
+                    let operand_cpn = rvalue_cpn.init_use();
+                    let place_cpn = operand_cpn.init_copy();
+                    Self::encode_place(enc_ctx, place, place_cpn);
+                }
             }
         }
 
@@ -1563,6 +1571,9 @@ mod vf_mir_builder {
                         fn_span,
                         fn_call_data_cpn,
                     );
+                }
+                mir::TerminatorKind::Drop { place, target, unwind, replace } => {
+                    terminator_kind_cpn.set_drop(());
                 }
                 _ => todo!("Unsupported Mir terminator kind"),
             }

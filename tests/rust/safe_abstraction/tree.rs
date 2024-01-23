@@ -203,6 +203,8 @@ impl Tree {
     pub fn new_nonempty(data: *mut u8, left: Tree, right: Tree) -> Tree
     {
         unsafe {
+            let mut left_ = std::mem::ManuallyDrop::new(left);
+            let mut right_ = std::mem::ManuallyDrop::new(right);
             let result = std::alloc::alloc(std::alloc::Layout::new::<Node>()) as *mut Node;
             if result.is_null() {
                 std::alloc::handle_alloc_error(std::alloc::Layout::new::<Node>());
@@ -210,10 +212,10 @@ impl Tree {
             //@ assume(result as usize & 1 == 0);
             //@ close_struct(result);
             (*result).data = data;
-            (*result).left = left.root;
-            (*left.root).parent = result;
-            (*result).right = right.root;
-            (*right.root).parent = result;
+            (*result).left = left_.root;
+            (*left_.root).parent = result;
+            (*result).right = right_.root;
+            (*right_.root).parent = result;
             (*result).parent = std::ptr::null_mut();
             Tree { root: result }
         }
@@ -298,12 +300,6 @@ impl Tree {
         //@ open stack(_, _, _, _, _, _, _);
     }
 
-    pub fn dispose(tree: Tree) {
-        unsafe {
-            Self::dispose_unsafe(tree.root);
-        }
-    }
-
     unsafe fn dispose_unsafe(tree: *mut Node)
     //@ req Tree(tree, _, _);
     //@ ens true;
@@ -314,6 +310,18 @@ impl Tree {
         }
         //@ open_struct(tree);
         std::alloc::dealloc(tree as *mut u8, std::alloc::Layout::new::<Node>());
+    }
+
+}
+
+impl Drop for Tree {
+
+    fn drop<'a>(&'a mut self) {
+        unsafe {
+            //@ open Tree_full_borrow_content(_t, self)();
+            Self::dispose_unsafe(self.root);
+            //@ close raw_ptr_full_borrow_content(_t, &(*self).root)();
+        }
     }
 
 }

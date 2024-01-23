@@ -543,6 +543,7 @@ struct Body {
                     resume @2: Void;
                     return @3: Void;
                     call @4: FnCallData;
+                    drop @5: Void;
                 }
             }
 

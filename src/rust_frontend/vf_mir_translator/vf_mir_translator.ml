@@ -943,7 +943,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               let usz_ty_cpn = init_root () in
               u_size_set usz_ty_cpn;
               translate_u_int_ty (to_reader usz_ty_cpn) loc
-        | "std::cell::UnsafeCell" ->
+        | "std::cell::UnsafeCell" | "std::mem::ManuallyDrop" ->
             let [ arg_cpn ] = substs_cpn in
             let* (Mir.GenArgType arg_ty) = translate_generic_arg arg_cpn loc in
             Ok arg_ty
@@ -1143,13 +1143,36 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | Const _ -> Ok Mir.GenArgConst
     | Undefined _ -> Error (`TrGenArg "Unknown generic arg. kind")
 
+  and decode_generic_arg (gen_arg_cpn : GenArgRd.t) =
+    let open GenArgRd in
+    let kind_cpn = kind_get gen_arg_cpn in
+    let open GenArgKindRd in
+    match get kind_cpn with
+    | Lifetime -> failwith "Todo: Generic arg. lifetime is not supported yet"
+    | Type ty_cpn -> `Type (decode_ty ty_cpn)
+    | Const _ -> `Const
+    | Undefined _ -> `Undefined
+
+  and translate_fn_name (name : string) (substs_cpn : GenArgRd.t list) =
+    match (name, lazy (List.map decode_generic_arg substs_cpn)) with
+    | ( "std::ops::Deref::deref",
+        (lazy [ `Type (`Adt ("std::mem::ManuallyDrop", _, _)) ]) ) ->
+        "std::mem::ManuallyDrop::deref"
+    | ( "std::ops::DerefMut::deref_mut",
+        (lazy [ `Type (`Adt ("std::mem::ManuallyDrop", _, _)) ]) ) ->
+        "std::mem::ManuallyDrop::deref_mut"
+    | _ -> name
+
   and translate_fn_def_ty (fn_def_ty_cpn : FnDefTyRd.t) (loc : Ast.loc) =
     let open FnDefTyRd in
     let id_cpn = id_get fn_def_ty_cpn in
     let id = FnDefIdRd.name_get id_cpn in
     let name = TrName.translate_def_path id in
-    let vf_ty = Ast.ManifestTypeExpr (loc, Ast.FuncType name) in
     let substs_cpn = substs_get_list fn_def_ty_cpn in
+    let vf_ty =
+      Ast.ManifestTypeExpr
+        (loc, Ast.FuncType (translate_fn_name name substs_cpn))
+    in
     let id_mono_cpn = id_mono_get fn_def_ty_cpn in
     match OptionRd.get id_mono_cpn with
     | Nothing ->
@@ -1330,6 +1353,31 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         }
     in
     Ok ty_info
+
+  and decode_adt_ty (adt_ty_cpn : AdtTyRd.t) =
+    let open AdtTyRd in
+    let def_path = AdtDefIdRd.name_get @@ id_get @@ adt_ty_cpn in
+    let kind = AdtKindRd.get @@ kind_get @@ adt_ty_cpn in
+    let substs_cpn = substs_get_list adt_ty_cpn in
+    (def_path, kind, List.map decode_generic_arg substs_cpn)
+
+  and decode_ty (ty_cpn : TyRd.t) =
+    let open TyRd in
+    let kind_cpn = kind_get ty_cpn in
+    match TyRd.TyKind.get kind_cpn with
+    | Bool -> `Bool
+    | Int int_ty_cpn -> `Int
+    | UInt u_int_ty_cpn -> `Uint
+    | Char -> `Char
+    | Adt adt_ty_cpn -> `Adt (decode_adt_ty adt_ty_cpn)
+    | RawPtr raw_ptr_ty_cpn -> `RawPtr
+    | Ref ref_ty_cpn -> `Ref
+    | FnDef fn_def_ty_cpn -> `FnDef
+    | FnPtr fn_ptr_ty_cpn -> `FnPtr
+    | Never -> `Never
+    | Tuple substs_cpn -> `Tuple
+    | Param name -> `Param
+    | Undefined _ -> `Undefined
 
   and translate_ty (ty_cpn : TyRd.t) (loc : Ast.loc) =
     let open Ast in
@@ -1794,7 +1842,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                           (*U suffix*) false,
                           (*int literal*) Ast.NoLSuffix ) )
               | "std::cell::UnsafeCell::<T>::new"
-              | "std::cell::UnsafeCell::<T>::get" ->
+              | "std::cell::UnsafeCell::<T>::get"
+              | "std::mem::ManuallyDrop::<T>::new"
+              | "std::mem::ManuallyDrop::deref"
+              | "std::mem::ManuallyDrop::deref_mut" ->
                   let [ arg_cpn ] = args_cpn in
                   let* tmp_rvalue_binders, [ arg ] =
                     translate_operands [ (arg_cpn, fn_loc) ]
@@ -1957,6 +2008,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       | Return ->
           Ok [ Ast.ReturnStmt (loc, Some (Ast.Var (loc, ret_place_id))) ]
       | Call fn_call_data_cpn -> translate_fn_call fn_call_data_cpn loc
+      | Drop ->
+          raise
+            (Ast.StaticError (loc, "Implicit drops are not yet supported", None))
       | Undefined _ -> Error (`TrTerminatorKind "Unknown Mir terminator kind")
 
     let translate_terminator (ret_place_id : string)
