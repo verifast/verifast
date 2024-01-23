@@ -1,5 +1,6 @@
 #pragma once
 #include "Annotation.h"
+#include "Concept.h"
 #include "Util.h"
 #include "clang/AST/DeclVisitor.h"
 #include "clang/AST/Stmt.h"
@@ -8,23 +9,8 @@
 #include "clang/AST/TypeVisitor.h"
 #include "clang/Lex/Preprocessor.h"
 #include <cassert>
-#include <concepts>
 
 namespace vf {
-
-template <typename T, typename... U>
-concept IsAnyOf = (std::same_as<T, U> || ...);
-
-template <typename T>
-concept IsStubsNode =
-    IsAnyOf<T, stubs::Decl, stubs::Stmt, stubs::Expr, stubs::Type>;
-
-template <typename T>
-concept IsAstNode = IsAnyOf<T, clang::Decl, clang::Stmt, clang::Expr,
-                            clang::Type, clang::TypeLoc>;
-
-template <typename T>
-concept isWhileAstNode = IsAnyOf<T, clang::WhileStmt, clang::DoStmt>;
 
 class AstSerializer;
 
@@ -152,7 +138,7 @@ struct StmtSerializer : public NodeSerializer<stubs::Stmt, clang::Stmt>,
   bool VisitDefaultStmt(const clang::DefaultStmt *stmt);
 
 private:
-  template <isWhileAstNode While>
+  template <IsWhileAstNode While>
   bool serializeWhileStmt(stubs::Stmt::While::Builder builder,
                           const While *stmt);
 };

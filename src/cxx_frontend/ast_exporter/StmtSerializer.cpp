@@ -83,7 +83,7 @@ bool StmtSerializer::VisitNullStmt(const clang::NullStmt *stmt) {
   return true;
 }
 
-template <isWhileAstNode While>
+template <IsWhileAstNode While>
 bool StmtSerializer::serializeWhileStmt(stubs::Stmt::While::Builder builder,
                                         const While *stmt) {
 

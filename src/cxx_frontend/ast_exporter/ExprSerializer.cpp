@@ -329,13 +329,15 @@ bool ExprSerializer::VisitCXXDefaultInitExpr(
   return true;
 }
 
-bool ExprSerializer::VisitExprWithCleanups(const clang::ExprWithCleanups *expr) {
+bool ExprSerializer::VisitExprWithCleanups(
+    const clang::ExprWithCleanups *expr) {
   auto cleanups = m_builder.initCleanups();
   m_serializer.serializeExpr(cleanups, expr->getSubExpr());
   return true;
 }
 
-bool ExprSerializer::VisitCXXBindTemporaryExpr(const clang::CXXBindTemporaryExpr *expr) {
+bool ExprSerializer::VisitCXXBindTemporaryExpr(
+    const clang::CXXBindTemporaryExpr *expr) {
   auto temp = m_builder.initBindTemporary();
   m_serializer.serializeExpr(temp, expr->getSubExpr());
   return true;
