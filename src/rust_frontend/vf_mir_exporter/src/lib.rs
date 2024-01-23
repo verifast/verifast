@@ -66,7 +66,7 @@ pub fn run_compiler() -> i32 {
         // We must pass -Zpolonius so that the borrowck information is computed.
         rustc_args.push("-Zpolonius".to_owned());
         // To have MIR dump annotated with lifetimes
-        //rustc_args.push("-Zverbose".to_owned()); // This option is no longer supported.
+        rustc_args.push("-Zverbose_internals".to_owned());
 
         // Todo @Nima: Find the correct sysroot by yourself. for now we get it as an argument.
         // See filesearch::get_or_default_sysroot()
