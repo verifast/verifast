@@ -117,4 +117,32 @@ lemma void open_nonatomic_borrow(lifetime_t k, thread_id_t t, mask_t m, real q);
 lemma void close_nonatomic_borrow();
     requires close_nonatomic_borrow_token(?P, ?q, ?k, ?t, ?m) &*& P();
     ensures [q]lifetime_token(k) &*& partial_thread_token(t, m);
+
+// Fractured borrows
+
+/* The type of `P` in `frac_borrow` predicate causes VeriFast to allow creating fractured borrows only for precise predicates.
+VeriFast checks the declaration of precise predicates so they satisfy the precondition of LftL-fract-acc.
+Therefore the precondition does not need to be checked in the `requires` clause of the rule. */
+
+predicate frac_borrow(lifetime_t k, predicate(;) P);
+
+lemma void full_borrow_into_frac(lifetime_t k, predicate(;) P);
+    requires full_borrow(k, P);
+    ensures [_]frac_borrow(k, P);
+
+lemma void frac_borrow_mono(lifetime_t k, lifetime_t k1, predicate(;) P);
+    requires [_]frac_borrow(k, P) &*& lifetime_inclusion(k1, k) == true;
+    ensures [_]frac_borrow(k1, P);
+
+predicate close_frac_borrow_token(real q_p, predicate(;) P, real q_lft, lifetime_t k);
+
+// Rule LftL-fract-acc
+lemma void open_frac_borrow(lifetime_t k, predicate(;) P, real q_lft);
+    requires [_]frac_borrow(k, P) &*& [q_lft]lifetime_token(k);
+    ensures [?q_p]P() &*& close_frac_borrow_token(q_p, P, q_lft, k);
+
+lemma void close_frac_borrow(real q_p, predicate(;) P);
+    requires [q_p]P() &*& close_frac_borrow_token(q_p, P, ?q_lft, ?k);
+    ensures [q_lft]lifetime_token(k);
+
 #endif
