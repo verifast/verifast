@@ -82,24 +82,37 @@ pred Deque_own(t: thread_id_t, sentinel: *Node; size: i32) =
 pred Deque(deque: *Deque; elems: list<i32>) =
     (*deque).sentinel |-> ?sentinel &*& (*deque).size |-> ?size &*& Deque_(sentinel, elems) &*& size == length(elems);
 
-pred Deque_share(k: lifetime_t, t: thread_id_t, l: *Deque) = true; //Todo: frac borrow
+pred_ctor Deque_frac_borrow_content(t: thread_id_t, l: *Deque)(;) =
+    (*l).sentinel |-> ?sentinel &*& (*l).size |-> ?size &*& Deque_own(t, sentinel, size) &*& struct_Deque_padding(l);
+pred Deque_share(k: lifetime_t, t: thread_id_t, l: *Deque) = [_]frac_borrow(k, Deque_frac_borrow_content(t, l));
 
 // Proof obligations
 lem Deque_share_mono(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *Deque)
     req lifetime_inclusion(k1, k) == true &*& [_]Deque_share(k, t, l);
     ens [_]Deque_share(k1, t, l);
 {
-    close Deque_share(k1, t, l);
-    leak Deque_share(k1, t, l);
+    open Deque_share(k, t, l);
+    frac_borrow_mono(k, k1, Deque_frac_borrow_content(t, l));
+    assert [?q]frac_borrow(k1, _);
+    close [q]Deque_share(k1, t, l);
 }
 
 lem Deque_share_full(k: lifetime_t, t: thread_id_t, l: *Deque)
     req full_borrow(k, Deque_full_borrow_content(t, l)) &*& [?q]lifetime_token(k);
     ens [_]Deque_share(k, t, l) &*& [q]lifetime_token(k);
 {
-    close Deque_share(k, t, l);
-    leak Deque_share(k, t, l);
-    leak full_borrow(_, _);
+    produce_lem_ptr_chunk implies(Deque_full_borrow_content(t, l), Deque_frac_borrow_content(t, l))() {
+        open Deque_full_borrow_content(t, l)();
+    }{
+        produce_lem_ptr_chunk implies(Deque_frac_borrow_content(t, l), Deque_full_borrow_content(t, l))() {
+            close Deque_full_borrow_content(t, l)();
+        }{
+            full_borrow_implies(k, Deque_full_borrow_content(t, l), Deque_frac_borrow_content(t, l));
+        }
+    }
+    full_borrow_into_frac(k, Deque_frac_borrow_content(t, l));
+    assert [?q_f]frac_borrow(_, _);
+    close [q_f]Deque_share(k, t, l);
 }
 @*/
 
@@ -118,14 +131,12 @@ impl Deque {
         }
     }
 
-    // Todo: implement with shared reference
-    pub fn get_size<'a>(&'a mut self) -> i32 {
-        //@ open_full_borrow(_q_a, a, Deque_full_borrow_content(_t, self));
-        //@ open Deque_full_borrow_content(_t, self)();
+    pub fn get_size<'a>(&'a self) -> i32 {
+        //@ open Deque_share(a, _t, self);
+        //@ open_frac_borrow(a, Deque_frac_borrow_content(_t, self), _q_a);
         let size = (*self).size;
-        //@ close Deque_full_borrow_content(_t, self)();
-        //@ close_full_borrow(Deque_full_borrow_content(_t, self));
-        //@ leak full_borrow(_, _);
+        //@ assert [?q_p]Deque_size(self, _);
+        //@ close_frac_borrow(q_p, Deque_frac_borrow_content(_t, self));
         return size;
     }
 
