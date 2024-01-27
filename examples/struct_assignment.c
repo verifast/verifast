@@ -99,3 +99,27 @@ void test3()
     
     r = t;
 }
+
+void test4(struct foo f)
+//@ requires f.x < f.y;
+//@ ensures true;
+{}
+
+struct foo test5()
+//@ requires true;
+//@ ensures result == (struct foo) { 40, 50 };
+{
+  test4((struct foo) { 20, 30 });
+  return (struct foo) { 40, 50 };
+}
+
+/*@
+
+predicate foo_ok(struct foo f;) = f.x < f.y;
+
+predicate foo(struct foo *pf; struct foo f) =
+    pf->x |-> ?x &*& pf->y |-> ?y &*&
+    f == (struct foo) { x, y } &*&
+    foo_ok((struct foo) { x, y });
+
+@*/

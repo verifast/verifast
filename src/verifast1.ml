@@ -4196,6 +4196,22 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           Java-> (e, ObjType ("java.lang.String", []), None)
         | _ -> (e, (PtrType charType), None)
         end
+    | CastExpr (l, (StructTypeExpr (_, _, _, _, _) as te), InitializerList (linit, es)) ->
+      let t = check_pure_type (pn,ilist) tparams Ghost te in
+      let StructType (sn, targs) = t in
+      let (_, s_tparams, Some (_, fds, _), _, _) = List.assoc sn structmap in
+      let s_tpenv = List.combine s_tparams targs in
+      let bs =
+        match zip fds es with
+          Some bs -> bs
+        | None -> static_error linit "Length of initializer list does not match number of struct fields." None
+      in
+      let ws = bs |> List.map begin fun ((f, (_, _, tp, _, _)), e) ->
+          let tp' = instantiate_type s_tpenv tp in
+          checkt e tp'
+        end
+      in
+      (CastExpr (l, ManifestTypeExpr (type_expr_loc te, t), InitializerList (linit, ws)), t, None)
     | CastExpr (l, te, e) ->
       let t = check_pure_type (pn,ilist) tparams Ghost te in
       let w = checkt_cast e t in
@@ -7292,6 +7308,18 @@ let check_if_list_is_defined () =
         | PureFuncName -> let (lg, tparams, t, tps, (fsymb, vsymb)) = List.assoc x purefuncmap in vsymb
       end
     | PredNameExpr (l, g) -> let Some (_, _, _, _, symb, _, _) = try_assoc g predfammap in cont state symb
+    | CastExpr (l, ManifestTypeExpr (_, StructType (sn, targs)), InitializerList (linit, ws)) ->
+      evs state ws @@ fun state vs ->
+      let (_, s_tparams, Some (_, fds, _), _, _) = List.assoc sn structmap in
+      let s_tpenv = List.combine s_tparams targs in
+      let bs = List.combine fds vs in
+      let vs_boxed = bs |> List.map begin fun ((f, (_, _, tp, _, _)), v) ->
+          let tp' = instantiate_type s_tpenv tp in
+          prover_convert_term v tp' tp
+        end
+      in
+      let (_, csym, _, _) = List.assoc sn struct_accessor_map in
+      cont state (ctxt#mk_app csym vs_boxed)
     | TruncatingExpr (l, CastExpr (lc, ManifestTypeExpr (_, t), e)) ->
       begin
         match (e, t) with
