@@ -1583,8 +1583,9 @@ let make_file_preprocessor0 reportMacroCall path get_macro set_macro peek junk i
           end;
           result
         in
+        let expand_body body = body |> List.map (fun (l, t) -> MacroExpansion (lmacro_call, l), t) in
         begin match params with
-          None -> push_list [x] (concatenate body []); next_token ()
+          None -> push_list [x] (concatenate body [] |> expand_body); next_token ()
         | Some params ->
           match peek () with
             Some (_, Kwd "(") ->
@@ -1647,8 +1648,7 @@ let make_file_preprocessor0 reportMacroCall path get_macro set_macro peek junk i
               | t -> [t]
               end
             in
-            let body = List.map (fun (l, t) -> MacroExpansion (lmacro_call, l), t) body in
-            push_list [x] body; next_token ()
+            push_list [x] (expand_body body); next_token ()
           | _ -> Some t
         end
       | t -> junk (); Some t
