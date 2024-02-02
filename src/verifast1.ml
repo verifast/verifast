@@ -114,6 +114,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let intType = Int (Signed, IntRank)
   let sizeType = Int (Unsigned, PtrRank)
   let ptrdiff_t = Int (Signed, PtrRank)
+  let voidPtrType = PtrType Void
 
   let char_width = LitWidth 0
   let short_width = LitWidth 1
