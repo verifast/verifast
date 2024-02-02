@@ -1660,7 +1660,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           in
           match t with
             StaticArrayType (_, _) | StructType _ | UnionType _ ->
-            produce_c_object l coef (field_address l addr sn targs f) t eval_h init allowGhostFields true h env $. fun h env ->
+            produce_c_object l coef (field_address l env addr sn targs f) t eval_h init allowGhostFields true h env $. fun h env ->
             iter h env fields inits
           | _ ->
             begin fun cont ->
@@ -1748,7 +1748,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let t = instantiate_type tpenv t0 in
           match t with
             StaticArrayType (_, _) | StructType _ | UnionType _ ->
-            consume_c_object_core_core l coefpat (field_address l addr sn targs f) t h env true consumeUninitChunk $. fun chunks' h (Some value) ->
+            consume_c_object_core_core l coefpat (field_address l env addr sn targs f) t h env true consumeUninitChunk $. fun chunks' h (Some value) ->
             let value =
               if consumeUninitChunk then value else prover_convert_term value t t0
             in
@@ -2292,7 +2292,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           cont h env vp
       | AddressOf (la, WRead (lr, wr, fparent, tparams, fname, tp, targs, false, fvalue, fghost)) ->
         eval_h_core_and_activate_union_members readonly h env wr $. fun h env target ->
-        cont h env (field_address l target fparent targs fname)
+        cont h env (field_address l env target fparent targs fname)
       | AddressOf (la, WDeref (ld, w, _)) ->
         eval_h_core_and_activate_union_members readonly h env w cont
       | _ ->
@@ -2840,7 +2840,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let frange = instantiate_type tpenv frange in
       begin match frange with
         StaticArrayType (elemTp, elemCount) ->
-        cont h env (field_address l t fparent targs fname)
+        cont h env (field_address l env t fparent targs fname)
       | _ ->
       let (_, (_, _, _, _, f_symb, _, _)), _ = List.assoc (fparent, fname) field_pred_map in
       begin match lookup_points_to_chunk_core h f_symb targs t with

@@ -73,6 +73,10 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   (* Region: verification of statements *)
   
+  let tparam_carries_typeid tparam =
+    uppercase_type_params_carry_typeid &&
+    String.length tparam > 0 && match tparam.[0] with 'A'..'Z' -> true | _ -> false
+
   let verify_expr readonly (pn,ilist) tparams pure leminfo funcmap sizemap tenv ghostenv h env xo e cont econt =
     verify_expr (readonly, readonly) (pn,ilist) tparams pure leminfo funcmap sizemap tenv ghostenv h env xo e cont econt
 
@@ -1207,6 +1211,13 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             (let Some bs = zip ps ts in bs)
         in
         let env' = env0 @ env' in
+        let typeid_env = tpenv |> flatmap @@ fun (tparam, tp) ->
+          if tparam_carries_typeid tparam then
+            [(tparam ^ "_typeid", typeid_of_core l env tp)]
+          else
+            []
+        in
+        let env' = typeid_env @ env' in
         let body_size =
           begin match chunk_size with
           | Some (PredicateChunkSize k) ->
@@ -1516,6 +1527,13 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       let env' = flatmap (function (p, pat, tp0, tp, Some t) -> [(p, prover_convert_term t tp tp0)] | _ -> []) ps in
       let env' = bs0 @ env' in
+      let typeid_env = tpenv |> flatmap @@ fun (tparam, tp) ->
+        if tparam_carries_typeid tparam then
+          [(tparam ^ "_typeid", typeid_of_core l env tp)]
+        else
+          []
+      in
+      let env' = typeid_env @ env' in
       with_context PushSubcontext (fun () ->
         consume_asn rules tpenv h ghostenv env' p true coef (fun _ h p_ghostenv p_env size_first ->
           with_context (Executing (h, p_env, lpred, "Inferring chunk arguments")) $. fun () ->
@@ -3032,7 +3050,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 match init with 
                 | WCxxConstruct (l, mangled_name, te, args) ->
                   let eval_h h env e cont = verify_expr false (pn, ilist) [] false leminfo funcmap sizemap tenv ghostenv h env None e cont @@ fun _ _ _ _ _ -> assert false in
-                  let field_addr = field_address l struct_addr struct_name [] field_name in
+                  let field_addr = field_address l env struct_addr struct_name [] field_name in
                   let verify_ctor_call = verify_ctor_call (pn, ilist) leminfo funcmap predinstmap sizemap tenv ghostenv h env field_addr field_addr_name in
                   produce_cxx_object l real_unit field_addr field_type eval_h verify_ctor_call (Expr init) false true h env @@ fun h env ->
                   iter h rest
@@ -3096,7 +3114,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let field_addr_name = Some (field_name ^ "_addr") in 
           begin match gh, field_type with
           | Real, (UnionType _ | StructType _) ->
-            let field_addr = field_address field_loc struct_addr struct_name [] field_name in
+            let field_addr = field_address field_loc [] struct_addr struct_name [] field_name in
             with_context (Executing (h, env, field_loc, "Executing field destructor")) @@ fun () ->
             let verify_dtor_call = verify_dtor_call (pn, ilist) leminfo funcmap predinstmap sizemap tenv ghostenv h env field_addr field_addr_name in
             consume_cxx_object field_loc real_unit_pat field_addr field_type verify_dtor_call true h env @@ fun h env ->
