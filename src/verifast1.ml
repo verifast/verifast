@@ -82,6 +82,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let data_model = Vfbindings.get Vfparam_data_model vfbindings
   let define_macros = Vfbindings.get Vfparam_define_macros vfbindings
   let include_paths = Vfbindings.get Vfparam_include_paths vfbindings
+  let uppercase_type_params_carry_typeid = Vfbindings.get Vfparam_uppercase_type_params_carry_typeid vfbindings
 
   let () =
     if assume_no_subobject_provenance && not fno_strict_aliasing then
@@ -5594,8 +5595,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | _ ->
       mk_app (ptr_add__symb ()) [p; off; typeid_of l elemType]
   let mk_field_ptr p structTypeid off = mk_app (field_ptr_symb ()) [p; structTypeid; off]
-  let mk_field_ptr_ l p targs structTypeidFunc offsetFunc =
-    let targ_typeids = List.map (typeid_of l) targs in
+  let mk_field_ptr_ l env p targs structTypeidFunc offsetFunc =
+    let targ_typeids = List.map (typeid_of_core l env) targs in
     mk_field_ptr p (ctxt#mk_app structTypeidFunc targ_typeids) (ctxt#mk_app offsetFunc targ_typeids)
   let mk_union_variant_ptr p unionTypeName idx =
     let (_, _, unionTypeid) = List.assoc unionTypeName unionmap in
@@ -6373,12 +6374,21 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                       inst
                     ;
                       ((g_, []),
-                       ([], l, [], [sn, PtrType (StructType (sn, targs)); "value", InductiveType ("option", [t])], symb_, Some 1,
+                       ([], l, tparams, [sn, PtrType (StructType (sn, targs)); "value", InductiveType ("option", [t])], symb_, Some 1,
                         let r = WRead (l, WVar (l, sn, LocalVar), sn, tparams, f, t, targs, false, ref (Some None), Real) in
                         WPredAsn (l, p_, true, [], [], ([LitPat (AddressOf (l, r))] @ List.map (fun e -> LitPat e) args @ [LitPat (WVar (l, "value", LocalVar))]))
                        )
                       )
                     ]
+                in
+                let points_to_predinst () =
+                  let r = WRead (l, WVar (l, sn, LocalVar), sn, tparams, f, t, targs, false, ref (Some None), Real) in
+                  let body = WPointsTo (l, WDeref (l, AddressOf (l, r), t), t, LitPat (WVar (l, "value", LocalVar))) in
+                  let inst =
+                    (g, []),
+                    ([], l, tparams, [sn, PtrType (StructType (sn, targs)); "value", t], symb, Some 1, body)
+                  in
+                  [inst]
                 in
                 let predinst__ p p_ domain t = predinst___ p p_ domain t [] in
                 let predinst_ p p_ t = predinst__ p p_ [PtrType t] t in
@@ -6399,6 +6409,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 | Int (Unsigned, LongLongRank) -> predinst "u_llong_integer" "ullong_"
                 | Int (s, _) -> predinst___ "integer_" "integer__" [PtrType Void; intType; Bool] intType [SizeofExpr (l, TypeExpr (ManifestTypeExpr (l, t))); if s = Signed then True l else False l]
                 | Bool -> predinst_ "boolean" "bool_" Bool
+                | GhostTypeParam tparam -> points_to_predinst ()
                 | _ -> []
                 end
               | _ -> []
@@ -6618,7 +6629,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         end
     end
 
-  let field_address l t fparent targs fname =
+  let field_address l env t fparent targs fname =
     let (_, tparams, Some (_, fmap, _), _, structTypeidFunc) = List.assoc fparent structmap in
     let (_, gh, y, offsetFunc_opt, _) = List.assoc fname fmap in
     let offsetFunc =
@@ -6626,7 +6637,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         Some symbol -> symbol
       | None -> static_error l "Cannot take the address of a ghost field" None
     in
-    mk_field_ptr_ l t targs structTypeidFunc offsetFunc
+    mk_field_ptr_ l env t targs structTypeidFunc offsetFunc
 
   let direct_base_addr (derived_name, derived_addr) base_name =
     let _, _, Some (bases, _, _), _, derivedTypeid = List.assoc derived_name structmap in
@@ -7535,7 +7546,7 @@ let check_if_list_is_defined () =
         begin
           match frange with
             StaticArrayType (elemTp, elemCount) ->
-            cont state (check_pointer_within_limits ass_term l (field_address l v fparent targs fname))
+            cont state (check_pointer_within_limits ass_term l (field_address l env v fparent targs fname))
           | _ ->
           match read_field with
             None -> static_error l "Cannot use field dereference in this context." None
@@ -7575,7 +7586,7 @@ let check_if_list_is_defined () =
           (* MS Visual C++ behavior: http://msdn.microsoft.com/en-us/library/hx1b6kkd.aspx (= depends on command-line switches and pragmas) *)
           (* GCC documentation is not clear about it. *)
           ev state e $. fun state v ->
-          cont state (check_pointer_within_limits ass_term l (field_address l v fparent targs fname))
+          cont state (check_pointer_within_limits ass_term l (field_address l env v fparent targs fname))
         | WReadArray (le, w1, tp, w2) ->
           ev state w1 $. fun state arr ->
           ev state w2 $. fun state index ->

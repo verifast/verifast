@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <stdint.h>
 
 struct pair<A, B> {
   A fst;
@@ -121,4 +122,36 @@ void test_sizeof_pair<T, U>(void *T_typeid, void *U_typeid, struct pair<T, U> *b
   buf->fst = fst;
   buf->snd = snd;
   //@ open_struct(buf);
+}
+
+void swap<A>(A *p1, A *p2)
+//@ requires *p1 |-> ?v1 &*& *p2 |-> ?v2;
+//@ ensures *p1 |-> v2 &*& *p2 |-> v1;
+{
+  A tmp = *p1;
+  *p1 = *p2;
+  *p2 = tmp;
+}
+
+void flip_in_place<T>(void *T_typeid, struct pair<T, T> *p)
+//@ requires p->fst |-> ?v1 &*& p->snd |-> ?v2;
+//@ ensures p->fst |-> v2 &*& p->snd |-> v1;
+{
+  //@ open pair_fst<T, T>(p, _);
+  //@ open pair_snd<T, T>(p, _);
+  swap<T>(&p->fst, &p->snd);
+  //@ close pair_fst<T, T>(p, _);
+  //@ close pair_snd<T, T>(p, _);
+}
+
+
+void flip_in_place_int32_t(struct pair<int32_t, int32_t> *p)
+//@ requires p->fst |-> ?v1 &*& p->snd |-> ?v2;
+//@ ensures p->fst |-> v2 &*& p->snd |-> v1;
+{
+  //@ open pair_fst<int32_t, int32_t>(p, _);
+  //@ open pair_snd<int32_t, int32_t>(p, _);
+  swap<int32_t>(&p->fst, &p->snd);
+  //@ close pair_fst<int32_t, int32_t>(p, _);
+  //@ close pair_snd<int32_t, int32_t>(p, _);
 }

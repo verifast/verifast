@@ -2052,7 +2052,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let tsigned = match signedness with Signed -> true_term | Unsigned -> false_term in
         let pointee_chunk_to_field_chunk__rule l h wanted_targs terms_are_well_typed wanted_coef wanted_coefpat wanted_indices_and_input_ts cont =
           let [tp] = wanted_indices_and_input_ts in
-          let field_address = mk_field_ptr_ l tp wanted_targs structTypeidFunc offsetFunc in
+          let field_address = mk_field_ptr_ l [] tp wanted_targs structTypeidFunc offsetFunc in
           match extract
             begin function
               (Chunk ((g, is_symb), [], coef, [tp'; tsize'; tsigned'; tv], _)) when
