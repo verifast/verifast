@@ -71,7 +71,11 @@ elif [ $(uname -s) = "Darwin" ]; then
   }  
   brewinstall wget
   brewinstall gtk+
-  brewinstall gtksourceview
+  # brewinstall gtksourceview
+  brewinstall oras
+  oras pull ghcr.io/homebrew/core/gtksourceview:2.10.5_7@sha256:368413983346081e277782a5df7ac4b9e9ad1adce149fa7028fa6d99e809b7ae
+  tar -C /usr/local/Cellar xzf gtksourceview--2.10.5_7.monterey.bottle.tar.gz
+  brew link gtksourceview
   brewinstall vala
   brewinstall cmake
   brewinstall ninja
