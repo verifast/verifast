@@ -140,7 +140,8 @@ void DeclSerializer::serializeBases(
     auto locBuilder = builder[i].initLoc();
     auto descBuilder = builder[i].initDesc();
 
-    serializeSrcRange(locBuilder, base.getBaseTypeLoc(), getSourceManager());
+    serializeSourceRange(locBuilder, base.getBaseTypeLoc(), getSourceManager(),
+                         getContext().getLangOpts());
     descBuilder.setName(baseDecl->getQualifiedNameAsString());
     descBuilder.setVirtual(base.isVirtual());
 
@@ -319,7 +320,8 @@ bool DeclSerializer::VisitTypedefNameDecl(const clang::TypedefNameDecl *decl) {
     auto locBuilder = defType.initLoc();
     auto descBuilder = defType.initDesc();
 
-    serializeSrcRange(locBuilder, typeLoc.getSourceRange(), getSourceManager());
+    serializeSourceRange(locBuilder, typeLoc.getSourceRange(),
+                         getSourceManager(), getContext().getLangOpts());
 
     auto fw = descBuilder.initFixedWidth();
     fw.setKind(fwi->isSigned ? stubs::Type::FixedWidth::FixedWidthKind::INT
@@ -411,7 +413,8 @@ bool DeclSerializer::VisitFunctionTemplateDecl(
     auto specBuilder = specsBuilder[i++];
     auto locBuilder = specBuilder.initLoc();
     auto descBuilder = specBuilder.initDesc();
-    serializeSrcRange(locBuilder, spec->getSourceRange(), getSourceManager());
+    serializeSourceRange(locBuilder, spec->getSourceRange(), getSourceManager(),
+                         getContext().getLangOpts());
     serializeFuncDecl(descBuilder, spec, false);
   }
 

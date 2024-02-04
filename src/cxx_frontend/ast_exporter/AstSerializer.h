@@ -68,8 +68,7 @@ public:
                          InclusionContext &inclContext,
                          bool serializeImplicitDecls)
       : m_ASTContext(context), m_SM(context.getSourceManager()),
-        m_inclContext(inclContext),
-        m_textSerializer(context.getSourceManager()), m_store(store),
+        m_inclContext(inclContext), m_textSerializer(context), m_store(store),
         m_serializeImplicitDecls(serializeImplicitDecls) {}
 
   KJ_DISALLOW_COPY(AstSerializer);
@@ -79,6 +78,8 @@ public:
   }
 
   AnnotationStore &getAnnStore() { return m_store; }
+
+  const clang::ASTContext &getASTContext() const { return m_ASTContext; }
 
   /**
    * Serializes a declaration.

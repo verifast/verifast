@@ -27,7 +27,7 @@ bool StmtSerializer::VisitCompoundStmt(const clang::CompoundStmt *stmt) {
 
   auto rBrace = comp.initRBrace();
   auto rBraceLoc = stmt->getRBracLoc();
-  serializeSrcRange(rBrace, {rBraceLoc, rBraceLoc}, SM);
+  serializeSourceRange(rBrace, rBraceLoc, SM, getContext().getLangOpts());
 
   return true;
 }
@@ -102,7 +102,8 @@ bool StmtSerializer::serializeWhileStmt(stubs::Stmt::While::Builder builder,
 
   auto whileLoc = builder.initWhileLoc();
   auto whileBegin = stmt->getWhileLoc();
-  serializeSrcRange(whileLoc, {whileBegin, whileBegin}, getSourceManager());
+  serializeSourceRange(whileLoc, whileBegin, getSourceManager(),
+                       getContext().getLangOpts());
 
   auto body = builder.initBody();
   m_serializer.serializeStmt(body, stmt->getBody());

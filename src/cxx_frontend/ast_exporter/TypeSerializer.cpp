@@ -1,5 +1,5 @@
 #include "AstSerializer.h"
-#include "Util.h"
+#include "Location.h"
 #include "clang/AST/Type.h"
 #include "clang/AST/TypeLoc.h"
 
@@ -166,7 +166,8 @@ bool TypeLocSerializer::VisitSubstTemplateTypeParmType(
   auto substTemplateTypeParamBuilder = m_builder.initSubstTemplateTypeParam();
   auto locBuilder = substTemplateTypeParamBuilder.initLoc();
   auto descBuilder = substTemplateTypeParamBuilder.initDesc();
-  serializeSrcRange(locBuilder, typeLoc.getSourceRange(), getSourceManager());
+  serializeSourceRange(locBuilder, typeLoc.getSourceRange(), getSourceManager(),
+                       getContext().getLangOpts());
   m_serializer.serializeQualType(descBuilder,
                                  typeLoc.getTypePtr()->getReplacementType());
   return true;

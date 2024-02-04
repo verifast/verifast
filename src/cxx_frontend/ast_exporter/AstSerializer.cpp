@@ -26,8 +26,9 @@ void AstSerializer::serializeExpr(ExprSerializer::NodeBuilder builder,
     auto loc = builder.initLoc();
     auto desc = builder.initDesc();
 
-    serializeSrcRange(loc, {truncatingOptional->getBegin(), expr->getEndLoc()},
-                      m_SM);
+    serializeSourceRange(loc,
+                         {truncatingOptional->getBegin(), expr->getEndLoc()},
+                         m_SM, m_ASTContext.getLangOpts());
     auto truncating = desc.initTruncating();
 
     ExprSerializer ser(m_ASTContext, *this, truncating);
@@ -135,7 +136,9 @@ void AstSerializer::validateIncludesBeforeFirstDecl(
     return;
   }
   auto &diagsEngine = getDiagsEngine();
-  auto id = diagsEngine.getCustomDiagID(clang::DiagnosticsEngine::Error, "'#include' directive cannot appear after a declaration");
+  auto id = diagsEngine.getCustomDiagID(
+      clang::DiagnosticsEngine::Error,
+      "'#include' directive cannot appear after a declaration");
   diagsEngine.Report(lastDirective.getRange().getBegin(), id);
 }
 

@@ -1,6 +1,6 @@
 #include "Inclusion.h"
 #include "AstSerializer.h"
-#include "Util.h"
+#include "Location.h"
 #include "llvm/ADT/STLExtras.h"
 #include <vector>
 
@@ -14,7 +14,6 @@ static struct Comparator {
 } comparator;
 
 void RealIncludeDirective::serialize(stubs::Include::Builder &builder,
-                                     const clang::SourceManager &SM,
                                      AstSerializer &serializer,
                                      const InclusionContext &context) const {
   auto realInclude = builder.initRealInclude();
@@ -23,7 +22,9 @@ void RealIncludeDirective::serialize(stubs::Include::Builder &builder,
   realInclude.setIsAngled(m_isAngled);
 
   auto locBuilder = realInclude.initLoc();
-  serializeSrcRange(locBuilder, m_range, SM);
+  serializeSourceRange(locBuilder, m_range,
+                       serializer.getASTContext().getSourceManager(),
+                       serializer.getASTContext().getLangOpts());
 
   auto &inclusion = context.getInclusionForFD(m_fileUID);
   std::vector<std::reference_wrapper<const IncludeDirective>>
@@ -39,12 +40,11 @@ void RealIncludeDirective::serialize(stubs::Include::Builder &builder,
   for (size_t i(0); i < nestedIncludeDirectives.size(); ++i) {
     auto nestedBuilder = nestedBuilders[i];
     const IncludeDirective &nestedInclude = nestedIncludeDirectives[i];
-    nestedInclude.serialize(nestedBuilder, SM, serializer, context);
+    nestedInclude.serialize(nestedBuilder, serializer, context);
   }
 }
 
 void GhostIncludeDirective::serialize(stubs::Include::Builder &builder,
-                                      const clang::SourceManager &SM,
                                       AstSerializer &serializer,
                                       const InclusionContext &context) const {
   auto ghostInclude = builder.initGhostInclude();
@@ -97,7 +97,7 @@ void Inclusion::serializeIncludeDirectives(
   for (size_t i(0); i < includes.size(); ++i) {
     auto includeBuilder = builder[i];
     const IncludeDirective &include = includes[i];
-    include.serialize(includeBuilder, SM, serializer, context);
+    include.serialize(includeBuilder, serializer, context);
   }
 }
 
