@@ -4,7 +4,7 @@
 #include "ContextFreePPCallbacks.h"
 #include "DiagnosticCollectorConsumer.h"
 #include "Inclusion.h"
-#include "Util.h"
+#include "Location.h"
 #include "capnp/message.h"
 #include "capnp/serialize.h"
 #include "clang/AST/ASTConsumer.h"

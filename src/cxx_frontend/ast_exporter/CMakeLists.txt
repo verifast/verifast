@@ -17,7 +17,7 @@ add_executable(vf-cxx-ast-exporter
   Annotation.cpp
   CommentProcessor.cpp
   ContextFreePPCallbacks.cpp
-  LocUtil.cpp
+  Location.cpp
   FixedWidthInt.cpp
   AnnotationStore.cpp
   Inclusion.cpp

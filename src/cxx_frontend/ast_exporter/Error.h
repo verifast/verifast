@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Util.h"
+#include "Location.h"
 #include "stubs_ast.capnp.h"
 #include "clang/Basic/FileEntry.h"
 #include "clang/Basic/SourceLocation.h"
@@ -26,10 +26,9 @@ public:
     if (!m_valid) {
       return;
     }
-    auto startBuilder = builder.initStart();
-    auto endBuilder = builder.initEnd();
-    serializeSrcPos(startBuilder, m_loc);
-    serializeSrcPos(endBuilder, m_loc);
+    auto lexedBuilder = builder.initLexed();
+    serializeSourcePos(lexedBuilder.initStart(), m_loc);
+    serializeSourcePos(lexedBuilder.initEnd(), m_loc);
   }
 };
 

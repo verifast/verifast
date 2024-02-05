@@ -29,15 +29,43 @@ end) : Translator = struct
     let file_name = Args.path_of_int fd in
     (file_name, l, c)
 
-  let translate_loc loc =
-    let l_start =
-      if L.has_start loc then L.start_get loc |> transl_srcpos
-      else Ast.dummy_srcpos
-    in
-    let l_end =
-      if L.has_end loc then L.end_get loc |> transl_srcpos else Ast.dummy_srcpos
-    in
-    Ast.Lexed (l_start, l_end)
+  let rec translate_loc loc =
+    match L.get loc with
+    | UnionNotInitialized -> Error.union_no_init_err "location"
+    | Lexed l ->
+        let l_start =
+          if L.Lexed.has_start l then L.Lexed.start_get l |> transl_srcpos
+          else Ast.dummy_srcpos
+        in
+        let l_end =
+          if L.Lexed.has_end l then L.Lexed.end_get l |> transl_srcpos
+          else Ast.dummy_srcpos
+        in
+        Ast.Lexed (l_start, l_end)
+    | MacroExp l ->
+        let l_call_site =
+          if L.MacroExp.has_call_site l then
+            L.MacroExp.call_site_get l |> translate_loc
+          else Ast.dummy_loc
+        in
+        let l_body_token =
+          if L.MacroExp.has_body_token l then
+            L.MacroExp.body_token_get l |> translate_loc
+          else Ast.dummy_loc
+        in
+        Ast.MacroExpansion (l_call_site, l_body_token)
+    | MacroParamExp l ->
+        let l_param =
+          if L.MacroParamExp.has_param l then
+            L.MacroParamExp.param_get l |> translate_loc
+          else Ast.dummy_loc
+        in
+        let l_arg_token =
+          if L.MacroParamExp.has_arg_token l then
+            L.MacroParamExp.arg_token_get l |> translate_loc
+          else Ast.dummy_loc
+        in
+        Ast.MacroParamExpansion (l_param, l_arg_token)
 
   let map_annotation ann =
     let open R.Clause in

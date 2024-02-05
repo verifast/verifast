@@ -19,7 +19,6 @@ public:
   virtual clang::SourceRange getRange() const = 0;
 
   virtual void serialize(stubs::Include::Builder &builder,
-                         const clang::SourceManager &SM,
                          AstSerializer &serializer,
                          const InclusionContext &context) const = 0;
 };
@@ -46,8 +45,7 @@ public:
 
   clang::SourceRange getRange() const override { return m_range; }
 
-  void serialize(stubs::Include::Builder &builder,
-                 const clang::SourceManager &SM, AstSerializer &serializer,
+  void serialize(stubs::Include::Builder &builder, AstSerializer &serializer,
                  const InclusionContext &context) const override;
 };
 
@@ -64,8 +62,7 @@ public:
     return Annotation::getRange();
   }
 
-  void serialize(stubs::Include::Builder &builder,
-                 const clang::SourceManager &SM, AstSerializer &serializer,
+  void serialize(stubs::Include::Builder &builder, AstSerializer &serializer,
                  const InclusionContext &context) const override;
 };
 

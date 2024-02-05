@@ -1,7 +1,7 @@
 #pragma once
 #include "Annotation.h"
 #include "Concept.h"
-#include "Util.h"
+#include "Location.h"
 #include "clang/AST/DeclVisitor.h"
 #include "clang/AST/Stmt.h"
 #include "clang/AST/StmtVisitor.h"
@@ -85,8 +85,9 @@ protected:
                      const llvm::StringRef kind) {
     if (!this->serializeDesc(node))
       this->unsupported(node->getBeginLoc(), nodeName, kind);
-    serializeSrcRange(m_locBuilder, node->getSourceRange(),
-                      this->getSourceManager());
+    serializeSourceRange(m_locBuilder, node->getSourceRange(),
+                         this->getSourceManager(),
+                         this->getContext().getLangOpts());
   }
 };
 
@@ -381,16 +382,17 @@ public:
 };
 
 class TextSerializer {
-  clang::SourceManager &m_SM;
+  clang::ASTContext &m_context;
 
 public:
-  explicit TextSerializer(clang::SourceManager &SM) : m_SM(SM) {}
+  explicit TextSerializer(clang::ASTContext &context) : m_context(context) {}
 
   using ClauseBuilder = stubs::Clause::Builder;
 
   void serializeClause(ClauseBuilder builder, const Text &text) {
     auto locBuilder = builder.initLoc();
-    serializeSrcRange(locBuilder, text.getRange(), m_SM);
+    serializeSourceRange(locBuilder, text.getRange(),
+                         m_context.getSourceManager(), m_context.getLangOpts());
     builder.setText(text.getText().str());
   }
 
@@ -398,7 +400,8 @@ public:
   void serializeNode(stubs::Loc::Builder locBuilder,
                      typename StubsNode::Builder descBuilder,
                      const Text &text) {
-    serializeSrcRange(locBuilder, text.getRange(), m_SM);
+    serializeSourceRange(locBuilder, text.getRange(),
+                         m_context.getSourceManager(), m_context.getLangOpts());
     descBuilder.setAnn(text.getText().str());
   }
 };

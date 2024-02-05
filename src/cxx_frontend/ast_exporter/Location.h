@@ -25,23 +25,17 @@ struct LCF {
  * @return false if the given location \p was invalid and it was not possible to
  * decompose it.
  */
-bool decomposeLocToLCF(const clang::SourceLocation &loc,
+bool decomposeLocToLCF(const clang::SourceLocation loc,
                        const clang::SourceManager &SM, LCF &lcf);
 
-inline void serializeSrcPos(stubs::Loc::SrcPos::Builder &builder, LCF lcf) {
-  builder.setL(lcf.l);
-  builder.setC(lcf.c);
-  builder.setFd(lcf.f);
-}
+void serializeSourcePos(stubs::Loc::SrcPos::Builder builder, LCF lcf);
 
-void serializeSrcRange(stubs::Loc::Builder &builder,
-                       const clang::SourceRange &range,
-                       const clang::SourceManager &SM);
+void serializeSourceRange(stubs::Loc::Builder builder,
+                          const clang::SourceRange range,
+                          const clang::SourceManager &SM,
+                          const clang::LangOptions &langOpts);
 
-inline const clang::FileEntry *getFileEntry(const clang::SourceLocation &loc,
-                                            const clang::SourceManager &SM) {
-  auto id = SM.getFileID(SM.getExpansionLoc(loc));
-  return SM.getFileEntryForID(id);
-}
+const clang::FileEntry *getFileEntry(const clang::SourceLocation loc,
+                                     const clang::SourceManager &SM);
 
 } // namespace vf

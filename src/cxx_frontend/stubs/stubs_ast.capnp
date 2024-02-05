@@ -10,8 +10,27 @@ struct Loc {
     fd @2 :UInt16;
   }
 
-  start @0 :SrcPos;
-  end @1 :SrcPos;
+  struct Lexed {
+    start @0 :SrcPos;
+    end @1 :SrcPos;
+  }
+
+  struct MacroExp {
+    callSite @0 :Loc;
+    bodyToken @1 :Loc;
+  }
+
+  struct MacroParamExp {
+    param @0 :Loc;
+    argToken @1 :Loc;
+  }
+
+  union {
+    unionNotInitialized @0 :Void;
+    lexed @1 :Lexed;
+    macroExp @2 :MacroExp;
+    macroParamExp @3 :MacroParamExp;
+  }
 }
 
 struct Node(Base) {

@@ -112,9 +112,9 @@ bool checkSuffixIgnoreCase(const clang::StringRef str, const char suffix,
 bool ExprSerializer::VisitIntegerLiteral(const clang::IntegerLiteral *lit) {
   llvm::SmallString<16> buffer;
   bool invalid(false);
-  auto spelling =
-      clang::Lexer::getSpelling(lit->getBeginLoc(), buffer, getSourceManager(),
-                                getContext().getLangOpts(), &invalid);
+  auto spelling = clang::Lexer::getSpelling(
+      getSourceManager().getSpellingLoc(lit->getBeginLoc()), buffer,
+      getSourceManager(), getContext().getLangOpts(), &invalid);
   assert(!invalid);
 
   size_t offset(0);
