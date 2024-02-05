@@ -36,6 +36,8 @@ dl_and_unzip_llvm-clang() {
 script_dir=$(pwd)
 
 if [ $(uname -s) = "Linux" ]; then
+  # libgtksourceview2.0-dev is not in recent Ubuntu releases, so add focal (20.04 LTS) repo
+  sudo add-apt-repository "deb http://mirrors.kernel.org/ubuntu/ focal main"
   sudo apt-get update
   sudo apt-get install -y --no-install-recommends \
        git wget ca-certificates m4 \
