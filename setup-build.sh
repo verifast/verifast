@@ -40,8 +40,14 @@ if [ $(uname -s) = "Linux" ]; then
   sudo apt-get install -y --no-install-recommends \
        git wget ca-certificates m4 \
        patch unzip libgtk2.0-dev \
-       valac libgtksourceview2.0-dev \
+       valac \
        cmake build-essential ninja-build
+  if ! sudo apt-get install libgtksourceview2.0-dev; then
+    # libgtksourceview2.0-dev is not in recent Ubuntu releases, so add focal (20.04 LTS) repo
+    sudo add-apt-repository "deb http://mirrors.kernel.org/ubuntu/ focal universe"
+    sudo apt-get update
+    sudo apt-get install libgtksourceview2.0-dev
+  fi
 
   if ! rustup show home; then
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s - -y
