@@ -545,10 +545,13 @@ let rec sexpr_of_expr (expr : expr) : sexpression =
         build_list
           [ Symbol "expr-w-super-call" ]
           [ "name", Symbol name; "params", sexpr_of_list sexpr_of_expr params ]
-    | InitializerList (_, exprs) ->
+    | InitializerList (_, elems) ->
+        let sexpr_of_elem (f_opt, e) =
+          List [sexpr_of_option (fun (l, f) -> Symbol f) f_opt; sexpr_of_expr e]
+        in
         build_list
           [ Symbol "expr-init-list" ]
-          [ "exprs", sexpr_of_list sexpr_of_expr exprs ]
+          [ "elems", sexpr_of_list sexpr_of_elem elems ]
     | PointsTo (loc, expr, pat) ->
         build_list
           [ Symbol "expr-points-to" ]

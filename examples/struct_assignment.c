@@ -113,6 +113,14 @@ struct foo test5()
   return (struct foo) { 40, 50 };
 }
 
+struct foo test6()
+//@ requires true;
+//@ ensures result == (struct foo) { .x = 40, .y = 50 };
+{
+  test4((struct foo) { .y = 30, .x = 20 });
+  return (struct foo) { .y = 50, .x = 40 };
+}
+
 /*@
 
 predicate foo_ok(struct foo f;) = f.x < f.y;
@@ -122,4 +130,8 @@ predicate foo(struct foo *pf; struct foo f) =
     f == (struct foo) { x, y } &*&
     foo_ok((struct foo) { x, y });
 
+predicate bar(struct foo *pf; struct foo f) =
+    pf->x |-> ?x &*& pf->y |-> ?y &*&
+    f == (struct foo) { .y = y, .x = x } &*&
+    foo_ok((struct foo) { .x = x, .y = y });
 @*/

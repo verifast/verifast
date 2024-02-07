@@ -510,7 +510,7 @@ and of_expr = function
 | InitializerList (l, es) ->
   C ("InitializerList", [
     of_loc l;
-    of_list of_expr es
+    of_list (fun (f_opt, e) -> T [of_option (fun (l, f) -> T [of_loc l; S f]) f_opt; of_expr e]) es
   ])
 | SliceExpr (l, ef, et) ->
   C ("SliceExpr", [

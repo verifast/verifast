@@ -447,7 +447,7 @@ and
   | InstanceOfExpr of loc * expr * type_expr
   | SuperMethodCall of loc * string * expr list
   | WSuperMethodCall of loc * string (*superclass*) * string * expr list * (loc * ghostness * (type_ option) * (string * type_) list * asn * asn * (type_ * asn) list * bool (*terminates*) * int (*rank*) option * visibility)
-  | InitializerList of loc * expr list
+  | InitializerList of loc * ((loc * string (* field name *)) option * expr) list
   | SliceExpr of loc * pat option * pat option
   | PointsTo of
         loc *
@@ -1233,7 +1233,7 @@ let expr_fold_open iter state e =
   | InstanceOfExpr(l, e, tp) -> iter state e
   | SuperMethodCall(_, _, args) -> iters state args
   | WSuperMethodCall(_, _, _, args, _) -> iters state args
-  | InitializerList (l, es) -> iters state es
+  | InitializerList (l, es) -> iters state (List.map snd es)
   | CxxNew (_, _, Some e)
   | WCxxNew (_, _, Some e) -> iter state e
   | CxxNew (_, _, _)

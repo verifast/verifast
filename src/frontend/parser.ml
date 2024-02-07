@@ -560,9 +560,12 @@ and
           ConsMember (Cons (l, ps, co, ss, vis))
     ]
   ] -> member
+and parse_initializer_elem = function%parser
+  [ (_, Kwd "."); (lf, Ident f); (_, Kwd "="); parse_expr as e ] -> (Some (lf, f), e)
+| [ parse_expr as e ] -> (None, e)
 and parse_array_init_rest = function%parser
 | [ (_, Kwd ","); 
-    [%l es = opt (function%parser [ parse_expr as e; parse_array_init_rest as es ] -> e :: es)]
+    [%l es = opt (function%parser [ parse_initializer_elem as e; parse_array_init_rest as es ] -> e :: es)]
   ] -> (match es with None -> [] | Some(es) -> es)
 | [ ] -> []
 and parse_array_init = function%parser
@@ -570,12 +573,16 @@ and parse_array_init = function%parser
     (_, Kwd "}") 
   ] -> []
 | [ (_, Kwd "}") ] -> []
-| [ parse_expr as e; parse_array_init_rest as es; (_, Kwd "}") ] -> e :: es
+| [ parse_initializer_elem as e; parse_array_init_rest as es; (_, Kwd "}") ] -> e :: es
 and parse_declaration_rhs te = function%parser
 | [ (linit, Kwd "{"); 
     parse_array_init as es 
   ] ->
-  (match te with ArrayTypeExpr (_, elem_te) when language = Java -> NewArrayWithInitializer (linit, elem_te, es) | _ -> InitializerList (linit, es))
+  begin match te with
+    ArrayTypeExpr (_, elem_te) when language = Java ->
+    NewArrayWithInitializer (linit, elem_te, List.map snd es)
+  | _ -> InitializerList (linit, es)
+  end
 | [ parse_expr as e ] -> e
 and
   parse_declarator0 = function%parser
@@ -2617,7 +2624,7 @@ and
   end
 | [ (l, Kwd "++"); parse_expr_suffix as e ] -> AssignOpExpr (l, e, Add, IntLit (l, unit_big_int, true, false, NoLSuffix), false)
 | [ (l, Kwd "--"); parse_expr_suffix as e ] -> AssignOpExpr (l, e, Sub, IntLit (l, unit_big_int, true, false, NoLSuffix), false)
-| [ (l, Kwd "{"); [%l es = rep_comma parse_expr]; (_, Kwd "}") ] -> InitializerList (l, es)
+| [ (l, Kwd "{"); [%l es = rep_comma parse_initializer_elem]; (_, Kwd "}") ] -> InitializerList (l, es)
 | [ (l, Kwd "_Generic"); 
     (_, Kwd "("); 
     parse_expr as e; 

@@ -909,7 +909,11 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                     [] ->
                     let (_, csym, _, _) = List.assoc sn struct_accessor_map in
                     cont h env (ctxt#mk_app csym (List.rev vs))
-                  | ((f, (_, _, tp, _, _)), e)::bs ->
+                  | ((f, (_, _, tp, _, _)), (f_opt, e))::bs ->
+                    begin match f_opt with
+                      None -> ()
+                    | Some (lf, f) -> static_error lf "Field names are not yet supported in this position" None
+                    end;
                     let tp' = instantiate_type s_tpenv tp in
                     get_initial_value h env f tp' (Some e) $. fun h env v ->
                     iter h env (prover_convert_term v tp' tp::vs) bs

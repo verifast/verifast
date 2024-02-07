@@ -241,6 +241,12 @@ let take_drop n xs =
   in
   iter [] xs n
 
+let rec drop_while f xs =
+  match xs with
+    [] -> []
+  | x::xs0 ->
+    if f x then drop_while f xs0 else xs
+
 let rec list_make n x = if n = 0 then [] else x::list_make (n - 1) x
 
 let remove f xs = List.filter (fun x -> not (f x)) xs

@@ -1323,7 +1323,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | ArrayTypeExpr'(_, e) ->  expr_mark_addr_taken e locals
     | AssignExpr(_, e1, e2) ->  expr_mark_addr_taken e1 locals;  expr_mark_addr_taken e2 locals
     | AssignOpExpr(_, e1, _, e2, _) -> expr_mark_addr_taken e1 locals;  expr_mark_addr_taken e2 locals
-    | InitializerList(_, es) -> List.iter (fun e -> expr_mark_addr_taken e locals) es
+    | InitializerList(_, es) -> List.iter (fun (_, e) -> expr_mark_addr_taken e locals) es
     | CxxNew (_, _, Some e)
     | WCxxNew (_, _, Some e) -> expr_mark_addr_taken e locals
     | CxxNew (_, _, _)
@@ -1479,7 +1479,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | ArrayTypeExpr'(_, e) -> expr_address_taken e
     | AssignExpr(_, e1, e2) -> (expr_address_taken e1) @ (expr_address_taken e2)
     | AssignOpExpr(_, e1, _, e2, _) -> (expr_address_taken e1) @ (expr_address_taken e2)
-    | InitializerList (_, es) -> flatmap expr_address_taken es
+    | InitializerList (_, es) -> flatmap (fun (_, e) -> expr_address_taken e) es
     | _ -> []
   
   let rec stmt_address_taken s =
@@ -1581,7 +1581,11 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           match es with
             [] ->
             produce_char_array_chunk h env addr (elemCount - i)
-          | e::es ->
+          | (f_opt, e)::es ->
+            begin match f_opt with
+              None -> ()
+            | Some (lf, f) -> static_error lf "Field names are not yet supported in this position" None
+            end;
             produce_c_object l coef addr elemTp eval_h (Expr e) false true h env $. fun h env ->
             iter h env (i + 1) es
         in
@@ -1590,7 +1594,11 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let rec iter h env n es cont =
           match es with
             [] -> cont h env (mk_zero_list n)
-          | e::es ->
+          | (f_opt, e)::es ->
+            begin match f_opt with
+              None -> ()
+            | Some (lf, f) -> static_error lf "Field names are not yet supported in this position" None
+            end;
             eval_h h env e $. fun h env elem ->
             iter h env (n - 1) es $. fun h env elems ->
             cont h env (mk_cons elemTp elem elems)
@@ -1631,7 +1639,13 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       begin fun cont ->
         match init with
-          Expr (InitializerList (_, es)) -> cont h env (Some (Some (`Exprs es)))
+          Expr (InitializerList (_, es)) ->
+          let es = es |> List.map @@ fun (f_opt, e) ->
+            match f_opt with
+              Some (lf, f) -> static_error lf "Field names are not yet supported in this position" None
+            | None -> e
+          in
+          cont h env (Some (Some (`Exprs es)))
         | Expr e -> eval_h h env e $. fun h env v -> cont h env (Some (Some (`Terms (field_values_of_struct_as_value v))))
         | Term t -> cont h env (Some (Some (`Terms (field_values_of_struct_as_value t))))
         | Default -> cont h env (Some None) (* Initialize to default value (= zero) *)

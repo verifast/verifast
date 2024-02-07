@@ -4191,7 +4191,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       if inAnnotation = Some true then
         (* TODO: Do the right thing for non-ASCII characters *)
         let cs = chars_of_string s in
-        let es = List.map (fun c -> IntLit(l, big_int_of_int (Char.code c), true, false, NoLSuffix)) cs in
+        let es = List.map (fun c -> None, IntLit(l, big_int_of_int (Char.code c), true, false, NoLSuffix)) cs in
         check (InitializerList (l, es))
       else
         begin match language with
@@ -4204,13 +4204,36 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let (_, s_tparams, Some (_, fds, _), _, _) = List.assoc sn structmap in
       let s_tpenv = List.combine s_tparams targs in
       let bs =
-        match zip fds es with
-          Some bs -> bs
-        | None -> static_error linit "Length of initializer list does not match number of struct fields." None
+        let rec iter fds_todo next_fds es =
+          match es with
+            [] ->
+            begin match fds_todo with
+              [] -> []
+            | (f, _)::_ -> static_error l (Printf.sprintf "Initializer does not initialize field '%s'" f) None
+            end
+          | (None, e)::es ->
+            begin match next_fds with
+              [] -> static_error (expr_loc e) "There is no next field; specify a field name" None
+            | ((f, _) as fd)::next_fds ->
+              if List.mem_assoc f fds_todo then
+                (fd, e)::iter (List.remove_assoc f fds_todo) next_fds es
+              else
+                static_error (expr_loc e) (Printf.sprintf "Duplicate initializer for field '%s'" f) None
+            end
+          | (Some (lf, f), e)::es ->
+            if List.mem_assoc f fds_todo then
+              let next_fds = List.tl (drop_while (fun (f', _) -> f' <> f) fds) in
+              ((f, List.assoc f fds_todo), e)::iter (List.remove_assoc f fds_todo) next_fds es
+            else if List.mem_assoc f fds then
+              static_error lf (Printf.sprintf "Duplicate initializer for field '%s'" f) None
+            else
+              static_error lf "No such field" None
+        in
+        iter fds fds es
       in
       let ws = bs |> List.map begin fun ((f, (_, _, tp, _, _)), e) ->
           let tp' = instantiate_type s_tpenv tp in
-          checkt e tp'
+          (Some (l, f), checkt e tp')
         end
       in
       (CastExpr (l, ManifestTypeExpr (type_expr_loc te, t), InitializerList (linit, ws)), t, None)
@@ -4716,7 +4739,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let rec to_list_expr es =
         match es with
           [] -> CallExpr (l, "nil", [], [], [], Static)
-        | e::es -> CallExpr (l, "cons", [], [], [LitPat e; LitPat (to_list_expr es)], Static)
+        | (None, e)::es -> CallExpr (l, "cons", [], [], [LitPat e; LitPat (to_list_expr es)], Static)
+        | (Some (lf, f), _)::_ -> static_error lf "Field names are not supported in this position" None
       in
       check (to_list_expr es)
     | CxxNew (l, te, expr_opt) ->
@@ -5113,11 +5137,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let rec iter n es =
         match es with
           [] -> []
-        | e::es ->
+        | (_, e)::es ->
           if n = 0 then static_error ll "Initializer list too long." None;
           let e = check e elemTp in
           let es = iter (n - 1) es in
-          e::es
+          (None, e)::es
       in
       InitializerList (ll, iter elemCount es)
     | StructType (sn, targs), InitializerList (ll, es) ->
@@ -5131,10 +5155,14 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         match fds, es with
           _, [] -> []
         | (_, (_, Ghost, _, _, _))::fds, es -> iter fds es
-        | (_, (_, _, tp, _, _))::fds, e::es ->
+        | (_, (_, _, tp, _, _))::fds, (f_opt, e)::es ->
+          begin match f_opt with
+            None -> ()
+          | Some (lf, f) -> static_error lf "Field names are not yet supported in this position" None
+          end;
           let e = check e (instantiate_type tpenv tp) in
           let es = iter fds es in
-          e::es
+          (None, e)::es
         | _ -> static_error ll "Initializer list too long." None
       in
       InitializerList (ll, iter fds es)
@@ -7321,11 +7349,20 @@ let check_if_list_is_defined () =
       end
     | PredNameExpr (l, g) -> let Some (_, _, _, _, symb, _, _) = try_assoc g predfammap in cont state symb
     | CastExpr (l, ManifestTypeExpr (_, StructType (sn, targs)), InitializerList (linit, ws)) ->
-      evs state ws @@ fun state vs ->
+      begin fun cont ->
+        let rec iter state vs ws =
+          match ws with
+            [] -> cont state (List.rev vs)
+          | (Some (_, f), w)::ws ->
+            ev state w @@ fun state v ->
+            iter state ((f, v)::vs) ws
+        in
+        iter state [] ws
+      end @@ fun state vs ->
       let (_, s_tparams, Some (_, fds, _), _, _) = List.assoc sn structmap in
       let s_tpenv = List.combine s_tparams targs in
-      let bs = List.combine fds vs in
-      let vs_boxed = bs |> List.map begin fun ((f, (_, _, tp, _, _)), v) ->
+      let vs_boxed = fds |> List.map begin fun (f, (_, _, tp, _, _)) ->
+          let v = List.assoc f vs in
           let tp' = instantiate_type s_tpenv tp in
           prover_convert_term v tp' tp
         end
