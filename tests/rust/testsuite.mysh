@@ -1,3 +1,4 @@
+verifast -c ghost_cmd_inj.rs
 cd purely_unsafe
   verifast -c struct_exprs.rs
   verifast -c scalars.rs

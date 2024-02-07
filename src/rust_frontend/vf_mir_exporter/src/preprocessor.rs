@@ -92,6 +92,9 @@ impl GhostRange {
     }
 }
 
+const VF_GHOST_CMD_TAG: &str = "crate::VeriFast_ghost_command();";
+const VF_GHOST_CMD_TAG_LEN: u32 = VF_GHOST_CMD_TAG.len() as u32;
+
 pub fn preprocess(
     input: &str,
     directives: &mut Vec<GhostRange>,
@@ -172,8 +175,8 @@ pub fn preprocess(
                                         let start = cs.pos;
                                         let in_fn_body = fn_body_brace_depth != -1;
                                         if in_fn_body {
-                                            output.push_str("VeriFast_ghost_command();");
-                                            cs.pos.byte_pos += 25;
+                                            output.push_str(VF_GHOST_CMD_TAG);
+                                            cs.pos.byte_pos += VF_GHOST_CMD_TAG_LEN;
                                         }
                                         let mut contents = String::new();
                                         output.push_str("//@");
@@ -312,8 +315,8 @@ pub fn preprocess(
                                         ghost_range.in_fn_body = fn_body_brace_depth != -1;
                                         ghost_range.start = cs.pos;
                                         if ghost_range.in_fn_body {
-                                            output.push_str("VeriFast_ghost_command();");
-                                            cs.pos.byte_pos += 25;
+                                            output.push_str(VF_GHOST_CMD_TAG);
+                                            cs.pos.byte_pos += VF_GHOST_CMD_TAG_LEN;
                                         }
                                         output.push_str("/*@");
                                         ghost_range.contents.push_str("/*@");
