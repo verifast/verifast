@@ -1,8 +1,8 @@
 #[derive(Copy, Clone, Debug)]
 pub struct SrcPos {
-    pub line: i32,   // 1-based
-    pub column: i32, // 1-based
-    pub byte_pos: u32,   // 0-based
+    pub line: i32,     // 1-based
+    pub column: i32,   // 1-based
+    pub byte_pos: u32, // 0-based
 }
 
 impl SrcPos {
@@ -92,7 +92,11 @@ impl GhostRange {
     }
 }
 
-pub fn preprocess(input: &str, directives: &mut Vec<GhostRange>, ghost_ranges: &mut Vec<GhostRange>) -> String {
+pub fn preprocess(
+    input: &str,
+    directives: &mut Vec<GhostRange>,
+    ghost_ranges: &mut Vec<GhostRange>,
+) -> String {
     let mut cs = TextIterator {
         chars: input.chars().peekable(),
         pos: SrcPos {
