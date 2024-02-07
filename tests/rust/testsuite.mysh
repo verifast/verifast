@@ -1,4 +1,5 @@
 cd purely_unsafe
+  verifast -c struct_exprs.rs
   verifast -c scalars.rs
   verifast -c alloc.rs
   verifast -c reverse.rs
