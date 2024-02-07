@@ -5,7 +5,7 @@ pub struct Foo {
 
 /*@
 
-pred Foo_own(t: thread_id_t, fields1: i32, field2: u8) = true;
+pred Foo_own(t: thread_id_t, v: Foo) = true;
 
 pred Foo_share(k: lifetime_t, t: thread_id_t, l: *Foo) = true;
 
@@ -42,7 +42,7 @@ pub struct Bar {
 
 /*@
 
-pred Bar_own(t: thread_id_t, fd: *mut u8) = true;
+pred Bar_own(t: thread_id_t, v: Bar) = true;
 
 pred Bar_share(k: lifetime_t, t: thread_id_t, l: *Bar) = true;
 

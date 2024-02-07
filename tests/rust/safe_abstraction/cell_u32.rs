@@ -7,7 +7,7 @@ pub struct CellU32 {
 // Interpretation
 // `OWN` for Cell<u32>
 // [[cell(tau)]].OWN(t, vs) = [[tau]].OWN(t, vs)
-pred CellU32_own(t: thread_id_t, v: u32;) = true; // The `v` parameter type carries the info
+pred CellU32_own(t: thread_id_t, v: CellU32;) = true; // The `v` parameter type carries the info
 
 /* A note on `|= cell(tau) copy` judgement:
 In RustBelt `|= tau copy => |= cell(tau) copy` but it is not the case in Rust as it is prohibited
@@ -19,7 +19,7 @@ i.e. in VeriFast the `[[u32]].OWN` is implicitly persistent.
 */
 
 pred_ctor CellU32_nonatomic_borrow_content(l: *CellU32, t: thread_id_t)(;) =
-  CellU32_v(l, ?v) &*& struct_CellU32_padding(l) &*& CellU32_own(t, v);
+  CellU32_v(l, ?v) &*& struct_CellU32_padding(l) &*& CellU32_own(t, CellU32 { v });
 
 // `SHR` for Cell<u32>
 pred CellU32_share(k: lifetime_t, t: thread_id_t, l: *CellU32) =
@@ -63,7 +63,7 @@ impl CellU32 {
         let c = CellU32 {
             v: std::cell::UnsafeCell::new(u),
         };
-        //@ close CellU32_own(_t, u);
+        //@ close CellU32_own(_t, CellU32 { v: u });
         c
     }
 

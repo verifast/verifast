@@ -950,8 +950,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         | _ ->
             let vf_ty = ManifestTypeExpr (loc, StructType (name, [])) in
             let sz_expr = SizeofExpr (loc, TypeExpr vf_ty) in
-            let own tid vs =
-              let args = List.map (fun x -> LitPat x) (tid :: vs) in
+            let own tid v =
+              let args = List.map (fun x -> LitPat x) (tid :: [ v ]) in
               Ok
                 (CallExpr
                    ( loc,
@@ -1024,9 +1024,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       (* https://doc.rust-lang.org/reference/types/textual.html *)
     in
     let size = SizeofExpr (loc, TypeExpr vf_ty) in
-    let own tid vs =
-      match vs with
-      | [ c ] ->
+    let own tid v =
+      match v with
+      | c ->
           let c_ge_zero =
             Operation
               ( loc,
@@ -1083,11 +1083,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                    Operation (loc, And, [ c_ge_zero; c_le_D7FF ]);
                    Operation (loc, And, [ c_ge_E000; c_le_10FFFF ]);
                  ] ))
-          (* Todo: According to https://doc.rust-lang.org/reference/types/textual.html,
-             "It is immediate Undefined Behavior to create a char that falls outside this (the above one) range".
-             So it is not enough to check char ranges in function boundaries. Miri warns about UB when reading an out-of-range character.
-             A proposal is to translate char-ptr/ref dereferences to calls to a function with a contract that checks for the range. *)
-      | _ -> Error "[[char]].own(tid, vs) should have `vs == [c]`"
+      (* Todo: According to https://doc.rust-lang.org/reference/types/textual.html,
+         "It is immediate Undefined Behavior to create a char that falls outside this (the above one) range".
+         So it is not enough to check char ranges in function boundaries. Miri warns about UB when reading an out-of-range character.
+         A proposal is to translate char-ptr/ref dereferences to calls to a function with a contract that checks for the range. *)
     in
     let shr _ _ _ = Ok (True loc) in
     let full_bor_content = Ok "char_full_borrow_content" in
@@ -1096,7 +1095,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       | Some vid when vid != "" ->
           let var_pat = VarPat (loc, vid) in
           let var_expr = Var (loc, vid) in
-          let* own = own tid [ var_expr ] in
+          let* own = own tid var_expr in
           Ok (Sep (loc, PointsTo (loc, l, var_pat), own))
       | _ -> Error "char points_to needs a value id"
     in
@@ -1270,9 +1269,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let* own, shr, full_bor_content, points_to =
       match mut with
       | Mir.Mut ->
-          let own tid vs =
-            match vs with
-            | [ l ] ->
+          let own tid v =
+            match v with
+            | l ->
                 let* ptee_fbc = ptee_fbc in
                 let ptee_fbc =
                   CallExpr
@@ -1293,7 +1292,6 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                        (*arguments*)
                        [ LitPat lft; LitPat ptee_fbc ],
                        Static ))
-            | _ -> Error "[[&mut T]].own(tid, vs) needs to vs == [l]"
           in
           let shr lft tid l = Ok (True loc) in
           let full_bor_content =
@@ -1316,17 +1314,13 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             | Some vid when vid != "" ->
                 let var_pat = VarPat (loc, vid) in
                 let var_expr = Var (loc, vid) in
-                let* own = own tid [ var_expr ] in
+                let* own = own tid var_expr in
                 Ok (Sep (loc, PointsTo (loc, l, var_pat), own))
             | _ -> Error "mut reference points_to needs a value id"
           in
           Ok (own, shr, full_bor_content, points_to)
       | Mir.Not ->
-          let own tid vs =
-            match vs with
-            | [ l ] -> ptee_shr lft tid l
-            | _ -> Error "[[&T]].own(tid, vs) needs to vs == [l]"
-          in
+          let own tid l = ptee_shr lft tid l in
           let shr lft tid l = Ok (True loc) in
           let full_bor_content =
             Error
@@ -1338,7 +1332,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             | Some vid when vid != "" ->
                 let var_pat = VarPat (loc, vid) in
                 let var_expr = Var (loc, vid) in
-                let* own = own tid [ var_expr ] in
+                let* own = own tid var_expr in
                 Ok (Sep (loc, PointsTo (loc, l, var_pat), own))
             | _ -> Error "shared reference points_to needs a value id"
           in
@@ -2473,41 +2467,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let (Ast.ManifestTypeExpr (_ (*loc*), raw_ty)) =
         Mir.raw_type_of ty_info
       in
-      let* vs =
-        if not (AstAux.is_adt_ty raw_ty) then Ok [ Ast.Var (loc, id) ]
-        else
-          let* adt_name = AstAux.adt_ty_name raw_ty in
-          match adt_name with
-          (*Todo: We need to have these built-in types defined during translation and not through headers*)
-          | "std_tuple_0_" | "std_empty_" -> Ok [ Ast.Var (loc, id) ]
-          | _ -> (
-              let adt_def =
-                List.find
-                  (fun ({ name } : Mir.adt_def_tr) -> name = adt_name)
-                  adt_defs
-              in
-              let* adt_kind = Mir.decl_mir_adt_kind adt_def.def in
-              match adt_kind with
-              | Mir.Enum | Mir.Union ->
-                  failwith "Todo: Generate owner assertion for local ADT"
-              | Mir.Struct ->
-                  let* fields_opt = AstAux.decl_fields adt_def.def in
-                  let* fields =
-                    Option.to_result
-                      ~none:(`GenLocalTyAsn "ADT without fields definition")
-                      fields_opt
-                  in
-                  let vs =
-                    List.map
-                      (fun field ->
-                        Ast.Select
-                          (loc, Ast.Var (loc, id), AstAux.field_name field))
-                      fields
-                  in
-                  Ok vs)
-      in
       let RustBelt.{ size; own; shr } = Mir.interp_of ty_info in
-      match own (Ast.Var (loc, thread_id_name)) vs with
+      match own (Ast.Var (loc, thread_id_name)) (Ast.Var (loc, id)) with
       | Ok asn -> Ok asn
       | Error estr ->
           Error (`GenLocalTyAsn ("Owner assertion function error: " ^ estr))
@@ -3055,11 +3016,19 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           | Ok field_chunks -> Ok field_chunks
           | Error msg -> Error (`GenAdtFullBorContent msg)
         in
+        let field_vals =
+          List.map
+            (fun (f : Mir.field_def_tr) -> (None, Var (f.loc, f.name)))
+            fields
+        in
+        let struct_val =
+          CastExpr
+            ( adt_def_loc,
+              StructTypeExpr (adt_def_loc, Some name, None, [], []),
+              InitializerList (adt_def_loc, field_vals) )
+        in
         let own_args =
-          LitPat (Var (adt_def_loc, tid_param_name))
-          :: List.map
-               (fun (f : Mir.field_def_tr) -> LitPat (Var (f.loc, f.name)))
-               fields
+          [ LitPat (Var (adt_def_loc, tid_param_name)); LitPat struct_val ]
         in
         let own_pred =
           CallExpr

@@ -163,8 +163,30 @@ and parse_suffix e = function%parser
   | _ -> raise (ParseException (l, "Cannot call this expression form"))
   end
 | [] -> e
+and parse_struct_expr_field_rest lf f = function%parser
+  [ (_, Kwd ":"); parse_expr as e ] -> (Some (lf, f), e)
+| [ ] -> (Some (lf, f), Var (lf, f))
+and parse_struct_expr_field = function%parser
+  [ (lf, Ident f); [%let e = parse_struct_expr_field_rest lf f] ] -> e
+and parse_struct_expr_fields = function%parser
+  [ parse_struct_expr_field as e; parse_struct_expr_fields_rest as es ] -> e::es
+| [ ] -> []
+and parse_struct_expr_fields_rest = function%parser
+  [ (_, Kwd ","); parse_struct_expr_fields as es ] -> es
+| [ ] -> []
+and is_struct_name = function
+  Var (_, x) -> (match x.[0] with 'A'..'Z' -> true | _ -> false)
+| _ -> false
+and parse_struct_expr_rest e = function%parser
+  [ (_, Kwd "{"); parse_struct_expr_fields as es; (_, Kwd "}") ] when is_struct_name e ->
+  begin match e with
+    Var (l, x) -> CastExpr (l, StructTypeExpr (l, Some x, None, [], []), InitializerList (l, es))
+  | _ -> raise (ParseException (expr_loc e, "This expression form is not supported in this position"))
+  end
+| [ ] -> e
 and parse_primary_expr = function%parser
-  [ (l, Ident x); [%let e = parse_path_rest l x] ] -> e
+  [ (l, Ident x); [%let e = parse_path_rest l x];
+    [%let e = parse_struct_expr_rest e] ] -> e
 | [ (l, Kwd "self") ] -> Var (l, "self")
 | [ (l, Int (i, dec, usuffix, lsuffix, _)) ] -> IntLit (l, i, dec, usuffix, lsuffix)
 | [ (l, String s) ] -> StringLit (l, s)

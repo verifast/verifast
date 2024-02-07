@@ -8,7 +8,7 @@ type vid = string (* value id *)
 
 type ty_interp = {
   size : expr;
-  own : tid -> v list -> (asn, string) result;
+  own : tid -> v -> (asn, string) result;
   shr : lft -> tid -> l -> (asn, string) result;
   full_bor_content : (string, string) result;
   points_to : tid -> l -> vid option -> (asn, string) result;
