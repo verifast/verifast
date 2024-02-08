@@ -641,7 +641,7 @@ mod vf_mir_builder {
                 let it = req_adt_defs.into_iter();
                 req_adt_defs = Vec::new();
                 for adt_def in it {
-                    if adt_def.is_unsafe_cell() || adt_def.is_manually_drop() {
+                    if adt_def.is_unsafe_cell() || adt_def.is_manually_drop() || !adt_def.did().is_local(){
                         continue;
                     }
                     match encoded_adt_defs
@@ -699,6 +699,12 @@ mod vf_mir_builder {
                 "Adt def {:?} Visibility:{:?} Local:{}",
                 adt_def, vis, is_local
             );
+            let hir_gens_cpn = adt_def_cpn.reborrow().init_hir_generics();
+            let hir_gens = tcx
+                .hir()
+                .get_generics(adt_def.did().expect_local())
+                .expect(&format!("Failed to get HIR generics data"));
+            Self::encode_hir_generics(enc_ctx, hir_gens, hir_gens_cpn);
         }
 
         fn encode_adt_kind(adt_kind: ty::AdtKind, mut adt_kind_cpn: adt_kind_cpn::Builder<'_>) {
@@ -730,7 +736,7 @@ mod vf_mir_builder {
             let name_cpn = fdef_cpn.reborrow().init_name();
             Self::encode_symbol(&fdef.name, name_cpn);
             let ty_cpn = fdef_cpn.reborrow().init_ty();
-            let ty = tcx.type_of(fdef.did).no_bound_vars().unwrap();
+            let ty = tcx.type_of(fdef.did).instantiate_identity();
             Self::encode_ty(tcx, enc_ctx, ty, ty_cpn);
             let vis_cpn = fdef_cpn.reborrow().init_vis();
             Self::encode_visibility(fdef.vis, vis_cpn);

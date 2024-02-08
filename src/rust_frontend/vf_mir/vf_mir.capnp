@@ -231,6 +231,7 @@ struct Ty {
         span @3: SpanData;
         vis @4: Visibility;
         isLocal @5: Bool;
+        hirGenerics @6: Hir.Generics;
     }
 
     struct AdtTy {
