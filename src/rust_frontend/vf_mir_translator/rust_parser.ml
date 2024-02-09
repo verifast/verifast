@@ -9,9 +9,9 @@ let is_expr_with_block = function
 | SwitchExpr (_, _, _, _) -> true
 | _ -> false
 
-let rec parse_type_path_rest l x = function%parser
+let rec parse_simple_path_rest l x = function%parser
   [ (_, Kwd "::"); (ll, Ident xx);
-  [%let l, x = parse_type_path_rest (Lexed(Result.get_ok @@ LocAux.cover_loc0 (lexed_loc l) (lexed_loc ll))) (x ^ "::" ^ xx)] ] -> (l, x)
+  [%let l, x = parse_simple_path_rest (Lexed(Result.get_ok @@ LocAux.cover_loc0 (lexed_loc l) (lexed_loc ll))) (x ^ "::" ^ xx)] ] -> (l, x)
 | [ ] -> (l, x)
 
 let rec parse_type = function%parser
@@ -28,7 +28,7 @@ let rec parse_type = function%parser
 | [ (l, Ident "u128") ] -> ManifestTypeExpr (l, Int (Unsigned, FixedWidthRank 4))
 | [ (l, Ident "usize") ] -> ManifestTypeExpr (l, Int (Unsigned, PtrRank))
 | [ (l, Ident "bool") ] -> ManifestTypeExpr (l, Bool)
-| [ (l, Ident x); [%let l, x = parse_type_path_rest l x];
+| [ (l, Ident x); [%let l, x = parse_simple_path_rest l x];
     [%let t = function%parser
       [ (_, Kwd "<"); [%let targs = rep_comma parse_type]; (_, Kwd ">") ] -> ConstructedTypeExpr (l, x, targs)
     | [ ] -> IdentTypeExpr (l, None, x)
@@ -418,7 +418,7 @@ let parse_pred_body = function%parser
   [ (_, Kwd "="); parse_asn as p ] -> p
 
 let parse_func_header k = function%parser
-  [ (l, Ident g); [%let l, g = parse_type_path_rest l g]; (_, Kwd "("); [%let ps = rep_comma parse_param]; (_, Kwd ")");
+  [ (l, Ident g); [%let l, g = parse_simple_path_rest l g]; (_, Kwd "("); [%let ps = rep_comma parse_param]; (_, Kwd ")");
     [%let rt = function%parser
       [ (_, Kwd "->"); parse_type as t ] -> Some t
     | [ ] -> if k = Regular then Some (StructTypeExpr (l, Some "std_tuple_0_", None, [], [])) else None
@@ -475,7 +475,7 @@ let parse_ghost_decl = function%parser
     ];
     (_, Kwd ";")
   ] -> [Inductive (l, i, tparams, cs)]
-| [ (l, Kwd "pred"); (li, Ident g); [%let l, g = parse_type_path_rest li g];
+| [ (l, Kwd "pred"); (li, Ident g); [%let l, g = parse_simple_path_rest li g];
     [%let (ps, inputParamCount) = parse_pred_paramlist ];
     [%let body = opt parse_pred_body ];
     (_, Kwd ";")
