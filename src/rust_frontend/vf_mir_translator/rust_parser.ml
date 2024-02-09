@@ -1,3 +1,4 @@
+module LocAux = Src_loc_aux
 open Lexer
 open Ast
 open Parser
@@ -8,9 +9,10 @@ let is_expr_with_block = function
 | SwitchExpr (_, _, _, _) -> true
 | _ -> false
 
-let rec parse_type_path_rest x = function%parser
-  [ (_, Kwd "::"); (_, Ident xx); [%let x = parse_type_path_rest (x ^ "::" ^ xx)] ] -> x
-| [ ] -> x
+let rec parse_simple_path_rest l x = function%parser
+  [ (_, Kwd "::"); (ll, Ident xx);
+  [%let l, x = parse_simple_path_rest (Lexed(Result.get_ok @@ LocAux.cover_loc0 (lexed_loc l) (lexed_loc ll))) (x ^ "::" ^ xx)] ] -> (l, x)
+| [ ] -> (l, x)
 
 let rec parse_type = function%parser
   [ (l, Ident "i8") ] -> ManifestTypeExpr (l, Int (Signed, FixedWidthRank 0))
@@ -26,7 +28,7 @@ let rec parse_type = function%parser
 | [ (l, Ident "u128") ] -> ManifestTypeExpr (l, Int (Unsigned, FixedWidthRank 4))
 | [ (l, Ident "usize") ] -> ManifestTypeExpr (l, Int (Unsigned, PtrRank))
 | [ (l, Ident "bool") ] -> ManifestTypeExpr (l, Bool)
-| [ (l, Ident x); [%let x = parse_type_path_rest x];
+| [ (l, Ident x); [%let l, x = parse_simple_path_rest l x];
     [%let t = function%parser
       [ (_, Kwd "<"); [%let targs = rep_comma parse_type]; (_, Kwd ">") ] -> ConstructedTypeExpr (l, x, targs)
     | [ ] -> IdentTypeExpr (l, None, x)
@@ -154,7 +156,12 @@ let rec parse_expr_funcs allowStructExprs =
   | [ (l, Kwd "&"); [%let mutability = opt (function%parser [ (_, Kwd "mut") ] -> ()) ]; parse_prefix_expr as e ] -> ignore mutability; AddressOf (l, e)
   | [ parse_suffix_expr as e ] -> e
   and parse_suffix_expr = function%parser
-    [ parse_primary_expr as e; [%let e = parse_suffix e ] ] -> e
+    [ parse_primary_expr as e;
+      [%let e = match e with
+        CallExpr (_, "#list", [], [], pats, Static) -> fun s -> e
+        | _ -> parse_suffix e
+      ]
+    ] -> e
   and parse_suffix e = function%parser
     [ (l, Kwd "."); (_, Ident f); [%let e = parse_suffix (Select (l, e, f)) ] ] -> e
   | [ (l, Kwd "("); [%let args0 = rep_comma parse_pat ]; (_, Kwd ")");
@@ -411,7 +418,7 @@ let parse_pred_body = function%parser
   [ (_, Kwd "="); parse_asn as p ] -> p
 
 let parse_func_header k = function%parser
-  [ (l, Ident g); (_, Kwd "("); [%let ps = rep_comma parse_param]; (_, Kwd ")");
+  [ (l, Ident g); [%let l, g = parse_simple_path_rest l g]; (_, Kwd "("); [%let ps = rep_comma parse_param]; (_, Kwd ")");
     [%let rt = function%parser
       [ (_, Kwd "->"); parse_type as t ] -> Some t
     | [ ] -> if k = Regular then Some (StructTypeExpr (l, Some "std_tuple_0_", None, [], [])) else None
@@ -468,7 +475,7 @@ let parse_ghost_decl = function%parser
     ];
     (_, Kwd ";")
   ] -> [Inductive (l, i, tparams, cs)]
-| [ (l, Kwd "pred"); (li, Ident g);
+| [ (l, Kwd "pred"); (li, Ident g); [%let l, g = parse_simple_path_rest li g];
     [%let (ps, inputParamCount) = parse_pred_paramlist ];
     [%let body = opt parse_pred_body ];
     (_, Kwd ";")
