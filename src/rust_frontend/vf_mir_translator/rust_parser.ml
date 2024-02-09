@@ -156,7 +156,12 @@ let rec parse_expr_funcs allowStructExprs =
   | [ (l, Kwd "&"); [%let mutability = opt (function%parser [ (_, Kwd "mut") ] -> ()) ]; parse_prefix_expr as e ] -> ignore mutability; AddressOf (l, e)
   | [ parse_suffix_expr as e ] -> e
   and parse_suffix_expr = function%parser
-    [ parse_primary_expr as e; [%let e = parse_suffix e ] ] -> e
+    [ parse_primary_expr as e;
+      [%let e = match e with
+        CallExpr (_, "#list", [], [], pats, Static) -> fun s -> e
+        | _ -> parse_suffix e
+      ]
+    ] -> e
   and parse_suffix e = function%parser
     [ (l, Kwd "."); (_, Ident f); [%let e = parse_suffix (Select (l, e, f)) ] ] -> e
   | [ (l, Kwd "("); [%let args0 = rep_comma parse_pat ]; (_, Kwd ")");
