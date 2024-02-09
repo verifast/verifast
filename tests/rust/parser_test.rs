@@ -3,9 +3,9 @@ mod foo {
     struct Foo {
         v: i32,
     }
-
-    //@ pred foo::Foo_own(t: thread_id_t, v: i32) = true;
 }
+
+//@ pred foo::Foo_own(t: thread_id_t, v: i32) = true;
 
 /*@
 lem foo::Foo_dummy(p: *foo::Foo)
