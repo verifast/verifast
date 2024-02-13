@@ -188,7 +188,6 @@ let sexpr_of_func_kind kind =
 let sexpr_of_ident_scope (scope : ident_scope) : sexpression =
   match scope with
     | LocalVar           -> Symbol "local"
-    | PureCtor           -> Symbol "pure-constructor"
     | FuncName           -> Symbol "function"
     | PredFamName        -> Symbol "predicate-family"
     | EnumElemName n     -> Symbol "enumeration-member"

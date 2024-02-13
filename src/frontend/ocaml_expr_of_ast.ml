@@ -78,7 +78,6 @@ let of_predref p =
 
 let of_ident_scope = function
   LocalVar -> c "LocalVar"
-| PureCtor -> c "PureCtor"
 | FuncName -> c "FuncName"
 | PredFamName -> c "PredFamName"
 | EnumElemName n -> C ("EnumElemName", [BigInt n])

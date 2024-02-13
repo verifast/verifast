@@ -1338,7 +1338,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               flatmap 
                 (fun (WSwitchAsnClause (l, casename, args, boxinginfo, asn)) ->
                   if (List.length args) = 0 then
-                    let cond = WOperation (l, Eq, [e; WVar (l, casename, PureCtor)], AnyType) in
+                    let cond = WOperation (l, Eq, [e; WVar (l, casename, PureFuncName)], AnyType) in
                     iter (cond :: conds) asn cont
                   else 
                    []

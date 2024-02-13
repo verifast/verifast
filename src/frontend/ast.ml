@@ -239,7 +239,6 @@ class predref (name: string) (domain: type_ list) (inputParamCount: int option) 
 type
   ident_scope = (* ?ident_scope *)
     LocalVar
-  | PureCtor
   | FuncName
   | PredFamName
   | EnumElemName of big_int

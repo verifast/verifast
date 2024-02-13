@@ -3974,11 +3974,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         begin
           let targs = List.map (fun _ -> InferredType (object end, ref Unconstrained)) tparams in
           let Some tpenv = zip tparams targs in
-          (WVar (l, x, PureCtor), instantiate_type tpenv t, None)
+          (WVar (l, x, PureFuncName), instantiate_type tpenv t, None)
         end
         else
         begin
-          (WVar (l, x, PureCtor), t, None)
+          (WVar (l, x, PureFuncName), t, None)
         end
       | _ ->
       match try_assoc x all_funcnameterms with
@@ -7328,7 +7328,6 @@ let check_if_list_is_defined () =
       begin
         match scope with
           LocalVar -> (try List.assoc x env with Not_found -> assert_false [] env l (Printf.sprintf "Unbound variable '%s'" x) None)
-        | PureCtor -> let Some (lg, tparams, t, [], s) = try_assoc x purefuncmap in mk_app s []
         | FuncName -> List.assoc x all_funcnameterms
         | PredFamName -> let Some (_, _, _, _, symb, _, _) = try_assoc x predfammap in symb
         | EnumElemName n -> ctxt#mk_intlit_of_string (string_of_big_int n)
