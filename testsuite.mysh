@@ -9,6 +9,8 @@ cd bin
   cd ..
 cd ..
 cd examples
+  verifast -c -uppercase_type_params_carry_typeid generic_pred_ctors.c
+  verifast -c -prover z3v4.5 -uppercase_type_params_carry_typeid generic_pred_ctors.c
   verifast -c mutually_recursive_fns_simple.c
   verifast -shared uniqueness.c
   verifast -read_options_from_source_file unions.c

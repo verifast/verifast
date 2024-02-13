@@ -915,10 +915,11 @@ and of_decl = function
     of_params params;
     of_expr body
   ])
-| PredCtorDecl (l, p, ctorParams, predParams, inputParamCount, body) ->
+| PredCtorDecl (l, p, tparams, ctorParams, predParams, inputParamCount, body) ->
   C ("PredCtorDecl", [
     of_loc l;
     S p;
+    of_list s tparams;
     of_params ctorParams;
     of_params predParams;
     of_option i inputParamCount;

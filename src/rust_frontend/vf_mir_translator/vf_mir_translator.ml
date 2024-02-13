@@ -2916,6 +2916,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           PredCtorDecl
             ( adt_def_loc,
               fbor_content_name,
+              [] (* type parameters*),
               fbor_content_params,
               [],
               None

@@ -1031,11 +1031,12 @@ and sexpr_of_decl (decl : decl) : sexpression =
                  ; "fields", sexpr_of_list sexpr_of_field fields
                  ; "construcors", sexpr_of_list (sexpr_of_constructor id) cons
                  ; "instance-preds", sexpr_of_list sexpr_of_instance_pred preds ]
-    | PredCtorDecl (_, name, tparams, args, precise, asn) ->
+    | PredCtorDecl (_, name, tparams, ctorParams, params, precise, asn) ->
       build_list [ Symbol "declare-predicate-constructor"
                  ; Symbol name ]
-                 [ "tparams", List (List.map sexpr_of_argument tparams)
-                 ; "args", List (List.map sexpr_of_argument args)
+                 [ "tparams", List (List.map (fun tparam -> Symbol tparam) tparams)
+                 ; "ctorParams", List (List.map sexpr_of_param ctorParams)
+                 ; "params", List (List.map sexpr_of_param params)
                  ; "precise", sexpr_of_option sexpr_of_int precise
                  ; "ans", sexpr_of_pred asn ]
     | FuncTypeDecl _              -> unsupported "FuncTypeDecl"
@@ -1046,8 +1047,8 @@ and sexpr_of_decl (decl : decl) : sexpression =
                  (("type", sexpr_of_type_expr ty) :: (match init_opt with None -> [] | Some e -> ["init", sexpr_of_expr e]))
     | UnloadableModuleDecl _      -> unsupported "UnloadableModuleDecl"
 
-and sexpr_of_argument (type_, name) =
-  Symbol (name ^ " with type " ^ (string_of_sexpression(sexpr_of_type_expr type_)))
+and sexpr_of_param (type_, name) =
+  List [Symbol name; sexpr_of_type_expr type_]
 
 and sexpr_of_inductive_constructor (c : ctor) : sexpression =
   let aux (name, type_) =

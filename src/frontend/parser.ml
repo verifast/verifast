@@ -962,13 +962,14 @@ and
     (_, Kwd ";") 
   ] -> pop_typedef_scope (); [PredFamilyInstanceDecl (l, g, [], is, ps, p)]
 | [ (l, Kwd "predicate_ctor"); 
-    (_, Ident g); 
+    (lg, Ident g); 
+    [%l tparams = parse_type_params lg]; 
     [%l () = (fun _ -> push_typedef_scope ())]; 
     parse_paramlist as ps1; 
     [%l (ps2, inputParamCount) = parse_pred_paramlist];
     parse_pred_body as p; 
     (_, Kwd ";") 
-  ] -> pop_typedef_scope (); [PredCtorDecl (l, g, ps1, ps2, inputParamCount, p)]
+  ] -> pop_typedef_scope (); [PredCtorDecl (l, g, tparams, ps1, ps2, inputParamCount, p)]
 | [ (l, Kwd "lemma"); 
     parse_return_type as t; 
     [%l d = parse_func_rest (Lemma(false, None)) t] 
@@ -2800,7 +2801,11 @@ and
 and
   apply_type_args e targs args =
   match e with
-    Var (lx, x) -> CallExpr (lx, x, targs, [], args, Static)
+    Var (lx, x) ->
+    begin match args with
+      args, None -> CallExpr (lx, x, targs, [], args, Static)
+    | args, Some args' -> CallExpr (lx, x, targs, args, args', Static)
+    end
   | CastExpr (lc, te, e) -> CastExpr (lc, te, apply_type_args e targs args)
   | Operation (l, Not, [e]) -> Operation (l, Not, [apply_type_args e targs args])
   | Operation (l, BitNot, [e]) -> Operation (l, BitNot, [apply_type_args e targs args])
@@ -2808,6 +2813,10 @@ and
   | AddressOf (l, e) -> AddressOf (l, apply_type_args e targs args)
   | Operation (l, op, [e1; e2]) -> Operation (l, op, [e1; apply_type_args e2 targs args])
   | _ -> raise (ParseException (expr_loc e, "Identifier expected before type argument list"))
+and
+  parse_arglists = function%parser
+    [ parse_patlist as args; [%let args' = opt parse_patlist] ] -> args, args'
+  | [ ] -> [], None
 and
   parse_expr_lt_rest e0 cont = function%parser
 | [ (l, Kwd "<");
@@ -2818,13 +2827,13 @@ and
         [%l
         e = function%parser
         | [ (_, Kwd ">"); (* Type argument *)
-            [%l args = (function%parser [ parse_patlist as args ] -> args | [ ] -> [])];
+            parse_arglists as args;
             [%l e = cont (apply_type_args e0 [type_expr_of_expr e1] args)]
           ] -> e
         | [ (_, Kwd ","); 
             [%l ts = rep_comma parse_type]; 
             (_, Kwd ">");
-            [%l args = (function%parser [ parse_patlist as args ] -> args | [ ] -> [])];
+            parse_arglists as args;
             [%l e = cont (apply_type_args e0 ([type_expr_of_expr e1] @ ts) args)]
           ] -> e
         | [ [%l e = cont (Operation (l, Lt, [e0; e1]))] ] -> e
@@ -2832,7 +2841,7 @@ and
       ] -> e
     | [ [%l ts = rep_comma parse_type]; 
         (_, Kwd ">");
-        [%l args = (function%parser [ parse_patlist as args ] -> args | [ ] -> [])];
+        parse_arglists as args;
         [%l e = cont (apply_type_args e0 ts args)]
       ] -> e
     ]

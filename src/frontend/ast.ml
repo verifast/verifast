@@ -817,6 +817,7 @@ and
   | PredCtorDecl of
       loc *
       string *
+      string list (* type parameters *) *
       (type_expr * string) list *
       (type_expr * string) list *
       int option * (* (Some n) means the predicate is precise and the first n parameters are input parameters *)

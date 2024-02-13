@@ -499,12 +499,12 @@ let parse_ghost_decl = function%parser
     | e -> raise (ParseException (expr_loc e, "typeid(T) expected"))
     in
     [PredFamilyInstanceDecl (l, g, [], indices, ps, body)]
-| [ (l, Kwd "pred_ctor"); (li, Ident g);
+| [ (l, Kwd "pred_ctor"); (li, Ident g); parse_type_params as tparams;
     (_, Kwd "("); [%let ps1 = rep_comma parse_param]; (_, Kwd ")");
     [%let (ps2, inputParamCount) = parse_pred_paramlist ];
     parse_pred_body as p;
     (_, Kwd ";")
-  ] -> [PredCtorDecl (l, g, ps1, ps2, inputParamCount, p)]
+  ] -> [PredCtorDecl (l, g, tparams, ps1, ps2, inputParamCount, p)]
 | [ parse_lemma_keyword as k; [%let d = parse_func_rest k ] ] -> [d]
 | [ (_, Kwd "fix"); [%let (l, g, ps, rt) = parse_func_header Fixpoint]; (_, Kwd "{"); parse_expr as e; (closeBraceLoc, Kwd "}") ] ->
   let ss =

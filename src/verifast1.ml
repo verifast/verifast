@@ -84,6 +84,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let include_paths = Vfbindings.get Vfparam_include_paths vfbindings
   let uppercase_type_params_carry_typeid = Vfbindings.get Vfparam_uppercase_type_params_carry_typeid vfbindings
 
+  let tparam_carries_typeid tparam =
+    uppercase_type_params_carry_typeid &&
+    String.length tparam > 0 && match tparam.[0] with 'A'..'Z' -> true | _ -> false
+
   let () =
     if assume_no_subobject_provenance && not fno_strict_aliasing then
       static_error (Lexed ((path, 1, 1), (path, 1, 1))) "Command-line option -assume_no_subobject_provenance is allowed only in combination with -fno_strict_aliasing" None;
@@ -162,7 +166,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let dummy_frac_terms = ref []
 
   (** The terms that represent predicate constructor applications. *)
-  let pred_ctor_applications : (termnode * (symbol * termnode * (termnode list) * int option)) list ref = ref []
+  let pred_ctor_applications : (termnode * (symbol * termnode * type_ list * (termnode list) * int option)) list ref = ref []
 
   (** When switching to the next symbolic execution branch, this stack is popped to forget about fresh identifiers generated in the old branch. *)
   let used_ids_stack = ref []
@@ -279,8 +283,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     if (language, dialect) = (CLang, Some(Rust)) then filter_redundant_ctxs cs else cs
 
-  let register_pred_ctor_application t symbol symbol_term ts inputParamCount =
-    pred_ctor_applications := (t, (symbol, symbol_term, ts, inputParamCount)) :: !pred_ctor_applications
+  let register_pred_ctor_application t symbol symbol_term targs ts inputParamCount =
+    pred_ctor_applications := (t, (symbol, symbol_term, targs, ts, inputParamCount)) :: !pred_ctor_applications
 
   let success () = SymExecSuccess
 
@@ -812,6 +816,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     type pred_ctor_info =
       PredCtorInfo of
         loc
+      * string list (* type parameters *)
       * (string * type_) list (* constructor parameters *)
       * (string * type_) list (* predicate parameters *)
       * int option (* inputParamCount *)
@@ -3414,7 +3419,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let (predctormap1, purefuncmap1) =
     let rec iter (pn,ilist) pcm pfm ds =
       match ds with
-        PredCtorDecl (l, p, ps1, ps2, inputParamCount, body)::ds -> let p=full_name pn p in
+        PredCtorDecl (l, p, tparams, ps1, ps2, inputParamCount, body)::ds -> let p=full_name pn p in
         begin
           match try_assoc2' Ghost (pn,ilist) p pfm purefuncmap0 with
             Some _ -> static_error l "Predicate constructor name clashes with existing pure function name." None
@@ -3424,6 +3429,13 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           match try_assoc' Ghost (pn,ilist) p predfammap with
             Some _ -> static_error l "Predicate constructor name clashes with existing predicate or predicate family name." None
           | None -> ()
+        end;
+        check_tparams l [] tparams;
+        if List.exists (fun x -> not (tparam_carries_typeid x)) tparams then begin
+          if not uppercase_type_params_carry_typeid then
+            static_error l "Generic predicate constructor declarations are allowed only if option `uppercase_type_params_carry_typeid` is specified" None
+          else
+            static_error l "The type parameters of a generic predicate constructor must start with an uppercase letter" None
         end;
         let ps1 =
           let rec iter pmap ps =
@@ -3435,7 +3447,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   Some _ -> static_error l "Duplicate parameter name." None
                 | _ -> ()
               end;
-              let t = check_pure_type (pn,ilist) [] Ghost te in
+              let t = check_pure_type (pn,ilist) tparams Ghost te in
               if not (type_satisfies_contains_any_constraint true t) then static_error (type_expr_loc te) "This type cannot be used as a predicate constructor parameter type because it contains 'any' or a predicate type in a negative position." None;
               iter ((x, t)::pmap) ps
           in
@@ -3451,15 +3463,15 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   Some _ -> static_error l "Duplicate parameter name." None
                 | _ -> ()
               end;
-              let t = check_pure_type (pn,ilist) [] Ghost te in
+              let t = check_pure_type (pn,ilist) tparams Ghost te in
               iter ((x, t)::psmap) ((x, t)::pmap) ps
           in
           iter ps1 [] ps2
         in
-        let funcsym = mk_func_symbol p (List.map (fun (x, t) -> provertype_of_type t) ps1) ProverInductive Proverapi.Uninterp in
+        let funcsym = mk_func_symbol p (List.map (fun tparam -> provertype_of_type voidPtrType) tparams @ List.map (fun (x, t) -> provertype_of_type t) ps1) ProverInductive Proverapi.Uninterp in
         (* predicate constructors do not support coinductive predicates yet. *)
-        let pf = (p, (l, [], PredType ([], List.map (fun (x, t) -> t) ps2, inputParamCount, Inductiveness_Inductive), List.map (fun (x, t) -> (x, t)) ps1, funcsym)) in
-        iter (pn,ilist) ((p, (l, ps1, ps2, inputParamCount, body, funcsym, pn, ilist))::pcm) (pf::pfm) ds
+        let pf = (p, (l, tparams, PredType ([], List.map (fun (x, t) -> t) ps2, inputParamCount, Inductiveness_Inductive), List.map (fun (x, t) -> (x, t)) ps1, funcsym)) in
+        iter (pn,ilist) ((p, (l, tparams, ps1, ps2, inputParamCount, body, funcsym, pn, ilist))::pcm) (pf::pfm) ds
       | [] -> (pcm, pfm)
       | _::ds -> iter (pn,ilist) pcm pfm ds
     in
@@ -3967,19 +3979,23 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       end else
         cont ()
       end $. fun () ->
-      match resolve Ghost (pn,ilist) l x purefuncmap with
-      | Some (x, (ld, tparams, t, [], _)) ->
+      let check_pure_func_name (x, (ld, tparams, t, param_names_types, _)) =
         reportUseSite DeclKind_PureFunction ld l;
-        if tparams <> [] then
-        begin
-          let targs = List.map (fun _ -> InferredType (object end, ref Unconstrained)) tparams in
-          let Some tpenv = zip tparams targs in
-          (WVar (l, x, PureFuncName), instantiate_type tpenv t, None)
-        end
-        else
-        begin
-          (WVar (l, x, PureFuncName), t, None)
-        end
+        let (_, pts) = List.split param_names_types in
+        let (pts, t) =
+          if tparams = [] then
+            (pts, t)
+          else begin
+            if List.exists tparam_carries_typeid tparams then
+              static_error l "Using a pure function with type parameters that carry a type id as a value is not yet supported" None;
+            let tpenv = List.map (fun x -> (x, InferredType (object end, ref Unconstrained))) tparams in
+            (List.map (instantiate_type tpenv) pts, instantiate_type tpenv t)
+          end
+        in
+        (WVar (l, x, PureFuncName), List.fold_right (fun t1 t2 -> PureFuncType (t1, t2)) pts t, None)
+      in
+      match resolve Ghost (pn,ilist) l x purefuncmap with
+      | Some ((x, (ld, tparams, t, [], _)) as entry) -> check_pure_func_name entry
       | _ ->
       match try_assoc x all_funcnameterms with
         Some fterm when language = CLang ->
@@ -4005,17 +4021,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | Some _ when language <> Java -> (WVar (l, x, ModuleName), intType, None)
       | _ ->
       match resolve Ghost (pn,ilist) l x purefuncmap with
-        Some (x, (ld, tparams, t, param_names_types, _)) ->
-        reportUseSite DeclKind_PureFunction ld l;
-        let (_, pts) = List.split param_names_types in
-        let (pts, t) =
-          if tparams = [] then
-            (pts, t)
-          else
-            let tpenv = List.map (fun x -> (x, InferredType (object end, ref Unconstrained))) tparams in
-            (List.map (instantiate_type tpenv) pts, instantiate_type tpenv t)
-        in
-        (WVar (l, x, PureFuncName), List.fold_right (fun t1 t2 -> PureFuncType (t1, t2)) pts t, None)
+        Some entry -> check_pure_func_name entry
       | None ->
       if language = Java then
         static_error l ("No such variable, field, class, interface, package, inductive datatype constructor, or predicate: " ^ x) None
@@ -5956,18 +5962,18 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             | None ->
               begin match
                 match try_assoc p predctormap1 with
-                  Some (lp, ps1, ps2, inputParamCount, body, funcsym, pn, ilist) ->
+                  Some (lp, tparams, ps1, ps2, inputParamCount, body, funcsym, pn, ilist) ->
                   reportUseSite DeclKind_Predicate lp l;
-                  Some (ps1, ps2, inputParamCount)
+                  Some (tparams, ps1, ps2, inputParamCount)
                 | None ->
                 match try_assoc p predctormap0 with
-                  Some (PredCtorInfo (lp, ps1, ps2, inputParamCount, body, funcsym)) ->
+                  Some (PredCtorInfo (lp, tparams, ps1, ps2, inputParamCount, body, funcsym)) ->
                   reportUseSite DeclKind_Predicate lp l;
-                  Some (ps1, ps2, inputParamCount)
+                  Some (tparams, ps1, ps2, inputParamCount)
                 | None -> None
               with
-                Some (ps1, ps2, inputParamCount) ->
-                cont (p, true, [], List.map snd ps1, List.map snd ps2, inputParamCount)
+                Some (tparams, ps1, ps2, inputParamCount) ->
+                cont (p, true, tparams, List.map snd ps1, List.map snd ps2, inputParamCount)
               | None ->
                 let error () = 
                   begin match try_assoc p tenv with
@@ -6569,8 +6575,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     List.map
       (
         function
-          (g, (l, ps1, ps2, inputParamCount, body, funcsym,pn,ilist)) ->
-          let (wbody, _) = check_asn (pn,ilist) [] (ps1 @ ps2) body in
+          (g, (l, tparams, ps1, ps2, inputParamCount, body, funcsym,pn,ilist)) ->
+          let (wbody, _) = check_asn (pn,ilist) tparams (ps1 @ ps2) body in
           begin match inputParamCount with
             None -> ()
           | Some(n) -> 
@@ -6583,7 +6589,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   static_error l ("Preciseness check failure: body does not fix output parameter '" ^ x ^ "'.") None)
               outps
           end;
-          (g, PredCtorInfo (l, ps1, ps2, inputParamCount, wbody, funcsym))
+          (g, PredCtorInfo (l, tparams, ps1, ps2, inputParamCount, wbody, funcsym))
       )
       predctormap1
   
@@ -7423,11 +7429,13 @@ let check_if_list_is_defined () =
       cont state (ctxt#mk_app get_class_symbol [t])
     | WPureFunCall (l, g, targs, args) ->
       begin match try_assoc g predctormap with
-        Some (PredCtorInfo(l, ps1, ps2, inputParamCount, body, (s, st))) ->
+        Some (PredCtorInfo(l, tparams, ps1, ps2, inputParamCount, body, (s, st))) ->
+          let targs_typeids = List.map (typeid_of_core l env) targs in
           evs state args $. fun state vs ->
-          let fun_app = (mk_app (s, st) vs) in
+          
+          let fun_app = (mk_app (s, st) (targs_typeids @ vs)) in
           (if((List.length ps1) = (List.length vs)) then
-            register_pred_ctor_application fun_app s st vs inputParamCount);
+            register_pred_ctor_application fun_app s st targs vs inputParamCount);
           cont state fun_app
       | None ->
         begin match try_assoc g purefuncmap with

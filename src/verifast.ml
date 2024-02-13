@@ -73,10 +73,6 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   (* Region: verification of statements *)
   
-  let tparam_carries_typeid tparam =
-    uppercase_type_params_carry_typeid &&
-    String.length tparam > 0 && match tparam.[0] with 'A'..'Z' -> true | _ -> false
-
   let verify_expr readonly (pn,ilist) tparams pure leminfo funcmap sizemap tenv ghostenv h env xo e cont econt =
     verify_expr (readonly, readonly) (pn,ilist) tparams pure leminfo funcmap sizemap tenv ghostenv h env xo e cont econt
 
@@ -1183,18 +1179,31 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               let this = List.assoc "this" env in
               open_instance_predicate this target_tn
             end
-          | Some (PredCtorInfo (lp, ps1, ps2, inputParamCount, body, funcsym)) ->
+          | Some (PredCtorInfo (lp, tparams, ps1, ps2, inputParamCount, body, funcsym)) ->
             reportUseSite DeclKind_Predicate lp l;
-            if targs <> [] then static_error l "Predicate constructor expects 0 type arguments." None;
+            let tpenv =
+              match zip tparams targs with
+                Some bs -> bs
+              | None -> static_error l "Incorrect number of type arguments" None
+            in
             let bs0 =
               match zip pats0 ps1 with
                 None -> static_error l "Incorrect number of predicate constructor arguments." None
               | Some bs ->
-                List.map (function (LitPat e, (x, t)) -> let w = check_expr_t (pn,ilist) tparams tenv e t in (x, ev w) | _ -> static_error l "Predicate constructor arguments must be expressions." None) bs
+                bs |> List.map begin function
+                  (LitPat e, (x, t)) ->
+                  let t' = instantiate_type tpenv t in
+                  let w = check_expr_t (pn,ilist) tparams tenv e t' in
+                  let v = ev w in
+                  (x, prover_convert_term v t' t)
+                | _ -> static_error l "Predicate constructor arguments must be expressions." None
+                end
             in
-            let g_symb = mk_app funcsym (List.map (fun (x, t) -> t) bs0) in
-            let ps2 = List.map (fun (x, t) -> (x, t, t)) ps2 in
-            ([], [], (g_symb, false), [], 0, ps2, bs0, body, inputParamCount)
+            let targs_typeids = List.map (fun (x, tp) -> (x ^ "_typeid", typeid_of_core l env tp)) tpenv in
+            let g_symb = mk_app funcsym (List.map snd targs_typeids @ List.map (fun (x, t) -> t) bs0) in
+            let ps2 = List.map (fun (x, t) -> (x, t, instantiate_type tpenv t)) ps2 in
+            let bs0 = targs_typeids @ bs0 in
+            ([], tpenv, (g_symb, false), [], 0, ps2, bs0, body, inputParamCount)
           end
       in
       let (coefpat, tenv) =
@@ -1215,13 +1224,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             (let Some bs = zip ps ts in bs)
         in
         let env' = env0 @ env' in
-        let typeid_env = tpenv |> flatmap @@ fun (tparam, tp) ->
-          if tparam_carries_typeid tparam then
-            [(tparam ^ "_typeid", typeid_of_core l env tp)]
-          else
-            []
-        in
-        let env' = typeid_env @ env' in
+        let env' = typeid_env_of_tpenv l env tpenv @ env' in
         let body_size =
           begin match chunk_size with
           | Some (PredicateChunkSize k) ->
@@ -1243,7 +1246,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                        * coinduction is not supported). *)
                       Inductiveness_Inductive
                     end
-                  | Some (PredCtorInfo (_, ps1, ps2, inputParamCount, body, funcsym)) ->
+                  | Some (PredCtorInfo (_, tparams, ps1, ps2, inputParamCount, body, funcsym)) ->
                     (* predicate ctors do not support coinductive predicates yet, so they are inductive. *)
                     Inductiveness_Inductive
                   end
@@ -1494,17 +1497,29 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 close_instance_predicate this tn
               | _ -> static_error l "No such predicate instance." None
               end
-            | Some (PredCtorInfo (lpred, ps1, ps2, inputParamCount, body, funcsym)) ->
+            | Some (PredCtorInfo (lpred, tparams, ps1, ps2, inputParamCount, body, funcsym)) ->
               reportUseSite DeclKind_Predicate lpred l;
+              let tpenv =
+                match zip tparams targs with
+                  Some tpenv -> tpenv
+                | None -> static_error l "Incorrect number of type arguments" None
+              in
               let bs0 =
                 match zip pats0 ps1 with
                   None -> static_error l "Incorrect number of predicate constructor arguments." None
                 | Some bs ->
-                  List.map (function (LitPat e, (x, t)) -> let w = check_expr_t (pn,ilist) tparams tenv e t in (x, ev w) | _ -> static_error l "Predicate constructor arguments must be expressions." None) bs
+                  bs |> List.map begin function
+                    (LitPat e, (x, t)) ->
+                    let t' = instantiate_type tpenv t in
+                    let w = check_expr_t (pn,ilist) tparams tenv e t' in
+                    let v = ev w in
+                    (x, prover_convert_term v t' t)
+                  | _ -> static_error l "Predicate constructor arguments must be expressions." None
+                  end
               in
-              let g_symb = mk_app funcsym (List.map (fun (x, t) -> t) bs0) in
-              if targs <> [] then static_error l "Incorrect number of type arguments." None;
-              (lpred, [], [], ps2, bs0, (g_symb, false), body, [], inputParamCount)
+              let targs_typeids = List.map (fun (x, tp) -> (x ^ "_typeid", typeid_of_core l env tp)) tpenv in
+              let g_symb = mk_app funcsym (List.map snd targs_typeids @ List.map (fun (x, t) -> t) bs0) in
+              (lpred, [], tpenv, ps2, targs_typeids @ bs0, (g_symb, false), body, [], inputParamCount)
           end
       in
       let ps =
@@ -1531,13 +1546,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       let env' = flatmap (function (p, pat, tp0, tp, Some t) -> [(p, prover_convert_term t tp tp0)] | _ -> []) ps in
       let env' = bs0 @ env' in
-      let typeid_env = tpenv |> flatmap @@ fun (tparam, tp) ->
-        if tparam_carries_typeid tparam then
-          [(tparam ^ "_typeid", typeid_of_core l env tp)]
-        else
-          []
-      in
-      let env' = typeid_env @ env' in
+      let env' = typeid_env_of_tpenv l env tpenv @ env' in
       with_context PushSubcontext (fun () ->
         consume_asn rules tpenv h ghostenv env' p true coef (fun _ h p_ghostenv p_env size_first ->
           with_context (Executing (h, p_env, lpred, "Inferring chunk arguments")) $. fun () ->

@@ -352,11 +352,12 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           begin match try_assoc g#name predfammap with
             Some (_, _, _, declared_paramtypes, symb, _, _) -> ((symb, true), pats0, pats, g#domain, Some (g#name, declared_paramtypes))
           | None ->
-            let PredCtorInfo (_, ps1, ps2, inputParamCount, body, funcsym) = List.assoc g#name predctormap in
+            let PredCtorInfo (_, tparams, ps1, ps2, inputParamCount, body, funcsym) = List.assoc g#name predctormap in
+            if tparams <> [] then static_error l "Generic predicate constructor assertions are not yet supported" None;
             let ctorargs = List.map (function (LitPat e | WCtorPat (_, _, _, _, _, _, _, Some e)) -> ev e | _ -> static_error l "Patterns are not supported in predicate constructor argument positions." None) pats0 in
             let g_symb = mk_app funcsym ctorargs in
             let (symbol, symbol_term) = funcsym in
-            register_pred_ctor_application g_symb symbol symbol_term ctorargs inputParamCount;
+            register_pred_ctor_application g_symb symbol symbol_term [] ctorargs inputParamCount;
             ((g_symb, false), [], pats, List.map snd ps2, None)
           end
       in
@@ -917,7 +918,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               Some (_, (_, _, _, _, symb, inputParamCount, _)) -> ((symb, true), inputParamCount)
             | None -> begin match try_assq (fst g) !pred_ctor_applications with
                 None -> (g, None)
-              | Some (funsym, funterm, args, inputParamCount) -> (g, inputParamCount)
+              | Some (funsym, funterm, targs, args, inputParamCount) -> (g, inputParamCount)
               end
             end
           | None -> (g, None)
@@ -960,12 +961,12 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let lemma_rules = match try_assq g !lemma_rules with None -> [] | Some(rules) -> !rules in
             begin match open_close_rules @ lemma_rules with
               [] ->  begin match try_assq g ! pred_ctor_applications with 
-                  None -> cont ()
-                | Some (_, symbol_term, ctor_args, _) -> 
+                | Some (_, symbol_term, [], ctor_args, _) -> 
                   begin match try_assq symbol_term ! rules with
                     Some rules -> try_rules !rules (ctor_args @ ts)
                   | None -> cont ()
                   end
+                | _ -> cont ()
               end
             | rules -> try_rules rules ts
             end
@@ -1124,11 +1125,12 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
            match try_assoc g#name predfammap with
             Some (_, _, _, _, symb, _, _) -> ((symb, true), pats0, pats, g#domain)
           | None -> 
-            let PredCtorInfo (_, ps1, ps2, inputParamCount, body, funcsym) = List.assoc g#name predctormap in
+            let PredCtorInfo (_, tparams, ps1, ps2, inputParamCount, body, funcsym) = List.assoc g#name predctormap in
+            if tparams <> [] then static_error l "Generic predicate constructor assertions are not yet supported" None;
             let ctorargs = List.map (function SrcPat (LitPat e | WCtorPat (_, _, _, _, _, _, _, Some e)) -> ev e | _ -> static_error l "Patterns are not supported in predicate constructor argument positions." None) pats0 in
             let g_symb = mk_app funcsym ctorargs in
             let (symbol, symbol_term) = funcsym in
-            register_pred_ctor_application g_symb symbol symbol_term ctorargs inputParamCount;
+            register_pred_ctor_application g_symb symbol symbol_term targs ctorargs inputParamCount;
             ((g_symb, false), [], pats, List.map snd ps2)
         else
           match try_assoc g#name env with
@@ -1310,6 +1312,13 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       end
       predinstmap
   
+  let typeid_env_of_tpenv l env tpenv =
+    tpenv |> flatmap @@ fun (tparam, tp) ->
+      if tparam_carries_typeid tparam then
+        [(tparam ^ "_typeid", typeid_of_core l env tp)]
+      else
+        []
+
   (* Those predicate instances that, under certain conditions on the input parameters, are likely to be closeable. *)
   let empty_preds =
     flatmap
@@ -1405,16 +1414,16 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           | None ->
             begin match try_assoc q#name predctormap with
               None -> []
-            | Some(PredCtorInfo (l, ps1, ps2, inputParamCount, wbody, (funcsym, vsymb))) ->
+            | Some(PredCtorInfo (l, tparams, ps1, ps2, inputParamCount, wbody, (funcsym, vsymb))) ->
               begin match inputParamCount with
-                None -> []
-              | Some qInputParamCount ->
+              | Some qInputParamCount when tparams = [] ->
                 let qIndices = List.map (fun (LitPat e) -> e) qfns in
                 let qInputActuals = List.map expr_of_fixed_pat (take qInputParamCount qpats) in
                 if List.for_all (fun e -> expr_is_fixed inputParameters e) (qIndices @ qInputActuals) then
                 construct_edge vsymb coef None [] [] (qIndices @ qInputActuals) conds
                 else
                   []
+              | None -> []
               end
             end
           end
@@ -1512,7 +1521,8 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let predicate_ctor_contains_edges = 
     predctormap |> flatmap
-      (fun (g, PredCtorInfo (l, ps1, ps2, inputParamCount, wbody0, (psymbol, psymbol_term))) ->
+      (fun (g, PredCtorInfo (l, tparams, ps1, ps2, inputParamCount, wbody0, (psymbol, psymbol_term))) ->
+        if tparams <> [] then [] else
         match inputParamCount with
           None -> []
         | Some(nbInputParameters) ->
@@ -1670,7 +1680,8 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 let (fsymb, literal) = found_symb in 
                 match try_assq fsymb !pred_ctor_applications with
                 | None -> false
-                | Some (symbol, symbol_term, ctor_args, _) ->
+                | Some (symbol, symbol_term, targs, ctor_args, _) ->
+                  targs = [] &&
                   let found_terms = ctor_args @ found_terms in
                   if to_symb == symbol_term then
                     for_all2 definitely_equal (take (List.length (expected_terms)) found_terms) expected_terms
@@ -1706,6 +1717,8 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 Some (fun h cont -> cont h found_coef)
               end
             | (outer_l, outer_symb, outer_nb_curried, outer_fun_sym, outer_inst_pred_info_opt, outer_formal_targs, outer_actual_indices, outer_formal_args, outer_formal_input_args, outer_wbody, inner_frac_expr_opt, inner_inst_pred_info_opt, inner_formal_targs, inner_formal_indices, inner_input_exprs, conds) :: path ->
+              if List.exists tparam_carries_typeid outer_formal_targs then
+                assert_false h [] l "Auto-closing predicates that take type parameters that carry typeids is not yet supported; explicitly close the predicate instead" None;
               let Some tpenv = zip outer_formal_targs current_targs in
               let env = List.map2 
                 (fun (x, tp0) actual -> 
@@ -1918,8 +1931,8 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                               let (fsymb, literal) = found_symb in 
                               begin match try_assq fsymb !pred_ctor_applications with
                                 None -> iter (chunk::hdone) htodo
-                              | Some (symbol, symbol_term, ctor_args, _) -> 
-                                if symbol_term == osymb then
+                              | Some (symbol, symbol_term, targs, ctor_args, _) -> 
+                                if symbol_term == osymb && targs = [] then
                                   if for_all2 definitely_equal (take (List.length actuals) (ctor_args @ found_ts)) actuals then
                                     Some ((chunk, hdone @ htodo, found_targs, found_coef, ctor_args @ found_ts))
                                   else 
@@ -1993,8 +2006,8 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                     let (fsymb, literal) = actual_name in 
                     begin match try_assq fsymb !pred_ctor_applications with
                     | None -> try_apply_rule_aux (chnk :: hdone) rest
-                    | Some (symbol, symbol_term, ctor_args, _) -> 
-                      if from_symb == symbol_term then
+                    | Some (symbol, symbol_term, targs, ctor_args, _) -> 
+                      if from_symb == symbol_term && targs = [] then
                         begin match try_apply_rule_core None actual_targs [] (ctor_args @ actual_ts) path with
                         | None -> try_apply_rule_aux (chnk :: hdone) rest
                         | Some exec_rule -> Some exec_rule
