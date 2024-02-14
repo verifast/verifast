@@ -378,7 +378,7 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
             contract )
     | _ ->
         let ty = Type_translator.translate_decomposed l type_desc in
-        Ast.TypedefDecl (loc, ty, name)
+        Ast.TypedefDecl (loc, ty, name, [])
 
   (* TODO: we currnetly ignore the name, because the serializer exposes qualified names.
      However, namespaces might be useful to scope ghost code. *)

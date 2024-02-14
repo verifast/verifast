@@ -15,6 +15,7 @@ cd purely_unsafe
   verifast -c -allow_should_fail -allow_dead_code traits0_error2.rs
   verifast -c pred_fam.rs
   verifast -c tree3.rs
+  verifast -c generic_structs.rs
 cd ..
 cd safe_abstraction
   verifast -c full_bor_primitive_types.rs

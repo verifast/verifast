@@ -859,7 +859,8 @@ and
   | TypedefDecl of
       loc *
       type_expr *
-      string
+      string *
+      string list (* type parameters *)
       
   (** Used for declaring a function type like "typedef void myfunc();"
     * or "typedef lemma ..."

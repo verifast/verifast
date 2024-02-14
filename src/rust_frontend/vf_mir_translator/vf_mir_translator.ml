@@ -126,12 +126,12 @@ module AstAux = struct
       ->
         loc
 
-  let is_adt_ty (t : type_) =
-    match t with StructType _ | UnionType _ -> true | _ -> false
+  let is_adt_ty (t : type_expr) =
+    match t with StructTypeExpr _ -> true | _ -> false
 
-  let adt_ty_name (adt : type_) =
+  let adt_ty_name (adt : type_expr) =
     match adt with
-    | StructType (name, _) | UnionType name -> Ok name
+    | StructTypeExpr (_, Some name, _, _, _) -> Ok name
     | _ -> Error (`AdtTyName "Not an ADT")
 
   let sort_decls_lexically ds =
@@ -776,7 +776,29 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             let* (Mir.GenArgType arg_ty) = translate_generic_arg arg_cpn loc in
             Ok arg_ty
         | _ ->
-            let vf_ty = ManifestTypeExpr (loc, StructType (name, [])) in
+            let* targs =
+              ListAux.try_map
+                (fun targ_cpn -> translate_generic_arg targ_cpn loc)
+                substs_cpn
+            in
+            let targs =
+              targs
+              |> List.map @@ function
+                 | Mir.GenArgLifetime ->
+                     raise
+                       (Ast.StaticError
+                          ( loc,
+                            "Lifetime arguments are not yet supported here",
+                            None ))
+                 | Mir.GenArgType arg_ty -> Mir.basic_type_of arg_ty
+                 | Mir.GenArgConst ->
+                     raise
+                       (Ast.StaticError
+                          ( loc,
+                            "Const arguments are not yet supported here",
+                            None ))
+            in
+            let vf_ty = StructTypeExpr (loc, Some name, None, [], targs) in
             let sz_expr = SizeofExpr (loc, TypeExpr vf_ty) in
             let own tid vs =
               let args = List.map (fun x -> LitPat x) (tid :: vs) in
@@ -1048,10 +1070,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let* mutability = translate_mutability mut_cpn in
     let ty_cpn = ty_get raw_ptr_ty_cpn in
     let* pointee_ty_info = translate_ty ty_cpn loc in
-    let (ManifestTypeExpr ((*loc*) _, pointee_ty)) =
-      Mir.basic_type_of pointee_ty_info
-    in
-    let vf_ty = ManifestTypeExpr (loc, PtrType pointee_ty) in
+    let pointee_ty = Mir.basic_type_of pointee_ty_info in
+    let vf_ty = PtrTypeExpr (loc, pointee_ty) in
     let size_expr = SizeofExpr (loc, TypeExpr vf_ty) in
     let own tid vs = Ok (True loc) in
     let shr lft tid l = Ok (True loc) in
@@ -1080,10 +1100,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let* mut = translate_mutability mut_cpn in
     let ty_cpn = ty_get ref_ty_cpn in
     let* pointee_ty_info = translate_ty ty_cpn loc in
-    let (ManifestTypeExpr ((*loc*) _, pointee_ty)) =
-      Mir.basic_type_of pointee_ty_info
-    in
-    let vf_ty = ManifestTypeExpr (loc, PtrType pointee_ty) in
+    let pointee_ty = Mir.basic_type_of pointee_ty_info in
+    let vf_ty = PtrTypeExpr (loc, pointee_ty) in
     let sz_expr = SizeofExpr (loc, TypeExpr vf_ty) in
     let RustBelt.
           {
@@ -1226,7 +1244,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         let substs_cpn = Capnp.Array.to_list substs_cpn in
         translate_tuple_ty substs_cpn loc
     | Param name ->
-        let vf_ty = ManifestTypeExpr (loc, RealTypeParam name) in
+        let vf_ty = ManifestTypeExpr (loc, GhostTypeParam name) in
         let interp : RustBelt.ty_interp =
           {
             size = SizeofExpr (loc, TypeExpr vf_ty);
@@ -2298,9 +2316,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     in
     let gen_local_ty_asn (local : Mir.local_decl) =
       let Mir.{ mutability; id; ty = ty_info; loc } = local in
-      let (Ast.ManifestTypeExpr (_ (*loc*), raw_ty)) =
-        Mir.raw_type_of ty_info
-      in
+      let raw_ty = Mir.raw_type_of ty_info in
       let* vs =
         if not (AstAux.is_adt_ty raw_ty) then Ok [ Ast.Var (loc, id) ]
         else
@@ -2738,7 +2754,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             let* pre_post_template =
               if is_drop_fn_get body_cpn then
                 let ({ ty = self_ty } :: _) = param_decls in
-                let (ManifestTypeExpr (_, PtrType (StructType (self_ty, _)))) =
+                let (PtrTypeExpr (_, StructTypeExpr (_, Some self_ty, _, _, _))) =
                   Mir.basic_type_of self_ty
                 in
                 gen_drop_contract body_tr_defs_ctx.adt_defs self_ty contract_loc
@@ -3090,6 +3106,41 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     if TrName.is_from_std_lib def_path then Ok None
     else
       let name = TrName.translate_def_path def_path in
+      let* tparams =
+        hir_generics_get adt_def_cpn
+        |> HirGenericsRd.params_get_list
+        |> ListAux.try_map @@ fun param_cpn ->
+           let* l =
+             translate_span_data (HirGenericParamRd.span_get param_cpn)
+           in
+           (match
+              HirGenericParamRd.kind_get param_cpn |> HirGenericParamKindRd.get
+            with
+           | Lifetime ->
+               raise
+                 (Ast.StaticError
+                    ( l,
+                      "Structs with lifetime parameters are not yet supported",
+                      None ))
+           | Type -> ()
+           | Const ->
+               raise
+                 (Ast.StaticError
+                    ( l,
+                      "Structs with const parameters are not yet supported",
+                      None )));
+           match
+             HirGenericParamRd.name_get param_cpn |> HirGenericParamNameRd.get
+           with
+           | Plain ident -> Ok (IdentRd.name_get ident |> SymbolRd.name_get)
+           | Fresh _ ->
+               raise
+                 (Ast.StaticError
+                    ( l,
+                      "Structs with inferred type parameters are not yet \
+                       supported",
+                      None ))
+      in
       let variants_cpn = variants_get_list adt_def_cpn in
       let* variants = ListAux.try_map translate_variant_def variants_cpn in
       let span_cpn = span_get adt_def_cpn in
@@ -3111,7 +3162,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               Ast.Struct
                 ( def_loc,
                   name,
-                  (*type parameters*) [],
+                  tparams,
                   Some
                     ( (*base_spec list*) [],
                       (*field list*) field_defs,
@@ -3120,10 +3171,15 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   (*struct_attr list*) [] )
             in
             let struct_typedef_aux =
+              let targs =
+                tparams
+                |> List.map (fun x -> Ast.IdentTypeExpr (def_loc, None, x))
+              in
               Ast.TypedefDecl
                 ( def_loc,
-                  StructTypeExpr (def_loc, Some name, None, [], []),
-                  name )
+                  StructTypeExpr (def_loc, Some name, None, [], targs),
+                  name,
+                  tparams )
             in
             Ok (Mir.Struct, fds, struct_decl, [ struct_typedef_aux ])
         | EnumKind -> failwith "Todo: AdtDef::Enum"
@@ -3133,37 +3189,45 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let* full_bor_content, proof_obligs =
         match (is_local, vis) with
         | false, _ | true, Mir.Restricted ->
-            let fbc_decl =
-              Ast.Func
-                ( def_loc,
-                  Fixpoint,
-                  (*type parameters*) [],
-                  (*return type*)
-                  Some
-                    (PureFuncTypeExpr
-                       ( def_loc,
-                         [
-                           IdentTypeExpr (def_loc, None, "thread_id_t");
-                           ManifestTypeExpr (def_loc, PtrType Void);
-                           PredTypeExpr (def_loc, [], None);
-                         ] )),
-                  name ^ "_full_borrow_content",
-                  (*parameters*) [],
-                  (*nonghost_callers_only*) false,
-                  (*functype clause*) None,
-                  (*contract*) None,
-                  (*terminates*) false,
-                  (*body*) None,
-                  (*virtual*) false,
-                  (*overrides*) [] )
-            in
-            Ok (Some fbc_decl, [])
+            if tparams <> [] then Ok (None, [])
+            else
+              let fbc_decl =
+                Ast.Func
+                  ( def_loc,
+                    Fixpoint,
+                    (*type parameters*) [],
+                    (*return type*)
+                    Some
+                      (PureFuncTypeExpr
+                         ( def_loc,
+                           [
+                             IdentTypeExpr (def_loc, None, "thread_id_t");
+                             ManifestTypeExpr (def_loc, PtrType Void);
+                             PredTypeExpr (def_loc, [], None);
+                           ] )),
+                    name ^ "_full_borrow_content",
+                    (*parameters*) [],
+                    (*nonghost_callers_only*) false,
+                    (*functype clause*) None,
+                    (*contract*) None,
+                    (*terminates*) false,
+                    (*body*) None,
+                    (*virtual*) false,
+                    (*overrides*) [] )
+              in
+              Ok (Some fbc_decl, [])
         | true, Mir.Invisible ->
             Error
               (`TrAdtDef
                 ("The " ^ def_path
                ^ " ADT definition is local and locally invisible"))
         | true, Mir.Public ->
+            if tparams <> [] then
+              raise
+                (Ast.StaticError
+                   ( def_loc,
+                     "Public generic structs are not yet supported",
+                     None ));
             let* full_bor_content =
               gen_adt_full_borrow_content kind name variants def_loc
             in

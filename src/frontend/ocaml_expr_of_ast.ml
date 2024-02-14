@@ -947,8 +947,8 @@ and of_decl = function
     B isVirtual;
     of_list s overrides
   ])
-| TypedefDecl (l, t, x) ->
-  C ("TypedefDecl", [of_loc l; of_type_expr t; S x])
+| TypedefDecl (l, t, x, tparams) ->
+  C ("TypedefDecl", [of_loc l; of_type_expr t; S x; of_list s tparams])
 | FuncTypeDecl (l, gh, rt, ftn, tparams, ftparams, params, (pre, post, terminates)) ->
   C ("FuncTypeDecl", [
     of_loc l;
