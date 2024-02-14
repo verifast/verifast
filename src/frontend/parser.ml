@@ -784,18 +784,18 @@ and
           | None -> raise (ParseException (l, "Void not allowed here."))
           | Some (EnumTypeExpr (le, en_opt, Some body)) ->
             let en = match en_opt with None -> g | Some en -> en in
-            [EnumDecl (l, en, body); TypedefDecl (l, EnumTypeExpr (le, Some en, None), g)]
+            [EnumDecl (l, en, body); TypedefDecl (l, EnumTypeExpr (le, Some en, None), g, [])]
           | Some (StructTypeExpr (ls, s_opt, Some (tparams, fs), attrs, targs)) ->
             let s = match s_opt with None -> g | Some s -> s in
-            [Struct (l, s, tparams, Some ([], fs, [], false), attrs); TypedefDecl (l, StructTypeExpr (ls, Some s, None, attrs, targs), g)]
+            [Struct (l, s, tparams, Some ([], fs, [], false), attrs); TypedefDecl (l, StructTypeExpr (ls, Some s, None, attrs, targs), g, [])]
           | Some (UnionTypeExpr (ls, u_opt, Some fs)) ->
             let u = match u_opt with None -> g | Some u -> u in
-            [Union (l, u, Some fs); TypedefDecl (l, UnionTypeExpr (ls, Some u, None), g)]
+            [Union (l, u, Some fs); TypedefDecl (l, UnionTypeExpr (ls, Some u, None), g, [])]
           | Some PtrTypeExpr (lp, (StructTypeExpr (ls, s_opt, Some (tparams, fs), attrs, targs))) ->
             let s = match s_opt with None -> g | Some s -> s in
-            [Struct (l, s, tparams, Some ([], fs, [], false), attrs); TypedefDecl (l, PtrTypeExpr (lp, StructTypeExpr (ls, Some s, None, attrs, targs)), g)]
+            [Struct (l, s, tparams, Some ([], fs, [], false), attrs); TypedefDecl (l, PtrTypeExpr (lp, StructTypeExpr (ls, Some s, None, attrs, targs)), g, [])]
           | Some te ->
-            [TypedefDecl (l, te, g)]
+            [TypedefDecl (l, te, g, [])]
           end
         end
         ]
@@ -809,7 +809,7 @@ and
         [%l spec = opt parse_spec]
       ] -> 
       let contract = check_for_contract spec l "Function type declaration should have contract." (fun (pre, post) -> (pre, post, false)) in
-      g, [FuncTypeDecl (l, Real, rt, g, tparams, ftps, ps, contract); TypedefDecl (l, ManifestTypeExpr (lp, PtrType (FuncType g)), g)]
+      g, [FuncTypeDecl (l, Real, rt, g, tparams, ftps, ps, contract); TypedefDecl (l, ManifestTypeExpr (lp, PtrType (FuncType g)), g, [])]
     end
     ]
   ] -> pop_typedef_scope (); register_typedef g; ds

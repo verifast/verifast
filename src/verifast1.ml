@@ -1016,7 +1016,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       * ((string * string) * (field_pred_info * field_pred_info option)) list
       * pred_fam_info map
       * pred_inst_map
-      * (loc * type_) map (* typedefmap *)
+      * (loc * string list * type_) map (* typedefmap *)
       * func_type_info map
       * func_info map
       * box_info map
@@ -1183,7 +1183,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       (field_pred_map0: ((string * string) * (field_pred_info * field_pred_info option)) list),
       (predfammap0: pred_fam_info map),
       (predinstmap0: pred_inst_map),
-      (typedefmap0: (loc * type_) map),
+      (typedefmap0: (loc * string list * type_) map),
       (functypemap0: func_type_info map),
       (funcmap0: func_info map),
       (boxmap0: box_info map),
@@ -1412,11 +1412,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let rec iter tddm ds =
       match ds with
         [] -> List.rev tddm
-      | TypedefDecl (l, LValueRefTypeExpr _, _) :: _ ->
+      | TypedefDecl (l, LValueRefTypeExpr _, _, _) :: _ ->
         static_error l "Typedefs for lvalue reference types are not supported." None
-      | TypedefDecl (l, te, d)::ds ->
+      | TypedefDecl (l, te, d, tparams)::ds ->
         (* C compiler detects duplicate typedefs *)
-        iter ((d, (l, te))::tddm) ds
+        iter ((d, (l, tparams, te))::tddm) ds
       | _::ds ->
         iter tddm ds
     in
@@ -1826,6 +1826,24 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     @ List.map (fun (cn, (l, _, _, _, _, _, _, tparams)) -> (cn, (l, List.length tparams))) interfmap1
     @ List.map (fun (cn, InterfaceInfo (l, _, _, _, _, tparams)) -> (cn, (l, List.length tparams))) interfmap0
 
+  let rec instantiate_type tpenv t =
+    if tpenv = [] then t else
+    match t with
+      RealTypeParam x | GhostTypeParam x -> (try List.assoc x tpenv  with _ -> failwith 
+        (Printf.sprintf "not found! looking for %s in env %s" x (String.concat ", " (List.map (fun (a,b) -> a ^ "->" ^ (string_of_type b)) tpenv))))
+    | PtrType t -> PtrType (instantiate_type tpenv t)
+    | InductiveType (i, targs) -> InductiveType (i, List.map (instantiate_type tpenv) targs)
+    | PredType ([], pts, inputParamCount, inductiveness) -> PredType ([], List.map (instantiate_type tpenv) pts, inputParamCount, inductiveness)
+    | PureFuncType (t1, t2) -> PureFuncType (instantiate_type tpenv t1, instantiate_type tpenv t2)
+    | InferredType (_, t) ->
+      begin match !t with
+      | EqConstraint t -> instantiate_type tpenv t
+      | _ -> assert false
+      end
+    | ArrayType t -> ArrayType (instantiate_type tpenv t)
+    | StructType (sn, targs) -> StructType (sn, List.map (instantiate_type tpenv) targs)
+    | _ -> t
+  
   (* Region: check_pure_type: checks validity of type expressions *)
   let check_pure_type_core typedefmap1 (pn,ilist) tpenv te envType =
     let rec create_objects n = if n > 0 then javaLangObject::(create_objects (n-1)) else [] in
@@ -1846,8 +1864,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       end
       else
       match try_assoc2 id typedefmap0 typedefmap1 with
-        Some (ld, t) ->
+        Some (ld, tparams, t) ->
         reportUseSite DeclKind_Typedef ld l;
+        if tparams <> [] then static_error l "Missing type arguments" None;
         t
       | None ->
       match resolve Ghost (pn,ilist) l id inductive_arities with
@@ -1931,6 +1950,16 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           static_error l "Incorrect number of type arguments." None
         else  
           ObjType (id, List.map check targs)
+      | None ->
+      match try_assoc2 id typedefmap0 typedefmap1 with
+        Some (ld, tparams, t) ->
+        reportUseSite DeclKind_Typedef ld l;
+        let tpenv =
+          match zip tparams (List.map check targs) with
+            Some tpenv -> tpenv
+          | None -> static_error l "Incorrect number of type arguments" None
+        in
+        instantiate_type tpenv t
       | None -> static_error l ("No such inductive type, class, or interface.") None
       end
     | StructTypeExpr (l, sn, Some _, _, _) ->
@@ -2000,9 +2029,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let rec iter tdm1 tdds =
       match tdds with
         [] -> tdm1
-      | (d, (l, te))::tdds ->
-        let t = check_pure_type_core tdm1 ("",[]) [] te Real in
-        iter ((d,(l, t))::tdm1) tdds
+      | (d, (l, tparams, te))::tdds ->
+        let t = check_pure_type_core tdm1 ("",[]) tparams te Real in
+        iter ((d,(l, tparams, t))::tdm1) tdds
     in
     iter [] typedefdeclmap
   
@@ -2036,24 +2065,6 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       end
       interfmap1
 
-  let rec instantiate_type tpenv t =
-    if tpenv = [] then t else
-    match t with
-      RealTypeParam x | GhostTypeParam x -> (try List.assoc x tpenv  with _ -> failwith 
-        (Printf.sprintf "not found! looking for %s in env %s" x (String.concat ", " (List.map (fun (a,b) -> a ^ "->" ^ (string_of_type b)) tpenv))))
-    | PtrType t -> PtrType (instantiate_type tpenv t)
-    | InductiveType (i, targs) -> InductiveType (i, List.map (instantiate_type tpenv) targs)
-    | PredType ([], pts, inputParamCount, inductiveness) -> PredType ([], List.map (instantiate_type tpenv) pts, inputParamCount, inductiveness)
-    | PureFuncType (t1, t2) -> PureFuncType (instantiate_type tpenv t1, instantiate_type tpenv t2)
-    | InferredType (_, t) ->
-      begin match !t with
-      | EqConstraint t -> instantiate_type tpenv t
-      | _ -> assert false
-      end
-    | ArrayType t -> ArrayType (instantiate_type tpenv t)
-    | StructType (sn, targs) -> StructType (sn, List.map (instantiate_type tpenv) targs)
-    | _ -> t
-  
   let instantiate_types tpenv ts =
     if tpenv = [] then ts else List.map (instantiate_type tpenv) ts
   
