@@ -23,7 +23,7 @@ predicate MutexCell_held<T>(struct MutexCell<T> *mutexCell, predicate(T) T_own, 
 
 @*/
 
-struct MutexCell<T> *create_MutexCell<T>(void *T_typeid, T value)
+struct MutexCell<T> *create_MutexCell<T>(T value)
 //@ requires exists<predicate(T)>(?T_own) &*& T_own(value);
 //@ ensures MutexCell<T>(result, T_own);
 {
@@ -39,7 +39,7 @@ struct MutexCell<T> *create_MutexCell<T>(void *T_typeid, T value)
     //@ close MutexCell<T>(result, T_own);
 }
 
-void MutexCell_acquire<T>(void *T_typeid, struct MutexCell<T> *mutexCell)
+void MutexCell_acquire<T>(struct MutexCell<T> *mutexCell)
 //@ requires [?q]MutexCell<T>(mutexCell, ?T_own);
 //@ ensures MutexCell_held<T>(mutexCell, T_own, currentThread, q) &*& mutexCell->payload |-> ?payload &*& T_own(payload);
 {
@@ -49,7 +49,7 @@ void MutexCell_acquire<T>(void *T_typeid, struct MutexCell<T> *mutexCell)
     //@ close MutexCell_held<T>(mutexCell, T_own, currentThread, q);
 }
 
-void MutexCell_release<T>(void *T_typeid, struct MutexCell<T> *mutexCell)
+void MutexCell_release<T>(struct MutexCell<T> *mutexCell)
 //@ requires MutexCell_held<T>(mutexCell, ?T_own, currentThread, ?q) &*& mutexCell->payload |-> ?payload &*& T_own(payload);
 //@ ensures [q]MutexCell<T>(mutexCell, T_own);
 {

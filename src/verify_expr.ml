@@ -1944,6 +1944,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         None -> static_error l "Incorrect number of type arguments." None
       | Some tpenv -> tpenv
     in
+    let targ_typeid_env = typeid_env_of_tpenv l env tpenv in
+    let funenv = funenv @ targ_typeid_env in
     let ys: string list = List.map (function (p, t) -> p) ps in
     begin fun cont ->
       let rec iter h env ts pats ps =

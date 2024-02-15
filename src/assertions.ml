@@ -324,7 +324,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         cont h ghostenv env
       else
         let te = ev e in
-        evalpat_ (fghost = Ghost) ghostenv env rhs tp tp $. fun ghostenv env t ->
+        evalpat_ (fghost = Ghost) ghostenv env rhs tp (instantiate_type tpenv tp) $. fun ghostenv env t ->
         assume_field h env fparent tparams fname frange (List.map (instantiate_type tpenv) targs) fghost te t coef $. fun h ->
         cont h ghostenv env
     | WPointsTo (l, WReadArray (la, ea, _, ei), tp, rhs) ->
@@ -1084,11 +1084,11 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       match e with
         WRead (lr, e, fparent, tparams, fname, frange, targs, fstatic, fvalue, fghost) ->
         let (_, (_, _, _, _, symb, _, _)), p__opt = List.assoc (fparent, fname) field_pred_map in
-        let (inputParamCount, pats) =
+        let (inputParamCount, pats, tps0, tps) =
           if fstatic then
-            (Some 0, [rhs])
+            (Some 0, [rhs], [tp], [tp])
           else
-            (Some 1, [SrcPat (LitPat e); rhs])
+            (Some 1, [SrcPat (LitPat e); rhs], [voidPtrType; tp], [voidPtrType; instantiate_type tpenv tp])
         in
         let symb_used =
           match rhs, p__opt with
@@ -1098,7 +1098,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             symb
         in
         let targs = List.map (instantiate_type tpenv) targs in
-        consume_chunk rules h ghostenv env env' l (symb_used, true) targs coef coefpat inputParamCount pats
+        consume_chunk_core rules h ghostenv env env' l (symb_used, true) targs coef coefpat inputParamCount pats tps0 tps
           (fun chunk h coef ts size ghostenv env env' -> check_dummy_coefpat l coefpat coef; cont [chunk] h ghostenv env env' size)
       | WReadArray (la, ea, _, ei) ->
         let pats = [SrcPat (LitPat ea); SrcPat (LitPat ei); rhs] in

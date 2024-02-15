@@ -2869,6 +2869,16 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     if startswith g "vf__" then static_error l "The name of a user-defined function must not start with 'vf__'." None;
     let tparams = tparams' @ tparams in
     let _ = push() in
+    let tparam_typeid_env = tparams' |> flatmap @@ fun x ->
+      if tparam_carries_typeid x then
+        let paramName = x ^ "_typeid" in
+        [paramName, get_unique_var_symb paramName voidPtrType]
+      else
+        []
+    in
+    let tparam_typeid_tenv = tparam_typeid_env |> List.map (fun (x, t) -> (x, voidPtrType)) in
+    let pre_tenv = tparam_typeid_tenv @ pre_tenv in
+    let env = env @ tparam_typeid_env in
     let penv, heapy_ps, varargsLastParam = compute_heapy_params l k ps pre_tenv ss in
     let sizemap, indinfo = compute_size_info penv ss in
     let prolog, ss = partition_ss k ss in

@@ -36,7 +36,7 @@ void pair_int_bool_swap(struct pair<int, bool> *p1, struct pair<int, bool> *p2)
   p2->snd = tmp2;
 }
 
-struct pair<T, U> *create_pair<T, U>(void *T_typeid, void *U_typeid, T fst, U snd)
+struct pair<T, U> *create_pair<T, U>(T fst, U snd)
 //@ requires true;
 //@ ensures result->fst |-> fst &*& result->snd |-> snd &*& malloc_block_pair<T, U>(result);
 {
@@ -47,14 +47,14 @@ struct pair<T, U> *create_pair<T, U>(void *T_typeid, void *U_typeid, T fst, U sn
   return result;
 }
 
-void dispose_pair<T, U>(void *T_typeid, void *U_typeid, struct pair<T, U> *p)
+void dispose_pair<T, U>(struct pair<T, U> *p)
 //@ requires p->fst |-> _ &*& p->snd |-> _ &*& malloc_block_pair<T, U>(p);
 //@ ensures true;
 {
   free(p);
 }
 
-void pair_swap<T, U>(void *T_typeid, void *U_typeid, struct pair<T, U> *p1, struct pair<T, U> *p2)
+void pair_swap<T, U>(struct pair<T, U> *p1, struct pair<T, U> *p2)
 //@ requires p1->fst |-> ?fst1 &*& p1->snd |-> ?snd1 &*& p2->fst |-> ?fst2 &*& p2->snd |-> ?snd2;
 //@ ensures p1->fst |-> fst2 &*& p1->snd |-> snd2 &*& p2->fst |-> fst1 &*& p2->snd |-> snd1;
 {
@@ -64,6 +64,21 @@ void pair_swap<T, U>(void *T_typeid, void *U_typeid, struct pair<T, U> *p1, stru
   p1->snd = p2->snd;
   p2->fst = tmp1;
   p2->snd = tmp2;
+}
+
+void generic_pair_test()
+//@ requires true;
+//@ ensures true;
+{
+  struct pair<bool, int> *p1 = create_pair<bool, int>(true, 42);
+  struct pair<bool, int> *p2 = create_pair<bool, int>(false, 37);
+  pair_swap<bool, int>(p1, p2);
+  assert p1->fst == false;
+  assert p1->snd == 37;
+  assert p2->fst == true;
+  assert p2->snd == 42;
+  dispose_pair<bool, int>(p1);
+  dispose_pair<bool, int>(p2);
 }
 
 struct pair<bool, int> pair_int_bool_flip(struct pair<int, bool> p)
@@ -114,7 +129,7 @@ void test_sizeof_pair_int_bool(struct pair<int, bool> *buf)
   //@ open_struct(buf);
 }
 
-void test_sizeof_pair<T, U>(void *T_typeid, void *U_typeid, struct pair<T, U> *buf, T fst, U snd)
+void test_sizeof_pair<T, U>(struct pair<T, U> *buf, T fst, U snd)
 //@ requires chars_((void *)buf, sizeof(struct pair<T, U>), _);
 //@ ensures chars_((void *)buf, sizeof(struct pair<T, U>), _);
 {
@@ -133,7 +148,7 @@ void swap<A>(A *p1, A *p2)
   *p2 = tmp;
 }
 
-void flip_in_place<T>(void *T_typeid, struct pair<T, T> *p)
+void flip_in_place<T>(struct pair<T, T> *p)
 //@ requires p->fst |-> ?v1 &*& p->snd |-> ?v2;
 //@ ensures p->fst |-> v2 &*& p->snd |-> v1;
 {
