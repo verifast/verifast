@@ -581,6 +581,7 @@ struct Body {
     varDebugInfo @8: List(VarDebugInfo);
     ghostStmts @9: List(Annotation);
     unsafety @10: Unsafety;
+    implBlockHirGenerics @14: Option(Hir.Generics);
     hirGenerics @11: Hir.Generics;
     isTraitFn @12: Bool;
     isDropFn @13: Bool; # Implements std::ops::Drop::drop

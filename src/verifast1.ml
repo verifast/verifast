@@ -82,11 +82,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let data_model = Vfbindings.get Vfparam_data_model vfbindings
   let define_macros = Vfbindings.get Vfparam_define_macros vfbindings
   let include_paths = Vfbindings.get Vfparam_include_paths vfbindings
-  let uppercase_type_params_carry_typeid = Vfbindings.get Vfparam_uppercase_type_params_carry_typeid vfbindings
+  let uppercase_type_params_carry_typeid = Vfbindings.get Vfparam_uppercase_type_params_carry_typeid vfbindings || dialect = Some Rust
 
   let tparam_carries_typeid tparam =
-    uppercase_type_params_carry_typeid &&
-    String.length tparam > 0 && match tparam.[0] with 'A'..'Z' -> true | _ -> false
+    uppercase_type_params_carry_typeid && tparam_is_uppercase tparam
 
   let () =
     if assume_no_subobject_provenance && not fno_strict_aliasing then
@@ -2758,9 +2757,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       (_, Void) -> true
     | (Void, _) -> true
     | (PtrType t, PtrType t0) -> compatible_pointees t t0
-    | t, t0 -> t = t0
+    | t, t0 -> unify t t0
   
-  let rec unify t1 t2 =
+  and unify t1 t2 =
     t1 == t2 ||
     match (unfold_inferred_type t1, unfold_inferred_type t2) with
       (InferredType (_, t'), InferredType (_, t0')) ->
@@ -2774,6 +2773,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | (t, InferredType (_, t0)) | (InferredType (_, t0), t) -> type_satisfies_inferred_type_constraint !t0 t && (t0 := EqConstraint t; true)
     | (InductiveType (i1, args1), InductiveType (i2, args2)) ->
       i1=i2 && List.for_all2 unify args1 args2
+    | (StructType (s1, args1), StructType (s2, args2)) ->
+      s1 = s2 && List.for_all2 unify args1 args2
     | (PureFuncType (d1, r1), PureFuncType(d2, r2)) -> unify d1 d2 && unify r1 r2
     | (PredType ([], ts1, inputParamCount1, inductiveness1), PredType ([], ts2, inputParamCount2, inductiveness2)) ->
       for_all2 unify ts1 ts2 && inputParamCount1 = inputParamCount2 && inductiveness1 = inductiveness2
@@ -5520,7 +5521,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let tparam_typeid_varname tn = tn ^ "_typeid"
 
-  let rec typeid_of_core l env = function
+  let rec typeid_of_core l env t =
+  match unfold_inferred_type t with
     Int (Signed, CharRank) -> char_typeid_term
   | Int (Signed, ShortRank) -> short_typeid_term
   | Int (Signed, IntRank) -> int_typeid_term
@@ -5553,6 +5555,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     with
       Not_found -> static_error l (Printf.sprintf "Unbound variable '%s'" x) None
     end
+  | InferredType _ -> static_error l "A type argument for a type parameter that carries a typeid could not be inferred; specify the type argument explicitly" None
   | _ -> static_error l "Taking the typeid of this type is not yet supported" None
 
   let typeid_of l t = typeid_of_core l [] t
@@ -5759,6 +5762,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let integers__symb = lazy_predfamsymb "integers_"
   let malloc_block_integers__symb = lazy_predfamsymb "malloc_block_integers_"
 
+  let generic_points_to__symb = lazy_predfamsymb "generic_points_to_"
   let generic_points_to_symb = lazy_predfamsymb "generic_points_to"
 
   let pointee_tuple chunk_pred_name array_pred_name uninit_chunk_pred_name uninit_array_pred_name =
@@ -6433,7 +6437,19 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                     (g, []),
                     ([], l, tparams, [sn, PtrType (StructType (sn, targs)); "value", t], symb, Some 1, body)
                   in
-                  [inst]
+                  match g__opt with
+                    None -> [inst]
+                  | Some (g_, (_, _, _, _, symb_, _, _)) ->
+                    [
+                      inst
+                    ;
+                      let p_ = new predref "generic_points_to_" [PtrType t; option_type t] (Some 1) in
+                      let r = WRead (l, WVar (l, sn, LocalVar), sn, tparams, f, t, targs, false, ref (Some None), Real) in
+                      let body = WPredAsn (l, p_, true, [t], [], [LitPat (AddressOf (l, r)); LitPat (WVar (l, "value", LocalVar))]) in
+                      ((g_, []),
+                       ([], l, tparams, [sn, PtrType (StructType (sn, targs)); "value", InductiveType ("option", [t])], symb_, Some 1, body)
+                      )
+                    ]
                 in
                 let predinst__ p p_ domain t = predinst___ p p_ domain t [] in
                 let predinst_ p p_ t = predinst__ p p_ [PtrType t] t in
