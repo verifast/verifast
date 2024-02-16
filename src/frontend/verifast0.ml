@@ -55,6 +55,9 @@ let get_callers (ctxts: 'termnode context list): loc option list =
 
 let get_root_caller ctxts = match List.rev (get_callers ctxts) with Some l::_ -> Some l | _ -> None
 
+let tparam_is_uppercase tparam =
+  String.length tparam > 0 && match tparam.[0] with 'A'..'Z' -> true | _ -> false
+
 let rec string_of_type t =
   match t with
     Bool -> "bool"

@@ -288,7 +288,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       Some (k, signedness) ->
         produce_chunk h (integer___symb (), true) [] coef (Some 3) [addr; rank_size_term k; mk_bool (signedness = Signed); get_unique_var_symb_ "dummy" (option_type type_) true] None cont
     | None ->
-      produce_chunk h (generic_points_to_symb (), true) [type_] coef (Some 1) [addr; get_unique_var_symb_ "dummy" type_ true] None cont
+      produce_chunk h (generic_points_to__symb (), true) [type_] coef (Some 1) [addr; get_unique_var_symb_ "dummy" (option_type type_) true] None cont
 
   let produce_points_to_chunk_ l h type_ coef addr value cont =
     match value with
@@ -855,6 +855,42 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     r := f value;
     do_finally body (fun () -> r := value)
   
+  let string_of_chunk_asn env g targs coef coefpat pats =
+    let predname = match g with (g, _) -> ctxt#pprint g in
+    let targs =
+      match targs with
+        [] -> ""
+      | _ -> Printf.sprintf "<%s>" (String.concat ", " (List.map string_of_type targs))
+    in
+    let patvars = ref [] in
+    let rec string_of_pat pat =
+      match pat with
+      | LitPat (WVar (_, x, LocalVar)) -> if List.mem_assoc x env then ctxt#pprint (List.assoc x env) else "_"
+      | LitPat e -> if !patvars = [] || lists_disjoint !patvars (vars_used e) then ctxt#pprint (eval None env e) else "<expr>"
+      | DummyPat -> "_"
+      | DummyVarPat -> "?_"
+      | VarPat (_, x) -> patvars := x::!patvars; "_"
+      | WCtorPat (_, i, targs, g, ts0, ts, pats, _) -> Printf.sprintf "%s(%s)" g (String.concat ", " (List.map string_of_pat pats))
+    in
+    let string_of_pat0 pat0 =
+      match pat0 with
+        TermPat t -> ctxt#pprint t
+      | SrcPat pat -> string_of_pat pat
+    in
+    let coef =
+      if coef == real_unit then
+        if coefpat == real_unit_pat then
+          ""
+        else
+          "[" ^ string_of_pat0 coefpat ^ "]"
+      else
+        if coefpat == real_unit_pat then
+          "[" ^ ctxt#pprint coef ^ "]"
+        else
+          "[" ^ ctxt#pprint coef ^ " * " ^ string_of_pat0 coefpat ^ "]"
+    in
+    Printf.sprintf "%s%s%s(%s)" coef predname targs (String.concat ", " (List.map string_of_pat0 pats))
+
   let consume_chunk_recursion_depth = ref 0
   
   (** consume_chunk_core attempts to consume a chunk matching the specified predicate assertion from the specified heap.
@@ -888,6 +924,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             env': (string * term) list -- Updated list of bindings of declared but unbound variables
     *)
   let consume_chunk_core rules h ghostenv env env' l g targs coef coefpat inputParamCount pats tps0 tps cont =
+    if !verbosity >= 4 then printff "%10.6fs: Consuming chunk %s\n" (Perf.time ()) (string_of_chunk_asn env g targs coef coefpat pats);
     let old_depth = !consume_chunk_recursion_depth in
     let rec consume_chunk_core_core h =
       begin fun cont ->
@@ -973,40 +1010,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           end
         end $. fun () ->
         let message =
-          let predname = match g with (g, _) -> ctxt#pprint g in
-          let targs =
-            match targs with
-              [] -> ""
-            | _ -> Printf.sprintf "<%s>" (String.concat ", " (List.map string_of_type targs))
-          in
-          let patvars = ref [] in
-          let rec string_of_pat pat =
-            match pat with
-            | LitPat (WVar (_, x, LocalVar)) -> if List.mem_assoc x env then ctxt#pprint (List.assoc x env) else "_"
-            | LitPat e -> if !patvars = [] || lists_disjoint !patvars (vars_used e) then ctxt#pprint (eval None env e) else "<expr>"
-            | DummyPat -> "_"
-            | DummyVarPat -> "?_"
-            | VarPat (_, x) -> patvars := x::!patvars; "_"
-            | WCtorPat (_, i, targs, g, ts0, ts, pats, _) -> Printf.sprintf "%s(%s)" g (String.concat ", " (List.map string_of_pat pats))
-          in
-          let string_of_pat0 pat0 =
-            match pat0 with
-              TermPat t -> ctxt#pprint t
-            | SrcPat pat -> string_of_pat pat
-          in
-          let coef =
-            if coef == real_unit then
-              if coefpat == real_unit_pat then
-                ""
-              else
-                "[" ^ string_of_pat0 coefpat ^ "]"
-            else
-              if coefpat == real_unit_pat then
-                "[" ^ ctxt#pprint coef ^ "]"
-              else
-                "[" ^ ctxt#pprint coef ^ " * " ^ string_of_pat0 coefpat ^ "]"
-          in
-          Printf.sprintf "No matching heap chunks: %s%s%s(%s)" coef predname targs (String.concat ", " (List.map string_of_pat0 pats))
+          Printf.sprintf "No matching heap chunks: %s" (string_of_chunk_asn env g targs coef coefpat pats)
         in
         assert_false h env l message (Some "nomatchingheapchunks")
   (*      
@@ -1030,19 +1034,25 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let dummypat = SrcPat DummyPat
   
   let consume_points_to_chunk__core rules h ghostenv env env' l type0 type_ coef coefpat addr rhs consumeUninitChunk cont =
+    let tp0, tp =
+      if consumeUninitChunk && rhs = dummypat then
+        option_type type0, option_type type_
+      else
+        type0, type_
+    in
     match try_pointee_pred_symb0 type_ with
       Some (_, predsym, _, _, _, _, _, _, _, uninit_predsym, _, _) ->
-      consume_chunk_core rules h ghostenv env env' l ((if consumeUninitChunk && rhs = dummypat then uninit_predsym else predsym), true) [] coef coefpat (Some 1) [TermPat addr; rhs] [voidPtrType; type0] [voidPtrType; type_]
+      consume_chunk_core rules h ghostenv env env' l ((if consumeUninitChunk && rhs = dummypat then uninit_predsym else predsym), true) [] coef coefpat (Some 1) [TermPat addr; rhs] [voidPtrType; tp0] [voidPtrType; tp]
         (fun chunk h coef [_; value] size ghostenv env env' -> cont chunk h coef value ghostenv env env')
     | None ->
     match int_rank_and_signedness type_ with
       Some (k, signedness) ->
       consume_chunk_core rules h ghostenv env env' l ((if consumeUninitChunk && rhs = dummypat then integer___symb () else integer__symb ()), true) [] coef coefpat (Some 3)
-        [TermPat addr; TermPat (rank_size_term k); TermPat (mk_bool (signedness = Signed)); rhs] [voidPtrType; intType; Bool; type0] [voidPtrType; intType; Bool; type_]
+        [TermPat addr; TermPat (rank_size_term k); TermPat (mk_bool (signedness = Signed)); rhs] [voidPtrType; intType; Bool; tp0] [voidPtrType; intType; Bool; tp]
         (fun chunk h coef [_; _; _; value] size ghostenv env env' -> cont chunk h coef value ghostenv env env')
     | None ->
-      consume_chunk_core rules h ghostenv env env' l (generic_points_to_symb (), true) [type_] coef coefpat (Some 1)
-        [TermPat addr; rhs] [voidPtrType; type0] [voidPtrType; type_]
+      consume_chunk_core rules h ghostenv env env' l ((if consumeUninitChunk && rhs = dummypat then generic_points_to__symb () else generic_points_to_symb ()), true) [type_] coef coefpat (Some 1)
+        [TermPat addr; rhs] [voidPtrType; tp0] [voidPtrType; tp]
         (fun chunk h coef [_; value] size ghostenv env env' -> cont chunk h coef value ghostenv env env')
 
   let consume_points_to_chunk_ rules h ghostenv env env' l type_ coef coefpat addr rhs consumeUninitChunk cont =

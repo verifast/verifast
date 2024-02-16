@@ -641,7 +641,10 @@ mod vf_mir_builder {
                 let it = req_adt_defs.into_iter();
                 req_adt_defs = Vec::new();
                 for adt_def in it {
-                    if adt_def.is_unsafe_cell() || adt_def.is_manually_drop() || !adt_def.did().is_local(){
+                    if adt_def.is_unsafe_cell()
+                        || adt_def.is_manually_drop()
+                        || !adt_def.did().is_local()
+                    {
                         continue;
                     }
                     match encoded_adt_defs
@@ -800,6 +803,13 @@ mod vf_mir_builder {
                 tcx.fn_sig(def_id).skip_binder().unsafety(),
                 body_cpn.reborrow().init_unsafety(),
             );
+
+            if let Some(impl_did) = tcx.impl_of_method(def_id) {
+                let impl_hir_gens = tcx.hir().get_generics(impl_did.expect_local()).unwrap();
+                let impl_generics_cpn = body_cpn.reborrow().init_impl_block_hir_generics();
+                let impl_generics_some_cpn = impl_generics_cpn.init_something();
+                Self::encode_hir_generics(enc_ctx, impl_hir_gens, impl_generics_some_cpn);
+            }
 
             let hir_gens_cpn = body_cpn.reborrow().init_hir_generics();
             let hir_gens = tcx

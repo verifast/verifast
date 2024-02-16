@@ -14,6 +14,11 @@ let rec parse_simple_path_rest l x = function%parser
   [%let l, x = parse_simple_path_rest (Lexed(Result.get_ok @@ LocAux.cover_loc0 (lexed_loc l) (lexed_loc ll))) (x ^ "::" ^ xx)] ] -> (l, x)
 | [ ] -> (l, x)
 
+let parse_right_angle_bracket stream = stream |> function%parser
+  [ (_, Kwd ">") ] -> ()
+| [ (Lexed ((path, line, col), (path', line', col')), Kwd ">>") ] ->
+  Lexer.Stream.push (Some (Lexed ((path, line, col + 1), (path', line', col')), Kwd ">")) stream
+
 let rec parse_type = function%parser
   [ (l, Ident "i8") ] -> ManifestTypeExpr (l, Int (Signed, FixedWidthRank 0))
 | [ (l, Ident "i16") ] -> ManifestTypeExpr (l, Int (Signed, FixedWidthRank 1))
@@ -30,7 +35,7 @@ let rec parse_type = function%parser
 | [ (l, Ident "bool") ] -> ManifestTypeExpr (l, Bool)
 | [ (l, Ident x); [%let l, x = parse_simple_path_rest l x];
     [%let t = function%parser
-      [ (_, Kwd "<"); [%let targs = rep_comma parse_type]; (_, Kwd ">") ] -> ConstructedTypeExpr (l, x, targs)
+      [ parse_type_args as targs ] -> ConstructedTypeExpr (l, x, targs)
     | [ ] -> IdentTypeExpr (l, None, x)
     ]
   ] -> t
@@ -59,6 +64,8 @@ and parse_type_with_opt_name = function%parser
      | [ ] -> ("", t)
     ]
   ] -> (x, t)
+and parse_type_args = function%parser
+  [ (_, Kwd "<"); [%let targs = rep_comma parse_type]; parse_right_angle_bracket as dummy ] -> targs
 
 let rec parse_expr_funcs allowStructExprs =
 
@@ -242,7 +249,7 @@ let rec parse_expr_funcs allowStructExprs =
   and parse_path_rest l x = function%parser
     [ (_, Kwd "::");
       [%let e = function%parser
-        [ (_, Kwd "<"); [%let targs = rep_comma parse_type]; (_, Kwd ">");
+        [ parse_type_args as targs;
           [%let e = function%parser
             [ (l, Kwd "("); [%let args = rep_comma parse_pat ]; (_, Kwd ")") ] ->
             begin match x, targs with
@@ -365,7 +372,7 @@ let rec parse_stmt = function%parser
 | [ (l, Kwd "produce_fn_ptr_chunk"); 
     (li, Ident ftn);
     [%let targs = function%parser
-      [ (_, Kwd "<"); [%let targs = rep_comma parse_type]; (_, Kwd ">") ] -> targs
+      [ parse_type_args as targs ] -> targs
     | [ ] -> []
     ];
     (_, Kwd "(");
@@ -417,25 +424,29 @@ let parse_pred_paramlist = function%parser
 let parse_pred_body = function%parser
   [ (_, Kwd "="); parse_asn as p ] -> p
 
+let parse_type_params = function%parser
+  [ (_, Kwd "<"); [%let tparams = rep_comma (function%parser [ (_, Ident x) ] -> x)]; (_, Kwd ">") ] -> tparams
+| [ ] -> []
+
 let parse_func_header k = function%parser
-  [ (l, Ident g); [%let l, g = parse_simple_path_rest l g]; (_, Kwd "("); [%let ps = rep_comma parse_param]; (_, Kwd ")");
+  [ (l, Ident g); [%let l, g = parse_simple_path_rest l g]; parse_type_params as tparams; (_, Kwd "("); [%let ps = rep_comma parse_param]; (_, Kwd ")");
     [%let rt = function%parser
       [ (_, Kwd "->"); parse_type as t ] -> Some t
     | [ ] -> if k = Regular then Some (StructTypeExpr (l, Some "std_tuple_0_", None, [], [])) else None
     ]
-  ] -> (l, g, ps, rt)
+  ] -> (l, g, tparams, ps, rt)
 
 let parse_func_rest k = function%parser
-  [ [%let (l, g, ps, rt) = parse_func_header k];
+  [ [%let (l, g, tparams, ps, rt) = parse_func_header k];
     [%let d = function%parser
       [ (_, Kwd ";");
         [%let (nonghost_callers_only, ft, co, terminates) = parse_spec_clauses]
-      ] -> Func (l, k, [], rt, g, ps, nonghost_callers_only, ft, co, terminates, None, false, [])
+      ] -> Func (l, k, tparams, rt, g, ps, nonghost_callers_only, ft, co, terminates, None, false, [])
     | [ [%let (nonghost_callers_only, ft, co, terminates) = parse_spec_clauses];
         (_, Kwd "{");
         parse_stmts as ss;
         (closeBraceLoc, Kwd "}")
-      ] -> Func (l, k, [], rt, g, ps, nonghost_callers_only, ft, co, terminates, Some (ss, closeBraceLoc), false, [])
+      ] -> Func (l, k, tparams, rt, g, ps, nonghost_callers_only, ft, co, terminates, Some (ss, closeBraceLoc), false, [])
     ]
   ] -> d
 
@@ -463,10 +474,6 @@ let parse_lemma_keyword = function%parser
     ]
   ] -> Lemma (true, trigger)
 
-let parse_type_params = function%parser
-  [ (_, Kwd "<"); [%let tparams = rep_comma (function%parser [ (_, Ident x) ] -> x)]; (_, Kwd ">") ] -> tparams
-| [ ] -> []
-
 let parse_ghost_decl = function%parser
 | [ (l, Kwd "inductive"); (li, Ident i); parse_type_params as tparams; (_, Kwd "=");
     [%let cs = function%parser
@@ -475,13 +482,13 @@ let parse_ghost_decl = function%parser
     ];
     (_, Kwd ";")
   ] -> [Inductive (l, i, tparams, cs)]
-| [ (l, Kwd "pred"); (li, Ident g); [%let l, g = parse_simple_path_rest li g];
+| [ (l, Kwd "pred"); (li, Ident g); parse_type_params as tparams; [%let l, g = parse_simple_path_rest li g];
     [%let (ps, inputParamCount) = parse_pred_paramlist ];
     [%let body = opt parse_pred_body ];
     (_, Kwd ";")
   ] ->
-    [PredFamilyDecl (l, g, [], 0, List.map fst ps, inputParamCount, Inductiveness_Inductive)] @
-    (match body with None -> [] | Some body -> [PredFamilyInstanceDecl (l, g, [], [], ps, body)])
+    [PredFamilyDecl (l, g, tparams, 0, List.map fst ps, inputParamCount, Inductiveness_Inductive)] @
+    (match body with None -> [] | Some body -> [PredFamilyInstanceDecl (l, g, tparams, [], ps, body)])
 | [ (l, Kwd "pred_fam"); (li, Ident g);
     (_, Kwd "("); [%let index_params = rep_comma parse_param]; (_, Kwd ")");
     [%let (ps, inputParamCount) = parse_pred_paramlist ];
@@ -506,7 +513,7 @@ let parse_ghost_decl = function%parser
     (_, Kwd ";")
   ] -> [PredCtorDecl (l, g, tparams, ps1, ps2, inputParamCount, p)]
 | [ parse_lemma_keyword as k; [%let d = parse_func_rest k ] ] -> [d]
-| [ (_, Kwd "fix"); [%let (l, g, ps, rt) = parse_func_header Fixpoint]; (_, Kwd "{"); parse_expr as e; (closeBraceLoc, Kwd "}") ] ->
+| [ (_, Kwd "fix"); [%let (l, g, tparams, ps, rt) = parse_func_header Fixpoint]; (_, Kwd "{"); parse_expr as e; (closeBraceLoc, Kwd "}") ] ->
   let ss =
     match e with
       SwitchExpr (l, e, cs, None) ->
@@ -517,7 +524,7 @@ let parse_ghost_decl = function%parser
       [SwitchStmt (l, e, cs)]
     | _ -> [ReturnStmt (expr_loc e, Some e)]
   in
-  [Func (l, Fixpoint, [], rt, g, ps, false, None, None, false, Some (ss, closeBraceLoc), false, [])]
+  [Func (l, Fixpoint, tparams, rt, g, ps, false, None, None, false, Some (ss, closeBraceLoc), false, [])]
 | [ (l, Kwd "fn_type"); (lftn, Ident ftn); (_, Kwd "("); [%let ftps = rep_comma parse_param]; (_, Kwd ")"); (_, Kwd "=");
     [%let unsafe = function%parser
        [ (_, Kwd "unsafe") ] -> true

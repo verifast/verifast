@@ -4,19 +4,19 @@ unsafe fn assert(b: bool)
 {
 }
 
-struct Node<T> {
-    prev: *mut Node<T>,
-    value: T,
-    next: *mut Node<T>,
+struct Node {
+    prev: *mut Node,
+    value: i32,
+    next: *mut Node,
 }
 
 /*@
 
-pred Nodes<T>(n: *Node<T>, prev: *Node<T>, last: *Node<T>, next: *Node<T>; elems: list<T>) =
+pred Nodes(n: *Node, prev: *Node, last: *Node, next: *Node; elems: list<i32>) =
     if n == next {
         elems == [] &*& last == prev
     } else {
-        alloc_block(n, std::mem::size_of::<Node<T>>()) &*& struct_Node_padding(n) &*&
+        alloc_block(n, std::mem::size_of::<Node>()) &*& struct_Node_padding(n) &*&
         (*n).prev |-> prev &*&
         (*n).value |-> ?value &*&
         (*n).next |-> ?next0 &*&
@@ -24,11 +24,11 @@ pred Nodes<T>(n: *Node<T>, prev: *Node<T>, last: *Node<T>, next: *Node<T>; elems
         elems == cons(value, elems0)
     };
 
-lem Nodes_split_last<T>(n: *Node<T>)
+lem Nodes_split_last(n: *Node)
     req Nodes(n, ?prev, ?last, ?next, ?elems) &*& 1 <= length(elems);
     ens
         Nodes(n, prev, ?last1, last, take(length(elems) - 1, elems)) &*&
-        alloc_block(last, std::mem::size_of::<Node<T>>()) &*& struct_Node_padding(last) &*&
+        alloc_block(last, std::mem::size_of::<Node>()) &*& struct_Node_padding(last) &*&
         (*last).prev |-> last1 &*&
         (*last).value |-> nth(length(elems) - 1, elems) &*&
         (*last).next |-> next;
@@ -45,10 +45,10 @@ lem Nodes_split_last<T>(n: *Node<T>)
     }
 }
 
-lem Nodes_join_last<T>(n: *Node<T>)
+lem Nodes_join_last(n: *Node)
     req
         Nodes(n, ?prev, ?last1, ?last, ?elems1) &*&
-        alloc_block(last, std::mem::size_of::<Node<T>>()) &*& struct_Node_padding(last) &*&
+        alloc_block(last, std::mem::size_of::<Node>()) &*& struct_Node_padding(last) &*&
         (*last).prev |-> last1 &*&
         (*last).value |-> ?value &*&
         (*last).next |-> ?next &*& (*next).next |-> ?nextNext;
@@ -64,17 +64,17 @@ lem Nodes_join_last<T>(n: *Node<T>)
 
 @*/
 
-struct Deque<T> {
-    sentinel: *mut Node<T>,
+struct Deque {
+    sentinel: *mut Node,
     size: i32,
 }
 
 /*@
 
-pred Deque<T>(deque: *Deque<T>; elems: list<T>) =
-    alloc_block(deque, std::mem::size_of::<Deque<T>>()) &*& struct_Deque_padding(deque) &*&
+pred Deque(deque: *Deque; elems: list<i32>) =
+    alloc_block(deque, std::mem::size_of::<Deque>()) &*& struct_Deque_padding(deque) &*&
     (*deque).sentinel |-> ?sentinel &*&
-    alloc_block(sentinel, std::mem::size_of::<Node<T>>()) &*& struct_Node_padding(sentinel) &*&
+    alloc_block(sentinel, std::mem::size_of::<Node>()) &*& struct_Node_padding(sentinel) &*&
     (*sentinel).prev |-> ?last &*&
     (*sentinel).value |-> _ &*&
     (*sentinel).next |-> ?first &*&
@@ -83,19 +83,19 @@ pred Deque<T>(deque: *Deque<T>; elems: list<T>) =
 
 @*/
 
-impl<T> Deque<T> {
-    unsafe fn new() -> *mut Deque<T>
+impl Deque {
+    unsafe fn new() -> *mut Deque
     //@ req true;
     //@ ens Deque(result, []);
     {
-        let deque = std::alloc::alloc(std::alloc::Layout::new::<Deque<T>>()) as *mut Deque<T>;
+        let deque = std::alloc::alloc(std::alloc::Layout::new::<Deque>()) as *mut Deque;
         if deque.is_null() {
-            std::alloc::handle_alloc_error(std::alloc::Layout::new::<Deque<T>>());
+            std::alloc::handle_alloc_error(std::alloc::Layout::new::<Deque>());
         }
         //@ close_struct(deque);
-        let sentinel = std::alloc::alloc(std::alloc::Layout::new::<Node<T>>()) as *mut Node<T>;
+        let sentinel = std::alloc::alloc(std::alloc::Layout::new::<Node>()) as *mut Node;
         if sentinel.is_null() {
-            std::alloc::handle_alloc_error(std::alloc::Layout::new::<Node<T>>());
+            std::alloc::handle_alloc_error(std::alloc::Layout::new::<Node>());
         }
         //@ close_struct(sentinel);
         (*sentinel).prev = sentinel;
@@ -105,25 +105,24 @@ impl<T> Deque<T> {
         return deque;
     }
 
-    unsafe fn get_size(deque: *mut Deque<T>) -> i32
+    unsafe fn get_size(deque: *mut Deque) -> i32
     //@ req Deque(deque, ?elems);
     //@ ens Deque(deque, elems) &*& result == length(elems);
     {
         return (*deque).size;
     }
 
-    unsafe fn push_front(deque: *mut Deque<T>, value: T)
+    unsafe fn push_front(deque: *mut Deque, value: i32)
     //@ req Deque(deque, ?elems) &*& length(elems) < 0x7fffffff;
     //@ ens Deque(deque, cons(value, elems));
     {
-        let new_node = std::alloc::alloc(std::alloc::Layout::new::<Node<T>>()) as *mut Node<T>;
+        let new_node = std::alloc::alloc(std::alloc::Layout::new::<Node>()) as *mut Node;
         if new_node.is_null() {
-            std::alloc::handle_alloc_error(std::alloc::Layout::new::<Node<T>>());
+            std::alloc::handle_alloc_error(std::alloc::Layout::new::<Node>());
         }
         //@ close_struct(new_node);
         (*new_node).prev = (*deque).sentinel;
-        std::ptr::write(std::ptr::addr_of_mut!((*new_node).value), value);
-        //@ close Node_value(new_node, _);
+        (*new_node).value = value;
         //@ let sentinel = (*deque).sentinel;
         //@ let first = (*sentinel).next;
         (*new_node).next = (*(*deque).sentinel).next;
@@ -133,19 +132,18 @@ impl<T> Deque<T> {
         (*deque).size += 1;
     }
 
-    unsafe fn push_back(deque: *mut Deque<T>, value: T)
+    unsafe fn push_back(deque: *mut Deque, value: i32)
     //@ req Deque(deque, ?elems) &*& length(elems) < 0x7fffffff;
     //@ ens Deque(deque, append(elems, [value]));
     {
-        let new_node = std::alloc::alloc(std::alloc::Layout::new::<Node<T>>()) as *mut Node<T>;
+        let new_node = std::alloc::alloc(std::alloc::Layout::new::<Node>()) as *mut Node;
         if new_node.is_null() {
-            std::alloc::handle_alloc_error(std::alloc::Layout::new::<Node<T>>());
+            std::alloc::handle_alloc_error(std::alloc::Layout::new::<Node>());
         }
         //@ close_struct(new_node);
         //@ let sentinel = (*deque).sentinel;
         (*new_node).prev = (*(*deque).sentinel).prev;
-        std::ptr::write(std::ptr::addr_of_mut!((*new_node).value), value);
-        //@ close Node_value(new_node, _);
+        (*new_node).value = value;
         (*new_node).next = (*deque).sentinel;
         /*@
         if length(elems) > 0 {
@@ -169,25 +167,23 @@ impl<T> Deque<T> {
         //@ Nodes_join_last((*sentinel).next);
     }
 
-    unsafe fn pop_front(deque: *mut Deque<T>) -> T
+    unsafe fn pop_front(deque: *mut Deque) -> i32
     //@ req Deque(deque, cons(?elem, ?elems));
     //@ ens Deque(deque, elems) &*& result == elem;
     {
         let node = (*(*deque).sentinel).next;
         //@ open Nodes(_, _, _, _, _);
-        //@ open Node_value(node, _);
-        let result = std::ptr::read(std::ptr::addr_of!((*node).value));
-        //@ close Node_value(node, _);
+        let result = (*node).value;
         (*(*node).prev).next = (*node).next;
         //@ open Nodes(_, _, _, _, _);
         (*(*node).next).prev = (*node).prev;
         //@ open_struct(node);
-        std::alloc::dealloc(node as *mut u8, std::alloc::Layout::new::<Node<T>>());
+        std::alloc::dealloc(node as *mut u8, std::alloc::Layout::new::<Node>());
         (*deque).size -= 1;
         return result;
     }
 
-    unsafe fn pop_back(deque: *mut Deque<T>) -> T
+    unsafe fn pop_back(deque: *mut Deque) -> i32
     //@ req Deque(deque, ?elems) &*& 1 <= length(elems);
     //@ ens Deque(deque, take(length(elems) - 1, elems)) &*& result == nth(length(elems) - 1, elems);
     {
@@ -195,9 +191,7 @@ impl<T> Deque<T> {
         //@ let first = (*sentinel).next;
         //@ Nodes_split_last(first);
         let node = (*(*deque).sentinel).prev;
-        //@ open Node_value(node, _);
-        let result = std::ptr::read(std::ptr::addr_of!((*node).value));
-        //@ close Node_value(node, _);
+        let result = (*node).value;
         /*@
         if 2 <= length(elems) {
             Nodes_split_last(first);
@@ -210,7 +204,7 @@ impl<T> Deque<T> {
         (*(*node).prev).next = (*node).next;
         (*(*node).next).prev = (*node).prev;
         //@ open_struct(node);
-        std::alloc::dealloc(node as *mut u8, std::alloc::Layout::new::<Node<T>>());
+        std::alloc::dealloc(node as *mut u8, std::alloc::Layout::new::<Node>());
         (*deque).size -= 1;
         /*@
         if 2 <= length(elems) {
@@ -220,21 +214,21 @@ impl<T> Deque<T> {
         return result;
     }
 
-    unsafe fn dispose(deque: *mut Deque<T>)
+    unsafe fn dispose(deque: *mut Deque)
     //@ req Deque(deque, []);
     //@ ens true;
     {
-        //@ open_struct((*deque).sentinel);
+        //@ open_struct((*deque ) . sentinel);
         std::alloc::dealloc(
             (*deque).sentinel as *mut u8,
-            std::alloc::Layout::new::<Node<T>>(),
+            std::alloc::Layout::new::<Node>(),
         );
         //@ open_struct(deque);
-        std::alloc::dealloc(deque as *mut u8, std::alloc::Layout::new::<Deque<T>>());
+        std::alloc::dealloc(deque as *mut u8, std::alloc::Layout::new::<Deque>());
         //@ open Nodes(_, _, _, _, _);
     }
 
-    unsafe fn swap(d: *mut Deque<T>, d1: *mut Deque<T>)
+    unsafe fn swap(d: *mut Deque, d1: *mut Deque)
     //@ req Deque(d, ?elems) &*& Deque(d1, ?elems1);
     //@ ens Deque(d, elems1) &*& Deque(d1, elems);
     {
@@ -249,16 +243,16 @@ impl<T> Deque<T> {
 
 fn main() {
     unsafe {
-        let deque = Deque::<i32>::new();
-        Deque::<i32>::push_back(deque, 10);
-        Deque::<i32>::push_front(deque, -10);
-        Deque::<i32>::push_back(deque, 20);
-        Deque::<i32>::push_front(deque, -20);
-        assert(Deque::<i32>::get_size(deque) == 4);
-        assert(Deque::<i32>::pop_back(deque) == 20);
-        assert(Deque::<i32>::pop_back(deque) == 10);
-        assert(Deque::<i32>::pop_front(deque) == -20);
-        assert(Deque::<i32>::pop_front(deque) == -10);
-        Deque::<i32>::dispose(deque);
+        let deque = Deque::new();
+        Deque::push_back(deque, 10);
+        Deque::push_front(deque, -10);
+        Deque::push_back(deque, 20);
+        Deque::push_front(deque, -20);
+        assert(Deque::get_size(deque) == 4);
+        assert(Deque::pop_back(deque) == 20);
+        assert(Deque::pop_back(deque) == 10);
+        assert(Deque::pop_front(deque) == -20);
+        assert(Deque::pop_front(deque) == -10);
+        Deque::dispose(deque);
     }
 }

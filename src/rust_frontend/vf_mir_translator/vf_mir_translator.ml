@@ -1425,6 +1425,12 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       | FnDef -> failwith "Todo: Scalar::FnDef"
       | Undefined _ -> Error (`TrScalar "Unknown Scalar kind")
 
+    let mk_unit_expr loc =
+      Ast.CastExpr
+        ( loc,
+          StructTypeExpr (loc, Some TrTyTuple.tuple0_name, None, [], []),
+          InitializerList (loc, []) )
+
     let translate_unit_constant (loc : Ast.loc) =
       let rvalue_binder_builder tmp_var_name =
         Ast.DeclStmt
@@ -1687,6 +1693,24 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                           (*decimal*) true,
                           (*U suffix*) false,
                           (*int literal*) Ast.NoLSuffix ) )
+              | "std::ptr::read" ->
+                  let [ src_cpn ] = args_cpn in
+                  let* tmp_rvalue_binders, [ src ] =
+                    translate_operands [ (src_cpn, fn_loc) ]
+                  in
+                  Ok (tmp_rvalue_binders, Ast.Deref (fn_loc, src))
+              | "std::ptr::write" ->
+                  let [ dst_cpn; src_cpn ] = args_cpn in
+                  let* tmp_rvalue_binders, [ dst; src ] =
+                    translate_operands [ (dst_cpn, fn_loc); (src_cpn, fn_loc) ]
+                  in
+                  Ok
+                    ( tmp_rvalue_binders
+                      @ [
+                          Ast.ExprStmt
+                            (AssignExpr (fn_loc, Deref (fn_loc, dst), src));
+                        ],
+                      mk_unit_expr fn_loc )
               | "std::cell::UnsafeCell::<T>::new"
               | "std::cell::UnsafeCell::<T>::get"
               | "std::mem::ManuallyDrop::<T>::new"
@@ -1697,15 +1721,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                     translate_operands [ (arg_cpn, fn_loc) ]
                   in
                   Ok (tmp_rvalue_binders, arg)
-              | _ ->
-                  (* Ignore the generic args for now *)
-                  translate_regular_fn_call substs fn_name
-                  (*
-                failwith
-                  ("Todo: Generic functions are not supported yet. Function: "
-                 ^ fn_name))
-                *)
-              )
+              | _ -> translate_regular_fn_call substs fn_name)
           | _ ->
               Error
                 (`TrFnCallRExpr "Invalid function definition type translation"))
@@ -2529,10 +2545,17 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | Unsafe -> Ok true
     | Undefined _ -> Error (`TrUnsafety "Unknown unsafety kind")
 
-  let translate_hir_generic_param_name loc (n_cpn : HirGenericParamNameRd.t) =
+  let translate_hir_generic_param_name loc (is_type_param_name : bool)
+      (n_cpn : HirGenericParamNameRd.t) =
     let open HirGenericParamNameRd in
     match get n_cpn with
-    | Plain ident_cpn -> translate_ident ident_cpn
+    | Plain ident_cpn ->
+        let* name, loc = translate_ident ident_cpn in
+        if is_type_param_name && not (Verifast0.tparam_is_uppercase name) then
+          raise
+            (Ast.StaticError
+               (loc, "Type parameters must start with an uppercase letter", None));
+        Ok (name, loc)
     | Fresh id_cpn ->
         failwith
           (Printf.sprintf "Todo: ParamName::Fresh (at %s)"
@@ -2551,11 +2574,13 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let open HirGenericParamRd in
     let span_cpn = span_get p_cpn in
     let* loc = translate_span_data span_cpn in
-    let name_cpn = name_get p_cpn in
-    let* name, name_loc = translate_hir_generic_param_name loc name_cpn in
-    let pure_wrt_drop = pure_wrt_drop_get p_cpn in
     let kind_cpn = kind_get p_cpn in
     let* kind = translate_hir_generic_param_kind kind_cpn in
+    let name_cpn = name_get p_cpn in
+    let* name, name_loc =
+      translate_hir_generic_param_name loc (kind = Hir.GenParamType) name_cpn
+    in
+    let pure_wrt_drop = pure_wrt_drop_get p_cpn in
     Ok (name, kind, loc)
 
   let translate_hir_generics (gens_cpn : HirGenericsRd.t) =
@@ -2685,6 +2710,18 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | DefKind.Fn ->
         let def_path = def_path_get body_cpn in
         let name = TrName.translate_def_path def_path in
+        let* tparams =
+          match impl_block_hir_generics_get body_cpn |> OptionRd.get with
+          | Nothing -> Ok []
+          | Something hir_gens_cpn_ptr ->
+              let hir_gens_cpn = VfMirStub.Reader.of_pointer hir_gens_cpn_ptr in
+              let* gens, gens_loc = translate_hir_generics hir_gens_cpn in
+              Ok
+                (Util.flatmap
+                   (function
+                     | name, Hir.GenParamType, loc -> [ name ] | _ -> [])
+                   gens)
+        in
         let hir_gens_cpn = hir_generics_get body_cpn in
         let* gens, gens_loc = translate_hir_generics hir_gens_cpn in
         let* lft_param_names =
@@ -2697,9 +2734,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             gens
         in
         let tparams =
-          Util.flatmap
-            (function name, Hir.GenParamType, loc -> [ name ] | _ -> [])
-            gens
+          tparams
+          @ Util.flatmap
+              (function name, Hir.GenParamType, loc -> [ name ] | _ -> [])
+              gens
         in
         let tparams =
           if is_trait_fn_get body_cpn then "Self" :: tparams else tparams
@@ -2754,7 +2792,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             let* pre_post_template =
               if is_drop_fn_get body_cpn then
                 let ({ ty = self_ty } :: _) = param_decls in
-                let (PtrTypeExpr (_, StructTypeExpr (_, Some self_ty, _, _, _))) =
+                let (PtrTypeExpr (_, StructTypeExpr (_, Some self_ty, _, _, _)))
+                    =
                   Mir.basic_type_of self_ty
                 in
                 gen_drop_contract body_tr_defs_ctx.adt_defs self_ty contract_loc

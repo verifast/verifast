@@ -1713,7 +1713,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let rec consume_c_object_core_core l coefpat addr tp h env consumePaddingChunk consumeUninitChunk cont =
     let consume_char_array_chunk () =
       let pats = [TermPat addr; TermPat (sizeof_core l env tp); dummypat] in
-      consume_chunk rules h [] [] [] l ((if consumeUninitChunk then chars__pred_symb() else chars_pred_symb()), true) [] real_unit coefpat (Some 2) pats $. fun chunk h _ [_; _; cs] _ _ _ _ ->
+      consume_chunk rules h [] env [] l ((if consumeUninitChunk then chars__pred_symb() else chars_pred_symb()), true) [] real_unit coefpat (Some 2) pats $. fun chunk h _ [_; _; cs] _ _ _ _ ->
       cont [chunk] h (Some (get_unique_var_symb "value" tp))
     in
     match tp with
@@ -1721,13 +1721,13 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       begin match try_pointee_pred_symb0 elemTp with
         Some (_, _, _, arrayPredSymb, _, _, _, _, _, _, _, uninitArrayPredSymb) ->
         let pats = [TermPat addr; TermPat (ctxt#mk_intlit elemCount); dummypat] in
-        consume_chunk rules h [] [] [] l ((if consumeUninitChunk then uninitArrayPredSymb else arrayPredSymb), true) [] real_unit coefpat (Some 2) pats $. fun chunk h _ [_; _; elems] _ _ _ _ ->
+        consume_chunk rules h [] env [] l ((if consumeUninitChunk then uninitArrayPredSymb else arrayPredSymb), true) [] real_unit coefpat (Some 2) pats $. fun chunk h _ [_; _; elems] _ _ _ _ ->
         cont [chunk] h (Some elems)
       | None ->
       match int_rank_and_signedness elemTp with
         Some (k, signedness) ->
         let pats = [TermPat addr; TermPat (rank_size_term k); TermPat (mk_bool (signedness = Signed)); TermPat (ctxt#mk_intlit elemCount); dummypat] in
-        consume_chunk rules h [] [] [] l ((if consumeUninitChunk then integers___symb () else integers__symb ()), true) [] real_unit coefpat (Some 4) pats $. fun chunk h _ [_; _; _; _; elems] _ _ _ _ ->
+        consume_chunk rules h [] env [] l ((if consumeUninitChunk then integers___symb () else integers__symb ()), true) [] real_unit coefpat (Some 4) pats $. fun chunk h _ [_; _; _; _; elems] _ _ _ _ ->
         cont [chunk] h (Some elems)
       | None ->
         consume_char_array_chunk ()
@@ -1748,7 +1748,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       begin fun cont ->
         match consumePaddingChunk, padding_predsymb_opt with
           true, Some padding_predsymb ->
-          consume_chunk rules h [] [] [] l (padding_predsymb, true) targs real_unit coefpat (Some 1) [TermPat addr] $. fun chunk h _ _ _ _ _ _ ->
+          consume_chunk rules h [] env [] l (padding_predsymb, true) targs real_unit coefpat (Some 1) [TermPat addr] $. fun chunk h _ _ _ _ _ _ ->
           cont [chunk] h
         | _ ->
           cont [] h
@@ -1775,7 +1775,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                  f_symb_
                | _ -> f_symb
              in
-             consume_chunk rules h [] [] [] l (f_symb_used, true) targs real_unit coefpat (Some 1) [TermPat addr; dummypat] $. fun chunk h coef [_; value] size ghostenv env env' ->
+             consume_chunk rules h [] env [] l (f_symb_used, true) targs real_unit coefpat (Some 1) [TermPat addr; dummypat] $. fun chunk h coef [_; value] size ghostenv env env' ->
              let value =
                if consumeUninitChunk then value else prover_convert_term value t t0
              in
@@ -1783,7 +1783,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       iter chunks [] h fields
     | _ ->
-      consume_points_to_chunk_ rules h [] [] [] l tp real_unit coefpat addr dummypat consumeUninitChunk $. fun chunk h _ value _ _ _ ->
+      consume_points_to_chunk_ rules h [] env [] l tp real_unit coefpat addr dummypat consumeUninitChunk $. fun chunk h _ value _ _ _ ->
       cont [chunk] h (Some value)
   
   let consume_c_object_core l coefpat addr tp h env consumePaddingChunk cont =
@@ -1944,8 +1944,6 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         None -> static_error l "Incorrect number of type arguments." None
       | Some tpenv -> tpenv
     in
-    let targ_typeid_env = typeid_env_of_tpenv l env tpenv in
-    let funenv = funenv @ targ_typeid_env in
     let ys: string list = List.map (function (p, t) -> p) ps in
     begin fun cont ->
       let rec iter h env ts pats ps =
@@ -1990,6 +1988,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       iter h env [] pats ps
     end $. fun h env ts ->
+    let targ_typeid_env = typeid_env_of_tpenv l env tpenv in
+    let funenv = funenv @ targ_typeid_env in
     let Some env' = zip ys ts in
     begin fun cont ->
       match dialect, try_assoc "this" ps with
@@ -2372,7 +2372,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         cont h env (prover_convert_term (ctxt#mk_app getter [x]) tp0 tp)
       | LValues.ArrayElement (l, arr, elem_tp, i) when language = Java ->
         let pats = [TermPat arr; TermPat i; SrcPat DummyPat] in
-        consume_chunk rules h [] [] [] l (array_element_symb(), true) [elem_tp] real_unit dummypat (Some 2) pats $. fun chunk h _ [_; _; value] _ _ _ _ ->
+        consume_chunk rules h [] env [] l (array_element_symb(), true) [elem_tp] real_unit dummypat (Some 2) pats $. fun chunk h _ [_; _; value] _ _ _ _ ->
         cont (chunk::h) env value
       | LValues.ArrayElement (l, arr, elem_tp, i) when language = CLang ->
         cont h env (read_c_array h env l arr i elem_tp)
@@ -2400,7 +2400,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             Some f_symb_ -> f_symb_
           | None -> f_symb
         in
-        consume_chunk rules h [] [] [] l (f_symb_used, true) targs real_unit real_unit_pat (Some 1) pats $. fun _ h _ _ _ _ _ _ ->
+        consume_chunk rules h [] env [] l (f_symb_used, true) targs real_unit real_unit_pat (Some 1) pats $. fun _ h _ _ _ _ _ _ ->
         cont (Chunk ((f_symb, true), targs, real_unit, targets @ [value], None)::h) env
       | LValues.ValueField (l, w, getter, setter, tp0, tp) ->
         read_lvalue h env w $. fun h env x ->
@@ -2412,7 +2412,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         begin match try_update_java_array h env l arr i elem_tp value with
           None -> 
           let pats = [TermPat arr; TermPat i; SrcPat DummyPat] in
-          consume_chunk rules h [] [] [] l (array_element_symb(), true) [elem_tp] real_unit real_unit_pat (Some 2) pats $. fun _ h _ _ _ _ _ _ ->
+          consume_chunk rules h [] env [] l (array_element_symb(), true) [elem_tp] real_unit real_unit_pat (Some 2) pats $. fun _ h _ _ _ _ _ _ ->
           cont (Chunk ((array_element_symb(), true), [elem_tp], real_unit, [arr; i; value], None)::h) env
         | Some h ->
           cont h env
@@ -2422,7 +2422,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         if pure then static_error l "Cannot write in a pure context." None;
         let consume_elem () =
           let target = mk_ptr_add_ l arr i elem_tp in
-          consume_points_to_chunk_ rules h [] [] [] l elem_tp real_unit real_unit_pat target dummypat true $. fun _ h _ _ _ _ _ ->
+          consume_points_to_chunk_ rules h [] env [] l elem_tp real_unit real_unit_pat target dummypat true $. fun _ h _ _ _ _ _ ->
           produce_points_to_chunk l h elem_tp real_unit target value $. fun h ->
           cont h env
         in

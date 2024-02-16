@@ -180,8 +180,8 @@ lemma_auto(has_type((void *)ptr_add_(p, offset, elemTypeid), elemTypeid)) void h
     requires true;
     ensures has_type((void *)ptr_add_(p, offset, elemTypeid), elemTypeid) == has_type((void *)p, elemTypeid);
 
-predicate generic_points_to<t>(t *p; t v);
 predicate generic_points_to_<t>(t *p; option<t> v);
+predicate generic_points_to<t>(t *p; t v) = generic_points_to_(p, some(v));
 
 predicate integer__(void *p, int size, bool signed_; option<int> v);
 predicate integer_(void *p, int size, bool signed_; int v) = integer__(p, size, signed_, some(v));
