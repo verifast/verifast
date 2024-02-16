@@ -36,14 +36,12 @@ struct MutexCell<T> *create_MutexCell<T>(T value)
     mutex mutex = create_mutex();
     result->mutex = mutex;
     return result;
-    //@ close MutexCell<T>(result, T_own);
 }
 
 void MutexCell_acquire<T>(struct MutexCell<T> *mutexCell)
 //@ requires [?q]MutexCell<T>(mutexCell, ?T_own);
 //@ ensures MutexCell_held<T>(mutexCell, T_own, currentThread, q) &*& mutexCell->payload |-> ?payload &*& T_own(payload);
 {
-    //@ open MutexCell<T>(mutexCell, T_own);
     mutex_acquire(mutexCell->mutex);
     //@ open MutexCell_inv<T>(mutexCell, T_own)();
     //@ close MutexCell_held<T>(mutexCell, T_own, currentThread, q);
@@ -56,5 +54,4 @@ void MutexCell_release<T>(struct MutexCell<T> *mutexCell)
     //@ open MutexCell_held<T>(mutexCell, T_own, currentThread, q);
     //@ close MutexCell_inv<T>(mutexCell, T_own)();
     mutex_release(mutexCell->mutex);
-    //@ close [q]MutexCell<T>(mutexCell, T_own);
 }

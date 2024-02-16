@@ -99,8 +99,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | Break _ -> []
     | SuperConstructorCall(_, es) -> flatmap (fun e -> expr_assigned_variables e) es
 
-  let get_points_to h p predSymb targs l cont =
-    consume_chunk rules h [] [] [] l (predSymb, true) targs real_unit dummypat (Some 1) [TermPat p; dummypat] (fun chunk h coef [_; t] size ghostenv env env' ->
+  let get_points_to h p predSymb typeid_env targs l cont =
+    consume_chunk rules h [] typeid_env [] l (predSymb, true) targs real_unit dummypat (Some 1) [TermPat p; dummypat] (fun chunk h coef [_; t] size ghostenv env env' ->
       cont h coef t)
     
   let get_points_to' h p tpx l cont =
@@ -2361,10 +2361,10 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | LValues.Field (l, target, fparent, tparams, fname, tp, targs, fvalue, fghost, f_symb, _) ->
         begin match target with
           Some target ->
-          consume_chunk rules h [] [] [] l (f_symb, true) targs real_unit dummypat (Some 1) [TermPat target; dummypat] $. fun chunk h _ [_; value] _ _ _ _ ->
+          consume_chunk rules h [] env [] l (f_symb, true) targs real_unit dummypat (Some 1) [TermPat target; dummypat] $. fun chunk h _ [_; value] _ _ _ _ ->
           cont (chunk::h) env value
         | None ->
-          consume_chunk rules h [] [] [] l (f_symb, true) targs real_unit dummypat (Some 0) [dummypat] $. fun chunk h _ [value] _ _ _ _ ->
+          consume_chunk rules h [] env [] l (f_symb, true) targs real_unit dummypat (Some 0) [dummypat] $. fun chunk h _ [value] _ _ _ _ ->
           cont (chunk::h) env value
         end
       | LValues.ValueField (l, w, getter, setter, tp0, tp) ->
@@ -2861,7 +2861,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let (_, (_, _, _, _, f_symb, _, _)), _ = List.assoc (fparent, fname) field_pred_map in
       begin match lookup_points_to_chunk_core h f_symb targs t with
         None -> (* Try the heavyweight approach; this might trigger a rule (i.e. an auto-open or auto-close) and rewrite the heap. *)
-        get_points_to h t f_symb targs l $. fun h coef v ->
+        get_points_to h t f_symb env targs l $. fun h coef v ->
         cont (Chunk ((f_symb, true), targs, coef, [t; v], None)::h) env v
       | Some v -> cont h env v
       end

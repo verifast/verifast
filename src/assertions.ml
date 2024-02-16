@@ -948,7 +948,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 match rules with
                  [] -> cont ()
                 | rule::rules ->
-                  rule l h targs terms_are_well_typed coef coefpat ts $. fun h ->
+                  rule l h env targs terms_are_well_typed coef coefpat ts $. fun h ->
                   match h with
                     None -> iter rules
                   | Some h ->
@@ -1395,7 +1395,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               DummyPat, Some ((_, (_, _, _, _, qsymb_, _, _))) -> qsymb_
             | _ -> qsymb
           in
-          construct_edge qsymb_used coef None targs [] (if fstatic then [] else [e]) conds
+          construct_edge qsymb_used coef None targs [] (if fstatic then [] else [voidPtrType]) (if fstatic then [] else [e]) conds
         else
           []
       | WPredAsn(_, q, true, qtargs, qfns, qpats) ->
@@ -1407,7 +1407,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               let qIndices = List.map (fun (LitPat e) -> e) qfns in
               let qInputActuals = List.map expr_of_fixed_pat (take qInputParamCount qpats) in
               if List.for_all (fun e -> expr_is_fixed inputParameters e) (qIndices @ qInputActuals) then
-               construct_edge qsymb coef None qtargs qIndices qInputActuals conds
+               construct_edge qsymb coef None qtargs qIndices (take qInputParamCount q#domain) qInputActuals conds
               else
                 []
             end
@@ -1420,10 +1420,11 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 let qIndices = List.map (fun (LitPat e) -> e) qfns in
                 let qInputActuals = List.map expr_of_fixed_pat (take qInputParamCount qpats) in
                 if List.for_all (fun e -> expr_is_fixed inputParameters e) (qIndices @ qInputActuals) then
-                construct_edge vsymb coef None [] [] (qIndices @ qInputActuals) conds
+                let inputParamTypes = List.map snd ps1 @ take qInputParamCount (List.map snd ps2) in
+                construct_edge vsymb coef None [] [] inputParamTypes (qIndices @ qInputActuals) conds
                 else
                   []
-              | None -> []
+              | _ -> []
               end
             end
           end
@@ -1458,7 +1459,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         if match target_opt with Some e -> expr_is_fixed inputParameters e | None -> true then begin
           let target = match target_opt with Some e -> Some e | None -> Some (WVar(l2, "this", LocalVar)) in
           let inner_info = target |> Option.map @@ fun target -> family_type_string, static_type_name, target in
-          construct_edge qsymb coef inner_info [] [index] [] conds
+          construct_edge qsymb coef inner_info [] [index] [] [] conds
         end else
           []
       | CoefAsn(_, DummyPat, asn) ->
@@ -1512,8 +1513,8 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | Some nbInputParameters ->
           let inputParameters = List.map fst (take nbInputParameters xs) in
           let inputFormals = (take nbInputParameters xs) in
-          let construct_edge qsymb coef inner_inst_pred_info_opt qtargs qIndices qInputActuals conds =
-            [(psymb, pindices, qsymb, [(l, (psymb, true), 0, None, None, predinst_tparams, fns, xs, inputFormals, wbody0, coef, inner_inst_pred_info_opt, qtargs, qIndices, qInputActuals, conds)])]
+          let construct_edge qsymb coef inner_inst_pred_info_opt qtargs qIndices qInputParamTypes qInputActuals conds =
+            [(psymb, pindices, qsymb, [(l, (psymb, true), 0, None, None, predinst_tparams, fns, xs, inputFormals, wbody0, coef, inner_inst_pred_info_opt, qtargs, qIndices, List.combine qInputParamTypes qInputActuals, conds)])]
           in
           find_edges construct_edge inputParameters xs wbody0
       )
@@ -1533,8 +1534,8 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let inputParameters = List.map fst (take nbInputParameters xs) in
           let inputFormals = (take nbInputParameters xs) in
           let outer_nb_curried = (List.length ps1) in
-          let construct_edge qsymb coef inner_inst_pred_info_opt qtargs qIndices qInputActuals conds =
-            [(psymbol_term, [], qsymb, [(l, (psymbol_term, true), outer_nb_curried, Some(psymbol), None, predinst_tparams, fns, xs, inputFormals, wbody0, coef, inner_inst_pred_info_opt, qtargs, qIndices, qInputActuals, conds)])]
+          let construct_edge qsymb coef inner_inst_pred_info_opt qtargs qIndices qInputParamTypes qInputActuals conds =
+            [(psymbol_term, [], qsymb, [(l, (psymbol_term, true), outer_nb_curried, Some(psymbol), None, predinst_tparams, fns, xs, inputFormals, wbody0, coef, inner_inst_pred_info_opt, qtargs, qIndices, List.combine qInputParamTypes qInputActuals, conds)])]
           in
           find_edges construct_edge inputParameters xs wbody0
       )
@@ -1548,8 +1549,8 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let xs = pmap in
       let inputParameters = ["this"] in
       let inputFormals = [] in
-      let construct_edge qsymb coef inner_inst_pred_info_opt qtargs qIndices qInputActuals conds =
-        [(psymb, pindices, qsymb, [(l, (psymb, true), 0, None, Some family, instpred_tparams, fns, xs, inputFormals, wbody0, coef, inner_inst_pred_info_opt, qtargs, qIndices, qInputActuals, conds)])]
+      let construct_edge qsymb coef inner_inst_pred_info_opt qtargs qIndices qInputParamTypes qInputActuals conds =
+        [(psymb, pindices, qsymb, [(l, (psymb, true), 0, None, Some family, instpred_tparams, fns, xs, inputFormals, wbody0, coef, inner_inst_pred_info_opt, qtargs, qIndices, List.combine qInputParamTypes qInputActuals, conds)])]
       in
       find_edges construct_edge inputParameters xs wbody0
 
@@ -1669,7 +1670,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     (* transitive auto-close rules for precise predicates and predicate families *)
     List.iter
       (fun (from_symb, indices, to_symb, path) ->
-        let transitive_auto_close_rule l h wanted_targs terms_are_well_typed wanted_coef wanted_coefpat wanted_indices_and_input_ts cont =
+        let transitive_auto_close_rule l h typeid_env wanted_targs terms_are_well_typed wanted_coef wanted_coefpat wanted_indices_and_input_ts cont =
           (*let _ = print_endline ("trying to auto-close:" ^ (ctxt#pprint from_symb)) in*)
           let rec can_apply_rule wanted_coef current_this_opt current_targs current_indices current_input_args path =
             let is_chunk_candidate (Chunk (found_symb, found_targs, found_coef, found_terms, _)) =
@@ -1717,10 +1718,9 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 Some (fun h cont -> cont h found_coef)
               end
             | (outer_l, outer_symb, outer_nb_curried, outer_fun_sym, outer_inst_pred_info_opt, outer_formal_targs, outer_actual_indices, outer_formal_args, outer_formal_input_args, outer_wbody, inner_frac_expr_opt, inner_inst_pred_info_opt, inner_formal_targs, inner_formal_indices, inner_input_exprs, conds) :: path ->
-              if List.exists tparam_carries_typeid outer_formal_targs then
-                assert_false h [] l "Auto-closing predicates that take type parameters that carry typeids is not yet supported; explicitly close the predicate instead" None;
               let Some tpenv = zip outer_formal_targs current_targs in
-              let env = List.map2 
+              let env = typeid_env_of_tpenv l typeid_env tpenv in
+              let env = env @ List.map2 
                 (fun (x, tp0) actual -> 
                   let tp = instantiate_type tpenv tp0 in 
                   (x, prover_convert_term actual tp tp0)) 
@@ -1738,12 +1738,6 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               in
               let env = env |> env_with_this_opt current_this_opt in
               if conds |> for_all_rev @@ fun cond -> ctxt#query (eval None env cond) then
-                let env = List.map2 
-                  (fun (x, tp0) actual -> (x, actual)) 
-                  outer_formal_input_args 
-                  current_input_args 
-                in
-                let env = env |> env_with_this_opt current_this_opt in
                 let new_wanted_coef = Option.bind wanted_coef @@ fun wanted_coef ->
                   match inner_frac_expr_opt with
                     None -> Some wanted_coef
@@ -1756,7 +1750,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 let new_this_opt = inner_inst_pred_info_opt |> Option.map @@ fun (_, this_type, this_expr) -> this_type, eval None env this_expr in
                 let new_actual_targs = inner_formal_targs |> List.map @@ instantiate_type tpenv in
                 let new_actual_indices = inner_formal_indices |> List.map @@ eval None env in
-                let new_actual_input_args = inner_input_exprs |> List.map @@ eval None env in
+                let new_actual_input_args = inner_input_exprs |> List.map @@ fun (tp, e) -> prover_convert_term (eval None env e) tp (instantiate_type tpenv tp) in
                 match can_apply_rule new_wanted_coef new_this_opt new_actual_targs new_actual_indices new_actual_input_args path with
                 | None -> None
                 | Some exec_rule -> Some (fun h cont ->
@@ -1764,14 +1758,6 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                       let rules = rules_cell in
                       let ghostenv = [] in
                       let checkDummyFracs = true in
-                      let env = List.map2 
-                        (fun (x, tp0) actual -> 
-                          let tp = instantiate_type tpenv tp0 in 
-                          (x, prover_convert_term actual tp tp0)) 
-                        outer_formal_input_args 
-                        current_input_args 
-                      in
-                      let env = env |> env_with_this_opt current_this_opt in
                       with_context PushSubcontext @@ fun () ->
                         let new_coef = 
                           match inner_frac_expr_opt with
@@ -1851,7 +1837,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let transitive_auto_open_rules =
     List.map
       (fun (from_symb, indices, to_symb, path) ->
-        let transitive_auto_open_rule l h wanted_targs terms_are_well_typed wanted_coef wanted_coefpat wanted_indices_and_input_ts cont =
+        let transitive_auto_open_rule l h typeid_env wanted_targs terms_are_well_typed wanted_coef wanted_coefpat wanted_indices_and_input_ts cont =
           (*let _ = print_endline ("trying to auto-open : " ^ (ctxt#pprint from_symb)) in *)
           (* Check if we can obtain the 'wanted' chunk by transitively opening each predicate in the rule's path *)
           let rec try_apply_rule_core actual_this_opt actual_targs actual_indices actual_input_args path = 
@@ -1866,7 +1852,8 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               (* evaluate the relevant predicate in the body *)
               let actual_input_args = actual_input_args |> take @@ List.length outer_formal_input_args in (* to fix first call *)
               let Some tpenv = zip outer_formal_targs actual_targs in
-              let env = List.map2 (fun (x, tp0) actual -> 
+              let outer_typeid_env = typeid_env_of_tpenv l typeid_env tpenv in
+              let env = outer_typeid_env @ List.map2 (fun (x, tp0) actual -> 
                 let tp = instantiate_type tpenv tp0 in (x, prover_convert_term actual tp tp0))
                 outer_formal_input_args 
                 actual_input_args 
@@ -1882,14 +1869,12 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               in
               let env = env |> env_with_this_opt actual_this_opt in
               if conds |> for_all_rev @@ fun cond -> ctxt#query (eval None env cond) then
-                let env = List.map2 (fun (x, tp0) actual -> (x, actual)) outer_formal_input_args actual_input_args in
-                let env = env |> env_with_this_opt actual_this_opt in
                 let new_this_opt = inner_inst_pred_info_opt |> Option.map @@ fun (_, this_type, this_expr) ->
                   this_type, eval None env this_expr
                 in
                 let new_actual_targs = inner_formal_targs |> List.map @@ instantiate_type tpenv in
                 let new_actual_indices = inner_formal_indices |> List.map @@ eval None env in
-                let new_actual_input_args = inner_input_exprs |> List.map @@ eval None env in
+                let new_actual_input_args = inner_input_exprs |> List.map @@ fun (tp, e) -> prover_convert_term (eval None env e) tp (instantiate_type tpenv tp) in
                 let new_this_opt = new_this_opt |> Option.map @@ fun this_type_name_and_term ->
                   begin match dialect, path, inner_inst_pred_info_opt with
                   | Some Cxx, [], Some (family, _, _) ->
@@ -1947,7 +1932,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                         None -> cont None
                       | Some ((Chunk (consumed_symb, consumed_targs, consumed_coef, consumed_ts, consumed_size), h, found_targs, found_coef, found_ts)) -> 
                         (* produce from_symb body *)
-                        let full_env = List.map2 
+                        let full_env = outer_typeid_env @ List.map2 
                           (fun (x, tp0) t -> 
                             let tp = instantiate_type tpenv tp0 in 
                             (x, prover_convert_term t tp tp0)) 
@@ -2039,7 +2024,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | Some offsetFunc ->
       match try_pointee_pred_symb ft with
         Some pointee_pred_symb ->
-        let pointee_chunk_to_field_chunk__rule l h wanted_targs terms_are_well_typed wanted_coef wanted_coefpat wanted_indices_and_input_ts cont =
+        let pointee_chunk_to_field_chunk__rule l h typeid_env wanted_targs terms_are_well_typed wanted_coef wanted_coefpat wanted_indices_and_input_ts cont =
           let [tp] = wanted_indices_and_input_ts in
           let targ_typeids = List.map (typeid_of l) wanted_targs in
           let structTypeid = ctxt#mk_app structTypeidFunc targ_typeids in
@@ -2063,7 +2048,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let integer__symb = integer__symb () in
         let tsize = rank_size_term rank in
         let tsigned = match signedness with Signed -> true_term | Unsigned -> false_term in
-        let pointee_chunk_to_field_chunk__rule l h wanted_targs terms_are_well_typed wanted_coef wanted_coefpat wanted_indices_and_input_ts cont =
+        let pointee_chunk_to_field_chunk__rule l h typeid_env wanted_targs terms_are_well_typed wanted_coef wanted_coefpat wanted_indices_and_input_ts cont =
           let [tp] = wanted_indices_and_input_ts in
           let field_address = mk_field_ptr_ l [] tp wanted_targs structTypeidFunc offsetFunc in
           match extract
@@ -2085,7 +2070,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         add_rule symb_ pointee_chunk_to_field_chunk__rule
       | None -> ()
       end;
-      let field_chunk_to_field_chunk__rule l h wanted_targs terms_are_well_typed wanted_coef wanted_coefpat wanted_indices_and_input_ts cont =
+      let field_chunk_to_field_chunk__rule l h typeid_env wanted_targs terms_are_well_typed wanted_coef wanted_coefpat wanted_indices_and_input_ts cont =
         let [tp] = wanted_indices_and_input_ts in
         match extract
           begin function
@@ -2104,11 +2089,11 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       add_rule symb_ field_chunk_to_field_chunk__rule;
       transitive_auto_open_rules |> List.iter begin fun (to_symb, rule) ->
         if to_symb == symb then
-          let combined_rule l h wanted_targs terms_are_well_typed wanted_coef wanted_coefpat wanted_indices_and_input_ts cont =
-            rule l h wanted_targs terms_are_well_typed wanted_coef wanted_coefpat wanted_indices_and_input_ts $. function
+          let combined_rule l h typeid_env wanted_targs terms_are_well_typed wanted_coef wanted_coefpat wanted_indices_and_input_ts cont =
+            rule l h typeid_env wanted_targs terms_are_well_typed wanted_coef wanted_coefpat wanted_indices_and_input_ts $. function
               None -> cont None
             | Some h ->
-              field_chunk_to_field_chunk__rule l h wanted_targs terms_are_well_typed wanted_coef wanted_coefpat wanted_indices_and_input_ts cont
+              field_chunk_to_field_chunk__rule l h typeid_env wanted_targs terms_are_well_typed wanted_coef wanted_coefpat wanted_indices_and_input_ts cont
           in
           add_rule symb_ combined_rule
       end
@@ -2144,7 +2129,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             with_context PopSubcontext $. fun () ->
             cont (Chunk (g, targs, coef, inputArgs @ outputArgs, None)::h)
           in
-          let rule l h targs terms_are_well_typed coef coefpat ts cont =
+          let rule l h typeid_env targs terms_are_well_typed coef coefpat ts cont =
             (*let _ = print_endline "trying to close empty predicate" in*)
             if terms_are_well_typed && match_func h targs ts then exec_func h targs coef coefpat ts (fun h -> cont (Some h)) else cont None
           in
@@ -2158,7 +2143,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let array_element_symb = array_element_symb () in
       let array_slice_symb = array_slice_symb () in
       let array_slice_deep_symb = array_slice_deep_symb () in
-      let get_element_rule l h [elem_tp] terms_are_well_typed coef coefpat [arr; index] cont =
+      let get_element_rule l h typeid_env [elem_tp] terms_are_well_typed coef coefpat [arr; index] cont =
         match extract
           begin function
             (Chunk ((g, is_symb), elem_tp'::targs_rest, coef, arr'::istart'::iend'::args_rest, _)) when
@@ -2227,7 +2212,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               produce_asn tpenv h ghostenv env wbody coef None None $. fun h _ _ ->
               cont (Some h)
       in
-      let get_slice_upcast_rule l h [elem_tp] terms_are_well_typed coef coefpat [arr; istart; iend] cont =
+      let get_slice_upcast_rule l h typeid_env [elem_tp] terms_are_well_typed coef coefpat [arr; istart; iend] cont =
         match unfold_inferred_type elem_tp with
           ObjType _ | ArrayType _ ->
           begin match extract
@@ -2252,7 +2237,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | _ ->
           cont None
       in
-      let get_slice_rule l h [elem_tp] terms_are_well_typed coef coefpat [arr; istart; iend] cont =
+      let get_slice_rule l h typeid_env [elem_tp] terms_are_well_typed coef coefpat [arr; istart; iend] cont =
         let extract_slice h cond cont' =
           match extract
             begin function
@@ -2325,7 +2310,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let chunks_after = mk_chunk iend iend_last elems_last_after true in
           cont (Some (target_chunk @ chunks_before @ chunks_after @ h))
       in
-      let get_slice_deep_rule l h [elem_tp; a_tp; v_tp] terms_are_well_typed coef coefpat [arr; istart; iend; p; info] cont = 
+      let get_slice_deep_rule l h typeid_env [elem_tp; a_tp; v_tp] terms_are_well_typed coef coefpat [arr; istart; iend; p; info] cont = 
         let extract_slice_deep h cond cont' =
           let consume_array_element coef' index elem h =
             (* Close a unit array_slice_deep chunk *)
