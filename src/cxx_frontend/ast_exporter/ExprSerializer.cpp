@@ -147,7 +147,7 @@ bool ExprSerializer::VisitCharacterLiteral(clang::CharacterLiteral const * const
 
   // Initialize IntLit
   ::stubs::Expr::IntLit::Builder intLit = m_builder.initIntLit();
-  intLit.setUSuffix(false);
+  intLit.setUSuffix(uSuf);
   intLit.setLSuffix(stubs::SufKind::NO_SUF);
   intLit.setBase(stubs::NbBase::HEX); // !BAD HACK! This implies decimal==false and ensures correct decoding of the hex encoded value in later steps
   intLit.setValue(hexStringOf(lit->getValue()));
