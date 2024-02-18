@@ -243,6 +243,8 @@ struct ExprSerializer : public NodeSerializer<stubs::Expr, clang::Expr>,
 
   bool VisitCXXBoolLiteralExpr(const clang::CXXBoolLiteralExpr *expr);
 
+  bool VisitCharacterLiteral(const clang::CharacterLiteral *lit);
+
   bool VisitIntegerLiteral(const clang::IntegerLiteral *lit);
 
   bool VisitStringLiteral(const clang::StringLiteral *lit);
