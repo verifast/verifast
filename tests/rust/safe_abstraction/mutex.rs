@@ -2,28 +2,12 @@
 #![allow(dead_code)]
 
 /*
-What we need:
-	1- we need a `[[MutexU32]].Shr(k, t, l)` in a way that:
-		11- It is necessary that we can take the resource out of the `SysMutex` because in the proof of `Ty-Share` we need to get
-		`MutexU32_full_borrow_content`, specifically `data` in the `MutexU32`, back from a `MutexU32_frac_borrow_content`.
-		It represents the moment that the sharing is done and we have the original full borrow back. This means we need to have full
-		`SysMutex(inner)` in `MutexU32_frac_borrow_content`.
-
-		12- We should be able to close `[q1]MutexU32_frac_borrow_content` after a call in `sys::locks::Mutex::lock` in `MutexU32::lock`'s
-		body. It means
-		    - either the `sys::locks::Mutex::lock` should return the `SysMutex` fraction it gets after locking the mutex.
-		    This will be in contradiction with the posibility of getting the resource back out of `SysMutex` i.e. the `SysMutex_swap` will not hold
-		    anymore.
-		    - or put the `SysMutex` chunk in the definition of `MutexU32_frac_borrow_content` under an existential quantifire or make it dummy fraction.
-		    Wither way it will be in contradiction with 11.
-		To solve this contradiction it seems we need an invariant like
-		13- I do not see why we should put a `full_borrow` of the data inside the `SysMutex`.
-		It does not seem necessay and even causes complexities proving `Ty-Share`.
-		
-
-	2- I encountered the fact that I can put a full chunk in a `Share` predicate which is in contradiction with `Ty-Shr-Persist`.
-	   It seems our implementation is not sound and we should add proof obligation for that. Simply producing and consuming dummy-fractions
-	   is not sufficient.
+About the definition of `[[MutexU32]].Shr(k, t, l)`:
+    In the proof of `Ty-Share` we need to get `MutexU32_full_borrow_content`, specifically `data` back, on the other hand we cannot keep track of 
+    `SysMutex` fractions used to get the lock because in the proof of `MutexU32::lock` we need to close the `frac_borrow` which means we need the
+    `SysMutex` fraction we used to lock the mutex back from method `sys::locks::Mutex::lock`. To solve this we put a `full_borrow` of `data` in the inner `SysMutex`
+    and keep the `end_borrow_token` in the fractured borrow. The part of `Ty-Share`'s proof that represents the moment that sharing ends gets the whole `end_borrow`
+    token and is able to retrive the `data`. The full borrow in the inner `SysMutex` gets leaked which is fine because we do not need it anymore.
 */
 
 mod sys {
@@ -45,6 +29,7 @@ mod sys {
         {
             leak full_borrow(_, _);
         }
+        // ymmud
 
         pred SysMutex(m: sys::locks::Mutex; P: pred());
         pred SysMutex::new_ghost_arg(P: pred()) = true;
@@ -70,7 +55,7 @@ mod sys {
                    - Todo: `drop` will show undefined behaviour unless it knows the mutex is free. its specification needs to change.
                    https://pubs.opengroup.org/onlinepubs/9699919799/
         */
-        
+        // Todo: should we change our nonatomic_borrow to have a void * instead of mask so it would be compatible with Iris.
         /* Todo: we can put non-persistent predicate in `[[T]].Shr(k, t, l)` which is inconsistent with `Ty-Shr-Persist`. I think, not sure, our aproach for
         producing and consumming dummy fractions of `Shr` component is not enough and unsound.
         */
@@ -100,7 +85,13 @@ mod sys {
 
             /*impl Drop for Mutex */
             unsafe fn drop<'a>(&'a mut self)
-            //@ req (*self) |-> ?m &*& SysMutex(m, _); // Todo: It is not sound. see the doc for `SysMutex_renew`
+            /*
+            Todo: It is not sound. `https://pubs.opengroup.org/onlinepubs/9699919799/functions/pthread_mutex_destroy.html`
+            It shall be safe to destroy an initialized mutex that is unlocked. Attempting to destroy a locked mutex,
+            or a mutex that another thread is attempting to lock, or a mutex that is being used in a pthread_cond_timedwait() or pthread_cond_wait() call
+            by another thread, results in undefined behavior.
+            */
+            //@ req (*self) |-> ?m &*& SysMutex(m, _);
             //@ ens true;
             {
                 abort();
@@ -126,7 +117,6 @@ pred MutexU32_own(t: thread_id_t, inner: sys::locks::Mutex, data: u32) = SysMute
 
 pred_ctor MutexU32_full_borrow_content0(t: thread_id_t, l: *MutexU32)() =
     (*l).inner |-> ?inner &*& (*l).data |-> ?data &*& MutexU32_own(t, inner, data);
-
 
 pred_ctor SysMutex_content(k1: lifetime_t, t: thread_id_t, l: *MutexU32)(;) =
     full_borrow(k1, u32_full_borrow_content(t, &(*l).data));
@@ -188,9 +178,16 @@ lem MutexU32_share_full(k: lifetime_t, t: thread_id_t, l: *MutexU32)
 
 impl !Send for MutexGuardU32/*<'_>*/ {}
 /*@
+pred MutexU32_locked(l: *MutexU32; t: thread_id_t);
+lem MutexU32_locked_unwrap(l: *MutexU32, t: thread_id_t);
+    req MutexU32_locked(l, t) &*& [?qi](*l).inner |-> ?inner &*& [?qm]SysMutex(inner, ?P);
+    ens [qi](*l).inner |-> inner &*& [qm]SysMutex(inner, P) &*& SysMutex_locked(inner, P, t);
+lem MutexU32_locked_wrap(l: *MutexU32);
+    req [?qi](*l).inner |-> ?inner &*& [?qm]SysMutex(inner, ?P) &*& SysMutex_locked(inner, P, ?t);
+    ens [qi](*l).inner |-> inner &*& [qm]SysMutex(inner, P) &*& MutexU32_locked(l, t);
+
 pred_ctor MutexGuardU32_own(km: lifetime_t)(t: thread_id_t, lock: *MutexU32) =
-    MutexU32_share(km, t, lock) //&*& SysMutex_locked((*lock).inner, SysMutex_content(km, t, lock), t)
-    &*& full_borrow(km, u32_full_borrow_content(t, &(*lock).data));
+    [_]MutexU32_share(km, t, lock) &*& MutexU32_locked(lock, t) &*& full_borrow(?k1, u32_full_borrow_content(t, &(*lock).data));
 
 pred_ctor MutexGuardU32_full_borrow_content0(km: lifetime_t)(t: thread_id_t, l: *MutexGuardU32) =
     (*l).lock |-> ?lock &*& MutexGuardU32_own(km)(t, lock);
@@ -216,9 +213,10 @@ impl MutexU32 {
             //@ open_frac_borrow(a, MutexU32_frac_borrow_content(k1, t, self), qa);
             //@ open MutexU32_frac_borrow_content(k1, t, self)();
             self.inner.lock();
+            //@ MutexU32_locked_wrap(self);
             //@ assert [?qp](*self).inner |-> _;
             //@ close_frac_borrow(qp, MutexU32_frac_borrow_content(k1, t, self));
-            //@ close MutexGuardU32_own(k1)(t, self);
+            //@ open SysMutex_content(k1, t, self)();
             MutexGuardU32::new(self)
         }
     }
@@ -227,9 +225,10 @@ impl MutexU32 {
 impl/*<'mutex>*/ MutexGuardU32/*<'mutex>*/ {
     /* because MutexGuardU32_own is pred_ctor and not supported yet */
     unsafe fn new<'a>(lock: &'a/*'mutex*/ MutexU32) -> MutexGuardU32/*<'mutex>*/
-    //@ req thread_token(?t) &*& [?qa]lifetime_token(?a) &*& [_]MutexU32_share(a, t, lock);
-    //@ ens thread_token(t) &*& [qa]lifetime_token(a) &*& MutexGuardU32_own(a)(t, result.lock);
+    //@ req thread_token(?t) &*& [?qa]lifetime_token(?a) &*& [_]MutexU32_share(a, t, lock) &*& MutexU32_locked(lock, t) &*& full_borrow(?k1, u32_full_borrow_content(t, &(*lock).data));
+    //@ ens thread_token(t) &*& [qa]lifetime_token(a) &*& MutexGuardU32_own(a)(t, lock);
     {
+        //@ close MutexGuardU32_own(a)(t, lock);
         MutexGuardU32 { lock }
     }
 }
