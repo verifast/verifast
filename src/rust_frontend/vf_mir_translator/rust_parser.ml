@@ -38,6 +38,9 @@ let rec parse_type = function%parser
 | [ (l, Ident "u128") ] -> ManifestTypeExpr (l, Int (Unsigned, FixedWidthRank 4))
 | [ (l, Ident "usize") ] -> ManifestTypeExpr (l, Int (Unsigned, PtrRank))
 | [ (l, Ident "bool") ] -> ManifestTypeExpr (l, Bool)
+| [ (l, Ident "f32" ) ] -> ManifestTypeExpr (l, Float)
+| [ (l, Ident "f64" ) ] -> ManifestTypeExpr (l, Double)
+| [ (l, Ident "real" ) ] -> ManifestTypeExpr (l, RealType)
 | [ (l, Ident x); [%let l, x = parse_simple_path_rest l x];
     [%let t = function%parser
       [ parse_type_args as targs ] -> ConstructedTypeExpr (l, x, targs)

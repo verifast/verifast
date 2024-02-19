@@ -9,6 +9,7 @@ lemma void assume(bool b);
     ensures b;
 
 predicate exists<t>(t x;) = true;
+predicate exists_np<t>(t x) = true;
 
 fixpoint int truncate_unsigned(int x, int nbBits);
 fixpoint int truncate_signed(int x, int nbBits); // nbBits does not include the sign bit
