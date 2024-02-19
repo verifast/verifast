@@ -3964,6 +3964,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         | UnionKind -> failwith "Todo: AdtDef::Union"
         | Undefined _ -> Error (`TrAdtDef "Unknown ADT kind")
       in
+      (* Todo: Should we have full_borrow_content for private structs? In particular a private function can have a mutable reference to a private struct. *)
       let* full_bor_content, proof_obligs, aux_decls' =
         match (is_local, vis) with
         | false, _ | true, Mir.Restricted -> Ok (None, [], [])
