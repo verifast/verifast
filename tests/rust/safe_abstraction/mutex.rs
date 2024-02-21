@@ -244,6 +244,7 @@ pred_ctor MutexGuardU32_own_mutex(km: lifetime_t, t: thread_id_t, lock: *MutexU3
     [_]MutexU32_share(km, t, lock) &*& MutexU32_locked(lock, t);
 pred_ctor MutexGuardU32_own_data(km: lifetime_t, t: thread_id_t, lock: *MutexU32)() =
     full_borrow(km, MutexU32_fbc_data(t, lock));
+
 pred_ctor MutexGuardU32_own(km: lifetime_t)(t: thread_id_t, lock: *MutexU32) =
     sep(MutexGuardU32_own_mutex(km, t, lock), MutexGuardU32_own_data(km, t, lock))();
 
@@ -276,8 +277,8 @@ impl MutexGuardU32 /*<'mutex>*/ {
     }
 
     /*@ //Todo: add primary types `share` predicates in `general.h`
-    pred_ctor u32_frac_borrow_content(t: thread_id_t, l: *u32)(;) = *l |-> ?v;
-    pred u32_share(k: lifetime_t, t: thread_id_t, l: *u32) = frac_borrow(k, u32_frac_borrow_content(t, l));
+    //pred_ctor u32_frac_borrow_content(t: thread_id_t, l: *u32)(;) = *l |-> ?v;
+    //pred u32_share(k: lifetime_t, t: thread_id_t, l: *u32) = frac_borrow(k, u32_frac_borrow_content(t, l));
     //Todo: The trait impl support is not complete yet
     @*/
 /*    unsafe fn deref<'a>(&'a self) -> &'a u32
@@ -287,6 +288,8 @@ impl MutexGuardU32 /*<'mutex>*/ {
         unsafe { &*(*self.lock).data.get() }
     }*/
 
+
+    // Todo: deref_mut should not be an `unsafe` function
     unsafe fn deref_mut<'a>(&'a mut self) -> &'a mut u32
     /*@ req thread_token(?t) &*& [?qa]lifetime_token(?a) &*& exists(?km)
         &*& full_borrow(a, MutexGuardU32_full_borrow_content0(km, t, self))
