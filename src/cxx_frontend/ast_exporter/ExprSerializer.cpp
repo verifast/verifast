@@ -117,7 +117,7 @@ std::string hexStringOf(unsigned value) {
 
   // Translate half-bytes to hex digits and write them to buf beginning at the end
   for(; value; value >>= 4) {
-    buf[--offset] += hexDigits[value & 0xF];
+    buf[--offset] = hexDigits[value & 0xF];
   }
 
   // Prepend "0x"

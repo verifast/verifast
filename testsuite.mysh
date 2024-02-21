@@ -684,6 +684,7 @@ cd tests
     verifast -c -disable_overflow_check lvalue_refs.cpp
     verifast -c typeid.cpp
     verifast -c ghost_field.cpp
+    verifast -c char_literals.cpp
   cd ..
   cd rust
     call testsuite.mysh
