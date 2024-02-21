@@ -39,6 +39,11 @@ lemma void lifetime_inclusion_trans(lifetime_t k, lifetime_t k1, lifetime_t k2);
     requires lifetime_inclusion(k, k1) && lifetime_inclusion(k1, k2);
     ensures lifetime_inclusion(k, k2) == true;
 
+// LftL-incl-glb
+lemma void lifetime_inclusion_glb(lifetime_t k, lifetime_t k1, lifetime_t k2);
+    requires lifetime_inclusion(k, k1) && lifetime_inclusion(k, k2);
+    ensures lifetime_inclusion(k, lifetime_intersection(k1, k2)) == true;
+
 // lifetime intersection is multiset union
 lemma void lifetime_intersection_symm(lifetime_t k, lifetime_t k1);
     requires true;
@@ -144,6 +149,13 @@ typedef lemma void full_borrow_convert_strong(predicate() Q, lifetime_t k1, pred
 lemma void close_full_borrow_strong(lifetime_t k1, predicate() P, predicate() Q);
     requires close_full_borrow_token_strong(k1, P, ?q, ?k) &*& is_full_borrow_convert_strong(?f, Q, k1, P) &*& Q();
     ensures full_borrow(k1, Q) &*& [q]lifetime_token(k) &*& is_full_borrow_convert_strong(f, Q, k1, P);
+
+// LftL-bor-unnest
+predicate_ctor full_borrow_wrapper(lifetime_t k, predicate() P)(;) = full_borrow(k, P);
+
+lemma void full_borrow_unnest(lifetime_t k1, lifetime_t k, predicate() P);
+    requires full_borrow(k1, full_borrow_wrapper(k, P));
+    ensures full_borrow(lifetime_intersection(k1, k), P);
 
 // LftL-reborrow
 predicate end_reborrow_token(lifetime_t k1, lifetime_t k, predicate() P);
