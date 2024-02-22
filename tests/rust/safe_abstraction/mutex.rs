@@ -246,10 +246,10 @@ pred_ctor MutexGuardU32_own_data(km: lifetime_t, t: thread_id_t, lock: *MutexU32
     full_borrow(km, MutexU32_fbc_data(t, lock));
 
 pred_ctor MutexGuardU32_own(km: lifetime_t)(t: thread_id_t, lock: *MutexU32) =
-    sep(MutexGuardU32_own_mutex(km, t, lock), MutexGuardU32_own_data(km, t, lock))();
+    [_]MutexU32_share(km, t, lock) &*& MutexU32_locked(lock, t) &*& full_borrow(km, MutexU32_fbc_data(t, lock));
 
-pred_ctor MutexGuardU32_fbc_lock(l: *MutexGuardU32, lock: *MutexU32)() = (*l).lock |-> lock;
-pred_ctor MutexGuardU32_fbc_guard(km: lifetime_t, t: thread_id_t, lock: *MutexU32)() = MutexGuardU32_own(km)(t, lock);
+pred_ctor MutexGuardU32_fbc_lock_pto(l: *MutexGuardU32, lock: *MutexU32)() = (*l).lock |-> lock;
+pred_ctor MutexGuardU32_fbc_own(km: lifetime_t, t: thread_id_t, lock: *MutexU32)() = MutexGuardU32_own(km)(t, lock);
 pred_ctor MutexGuardU32_full_borrow_content0(km: lifetime_t, t: thread_id_t, l: *MutexGuardU32)() =
     (*l).lock |-> ?lock &*& MutexGuardU32_own(km)(t, lock);
 
@@ -269,9 +269,6 @@ impl MutexGuardU32 /*<'mutex>*/ {
     @*/
     //@ ens thread_token(t) &*& [qa]lifetime_token(a) &*& MutexGuardU32_own(a)(t, lock);
     {
-        //@ close MutexGuardU32_own_mutex(a, t, lock)();
-        //@ close MutexGuardU32_own_data(a, t, lock)();
-        //@ close sep(MutexGuardU32_own_mutex(a, t, lock), MutexGuardU32_own_data(a, t, lock))();
         //@ close MutexGuardU32_own(a)(t, lock);
         MutexGuardU32 { lock }
     }
@@ -288,52 +285,69 @@ impl MutexGuardU32 /*<'mutex>*/ {
         unsafe { &*(*self.lock).data.get() }
     }*/
 
-
+    // Todo: deref_mut should be in the implementation of the trait `DerefMut`
     // Todo: deref_mut should not be an `unsafe` function
     unsafe fn deref_mut<'a>(&'a mut self) -> &'a mut u32
     /*@ req thread_token(?t) &*& [?qa]lifetime_token(?a) &*& exists(?km)
         &*& full_borrow(a, MutexGuardU32_full_borrow_content0(km, t, self))
         &*& lifetime_inclusion(a, km) == true;
         /* Todo: This inclusion must be generated automatically by translator based on reference and referee lifetimes.
-           Referee lifetime always outlives reference lifetime */
+           Referee lifetime always outlives reference lifetime out of compiler guarantees of welformedness of types */
     @*/
     //@ ens thread_token(t) &*& [qa]lifetime_token(a) &*& full_borrow(a, u32_full_borrow_content(t, result));
     {
-        //@ open_full_borrow_strong(a, MutexGuardU32_full_borrow_content0(km, t, self), qa);
+        //@ open_full_borrow_strong(a, MutexGuardU32_full_borrow_content0(km, t, self), qa/2);
+        //@ assert exists(?klong);
         //@ open MutexGuardU32_full_borrow_content0(km, t, self)();
-        //@ assert (*self).lock |-> ?lock;
-        //@ assert exists(?k1);
-        /*@ produce_lem_ptr_chunk full_borrow_convert_strong(sep(MutexGuardU32_fbc_lock(self, lock), MutexGuardU32_fbc_guard(km, t, lock)), k1,
+        //@ open MutexGuardU32_own(km)(t, ?lock);
+        
+        // open MutexU32_fbc_data to get ptr provenance info
+        //@ lifetime_token_trade(a, qa/2, km);
+        //@ assert [?qkm]lifetime_token(km);
+        //@ open_full_borrow(qkm, km, MutexU32_fbc_data(t, lock));
+        //@ open MutexU32_fbc_data(t, lock)();
+        //@ close MutexU32_fbc_data(t, lock)();
+        //@ close_full_borrow(MutexU32_fbc_data(t, lock));
+        //@ close MutexGuardU32_own(km)(t, lock);
+        //@ lifetime_token_trade_back(qkm, km);
+        let r = unsafe { &mut *(*self.lock).data.get() };
+        /*@ produce_lem_ptr_chunk full_borrow_convert_strong(sep(MutexGuardU32_fbc_lock_pto(self, lock), MutexGuardU32_fbc_own(km, t, lock)), klong,
                 MutexGuardU32_full_borrow_content0(km, t, self))()
             {
-                open sep(MutexGuardU32_fbc_lock(self, lock), MutexGuardU32_fbc_guard(km, t, lock))();
-                open MutexGuardU32_fbc_lock(self, lock)();
-                open MutexGuardU32_fbc_guard(km, t, lock)();
+                open sep(MutexGuardU32_fbc_lock_pto(self, lock), MutexGuardU32_fbc_own(km, t, lock))();
+                open MutexGuardU32_fbc_lock_pto(self, lock)();
+                open MutexGuardU32_fbc_own(km, t, lock)();
                 close MutexGuardU32_full_borrow_content0(km, t, self)();
             }{
-                close MutexGuardU32_fbc_lock(self, lock)();
-                close MutexGuardU32_fbc_guard(km, t, lock)();
-                close sep(MutexGuardU32_fbc_lock(self, lock), MutexGuardU32_fbc_guard(km, t, lock))();
-                close_full_borrow_strong(k1, MutexGuardU32_full_borrow_content0(km, t, self),
-                    sep(MutexGuardU32_fbc_lock(self, lock), MutexGuardU32_fbc_guard(km, t, lock)));
-                full_borrow_mono(k1, a, sep(MutexGuardU32_fbc_lock(self, lock), MutexGuardU32_fbc_guard(km, t, lock)));
-                full_borrow_split(a, MutexGuardU32_fbc_lock(self, lock), MutexGuardU32_fbc_guard(km, t, lock));
+                close MutexGuardU32_fbc_lock_pto(self, lock)();
+                close MutexGuardU32_fbc_own(km, t, lock)();
+                close sep(MutexGuardU32_fbc_lock_pto(self, lock), MutexGuardU32_fbc_own(km, t, lock))();
+                close_full_borrow_strong(klong, MutexGuardU32_full_borrow_content0(km, t, self),
+                    sep(MutexGuardU32_fbc_lock_pto(self, lock), MutexGuardU32_fbc_own(km, t, lock)));
+                full_borrow_mono(klong, a, sep(MutexGuardU32_fbc_lock_pto(self, lock), MutexGuardU32_fbc_own(km, t, lock)));
+                full_borrow_split(a, MutexGuardU32_fbc_lock_pto(self, lock), MutexGuardU32_fbc_own(km, t, lock));
             }
         @*/
         /*@
-            produce_lem_ptr_chunk implies(MutexGuardU32_fbc_guard(km, t, lock),
+            produce_lem_ptr_chunk implies(MutexGuardU32_fbc_own(km, t, lock),
                 sep(MutexGuardU32_own_mutex(km, t, lock), MutexGuardU32_own_data(km, t, lock)))()
             {
-                open MutexGuardU32_fbc_guard(km, t, lock)();
+                open MutexGuardU32_fbc_own(km, t, lock)();
                 open MutexGuardU32_own(km)(t, lock);
+                close MutexGuardU32_own_mutex(km, t, lock)();
+                close MutexGuardU32_own_data(km, t, lock)();
+                close sep(MutexGuardU32_own_mutex(km, t, lock), MutexGuardU32_own_data(km, t, lock))();
+                
             }{
                 produce_lem_ptr_chunk implies(sep(MutexGuardU32_own_mutex(km, t, lock), MutexGuardU32_own_data(km, t, lock)),
-                    MutexGuardU32_fbc_guard(km, t, lock))()
+                    MutexGuardU32_fbc_own(km, t, lock))()
                 {
+                    open sep(MutexGuardU32_own_mutex(km, t, lock), MutexGuardU32_own_data(km, t, lock))();
+                    open MutexGuardU32_own_mutex(km, t, lock)(); open MutexGuardU32_own_data(km, t, lock)();
                     close MutexGuardU32_own(km)(t, lock);
-                    close MutexGuardU32_fbc_guard(km, t, lock)();
+                    close MutexGuardU32_fbc_own(km, t, lock)();
                 }{
-                    full_borrow_implies(a, MutexGuardU32_fbc_guard(km, t, lock),
+                    full_borrow_implies(a, MutexGuardU32_fbc_own(km, t, lock),
                         sep(MutexGuardU32_own_mutex(km, t, lock), MutexGuardU32_own_data(km, t, lock)));
                     full_borrow_split(a, MutexGuardU32_own_mutex(km, t, lock), MutexGuardU32_own_data(km, t, lock));
                 }
@@ -353,17 +367,45 @@ impl MutexGuardU32 /*<'mutex>*/ {
             }
         }
         @*/
-        let r = unsafe { &mut *(*self.lock).data.get() };
+        /*@
+        produce_lem_ptr_chunk implies(MutexU32_fbc_data(t, lock), u32_full_borrow_content(t, &(*lock).data))() {
+            open MutexU32_fbc_data(t, lock)(); close u32_full_borrow_content(t, &(*lock).data)();
+        }{
+            produce_lem_ptr_chunk implies(u32_full_borrow_content(t, &(*lock).data), MutexU32_fbc_data(t, lock))() {
+                open u32_full_borrow_content(t, &(*lock).data)(); close MutexU32_fbc_data(t, lock)();
+            }{
+                full_borrow_implies(a, MutexU32_fbc_data(t, lock), u32_full_borrow_content(t, &(*lock).data));
+            }
+        }
+        @*/
+        //@ leak full_borrow(a, MutexGuardU32_fbc_lock_pto(self, lock));
+        //@ leak full_borrow(a, MutexGuardU32_own_mutex(km, t, lock));
         r
     }
 
     unsafe fn drop<'a>(&'a mut self)
-    //@ req thread_token(?t) &*& [?qa]lifetime_token(?a) &*& exists(?km) &*& full_borrow(a, MutexGuardU32_full_borrow_content0(km, t, self));
+    //@ req thread_token(?t) &*& [?qa]lifetime_token(?a) &*& exists(?km) &*& full_borrow(a, MutexGuardU32_full_borrow_content0(km, t, self)) &*& lifetime_inclusion(a, km) == true;
     //@ ens thread_token(t) &*& [qa]lifetime_token(a);
     {
+        //@ open_full_borrow(qa/2, a, MutexGuardU32_full_borrow_content0(km, t, self));
+        //@ open MutexGuardU32_full_borrow_content0(km, t, self)();
+        //@ open MutexGuardU32_own(km)(t, ?lock);
+        //@ open MutexU32_share(km, t, lock);
+        //@ assert [_]exists_np(?kfracc);
+        //@ lifetime_token_trade(a, qa/2, km);
+        //@ assert [?qkm]lifetime_token(km);
+        //@ open_frac_borrow(km, MutexU32_frac_borrow_content(kfracc, t, lock), qkm);
+        //@ open MutexU32_frac_borrow_content(kfracc, t, lock)();
+        // assert false;
+        //@ full_borrow_mono(kfracc, km, MutexU32_fbc_data(t, lock));
+        //@ close SysMutex_content(kfracc, t, lock)();
+        //@ MutexU32_locked_unwrap(lock, t);
         unsafe {
             (*self.lock).inner.unlock();
         }
+        //@ close_full_borrow(MutexU32_fbc_data(t, lock));
+        //@ close MutexGuardU32_own(km)(t, lock);
+        //@ lifetime_token_trade_back(qkm, km);
     }
 }
 /*
