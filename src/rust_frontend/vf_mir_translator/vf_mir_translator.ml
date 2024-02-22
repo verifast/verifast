@@ -675,6 +675,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       | Undefined _ -> Error (`TrIntTy "Unknown Rust int type")
     in
     let own tid vs = Ok (True loc) in
+    let own_predname = Ok (ty_name ^ "_own") in
     let shr lft tid l = Ok (True loc) in
     let full_bor_content = Ok (ty_name ^ "_full_borrow_content") in
     let points_to tid l vid_op =
@@ -688,7 +689,15 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         {
           vf_ty = ManifestTypeExpr (loc, Int (Signed, rank));
           interp =
-            RustBelt.{ size = sz_expr; own; shr; full_bor_content; points_to };
+            RustBelt.
+              {
+                size = sz_expr;
+                own;
+                own_predname;
+                shr;
+                full_bor_content;
+                points_to;
+              };
         }
     in
     Ok ty_info
@@ -727,6 +736,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       | Undefined _ -> Error (`TrUIntTy "Unknown Rust unsigned int type")
     in
     let own tid vs = Ok (True loc) in
+    let own_predname = Ok (ty_name ^ "_own") in
     (* Todo @Nima: This shared predicate is not correct. We should write a SimpleType interpretation
        constructor in RustBelt module to call to for creating the interpretation for u_int and other simple types. *)
     let shr lft tid l = Ok (True loc) in
@@ -742,7 +752,15 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         {
           vf_ty = ManifestTypeExpr (loc, Int (Unsigned, rank));
           interp =
-            RustBelt.{ size = sz_expr; own; shr; full_bor_content; points_to };
+            RustBelt.
+              {
+                size = sz_expr;
+                own;
+                own_predname;
+                shr;
+                full_bor_content;
+                points_to;
+              };
         }
     in
     Ok ty_info
@@ -811,6 +829,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                      args,
                      Static ))
             in
+            let own_predname = Ok (name ^ "_own_") in
             let shr lft tid l =
               Ok
                 (CallExpr
@@ -826,7 +845,15 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             (* Todo: Nested structs *)
             let points_to tid l vid_op = Ok (True loc) in
             let interp =
-              RustBelt.{ size = sz_expr; own; shr; full_bor_content; points_to }
+              RustBelt.
+                {
+                  size = sz_expr;
+                  own;
+                  own_predname;
+                  shr;
+                  full_bor_content;
+                  points_to;
+                }
             in
             let ty_info = Mir.TyInfoBasic { vf_ty; interp } in
             Ok ty_info)
@@ -855,6 +882,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let vf_ty = ManifestTypeExpr (loc, Bool) in
     let size = SizeofExpr (loc, TypeExpr vf_ty) in
     let own _ _ = Ok (True loc) in
+    let own_predname = Ok "bool_own" in
     let shr _ _ _ = Ok (True loc) in
     let full_bor_content = Ok "bool_full_borrow_content" in
     let points_to tid l vid_op =
@@ -864,7 +892,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     Mir.TyInfoBasic
       {
         vf_ty;
-        interp = RustBelt.{ size; own; shr; full_bor_content; points_to };
+        interp =
+          RustBelt.{ size; own; own_predname; shr; full_bor_content; points_to };
       }
 
   and char_ty_info loc =
@@ -939,6 +968,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
              A proposal is to translate char-ptr/ref dereferences to calls to a function with a contract that checks for the range. *)
       | _ -> Error "[[char]].own(tid, vs) should have `vs == [c]`"
     in
+    let own_predname = Ok "char_own" in
     let shr _ _ _ = Ok (True loc) in
     let full_bor_content = Ok "char_full_borrow_content" in
     let points_to tid l vid_op =
@@ -953,7 +983,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     Mir.TyInfoBasic
       {
         vf_ty;
-        interp = RustBelt.{ size; own; shr; full_bor_content; points_to };
+        interp =
+          RustBelt.{ size; own; own_predname; shr; full_bor_content; points_to };
       }
 
   and never_ty_info loc =
@@ -968,6 +999,11 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           NoLSuffix )
     in
     let own _ _ = Ok (False loc) in
+    let own_predname =
+      Error
+        "Calling a function with `!` as a generic type argument is not yet \
+         supported"
+    in
     let shr _ _ _ = Ok (False loc) in
     let full_bor_content =
       Error
@@ -978,7 +1014,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     Mir.TyInfoBasic
       {
         vf_ty;
-        interp = RustBelt.{ size; own; shr; full_bor_content; points_to };
+        interp =
+          RustBelt.{ size; own; own_predname; shr; full_bor_content; points_to };
       }
 
   and translate_generic_arg (gen_arg_cpn : GenArgRd.t) (loc : Ast.loc) =
@@ -1074,6 +1111,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let vf_ty = PtrTypeExpr (loc, pointee_ty) in
     let size_expr = SizeofExpr (loc, TypeExpr vf_ty) in
     let own tid vs = Ok (True loc) in
+    let own_predname = Ok "raw_ptr_own" in
     let shr lft tid l = Ok (True loc) in
     let full_bor_content = Ok "raw_ptr_full_borrow_content" in
     let points_to tid l vid_op =
@@ -1085,7 +1123,15 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         {
           vf_ty;
           interp =
-            RustBelt.{ size = size_expr; own; shr; full_bor_content; points_to };
+            RustBelt.
+              {
+                size = size_expr;
+                own;
+                own_predname;
+                shr;
+                full_bor_content;
+                points_to;
+              };
         }
     in
     Ok ty_info
@@ -1113,7 +1159,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           } =
       Mir.interp_of pointee_ty_info
     in
-    let* own, shr, full_bor_content, points_to =
+    let* own, own_predname, shr, full_bor_content, points_to =
       match mut with
       | Mir.Mut ->
           let own tid vs =
@@ -1141,6 +1187,11 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                        Static ))
             | _ -> Error "[[&mut T]].own(tid, vs) needs to vs == [l]"
           in
+          let own_predname =
+            Error
+              "Calling a function with a mutable reference type as a generic \
+               type argument is not yet supported"
+          in
           let shr lft tid l = Ok (True loc) in
           let full_bor_content =
             (* This will need to add a definition for each mut reference type in the program because the body of the predicate will need to mention
@@ -1166,12 +1217,17 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                 Ok (Sep (loc, PointsTo (loc, l, var_pat), own))
             | _ -> Error "mut reference points_to needs a value id"
           in
-          Ok (own, shr, full_bor_content, points_to)
+          Ok (own, own_predname, shr, full_bor_content, points_to)
       | Mir.Not ->
           let own tid vs =
             match vs with
             | [ l ] -> ptee_shr lft tid l
             | _ -> Error "[[&T]].own(tid, vs) needs to vs == [l]"
+          in
+          let own_predname =
+            Error
+              "Calling a function with a shared reference type as a generic \
+               type argument is not yet supported"
           in
           let shr lft tid l = Ok (True loc) in
           let full_bor_content =
@@ -1188,14 +1244,22 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                 Ok (Sep (loc, PointsTo (loc, l, var_pat), own))
             | _ -> Error "shared reference points_to needs a value id"
           in
-          Ok (own, shr, full_bor_content, points_to)
+          Ok (own, own_predname, shr, full_bor_content, points_to)
     in
     let ty_info =
       Mir.TyInfoBasic
         {
           vf_ty;
           interp =
-            RustBelt.{ size = sz_expr; own; shr; full_bor_content; points_to };
+            RustBelt.
+              {
+                size = sz_expr;
+                own;
+                own_predname;
+                shr;
+                full_bor_content;
+                points_to;
+              };
         }
     in
     Ok ty_info
@@ -1250,9 +1314,15 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             size = SizeofExpr (loc, TypeExpr vf_ty);
             own =
               (fun t vs ->
-                Error
-                  "Expressing the ownership predicate of a type parameter is \
-                   not yet supported");
+                Ok
+                  (Ast.CallExpr
+                     ( loc,
+                       name ^ "_own",
+                       [],
+                       [],
+                       List.map (fun e -> LitPat e) (t :: vs),
+                       Static )));
+            own_predname = Ok (name ^ "_own");
             shr =
               (fun k t l ->
                 Error
@@ -1574,7 +1644,18 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           targs
           |> Util.flatmap @@ fun ty ->
              [
-               Ast.Typeid (call_loc, Ast.TypeExpr (Mir.raw_type_of ty));
+               (let own_predname =
+                  match (Mir.interp_of ty).own_predname with
+                  | Ok own_predname -> own_predname
+                  | Error msg ->
+                      raise
+                        (Ast.StaticError
+                           ( call_loc,
+                             "Cannot express the ownership for some of the \
+                              type arguments: " ^ msg,
+                             None ))
+                in
+                Ast.Var (call_loc, own_predname));
                (let full_bor_content =
                   match (Mir.interp_of ty).full_bor_content with
                   | Ok fbc -> fbc
@@ -2593,9 +2674,14 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
 
   let tparam_params loc tparam =
     [
-      ( Ast.ManifestTypeExpr
-          (loc, Ast.PtrType (Ast.AbstractType "std::type_info")),
-        tparam ^ "_typeid" );
+      ( Ast.PredTypeExpr
+          ( loc,
+            [
+              Ast.IdentTypeExpr (loc, None, "thread_id_t");
+              Ast.IdentTypeExpr (loc, None, tparam);
+            ],
+            None ),
+        tparam ^ "_own" );
       ( Ast.PureFuncTypeExpr
           ( loc,
             [
@@ -3225,11 +3311,40 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         | UnionKind -> failwith "Todo: AdtDef::Union"
         | Undefined _ -> Error (`TrAdtDef "Unknown ADT kind")
       in
-      let* full_bor_content, proof_obligs =
+      let* full_bor_content, proof_obligs, aux_decls' =
         match (is_local, vis) with
         | false, _ | true, Mir.Restricted ->
-            if tparams <> [] then Ok (None, [])
+            if tparams <> [] then Ok (None, [], [])
             else
+              let own__decl =
+                if tparams <> [] then []
+                else
+                  [
+                    Ast.Func
+                      ( def_loc,
+                        Fixpoint,
+                        (*type parameters*) [],
+                        (*return type*)
+                        Some
+                          (PredTypeExpr
+                             ( def_loc,
+                               [
+                                 IdentTypeExpr (def_loc, None, "thread_id_t");
+                                 StructTypeExpr
+                                   (def_loc, Some name, None, [], []);
+                               ],
+                               None )),
+                        name ^ "_own_",
+                        (*parameters*) [],
+                        (*nonghost_callers_only*) false,
+                        (*functype clause*) None,
+                        (*contract*) None,
+                        (*terminates*) false,
+                        (*body*) None,
+                        (*virtual*) false,
+                        (*overrides*) [] );
+                  ]
+              in
               let fbc_decl =
                 Ast.Func
                   ( def_loc,
@@ -3254,7 +3369,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                     (*virtual*) false,
                     (*overrides*) [] )
               in
-              Ok (Some fbc_decl, [])
+              Ok (Some fbc_decl, [], own__decl)
         | true, Mir.Invisible ->
             Error
               (`TrAdtDef
@@ -3271,7 +3386,43 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               gen_adt_full_borrow_content kind name variants def_loc
             in
             let* proof_obligs = gen_adt_proof_obligs def in
-            Ok (Some full_bor_content, proof_obligs)
+            let own__pred_decls =
+              let own_args =
+                fds
+                |> List.map @@ fun (fd : Mir.field_def_tr) ->
+                   Ast.LitPat (Select (def_loc, Var (def_loc, "v"), fd.name))
+              in
+              [
+                Ast.PredFamilyDecl
+                  ( def_loc,
+                    name ^ "_own_",
+                    [],
+                    0,
+                    [
+                      IdentTypeExpr (def_loc, None, "thread_id_t");
+                      StructTypeExpr (def_loc, Some name, None, [], []);
+                    ],
+                    None,
+                    Ast.Inductiveness_Inductive );
+                Ast.PredFamilyInstanceDecl
+                  ( def_loc,
+                    name ^ "_own_",
+                    [],
+                    [],
+                    [
+                      (IdentTypeExpr (def_loc, None, "thread_id_t"), "t");
+                      (StructTypeExpr (def_loc, Some name, None, [], []), "v");
+                    ],
+                    CallExpr
+                      ( def_loc,
+                        name ^ "_own",
+                        [],
+                        [],
+                        LitPat (Var (def_loc, "t")) :: own_args,
+                        Static ) );
+              ]
+            in
+            Ok (Some full_bor_content, proof_obligs, own__pred_decls)
       in
       Ok
         (Some
@@ -3281,7 +3432,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                name;
                fds;
                def;
-               aux_decls;
+               aux_decls = aux_decls @ aux_decls';
                full_bor_content;
                proof_obligs;
              })
@@ -3349,7 +3500,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                                  "Self" :: tparams,
                                  rt,
                                  name,
-                                 (_, self_typeid_param)
+                                 (_, self_own_param)
                                  :: (_, self_full_bor_content_param)
                                  :: ps,
                                  false,
@@ -3367,6 +3518,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                                        (Ast.ManifestTypeExpr
                                           (lf, Ast.StructType (self_ty, []))) )
                                in
+                               let self_own = Ast.Var (lf, self_ty ^ "_own") in
                                let self_full_bor_content =
                                  Ast.Var (lf, self_ty ^ "_full_borrow_content")
                                in
@@ -3380,7 +3532,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                                          MatchAsn
                                            ( lf,
                                              self_ty_typeid,
-                                             VarPat (lf, self_typeid_param) ),
+                                             VarPat (lf, "Self_typeid") ),
                                          Ast.Sep
                                            ( lf,
                                              MatchAsn

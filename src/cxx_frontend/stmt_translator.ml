@@ -32,6 +32,14 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
   and translate stmt_node =
     Node_translator.map ~f:translate_decomposed stmt_node
 
+  and transl_stmt_as_list stmt_node =
+    Node_translator.map
+      ~f:(fun _ d ->
+        match S.get d with
+        | Compound c -> S.Compound.stmts_get c |> Capnp_util.arr_map translate
+        | _ -> [ translate stmt_node ])
+      stmt_node
+
   and expect_compund_stmt stmt_node =
     Node_translator.map_expect_fail
       ~f:(fun l s ->
@@ -87,12 +95,12 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
     let open R.Stmt.If in
     let cond = Expr_translator.translate @@ cond_get i in
     let th =
-      let stmts, _ = expect_compund_stmt @@ then_get i in
+      let stmts = then_get i |> transl_stmt_as_list in
       stmts
     in
     let el =
       if has_else i then
-        let stmts, _ = expect_compund_stmt @@ else_get i in
+        let stmts = else_get i |> transl_stmt_as_list in
         stmts
       else []
     in
