@@ -135,6 +135,14 @@ lemma void close_full_borrow(predicate() P);
     requires close_full_borrow_token(P, ?q, ?k) &*& P();
     ensures full_borrow(k, P) &*& [q]lifetime_token(k);
 
+// LftL-bor-exists
+/* Todo: Check for this rule's precondition i.e wether domain of x is inhabited. hopefully all types in VeriFast are inhabited so we can
+have the rule as generic. Obviously, the precondition is satisfied for lifetimes. */
+predicate_ctor exists_ctor(lifetime_t k)() = true;
+lemma void full_borrow_exists(lifetime_t k1, predicate() P);
+    requires full_borrow(?k, sep(exists_ctor(k1), P));
+    ensures exists(k1) &*& full_borrow(k, P);
+
 // LftL-bor-acc-strong
 predicate close_full_borrow_token_strong(lifetime_t k1, predicate() P, real q, lifetime_t k);
 
