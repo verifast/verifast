@@ -266,7 +266,22 @@ pred_ctor MutexGuardU32_full_borrow_content0(km: lifetime_t, t: thread_id_t, l: 
 
 pred_ctor MutexGuardU32_share(km: lifetime_t)(k: lifetime_t, t: thread_id_t, l: *MutexGuardU32) = true;
 
-//Todo: proof obligations
+lem MutexGuardU32_share_mono(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *MutexGuardU32)
+    req lifetime_inclusion(k1, k) == true &*& exists(?km) &*& [_]MutexGuardU32_share(km)(k, t, l);
+    ens [_]MutexGuardU32_share(km)(k1, t, l);
+{
+    close MutexGuardU32_share(km)(k1, t, l);
+    leak MutexGuardU32_share(km)(k1, t, l);
+}
+
+lem MutexGuardU32_full_share(k: lifetime_t, t: thread_id_t, l: *MutexGuardU32)
+    req exists(?km) &*& full_borrow(k, MutexGuardU32_full_borrow_content0(km, t, l)) &*& [?q]lifetime_token(k);
+    ens [_]MutexGuardU32_share(km)(k, t, l) &*& [q]lifetime_token(k);
+{
+    leak full_borrow(_, _);
+    close MutexGuardU32_share(km)(k, t, l);
+    leak MutexGuardU32_share(km)(k, t, l);
+}
 @*/
 
 // It is Sync automatically as in our case `T=u32` and `u32:Sync`
