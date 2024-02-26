@@ -12,7 +12,6 @@ About the definitions:
 mod sys {
     pub mod locks {
         use std::process::abort;
-        /* Based on `NORMAL` `pthread_mutex_t` described in https://pubs.opengroup.org/onlinepubs/9699919799/ */
         pub struct Mutex {
             m: *mut u32,
         }
@@ -233,27 +232,35 @@ struct MutexGuardU32 /*<'a>*/ {
 impl !Send for MutexGuardU32 /*<'_>*/ {}
 /*@
 pred MutexU32_locked(l: *MutexU32; t: thread_id_t);
+
 lem MutexU32_locked_unwrap(l: *MutexU32, t: thread_id_t);
     req MutexU32_locked(l, t) &*& [?qi](*l).inner |-> ?inner &*& [?qm]SysMutex(inner, ?P);
     ens [qi](*l).inner |-> inner &*& [qm]SysMutex(inner, P) &*& SysMutex_locked(inner, P, t);
+
 lem MutexU32_locked_wrap(l: *MutexU32);
     req [?qi](*l).inner |-> ?inner &*& [?qm]SysMutex(inner, ?P) &*& SysMutex_locked(inner, P, ?t);
     ens [qi](*l).inner |-> inner &*& [qm]SysMutex(inner, P) &*& MutexU32_locked(l, t);
 
-pred_ctor MutexGuardU32_own_mutex(km: lifetime_t, klong: lifetime_t, t: thread_id_t, lock: *MutexU32)() =
+
+/*pred_ctor MutexGuardU32_own_mutex(km: lifetime_t, klong: lifetime_t, t: thread_id_t, lock: *MutexU32)() =
     lifetime_inclusion(km, klong) == true &*& [_]frac_borrow(km, MutexU32_frac_borrow_content(klong, t, lock))
-    &*& MutexU32_locked(lock, t);
-pred_ctor MutexGuardU32_own_data(klong: lifetime_t, t: thread_id_t, lock: *MutexU32)() =
-    full_borrow(klong, MutexU32_fbc_data(t, lock));
+    &*& MutexU32_locked(lock, t);*/
 
 pred_ctor MutexGuardU32_own(km: lifetime_t)(t: thread_id_t, lock: *MutexU32) =
     [_]exists_np(?klong) &*& lifetime_inclusion(km, klong) == true &*& [_]frac_borrow(km, MutexU32_frac_borrow_content(klong, t, lock))
     &*& MutexU32_locked(lock, t) &*& full_borrow(klong, MutexU32_fbc_data(t, lock));
 
-pred_ctor MutexGuardU32_fbc_lock_pto(l: *MutexGuardU32, lock: *MutexU32)() = (*l).lock |-> lock;
-pred_ctor MutexGuardU32_fbc_own(km: lifetime_t, kmlong:lifetime_t, t: thread_id_t, lock: *MutexU32)() =
+/* pred_ctor MutexGuardU32_fbc_lock_pto(l: *MutexGuardU32, lock: *MutexU32)() = (*l).lock |-> lock; */
+
+/*pred_ctor MutexGuardU32_fbc_own(km: lifetime_t, kmlong:lifetime_t, t: thread_id_t, lock: *MutexU32)() =
     lifetime_inclusion(km, kmlong) == true &*& [_]frac_borrow(km, MutexU32_frac_borrow_content(kmlong, t, lock))
-    &*& MutexU32_locked(lock, t) &*& full_borrow(kmlong, MutexU32_fbc_data(t, lock));
+    &*& MutexU32_locked(lock, t) &*& full_borrow(kmlong, MutexU32_fbc_data(t, lock));*/
+
+pred_ctor MutexGuardU32_fbc_rest(km: lifetime_t, kmlong: lifetime_t, t: thread_id_t, l: *MutexGuardU32, lock: *MutexU32)() =
+    (*l).lock |-> lock &*& lifetime_inclusion(km, kmlong) == true
+    &*& [_]frac_borrow(km, MutexU32_frac_borrow_content(kmlong, t, lock))
+    &*& MutexU32_locked(lock, t);
+
 pred_ctor MutexGuardU32_full_borrow_content0(km: lifetime_t, t: thread_id_t, l: *MutexGuardU32)() =
     (*l).lock |-> ?lock &*& MutexGuardU32_own(km)(t, lock);
 
@@ -314,110 +321,86 @@ impl MutexGuardU32 /*<'mutex>*/ {
         //@ close_full_borrow(MutexU32_fbc_data(t, lock));
         //@ lifetime_token_trade_back(qkml, kmlong);
         let r = unsafe { &mut *(*self.lock).data.get() };
-        /*@ produce_lem_ptr_chunk full_borrow_convert_strong(
-            sep(MutexGuardU32_fbc_lock_pto(self, lock), sep(exists_ctor(kmlong), MutexGuardU32_fbc_own(km, kmlong, t, lock))),
+        /*@
+        produce_lem_ptr_chunk full_borrow_convert_strong(sep(MutexGuardU32_fbc_rest(km, kmlong, t, self, lock), full_borrow_wrapper(kmlong, u32_full_borrow_content(t, &(*lock).data))),
             kstrong,
-            MutexGuardU32_full_borrow_content0(km, t, self))()
-            {
-                open sep(MutexGuardU32_fbc_lock_pto(self, lock), sep(exists_ctor(kmlong), MutexGuardU32_fbc_own(km, kmlong, t, lock)))();
-                open MutexGuardU32_fbc_lock_pto(self, lock)();
-                open sep(exists_ctor(kmlong), MutexGuardU32_fbc_own(km, kmlong, t, lock))();
-                open exists_ctor(kmlong)(); close exists_np(kmlong); leak exists_np(kmlong);
-                open MutexGuardU32_fbc_own(km, kmlong, t, lock)();
+            MutexGuardU32_full_borrow_content0(km, t, self))() {
+                open sep(MutexGuardU32_fbc_rest(km, kmlong, t, self, lock), full_borrow_wrapper(kmlong, u32_full_borrow_content(t, &(*lock).data)))();
+                open MutexGuardU32_fbc_rest(km, kmlong, t, self, lock)();
+                open full_borrow_wrapper(kmlong, u32_full_borrow_content(t, &(*lock).data))();
+                close exists_np(kmlong); leak exists_np(kmlong);
+                // Todo: change the definitions so this implies will not be necessary
+                produce_lem_ptr_chunk implies(MutexU32_fbc_data(t, lock), u32_full_borrow_content(t, &(*lock).data))() {
+                    open MutexU32_fbc_data(t, lock)(); close u32_full_borrow_content(t, &(*lock).data)();
+                }{
+                    produce_lem_ptr_chunk implies(u32_full_borrow_content(t, &(*lock).data), MutexU32_fbc_data(t, lock))() {
+                        open u32_full_borrow_content(t, &(*lock).data)(); close MutexU32_fbc_data(t, lock)();
+                    }{
+                        full_borrow_implies(kmlong, u32_full_borrow_content(t, &(*lock).data), MutexU32_fbc_data(t, lock));
+                    }
+                }
                 close MutexGuardU32_own(km)(t, lock);
                 close MutexGuardU32_full_borrow_content0(km, t, self)();
             }{
-                close MutexGuardU32_fbc_lock_pto(self, lock)();
-                close exists_ctor(kmlong)();
-                close MutexGuardU32_fbc_own(km, kmlong, t, lock)();
-                close sep(exists_ctor(kmlong), MutexGuardU32_fbc_own(km, kmlong, t, lock))();
-                close sep(MutexGuardU32_fbc_lock_pto(self, lock), sep(exists_ctor(kmlong), MutexGuardU32_fbc_own(km, kmlong, t, lock)))();
-                close_full_borrow_strong(kstrong, MutexGuardU32_full_borrow_content0(km, t, self),
-                    sep(MutexGuardU32_fbc_lock_pto(self, lock), sep(exists_ctor(kmlong), MutexGuardU32_fbc_own(km, kmlong, t, lock))));
-                full_borrow_mono(k, a, sep(MutexGuardU32_fbc_lock_pto(self, lock), MutexGuardU32_fbc_own(km, t, lock)));
-                full_borrow_split(a, MutexGuardU32_fbc_lock_pto(self, lock), MutexGuardU32_fbc_own(km, t, lock));
-            }
-        @*/
-        /* produce_lem_ptr_chunk implies(MutexGuardU32_fbc_own(km, t, lock), sep(exists(?kmlong1), MutexGuardU32_own
-        @*/
-        //@ assert false;
-        /*@ produce_lem_ptr_chunk implies(MutexGuardU32_fbc_own(km, t, lock), sep(exists_ctor(kmlong),
-                sep(MutexGuardU32_own_mutex(km, kmlong, t, lock), MutexGuardU32_own_data(kmlong, t, lock))))()
-            {
-                open MutexGuardU32_fbc_own(km, t, lock)();
-                open MutexGuardU32_own(km)(t, lock);
-                close MutexGuardU32_own_mutex(km, kmlong, t, lock)();
-                close MutexGuardU32_own_data(kmlong, t, lock)();
-                close sep(MutexGuardU32_own_mutex(km, t, lock), MutexGuardU32_own_data(km, t, lock))();
-
-            }{
-                produce_lem_ptr_chunk implies(sep(MutexGuardU32_own_mutex(km, t, lock), MutexGuardU32_own_data(km, t, lock)),
-                    MutexGuardU32_fbc_own(km, t, lock))()
-                {
-                    open sep(MutexGuardU32_own_mutex(km, t, lock), MutexGuardU32_own_data(km, t, lock))();
-                    open MutexGuardU32_own_mutex(km, t, lock)(); open MutexGuardU32_own_data(km, t, lock)();
-                    close MutexGuardU32_own(km)(t, lock);
-                    close MutexGuardU32_fbc_own(km, t, lock)();
+                close MutexGuardU32_fbc_rest(km, kmlong, t, self, lock)();
+                produce_lem_ptr_chunk implies(MutexU32_fbc_data(t, lock), u32_full_borrow_content(t, &(*lock).data))() {
+                    open MutexU32_fbc_data(t, lock)(); close u32_full_borrow_content(t, &(*lock).data)();
                 }{
-                    full_borrow_implies(a, MutexGuardU32_fbc_own(km, t, lock),
-                        sep(MutexGuardU32_own_mutex(km, t, lock), MutexGuardU32_own_data(km, t, lock)));
-                    full_borrow_split(a, MutexGuardU32_own_mutex(km, t, lock), MutexGuardU32_own_data(km, t, lock));
+                    produce_lem_ptr_chunk implies(u32_full_borrow_content(t, &(*lock).data), MutexU32_fbc_data(t, lock))() {
+                        open u32_full_borrow_content(t, &(*lock).data)(); close MutexU32_fbc_data(t, lock)();
+                    }{
+                        full_borrow_implies(kmlong, MutexU32_fbc_data(t, lock), u32_full_borrow_content(t, &(*lock).data));
+                    }
                 }
+                close full_borrow_wrapper(kmlong, u32_full_borrow_content(t, &(*lock).data))();
+                close sep(MutexGuardU32_fbc_rest(km, kmlong, t, self, lock), full_borrow_wrapper(kmlong, u32_full_borrow_content(t, &(*lock).data)))();
+                close_full_borrow_strong(kstrong, MutexGuardU32_full_borrow_content0(km, t, self),
+                    sep(MutexGuardU32_fbc_rest(km, kmlong, t, self, lock), full_borrow_wrapper(kmlong, u32_full_borrow_content(t, &(*lock).data))));
+                full_borrow_split(kstrong, MutexGuardU32_fbc_rest(km, kmlong, t, self, lock), full_borrow_wrapper(kmlong, u32_full_borrow_content(t, &(*lock).data)));
+                full_borrow_unnest(kstrong, kmlong, u32_full_borrow_content(t, &(*lock).data));
+                lifetime_inclusion_glb(a, kstrong, kmlong);
+                full_borrow_mono(lifetime_intersection(kstrong, kmlong), a, u32_full_borrow_content(t, &(*lock).data));
             }
         @*/
-        /*@
-        produce_lem_ptr_chunk implies(MutexGuardU32_own_data(km, t, lock), full_borrow_wrapper(km, MutexU32_fbc_data(t, lock)))() {
-            open MutexGuardU32_own_data(km, t, lock)(); close full_borrow_wrapper(km, MutexU32_fbc_data(t, lock))();
-        }{
-            produce_lem_ptr_chunk implies(full_borrow_wrapper(km, MutexU32_fbc_data(t, lock)), MutexGuardU32_own_data(km, t, lock))() {
-                open full_borrow_wrapper(km, MutexU32_fbc_data(t, lock))(); close MutexGuardU32_own_data(km, t, lock)();
-            }{
-                full_borrow_implies(a, MutexGuardU32_own_data(km, t, lock), full_borrow_wrapper(km, MutexU32_fbc_data(t, lock)));
-                full_borrow_unnest(a, km, MutexU32_fbc_data(t, lock));
-                lifetime_inclusion_glb(a, a, km);
-                full_borrow_mono(lifetime_intersection(a, km), a, MutexU32_fbc_data(t, lock));
-            }
-        }
-        @*/
-        /*@
-        produce_lem_ptr_chunk implies(MutexU32_fbc_data(t, lock), u32_full_borrow_content(t, &(*lock).data))() {
-            open MutexU32_fbc_data(t, lock)(); close u32_full_borrow_content(t, &(*lock).data)();
-        }{
-            produce_lem_ptr_chunk implies(u32_full_borrow_content(t, &(*lock).data), MutexU32_fbc_data(t, lock))() {
-                open u32_full_borrow_content(t, &(*lock).data)(); close MutexU32_fbc_data(t, lock)();
-            }{
-                full_borrow_implies(a, MutexU32_fbc_data(t, lock), u32_full_borrow_content(t, &(*lock).data));
-            }
-        }
-        @*/
-        //@ leak full_borrow(a, MutexGuardU32_fbc_lock_pto(self, lock));
-        //@ leak full_borrow(a, MutexGuardU32_own_mutex(km, t, lock));
+        //@ leak full_borrow(kstrong, _);
         r
     }
-
+    /* Todo: Since the only drop's parameter is a mutable reference, if we open the full borrow and destroy the meaning of `[[T]].OWN`
+    we will not be able to close borrow again. It is fine because the value is getting dropped and will not get used after our borrow lifetime ends.
+    However, to get our lifetime back we need to close the borrow wich after destroying the `Own` predicate is not always possible.
+    One way to handle this is to generate a different contract for `drop` implementations which does not return the lifetime token corresponding to lifetime
+    of the mutable reference. It will represent the fact that we know for this special case, i.e. `drop` this external lifetime will immediately end
+    after this function call and the original value will not be used afterward too.
+    */
     unsafe fn drop<'a>(&'a mut self)
-    //@ req thread_token(?t) &*& [?qa]lifetime_token(?a) &*& exists(?km) &*& full_borrow(a, MutexGuardU32_full_borrow_content0(km, t, self)) &*& lifetime_inclusion(a, km) == true;
-    //@ ens thread_token(t) &*& [qa]lifetime_token(a);
+    /*@ req thread_token(?t) &*& [?qa]lifetime_token(?a) &*& exists(?km)
+        &*& full_borrow(a, MutexGuardU32_full_borrow_content0(km, t, self)) &*& lifetime_inclusion(a, km) == true;
+    @*/
+    //@ ens thread_token(t) /*&*& [qa]lifetime_token(a)*/;
     {
         //@ open_full_borrow(qa/2, a, MutexGuardU32_full_borrow_content0(km, t, self));
         //@ open MutexGuardU32_full_borrow_content0(km, t, self)();
         //@ open MutexGuardU32_own(km)(t, ?lock);
-        //@ open MutexU32_share(km, t, lock);
         //@ assert [_]exists_np(?kfracc);
         //@ lifetime_token_trade(a, qa/2, km);
         //@ assert [?qkm]lifetime_token(km);
         //@ open_frac_borrow(km, MutexU32_frac_borrow_content(kfracc, t, lock), qkm);
         //@ open MutexU32_frac_borrow_content(kfracc, t, lock)();
-        //@ assert false;
-        //@ full_borrow_mono(kfracc, km, MutexU32_fbc_data(t, lock));
-        //@ close SysMutex_content(kfracc, t, lock)();
         //@ MutexU32_locked_unwrap(lock, t);
         unsafe {
             (*self.lock).inner.unlock();
         }
-        //@ close_full_borrow(MutexU32_fbc_data(t, lock));
-        //@ close MutexGuardU32_own(km)(t, lock);
+        //@ assert [?qp](*lock).inner |-> _;
+        //@ close [qp]MutexU32_frac_borrow_content(kfracc, t, lock)();
+        //@ close_frac_borrow(qp, MutexU32_frac_borrow_content(kfracc, t, lock));
         //@ lifetime_token_trade_back(qkm, km);
+        //@ leak (*self).lock |-> _;
+        //@ leak close_full_borrow_token(_, _, _);
+        //@ leak [_]lifetime_token(a);
+        
+        // close MutexGuardU32_own(km)(t, lock);
+        // close MutexGuardU32_full_borrow_content0(km, t, self)();
+        // close_full_borrow(MutexGuardU32_full_borrow_content0(km, t, self));
     }
 }
 /*
