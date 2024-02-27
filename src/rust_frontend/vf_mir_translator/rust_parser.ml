@@ -409,6 +409,7 @@ and parse_stmts stream = rep parse_stmt stream
 
 let parse_param = function%parser
   [ (_, Ident x); (_, Kwd ":"); parse_type as t ] -> t, x
+| [ (_, Kwd "self"); (_, Kwd ":"); parse_type as t ] -> t, "self"
 
 let parse_pred_paramlist = function%parser
   [ (_, Kwd "(");
@@ -556,17 +557,47 @@ let prefix_decl_name l prefix = function
   Func (l, k, tparams, rt, prefix ^ g, ps, nonghost_callers_only, ft, co, terminates, body, isVirtual, overrides)
 | AbstractTypeDecl (l, tn) ->
   AbstractTypeDecl (l, prefix ^ tn)
-| _ -> static_error l "Items other than functions are not yet supported here" None
+| Struct (l, sn, tparams, body, attrs) ->
+  Struct (l, prefix ^ sn, tparams, body, attrs)
+| PredFamilyDecl (l, g, tparams, indexCount, pts, inputParamCount, inductiveness) ->
+  PredFamilyDecl (l, prefix ^ g, tparams, indexCount, pts, inputParamCount, inductiveness)
+| PredFamilyInstanceDecl (l, g, tparams, indices, pts, body) ->
+  PredFamilyInstanceDecl (l, prefix ^ g, tparams, indices, pts, body)
+| _ -> static_error l "Some of these kinds of items are not yet supported here" None
 
 let rec parse_decl = function%parser
-  [ (l, Kwd ("impl"|"mod")); (lx, Ident x); (_, Kwd "{");
+  [ (l, Kwd "impl"); (lx, Ident x); (_, Kwd "{");
     [%let ds = rep parse_decl];
     (_, Kwd "}")
   ] ->
   let prefix = x ^ "::" in
   ds |> List.flatten |> List.map (prefix_decl_name l prefix)
+| [ (l, Kwd "mod"); (lx, Ident x); (_, Kwd "{");
+    [%let ds = rep parse_decl];
+    (_, Kwd "}")
+  ] -> [ModuleDecl (l, x, [], List.flatten ds)]
 | [ (l, Kwd "fn"); [%let d = parse_func_rest Regular] ] -> [d]
+| [ (_, Kwd "unsafe"); (l, Kwd "fn"); [%let d = parse_func_rest Regular] ] -> [d]
+| [ (_, Kwd "struct"); (l, Ident sn); (_, Kwd ";") ] ->
+  [
+    Struct (l, sn, [], None, []);
+    TypedefDecl (l, StructTypeExpr (l, Some sn, None, [], []), sn, [])
+  ]
 | [ parse_ghost_decl_block as ds ] -> ds
 
 let parse_decls = function%parser
   [ [%let ds = rep parse_decl] ] -> List.flatten ds
+
+let flatten_module_decls ltop ds =
+  let rec iter lp pn ilist ds0 ds cont =
+    match ds with
+      [] -> PackageDecl (lp, pn, ilist, List.rev ds0)::cont ()
+    | ModuleDecl (l, mn, ilist', mds)::ds ->
+      PackageDecl (lp, pn, ilist, List.rev ds0)::
+      iter l (if pn = "" then mn else pn ^ "::" ^ mn) ilist' [] mds begin fun () ->
+        iter lp pn ilist [] ds cont
+      end
+    | d::ds ->
+      iter lp pn ilist (d::ds0) ds cont
+  in
+  iter ltop "" [] [] ds (fun () -> [])

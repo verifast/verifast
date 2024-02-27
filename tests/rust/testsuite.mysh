@@ -1,5 +1,12 @@
 verifast -c ghost_cmd_inj.rs
 verifast -c parser_test.rs
+begin_sequential
+cd unverified
+  cd platform
+    cargo +nightly-2023-12-31 build
+  cd ..
+cd ..
+begin_parallel
 cd purely_unsafe
   verifast -c struct_exprs.rs
   verifast -c scalars.rs
@@ -18,6 +25,7 @@ cd purely_unsafe
   verifast -c tree3.rs
   verifast -c generic_structs.rs
   verifast -c str.rs
+  verifast -c -rustc_arg --extern -rustc_arg platform=../unverified/platform/target/debug/libplatform.rlib -rustc_arg -L -rustc_arg ../unverified/platform/target/debug/deps -extern_spec platform=../unverified/platform/spec/lib.rsspec httpd.rs
 cd ..
 cd safe_abstraction
   verifast -c full_bor_primitive_types.rs
@@ -27,3 +35,5 @@ cd safe_abstraction
   verifast -c -allow_should_fail -allow_dead_code drop_test.rs
   verifast -c tparam_own.rs
 cd ..
+end_parallel
+end_sequential

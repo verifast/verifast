@@ -378,26 +378,6 @@ module TrName = struct
   let is_from_std_lib path = String.starts_with ~prefix:"std::" path
 end
 
-module type DECLS = sig
-  type decl
-
-  val add_decl : decl -> unit
-  val decls : unit -> decl list
-end
-
-module Decls (Args : sig
-  type decl
-end) : DECLS with type decl = Args.decl = struct
-  type decl = Args.decl
-
-  let ds : decl list ref = ref []
-
-  let add_decl (decl : decl) =
-    if not @@ List.exists (( = ) decl) !ds then ds := !ds @ [ decl ]
-
-  let decls _ = !ds
-end
-
 module type VF_MIR_TRANSLATOR_ARGS = sig
   val data_model_opt : Ast.data_model option
   val report_should_fail : string -> Ast.loc0 -> unit
@@ -449,68 +429,26 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           Error (`CapnpIndListGetList "Unknown inductive list constructor")
   end
 
-  module AstDecls = Decls (struct
-    type decl = Ast.decl
-  end)
-
-  module Headers = Decls (struct
-    type decl = string
-  end)
-
-  module HeadersAux = struct
-    module type AUX_HEADERS_ARGS = sig
-      include VF_MIR_TRANSLATOR_ARGS
-
-      val aux_headers_dir : string
-      val verbosity : int
-    end
-
-    module Make (Args : AUX_HEADERS_ARGS) = struct
-      type t = string list
-
-      let empty : t = []
-
-      let parse_header (header_name : string) =
-        let header_path = Filename.concat Args.aux_headers_dir header_name in
-        (* Todo @Nima: should we catch the exceptions and return Error here? *)
-        let headers, decls =
-          if Filename.check_suffix header_name ".rsspec" then
-            let prefix =
-              if Filename.check_suffix header_name "/lib.rsspec" then
-                let dirname =
-                  String.sub header_name 0
-                    (String.length header_name - String.length "/lib.rsspec")
-                in
-                let crateName = Filename.basename dirname in
-                crateName ^ "::"
-              else ""
-            in
-            let ds = VfMirAnnotParser.parse_rsspec_file header_path in
-            let pos = (header_path, 1, 1) in
-            let loc = Ast.Lexed (pos, pos) in
-            let ds =
-              if prefix = "" then ds
-              else ds |> List.map (Rust_parser.prefix_decl_name loc prefix)
-            in
-            let ps = [ Ast.PackageDecl (Ast.dummy_loc, "", [], ds) ] in
-            ([], ps)
-          else
-            Parser.parse_header_file Args.report_macro_call header_path
-              Args.report_range Args.report_should_fail Args.verbosity
-              (*include paths*) [] (*define macros*) []
-              (*enforce annotation*) true Args.data_model_opt
-        in
-        let header_names = List.map (fun (_, (_, _, h), _, _) -> h) headers in
-        let headers =
-          ( Ast.dummy_loc,
-            (Lexer.AngleBracketInclude, header_name, header_path),
-            header_names,
-            decls )
-          :: headers
-        in
-        Ok headers
-    end
-  end
+  let parse_header (crateName : string) (header_path : string) =
+    let header_name = Filename.basename header_path in
+    let decls =
+      if not (Filename.check_suffix header_name ".rsspec") then
+        failwith
+          (Printf.sprintf "Bad header name '%s': should end with .rsspec"
+             header_name);
+      let ds = VfMirAnnotParser.parse_rsspec_file header_path in
+      let pos = (header_path, 1, 1) in
+      let loc = Ast.Lexed (pos, pos) in
+      Rust_parser.flatten_module_decls loc
+        [ Ast.ModuleDecl (loc, crateName, [], ds) ]
+    in
+    let header =
+      ( Ast.dummy_loc,
+        (Lexer.AngleBracketInclude, header_name, header_path),
+        [],
+        decls )
+    in
+    [ header ]
 
   module VF0 = Verifast0
 
@@ -3636,15 +3574,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                     in
                     prototype))
 
-  let translate_vf_mir (vf_mir_cpn : VfMirRd.t)
+  let translate_vf_mir (extern_specs : string list) (vf_mir_cpn : VfMirRd.t)
       (report_should_fail : string -> Ast.loc0 -> unit) =
     let job _ =
-      let module HeadersAux = HeadersAux.Make (struct
-        include Args
-
-        let aux_headers_dir = Filename.dirname Sys.executable_name
-        let verbosity = 0
-      end) in
       let directives_cpn = VfMirRd.directives_get_list vf_mir_cpn in
       let* directives = ListAux.try_map translate_annotation directives_cpn in
       directives
@@ -3713,20 +3645,41 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         translate_trait_impls (VfMirRd.trait_impls_get_list vf_mir_cpn)
       in
       let debug_infos = VF0.DbgInfoRustFe debug_infos in
-      let decls = AstDecls.decls () in
       let trait_impl_prototypes =
         compute_trait_impl_prototypes adt_defs traits_and_body_decls trait_impls
       in
       let decls =
-        traits_decls @ trait_impl_prototypes @ decls @ adt_decls @ aux_decls
+        traits_decls @ trait_impl_prototypes @ adt_decls @ aux_decls
         @ adts_full_bor_content_preds @ adts_proof_obligs @ ghost_decls
         @ body_sigs @ body_decls
       in
       (* Todo @Nima: we should add necessary inclusions during translation *)
-      let _ = List.iter Headers.add_decl [ "rust/std/lib.rsspec" ] in
-      let header_names = Headers.decls () in
-      let* headers = ListAux.try_map HeadersAux.parse_header header_names in
-      let headers = List.concat headers in
+      let extern_header_names =
+        extern_specs
+        |> List.map @@ fun extern_spec ->
+           match String.split_on_char '=' extern_spec with
+           | [ crateName; header_path ] -> (crateName, header_path)
+           | _ ->
+               failwith
+                 (Printf.sprintf
+                    "-extern_spec argument '%s' should be of the form \
+                     `crateName=path/to/spec_file.rsspec`"
+                    extern_spec)
+      in
+      let header_names =
+        [
+          ( "std",
+            Filename.concat
+              (Filename.dirname Sys.executable_name)
+              "rust/std/lib.rsspec" );
+        ]
+        @ extern_header_names
+      in
+      let headers =
+        Util.flatmap
+          (fun (crateName, header_path) -> parse_header crateName header_path)
+          header_names
+      in
       Ok
         ( headers,
           [ Ast.PackageDecl (Ast.dummy_loc, "", [], decls) ],

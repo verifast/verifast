@@ -912,7 +912,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           match t with
             StaticArrayType (elemTp, elemCount) ->
             produce_object t
-          | StructType (sn, targs) when !address_taken || e = None || (language = CLang && dialect = Some Cxx) || (let (_, _, body_opt, _, _) = List.assoc sn structmap in match body_opt with Some (_, fds, _) -> List.exists (fun (_, (_, gh, _, _, _)) -> gh = Ast.Ghost) fds | _ -> true) ->
+          | StructType (sn, targs) when !address_taken || (language = CLang && dialect = Some Cxx) || (let (_, _, body_opt, _, _) = List.assoc sn structmap in match body_opt with Some (_, fds, _) -> e = None | _ -> false) ->
             (* If the variable's address is taken or the struct type has no body or it has a ghost field, treat it like a resource. *)
             produce_object (RefType t)
           | UnionType _ -> produce_object (RefType t)
@@ -3772,7 +3772,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         )
         in
         try
-          RustFe.parse_rs_file path
+          RustFe.parse_rs_file rustc_args extern_specs path
         with
         | RustFe.RustFrontend msg -> raise (CompilationErrorWithDetails ("Rust frontend failed", msg))
       end

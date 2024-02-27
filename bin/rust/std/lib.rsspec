@@ -25,7 +25,19 @@ mod alloc {
         };
     @*/
     //@ terminates;
-
+    
+    fn realloc(buffer: *u8, old_size: usize, new_size: usize) -> *u8;
+    //@ req integers_(buffer, 1, false, ?len, ?vs1) &*& integers__(buffer + len, 1, false, old_size - len, ?vs2) &*& alloc_block(buffer, old_size) &*& old_size <= new_size;
+    /*@
+    ens
+        if result == 0 {
+            integers_(buffer, 1, false, len, vs1) &*& integers__(buffer + len, 1, false, old_size - len, vs2) &*& alloc_block(buffer, old_size)
+        } else {
+            integers_(result, 1, false, len, vs1) &*& integers__(result + len, 1, false, old_size - len, vs2) &*&
+            integers__(result + old_size, 1, false, new_size - old_size, _) &*& alloc_block(result, new_size)
+        };
+    @*/
+    
     fn dealloc(p: *u8, size: usize);
     //@ req alloc_block(p, size) &*& integers__(p, 1, false, size, _);
     //@ ens true;

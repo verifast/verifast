@@ -887,6 +887,7 @@ and
   | UnloadableModuleDecl of loc
   | ImportModuleDecl of loc * string
   | RequireModuleDecl of loc * string
+  | ModuleDecl of loc * string * import list * decl list (* A Rust module. Is flattened into a list of PackageDecl after parsing. *)
 and (* shared box is deeltje ghost state, waarde kan enkel via actions gewijzigd worden, handle predicates geven info over de ghost state, zelfs als er geen eigendom over de box is*)
   action_decl = (* ?action_decl *)
   | ActionDecl of loc * string * bool (* does performing this action require a corresponding action permission? *) * (type_expr * string) list * expr * expr
