@@ -25,7 +25,7 @@ cd purely_unsafe
   verifast -c tree3.rs
   verifast -c generic_structs.rs
   verifast -c str.rs
-  verifast -c -rustc_arg --extern -rustc_arg platform=../unverified/platform/target/debug/libplatform.rlib -rustc_arg -L -rustc_arg ../unverified/platform/target/debug/deps -extern_spec platform=../unverified/platform/spec/lib.rsspec httpd.rs
+  verifast -prover z3v4.5 -c -rustc_arg --extern -rustc_arg platform=../unverified/platform/target/debug/libplatform.rlib -rustc_arg -L -rustc_arg ../unverified/platform/target/debug/deps -extern_spec platform=../unverified/platform/spec/lib.rsspec httpd.rs
 cd ..
 cd safe_abstraction
   verifast -c full_bor_primitive_types.rs

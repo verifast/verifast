@@ -3024,12 +3024,14 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let getters = field_types |> List.map (fun (f, t) -> (f, make_getter sn tt csym subtype fieldnames f t)) in
           let setters = field_types |> List.map (fun (f, t) -> (f, make_setter sn tt csym subtype getters fieldnames f t)) in
           (* Axiom: forall s, mk_s (get_f1 s) ... (get_fN s) == s *)
-          ctxt#begin_formal;
-          let s = ctxt#mk_bound 0 ctxt#type_inductive in
-          let mk_term = ctxt#mk_app csym (List.map (fun (_, getter) -> ctxt#mk_app getter [s]) getters) in
-          let fact = ctxt#mk_eq mk_term s in
-          ctxt#end_formal;
-          ctxt#assume_forall (sn ^ "_injectiveness") [mk_term] [ctxt#type_inductive] fact;
+          if field_types <> [] then begin
+            ctxt#begin_formal;
+            let s = ctxt#mk_bound 0 ctxt#type_inductive in
+            let mk_term = ctxt#mk_app csym (List.map (fun (_, getter) -> ctxt#mk_app getter [s]) getters) in
+            let fact = ctxt#mk_eq mk_term s in
+            ctxt#end_formal;
+            ctxt#assume_forall (sn ^ "_injectiveness") [mk_term] [ctxt#type_inductive] fact
+          end;
           [(sn, (l, csym, getters, setters))]
         end
     )
