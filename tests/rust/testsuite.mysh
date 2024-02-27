@@ -17,6 +17,7 @@ cd purely_unsafe
   verifast -c pred_fam.rs
   verifast -c tree3.rs
   verifast -c generic_structs.rs
+  verifast -c str.rs
 cd ..
 cd safe_abstraction
   verifast -c full_bor_primitive_types.rs

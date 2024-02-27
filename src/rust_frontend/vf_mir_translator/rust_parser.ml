@@ -221,6 +221,7 @@ let rec parse_expr_funcs allowStructExprs =
     ] -> SwitchExpr (l, scrutinee, arms, None)
   | [ (_, Kwd "("); parse_expr as e; (_, Kwd ")") ] -> e
   | [ (l, Kwd "["); [%let pats = rep_comma parse_pat]; (_, Kwd "]") ] -> CallExpr (l, "#list", [], [], pats, Static)
+  | [ (l, CharToken c) ] -> IntLit (l, big_int_of_int (Char.code c), true, false, NoLSuffix)
   | [ (l, Kwd "typeid"); (_, Kwd "("); parse_type as t; (_, Kwd ")") ] -> Typeid (l, TypeExpr t)
   and parse_match_arm = function%parser
     [ parse_expr as pat; (l, Kwd "=>"); parse_expr as rhs ] ->

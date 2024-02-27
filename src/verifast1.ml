@@ -4335,6 +4335,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | _ -> static_error l "Taking the address of this expression is not supported." None
       in
       (WVar (l2, x, LocalVar), PtrType pointeeType, None)
+    | AddressOf (la, Deref (ld, e)) ->
+      check e
     | CxxLValueToRValue (l, e) -> check e
     | CxxDerivedToBase (l, e, te) ->
       let t = check_pure_type (pn, ilist) tparams Real te in

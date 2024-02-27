@@ -279,6 +279,7 @@ struct Ty {
             never @7: Void;
             tuple @8: List(GenArg);
             param @11: Text;
+            str @12: Void;
         }
     }
 

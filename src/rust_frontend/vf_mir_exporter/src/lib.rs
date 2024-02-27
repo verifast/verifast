@@ -1224,6 +1224,7 @@ mod vf_mir_builder {
                 ty::TyKind::Param(param_ty) => {
                     ty_kind_cpn.set_param(&param_ty.to_string());
                 }
+                ty::TyKind::Str => ty_kind_cpn.set_str(()),
                 _ => todo!("Unsupported type kind"),
             }
         }

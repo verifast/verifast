@@ -1018,6 +1018,37 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           RustBelt.{ size; own; own_predname; shr; full_bor_content; points_to };
       }
 
+  and str_ref_ty_info loc =
+    let open Ast in
+    let vf_ty = ManifestTypeExpr (loc, StructType ("str_ref", [])) in
+    let size = SizeofExpr (loc, TypeExpr vf_ty) in
+    let own tid vs =
+      Error "Expressing ownership of &str values is not yet supported"
+    in
+    let own_predname =
+      Error
+        "Passing type &str as a type argument to a generic function is not yet \
+         supported"
+    in
+    let shr _ _ _ =
+      Error "Expressing shared ownership of &str values is not yet supported"
+    in
+    let full_bor_content =
+      Error
+        "Expressing the full borrow content of &str values is not yet supported"
+    in
+    let points_to tid l vid_op =
+      Error
+        "Expressing a points-to assertion for a &str object is not yet \
+         supported"
+    in
+    Mir.TyInfoBasic
+      {
+        vf_ty;
+        interp =
+          RustBelt.{ size; own; own_predname; shr; full_bor_content; points_to };
+      }
+
   and translate_generic_arg (gen_arg_cpn : GenArgRd.t) (loc : Ast.loc) =
     let open GenArgRd in
     let kind_cpn = kind_get gen_arg_cpn in
@@ -1145,124 +1176,127 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let mut_cpn = mutability_get ref_ty_cpn in
     let* mut = translate_mutability mut_cpn in
     let ty_cpn = ty_get ref_ty_cpn in
-    let* pointee_ty_info = translate_ty ty_cpn loc in
-    let pointee_ty = Mir.basic_type_of pointee_ty_info in
-    let vf_ty = PtrTypeExpr (loc, pointee_ty) in
-    let sz_expr = SizeofExpr (loc, TypeExpr vf_ty) in
-    let RustBelt.
-          {
-            size = ptee_sz;
-            own = ptee_own;
-            shr = ptee_shr;
-            full_bor_content = ptee_fbc;
-            points_to = ptee_points_to;
-          } =
-      Mir.interp_of pointee_ty_info
-    in
-    let* own, own_predname, shr, full_bor_content, points_to =
-      match mut with
-      | Mir.Mut ->
-          let own tid vs =
-            match vs with
-            | [ l ] ->
-                let* ptee_fbc = ptee_fbc in
-                let ptee_fbc =
-                  CallExpr
-                    ( loc,
-                      ptee_fbc,
-                      (*type arguments*) [],
-                      (*indices*) [],
-                      (*arguments*)
-                      [ LitPat tid; LitPat l ],
-                      Static )
-                in
-                Ok
-                  (CallExpr
-                     ( loc,
-                       "full_borrow",
-                       (*type arguments*) [],
-                       (*indices*) [],
-                       (*arguments*)
-                       [ LitPat lft; LitPat ptee_fbc ],
-                       Static ))
-            | _ -> Error "[[&mut T]].own(tid, vs) needs to vs == [l]"
-          in
-          let own_predname =
-            Error
-              "Calling a function with a mutable reference type as a generic \
-               type argument is not yet supported"
-          in
-          let shr lft tid l = Ok (True loc) in
-          let full_bor_content =
-            (* This will need to add a definition for each mut reference type in the program because the body of the predicate will need to mention
-               [[&mut T]].own which depends on T. Another solution is to make VeriFast support Higher order predicates with non-predicate arguments *)
-            Error
-              "Expressing the full borrow content of a mutable reference type \
-               is not yet supported"
-            (* CallExpr
-               ( loc,
-                 "mut_ref_full_borrow_content",
-                 (*type arguments*) [],
-                 (*indices*) [],
-                 (*arguments*)
-                 [ LitPat tid; LitPat l ],
-                 Static ) *)
-          in
-          let points_to tid l vid_op =
-            match vid_op with
-            | Some vid when vid != "" ->
-                let var_pat = VarPat (loc, vid) in
-                let var_expr = Var (loc, vid) in
-                let* own = own tid [ var_expr ] in
-                Ok (Sep (loc, PointsTo (loc, l, var_pat), own))
-            | _ -> Error "mut reference points_to needs a value id"
-          in
-          Ok (own, own_predname, shr, full_bor_content, points_to)
-      | Mir.Not ->
-          let own tid vs =
-            match vs with
-            | [ l ] -> ptee_shr lft tid l
-            | _ -> Error "[[&T]].own(tid, vs) needs to vs == [l]"
-          in
-          let own_predname =
-            Error
-              "Calling a function with a shared reference type as a generic \
-               type argument is not yet supported"
-          in
-          let shr lft tid l = Ok (True loc) in
-          let full_bor_content =
-            Error
-              "Expressing the full borrow content of a shared reference type \
-               is not yet supported"
-          in
-          let points_to tid l vid_op =
-            match vid_op with
-            | Some vid when vid != "" ->
-                let var_pat = VarPat (loc, vid) in
-                let var_expr = Var (loc, vid) in
-                let* own = own tid [ var_expr ] in
-                Ok (Sep (loc, PointsTo (loc, l, var_pat), own))
-            | _ -> Error "shared reference points_to needs a value id"
-          in
-          Ok (own, own_predname, shr, full_bor_content, points_to)
-    in
-    let ty_info =
-      Mir.TyInfoBasic
-        {
-          vf_ty;
-          interp =
-            RustBelt.
+    match TyRd.TyKind.get @@ TyRd.kind_get ty_cpn with
+    | Str -> Ok (str_ref_ty_info loc)
+    | _ ->
+        let* pointee_ty_info = translate_ty ty_cpn loc in
+        let pointee_ty = Mir.basic_type_of pointee_ty_info in
+        let vf_ty = PtrTypeExpr (loc, pointee_ty) in
+        let sz_expr = SizeofExpr (loc, TypeExpr vf_ty) in
+        let RustBelt.
               {
-                size = sz_expr;
-                own;
-                own_predname;
-                shr;
-                full_bor_content;
-                points_to;
-              };
-        }
-    in
-    Ok ty_info
+                size = ptee_sz;
+                own = ptee_own;
+                shr = ptee_shr;
+                full_bor_content = ptee_fbc;
+                points_to = ptee_points_to;
+              } =
+          Mir.interp_of pointee_ty_info
+        in
+        let* own, own_predname, shr, full_bor_content, points_to =
+          match mut with
+          | Mir.Mut ->
+              let own tid vs =
+                match vs with
+                | [ l ] ->
+                    let* ptee_fbc = ptee_fbc in
+                    let ptee_fbc =
+                      CallExpr
+                        ( loc,
+                          ptee_fbc,
+                          (*type arguments*) [],
+                          (*indices*) [],
+                          (*arguments*)
+                          [ LitPat tid; LitPat l ],
+                          Static )
+                    in
+                    Ok
+                      (CallExpr
+                         ( loc,
+                           "full_borrow",
+                           (*type arguments*) [],
+                           (*indices*) [],
+                           (*arguments*)
+                           [ LitPat lft; LitPat ptee_fbc ],
+                           Static ))
+                | _ -> Error "[[&mut T]].own(tid, vs) needs to vs == [l]"
+              in
+              let own_predname =
+                Error
+                  "Calling a function with a mutable reference type as a \
+                   generic type argument is not yet supported"
+              in
+              let shr lft tid l = Ok (True loc) in
+              let full_bor_content =
+                (* This will need to add a definition for each mut reference type in the program because the body of the predicate will need to mention
+                   [[&mut T]].own which depends on T. Another solution is to make VeriFast support Higher order predicates with non-predicate arguments *)
+                Error
+                  "Expressing the full borrow content of a mutable reference \
+                   type is not yet supported"
+                (* CallExpr
+                   ( loc,
+                     "mut_ref_full_borrow_content",
+                     (*type arguments*) [],
+                     (*indices*) [],
+                     (*arguments*)
+                     [ LitPat tid; LitPat l ],
+                     Static ) *)
+              in
+              let points_to tid l vid_op =
+                match vid_op with
+                | Some vid when vid != "" ->
+                    let var_pat = VarPat (loc, vid) in
+                    let var_expr = Var (loc, vid) in
+                    let* own = own tid [ var_expr ] in
+                    Ok (Sep (loc, PointsTo (loc, l, var_pat), own))
+                | _ -> Error "mut reference points_to needs a value id"
+              in
+              Ok (own, own_predname, shr, full_bor_content, points_to)
+          | Mir.Not ->
+              let own tid vs =
+                match vs with
+                | [ l ] -> ptee_shr lft tid l
+                | _ -> Error "[[&T]].own(tid, vs) needs to vs == [l]"
+              in
+              let own_predname =
+                Error
+                  "Calling a function with a shared reference type as a \
+                   generic type argument is not yet supported"
+              in
+              let shr lft tid l = Ok (True loc) in
+              let full_bor_content =
+                Error
+                  "Expressing the full borrow content of a shared reference \
+                   type is not yet supported"
+              in
+              let points_to tid l vid_op =
+                match vid_op with
+                | Some vid when vid != "" ->
+                    let var_pat = VarPat (loc, vid) in
+                    let var_expr = Var (loc, vid) in
+                    let* own = own tid [ var_expr ] in
+                    Ok (Sep (loc, PointsTo (loc, l, var_pat), own))
+                | _ -> Error "shared reference points_to needs a value id"
+              in
+              Ok (own, own_predname, shr, full_bor_content, points_to)
+        in
+        let ty_info =
+          Mir.TyInfoBasic
+            {
+              vf_ty;
+              interp =
+                RustBelt.
+                  {
+                    size = sz_expr;
+                    own;
+                    own_predname;
+                    shr;
+                    full_bor_content;
+                    points_to;
+                  };
+            }
+        in
+        Ok ty_info
 
   and decode_adt_ty (adt_ty_cpn : AdtTyRd.t) =
     let open AdtTyRd in
@@ -1802,6 +1836,18 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                     translate_operands [ (arg_cpn, fn_loc) ]
                   in
                   Ok (tmp_rvalue_binders, arg)
+              | "core::str::<impl str>::as_ptr" ->
+                  let [ arg_cpn ] = args_cpn in
+                  let* tmp_rvalue_binders, [ arg ] =
+                    translate_operands [ (arg_cpn, fn_loc) ]
+                  in
+                  Ok (tmp_rvalue_binders, Ast.Select (fn_loc, arg, "ptr"))
+              | "core::str::<impl str>::len" ->
+                  let [ arg_cpn ] = args_cpn in
+                  let* tmp_rvalue_binders, [ arg ] =
+                    translate_operands [ (arg_cpn, fn_loc) ]
+                  in
+                  Ok (tmp_rvalue_binders, Ast.Select (fn_loc, arg, "len"))
               | _ -> translate_regular_fn_call substs fn_name)
           | _ ->
               Error
