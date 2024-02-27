@@ -1566,7 +1566,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             when sn = TrTyTuple.tuple0_name ->
               translate_unit_constant loc
           | _ -> failwith "Todo: ConstValue::ZeroSized")
-      | Slice -> failwith "Todo: ConstValue::Slice"
+      | Slice _ -> failwith "Todo: ConstValue::Slice"
       | Undefined _ -> Error (`TrConstValue "Unknown ConstValue")
 
     let translate_ty_const_kind (ck_cpn : TyConstKindRd.t) (ty : Ast.type_expr)
@@ -1615,6 +1615,28 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           in
           match ty with
           | Ast.FuncType _ -> Ok (`TrTypedConstantFn ty_info)
+          | StructType ("str_ref", []) -> (
+              match ConstValueRd.get @@ const_value_get val_cpn with
+              | Slice bytes ->
+                  Ok
+                    (`TrTypedConstantScalar
+                      (Ast.CastExpr
+                         ( loc,
+                           StructTypeExpr (loc, Some "str_ref", None, [], []),
+                           InitializerList
+                             ( loc,
+                               [
+                                 (None, StringLit (loc, bytes));
+                                 ( None,
+                                   IntLit
+                                     ( loc,
+                                       Big_int.big_int_of_int
+                                         (String.length bytes),
+                                       true,
+                                       false,
+                                       NoLSuffix ) );
+                               ] ) )))
+              | _ -> failwith "TODO")
           | _ -> translate_const_value (const_value_get val_cpn) ty_expr loc)
       | Undefined _ -> Error (`TrConstantKind "Unknown ConstantKind")
 

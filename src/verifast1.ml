@@ -6810,7 +6810,16 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     iter 0
   
-  
+  let mk_u8_list_of_rust_string s =
+    let n = String.length s in
+    let rec iter k =
+      if k = n then
+        mk_nil ()
+      else
+        mk_cons charType (ctxt#mk_intlit (Char.code s.[k])) (iter (k + 1))
+    in
+    iter 0
+    
   (* data type to represent ancestries *)
   type ancestry_dt =
     | Class_anc of

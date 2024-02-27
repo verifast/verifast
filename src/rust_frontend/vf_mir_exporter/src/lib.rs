@@ -29,6 +29,7 @@
  * from the thread local storage.
  */
 
+extern crate rustc_abi;
 extern crate rustc_ast;
 extern crate rustc_borrowck;
 extern crate rustc_driver;
@@ -337,6 +338,7 @@ mod vf_mir_builder {
     use rustc_ast::util::comments::Comment;
     use rustc_hir as hir;
     use rustc_middle::bug;
+    use rustc_middle::mir::interpret::AllocRange;
     use rustc_middle::ty;
     use rustc_middle::{mir, ty::TyCtxt};
     use rvalue_cpn::aggregate_data::aggregate_kind as aggregate_kind_cpn;
@@ -713,8 +715,8 @@ mod vf_mir_builder {
         fn encode_adt_kind(adt_kind: ty::AdtKind, mut adt_kind_cpn: adt_kind_cpn::Builder<'_>) {
             match adt_kind {
                 ty::AdtKind::Struct => adt_kind_cpn.set_struct_kind(()),
-                ty::AdtKind::Union => adt_kind_cpn.set_enum_kind(()),
-                ty::AdtKind::Enum => adt_kind_cpn.set_union_kind(()),
+                ty::AdtKind::Union => adt_kind_cpn.set_union_kind(()),
+                ty::AdtKind::Enum => adt_kind_cpn.set_enum_kind(()),
             }
         }
 
@@ -1908,7 +1910,14 @@ mod vf_mir_builder {
                     const_value_cpn.set_zero_sized(());
                 }
                 // Used only for `&[u8]` and `&str`
-                CV::Slice { .. } => todo!(),
+                CV::Slice { data, meta } => {
+                    let allocation = data.inner();
+                    let bytes = allocation.get_bytes_unchecked(AllocRange {
+                        start: rustc_abi::Size::ZERO,
+                        size: allocation.size(),
+                    });
+                    const_value_cpn.set_slice(bytes);
+                }
                 CV::Indirect { alloc_id, offset } => todo!(),
             }
         }

@@ -2826,15 +2826,22 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let lv = ctxt#mk_intlit (List.length vs) in
       new_array h env l elem_tp lv elems
     | StringLit (l, s)->
-      begin match file_type path with
-        Java ->
+      begin match language, dialect with
+        Java, _ ->
         (* TODO: support UTF-8 *)
         let value = get_unique_var_symb "stringLiteral" (ObjType ("java.lang.String", [])) in
         let (_, _, _, _, chars_of_string_symb) = List.assoc "java.lang.charsOfString" purefuncmap in
         assume_neq value (ctxt#mk_intlit 0) $. fun () ->
         assume_eq (mk_app chars_of_string_symb [value]) (mk_char_list_of_c_string (String.length s) s) $. fun () ->
         cont h env value
-      | _ ->
+      | CLang, Some Rust ->
+        let cs = get_unique_var_symb "stringLiteralChars" (InductiveType ("list", [charType])) in
+        let value = get_unique_var_symb "stringLiteral" (PtrType charType) in
+        let coef = get_dummy_frac_term () in
+        assume (ctxt#mk_not (ctxt#mk_eq value (null_pointer_term ()))) $. fun () ->
+        assume (ctxt#mk_eq (mk_u8_list_of_rust_string s) cs) $. fun () ->
+        cont (Chunk ((integers__symb (), true), [], coef, [value; ctxt#mk_intlit 1; ctxt#mk_false; ctxt#mk_intlit (String.length s); cs], None)::h) env value
+      | CLang, _ ->
         if unloadable then static_error l "The use of string literals as expressions in unloadable modules is not supported. Put the string literal in a named global array variable instead." None;
         let (_, _, _, _, string_symb, _, _) = List.assoc "string" predfammap in
         let cs = get_unique_var_symb "stringLiteralChars" (InductiveType ("list", [charType])) in

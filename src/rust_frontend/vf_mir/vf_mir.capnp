@@ -367,7 +367,7 @@ struct Body {
         union {
             scalar @0: Scalar;
             zeroSized @2: Void;
-            slice @1: Void;
+            slice @1: Data;
         }
     }
 

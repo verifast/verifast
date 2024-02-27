@@ -11,3 +11,17 @@ unsafe fn is_hi<'a>(text: &'a str) -> bool
         *text.as_ptr() == b'H' && *text.as_ptr().offset(1) == b'i'
     }
 }
+
+unsafe fn assert(_b: bool)
+//@ req _b;
+//@ ens true;
+{}
+
+unsafe fn test_is_hi()
+//@ req true;
+//@ ens true;
+{
+    assert(is_hi("Hi"));
+    assert(!is_hi("Lo"));
+    assert(!is_hi("Hi!"));
+}
