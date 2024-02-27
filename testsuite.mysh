@@ -468,6 +468,7 @@ cd tutorial_solutions
 cd ..
 cd tests
   verifast -c generic_points_to.c
+  verifast -c struct_points_to.c
   verifast -c -prover z3v4.5 generic_points_to.c
   verifast -c -uppercase_type_params_carry_typeid generic_structs.c
   verifast -c -uppercase_type_params_carry_typeid -prover z3v4.5 generic_structs.c

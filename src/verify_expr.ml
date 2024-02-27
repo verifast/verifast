@@ -1546,6 +1546,17 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       assume_eq (mk_length elems) length $. fun () ->
       cont (Chunk ((pred_symb, true), [], coef, [addr; length; elems], None)::h) env
     in
+    let produce_points_to () =
+      begin fun cont ->
+        match init with
+          Default -> cont h env (Some (match tp with PtrType _ -> null_pointer_term () | Bool -> false_term | _ -> ctxt#mk_intlit 0))
+        | Expr e -> eval_h h env e $. fun h env value -> cont h env (Some value)
+        | Unspecified -> cont h env None
+        | Term t -> cont h env (Some t)
+      end $. fun h env value ->
+      produce_points_to_chunk_ l h tp coef addr value $. fun h ->
+      cont h env
+    in
     match tp with
       StaticArrayType (elemTp, elemCount) ->
       let elemSize = sizeof_core l env elemTp in
@@ -1624,11 +1635,11 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | _ -> produce_char_array_chunk h env addr (sizeof_core l env tp)
       end
     | StructType (sn, targs) ->
-      let (tparams, fields, padding_predsymb_opt) =
+      begin fun cont ->
         match try_assoc sn structmap with
-          Some (_, tparams, Some (_, fds, _), padding_predsymb_opt, _) -> tparams, fds, padding_predsymb_opt
-        | _ -> static_error l (Printf.sprintf "Cannot produce an object of type 'struct %s' since this struct type has not been defined" sn) None
-      in
+          Some (_, tparams, Some (_, fds, _), padding_predsymb_opt, _) -> cont (tparams, fds, padding_predsymb_opt)
+        | _ -> produce_points_to ()
+      end @@ fun (tparams, fields, padding_predsymb_opt) ->
       let tpenv = List.combine tparams targs in
       let producePaddingChunk = match language, dialect, fields with CLang, Some Rust, [] -> false | _ -> producePaddingChunk in
       let field_values_of_struct_as_value v =
@@ -1700,15 +1711,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       iter h env fields inits
     | _ ->
-      begin fun cont ->
-        match init with
-          Default -> cont h env (Some (match tp with PtrType _ -> null_pointer_term () | Bool -> false_term | _ -> ctxt#mk_intlit 0))
-        | Expr e -> eval_h h env e $. fun h env value -> cont h env (Some value)
-        | Unspecified -> cont h env None
-        | Term t -> cont h env (Some t)
-      end $. fun h env value ->
-      produce_points_to_chunk_ l h tp coef addr value $. fun h ->
-      cont h env
+      produce_points_to ()
   
   let rec consume_c_object_core_core l coefpat addr tp h env consumePaddingChunk consumeUninitChunk cont =
     let consume_char_array_chunk () =
@@ -1716,6 +1719,10 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       consume_chunk rules h [] env [] l ((if consumeUninitChunk then chars__pred_symb() else chars_pred_symb()), true) [] real_unit coefpat (Some 2) pats $. fun chunk h _ [_; _; cs] _ _ _ _ ->
       cont [chunk] h (Some (get_unique_var_symb "value" tp))
     in
+    let consume_points_to_chunk () =
+      consume_points_to_chunk_ rules h [] env [] l tp real_unit coefpat addr dummypat consumeUninitChunk $. fun chunk h _ value _ _ _ ->
+        cont [chunk] h (Some value)
+    in  
     match tp with
       StaticArrayType (elemTp, elemCount) ->
       begin match try_pointee_pred_symb0 elemTp with
@@ -1738,11 +1745,11 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | _ -> consume_char_array_chunk ()
       end
     | StructType (sn, targs) ->
-      let tparams, fields, padding_predsymb_opt =
+      begin fun cont ->
         match try_assoc sn structmap with
-          Some (_, tparams, Some (_, fds, _), padding_predsymb_opt, _) -> tparams, fds, padding_predsymb_opt
-        | _ -> static_error l (Printf.sprintf "Cannot consume an object of type 'struct %s' since this struct type has not been defined" sn) None
-      in
+          Some (_, tparams, Some (_, fds, _), padding_predsymb_opt, _) -> cont tparams fds padding_predsymb_opt
+        | _ -> consume_points_to_chunk ()
+      end @@ fun tparams fields padding_predsymb_opt ->
       let tpenv = List.combine tparams targs in
       let consumePaddingChunk = match language, dialect, fields with CLang, Some Rust, [] -> false | _ -> consumePaddingChunk in
       begin fun cont ->
@@ -1783,8 +1790,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       iter chunks [] h fields
     | _ ->
-      consume_points_to_chunk_ rules h [] env [] l tp real_unit coefpat addr dummypat consumeUninitChunk $. fun chunk h _ value _ _ _ ->
-      cont [chunk] h (Some value)
+      consume_points_to_chunk ()
   
   let consume_c_object_core l coefpat addr tp h env consumePaddingChunk cont =
     consume_c_object_core_core l coefpat addr tp h env consumePaddingChunk false cont
