@@ -1,6 +1,9 @@
 #[cfg(windows)]
+#[allow(non_snake_case,non_camel_case_types,dead_code)]
 mod c {
     pub type CHAR = libc::c_char;
+    pub type PSTR = *mut u8;
+    pub type PCSTR = *const u8;
 
     #[repr(C)]
     #[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
@@ -48,7 +51,7 @@ mod c {
         pub sin_zero: [CHAR; 8],
     }
 
-    pub type socklen_t = c_int;
+    pub type socklen_t = libc::c_int;
 
     pub type SEND_RECV_FLAGS = i32;
 
@@ -60,8 +63,8 @@ mod c {
         pub fn bind(s: SOCKET, name: *const sockaddr, namelen: i32) -> i32;
         pub fn listen(s: SOCKET, backlog: i32) -> i32;
         pub fn accept(s: SOCKET, addr: *mut sockaddr, addrlen: *mut i32) -> SOCKET;
-        pub fn recv(s: SOCKET, buf: PSTR, len: i32, flags: SEND_RECV_FLAGS) -> i32;
-        pub fn send(s: SOCKET, buf: PCSTR, len: i32, flags: SEND_RECV_FLAGS) -> i32;
+        pub fn recv(s: SOCKET, buf: *mut libc::c_void, len: i32, flags: SEND_RECV_FLAGS) -> i32;
+        pub fn send(s: SOCKET, buf: *const libc::c_void, len: i32, flags: SEND_RECV_FLAGS) -> i32;
         pub fn closesocket(s: SOCKET) -> i32;
     }
 }
@@ -71,7 +74,7 @@ use libc as c;
 
 #[cfg(windows)]
 unsafe fn print_socket_error_message(api: &std::ffi::CStr) {
-    println!("Socket API call '{}' failed: error code {}\n", api, c::WSAGetLastError());
+    println!("Socket API call '{}' failed: error code {}\n", api.to_str().unwrap(), c::WSAGetLastError());
 }
 
 #[cfg(unix)]
@@ -99,9 +102,13 @@ pub struct Socket {
 impl Socket {
 
     #[cfg(windows)]
+    #[allow(non_snake_case)]
     unsafe fn initialize_sockets_api() {
-        let windowsSocketsApiData: libc::WSADATA;
-        libc::WSAStartup(libc::MAKEWORD(2, 0), &mut windowsSocketsApiData);
+        let mut windowsSocketsApiData: c::WSADATA = std::mem::zeroed();
+        let result = c::WSAStartup(0x0002, &mut windowsSocketsApiData);
+        if result != 0 {
+            println!("Could not initialize Windows Sockets API. WSAStartup failed with error code {}", result);
+        }
     }
 
     #[cfg(unix)]
@@ -111,7 +118,7 @@ impl Socket {
 
         Self::initialize_sockets_api();
 
-        let server_socket: SOCKET = c::socket(c::PF_INET, c::SOCK_STREAM, c::IPPROTO_TCP);
+        let server_socket: SOCKET = c::socket(c::PF_INET.into(), c::SOCK_STREAM, c::IPPROTO_TCP);
         if INVALID_SOCKET == server_socket {
             print_socket_error_message(c"socket()");
             std::process::abort();
@@ -123,7 +130,7 @@ impl Socket {
     
         {
             let status = c::bind(server_socket, &server_name as *const c::sockaddr_in as *const c::sockaddr, std::mem::size_of::<c::sockaddr_in>().try_into().unwrap());
-            if INVALID_SOCKET == status {
+            if -1 == status {
                 print_socket_error_message(c"bind()");
                 std::process::abort();
             }
@@ -131,7 +138,7 @@ impl Socket {
     
         {
             let status = c::listen(server_socket, 5); // Allow 5 pending incoming connection requests
-            if INVALID_SOCKET == status {
+            if -1 == status {
                 print_socket_error_message(c"listen()");
                 std::process::abort();
             }
@@ -153,7 +160,7 @@ impl Socket {
     }
 
     pub unsafe fn receive(self, buffer: *mut u8, length: usize) -> usize {
-        let result = c::recv(self.socket, buffer as *mut libc::c_void, length, 0);
+        let result = c::recv(self.socket, buffer as *mut libc::c_void, length.try_into().unwrap(), 0);
         if result < 0 {
             print_socket_error_message(c"recv()");
             std::process::abort();
@@ -162,7 +169,7 @@ impl Socket {
     }
 
     pub unsafe fn send(self, buffer: *const u8, length: usize) {
-        if c::send(self.socket, buffer as *mut libc::c_void, length, 0) < 0 {
+        if c::send(self.socket, buffer as *mut libc::c_void, length.try_into().unwrap(), 0) < 0 {
             // print_socket_error_message(c"send");
             // std::process::abort();
         }
