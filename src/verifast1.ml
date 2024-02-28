@@ -83,6 +83,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let define_macros = Vfbindings.get Vfparam_define_macros vfbindings
   let include_paths = Vfbindings.get Vfparam_include_paths vfbindings
   let uppercase_type_params_carry_typeid = Vfbindings.get Vfparam_uppercase_type_params_carry_typeid vfbindings || dialect = Some Rust
+  let rustc_args = List.rev @@ Vfbindings.get Vfparam_rustc_args vfbindings
+  let extern_specs = List.rev @@ Vfbindings.get Vfparam_extern_specs vfbindings
 
   let tparam_carries_typeid tparam =
     uppercase_type_params_carry_typeid && tparam_is_uppercase tparam
@@ -96,6 +98,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let assume_left_to_right_evaluation = assume_left_to_right_evaluation || language <> CLang
 
   let {reportRange; reportUseSite; reportExecutionForest; reportStmt; reportStmtExec; reportDirective} = callbacks
+
+  let item_path_separator = if language = Java then "." else "::"
+
+  let full_name pn n = if pn = "" then n else pn ^ item_path_separator ^ n
+
 
   let type_info_name = "std::type_info"
   let type_info_struct_type = StructType (type_info_name, [])
@@ -1401,35 +1408,43 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   (* Region: structdeclmap, enumdeclmap, inductivedeclmap, modulemap *)
   
   let unloadable =
-    match language with
-      | CLang ->
+    match language, dialect with
+      | CLang, None ->
         let [PackageDecl (_, _, _, ds)] = ps in
         List.exists (function (UnloadableModuleDecl l) -> true | _ -> false) ds
-      | Java -> false
+      | _ -> false
   
   let typedefdeclmap =
-    let rec iter tddm ds =
+    let rec iter pn ilist tddm ds cont =
       match ds with
-        [] -> List.rev tddm
+        [] -> cont tddm
       | TypedefDecl (l, LValueRefTypeExpr _, _, _) :: _ ->
         static_error l "Typedefs for lvalue reference types are not supported." None
       | TypedefDecl (l, te, d, tparams)::ds ->
         (* C compiler detects duplicate typedefs *)
-        iter ((d, (l, tparams, te))::tddm) ds
+        iter pn ilist ((full_name pn d, (pn, ilist, l, tparams, te))::tddm) ds cont
       | _::ds ->
-        iter tddm ds
+        iter pn ilist tddm ds cont
     in
     if language = Java then [] else
-    let [PackageDecl(_,"",[],ds)] = ps in iter [] ds
+    let rec iter0 tddm ps =
+      match ps with
+        [] -> List.rev tddm
+      | PackageDecl (lp, pn, ilist, ds)::ps ->
+        iter pn ilist tddm ds @@ fun tddm ->
+        iter0 tddm ps
+    in
+    iter0 [] ps
   
   let delayed_struct_def sn ldecl ldef =
     structures_defined := (sn, ldecl, ldef)::!structures_defined
 
   let structdeclmap, cxx_inst_pred_decl_map =
-    let rec iter sdm pred_map ds =
+    let rec iter pn ilist sdm pred_map ds cont =
       match ds with
-        [] -> sdm, List.rev pred_map
+        [] -> cont sdm pred_map
       | Struct (l, sn, tparams, body_opt, attrs)::ds ->
+        let sn = full_name pn sn in
         let body_opt, pred_map =
           match body_opt with
           | Some (bases, fields, inst_preds, polymorphic) ->
@@ -1460,21 +1475,27 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             delayed_struct_def sn ldecl l
           | None -> ()
         end;
-        iter ((sn, (l, tparams, body_opt, attrs))::sdm) pred_map ds
-      | _::ds -> iter sdm pred_map ds
+        iter pn ilist ((sn, (l, tparams, body_opt, attrs))::sdm) pred_map ds cont
+      | _::ds -> iter pn ilist sdm pred_map ds cont
     in
-    match ps with
-      [PackageDecl(_,"",[],ds)] -> iter [] [] ds
-    | _ when file_type path=Java -> [],[]
+    let rec iter0 sdm pred_map ps =
+      match ps with
+        [] -> sdm, List.rev pred_map
+      | PackageDecl (lp, pn, ilist, ds)::ps ->
+        iter pn ilist sdm pred_map ds @@ fun sdm pred_map ->
+        iter0 sdm pred_map ps
+    in
+    iter0 [] [] ps
   
   let delayed_union_def un ldecl ldef =
     unions_defined := (un, ldecl, ldef)::!unions_defined
 
   let uniondeclmap =
-    let rec iter udm ds =
+    let rec iter pn ilist udm ds cont =
       match ds with
-        [] -> udm
+        [] -> cont udm
       | Union (l, un, fds_opt)::ds ->
+        let un = full_name pn un in
         begin match try_assoc un unionmap0 with
           Some (_, Some _, _) -> static_error l "Duplicate union name." None
         | Some (ldecl, None, _) -> if fds_opt = None then static_error l "Duplicate union declaration." None else delayed_union_def un ldecl l
@@ -1485,28 +1506,39 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | Some (ldecl, None) -> if fds_opt = None then static_error l "Duplicate union declaration." None else delayed_union_def un ldecl l
         | None -> ()
         end;
-        iter ((un, (l, fds_opt))::udm) ds
-      | _::ds -> iter udm ds
+        iter pn ilist ((un, (l, fds_opt))::udm) ds cont
+      | _::ds -> iter pn ilist udm ds cont
     in
-    match ps with
-      [PackageDecl(_,"",[],ds)] -> iter [] ds
-    | _ when language = Java -> []
+    let rec iter0 udm ps =
+      match ps with
+        [] -> udm
+      | PackageDecl (lp, pn, ilist, ds)::ps ->
+        iter pn ilist udm ds @@ fun udm ->
+        iter0 udm ps
+    in
+    iter0 [] ps
 
   let enumdeclmap = 
-    let rec iter edm ds = 
+    let rec iter pn ilist edm ds cont = 
       match ds with
-        [] -> List.rev edm
+        [] -> cont edm
       | EnumDecl(l, en, elems) :: ds ->
+        let en = full_name pn en in
         begin 
           match try_assoc en edm with
         | Some((l', elems')) -> static_error l "Duplicate enum name." None
-        | None -> iter ((en, (l, elems)) :: edm) ds
+        | None -> iter pn ilist ((en, (l, elems)) :: edm) ds cont
         end
-      | _ :: ds -> iter edm ds
+      | _ :: ds -> iter pn ilist edm ds cont
     in
-    match ps with
-      [PackageDecl(_,"",[],ds)] -> iter [] ds
-    | _ when file_type path=Java -> []
+    let rec iter0 edm ps =
+      match ps with
+        [] -> List.rev edm
+      | PackageDecl (lp, pn, ilist, ds)::ps ->
+        iter pn ilist edm ds @@ fun edm ->
+        iter0 edm ps
+    in
+    iter0 [] ps
   
   let enummap1 =
     let rec process_decls enummap1 ds =
@@ -1643,19 +1675,19 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     match try_assoc0 name map with
       Some xy as result -> result
     | None ->
-      if String.contains name '.' then
+      if String.contains name item_path_separator.[0] then
         None
       else
-        match if pn = "" then None else try_assoc0 (pn ^ "." ^ name) map with
+        match if pn = "" then None else try_assoc0 (pn ^ item_path_separator ^ name) map with
           Some xy as result -> result
         | None ->
           let matches =
             flatmap
               begin function
                 Import (l, _, p, None) ->
-                begin match try_assoc0 (p ^ "." ^ name) map with None -> [] | Some xy -> [xy] end
+                begin match try_assoc0 (p ^ item_path_separator ^ name) map with None -> [] | Some xy -> [xy] end
               | Import (l, ghost', p, Some name') when ghost = ghost' && name = name' ->
-                begin match try_assoc0 (p ^ "." ^ name) map with None -> [] | Some xy -> [xy] end
+                begin match try_assoc0 (p ^ item_path_separator ^ name) map with None -> [] | Some xy -> [xy] end
               | _ -> []
               end
               imports
@@ -1862,8 +1894,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | _ -> GhostTypeParam id
       end
       else
-      match try_assoc2 id typedefmap0 typedefmap1 with
-        Some (ld, tparams, t) ->
+      match resolve2' Real (pn,ilist) l id typedefmap0 typedefmap1 with
+        Some (id, (ld, tparams, t)) ->
         reportUseSite DeclKind_Typedef ld l;
         if tparams <> [] then static_error l "Missing type arguments" None;
         t
@@ -1885,13 +1917,13 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         reportUseSite DeclKind_Interface ld l;
         ObjType(s, create_objects n)
       | None ->
-      match try_assoc id functypenames with
-        Some (ld, _, _, _) ->
+      match resolve Real (pn,ilist) l id functypenames with
+        Some (id, (ld, _, _, _)) ->
         reportUseSite DeclKind_FuncType ld l;
         FuncType id
       | None ->
-      match try_assoc id functypemap0 with
-        Some (ld, _, _, _, _, _, _, _, _, _) ->
+      match resolve Real (pn,ilist) l id functypemap0 with
+        Some (id, (ld, _, _, _, _, _, _, _, _, _)) ->
         reportUseSite DeclKind_FuncType ld l;
         FuncType id
       | None ->
@@ -1902,32 +1934,32 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | None ->
       (*** TODO @Nima: Review two following dialect checks regarding Rust after Niels fixed them *)
       (* So we can use class/struct/union names as types in ghost code *)
-      match try_assoc id structmap0 with
-        Some (ld, tparams, _, _, _) when dialect = Some Cxx ->
+      match resolve Real (pn,ilist) l id structmap0 with
+        Some (id, (ld, tparams, _, _, _)) when dialect = Some Cxx ->
         reportUseSite DeclKind_Struct ld l;
         if tparams <> [] then static_error l "Type arguments required" None;
         StructType (id, [])
       | _ ->
-      match try_assoc id structdeclmap with
-        Some (ld, tparams, _, _) when dialect = Some Cxx -> 
+      match resolve Real (pn,ilist) l id structdeclmap with
+        Some (id, (ld, tparams, _, _)) when dialect = Some Cxx -> 
         reportUseSite DeclKind_Struct ld l;
         if tparams <> [] then static_error l "Type arguments required" None;
         StructType (id, [])
       | _ ->
-      match try_assoc id unionmap0 with
-        Some (ld, _, _) when dialect = Some Cxx ->
+      match resolve Real (pn,ilist) l id unionmap0 with
+        Some (id, (ld, _, _)) when dialect = Some Cxx ->
         reportUseSite DeclKind_Union ld l;
         UnionType id
       | _ ->
-      match try_assoc id uniondeclmap with
-        Some (ld, _) when dialect = Some Cxx ->
+      match resolve Real (pn,ilist) l id uniondeclmap with
+        Some (id, (ld, _)) when dialect = Some Cxx ->
         reportUseSite DeclKind_Union ld l;
         UnionType id
       | _ ->
       static_error l ("No such type parameter, inductive datatype, class, interface, or function type: " ^pn^" "^id) None
       end
     | IdentTypeExpr (l, Some(pac), id) ->
-      let full_name = pac ^ "." ^ id in
+      let full_name = pac ^ item_path_separator ^ id in
       begin
       match resolve Real (pac, ilist) l id class_arities with
         Some (_, (ld, n)) ->
@@ -1950,8 +1982,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         else  
           ObjType (id, List.map check targs)
       | None ->
-      match try_assoc2 id typedefmap0 typedefmap1 with
-        Some (ld, tparams, t) ->
+      match resolve2' Real (pn,ilist) l id typedefmap0 typedefmap1 with
+        Some (id, (ld, tparams, t)) ->
         reportUseSite DeclKind_Typedef ld l;
         let tpenv =
           match zip tparams (List.map check targs) with
@@ -1964,15 +1996,15 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | StructTypeExpr (l, sn, Some _, _, _) ->
       static_error l "A struct type with a body is not supported in this position." None
     | StructTypeExpr (l, Some sn, None, _, targs) ->
-      begin match try_assoc sn structmap0 with
-        Some (ld, tparams, _, _, _) ->
+      begin match resolve Real (pn,ilist) l sn structmap0 with
+        Some (sn, (ld, tparams, _, _, _)) ->
         reportUseSite DeclKind_Struct ld l;
         if List.length targs <> List.length tparams then
           static_error l "Incorrect number of type arguments" None;
         StructType (sn, List.map check targs)
       | None ->
-      match try_assoc sn structdeclmap with
-        Some (ld, tparams, _, _) ->
+      match resolve Real (pn,ilist) l sn structdeclmap with
+        Some (sn, (ld, tparams, _, _)) ->
         reportUseSite DeclKind_Struct ld l;
         if List.length targs <> List.length tparams then
           static_error l "Incorrect number of type arguments" None;
@@ -2028,8 +2060,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let rec iter tdm1 tdds =
       match tdds with
         [] -> tdm1
-      | (d, (l, tparams, te))::tdds ->
-        let t = check_pure_type_core tdm1 ("",[]) tparams te Real in
+      | (d, (pn, ilist, l, tparams, te))::tdds ->
+        let t = check_pure_type_core tdm1 (pn,ilist) tparams te Real in
         iter ((d,(l, tparams, t))::tdm1) tdds
     in
     iter [] typedefdeclmap
@@ -2253,10 +2285,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   (* Region: globaldeclmap *)
   
   let globaldeclmap =
-    let rec iter gdm ds =
+    let rec iter pn ilist gdm ds cont =
       match ds with
-        [] -> gdm
+        [] -> cont gdm
       | Global(l, te, x, init) :: ds -> (* typecheck the rhs *)
+        let x = full_name pn x in
         begin
           match try_assoc x globalmap0 with
             Some(_) -> static_error l "Duplicate global variable name." None
@@ -2266,15 +2299,20 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           match try_assoc x gdm with
             Some (_) -> static_error l "Duplicate global variable name." None
           | None -> 
-            let tp = check_pure_type ("", []) [] Real te in
+            let tp = check_pure_type (pn, ilist) [] Real te in
             let global_symb = get_unique_var_symb x (PtrType tp) in
-            iter ((x, (l, tp, global_symb, ref init)) :: gdm) ds
+            iter pn ilist ((x, (l, tp, global_symb, ref init)) :: gdm) ds cont
         end
-      | _::ds -> iter gdm ds
+      | _::ds -> iter pn ilist gdm ds cont
     in
-    match ps with
-      [PackageDecl(_,"",[],ds)] -> iter [] ds
-    | _ when file_type path=Java -> []
+    let rec iter0 gdm ps =
+      match ps with
+        [] -> gdm
+      | PackageDecl (lp, pn, ilist, ds)::ps ->
+        iter pn ilist gdm ds @@ fun gdm ->
+        iter0 gdm ps
+    in
+    iter0 [] ps
 
   let globalmap1 = globaldeclmap
   let globalmap = globalmap1 @ globalmap0
@@ -2297,7 +2335,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     match ps with
       [PackageDecl(_,"",[],ds)] -> iter [(current_module_name, current_module_term)] ds
-    | _ when file_type path=Java -> []
+    | _ when file_type path=Java || dialect <> None -> []
 
   let modulemap = modulemap1 @ modulemap0
 
@@ -2324,7 +2362,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     match ps with
       [PackageDecl(_,"",[],ds)] -> iter [] ds
-    | _ when file_type path=Java -> []
+    | _ when file_type path=Java || dialect <> None -> []
 
   let importmodulemap = importmodulemap1 @ importmodulemap0
   
@@ -2985,6 +3023,15 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let (csym, _) = mk_func_symbol cname (List.map (fun (x, t) -> provertype_of_type t) field_types) ProverInductive (Proverapi.Ctor (CtorByOrdinal (subtype, 0))) in
           let getters = field_types |> List.map (fun (f, t) -> (f, make_getter sn tt csym subtype fieldnames f t)) in
           let setters = field_types |> List.map (fun (f, t) -> (f, make_setter sn tt csym subtype getters fieldnames f t)) in
+          (* Axiom: forall s, mk_s (get_f1 s) ... (get_fN s) == s *)
+          if field_types <> [] then begin
+            ctxt#begin_formal;
+            let s = ctxt#mk_bound 0 ctxt#type_inductive in
+            let mk_term = ctxt#mk_app csym (List.map (fun (_, getter) -> ctxt#mk_app getter [s]) getters) in
+            let fact = ctxt#mk_eq mk_term s in
+            ctxt#end_formal;
+            ctxt#assume_forall (sn ^ "_injectiveness") [mk_term] [ctxt#type_inductive] fact
+          end;
           [(sn, (l, csym, getters, setters))]
         end
     )

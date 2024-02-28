@@ -1820,7 +1820,17 @@ mod vf_mir_builder {
                     );
                     Self::encode_ty(tcx, enc_ctx, *ty, val_cpn.init_ty());
                 }
-                _ => todo!(),
+                mir::Const::Unevaluated(unevaluated_const, ty) => {
+                    let const_value = const_.eval(tcx, ty::ParamEnv::empty(), None).unwrap();
+                    let mut val_cpn = const_cpn.init_val();
+                    Self::encode_const_value(
+                        tcx,
+                        *ty,
+                        &const_value,
+                        val_cpn.reborrow().init_const_value(),
+                    );
+                    Self::encode_ty(tcx, enc_ctx, *ty, val_cpn.init_ty());
+                }
             }
         }
 
