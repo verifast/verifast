@@ -72,6 +72,7 @@ mod sys {
                 abort();
             }
 
+            // Todo: Use `current_thread` var in SysMutex_locked like threading.h. The SysMutex interface does not need `thread_token` in the contracts.
             pub unsafe fn lock<'a>(&'a self)
             //@ req thread_token(?t) &*& [?q]SysMutex_share(self, ?P);
             //@ ens thread_token(t) &*& [q]SysMutex_share(self, P) &*& SysMutex_locked(self, P, t) &*& P();
@@ -268,11 +269,6 @@ lem MutexGuardU32_full_share(k: lifetime_t, t: thread_id_t, l: *MutexGuardU32)
     leak MutexGuardU32_share(km)(k, t, l);
 }
 @*/
-/*@
-lem MutexU32_data_ptr_prov(l: *MutexU32);
-    req (*l).data |-> ?v;
-    ens (*l).data |-> v;
-@*/
 impl MutexGuardU32 {
     unsafe fn new<'a>(lock: &'a MutexU32) -> MutexGuardU32
 /*@ req thread_token(?t) &*& [?qa]lifetime_token(?a) &*& [_]exists_np(?km) &*& lifetime_inclusion(a, km) == true
@@ -312,8 +308,7 @@ impl MutexGuardU32 {
         //@ assert [?qkml]lifetime_token(kmlong);
         //@ open_full_borrow(qkml, kmlong, u32_full_borrow_content(t, &(*lock).data));
         //@ open u32_full_borrow_content(t, &(*lock).data)();
-        // Todo: Is it possible to not need the following call
-        //@ MutexU32_data_ptr_prov(lock);
+        //@ integer__limits(&(*lock).data);
         //@ close u32_full_borrow_content(t, &(*lock).data)();
         //@ close_full_borrow(u32_full_borrow_content(t, &(*lock).data));
         //@ lifetime_token_trade_back(qkml, kmlong);
