@@ -66,7 +66,7 @@ mod sys {
 
         impl Mutex {
             pub unsafe fn new() -> Mutex
-//@ req SysMutex::new_ghost_arg(?P) &*& P();
+            //@ req SysMutex::new_ghost_arg(?P) &*& P();
             //@ ens SysMutex(result, P);
             {
                 abort();
@@ -117,13 +117,8 @@ pred_ctor MutexU32_full_borrow_content0(t: thread_id_t, l: *MutexU32)() =
 
 pred_ctor MutexU32_fbc_inner(l: *MutexU32)(;) = (*l).inner |-> ?inner &*& SysMutex(inner, True);
 
-//pred_ctor MutexU32_fbc_data(l: *MutexU32)(;) = (*l).data |-> ?v;
-
-//pred_ctor SysMutex_content(k1: lifetime_t, t: thread_id_t, l: *MutexU32)(;) =
-//    full_borrow(k1, MutexU32_fbc_data(t, l));
-
 pred_ctor MutexU32_frac_borrow_content(kfcc: lifetime_t, t: thread_id_t, l: *MutexU32)(;) =
-     (*l).inner |-> ?inner &*& SysMutex(inner, full_borrow_wrapper(kfcc, u32_full_borrow_content(t, &(*l).data)));
+     SysMutex_share(&(*l).inner, full_borrow_wrapper(kfcc, u32_full_borrow_content(t, &(*l).data)));
 
 pred MutexU32_share(k: lifetime_t, t: thread_id_t, l: *MutexU32) =
     exists_np(?kfcc) &*& lifetime_inclusion(k, kfcc) == true &*& frac_borrow(k, MutexU32_frac_borrow_content(kfcc, t, l));
@@ -167,6 +162,7 @@ lem MutexU32_share_full(k: lifetime_t, t: thread_id_t, l: *MutexU32)
         assert exists(?kstrong);
         produce_lem_ptr_chunk full_borrow_convert_strong(MutexU32_frac_borrow_content(k, t, l), kstrong, MutexU32_fbc_inner(l))() {
             open MutexU32_frac_borrow_content(k, t, l)();
+            SysMutex_end_share(&(*l).inner);
             assert (*l).inner |-> ?inner;
             SysMutex_renew(inner, True);
             close MutexU32_fbc_inner(l)();
@@ -175,6 +171,7 @@ lem MutexU32_share_full(k: lifetime_t, t: thread_id_t, l: *MutexU32)
             assert (*l).inner |-> ?inner;
             close full_borrow_wrapper(k, u32_full_borrow_content(t, &(*l).data))();
             SysMutex_renew(inner, full_borrow_wrapper(k, u32_full_borrow_content(t, &(*l).data)));
+            SysMutex_share_full(&(*l).inner);
             close MutexU32_frac_borrow_content(k, t, l)();
             close_full_borrow_strong(kstrong, MutexU32_fbc_inner(l), MutexU32_frac_borrow_content(k, t, l));
             full_borrow_into_frac(kstrong, MutexU32_frac_borrow_content(k, t, l));
@@ -188,229 +185,200 @@ lem MutexU32_share_full(k: lifetime_t, t: thread_id_t, l: *MutexU32)
 }
 @*/
 
-// impl MutexU32 {
-//     pub fn new(v: u32) -> MutexU32 {
-//         //@ close SysMutex::new_ghost_arg(True);
-//         let inner = unsafe { sys::locks::Mutex::new() };
-//         let data = UnsafeCell::new(v);
-//         let r = MutexU32 { inner, data };
-//         // Todo: Dereferencing a pointer of type struct sys::locks::Mutex is not yet supported.
-//         //@ close MutexU32_own(_t, r.inner, r.data);
-//         r
-//     }
+impl MutexU32 {
+    /*
+        pub fn new(v: u32) -> MutexU32 {
+            //@ close SysMutex::new_ghost_arg(True);
+            let inner = unsafe { sys::locks::Mutex::new() };
+            let data = UnsafeCell::new(v);
+            let r = MutexU32 { inner, data };
+            // Todo: Dereferencing a pointer of type struct sys::locks::Mutex is not yet supported.
+            //@ close MutexU32_own(_t, inner, data);
+            r
+        }
+    */
+    /*
+    https://doc.rust-lang.org/std/sync/struct.Mutex.html#method.lock
+    "The exact behavior on locking a mutex in the thread which already holds the lock is left unspecified.
+    However, this function will not return on the second call (it might panic or deadlock, for example)."
+    Note that in either case it is not undefined behaviour.
+    */
+    // Todo: should be safe
+    pub unsafe fn lock<'a>(&'a self) -> MutexGuardU32
+//@ req thread_token(?t) &*& [?qa]lifetime_token(?a) &*& [_]MutexU32_share(a, t, self);
+    //@ ens thread_token(t) &*& [qa]lifetime_token(a) &*& MutexGuardU32_own(a)(t, self);
+    {
+        unsafe {
+            //@ open MutexU32_share(a, t, self);
+            //@ assert [_]exists_np(?klong);
+            //@ open_frac_borrow(a, MutexU32_frac_borrow_content(klong, t, self), qa);
+            //@ open MutexU32_frac_borrow_content(klong, t, self)();
+            self.inner.lock();
+            //@ assert [?qp]SysMutex_share(&(*self).inner, _);
+            //@ close [qp]MutexU32_frac_borrow_content(klong, t, self)();
+            //@ close_frac_borrow(qp, MutexU32_frac_borrow_content(klong, t, self));
+            MutexGuardU32::new(self)
+        }
+    }
+}
 
-//     /// The exact behavior on locking a mutex in the thread which already holds
-//     /// the lock is left unspecified. However, this function will not return on
-//     /// the second call (it might panic or deadlock, for example).
-//     pub unsafe fn lock<'a>(&'a self) -> MutexGuardU32 /*<'a>*/
-//     //@ req thread_token(?t) &*& [?qa]lifetime_token(?a) &*& [_]MutexU32_share(a, t, self);
-//     //@ ens thread_token(t) &*& [qa]lifetime_token(a) &*& MutexGuardU32_own(a)(t, self);
-//     {
-//         unsafe {
-//             //@ open MutexU32_share(a, t, self);
-//             //@ assert [_]exists_np(?k1);
-//             //@ open_frac_borrow(a, MutexU32_frac_borrow_content(k1, t, self), qa);
-//             //@ open MutexU32_frac_borrow_content(k1, t, self)();
-//             self.inner.lock();
-//             //@ MutexU32_locked_wrap(self);
-//             //@ assert [?qp](*self).inner |-> _;
-//             //@ close [qp]MutexU32_frac_borrow_content(k1, t, self)();
-//             //@ close_frac_borrow(qp, MutexU32_frac_borrow_content(k1, t, self));
-//             //@ open SysMutex_content(k1, t, self)();
-//             MutexGuardU32::new(self)
-//         }
-//     }
-// }
+/* Todo: MutexGuardU32 should be defined as
+pub struct MutexGuardU32<'a> {
+    lock: &'a MutexU32,
+}
+*/
+struct MutexGuardU32 {
+    lock: *const MutexU32,
+}
 
-// /*pub*/
-// struct MutexGuardU32 /*<'a>*/ {
-//     lock: *const MutexU32,
-//     //    lock: &'a MutexU32,
-// }
+impl !Send for MutexGuardU32 {}
+// It is Sync automatically as in our case `T=u32` and `u32:Sync`
+// unsafe impl<T: ?Sized + Sync> Sync for MutexGuard<'_, T> {}
+/*@
+// Todo: Is this extra lifetime `klong` necessary here?
+pred_ctor MutexGuardU32_own(km: lifetime_t)(t: thread_id_t, lock: *MutexU32) =
+    [_]exists_np(?klong) &*& lifetime_inclusion(km, klong) == true &*& [_]frac_borrow(km, MutexU32_frac_borrow_content(klong, t, lock))
+    &*& SysMutex_locked(&(*lock).inner, full_borrow_wrapper(klong, u32_full_borrow_content(t, &(*lock).data)), t)
+    &*& full_borrow(klong, u32_full_borrow_content(t, &(*lock).data));
 
-// impl !Send for MutexGuardU32 /*<'_>*/ {}
-// /*@
-// pred MutexU32_locked(l: *MutexU32; t: thread_id_t);
+pred_ctor MutexGuardU32_fbc_rest(km: lifetime_t, klong: lifetime_t, t: thread_id_t, l: *MutexGuardU32, lock: *MutexU32)() =
+    (*l).lock |-> lock &*& lifetime_inclusion(km, klong) == true
+    &*& [_]frac_borrow(km, MutexU32_frac_borrow_content(klong, t, lock))
+    &*& SysMutex_locked(&(*lock).inner, full_borrow_wrapper(klong, u32_full_borrow_content(t, &(*lock).data)), t);
 
-// lem MutexU32_locked_unwrap(l: *MutexU32, t: thread_id_t);
-//     req MutexU32_locked(l, t) &*& [?qi](*l).inner |-> ?inner &*& [?qm]SysMutex(inner, ?P);
-//     ens [qi](*l).inner |-> inner &*& [qm]SysMutex(inner, P) &*& SysMutex_locked(inner, P, t);
+pred_ctor MutexGuardU32_full_borrow_content0(km: lifetime_t, t: thread_id_t, l: *MutexGuardU32)() =
+    (*l).lock |-> ?lock &*& MutexGuardU32_own(km)(t, lock);
 
-// lem MutexU32_locked_wrap(l: *MutexU32);
-//     req [?qi](*l).inner |-> ?inner &*& [?qm]SysMutex(inner, ?P) &*& SysMutex_locked(inner, P, ?t);
-//     ens [qi](*l).inner |-> inner &*& [qm]SysMutex(inner, P) &*& MutexU32_locked(l, t);
+pred_ctor MutexGuardU32_share(km: lifetime_t)(k: lifetime_t, t: thread_id_t, l: *MutexGuardU32) = true;
 
-// /*pred_ctor MutexGuardU32_own_mutex(km: lifetime_t, klong: lifetime_t, t: thread_id_t, lock: *MutexU32)() =
-//     lifetime_inclusion(km, klong) == true &*& [_]frac_borrow(km, MutexU32_frac_borrow_content(klong, t, lock))
-//     &*& MutexU32_locked(lock, t);*/
-// pred_ctor MutexGuardU32_own(km: lifetime_t)(t: thread_id_t, lock: *MutexU32) =
-//     [_]exists_np(?klong) &*& lifetime_inclusion(km, klong) == true &*& [_]frac_borrow(km, MutexU32_frac_borrow_content(klong, t, lock))
-//     &*& MutexU32_locked(lock, t) &*& full_borrow(klong, MutexU32_fbc_data(t, lock));
+lem MutexGuardU32_share_mono(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *MutexGuardU32)
+    req lifetime_inclusion(k1, k) == true &*& exists(?km) &*& [_]MutexGuardU32_share(km)(k, t, l);
+    ens [_]MutexGuardU32_share(km)(k1, t, l);
+{
+    close MutexGuardU32_share(km)(k1, t, l);
+    leak MutexGuardU32_share(km)(k1, t, l);
+}
 
-// /* pred_ctor MutexGuardU32_fbc_lock_pto(l: *MutexGuardU32, lock: *MutexU32)() = (*l).lock |-> lock; */
-// /*pred_ctor MutexGuardU32_fbc_own(km: lifetime_t, kmlong:lifetime_t, t: thread_id_t, lock: *MutexU32)() =
-//     lifetime_inclusion(km, kmlong) == true &*& [_]frac_borrow(km, MutexU32_frac_borrow_content(kmlong, t, lock))
-//     &*& MutexU32_locked(lock, t) &*& full_borrow(kmlong, MutexU32_fbc_data(t, lock));*/
-// pred_ctor MutexGuardU32_fbc_rest(km: lifetime_t, kmlong: lifetime_t, t: thread_id_t, l: *MutexGuardU32, lock: *MutexU32)() =
-//     (*l).lock |-> lock &*& lifetime_inclusion(km, kmlong) == true
-//     &*& [_]frac_borrow(km, MutexU32_frac_borrow_content(kmlong, t, lock))
-//     &*& MutexU32_locked(lock, t);
+lem MutexGuardU32_full_share(k: lifetime_t, t: thread_id_t, l: *MutexGuardU32)
+    req exists(?km) &*& full_borrow(k, MutexGuardU32_full_borrow_content0(km, t, l)) &*& [?q]lifetime_token(k);
+    ens [_]MutexGuardU32_share(km)(k, t, l) &*& [q]lifetime_token(k);
+{
+    leak full_borrow(_, _);
+    close MutexGuardU32_share(km)(k, t, l);
+    leak MutexGuardU32_share(km)(k, t, l);
+}
+@*/
+/*@
+lem MutexU32_data_ptr_prov(l: *MutexU32);
+    req (*l).data |-> ?v;
+    ens (*l).data |-> v;
+@*/
+impl MutexGuardU32 {
+    unsafe fn new<'a>(lock: &'a MutexU32) -> MutexGuardU32
+/*@ req thread_token(?t) &*& [?qa]lifetime_token(?a) &*& [_]exists_np(?km) &*& lifetime_inclusion(a, km) == true
+    &*& [_]frac_borrow(a, MutexU32_frac_borrow_content(km, t, lock))
+    &*& SysMutex_locked(&(*lock).inner, full_borrow_wrapper(km, u32_full_borrow_content(t, &(*lock).data)), t)
+    &*& full_borrow(km, u32_full_borrow_content(t, &(*lock).data));
+    @*/
+    //@ ens thread_token(t) &*& [qa]lifetime_token(a) &*& MutexGuardU32_own(a)(t, lock);
+    {
+        //@ close MutexGuardU32_own(a)(t, lock);
+        MutexGuardU32 { lock }
+    }
 
-// pred_ctor MutexGuardU32_full_borrow_content0(km: lifetime_t, t: thread_id_t, l: *MutexGuardU32)() =
-//     (*l).lock |-> ?lock &*& MutexGuardU32_own(km)(t, lock);
+    /*
+    Todo: deref_mut should be in the implementation of the trait `DerefMut`. Support for the implementation for standard library traits is
+    needed for that.
+    Todo: deref_mut should be a safe function */
+    unsafe fn deref_mut<'a>(&'a mut self) -> &'a mut u32
+    /*@ req thread_token(?t) &*& [?qa]lifetime_token(?a) &*& exists(?km)
+        &*& full_borrow(a, MutexGuardU32_full_borrow_content0(km, t, self))
+        &*& lifetime_inclusion(a, km) == true;
+    /* Todo: This inclusion must be generated automatically by translator based on reference and its target lifetimes.
+       The target lifetimes always outlive reference lifetime out of compiler guarantees of wellformedness of types.
+    */
+    @*/
+    //@ ens thread_token(t) &*& [qa]lifetime_token(a) &*& full_borrow(a, u32_full_borrow_content(t, result));
+    {
+        //@ open_full_borrow_strong(a, MutexGuardU32_full_borrow_content0(km, t, self), qa/2);
+        //@ assert exists(?kstrong);
+        //@ open MutexGuardU32_full_borrow_content0(km, t, self)();
+        //@ open MutexGuardU32_own(km)(t, ?lock);
 
-// pred_ctor MutexGuardU32_share(km: lifetime_t)(k: lifetime_t, t: thread_id_t, l: *MutexGuardU32) = true;
-
-// lem MutexGuardU32_share_mono(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *MutexGuardU32)
-//     req lifetime_inclusion(k1, k) == true &*& exists(?km) &*& [_]MutexGuardU32_share(km)(k, t, l);
-//     ens [_]MutexGuardU32_share(km)(k1, t, l);
-// {
-//     close MutexGuardU32_share(km)(k1, t, l);
-//     leak MutexGuardU32_share(km)(k1, t, l);
-// }
-
-// lem MutexGuardU32_full_share(k: lifetime_t, t: thread_id_t, l: *MutexGuardU32)
-//     req exists(?km) &*& full_borrow(k, MutexGuardU32_full_borrow_content0(km, t, l)) &*& [?q]lifetime_token(k);
-//     ens [_]MutexGuardU32_share(km)(k, t, l) &*& [q]lifetime_token(k);
-// {
-//     leak full_borrow(_, _);
-//     close MutexGuardU32_share(km)(k, t, l);
-//     leak MutexGuardU32_share(km)(k, t, l);
-// }
-// @*/
-// // It is Sync automatically as in our case `T=u32` and `u32:Sync`
-// //unsafe impl<T: ?Sized + Sync> Sync for MutexGuard<'_, T> {}
-
-// impl MutexGuardU32 /*<'mutex>*/ {
-//     /* because MutexGuardU32_own is pred_ctor and not supported yet */
-//     unsafe fn new<'a>(lock: &'a /*'mutex*/ MutexU32) -> MutexGuardU32 /*<'mutex>*/
-//     /*@ req thread_token(?t) &*& [?qa]lifetime_token(?a) &*& [_]exists_np(?klong) &*& lifetime_inclusion(a, klong) == true
-//     &*& [_]frac_borrow(a, MutexU32_frac_borrow_content(klong, t, lock))
-//     &*& MutexU32_locked(lock, t) &*& full_borrow(klong, MutexU32_fbc_data(t, lock));
-//     @*/
-//     //@ ens thread_token(t) &*& [qa]lifetime_token(a) &*& MutexGuardU32_own(a)(t, lock);
-//     {
-//         //@ close MutexGuardU32_own(a)(t, lock);
-//         MutexGuardU32 { lock }
-//     }
-
-//     //Todo: To have deref and The trait impl for traits from standard library should be
-//     /*    unsafe fn deref<'a>(&'a self) -> &'a u32
-//     //@ req thread_token(?t) &*& [?qa]lifetime_token(?a) &*& exists(?kg) &*& [_]MutexGuardU32_share(kg)(a, t, self);
-//     //@ ens thread_token(t) &*& [qa]lifetime_token(a) &*& [_]u32_share(a, t, result);
-//     {
-//         unsafe { &*(*self.lock).data.get() }
-//     }*/
-//     // Todo: deref_mut should be in the implementation of the trait `DerefMut`. The implementation for standard library traits
-//     // is needed for that.
-//     // Todo: deref_mut should not be an `unsafe` function
-//     unsafe fn deref_mut<'a>(&'a mut self) -> &'a mut u32
-// /*@ req thread_token(?t) &*& [?qa]lifetime_token(?a) &*& exists(?km)
-//         &*& full_borrow(a, MutexGuardU32_full_borrow_content0(km, t, self))
-//         &*& lifetime_inclusion(a, km) == true;
-//         /* Todo: This inclusion must be generated automatically by translator based on reference and referee lifetimes.
-//            Referee lifetime always outlives reference lifetime out of compiler guarantees of welformedness of types */
-//     @*/
-//     //@ ens thread_token(t) &*& [qa]lifetime_token(a) &*& full_borrow(a, u32_full_borrow_content(t, result));
-//     {
-//         //@ open_full_borrow_strong(a, MutexGuardU32_full_borrow_content0(km, t, self), qa/2);
-//         //@ assert exists(?kstrong);
-//         //@ open MutexGuardU32_full_borrow_content0(km, t, self)();
-//         //@ open MutexGuardU32_own(km)(t, ?lock);
-
-//         // open MutexU32_fbc_data to get ptr provenance info
-//         //@ assert [_]exists_np(?kmlong);
-//         //@ lifetime_inclusion_trans(a, km, kmlong);
-//         //@ lifetime_token_trade(a, qa/2, kmlong);
-//         //@ assert [?qkml]lifetime_token(kmlong);
-//         //@ open_full_borrow(qkml, kmlong, MutexU32_fbc_data(t, lock));
-//         //@ open MutexU32_fbc_data(t, lock)();
-//         //@ close MutexU32_fbc_data(t, lock)();
-//         //@ close_full_borrow(MutexU32_fbc_data(t, lock));
-//         //@ lifetime_token_trade_back(qkml, kmlong);
-//         let r = unsafe { &mut *(*self.lock).data.get() };
-//         /*@
-//         produce_lem_ptr_chunk full_borrow_convert_strong(sep(MutexGuardU32_fbc_rest(km, kmlong, t, self, lock), full_borrow_wrapper(kmlong, u32_full_borrow_content(t, &(*lock).data))),
-//             kstrong,
-//             MutexGuardU32_full_borrow_content0(km, t, self))() {
-//                 open sep(MutexGuardU32_fbc_rest(km, kmlong, t, self, lock), full_borrow_wrapper(kmlong, u32_full_borrow_content(t, &(*lock).data)))();
-//                 open MutexGuardU32_fbc_rest(km, kmlong, t, self, lock)();
-//                 open full_borrow_wrapper(kmlong, u32_full_borrow_content(t, &(*lock).data))();
-//                 close exists_np(kmlong); leak exists_np(kmlong);
-//                 // Todo: change the definitions so this implies will not be necessary
-//                 produce_lem_ptr_chunk implies(MutexU32_fbc_data(t, lock), u32_full_borrow_content(t, &(*lock).data))() {
-//                     open MutexU32_fbc_data(t, lock)(); close u32_full_borrow_content(t, &(*lock).data)();
-//                 }{
-//                     produce_lem_ptr_chunk implies(u32_full_borrow_content(t, &(*lock).data), MutexU32_fbc_data(t, lock))() {
-//                         open u32_full_borrow_content(t, &(*lock).data)(); close MutexU32_fbc_data(t, lock)();
-//                     }{
-//                         full_borrow_implies(kmlong, u32_full_borrow_content(t, &(*lock).data), MutexU32_fbc_data(t, lock));
-//                     }
-//                 }
-//                 close MutexGuardU32_own(km)(t, lock);
-//                 close MutexGuardU32_full_borrow_content0(km, t, self)();
-//             }{
-//                 close MutexGuardU32_fbc_rest(km, kmlong, t, self, lock)();
-//                 produce_lem_ptr_chunk implies(MutexU32_fbc_data(t, lock), u32_full_borrow_content(t, &(*lock).data))() {
-//                     open MutexU32_fbc_data(t, lock)(); close u32_full_borrow_content(t, &(*lock).data)();
-//                 }{
-//                     produce_lem_ptr_chunk implies(u32_full_borrow_content(t, &(*lock).data), MutexU32_fbc_data(t, lock))() {
-//                         open u32_full_borrow_content(t, &(*lock).data)(); close MutexU32_fbc_data(t, lock)();
-//                     }{
-//                         full_borrow_implies(kmlong, MutexU32_fbc_data(t, lock), u32_full_borrow_content(t, &(*lock).data));
-//                     }
-//                 }
-//                 close full_borrow_wrapper(kmlong, u32_full_borrow_content(t, &(*lock).data))();
-//                 close sep(MutexGuardU32_fbc_rest(km, kmlong, t, self, lock), full_borrow_wrapper(kmlong, u32_full_borrow_content(t, &(*lock).data)))();
-//                 close_full_borrow_strong(kstrong, MutexGuardU32_full_borrow_content0(km, t, self),
-//                     sep(MutexGuardU32_fbc_rest(km, kmlong, t, self, lock), full_borrow_wrapper(kmlong, u32_full_borrow_content(t, &(*lock).data))));
-//                 full_borrow_split(kstrong, MutexGuardU32_fbc_rest(km, kmlong, t, self, lock), full_borrow_wrapper(kmlong, u32_full_borrow_content(t, &(*lock).data)));
-//                 full_borrow_unnest(kstrong, kmlong, u32_full_borrow_content(t, &(*lock).data));
-//                 lifetime_inclusion_glb(a, kstrong, kmlong);
-//                 full_borrow_mono(lifetime_intersection(kstrong, kmlong), a, u32_full_borrow_content(t, &(*lock).data));
-//             }
-//         @*/
-//         //@ leak full_borrow(kstrong, _);
-//         r
-//     }
-//     /* Todo: Since the only drop's parameter is a mutable reference, if we open the full borrow and destroy the meaning of `[[T]].OWN`
-//     we will not be able to close borrow again. It is fine because the value is getting dropped and will not get used after our borrow lifetime ends.
-//     However, to get our lifetime back we need to close the borrow wich after destroying the `Own` predicate is not always possible.
-//     One way to handle this is to generate a different contract for `drop` implementations which does not return the lifetime token corresponding to lifetime
-//     of the mutable reference. It will represent the fact that we know for this special case, i.e. `drop` this external lifetime will immediately end
-//     after this function call and the original value will not be used afterward too.
-//     */
-//     unsafe fn drop<'a>(&'a mut self)
-//     /*@ req thread_token(?t) &*& [?qa]lifetime_token(?a) &*& exists(?km)
-//         &*& full_borrow(a, MutexGuardU32_full_borrow_content0(km, t, self)) &*& lifetime_inclusion(a, km) == true;
-//     @*/
-//     //@ ens thread_token(t) /*&*& [qa]lifetime_token(a) */;
-//     {
-//         //@ open_full_borrow(qa/2, a, MutexGuardU32_full_borrow_content0(km, t, self));
-//         //@ open MutexGuardU32_full_borrow_content0(km, t, self)();
-//         //@ open MutexGuardU32_own(km)(t, ?lock);
-//         //@ assert [_]exists_np(?kfracc);
-//         //@ lifetime_token_trade(a, qa/2, km);
-//         //@ assert [?qkm]lifetime_token(km);
-//         //@ open_frac_borrow(km, MutexU32_frac_borrow_content(kfracc, t, lock), qkm);
-//         //@ open MutexU32_frac_borrow_content(kfracc, t, lock)();
-//         //@ MutexU32_locked_unwrap(lock, t);
-//         unsafe {
-//             (*self.lock).inner.unlock();
-//         }
-//         //@ assert [?qp](*lock).inner |-> _;
-//         //@ close [qp]MutexU32_frac_borrow_content(kfracc, t, lock)();
-//         //@ close_frac_borrow(qp, MutexU32_frac_borrow_content(kfracc, t, lock));
-//         //@ lifetime_token_trade_back(qkm, km);
-//         //@ leak (*self).lock |-> _;
-//         //@ leak close_full_borrow_token(_, _, _);
-//         //@ leak [_]lifetime_token(a);
-
-//         // close MutexGuardU32_own(km)(t, lock);
-//         // close MutexGuardU32_full_borrow_content0(km, t, self)();
-//         // close_full_borrow(MutexGuardU32_full_borrow_content0(km, t, self));
-//     }
-// }
+        // We need `(*lock).data |-> _` to get ptr provenance info
+        //@ assert [_]exists_np(?kmlong);
+        //@ lifetime_inclusion_trans(a, km, kmlong);
+        //@ lifetime_token_trade(a, qa/2, kmlong);
+        //@ assert [?qkml]lifetime_token(kmlong);
+        //@ open_full_borrow(qkml, kmlong, u32_full_borrow_content(t, &(*lock).data));
+        //@ open u32_full_borrow_content(t, &(*lock).data)();
+        // Todo: Is it possible to not need the following call
+        //@ MutexU32_data_ptr_prov(lock);
+        //@ close u32_full_borrow_content(t, &(*lock).data)();
+        //@ close_full_borrow(u32_full_borrow_content(t, &(*lock).data));
+        //@ lifetime_token_trade_back(qkml, kmlong);
+        let r = unsafe { &mut *(*self.lock).data.get() };
+        /*@
+        produce_lem_ptr_chunk full_borrow_convert_strong(
+            sep(MutexGuardU32_fbc_rest(km, kmlong, t, self, lock), full_borrow_wrapper(kmlong, u32_full_borrow_content(t, &(*lock).data))),
+            kstrong,
+            MutexGuardU32_full_borrow_content0(km, t, self))() {
+                open sep(MutexGuardU32_fbc_rest(km, kmlong, t, self, lock), full_borrow_wrapper(kmlong, u32_full_borrow_content(t, &(*lock).data)))();
+                open MutexGuardU32_fbc_rest(km, kmlong, t, self, lock)();
+                open full_borrow_wrapper(kmlong, u32_full_borrow_content(t, &(*lock).data))();
+                close exists_np(kmlong); leak exists_np(kmlong);
+                close MutexGuardU32_own(km)(t, lock);
+                close MutexGuardU32_full_borrow_content0(km, t, self)();
+            }{
+                close MutexGuardU32_fbc_rest(km, kmlong, t, self, lock)();
+                close full_borrow_wrapper(kmlong, u32_full_borrow_content(t, &(*lock).data))();
+                close sep(MutexGuardU32_fbc_rest(km, kmlong, t, self, lock), full_borrow_wrapper(kmlong, u32_full_borrow_content(t, &(*lock).data)))();
+                close_full_borrow_strong(kstrong, MutexGuardU32_full_borrow_content0(km, t, self),
+                    sep(MutexGuardU32_fbc_rest(km, kmlong, t, self, lock), full_borrow_wrapper(kmlong, u32_full_borrow_content(t, &(*lock).data))));
+                full_borrow_split(kstrong, MutexGuardU32_fbc_rest(km, kmlong, t, self, lock),
+                    full_borrow_wrapper(kmlong, u32_full_borrow_content(t, &(*lock).data)));
+                full_borrow_unnest(kstrong, kmlong, u32_full_borrow_content(t, &(*lock).data));
+                lifetime_inclusion_glb(a, kstrong, kmlong);
+                full_borrow_mono(lifetime_intersection(kstrong, kmlong), a, u32_full_borrow_content(t, &(*lock).data));
+            }
+        @*/
+        //@ leak full_borrow(kstrong, _);
+        r
+    }
+    /* Todo: Since the single parameter of `drop` is a mutable reference, when we open the full borrow and destroy the meaning of `[[T]].OWN`
+    we will not be able to close borrow again. It is fine because the value is getting dropped and will not get used after our borrow lifetime ends.
+    However, to get our lifetime back we need to close the borrow wich after destroying the `Own` predicate is not always possible.
+    One way to handle this is to generate a different contract for `drop` implementations which does not return the lifetime token corresponding to lifetime
+    of the mutable reference. It will represent the fact that we know for this special case, i.e. `drop` this external lifetime will immediately end
+    after this function call and the original value will not be used afterward too.
+    */
+    // Todo: It should be an `impl` of `Drop` and a safe function
+    unsafe fn drop<'a>(&'a mut self)
+    /*@ req thread_token(?t) &*& [?qa]lifetime_token(?a) &*& exists(?km)
+        &*& full_borrow(a, MutexGuardU32_full_borrow_content0(km, t, self)) &*& lifetime_inclusion(a, km) == true;
+    @*/
+    //@ ens thread_token(t) /* &*& [qa]lifetime_token(a) */; // read the comment above
+    {
+        //@ open_full_borrow(qa/2, a, MutexGuardU32_full_borrow_content0(km, t, self));
+        //@ open MutexGuardU32_full_borrow_content0(km, t, self)();
+        //@ open MutexGuardU32_own(km)(t, ?lock);
+        //@ assert [_]exists_np(?kmlong);
+        //@ lifetime_token_trade(a, qa/2, km);
+        //@ assert [?qkm]lifetime_token(km);
+        //@ open_frac_borrow(km, MutexU32_frac_borrow_content(kmlong, t, lock), qkm);
+        //@ open MutexU32_frac_borrow_content(kmlong, t, lock)();
+        unsafe {
+            (*self.lock).inner.unlock();
+        }
+        //@ assert [?qp]SysMutex_share(&(*lock).inner, _);
+        //@ close [qp]MutexU32_frac_borrow_content(kmlong, t, lock)();
+        //@ close_frac_borrow(qp, MutexU32_frac_borrow_content(kmlong, t, lock));
+        //@ lifetime_token_trade_back(qkm, km);
+        //@ leak (*self).lock |-> _;
+        //@ leak close_full_borrow_token(_, _, _);
+        //@ leak [_]lifetime_token(a);
+    }
+}
 // /*
 // impl MutexU32 {
 //     pub fn new(v: u32) -> MutexU32 {
