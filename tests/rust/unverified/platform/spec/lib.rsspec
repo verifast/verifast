@@ -103,7 +103,7 @@ mod threading {
         //@ ens [f]Mutex(self) &*& post();
 
         unsafe fn dispose(self: Mutex);
-        //@ req Mutex(self); // Does not consume Mutex_state. Is fine because `new` always produces unique Mutex values (taking pointer provenance into account).
+        //@ req Mutex(self) &*& Mutex_state(self, none);
         //@ ens true;
 
     }
