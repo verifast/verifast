@@ -2758,24 +2758,37 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       end
     | _ -> t
   
-  let rec type_satisfies_contains_any_constraint allowContainsAnyPositive tp =
+  let rec type_satisfies_contains_any_constraint assumeTypeParamsContainAnyPositiveOnly allowContainsAnyPositive tp =
     match unfold_inferred_type tp with
       Bool | AbstractType _ | Int (_, _) | Float | Double | LongDouble | RealType | FuncType _ | PtrType _ | ObjType _ | ArrayType _ | BoxIdType | HandleIdType -> true
-    | RealTypeParam _ | GhostTypeParam _ -> false (* Assume the worst *)
+    | RealTypeParam _ | GhostTypeParam _ -> assumeTypeParamsContainAnyPositiveOnly
     | AnyType | PredType (_, _, _, _) -> allowContainsAnyPositive
-    | PureFuncType (t1, t2) -> type_satisfies_contains_any_constraint false t1 && type_satisfies_contains_any_constraint allowContainsAnyPositive t2
+    | StructType (_, _) -> allowContainsAnyPositive
+      (* We don't need to check the struct type type arguments because they are real and real types
+         do not contain any in negative positions. *)
+    | UnionType _ -> allowContainsAnyPositive
+    | StaticArrayType (t, n) -> type_satisfies_contains_any_constraint assumeTypeParamsContainAnyPositiveOnly allowContainsAnyPositive t
+    | PureFuncType (t1, t2) -> type_satisfies_contains_any_constraint assumeTypeParamsContainAnyPositiveOnly false t1 && type_satisfies_contains_any_constraint assumeTypeParamsContainAnyPositiveOnly allowContainsAnyPositive t2
     | InductiveType (i, targs) ->
       let (_, _, _, _, _, _, containsAny, _) = List.assoc i inductivemap in
       (containsAny <= if allowContainsAnyPositive then 1 else 0) &&
-      List.for_all (type_satisfies_contains_any_constraint allowContainsAnyPositive) targs
+      List.for_all (type_satisfies_contains_any_constraint assumeTypeParamsContainAnyPositiveOnly allowContainsAnyPositive) targs
     | InferredType (_, stateRef) ->
       stateRef := inferred_type_constraint_meet !stateRef (ContainsAnyConstraint allowContainsAnyPositive);
       true
   and type_satisfies_inferred_type_constraint cnt tp =
     match cnt with
       Unconstrained -> true
-    | ContainsAnyConstraint allowContainsAnyPositive -> type_satisfies_contains_any_constraint allowContainsAnyPositive tp
+    | ContainsAnyConstraint allowContainsAnyPositive -> type_satisfies_contains_any_constraint false allowContainsAnyPositive tp
 
+  let () =
+    structmap1 |> List.iter @@ function
+      (sn, (l, tparams, None, _, _)) -> ()
+    | (sn, (l, tparams, Some (_, fmap, _), _, _)) ->
+      fmap |> List.iter @@ fun (f, (lf, gh, t, offset, init)) ->
+        if not (type_satisfies_contains_any_constraint true true t) then
+          static_error lf "Struct field types must not contain 'any' or predicate types in negative positions" None
+  
   (* Region: type compatibility checker *)
 
   let rec is_derived_of_base derived_name base_name =
@@ -2888,7 +2901,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | _ -> static_error l (msg ^ "Predicate type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".") None
       end
     | (PureFuncType (t1, t2), PureFuncType (t10, t20)) -> expect_type_core l msg inAnnotation t10 t1; expect_type_core l msg inAnnotation t2 t20
-    | (InductiveType (_, _) as tp, AnyType) -> if not (type_satisfies_contains_any_constraint true tp) then static_error l (msg ^ "Cannot cast type " ^ string_of_type tp ^ " to 'any' because it contains 'any' in a negative position.") None
+    | (InductiveType (_, _) as tp, AnyType) -> if not (type_satisfies_contains_any_constraint false true tp) then static_error l (msg ^ "Cannot cast type " ^ string_of_type tp ^ " to 'any' because it contains 'any' in a negative position.") None
     | (InductiveType (i1, args1), InductiveType (i2, args2)) when i1 = i2 ->
       List.iter2 (expect_type_core l msg inAnnotation) args1 args2
     | (_, Void) -> ()
@@ -3507,7 +3520,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 | _ -> ()
               end;
               let t = check_pure_type (pn,ilist) tparams Ghost te in
-              if not (type_satisfies_contains_any_constraint true t) then static_error (type_expr_loc te) "This type cannot be used as a predicate constructor parameter type because it contains 'any' or a predicate type in a negative position." None;
+              if not (type_satisfies_contains_any_constraint false true t) then static_error (type_expr_loc te) "This type cannot be used as a predicate constructor parameter type because it contains 'any' or a predicate type in a negative position." None;
               iter ((x, t)::pmap) ps
           in
           iter [] ps1

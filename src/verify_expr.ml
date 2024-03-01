@@ -2611,7 +2611,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | None ->
         (* First try a fast identity-based search *)
         let ftn =
-          h |> head_flatmap_option begin fun (Chunk ((p, _), _, _, arg::_, _)) ->
+          h |> head_flatmap_option begin function
+            (Chunk ((p, _), _, _, arg::_, _)) ->
             if arg == fterm then
               functypemap |> head_flatmap_option begin function
                 (ftn, (_, _, _, _, _, _, _, _, _, [(_, (_, _, _, _, p', _, _))])) when p' == p -> Some ftn
@@ -2619,6 +2620,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               end
             else
               None
+          | _ -> None
           end
         in
         match ftn with
@@ -2626,7 +2628,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | None ->
         (* Slow, equality-based path *)
         let ftn =
-          h |> head_flatmap_option begin fun (Chunk ((p, _), _, _, arg::_, _)) ->
+          h |> head_flatmap_option begin function
+            (Chunk ((p, _), _, _, arg::_, _)) ->
             if definitely_equal arg fterm then
               functypemap |> head_flatmap_option begin function
                 (ftn, (_, _, _, _, _, _, _, _, _, [(_, (_, _, _, _, p', _, _))])) when definitely_equal p' p -> Some ftn
@@ -2634,6 +2637,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               end
             else
               None
+          | _ -> None
           end
         in
         match ftn with

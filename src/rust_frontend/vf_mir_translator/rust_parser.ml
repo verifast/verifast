@@ -14,6 +14,9 @@ let rec parse_simple_path_rest l x = function%parser
   [%let l, x = parse_simple_path_rest (Lexed(Result.get_ok @@ LocAux.cover_loc0 (lexed_loc l) (lexed_loc ll))) (x ^ "::" ^ xx)] ] -> (l, x)
 | [ ] -> (l, x)
 
+let parse_simple_path = function%parser
+  [ (l, Ident x); [%let (l, x) = parse_simple_path_rest l x] ] -> (l, x)
+
 let parse_right_angle_bracket stream = stream |> function%parser
   [ (_, Kwd ">") ] -> ()
 | [ (Lexed ((path, line, col), (path', line', col')), Kwd ">>") ] ->
@@ -371,7 +374,7 @@ let rec parse_stmt = function%parser
     ]
   ] -> ProduceLemmaFunctionPointerChunkStmt (l, None, Some ftclause, body)
 | [ (l, Kwd "produce_fn_ptr_chunk"); 
-    (li, Ident ftn);
+    [%let (li, ftn) = parse_simple_path];
     [%let targs = function%parser
       [ parse_type_args as targs ] -> targs
     | [ ] -> []
@@ -393,7 +396,7 @@ let rec parse_stmt = function%parser
 and parse_match_stmt_arm = function%parser
   [ parse_expr as pat; (l, Kwd "=>"); parse_block_stmt as s ] -> SwitchStmtClause (l, pat, [s])
 and parse_produce_lemma_function_pointer_chunk_stmt_function_type_clause = function%parser
-  [ (li, Ident ftn);
+  [ [%let (li, ftn) = parse_simple_path];
     (_, Kwd "("); [%let args = rep_comma parse_expr]; (_, Kwd ")");
     (_, Kwd "("); [%let params = rep_comma (function%parser [ (l, Ident x) ] -> (l, x))]; (_, Kwd ")");
     (openBraceLoc, Kwd "{");
@@ -545,6 +548,16 @@ let parse_ghost_decl = function%parser
      | [ ] -> false
     ]
   ] -> [FuncTypeDecl (l, Real, rt, ftn, [], ftps, ps, (pre, post, terminates))]
+| [ (l, Kwd "lem_type"); (lftn, Ident ftn); (_, Kwd "("); [%let ftps = rep_comma parse_param]; (_, Kwd ")"); (_, Kwd "=");
+  (_, Kwd "lem"); (_, Kwd "("); [%let ps = rep_comma parse_param]; (_, Kwd ")"); 
+  [%let rt = function%parser
+    [ (_, Kwd "->"); parse_type as t ] -> Some t
+  | [ ] -> None
+  ];
+  (_, Kwd ";");
+  (_, Kwd "req"); parse_asn as pre; (_, Kwd ";");
+  (_, Kwd "ens"); parse_asn as post; (_, Kwd ";")
+] -> [FuncTypeDecl (l, Ghost, rt, ftn, [], ftps, ps, (pre, post, false))]
 | [ (l, Kwd "abstract_type"); (_, Ident tn); (_, Kwd ";") ] -> [AbstractTypeDecl (l, tn)]
 
 let parse_ghost_decls stream = List.flatten (rep parse_ghost_decl stream)

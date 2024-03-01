@@ -54,5 +54,10 @@ mod process {
     //@ req true;
     //@ ens false;
     //@ terminates;
+
+    fn exit(code: i32);
+    //@ req true;
+    //@ ens false;
+    //@ terminates;
 }
 //Todo @Nima: Edit Rust parser so it substitutes `!` type with std_empty_ union

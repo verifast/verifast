@@ -5,6 +5,21 @@
 //@ #include "lifetime_logic.gh"
 /*@
 
+predicate atomic_mask(mask_t mask);
+predicate atomic_space(mask_t mask, predicate() inv;);
+
+lemma void create_atomic_space(mask_t mask, predicate() inv);
+    requires !mask_is_empty(mask) &*& inv();
+    ensures atomic_space(mask, inv);
+
+lemma void open_atomic_space(mask_t spaceMask, predicate() inv);
+    requires [?f]atomic_space(spaceMask, inv) &*& atomic_mask(?currentMask) &*& mask_is_empty(mask_isect(spaceMask, currentMask)) == true;
+    ensures [f]atomic_space(spaceMask, inv) &*& atomic_mask(mask_union(spaceMask, currentMask)) &*& inv();
+
+lemma void close_atomic_space(mask_t spaceMask, predicate() inv);
+    requires [?f]atomic_space(spaceMask, inv) &*& atomic_mask(?currentMask) &*& inv();
+    ensures [f]atomic_space(spaceMask, inv) &*& atomic_mask(mask_diff(currentMask, spaceMask));
+
 predicate bool_own(thread_id_t t, bool v;) = true;
 predicate char_own(thread_id_t t, uint32_t v;) = 0 <= v && v <= 0xD7FF || 0xE000 <= v && v <= 0x10FFFF;
 predicate raw_ptr_own(thread_id_t t, void *v;) = true;
