@@ -11,8 +11,9 @@ fn bool_set<'a>(x: &'a mut bool, y: bool)
 }
 
 fn char_set<'a>(x: &'a mut char, y: char)
-/*@ req thread_token(?t) &*& [?q]lifetime_token(?a) &*& full_borrow(a, char_full_borrow_content(t, x)) &*&
-/*[[char]].OWN(t, y)=*/ (0 <= y && y <= 0xD7FF) || (0xE000 <= y && y <= 0x10FFFF); @*/
+/*@ req thread_token(?t) &*& [?q]lifetime_token(?a) &*& full_borrow(a, char_full_borrow_content(t, x))
+    &*& char_own(t, y);
+@*/
 //@ ens thread_token(t) &*& [q]lifetime_token(a);
 {
     //@ open_full_borrow(q, a, char_full_borrow_content(t, x));
@@ -20,6 +21,7 @@ fn char_set<'a>(x: &'a mut char, y: char)
     *x = y;
     //@ close char_full_borrow_content(t, x)();
     //@ close_full_borrow(char_full_borrow_content(t, x));
+    //@ open char_own(t, _);
     //@ leak full_borrow(_, _);
 }
 

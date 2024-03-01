@@ -844,64 +844,16 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let own tid vs =
       match vs with
       | [ c ] ->
-          let c_ge_zero =
-            Operation
-              ( loc,
-                Ge,
-                [
-                  c;
-                  IntLit
-                    ( loc,
-                      Big_int.zero_big_int,
-                      (*decimal*) false,
-                      (*U suffix*) false,
-                      NoLSuffix );
-                ] )
-          in
-          let c_le_D7FF =
-            Operation
-              ( loc,
-                Le,
-                [
-                  c;
-                  IntLit
-                    (loc, Big_int.big_int_of_int 0xD7FF, false, false, NoLSuffix);
-                ] )
-          in
-          let c_ge_E000 =
-            Operation
-              ( loc,
-                Ge,
-                [
-                  c;
-                  IntLit
-                    (loc, Big_int.big_int_of_int 0xE000, false, false, NoLSuffix);
-                ] )
-          in
-          let c_le_10FFFF =
-            Operation
-              ( loc,
-                Le,
-                [
-                  c;
-                  IntLit
-                    ( loc,
-                      Big_int.big_int_of_int 0x10FFFF,
-                      false,
-                      false,
-                      NoLSuffix );
-                ] )
-          in
           Ok
-            (Operation
+            (CallExpr
                ( loc,
-                 Or,
-                 [
-                   Operation (loc, And, [ c_ge_zero; c_le_D7FF ]);
-                   Operation (loc, And, [ c_ge_E000; c_le_10FFFF ]);
-                 ] ))
+                 "char_own",
+                 (*type arguments*) [],
+                 (*indices*) [],
+                 [ LitPat tid; LitPat c ],
+                 Static ))
           (* Todo: According to https://doc.rust-lang.org/reference/types/textual.html,
-             "It is immediate Undefined Behavior to create a char that falls outside this (the above one) range".
+             "It is immediate Undefined Behavior to create a char that falls outside this (0 <= v && v <= 0xD7FF || 0xE000 <= v && v <= 0x10FFFF) range".
              So it is not enough to check char ranges in function boundaries. Miri warns about UB when reading an out-of-range character.
              A proposal is to translate char-ptr/ref dereferences to calls to a function with a contract that checks for the range. *)
       | _ -> Error "[[char]].own(tid, vs) should have `vs == [c]`"
