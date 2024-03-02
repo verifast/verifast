@@ -2566,7 +2566,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               match lbls with
                 [] -> lblenv
               | (l, lbl)::lbls ->
-                if List.mem_assoc lbl lblenv then static_error l "Duplicate label" None;
+                if dialect = None && List.mem_assoc lbl lblenv then static_error l "Duplicate label" None;
                 iter ((lbl, cont)::lblenv) lbls
             in
             iter lblenv lbls

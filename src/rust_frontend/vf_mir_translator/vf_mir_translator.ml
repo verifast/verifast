@@ -224,11 +224,18 @@ module Mir = struct
   }
 
   type source_info = { span : Ast.loc; scope : unit }
+  type bb_walk_state = NotSeen | Walking of int | Exhausted
 
   type basic_block = {
     id : string;
     statements : Ast.stmt list;
     terminator : Ast.stmt list;
+    successors : string list;
+    mutable walk_state : bb_walk_state;
+    mutable is_loop_head : bool;
+    mutable parent : basic_block option;
+        (* If this BB is inside a loop (i.e. not the head), points to the innermost containing loop's loop head *)
+    mutable children : basic_block list;
   }
 
   type fn_call_dst_data = { dst : Ast.expr; dst_bblock_id : string }
@@ -1789,9 +1796,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         translate_fn_call_rexpr func_cpn args_cpn loc fn_loc
       in
       let destination_cpn = destination_get fn_call_data_cpn in
-      let* call_stmt, next_bblock_stmt_op =
+      let* call_stmt, next_bblock_stmt_op, targets =
         match OptionRd.get destination_cpn with
-        | Nothing -> (*Diverging call*) Ok (Ast.ExprStmt fn_call_rexpr, None)
+        | Nothing -> (*Diverging call*) Ok (Ast.ExprStmt fn_call_rexpr, None, [])
         | Something ptr_cpn ->
             let destination_data_cpn = VfMirStub.Reader.of_pointer ptr_cpn in
             let* { Mir.dst; Mir.dst_bblock_id } =
@@ -1799,7 +1806,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             in
             Ok
               ( Ast.ExprStmt (Ast.AssignExpr (loc, dst, fn_call_rexpr)),
-                Some (Ast.GotoStmt (loc, dst_bblock_id)) )
+                Some (Ast.GotoStmt (loc, dst_bblock_id)),
+                [ dst_bblock_id ] )
         | Undefined _ -> Error (`TrFnCall "Unknown Option kind")
       in
       let full_call_stmt =
@@ -1836,8 +1844,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   ref [] )
       in
       match next_bblock_stmt_op with
-      | None -> Ok [ full_call_stmt ]
-      | Some next_bblock_stmt -> Ok [ full_call_stmt; next_bblock_stmt ]
+      | None -> Ok ([ full_call_stmt ], targets)
+      | Some next_bblock_stmt ->
+          Ok ([ full_call_stmt; next_bblock_stmt ], targets)
 
     let translate_sw_targets_branch (br_cpn : SwitchTargetsBranchRd.t) =
       let open SwitchTargetsBranchRd in
@@ -1868,32 +1877,34 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             let otherwise = translate_basic_block_id otherwise_cpn in
             Some otherwise
       in
-      let* main_stmt =
+      let* main_stmt, targets =
         match Mir.basic_type_of discr_ty with
         | Ast.ManifestTypeExpr ((*loc*) _, Ast.Bool) -> (
             match (branches, otherwise_op) with
             | [ (v, false_tgt) ], Some true_tgt when Stdint.Uint128.(zero = v)
               ->
                 Ok
-                  (Ast.IfStmt
-                     ( loc,
-                       discr,
-                       [ Ast.GotoStmt (loc, true_tgt) ],
-                       [ Ast.GotoStmt (loc, false_tgt) ] ))
+                  ( Ast.IfStmt
+                      ( loc,
+                        discr,
+                        [ Ast.GotoStmt (loc, true_tgt) ],
+                        [ Ast.GotoStmt (loc, false_tgt) ] ),
+                    [ true_tgt; false_tgt ] )
             | _ ->
                 Error
                   (`TrSwInt "Invalid SwitchTargets for a boolean discriminant"))
         | _ -> failwith "Todo: SwitchInt TerminatorKind"
       in
-      if ListAux.is_empty tmp_rvalue_binders then Ok main_stmt
+      if ListAux.is_empty tmp_rvalue_binders then Ok (main_stmt, targets)
       else
         Ok
-          (Ast.BlockStmt
-             ( loc,
-               (*decl list*) [],
-               tmp_rvalue_binders @ [ main_stmt ],
-               loc,
-               ref [] ))
+          ( Ast.BlockStmt
+              ( loc,
+                (*decl list*) [],
+                tmp_rvalue_binders @ [ main_stmt ],
+                loc,
+                ref [] ),
+            targets )
 
     let translate_terminator_kind (ret_place_id : string)
         (tkind_cpn : TerminatorKindRd.t) (loc : Ast.loc) =
@@ -1901,13 +1912,13 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       match get tkind_cpn with
       | Goto bblock_id_cpn ->
           let bb_id = translate_basic_block_id bblock_id_cpn in
-          Ok [ Ast.GotoStmt (loc, bb_id) ]
+          Ok ([ Ast.GotoStmt (loc, bb_id) ], [ bb_id ])
       | SwitchInt sw_int_data_cpn ->
-          let* sw_stmt = translate_sw_int sw_int_data_cpn loc in
-          Ok [ sw_stmt ]
+          let* sw_stmt, targets = translate_sw_int sw_int_data_cpn loc in
+          Ok ([ sw_stmt ], targets)
       | Resume -> failwith "Todo: Terminatorkind::Resume"
       | Return ->
-          Ok [ Ast.ReturnStmt (loc, Some (Ast.Var (loc, ret_place_id))) ]
+          Ok ([ Ast.ReturnStmt (loc, Some (Ast.Var (loc, ret_place_id))) ], [])
       | Call fn_call_data_cpn -> translate_fn_call fn_call_data_cpn loc
       | Drop ->
           raise
@@ -2286,14 +2297,97 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         let* statements = ListAux.try_map translate_statement statements_cpn in
         let statements = List.concat statements in
         let terminator_cpn = terminator_get bblock_cpn in
-        let* terminator = translate_terminator ret_place_id terminator_cpn in
-        let bblock : Mir.basic_block = { id; statements; terminator } in
+        let* terminator, successors =
+          translate_terminator ret_place_id terminator_cpn
+        in
+        let bblock : Mir.basic_block =
+          {
+            id;
+            statements;
+            terminator;
+            successors;
+            walk_state = NotSeen;
+            is_loop_head = false;
+            parent = None;
+            children = [];
+          }
+        in
         Ok (Some bblock)
 
-    let translate_to_vf_basic_block
-        ({ id; statements = stmts; terminator = trm } : Mir.basic_block) =
-      if ListAux.is_empty trm then
-        Error (`TrToVfBBlock "Basic block without any terminator")
+    let find_loops (bblocks : Mir.basic_block list) =
+      let open Mir in
+      let bblocks_table = Hashtbl.create 100 in
+      bblocks
+      |> List.iter (fun (bb : Mir.basic_block) ->
+             Hashtbl.add bblocks_table bb.id bb);
+      let entry_id = (List.hd bblocks).id in
+      let toplevel_blocks = ref [] in
+      let rec set_parent (bb : basic_block) k k' path =
+        if k' = k then ()
+        else
+          let (bb' :: path) = path in
+          (match bb'.parent with
+          | None ->
+              (*Printf.printf "Setting %s.parent <- Some %s\n" bb'.id bb.id;*)
+              bb'.parent <- Some bb
+          | Some bb'' ->
+              let (Walking k'') = bb''.walk_state in
+              if k'' < k then
+                (*Printf.printf "Setting %s.parent <- Some %s\n" bb'.id bb.id;*)
+                bb'.parent <- Some bb);
+          set_parent bb k (k' - 1) path
+      in
+      let rec iter path k bb_id =
+        let bb = Hashtbl.find bblocks_table bb_id in
+        match bb.walk_state with
+        | NotSeen -> (
+            bb.walk_state <- Walking k;
+            bb.successors
+            |> List.iter (fun succ_id -> iter (bb :: path) (k + 1) succ_id);
+            bb.walk_state <- Exhausted;
+            match bb.parent with
+            | None -> toplevel_blocks := bb :: !toplevel_blocks
+            | Some bb' -> bb'.children <- bb :: bb'.children)
+        | Walking k' ->
+            (*Printf.printf "Found a loop with head at rank %d: %s\n" k' (String.concat " -> " (List.map (fun (bb: basic_block) -> bb.id) (List.rev (bb::path))));*)
+            bb.is_loop_head <- true;
+            set_parent bb k' (k - 1) path
+        | Exhausted -> (
+            match bb.parent with
+            | None -> ()
+            | Some bb' -> (
+                match bb'.walk_state with
+                | Walking k' -> set_parent bb' k' (k - 1) path
+                | Exhausted ->
+                    failwith
+                      (Printf.sprintf
+                         "Error: found a loop with head %s and children %s and \
+                          a secondary entry point with path %s"
+                         bb'.id
+                         (String.concat ", "
+                            (List.map
+                               (fun (bb : basic_block) -> bb.id)
+                               bb'.children))
+                         (String.concat " -> "
+                            (List.rev
+                               (List.map
+                                  (fun (bb : basic_block) -> bb.id)
+                                  (bb :: path)))))))
+      in
+      iter [] 0 entry_id;
+      !toplevel_blocks
+
+    let rec translate_to_vf_basic_block
+        ({
+           id;
+           statements = stmts;
+           terminator = trm;
+           successors;
+           is_loop_head;
+           children;
+         } :
+          Mir.basic_block) =
+      if ListAux.is_empty trm then failwith "Basic block without any terminator"
       else
         (* let embed_ghost_stmts all_stmts stmt =
              let loc_stmt = stmt |> Ast.stmt_loc |> Ast.lexed_loc in
@@ -2303,7 +2397,22 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         let stmts = stmts @ trm in
         (* let* stmts = ListAux.try_fold_left embed_ghost_stmts [] stmts in *)
         let loc = stmts |> List.hd |> Ast.stmt_loc in
-        Ok (Ast.LabelStmt (loc, id) :: stmts)
+        let stmts =
+          if is_loop_head then
+            let children_stmts =
+              Util.flatmap translate_to_vf_basic_block children
+            in
+            [
+              Ast.BlockStmt
+                ( loc,
+                  [],
+                  Ast.LabelStmt (loc, id) :: (stmts @ children_stmts),
+                  loc,
+                  ref [] );
+            ]
+          else stmts
+        in
+        Ast.LabelStmt (loc, id) :: stmts
 
     let translate_var_debug_info_contents (vdic_cpn : VarDebugInfoContentsRd.t)
         (loc : Ast.loc) =
@@ -2754,6 +2863,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | DefKind.Fn ->
         let def_path = def_path_get body_cpn in
         let name = TrName.translate_def_path def_path in
+        (*Printf.printf "Translating body %s...\n" name;*)
         let* tparams =
           match impl_block_hir_generics_get body_cpn |> OptionRd.get with
           | Nothing -> Ok []
@@ -2858,8 +2968,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             (fun bblock_cpn -> translate_basic_block ret_place_id bblock_cpn)
             bblocks_cpn
         in
-        let* vf_bblocks = ListAux.try_map translate_to_vf_basic_block bblocks in
-        let vf_bblocks = List.concat vf_bblocks in
+        let toplevel_blocks = find_loops bblocks in
+        let vf_bblocks = Util.flatmap translate_to_vf_basic_block bblocks in
         let span_cpn = span_get body_cpn in
         let* loc = translate_span_data span_cpn in
         let tparam_params = Util.flatmap (tparam_params loc) tparams in

@@ -142,16 +142,10 @@ impl Tree {
     }
 
     unsafe fn mark(root: *mut Tree)
-    //@ req Tree(root, false, 0, ?shape);
-    //@ ens Tree(root, true, 0, shape);
-    {
-        Self::mark0(root, root);
-    }
-
-    unsafe fn mark0(root: *mut Tree, mut x: *mut Tree)
-    //@ req Tree(root, false, 0, ?rootShape) &*& x == root;
+    //@ req Tree(root, false, 0, ?rootShape);
     //@ ens Tree(root, true, 0, rootShape);
     {
+        let mut x = root;
         //@ Tree_inv();
         //@ close stack(0, root, rootShape, root, rootShape, 0);
         //@ close inv_(true, x, root, rootShape, _);

@@ -183,16 +183,11 @@ impl Tree {
     }
 
     unsafe fn visit(root: *mut Tree, visitor: TreeVisitor, visitor_data: *mut u8)
-    //@ req Tree(root, 0, ?shape) &*& [_]is_TreeVisitor(visitor, ?p) &*& p(visitor_data, node_count(shape));
-    //@ ens Tree(root, 0, shape) &*& p(visitor_data, 0);
-    {
-        Self::visit0(root, true, visitor, visitor_data)
-    }
-
-    unsafe fn visit0(mut x: *mut Tree, mut x_is_new: bool, visitor: TreeVisitor, visitor_data: *mut u8)
-    //@ req Tree(?root, 0, ?rootShape) &*& x == root &*& x_is_new &*& [_]is_TreeVisitor(visitor, ?p) &*& p(visitor_data, node_count(rootShape));
+    //@ req Tree(root, 0, ?rootShape) &*& [_]is_TreeVisitor(visitor, ?p) &*& p(visitor_data, node_count(rootShape));
     //@ ens Tree(root, 0, rootShape) &*& p(visitor_data, 0);
     {
+        let mut x = root;
+        let mut x_is_new = true;
         //@ Tree_inv();
         //@ close stack(0, root, rootShape, root, rootShape, 0, 0);
         //@ close inv_(true, x, root, rootShape, _, _);

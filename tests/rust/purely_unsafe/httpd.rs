@@ -74,14 +74,12 @@ impl Buffer {
     }
 }
 
-//@ pred eq<t>(x: t; y: t) = y == x;
-
 unsafe fn memchr(mut haystack: *const u8, mut size: usize, needle: u8) -> *const u8
-//@ req [?f]integers_(haystack, 1, false, size, ?cs) &*& size <= 30000 &*& eq(haystack, ?haystack0) &*& eq(size, ?size0) &*& haystack0 == haystack &*& size0 == size;
+//@ req [?f]integers_(haystack, 1, false, size, ?cs) &*& size <= 30000;
 //@ ens [f]integers_(haystack, 1, false, size, cs) &*& 0 <= result as usize - haystack as usize &*& result as usize - haystack as usize <= size &*& result == haystack + (result as usize - haystack as usize);
 {
-    //@ open eq(haystack, _);
-    //@ open eq(size, _);
+    //@ let haystack0 = haystack;
+    //@ let size0 = size;
     //@ close [f]integers_(haystack, 1, false, 0, []);
     loop {
         //@ inv [f]integers_(haystack0, 1, false, haystack as usize - haystack0 as usize, ?cs0) &*& [f]integers_(haystack, 1, false, size, ?cs1) &*& append(cs0, cs1) == cs &*& haystack == haystack0 + (haystack as usize - haystack0 as usize);
@@ -105,6 +103,7 @@ unsafe fn read_line(socket: platform::sockets::Socket, buffer: *mut Buffer)
 {
     let mut offset = (*buffer).length;
     loop {
+        //@ inv [q]platform::sockets::Socket(socket) &*& Buffer(buffer, _, offset);
         const RECV_BUF_SIZE: usize = 1000;
         Buffer::reserve(buffer, RECV_BUF_SIZE);
         //@ open Buffer(_, _, _);
@@ -123,7 +122,6 @@ unsafe fn read_line(socket: platform::sockets::Socket, buffer: *mut Buffer)
         if nl_index == count {
             offset += count;
             //@ integers__join(buf.buffer);
-            break; // TODO: Remove this
         } else {
             (*buffer).length = offset + nl_index + 1;
             //@ integers__split(buf.buffer + offset, nl_index + 1);
@@ -154,17 +152,6 @@ unsafe fn handle_connection(buffer: *mut Buffer, socket: platform::sockets::Sock
     socket.close();
 }
 
-unsafe fn handle_connections(buffer: *mut Buffer, server_socket: platform::sockets::Socket) -> !
-//@ req platform::sockets::ServerSocket(server_socket) &*& Buffer(buffer, _, _);
-//@ ens false;
-{
-    loop {
-        //@ inv platform::sockets::ServerSocket(server_socket) &*& Buffer(buffer, _, _);
-        let client_socket = server_socket.accept();
-        handle_connection(buffer, client_socket);
-    }
-}
-
 fn main() {
     unsafe {
         let port: u16 = 10000;
@@ -174,6 +161,10 @@ fn main() {
         //@ assert buffer.buffer |-> buf.buffer &*& buffer.size |-> 1000 &*& buffer.length |-> 0;
         //@ assert buf == Buffer { buffer: buf.buffer, size: buf.size, length: buf.length };
         //@ close Buffer(&buffer, _, _);
-        handle_connections(&mut buffer as *mut Buffer, server_socket);
+        loop {
+            //@ inv thread_token(_t) &*& platform::sockets::ServerSocket(server_socket) &*& Buffer(&buffer, _, _);
+            let client_socket = server_socket.accept();
+            handle_connection(&mut buffer as *mut Buffer, client_socket);
+        }
     }
 }
