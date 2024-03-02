@@ -224,9 +224,10 @@ module Mir = struct
   }
 
   type source_info = { span : Ast.loc; scope : unit }
-  type bb_walk_state = NotSeen | Walking of int | Exhausted
 
-  type basic_block = {
+  type bb_walk_state = NotSeen | Walking of int * basic_block list | Exhausted
+
+  and basic_block = {
     id : string;
     statements : Ast.stmt list;
     terminator : Ast.stmt list;
@@ -2326,29 +2327,33 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         if k' = k then ()
         else
           let (bb' :: path) = path in
-          (match bb'.parent with
+          match bb'.parent with
           | None ->
               (*Printf.printf "Setting %s.parent <- Some %s\n" bb'.id bb.id;*)
-              bb'.parent <- Some bb
+              bb'.parent <- Some bb;
+              set_parent bb k (k' - 1) path
           | Some bb'' ->
-              let (Walking k'') = bb''.walk_state in
-              if k'' < k then
+              let (Walking (k'', path')) = bb''.walk_state in
+              if k'' < k then (
                 (*Printf.printf "Setting %s.parent <- Some %s\n" bb'.id bb.id;*)
-                bb'.parent <- Some bb);
-          set_parent bb k (k' - 1) path
+                bb'.parent <- Some bb;
+                set_parent bb k (k' - 1) path)
+              else if k'' = k then ()
+              else set_parent bb k k'' path'
       in
       let rec iter path k bb_id =
         let bb = Hashtbl.find bblocks_table bb_id in
         match bb.walk_state with
         | NotSeen -> (
-            bb.walk_state <- Walking k;
+            let path = bb :: path in
+            bb.walk_state <- Walking (k, path);
             bb.successors
-            |> List.iter (fun succ_id -> iter (bb :: path) (k + 1) succ_id);
+            |> List.iter (fun succ_id -> iter path (k + 1) succ_id);
             bb.walk_state <- Exhausted;
             match bb.parent with
             | None -> toplevel_blocks := bb :: !toplevel_blocks
             | Some bb' -> bb'.children <- bb :: bb'.children)
-        | Walking k' ->
+        | Walking (k', _) ->
             (*Printf.printf "Found a loop with head at rank %d: %s\n" k' (String.concat " -> " (List.map (fun (bb: basic_block) -> bb.id) (List.rev (bb::path))));*)
             bb.is_loop_head <- true;
             set_parent bb k' (k - 1) path
@@ -2357,7 +2362,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             | None -> ()
             | Some bb' -> (
                 match bb'.walk_state with
-                | Walking k' -> set_parent bb' k' (k - 1) path
+                | Walking (k', _) -> set_parent bb' k' (k - 1) path
                 | Exhausted ->
                     failwith
                       (Printf.sprintf
