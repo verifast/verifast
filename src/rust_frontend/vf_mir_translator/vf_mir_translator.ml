@@ -2408,12 +2408,22 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               Util.flatmap translate_to_vf_basic_block children
             in
             [
-              Ast.BlockStmt
-                ( loc,
-                  [],
-                  Ast.LabelStmt (loc, id) :: (stmts @ children_stmts),
-                  loc,
-                  ref [] );
+              (match stmts with
+              | Ast.PureStmt (lp, InvariantStmt (linv, inv)) :: stmts ->
+                  Ast.WhileStmt
+                    ( loc,
+                      True loc,
+                      Some (LoopInv inv),
+                      None,
+                      stmts @ children_stmts @ [ Ast.LabelStmt (loc, id) ],
+                      [] )
+              | _ ->
+                  Ast.BlockStmt
+                    ( loc,
+                      [],
+                      Ast.LabelStmt (loc, id) :: (stmts @ children_stmts),
+                      loc,
+                      ref [] ));
             ]
           else stmts
         in

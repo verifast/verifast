@@ -162,7 +162,7 @@ fn main() {
         //@ assert buf == Buffer { buffer: buf.buffer, size: buf.size, length: buf.length };
         //@ close Buffer(&buffer, _, _);
         loop {
-            //@ inv thread_token(_t) &*& platform::sockets::ServerSocket(server_socket) &*& Buffer(&buffer, _, _);
+            //@ inv platform::sockets::ServerSocket(server_socket) &*& Buffer(&buffer, _, _);
             let client_socket = server_socket.accept();
             handle_connection(&mut buffer as *mut Buffer, client_socket);
         }
