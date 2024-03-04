@@ -166,6 +166,7 @@ type _ vfparam =
 | Vfparam_uppercase_type_params_carry_typeid: bool vfparam
 | Vfparam_rustc_args: string list vfparam
 | Vfparam_extern_specs: string list vfparam
+| Vfparam_externs: string list vfparam
 
 let cast_vfarg: type t1 t2. t1 vfparam -> t1 -> t2 vfparam -> t2 option = fun p0 a0 p ->
   (* if Obj.magic p0 = Obj.magic p then Some (Obj.magic a0) else None *)
@@ -185,6 +186,7 @@ let cast_vfarg: type t1 t2. t1 vfparam -> t1 -> t2 vfparam -> t2 option = fun p0
   | Vfparam_uppercase_type_params_carry_typeid, Vfparam_uppercase_type_params_carry_typeid -> Some a0
   | Vfparam_rustc_args, Vfparam_rustc_args -> Some a0
   | Vfparam_extern_specs, Vfparam_extern_specs -> Some a0
+  | Vfparam_externs, Vfparam_externs -> Some a0
   | _ -> None
 
 type _ vfparam_info =
@@ -213,6 +215,7 @@ let vfparam_info_of: type a. a vfparam -> a vfparam_info = function
 | Vfparam_uppercase_type_params_carry_typeid -> BoolParam
 | Vfparam_rustc_args -> string_list_param
 | Vfparam_extern_specs -> string_list_param
+| Vfparam_externs -> string_list_param
 
 let default_vfarg: type ta. ta vfparam -> ta = fun p ->
   match vfparam_info_of p with
@@ -241,6 +244,7 @@ let vfparams = [
   "uppercase_type_params_carry_typeid", (Vfparam Vfparam_uppercase_type_params_carry_typeid, "If true, uppercase type parameters carry a typeid");
   "rustc_arg", (Vfparam Vfparam_rustc_args, "Add a rustc command-line argument");
   "extern_spec", (Vfparam Vfparam_extern_specs, "Format: `foo=path/to/foo.rsspec`. Adds external crate `foo` to the Rust prelude");
+  "extern", (Vfparam Vfparam_externs, "`-extern path/to/externCrate` is equivalent to `-rustc_arg --extern -rustc_arg externCrate=path/to/externCrate/target/debug/libexternCrate.rlib -rustc_arg -L -rustc_arg dependency=path/to/externCrate/target/debug/deps -extern_spec externCrate=path/to/externCrate/spec/lib.rsspec`");
   "target", (Vfparam Vfparam_data_model, "Target platform of the program being verified. Determines the size of pointer and integer types. Supported targets: " ^ String.concat ", " (List.map fst data_models))
 ]
 

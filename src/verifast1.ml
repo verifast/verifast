@@ -85,6 +85,25 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let uppercase_type_params_carry_typeid = Vfbindings.get Vfparam_uppercase_type_params_carry_typeid vfbindings || dialect = Some Rust
   let rustc_args = List.rev @@ Vfbindings.get Vfparam_rustc_args vfbindings
   let extern_specs = List.rev @@ Vfbindings.get Vfparam_extern_specs vfbindings
+  let externs = List.rev @@ Vfbindings.get Vfparam_externs vfbindings
+
+  let rustc_args =
+    let externs_rustc_args =
+      externs |> flatmap @@ fun path ->
+        let crateName = Filename.basename path in
+        let externArg = Printf.sprintf "%s=%s/target/debug/lib%s.rlib" crateName path crateName in
+        let libPathArg = Printf.sprintf "dependency=%s/target/debug/deps" path in
+        ["--extern"; externArg; "-L"; libPathArg]
+    in
+    externs_rustc_args @ rustc_args
+  
+  let extern_specs =
+    let externs_extern_specs =
+      externs |> List.map @@ fun path ->
+        let crateName = Filename.basename path in
+        Printf.sprintf "%s=%s/spec/lib.rsspec" crateName path
+    in
+    externs_extern_specs @ extern_specs
 
   let tparam_carries_typeid tparam =
     uppercase_type_params_carry_typeid && tparam_is_uppercase tparam
