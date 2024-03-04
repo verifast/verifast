@@ -63,24 +63,24 @@ mod threading {
         ens Mutex_state(mutex, some(acquirer)) &*& state == none &*& Q();
 
     lem_type Mutex_acquire_ghop(mutex: Mutex, acquirer: usize, pre: pred(), post: pred()) = lem();
-        req atomic_mask(MaskBot) &*& is_Mutex_acquire_op(?op, mutex, acquirer, ?P, ?Q) &*& P() &*& pre();
-        ens atomic_mask(MaskBot) &*& is_Mutex_acquire_op(op, mutex, acquirer, P, Q) &*& Q() &*& post();
+        req atomic_mask(MaskTop) &*& is_Mutex_acquire_op(?op, mutex, acquirer, ?P, ?Q) &*& P() &*& pre();
+        ens atomic_mask(MaskTop) &*& is_Mutex_acquire_op(op, mutex, acquirer, P, Q) &*& Q() &*& post();
     
     lem_type Mutex_try_acquire_op(mutex: Mutex, acquirer: usize, P: pred(), Q: pred(bool)) = lem();
         req [?f]Mutex_state(mutex, ?state) &*& P() &*& state != none || f == 1;
         ens Mutex_state(mutex, match state { none() => some(acquirer), some(owner) => some(owner) }) &*& Q(state == none);
 
     lem_type Mutex_try_acquire_ghop(mutex: Mutex, acquirer: usize, pre: pred(), post: pred(bool)) = lem();
-        req atomic_mask(MaskBot) &*& is_Mutex_try_acquire_op(?op, mutex, acquirer, ?P, ?Q) &*& P() &*& pre();
-        ens atomic_mask(MaskBot) &*& is_Mutex_try_acquire_op(op, mutex, acquirer, P, Q) &*& Q(?success) &*& post(success);
+        req atomic_mask(MaskTop) &*& is_Mutex_try_acquire_op(?op, mutex, acquirer, ?P, ?Q) &*& P() &*& pre();
+        ens atomic_mask(MaskTop) &*& is_Mutex_try_acquire_op(op, mutex, acquirer, P, Q) &*& Q(?success) &*& post(success);
     
     lem_type Mutex_release_op(mutex: Mutex, releaser: usize, P: pred(), Q: pred()) = lem();
         req Mutex_state(mutex, some(releaser)) &*& P();
         ens Mutex_state(mutex, none) &*& Q();
 
     lem_type Mutex_release_ghop(mutex: Mutex, releaser: usize, pre: pred(), post: pred()) = lem();
-        req atomic_mask(MaskBot) &*& is_Mutex_release_op(?op, mutex, releaser, ?P, ?Q) &*& P() &*& pre();
-        ens atomic_mask(MaskBot) &*& is_Mutex_release_op(op, mutex, releaser, P, Q) &*& Q() &*& post();
+        req atomic_mask(MaskTop) &*& is_Mutex_release_op(?op, mutex, releaser, ?P, ?Q) &*& P() &*& pre();
+        ens atomic_mask(MaskTop) &*& is_Mutex_release_op(op, mutex, releaser, P, Q) &*& Q() &*& post();
     
     @*/
 
