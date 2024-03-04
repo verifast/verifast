@@ -52,7 +52,7 @@ unsafe fn SimpleMutex_acquire(mutex: platform::threading::Mutex)
         open SimpleMutex_inv(mutex, inv_)();
         op();
         close SimpleMutex_inv(mutex, inv_)();
-        close_atomic_space(MaskTop, SimpleMutex_inv(mutex, inv_));
+        close_atomic_space(MaskTop);
         close SimpleMutex_acquire_post(mutex, inv_, acquirer)();
     };
     @*/
@@ -87,7 +87,7 @@ unsafe fn SimpleMutex_release(mutex: platform::threading::Mutex)
         open SimpleMutex_inv(mutex, inv_)();
         op();
         close SimpleMutex_inv(mutex, inv_)();
-        close_atomic_space(MaskTop, SimpleMutex_inv(mutex, inv_));
+        close_atomic_space(MaskTop);
         close True();
     };
     @*/
