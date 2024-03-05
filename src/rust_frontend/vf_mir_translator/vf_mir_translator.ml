@@ -863,12 +863,12 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                    ( loc,
                      DummyPat,
                      CallExpr
-                   ( loc,
-                     name ^ "_share",
-                     (*type arguments*) [],
-                     (*indices*) [],
-                     (*arguments*)
-                     [ LitPat lft; LitPat tid; LitPat l ],
+                       ( loc,
+                         name ^ "_share",
+                         (*type arguments*) [],
+                         (*indices*) [],
+                         (*arguments*)
+                         [ LitPat lft; LitPat tid; LitPat l ],
                          Static ) ))
             in
             let shr_pred = Ok (Var (loc, name ^ "_share")) in
@@ -1387,13 +1387,18 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             own_pred = Ok (Var (loc, name ^ "_own"));
             shr =
               (fun k t l ->
-                Error
-                  "Expressing the shared ownership predicate of a type \
-                   parameter is not yet supported");
-            shr_pred =
-              Error
-                "Expressing the shared ownership predicate of a type parameter \
-                 is not yet supported";
+                Ok
+                  (CoefAsn
+                     ( loc,
+                       DummyPat,
+                       CallExpr
+                         ( loc,
+                           name ^ "_share",
+                           [],
+                           [],
+                           [ LitPat k; LitPat t; LitPat l ],
+                           Static ) )));
+            shr_pred = Ok (Var (loc, name ^ "_share"));
             full_bor_content = Ok (Var (loc, name ^ "_full_borrow_content"));
             points_to =
               (fun t l vid ->
@@ -1734,21 +1739,30 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
              [
                (match (Mir.interp_of ty).own_pred with
                | Ok own_pred -> own_pred
-                  | Error msg ->
-                      raise
-                        (Ast.StaticError
-                           ( call_loc,
+               | Error msg ->
+                   raise
+                     (Ast.StaticError
+                        ( call_loc,
                           "Cannot express the ownership for some of the type \
                            arguments: " ^ msg,
                           None )));
                (match (Mir.interp_of ty).full_bor_content with
-                  | Ok fbc -> fbc
-                  | Error msg ->
-                      raise
-                        (Ast.StaticError
-                           ( call_loc,
+               | Ok fbc -> fbc
+               | Error msg ->
+                   raise
+                     (Ast.StaticError
+                        ( call_loc,
                           "Cannot express the full borrow content for some of \
                            the type arguments: " ^ msg,
+                          None )));
+               (match (Mir.interp_of ty).shr_pred with
+               | Ok shr_pred -> shr_pred
+               | Error msg ->
+                   raise
+                     (Ast.StaticError
+                        ( call_loc,
+                          "Cannot express the shared ownership for some of the \
+                           type arguments: " ^ msg,
                           None )));
              ]
         in
@@ -2738,16 +2752,16 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                          None ))
               | Ok fbc ->
                   let fbc_call fbc_name =
-                      Ast.CallExpr
-                        ( loc,
+                    Ast.CallExpr
+                      ( loc,
                         fbc_name,
-                          [],
-                          [
-                            LitPat (Ast.Var (loc, "_t"));
-                            LitPat
+                        [],
+                        [
+                          LitPat (Ast.Var (loc, "_t"));
+                          LitPat
                             (AddressOf (loc, Read (loc, Var (loc, "self"), name)));
-                          ],
-                          [],
+                        ],
+                        [],
                         Static )
                   in
                   Ast.Sep
@@ -2911,6 +2925,15 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               PredTypeExpr (loc, [], None);
             ] ),
         tparam ^ "_full_borrow_content" );
+      ( Ast.PredTypeExpr
+          ( loc,
+            [
+              Ast.IdentTypeExpr (loc, None, "lifetime_t");
+              Ast.IdentTypeExpr (loc, None, "thread_id_t");
+              Ast.ManifestTypeExpr (loc, PtrType Void);
+            ],
+            None ),
+        tparam ^ "_share" );
     ]
 
   let translate_trait_required_fn (adt_defs : Mir.adt_def_tr list)
@@ -3538,7 +3561,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         | false, _ | true, Mir.Restricted ->
             if tparams <> [] then Ok (None, [], [])
             else
-              let own__decl =
+              let aux_decls' =
                 if tparams <> [] then []
                 else
                   [
@@ -3557,6 +3580,29 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                                ],
                                None )),
                         name ^ "_own_",
+                        (*parameters*) [],
+                        (*nonghost_callers_only*) false,
+                        (*functype clause*) None,
+                        (*contract*) None,
+                        (*terminates*) false,
+                        (*body*) None,
+                        (*virtual*) false,
+                        (*overrides*) [] );
+                    Ast.Func
+                      ( def_loc,
+                        Fixpoint,
+                        (*type parameters*) [],
+                        (*return type*)
+                        Some
+                          (PredTypeExpr
+                             ( def_loc,
+                               [
+                                 IdentTypeExpr (def_loc, None, "lifetime_t");
+                                 IdentTypeExpr (def_loc, None, "thread_id_t");
+                                 ManifestTypeExpr (def_loc, PtrType Void);
+                               ],
+                               None )),
+                        name ^ "_share",
                         (*parameters*) [],
                         (*nonghost_callers_only*) false,
                         (*functype clause*) None,
@@ -3591,7 +3637,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                     (*virtual*) false,
                     (*overrides*) [] )
               in
-              Ok (Some fbc_decl, [], own__decl)
+              Ok (Some fbc_decl, [], aux_decls')
         | true, Mir.Invisible ->
             Error
               (`TrAdtDef
@@ -3724,6 +3770,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                                  name,
                                  (_, self_own_param)
                                  :: (_, self_full_bor_content_param)
+                                 :: (_, self_share_param)
                                  :: ps,
                                  false,
                                  None,
@@ -3740,9 +3787,12 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                                        (Ast.ManifestTypeExpr
                                           (lf, Ast.StructType (self_ty, []))) )
                                in
-                               let self_own = Ast.Var (lf, self_ty ^ "_own") in
+                               let self_own = Ast.Var (lf, self_ty ^ "_own_") in
                                let self_full_bor_content =
                                  Ast.Var (lf, self_ty ^ "_full_borrow_content")
+                               in
+                               let self_share =
+                                 Ast.Var (lf, self_ty ^ "_share")
                                in
                                let pre =
                                  Ast.LetTypeAsn
@@ -3759,16 +3809,31 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                                            ( lf,
                                              MatchAsn
                                                ( lf,
-                                                 self_full_bor_content,
-                                                 VarPat
-                                                   ( lf,
-                                                     self_full_bor_content_param
-                                                   ) ),
+                                                 self_own,
+                                                 VarPat (lf, self_own_param) ),
                                              Ast.Sep
                                                ( lf,
-                                                 pre,
-                                                 Ast.EnsuresAsn (lf, post) ) )
-                                       ) )
+                                                 MatchAsn
+                                                   ( lf,
+                                                     self_full_bor_content,
+                                                     VarPat
+                                                       ( lf,
+                                                         self_full_bor_content_param
+                                                       ) ),
+                                                 Ast.Sep
+                                                   ( lf,
+                                                     MatchAsn
+                                                       ( lf,
+                                                         self_share,
+                                                         VarPat
+                                                           (lf, self_share_param)
+                                                       ),
+                                                     Ast.Sep
+                                                       ( lf,
+                                                         pre,
+                                                         Ast.EnsuresAsn
+                                                           (lf, post) ) ) ) ) )
+                                   )
                                in
                                let post = Ast.EmpAsn lf in
                                Some

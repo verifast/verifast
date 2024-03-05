@@ -680,6 +680,27 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let fbc_chunk = Chunk ((fbc_term, false), [], real_unit, [], None) in
         cont (fbc_chunk::h) env
       end
+    | ExprStmt (CallExpr (l, "produce_type_interp", targs, indices, args, Static)) when dialect = Some Rust ->
+      let x =
+        match targs, indices, args with
+          [IdentTypeExpr (_, None, x)], [], [] when List.mem x tparams && tparam_carries_typeid x ->
+          x
+        | _ ->
+          static_error l "Syntax error: produce_type_interp<T>() expected" None
+      in
+      begin
+        (* Keep this ghost command from being used in the proof of x's proof obligations! *)
+        match leminfo with
+          | LemInfo (lems, g0, indinfo, nonghost_callers_only) ->
+              if not nonghost_callers_only then static_error l "This construct is not allowed in a context that is not nonghost_callers_only." None
+          | RealFuncInfo (_, _, _) | RealMethodInfo _ -> ()
+      end;
+      let type_interp_pred_symb = get_pred_symb "type_interp" in
+      let x_own = List.assoc (x ^ "_own") env in
+      let x_fbc = List.assoc (x ^ "_full_borrow_content") env in
+      let x_share = List.assoc (x ^ "_share") env in
+      let type_interp_chunk = Chunk ((type_interp_pred_symb, true), [GhostTypeParam x], real_unit, [x_own; x_fbc; x_share], None) in
+      cont (type_interp_chunk::h) env
     | ExprStmt (CallExpr (l, "free", [], [], args,Static) as e) ->
       let args = List.map (function LitPat e -> e | _ -> static_error l "No patterns allowed here" None ) args in
       begin

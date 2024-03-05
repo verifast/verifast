@@ -61,6 +61,12 @@ predicate_ctor u32_full_borrow_content(thread_id_t t, uint32_t *l)(;) = *l |-> ?
 predicate_ctor u64_full_borrow_content(thread_id_t t, uint64_t *l)(;) = *l |-> ?_;
 predicate_ctor u128_full_borrow_content(thread_id_t t, uint128_t *l)(;) = *l |-> ?_;
 predicate_ctor usize_full_borrow_content(thread_id_t t, uintptr_t *l)(;) = *l |-> ?_;
+
+predicate type_interp<T>(; predicate(thread_id_t, T) T_own, fixpoint(thread_id_t, void *, predicate()) T_full_borrow_content, predicate(lifetime_t, thread_id_t, void *) T_share);
+
+lemma void share_full_borrow<T>(lifetime_t k, thread_id_t t, void *l);
+    requires type_interp<T>(?T_own, ?T_full_borrow_content, ?T_share) &*& full_borrow(k, T_full_borrow_content(t, l)) &*& [?q]lifetime_token(k);
+    ensures type_interp<T>(T_own, T_full_borrow_content, T_share) &*& [_]T_share(k, t, l) &*& [q]lifetime_token(k);
 @*/
 
 #endif

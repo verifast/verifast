@@ -28,3 +28,10 @@ fn swap<'a, T>(r1: &'a mut T, r2: &'a mut T) {
         //@ leak full_borrow(_, _);
     }
 }
+
+fn share<'a, T>(r: &'a mut T) -> &'a T {
+    //@ produce_type_interp::<T>();
+    //@ share_full_borrow::<T>(a, _t, r);
+    //@ leak type_interp(_, _, _);
+    r
+}
