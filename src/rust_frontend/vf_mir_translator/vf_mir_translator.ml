@@ -3818,10 +3818,11 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
          they need to be inside appropriate `ModuleDecl`s. `modularize_decl` does this. TODO: Generate the declarations inside the right
          module declarations from the start. This will become necessary once we want to take real `use` items into account inside annotations.*)
       let decls =
-        List.map modularize_decl (traits_decls @ trait_impl_prototypes @ adt_decls @ aux_decls
-        @ adts_full_bor_content_preds @ adts_proof_obligs) @
-        ghost_decls @
-        List.map modularize_decl (body_sigs @ body_decls)
+        List.map modularize_decl
+          (traits_decls @ trait_impl_prototypes @ adt_decls @ aux_decls
+         @ adts_full_bor_content_preds @ adts_proof_obligs)
+        @ ghost_decls
+        @ List.map modularize_decl (body_sigs @ body_decls)
       in
       (* Todo @Nima: we should add necessary inclusions during translation *)
       let extern_header_names =
