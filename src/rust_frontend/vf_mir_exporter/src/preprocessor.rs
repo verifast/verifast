@@ -62,24 +62,28 @@ pub struct GhostRange {
     start: SrcPos,
     end: SrcPos,
     contents: String,
+    span: Option<rustc_span::Span>,
 }
 
 impl GhostRange {
     pub fn is_dummy(&self) -> bool {
         self.start.is_dummy() || self.end.is_dummy()
     }
-    pub fn span(&self) -> Option<rustc_span::Span> {
+    pub fn set_span(&mut self, source_file_start_pos: rustc_span::BytePos) {
         use rustc_span::{BytePos, Span, SyntaxContext};
-        if self.is_dummy() {
+        self.span = if self.is_dummy() {
             None
         } else {
             Some(Span::new(
-                BytePos(self.start.byte_pos),
-                BytePos(self.end.byte_pos),
+                source_file_start_pos + BytePos(self.start.byte_pos),
+                source_file_start_pos + BytePos(self.end.byte_pos),
                 SyntaxContext::root(),
                 None,
             ))
-        }
+        };
+    }
+    pub fn span(&self) -> Option<rustc_span::Span> {
+        self.span
     }
     pub fn contents(&self) -> &str {
         &self.contents
@@ -92,13 +96,20 @@ impl GhostRange {
     }
 }
 
+/// If a ghost range occurs at the toplevel before the first token in a file,
+/// the preprocessor inserts `#[allow(warnings)]`. This is necessary, in case
+/// the file is a module, to ensure that the module's body span includes the
+/// ghost range. (The body span extends from the first to the last token in
+/// the file.)
+const VF_SYNTHETIC_FIRST_TOKENS: &str = "#[allow(warnings)]";
+const VF_SYNTHETIC_FIRST_TOKENS_LEN: u32 = VF_SYNTHETIC_FIRST_TOKENS.len() as u32;
 const VF_GHOST_CMD_TAG: &str = "crate::VeriFast_ghost_command();";
 const VF_GHOST_CMD_TAG_LEN: u32 = VF_GHOST_CMD_TAG.len() as u32;
 
 pub fn preprocess(
     input: &str,
-    directives: &mut Vec<GhostRange>,
-    ghost_ranges: &mut Vec<GhostRange>,
+    directives: &mut Vec<Box<GhostRange>>,
+    ghost_ranges: &mut Vec<Box<GhostRange>>,
 ) -> String {
     let mut cs = TextIterator {
         chars: input.chars().peekable(),
@@ -177,6 +188,9 @@ pub fn preprocess(
                                         if in_fn_body {
                                             output.push_str(VF_GHOST_CMD_TAG);
                                             cs.pos.byte_pos += VF_GHOST_CMD_TAG_LEN;
+                                        } else if start_of_whitespace.byte_pos == 0 {
+                                            output.push_str(VF_SYNTHETIC_FIRST_TOKENS);
+                                            cs.pos.byte_pos += VF_SYNTHETIC_FIRST_TOKENS_LEN;
                                         }
                                         let mut contents = String::new();
                                         output.push_str("//@");
@@ -207,13 +221,14 @@ pub fn preprocess(
                                                 }
                                             }
                                         }
-                                        ghost_ranges.push(GhostRange {
+                                        ghost_ranges.push(Box::new(GhostRange {
                                             in_fn_body,
                                             end_of_preceding_token: start_of_whitespace,
                                             start,
                                             end,
                                             contents,
-                                        });
+                                            span: None,
+                                        }));
                                     }
                                     Some('~') => {
                                         cs.next();
@@ -240,13 +255,14 @@ pub fn preprocess(
                                                 }
                                             }
                                         }
-                                        directives.push(GhostRange {
+                                        directives.push(Box::new(GhostRange {
                                             in_fn_body,
                                             end_of_preceding_token: start_of_whitespace,
                                             start,
                                             end,
                                             contents,
-                                        });
+                                            span: None,
+                                        }));
                                         loop {
                                             match cs.peek() {
                                                 None => {
@@ -290,7 +306,7 @@ pub fn preprocess(
                                     start_of_whitespace.byte_pos -= 2;
                                     start_of_whitespace.column -= 2;
                                 }
-                                let mut ghost_range = GhostRange {
+                                let mut ghost_range = Box::new(GhostRange {
                                     in_fn_body: false,
                                     end_of_preceding_token: start_of_whitespace,
                                     start: SrcPos {
@@ -304,7 +320,8 @@ pub fn preprocess(
                                         byte_pos: 0,
                                     },
                                     contents: String::new(),
-                                };
+                                    span: None,
+                                });
                                 let mut is_ghost_range = false;
                                 match cs.peek() {
                                     Some('@') => {
@@ -317,6 +334,9 @@ pub fn preprocess(
                                         if ghost_range.in_fn_body {
                                             output.push_str(VF_GHOST_CMD_TAG);
                                             cs.pos.byte_pos += VF_GHOST_CMD_TAG_LEN;
+                                        } else if start_of_whitespace.byte_pos == 0 {
+                                            output.push_str(VF_SYNTHETIC_FIRST_TOKENS);
+                                            cs.pos.byte_pos += VF_SYNTHETIC_FIRST_TOKENS_LEN;
                                         }
                                         output.push_str("/*@");
                                         ghost_range.contents.push_str("/*@");

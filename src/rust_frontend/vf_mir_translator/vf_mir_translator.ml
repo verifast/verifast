@@ -56,6 +56,64 @@ module AstAux = struct
     in
     List.fold_right f_aux asns init
 
+  let decl_loc_name_and_name_setter (d : decl) =
+    match d with
+    | Struct (loc, name, tparams, definition_opt, attrs) ->
+        ( loc,
+          name,
+          fun new_name -> Struct (loc, new_name, tparams, definition_opt, attrs)
+        )
+    | AbstractTypeDecl (l, x) -> (l, x, fun x -> AbstractTypeDecl (l, x))
+    | TypedefDecl (l, te, x, tparams) ->
+        (l, x, fun x -> TypedefDecl (l, te, x, tparams))
+    | PredFamilyDecl
+        (l, g, tparams, nbIndices, pts, inputParamCount, inductiveness) ->
+        ( l,
+          g,
+          fun g ->
+            PredFamilyDecl
+              (l, g, tparams, nbIndices, pts, inputParamCount, inductiveness) )
+    | PredFamilyInstanceDecl (l, g, tparams, indices, ps, body) ->
+        ( l,
+          g,
+          fun g -> PredFamilyInstanceDecl (l, g, tparams, indices, ps, body) )
+    | PredCtorDecl (l, g, tparams, ctor_ps, ps, inputParamCount, body) ->
+        ( l,
+          g,
+          fun g ->
+            PredCtorDecl (l, g, tparams, ctor_ps, ps, inputParamCount, body) )
+    | Func
+        ( l,
+          k,
+          tparams,
+          rt,
+          g,
+          ps,
+          nonghost_callers_only,
+          ftclause,
+          pre_post,
+          terminates,
+          body_opt,
+          is_virtual,
+          overrides ) ->
+        ( l,
+          g,
+          fun new_name ->
+            Func
+              ( l,
+                k,
+                tparams,
+                rt,
+                new_name,
+                ps,
+                nonghost_callers_only,
+                ftclause,
+                pre_post,
+                terminates,
+                body_opt,
+                is_virtual,
+                overrides ) )
+
   let decl_name (d : decl) =
     match d with
     | Struct (loc, name, tparams, definition_opt, attrs) -> Some name
@@ -135,9 +193,9 @@ module AstAux = struct
     | _ -> Error (`AdtTyName "Not an ADT")
 
   let sort_decls_lexically ds =
-    ListAux.try_sort LocAux.compare_err_desc
+    List.sort
       (fun d d1 ->
-        LocAux.try_compare_loc
+        compare
           (Ast.lexed_loc @@ decl_loc @@ d)
           (Ast.lexed_loc @@ decl_loc @@ d1))
       ds
@@ -3651,6 +3709,34 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                     in
                     prototype))
 
+  let rec translate_module (module_cpn : VfMirStub.Reader.Module.t) :
+      (Ast.decl, _) result =
+    let open VfMirStub.Reader.Module in
+    let name = name_get module_cpn in
+    let* loc = translate_span_data (header_span_get module_cpn) in
+    let* submodules =
+      submodules_get_list module_cpn |> ListAux.try_map translate_module
+    in
+    let* ghost_decl_batches =
+      ListAux.try_map translate_ghost_decl_batch
+        (ghost_decl_batches_get_list module_cpn)
+    in
+    Ok
+      (Ast.ModuleDecl
+         (loc, name, [], submodules @ List.flatten ghost_decl_batches))
+
+  let modularize_decl (d : Ast.decl) : Ast.decl =
+    let l, name, name_setter = AstAux.decl_loc_name_and_name_setter d in
+    if String.contains name ':' then
+      let segments = String.split_on_char ':' name in
+      let rec iter = function
+        | segment :: "" :: segments ->
+            Ast.ModuleDecl (l, segment, [], [ iter segments ])
+        | [ segment ] -> name_setter segment
+      in
+      iter segments
+    else d
+
   let translate_vf_mir (extern_specs : string list) (vf_mir_cpn : VfMirRd.t)
       (report_should_fail : string -> Ast.loc0 -> unit) =
     let job _ =
@@ -3683,13 +3769,16 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let adts_full_bor_content_preds =
         List.filter_map Fun.id adts_full_bor_content_preds
       in
+      let* module_decls =
+        ListAux.try_map translate_module (VfMirRd.modules_get_list vf_mir_cpn)
+      in
       let ghost_decl_batches_cpn =
         VfMirRd.ghost_decl_batches_get_list vf_mir_cpn
       in
       let* ghost_decl_batches =
         ListAux.try_map translate_ghost_decl_batch ghost_decl_batches_cpn
       in
-      let ghost_decls = List.flatten ghost_decl_batches in
+      let ghost_decls = module_decls @ List.flatten ghost_decl_batches in
       let* _ =
         ListAux.try_map
           (fun po -> check_proof_obligation ghost_decls po)
@@ -3711,12 +3800,11 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         ListAux.split3 bodies_tr_res
       in
       let body_sigs = List.filter_map Fun.id body_sig_opts in
-      (* Todo @Nima @Bart: `vfide` relies on the similarity of the order of function declarations
+      (* `vfide` relies on the similarity of the order of function declarations
          over several calls to `verifast` hence we are sorting them since `rustc` does not keep that order the same.
-         It is not a permanent solution and `vfide` should be fixed as the lexical sort does not work with nested function declarations.
       *)
-      let* body_sigs = AstAux.sort_decls_lexically body_sigs in
-      let* body_decls = AstAux.sort_decls_lexically body_decls in
+      let body_sigs = AstAux.sort_decls_lexically body_sigs in
+      let body_decls = AstAux.sort_decls_lexically body_decls in
       let traits_and_body_decls = traits_decls @ body_decls in
       let* trait_impls =
         translate_trait_impls (VfMirRd.trait_impls_get_list vf_mir_cpn)
@@ -3725,10 +3813,15 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let trait_impl_prototypes =
         compute_trait_impl_prototypes adt_defs traits_and_body_decls trait_impls
       in
+      (* Hack: for structs, functions, and other item-likes inside modules we
+         currently generate toplevel VF declarations with paths as names. However, to properly resolve names inside those declarations,
+         they need to be inside appropriate `ModuleDecl`s. `modularize_decl` does this. TODO: Generate the declarations inside the right
+         module declarations from the start. This will become necessary once we want to take real `use` items into account inside annotations.*)
       let decls =
-        traits_decls @ trait_impl_prototypes @ adt_decls @ aux_decls
-        @ adts_full_bor_content_preds @ adts_proof_obligs @ ghost_decls
-        @ body_sigs @ body_decls
+        List.map modularize_decl (traits_decls @ trait_impl_prototypes @ adt_decls @ aux_decls
+        @ adts_full_bor_content_preds @ adts_proof_obligs) @
+        ghost_decls @
+        List.map modularize_decl (body_sigs @ body_decls)
       in
       (* Todo @Nima: we should add necessary inclusions during translation *)
       let extern_header_names =
@@ -3759,7 +3852,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       in
       Ok
         ( headers,
-          [ Ast.PackageDecl (Ast.dummy_loc, "", [], decls) ],
+          Rust_parser.flatten_module_decls Ast.dummy_loc decls,
           Some debug_infos )
     in
     match job () with

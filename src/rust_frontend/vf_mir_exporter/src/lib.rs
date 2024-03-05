@@ -73,8 +73,7 @@ pub fn run_compiler() -> i32 {
         // See filesearch::get_or_default_sysroot()
 
         let mut callbacks = CompilerCalls {
-            directives: Vec::new(),
-            ghost_ranges: Vec::new(),
+            source_files: Box::leak(Box::new(std::sync::Mutex::new(SourceFiles::new()))),
         };
         // Call the Rust compiler with our callbacks.
         trace!("Calling the Rust Compiler with args: {:?}", rustc_args);
@@ -82,31 +81,104 @@ pub fn run_compiler() -> i32 {
     })
 }
 
-#[derive(Default)]
+struct SourceFile {
+    path: Box<std::path::Path>,
+    directives: Vec<Box<preprocessor::GhostRange>>,
+    ghost_ranges: Vec<Box<preprocessor::GhostRange>>,
+}
+
+struct SourceFiles {
+    source_files: Vec<SourceFile>,
+}
+
+impl SourceFiles {
+    fn new() -> SourceFiles {
+        SourceFiles {
+            source_files: Vec::new(),
+        }
+    }
+
+    fn push(&mut self, source_file: SourceFile) {
+        self.source_files.push(source_file);
+    }
+
+    fn export_data(
+        &mut self,
+        all_directives: &mut Vec<Box<preprocessor::GhostRange>>,
+        all_ghost_ranges: &mut Vec<Box<preprocessor::GhostRange>>,
+        sm: &rustc_span::source_map::SourceMap,
+    ) {
+        let mut source_files = core::mem::replace(&mut self.source_files, Vec::new());
+        for mut source_file in source_files.drain(..) {
+            let filename = rustc_span::FileName::Real(rustc_span::RealFileName::LocalPath(
+                std::path::PathBuf::from(source_file.path),
+            ));
+            let rustc_source_file = sm.get_source_file(&filename).unwrap();
+            let start_pos = rustc_source_file.start_pos;
+            for mut directive in source_file.directives.drain(..) {
+                directive.set_span(start_pos);
+                all_directives.push(directive);
+            }
+            for mut ghost_range in source_file.ghost_ranges.drain(..) {
+                ghost_range.set_span(start_pos);
+                all_ghost_ranges.push(ghost_range);
+            }
+        }
+    }
+}
+
+struct FileLoader {
+    source_files: &'static std::sync::Mutex<SourceFiles>,
+}
+
+impl rustc_span::source_map::FileLoader for FileLoader {
+    fn file_exists(&self, path: &std::path::Path) -> bool {
+        path.exists()
+    }
+
+    fn read_file(&self, path: &std::path::Path) -> std::io::Result<String> {
+        trace!("FileLoader::read_file({:?})", path);
+        let contents = std::fs::read_to_string(&path)?;
+        // Apparently, if the Rust library sources are installed, rustc reads them.
+        // For now, this nasty hack skips those files. TODO: Find a way to keep rustc from reading dependencies' source files.
+        if path.to_string_lossy().contains("toolchains") {
+            Ok(contents)
+        } else {
+            let mut directives = Vec::new();
+            let mut ghost_ranges = Vec::new();
+            let preprocessed_contents =
+                preprocessor::preprocess(contents.as_str(), &mut directives, &mut ghost_ranges);
+            self.source_files.lock().unwrap().push(SourceFile {
+                path: path.into(),
+                directives,
+                ghost_ranges,
+            });
+            Ok(preprocessed_contents)
+        }
+    }
+
+    fn read_binary_file(&self, path: &std::path::Path) -> std::io::Result<std::sync::Arc<[u8]>> {
+        trace!("FileLoader::read_binary_file({:?})", path);
+        let contents = std::fs::read(path)?;
+        Ok(std::sync::Arc::from(contents))
+    }
+}
+
 struct CompilerCalls {
-    directives: Vec<preprocessor::GhostRange>,
-    ghost_ranges: Vec<preprocessor::GhostRange>,
+    source_files: &'static std::sync::Mutex<SourceFiles>,
 }
 
 impl rustc_driver::Callbacks for CompilerCalls {
     // In this callback we override the mir_borrowck query.
     fn config(&mut self, config: &mut Config) {
-        let path = match &config.input {
-            rustc_session::config::Input::File(path) => path.clone(),
-            _ => {
-                panic!("File expected");
-            }
-        };
-        let contents = std::fs::read_to_string(&path).unwrap();
-        let preprocessed_contents = preprocessor::preprocess(
-            contents.as_str(),
-            &mut self.directives,
-            &mut self.ghost_ranges,
-        );
-        config.input = rustc_session::config::Input::Str {
-            name: rustc_span::FileName::Real(rustc_span::RealFileName::LocalPath(path)),
-            input: preprocessed_contents,
-        };
+        match &config.file_loader {
+            None => {}
+            Some(loader) => todo!(),
+        }
+        config.file_loader = Some(Box::from(FileLoader {
+            source_files: self.source_files,
+        }));
+
         // assert!(config.override_queries.is_none());
         // config.override_queries = Some(override_queries);
     }
@@ -154,13 +226,20 @@ impl rustc_driver::Callbacks for CompilerCalls {
             //     .collect();
 
             let mut vf_mir_capnp_builder = vf_mir_builder::VfMirCapnpBuilder::new(tcx);
-            trace!("Ghost Ranges:\n{:#?}", self.ghost_ranges);
-            for gr in &self.ghost_ranges {
+            let mut directives = Vec::new();
+            let mut ghost_ranges = Vec::new();
+            self.source_files.lock().unwrap().export_data(
+                &mut directives,
+                &mut ghost_ranges,
+                tcx.sess.source_map(),
+            );
+
+            trace!("Ghost Ranges:\n{:#?}", ghost_ranges);
+            for gr in &ghost_ranges {
                 debug!("{:?}", gr.span());
             }
-            vf_mir_capnp_builder.add_comments(&mut self.ghost_ranges);
-            vf_mir_capnp_builder
-                .set_directives(std::mem::replace(&mut self.directives, Vec::new()));
+            vf_mir_capnp_builder.add_comments(&mut ghost_ranges);
+            vf_mir_capnp_builder.set_directives(std::mem::replace(&mut directives, Vec::new()));
             vf_mir_capnp_builder.set_structs(visitor.structs);
             vf_mir_capnp_builder.set_trait_impls(visitor.trait_impls);
             vf_mir_capnp_builder.add_bodies(bodies);
@@ -372,6 +451,60 @@ mod vf_mir_builder {
     use var_debug_info_cpn::var_debug_info_contents as var_debug_info_contents_cpn;
     use variant_def_cpn::field_def as field_def_cpn;
 
+    struct Module {
+        name: String,
+        header_span: rustc_span::Span,
+        body_span: rustc_span::Span,
+        submodules: Vec<Box<Module>>,
+        ghost_decl_batches: LinkedList<Box<GhostRange>>,
+    }
+
+    fn collect_submodules<'tcx, 'a>(
+        tcx: TyCtxt<'tcx>,
+        annots: &'a mut LinkedList<Box<GhostRange>>,
+        mod_id: rustc_span::def_id::LocalModDefId,
+    ) -> Vec<Box<Module>> {
+        struct ModVisitor<'tcx, 'a> {
+            tcx: TyCtxt<'tcx>,
+            submodules: Vec<Box<Module>>,
+            annots: &'a mut LinkedList<Box<GhostRange>>,
+        }
+        impl<'tcx, 'a> rustc_hir::intravisit::Visitor<'tcx> for ModVisitor<'tcx, 'a> {
+            fn visit_mod(
+                &mut self,
+                m: &'tcx rustc_hir::Mod<'tcx>,
+                header_span: rustc_span::Span,
+                n: rustc_hir::HirId,
+            ) {
+                let name = self.tcx.hir().ident(n).as_str().into();
+                let body_span = m.spans.inner_span;
+                let mut mod_annots: LinkedList<Box<GhostRange>> = self
+                    .annots
+                    .extract_if(|annot| body_span.contains(annot.span().unwrap()))
+                    .collect();
+                let mod_submodules = collect_submodules(
+                    self.tcx,
+                    &mut mod_annots,
+                    rustc_hir::def_id::LocalModDefId::new_unchecked(n.expect_owner().def_id),
+                );
+                self.submodules.push(Box::new(Module {
+                    name,
+                    header_span,
+                    body_span,
+                    submodules: mod_submodules,
+                    ghost_decl_batches: mod_annots,
+                }));
+            }
+        }
+        let mut visitor = ModVisitor {
+            tcx,
+            submodules: Vec::new(),
+            annots,
+        };
+        tcx.hir().visit_item_likes_in_module(mod_id, &mut visitor);
+        visitor.submodules
+    }
+
     enum EncKind<'tcx, 'a> {
         Body(&'a mir::Body<'tcx>),
         Adt,
@@ -380,14 +513,14 @@ mod vf_mir_builder {
         req_adts: Vec<ty::AdtDef<'tcx>>,
         tcx: TyCtxt<'tcx>,
         mode: EncKind<'tcx, 'a>,
-        annots: LinkedList<GhostRange>,
+        annots: LinkedList<Box<GhostRange>>,
     }
 
     impl<'tcx, 'a> EncCtx<'tcx, 'a> {
         pub fn new(
             tcx: TyCtxt<'tcx>,
             mode: EncKind<'tcx, 'a>,
-            annots: LinkedList<GhostRange>,
+            annots: LinkedList<Box<GhostRange>>,
         ) -> Self {
             Self {
                 req_adts: Vec::new(),
@@ -415,11 +548,11 @@ mod vf_mir_builder {
 
     pub struct VfMirCapnpBuilder<'tcx> {
         tcx: TyCtxt<'tcx>,
-        directives: Vec<GhostRange>,
+        directives: Vec<Box<GhostRange>>,
         structs: Vec<rustc_span::def_id::LocalDefId>,
         trait_impls: Vec<super::TraitImplInfo>,
         bodies: Vec<mir::Body<'tcx>>,
-        annots: LinkedList<GhostRange>,
+        annots: LinkedList<Box<GhostRange>>,
     }
 
     impl<'tcx: 'a, 'a> VfMirCapnpBuilder<'tcx> {
@@ -434,11 +567,11 @@ mod vf_mir_builder {
             }
         }
 
-        pub(super) fn set_directives(&mut self, directives: Vec<GhostRange>) {
+        pub(super) fn set_directives(&mut self, directives: Vec<Box<GhostRange>>) {
             self.directives = directives;
         }
 
-        pub fn add_comments(&mut self, annots: &mut Vec<GhostRange>) {
+        pub fn add_comments(&mut self, annots: &mut Vec<Box<GhostRange>>) {
             self.annots.extend(
                 annots
                     .extract_if(|annot| !annot.is_dummy())
@@ -557,7 +690,7 @@ mod vf_mir_builder {
                                     );
                                     required_fn_cpn
                                         .fill_arg_names(arg_names.iter().map(|n| n.as_str()));
-                                    let contract: Vec<GhostRange> = self
+                                    let contract: Vec<Box<GhostRange>> = self
                                         .annots
                                         .extract_if(|annot| {
                                             annot.end_of_preceding_token.byte_pos
@@ -577,6 +710,35 @@ mod vf_mir_builder {
                 traits_cpn = traits_cons_cpn.init_t();
             }
             req_adt_defs.extend(enc_ctx.get_req_adts());
+        }
+
+        fn encode_module(
+            tcx: TyCtxt<'tcx>,
+            mut module_cpn: crate::vf_mir_capnp::module::Builder<'_>,
+            module: &Box<Module>,
+        ) {
+            module_cpn.set_name(&module.name);
+            Self::encode_span_data(
+                tcx,
+                &module.header_span.data(),
+                module_cpn.reborrow().init_header_span(),
+            );
+            Self::encode_span_data(
+                tcx,
+                &module.body_span.data(),
+                module_cpn.reborrow().init_body_span(),
+            );
+            module_cpn
+                .reborrow()
+                .fill_submodules(&module.submodules, |module_cpn, module| {
+                    Self::encode_module(tcx, module_cpn, module);
+                });
+            module_cpn.reborrow().fill_ghost_decl_batches(
+                &module.ghost_decl_batches,
+                |annot_cpn, annot| {
+                    Self::encode_annotation(tcx, annot, annot_cpn);
+                },
+            );
         }
 
         fn encode_mir(&mut self, mut vf_mir_cpn: vf_mir_cpn::Builder<'_>) {
@@ -610,6 +772,16 @@ mod vf_mir_builder {
             // Encode directives
             vf_mir_cpn.fill_directives(&self.directives, |directive_cpn, directive| {
                 Self::encode_annotation(self.tcx, directive, directive_cpn);
+            });
+
+            // Encode modules
+            let modules = collect_submodules(
+                self.tcx,
+                &mut self.annots,
+                rustc_hir::def_id::LocalModDefId::CRATE_DEF_ID,
+            );
+            vf_mir_cpn.fill_modules(&modules, |module_cpn, module| {
+                Self::encode_module(self.tcx, module_cpn, module);
             });
 
             // Encode Ghost Declarations
@@ -1104,7 +1276,7 @@ mod vf_mir_builder {
 
         fn encode_contract(
             tcx: TyCtxt<'tcx>,
-            contract_annots: LinkedList<GhostRange>,
+            contract_annots: LinkedList<Box<GhostRange>>,
             body_contract_span: &rustc_span::SpanData,
             mut contract_cpn: contract_cpn::Builder<'_>,
         ) {

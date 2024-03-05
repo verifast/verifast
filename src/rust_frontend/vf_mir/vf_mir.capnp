@@ -612,6 +612,14 @@ struct TraitImpl {
     items @2: List(Text);
 }
 
+struct Module {
+    name @0: Text;
+    headerSpan @4: SpanData;
+    bodySpan @1: SpanData;
+    submodules @2: List(Module);
+    ghostDeclBatches @3: List(Annotation);
+}
+
 struct VfMir {
     directives @4: List(Annotation);
     # Todo @Nima: We are using an inductive list to encode ADT definitions because the total size of `List`s
@@ -622,6 +630,7 @@ struct VfMir {
     traitImpls @3: List(TraitImpl);
     bodies @1: List(Body);
     ghostDeclBatches @2: List(Annotation);
+    modules @6: List(Module);
 }
 #Todo @Nima: For Clarity write a struct fields on top and then inner type definitions
 #Todo @Nima: Use a uniform naming. def_path for Rust style definition paths and Name for their corresponding translated names.
