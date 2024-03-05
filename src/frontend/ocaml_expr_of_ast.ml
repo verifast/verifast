@@ -83,7 +83,7 @@ let of_ident_scope = function
 | EnumElemName n -> C ("EnumElemName", [BigInt n])
 | GlobalName -> c "GlobalName"
 | ModuleName -> c "ModuleName"
-| PureFuncName -> c "PureFuncName"
+| PureFuncName typeid_types -> C ("PureFuncName", [of_list of_type typeid_types])
 | ClassOrInterfaceNameScope -> c "ClassOrInterfaceNameScope"
 | PackageNameScope -> c "PackageNameScope"
 

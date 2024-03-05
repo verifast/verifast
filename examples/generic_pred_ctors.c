@@ -14,7 +14,7 @@ predicate_ctor MutexCell_inv<T>(struct MutexCell<T> *mutexCell, predicate(T) T_o
 predicate MutexCell<T>(struct MutexCell<T> *mutexCell, predicate(T) T_own;) =
     malloc_block_MutexCell<T>(mutexCell) &*&
     mutexCell->mutex |-> ?mutex &*&
-    mutex(mutex, MutexCell_inv<T>(mutexCell, T_own));
+    mutex(mutex, (MutexCell_inv)(mutexCell, T_own));
 
 predicate MutexCell_held<T>(struct MutexCell<T> *mutexCell, predicate(T) T_own, int thread_id, real q) =
     [q]malloc_block_MutexCell<T>(mutexCell) &*&

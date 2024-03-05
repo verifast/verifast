@@ -244,7 +244,7 @@ type
   | EnumElemName of big_int
   | GlobalName
   | ModuleName
-  | PureFuncName
+  | PureFuncName of type_ list (* Type arguments for type parameters that carry a typeid *)
   | ClassOrInterfaceNameScope
   | PackageNameScope
 

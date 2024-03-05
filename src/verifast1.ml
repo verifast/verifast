@@ -4073,17 +4073,16 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let check_pure_func_name (x, (ld, tparams, t, param_names_types, _)) =
         reportUseSite DeclKind_PureFunction ld l;
         let (_, pts) = List.split param_names_types in
-        let (pts, t) =
+        let (typeid_types, pts, t) =
           if tparams = [] then
-            (pts, t)
+            ([], pts, t)
           else begin
-            if List.exists tparam_carries_typeid tparams then
-              static_error l "Using a pure function with type parameters that carry a type id as a value is not yet supported" None;
             let tpenv = List.map (fun x -> (x, InferredType (object end, ref Unconstrained))) tparams in
-            (List.map (instantiate_type tpenv) pts, instantiate_type tpenv t)
+            let typeid_types = tpenv |> flatmap @@ fun (x, tp) -> if tparam_carries_typeid x then [tp] else [] in
+            (typeid_types, List.map (instantiate_type tpenv) pts, instantiate_type tpenv t)
           end
         in
-        (WVar (l, x, PureFuncName), List.fold_right (fun t1 t2 -> PureFuncType (t1, t2)) pts t, None)
+        (WVar (l, x, PureFuncName typeid_types), List.fold_right (fun t1 t2 -> PureFuncType (t1, t2)) pts t, None)
       in
       match resolve Ghost (pn,ilist) l x purefuncmap with
       | Some ((x, (ld, tparams, t, [], _)) as entry) -> check_pure_func_name entry
@@ -5107,12 +5106,12 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                     | _ -> static_error l "Inductive argument of recursive call must be switch clause pattern variable." None
                   end;
                   List.iter iter1 args
-                | WPureFunValueCall (l, WVar (l', g', PureFuncName), args) when g' = g && List.length args > index ->
+                | WPureFunValueCall (l, WVar (l', g', PureFuncName _), args) when g' = g && List.length args > index ->
                   begin match List.nth args index with
                     WVar (l'', x, LocalVar) when List.mem x components -> List.iter iter1 args
                   | _ -> static_error l "Inductive argument of recursive call must be switch clause pattern variable." None
                   end
-                | WVar (l, g', PureFuncName) ->
+                | WVar (l, g', PureFuncName _) ->
                   if List.mem_assoc g' fpm_todo then static_error l "A fixpoint function cannot mention a fixpoint function that appears later in the program text" None;
                   if g' = g then static_error l "A fixpoint function that mentions itself is not yet supported." None
                 | WSwitchExpr (l, WVar (_, x, LocalVar), _, _, cs, def_opt, _, _) when List.mem x components ->
@@ -5137,7 +5136,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 WPureFunCall (l, g', targs, args) ->
                 if List.mem_assoc g' fpm_todo then static_error l "A fixpoint function cannot call a fixpoint function that appears later in the program text" None;
                 if g' = g then static_error l "Recursive calls are not allowed in a default clause." None
-              | WVar (l, g', PureFuncName) ->
+              | WVar (l, g', PureFuncName _) ->
                 if List.mem_assoc g' fpm_todo then static_error l "A fixpoint function cannot mention a fixpoint function that appears later in the program text" None;
                 if g' = g then static_error l "A fixpoint function that mentions itself is not yet supported." None
               | _ -> ()
@@ -5163,7 +5162,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               if List.mem_assoc g' fpm_todo then static_error l "A fixpoint function cannot call a fixpoint function that appears later in the program text" None;
               if g' = g then static_error l "A fixpoint function whose body is a return statement cannot call itself." None;
               List.iter iter1 args
-            | WVar (l, g', PureFuncName) ->
+            | WVar (l, g', PureFuncName _) ->
               if List.mem_assoc g' fpm_todo then static_error l "A fixpoint function cannot mention a fixpoint function that appears later in the program text" None;
               if g' = g then static_error l "A fixpoint function whose body is a return statement cannot mention itself." None
             | _ -> expr_fold_open iter () e
@@ -7467,7 +7466,9 @@ let check_if_list_is_defined () =
           end
           end
         | ModuleName -> List.assoc x modulemap
-        | PureFuncName -> let (lg, tparams, t, tps, (fsymb, vsymb)) = List.assoc x purefuncmap in vsymb
+        | PureFuncName typeid_types ->
+          let (lg, tparams, t, tps, (fsymb, vsymb)) = List.assoc x purefuncmap in
+          List.fold_left (fun f arg -> ctxt#mk_app apply_symbol [f; arg]) vsymb (List.map (typeid_of_core l env) typeid_types)
       end
     | PredNameExpr (l, g) -> let Some (_, _, _, _, symb, _, _) = try_assoc g predfammap in cont state symb
     | CastExpr (l, ManifestTypeExpr (_, StructType (sn, targs)), InitializerList (linit, ws)) ->
