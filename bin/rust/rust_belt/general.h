@@ -22,6 +22,10 @@ lemma void close_atomic_space(mask_t spaceMask);
     requires atomic_mask(?currentMask) &*& close_atomic_space_token(spaceMask, ?inv) &*& inv();
     ensures atomic_mask(mask_union(currentMask, spaceMask));
 
+predicate_ctor simple_share(fixpoint(thread_id_t, void *, predicate(;)) frac_borrow_content)(lifetime_t k, thread_id_t t, void *l) =
+    frac_borrow(k, frac_borrow_content(t, l));
+predicate_ctor shared_ref_own(predicate(lifetime_t, thread_id_t, void *) pointee_shr, lifetime_t k)(thread_id_t t, void *l) = [_]pointee_shr(k, t, l);
+
 predicate bool_own(thread_id_t t, bool v;) = true;
 predicate char_own(thread_id_t t, uint32_t v;) = 0 <= v && v <= 0xD7FF || 0xE000 <= v && v <= 0x10FFFF;
 predicate raw_ptr_own(thread_id_t t, void *v;) = true;

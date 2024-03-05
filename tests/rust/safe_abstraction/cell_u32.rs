@@ -84,7 +84,7 @@ impl CellU32 {
     /* User can also write the contract of safe functions to have it explicit.
     Verifast would check the compatibility of the contract with the function semantic type. */
     fn set<'a>(&'a self, u: u32)
-    //@ req thread_token(?t) &*& [?q]lifetime_token(?a) &*& CellU32_share(a, t, self);
+    //@ req thread_token(?t) &*& [?q]lifetime_token(?a) &*& [_]CellU32_share(a, t, self);
     //@ ens thread_token(t) &*& [q]lifetime_token(a);
     {
         let p = self.v.get();

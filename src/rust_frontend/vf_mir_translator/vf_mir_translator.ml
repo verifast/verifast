@@ -645,6 +645,29 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
   let translate_region (reg_cpn : RegionRd.t) = RegionRd.id_get reg_cpn
   let int_size_rank = Ast.PtrRank
 
+  let simple_shr loc fbc_name lft tid l =
+    Ok
+      (Ast.CoefAsn
+         ( loc,
+           DummyPat,
+           CallExpr
+             ( loc,
+               "frac_borrow",
+               [],
+               [],
+               [
+                 LitPat lft;
+                 LitPat
+                   (CallExpr
+                      (loc, fbc_name, [], [], [ LitPat tid; LitPat l ], Static));
+               ],
+               Static ) ))
+
+  let simple_shr_pred loc fbc_name =
+    Ok
+      (Ast.CallExpr
+         (loc, "simple_share", [], [], [ LitPat (Var (loc, fbc_name)) ], Static))
+
   let translate_int_ty (int_ty_cpn : IntTyRd.t) (loc : Ast.loc) =
     let open Ast in
     let sz_rank_name i =
@@ -680,8 +703,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     in
     let own tid vs = Ok (True loc) in
     let own_pred = Ok (Var (loc, ty_name ^ "_own")) in
-    let shr lft tid l = Ok (True loc) in
-    let full_bor_content = Ok (Var (loc, ty_name ^ "_full_borrow_content")) in
+    let fbc_name = ty_name ^ "_full_borrow_content" in
+    let full_bor_content = Ok (Var (loc, fbc_name)) in
     let points_to tid l vid_op =
       (* Todo: The size and bounds of the integer that this assertion is specifying will depend on the pointer `l` type
          which is error-prone. It is helpful if we add a sanity-check or use elevated `integer_(...)` predicates with bound infos *)
@@ -698,7 +721,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                 size = sz_expr;
                 own;
                 own_pred;
-                shr;
+                shr = simple_shr loc fbc_name;
+                shr_pred = simple_shr_pred loc fbc_name;
                 full_bor_content;
                 points_to;
               };
@@ -741,10 +765,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     in
     let own tid vs = Ok (True loc) in
     let own_pred = Ok (Var (loc, ty_name ^ "_own")) in
-    (* Todo @Nima: This shared predicate is not correct. We should write a SimpleType interpretation
-       constructor in RustBelt module to call to for creating the interpretation for u_int and other simple types. *)
-    let shr lft tid l = Ok (True loc) in
-    let full_bor_content = Ok (Var (loc, ty_name ^ "_full_borrow_content")) in
+    let fbc_name = ty_name ^ "_full_borrow_content" in
+    let full_bor_content = Ok (Var (loc, fbc_name)) in
     let points_to tid l vid_op =
       (* Todo: The size and bounds of the integer that this assertion is specifying will depend on the pointer `l` type
          which is error-prone. It is helpful if we add a sanity-check or use elevated `integer_(...)` predicates with bound infos *)
@@ -761,7 +783,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                 size = sz_expr;
                 own;
                 own_pred;
-                shr;
+                shr = simple_shr loc fbc_name;
+                shr_pred = simple_shr_pred loc fbc_name;
                 full_bor_content;
                 points_to;
               };
@@ -836,15 +859,19 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             let own_pred = Ok (Var (loc, name ^ "_own_")) in
             let shr lft tid l =
               Ok
-                (CallExpr
+                (CoefAsn
+                   ( loc,
+                     DummyPat,
+                     CallExpr
                    ( loc,
                      name ^ "_share",
                      (*type arguments*) [],
                      (*indices*) [],
                      (*arguments*)
                      [ LitPat lft; LitPat tid; LitPat l ],
-                     Static ))
+                         Static ) ))
             in
+            let shr_pred = Ok (Var (loc, name ^ "_share")) in
             let full_bor_content =
               Ok (Var (loc, name ^ "_full_borrow_content"))
             in
@@ -857,6 +884,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   own;
                   own_pred;
                   shr;
+                  shr_pred;
                   full_bor_content;
                   points_to;
                 }
@@ -889,8 +917,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let size = SizeofExpr (loc, TypeExpr vf_ty) in
     let own _ _ = Ok (True loc) in
     let own_pred = Ok (Var (loc, "bool_own")) in
-    let shr _ _ _ = Ok (True loc) in
-    let full_bor_content = Ok (Var (loc, "bool_full_borrow_content")) in
+    let fbc_name = "bool_full_borrow_content" in
+    let full_bor_content = Ok (Var (loc, fbc_name)) in
     let points_to tid l vid_op =
       let* pat = RustBelt.Aux.vid_op_to_var_pat vid_op loc in
       Ok (PointsTo (loc, l, pat))
@@ -899,7 +927,16 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       {
         vf_ty;
         interp =
-          RustBelt.{ size; own; own_pred; shr; full_bor_content; points_to };
+          RustBelt.
+            {
+              size;
+              own;
+              own_pred;
+              shr = simple_shr loc fbc_name;
+              shr_pred = simple_shr_pred loc fbc_name;
+              full_bor_content;
+              points_to;
+            };
       }
 
   and char_ty_info loc =
@@ -927,8 +964,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       | _ -> Error "[[char]].own(tid, vs) should have `vs == [c]`"
     in
     let own_pred = Ok (Var (loc, "char_own")) in
-    let shr _ _ _ = Ok (True loc) in
-    let full_bor_content = Ok (Var (loc, "char_full_borrow_content")) in
+    let shr = Ok (Var (loc, "char_share")) in
+    let fbc_name = "char_full_borrow_content" in
+    let full_bor_content = Ok (Var (loc, fbc_name)) in
     let points_to tid l vid_op =
       match vid_op with
       | Some vid when vid != "" ->
@@ -942,7 +980,16 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       {
         vf_ty;
         interp =
-          RustBelt.{ size; own; own_pred; shr; full_bor_content; points_to };
+          RustBelt.
+            {
+              size;
+              own;
+              own_pred;
+              shr = simple_shr loc fbc_name;
+              shr_pred = simple_shr_pred loc fbc_name;
+              full_bor_content;
+              points_to;
+            };
       }
 
   and never_ty_info loc =
@@ -962,7 +1009,14 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         "Calling a function with `!` as a generic type argument is not yet \
          supported"
     in
-    let shr _ _ _ = Ok (False loc) in
+    let shr lft tid l =
+      Error
+        "Expressing the shared ownership of the never type is not yet supported"
+    in
+    let shr_pred =
+      Error
+        "Expressing the shared ownership of the never type is not yet supported"
+    in
     let full_bor_content =
       Error
         "Expressing the full borrow content of the never type is not yet \
@@ -973,7 +1027,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       {
         vf_ty;
         interp =
-          RustBelt.{ size; own; own_pred; shr; full_bor_content; points_to };
+          RustBelt.
+            { size; own; own_pred; shr; shr_pred; full_bor_content; points_to };
       }
 
   and str_ref_ty_info loc =
@@ -988,7 +1043,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         "Passing type &str as a type argument to a generic function is not yet \
          supported"
     in
-    let shr _ _ _ =
+    let shr lft tid l =
+      Error "Expressing shared ownership of &str values is not yet supported"
+    in
+    let shr_pred =
       Error "Expressing shared ownership of &str values is not yet supported"
     in
     let full_bor_content =
@@ -1004,7 +1062,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       {
         vf_ty;
         interp =
-          RustBelt.{ size; own; own_pred; shr; full_bor_content; points_to };
+          RustBelt.
+            { size; own; own_pred; shr; shr_pred; full_bor_content; points_to };
       }
 
   and translate_generic_arg (gen_arg_cpn : GenArgRd.t) (loc : Ast.loc) =
@@ -1101,8 +1160,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let size_expr = SizeofExpr (loc, TypeExpr vf_ty) in
     let own tid vs = Ok (True loc) in
     let own_pred = Ok (Var (loc, "raw_ptr_own")) in
-    let shr lft tid l = Ok (True loc) in
-    let full_bor_content = Ok (Var (loc, "raw_ptr_full_borrow_content")) in
+    let fbc_name = "raw_ptr_full_borrow_content" in
+    let full_bor_content = Ok (Var (loc, fbc_name)) in
     let points_to tid l vid_op =
       let* pat = RustBelt.Aux.vid_op_to_var_pat vid_op loc in
       Ok (PointsTo (loc, l, pat))
@@ -1117,7 +1176,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                 size = size_expr;
                 own;
                 own_pred;
-                shr;
+                shr = simple_shr loc fbc_name;
+                shr_pred = simple_shr_pred loc fbc_name;
                 full_bor_content;
                 points_to;
               };
@@ -1151,7 +1211,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               } =
           Mir.interp_of pointee_ty_info
         in
-        let* own, own_pred, shr, full_bor_content, points_to =
+        let* own, own_pred, shr, shr_pred, full_bor_content, points_to =
           match mut with
           | Mir.Mut ->
               let own tid vs =
@@ -1175,7 +1235,16 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   "Calling a function with a mutable reference type as a \
                    generic type argument is not yet supported"
               in
-              let shr lft tid l = Ok (True loc) in
+              let shr lft tid l =
+                Error
+                  "Calling a function with a mutable reference type as a \
+                   generic type argument is not yet supported"
+              in
+              let shr_pred =
+                Error
+                  "Calling a function with a mutable reference type as a \
+                   generic type argument is not yet supported"
+              in
               let full_bor_content =
                 (* This will need to add a definition for each mut reference type in the program because the body of the predicate will need to mention
                    [[&mut T]].own which depends on T. Another solution is to make VeriFast support Higher order predicates with non-predicate arguments *)
@@ -1200,7 +1269,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                     Ok (Sep (loc, PointsTo (loc, l, var_pat), own))
                 | _ -> Error "mut reference points_to needs a value id"
               in
-              Ok (own, own_pred, shr, full_bor_content, points_to)
+              Ok (own, own_pred, shr, shr_pred, full_bor_content, points_to)
           | Mir.Not ->
               let own tid vs =
                 match vs with
@@ -1212,7 +1281,16 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   "Calling a function with a shared reference type as a \
                    generic type argument is not yet supported"
               in
-              let shr lft tid l = Ok (True loc) in
+              let shr lft tid l =
+                Error
+                  "Calling a function with a shared reference type as a \
+                   generic type argument is not yet supported"
+              in
+              let shr_pred =
+                Error
+                  "Calling a function with a shared reference type as a \
+                   generic type argument is not yet supported"
+              in
               let full_bor_content =
                 Error
                   "Expressing the full borrow content of a shared reference \
@@ -1227,7 +1305,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                     Ok (Sep (loc, PointsTo (loc, l, var_pat), own))
                 | _ -> Error "shared reference points_to needs a value id"
               in
-              Ok (own, own_pred, shr, full_bor_content, points_to)
+              Ok (own, own_pred, shr, shr_pred, full_bor_content, points_to)
         in
         let ty_info =
           Mir.TyInfoBasic
@@ -1240,6 +1318,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                     own;
                     own_pred;
                     shr;
+                    shr_pred;
                     full_bor_content;
                     points_to;
                   };
@@ -1311,6 +1390,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                 Error
                   "Expressing the shared ownership predicate of a type \
                    parameter is not yet supported");
+            shr_pred =
+              Error
+                "Expressing the shared ownership predicate of a type parameter \
+                 is not yet supported";
             full_bor_content = Ok (Var (loc, name ^ "_full_borrow_content"));
             points_to =
               (fun t l vid ->
