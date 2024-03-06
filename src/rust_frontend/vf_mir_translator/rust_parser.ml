@@ -182,7 +182,10 @@ let rec parse_expr_funcs allowStructExprs =
     ] ->
     begin match e with
       Var (_, x) -> CallExpr (l, x, [], indices, args, Static)
-    | _ -> raise (ParseException (l, "Cannot call this expression form"))
+    | _ ->
+      if indices <> [] then static_error l "This expression form is not supported here" None;
+      let args = args |> List.map @@ function LitPat e -> e | _ -> static_error l "Patterns are not supported as arguments here" None in
+      ExprCallExpr (l, e, args)
     end
   | [] -> e
   and parse_struct_expr_field_rest lf f = function%parser
@@ -226,6 +229,7 @@ let rec parse_expr_funcs allowStructExprs =
   | [ (l, Kwd "["); [%let pats = rep_comma parse_pat]; (_, Kwd "]") ] -> CallExpr (l, "#list", [], [], pats, Static)
   | [ (l, CharToken c) ] -> IntLit (l, big_int_of_int (Char.code c), true, false, NoLSuffix)
   | [ (l, Kwd "typeid"); (_, Kwd "("); parse_type as t; (_, Kwd ")") ] -> Typeid (l, TypeExpr t)
+  | [ (_, Kwd "<"); parse_type as t; (_, Kwd ">"); (l, Kwd "."); (_, Ident x) ] -> TypePredExpr (l, t, x)
   and parse_match_arm = function%parser
     [ parse_expr as pat; (l, Kwd "=>"); parse_expr as rhs ] ->
     begin match pat with
