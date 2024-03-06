@@ -136,7 +136,7 @@ module AstAux = struct
 
   let decl_fields (d : decl) =
     match d with
-    | Struct (loc, name, [], definition_opt, attrs) -> (
+    | Struct (loc, name, tparams, definition_opt, attrs) -> (
         match definition_opt with
         | Some (base_specs, fields, instance_pred_decls, is_polymorphic) ->
             Ok (Some fields)
@@ -1402,9 +1402,12 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                    (loc, IdentTypeExpr (loc, None, name), "full_borrow_content"));
             points_to =
               (fun t l vid ->
-                Error
-                  "Expressing the points-to predicate of a type parameter is \
-                   not yet supported");
+                let rhs =
+                  match vid with
+                  | None -> DummyPat
+                  | Some vid -> VarPat (loc, vid)
+                in
+                Ok (Ast.PointsTo (loc, l, rhs)));
           }
         in
         Ok (Mir.TyInfoBasic { vf_ty; interp })
@@ -3166,7 +3169,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let* fields = ListAux.try_map translate_field_def fields_cpn in
     Ok Mir.{ fields }
 
-  let gen_adt_full_borrow_content adt_kind name
+  let gen_adt_full_borrow_content adt_kind name tparams
       (variants : Mir.variant_def_tr list) adt_def_loc =
     let open Ast in
     match adt_kind with
@@ -3180,7 +3183,11 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           [
             ( IdentTypeExpr (adt_def_loc, None (*package name*), "thread_id_t"),
               tid_param_name );
-            ( ManifestTypeExpr (adt_def_loc, PtrType (StructType (name, []))),
+            ( ManifestTypeExpr
+                ( adt_def_loc,
+                  PtrType
+                    (StructType
+                       (name, List.map (fun x -> GhostTypeParam x) tparams)) ),
               ptr_param_name );
           ]
         in
@@ -3215,7 +3222,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           CallExpr
             ( adt_def_loc,
               name ^ "_own",
-              (*type arguments*) [],
+              (*type arguments*)
+              List.map (fun x -> IdentTypeExpr (adt_def_loc, None, x)) tparams,
               (*indices*) [],
               (*arguments*)
               own_args,
@@ -3225,7 +3233,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           CallExpr
             ( adt_def_loc,
               Printf.sprintf "struct_%s_padding" name,
-              [],
+              List.map (fun x -> IdentTypeExpr (adt_def_loc, None, x)) tparams,
               [],
               [ LitPat (Var (adt_def_loc, ptr_param_name)) ],
               Static )
@@ -3238,7 +3246,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           PredCtorDecl
             ( adt_def_loc,
               fbor_content_name,
-              [] (* type parameters*),
+              tparams (* type parameters*),
               fbor_content_params,
               [],
               None
@@ -3247,7 +3255,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         in
         Ok fbor_content_pred_ctor
 
-  let gen_adt_proof_obligs adt_def =
+  let gen_adt_proof_obligs adt_def tparams =
     let open Ast in
     let* adt_kind = Mir.decl_mir_adt_kind adt_def in
     match adt_kind with
@@ -3255,6 +3263,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         failwith "Todo: Gen proof obligs for Enum or Union"
     | Mir.Struct ->
         let adt_def_loc = AstAux.decl_loc adt_def in
+        let tparams_targs =
+          List.map (fun x -> IdentTypeExpr (adt_def_loc, None, x)) tparams
+        in
         let* name =
           Option.to_result ~none:(`GenAdtProofObligs "Failed to get ADT name")
             (AstAux.decl_name adt_def)
@@ -3269,6 +3280,21 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           (ManifestTypeExpr (adt_def_loc, PtrType Void), n)
         in
         let lpat_var n = LitPat (Var (adt_def_loc, n)) in
+        let add_type_interp_asn asn =
+          List.fold_right
+            (fun x asn ->
+              Sep
+                ( adt_def_loc,
+                  CallExpr
+                    ( adt_def_loc,
+                      "type_interp",
+                      [ IdentTypeExpr (adt_def_loc, None, x) ],
+                      [],
+                      [],
+                      Static ),
+                  asn ))
+            tparams asn
+        in
         (*TY-SHR-MONO*)
         let params =
           [
@@ -3301,14 +3327,16 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               CallExpr
                 ( adt_def_loc,
                   name ^ "_share",
-                  (*type arguments*) [],
+                  (*type arguments*) tparams_targs,
                   (*indices*) [],
                   (*arguments*)
                   List.map lpat_var [ lft_n; "t"; "l" ],
                   Static ) )
         in
-        let pre = Sep (adt_def_loc, lft_inc_asn, shr_asn "k") in
-        let post = shr_asn "k1" in
+        let pre =
+          add_type_interp_asn (Sep (adt_def_loc, lft_inc_asn, shr_asn "k"))
+        in
+        let post = add_type_interp_asn (shr_asn "k1") in
         let share_mono_po =
           Func
             ( adt_def_loc,
@@ -3316,7 +3344,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                 ( false
                   (*indicates whether an axiom should be generated for this lemma*),
                   None (*trigger*) ),
-              [] (*type parameters*),
+              tparams (*type parameters*),
               None (*return type*),
               name ^ "_share_mono",
               params,
@@ -3346,7 +3374,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   (CallExpr
                      ( adt_def_loc,
                        name ^ "_full_borrow_content",
-                       (*type arguments*) [],
+                       (*type arguments*) tparams_targs,
                        (*indices*) [],
                        (*arguments*)
                        List.map lpat_var [ "t"; "l" ],
@@ -3368,7 +3396,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   Static ) )
         in
         let pre =
-          Sep (adt_def_loc, fbor_pred, lft_token (VarPat (adt_def_loc, "q")))
+          add_type_interp_asn
+            (Sep (adt_def_loc, fbor_pred, lft_token (VarPat (adt_def_loc, "q"))))
         in
         let share_pred =
           CoefAsn
@@ -3377,12 +3406,15 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               CallExpr
                 ( adt_def_loc,
                   name ^ "_share",
-                  (*type arguments*) [],
+                  (*type arguments*) tparams_targs,
                   (*indices*) [],
                   (*arguments*) List.map lpat_var [ "k"; "t"; "l" ],
                   Static ) )
         in
-        let post = Sep (adt_def_loc, share_pred, lft_token (lpat_var "q")) in
+        let post =
+          add_type_interp_asn
+            (Sep (adt_def_loc, share_pred, lft_token (lpat_var "q")))
+        in
         let share_po =
           Func
             ( adt_def_loc,
@@ -3390,7 +3422,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                 ( false
                   (*indicates whether an axiom should be generated for this lemma*),
                   None (*trigger*) ),
-              [] (*type parameters*),
+              tparams (*type parameters*),
               None (*return type*),
               name ^ "_share_full",
               params,
@@ -3451,6 +3483,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let* variants = ListAux.try_map translate_variant_def variants_cpn in
       let span_cpn = span_get adt_def_cpn in
       let* def_loc = translate_span_data span_cpn in
+      let tparams_targs =
+        List.map (fun x -> Ast.IdentTypeExpr (def_loc, None, x)) tparams
+      in
       let vis_cpn = vis_get adt_def_cpn in
       let* vis = translate_visibility vis_cpn in
       let is_local = is_local_get adt_def_cpn in
@@ -3477,13 +3512,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   (*struct_attr list*) [] )
             in
             let struct_typedef_aux =
-              let targs =
-                tparams
-                |> List.map (fun x -> Ast.IdentTypeExpr (def_loc, None, x))
-              in
               Ast.TypedefDecl
                 ( def_loc,
-                  StructTypeExpr (def_loc, Some name, None, [], targs),
+                  StructTypeExpr (def_loc, Some name, None, [], tparams_targs),
                   name,
                   tparams )
             in
@@ -3494,24 +3525,17 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       in
       let* full_bor_content, proof_obligs, aux_decls' =
         match (is_local, vis) with
-        | false, _ | true, Mir.Restricted ->
-            Ok (None, [], [])
+        | false, _ | true, Mir.Restricted -> Ok (None, [], [])
         | true, Mir.Invisible ->
             Error
               (`TrAdtDef
                 ("The " ^ def_path
                ^ " ADT definition is local and locally invisible"))
         | true, Mir.Public ->
-            if tparams <> [] then
-              raise
-                (Ast.StaticError
-                   ( def_loc,
-                     "Public generic structs are not yet supported",
-                     None ));
             let* full_bor_content =
-              gen_adt_full_borrow_content kind name variants def_loc
+              gen_adt_full_borrow_content kind name tparams variants def_loc
             in
-            let* proof_obligs = gen_adt_proof_obligs def in
+            let* proof_obligs = gen_adt_proof_obligs def tparams in
             let own__pred_decls =
               let own_args =
                 fds
@@ -3522,27 +3546,30 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                 Ast.PredFamilyDecl
                   ( def_loc,
                     name ^ "_own_",
-                    [],
+                    tparams,
                     0,
                     [
                       IdentTypeExpr (def_loc, None, "thread_id_t");
-                      StructTypeExpr (def_loc, Some name, None, [], []);
+                      StructTypeExpr
+                        (def_loc, Some name, None, [], tparams_targs);
                     ],
                     None,
                     Ast.Inductiveness_Inductive );
                 Ast.PredFamilyInstanceDecl
                   ( def_loc,
                     name ^ "_own_",
-                    [],
+                    tparams,
                     [],
                     [
                       (IdentTypeExpr (def_loc, None, "thread_id_t"), "t");
-                      (StructTypeExpr (def_loc, Some name, None, [], []), "v");
+                      ( StructTypeExpr
+                          (def_loc, Some name, None, [], tparams_targs),
+                        "v" );
                     ],
                     CallExpr
                       ( def_loc,
                         name ^ "_own",
-                        [],
+                        tparams_targs,
                         [],
                         LitPat (Var (def_loc, "t")) :: own_args,
                         Static ) );

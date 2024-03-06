@@ -94,6 +94,10 @@ lemma void close_full_borrow_content<T>(thread_id_t t, T *l);
 
 predicate type_interp<T>(;);
 
+lemma void share_mono<T>(lifetime_t k, lifetime_t k1, thread_id_t t, T *l);
+    requires type_interp<T>() &*& lifetime_inclusion(k1, k) == true &*& [_](<T>.share)(k, t, l);
+    ensures type_interp<T>() &*& [_](<T>.share)(k1, t, l);
+
 lemma void share_full_borrow<T>(lifetime_t k, thread_id_t t, void *l);
     requires type_interp<T>() &*& full_borrow(k, (<T>.full_borrow_content)(t, l)) &*& [?q]lifetime_token(k);
     ensures type_interp<T>() &*& [_](<T>.share)(k, t, l) &*& [q]lifetime_token(k);

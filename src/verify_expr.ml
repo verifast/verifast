@@ -206,13 +206,20 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     if nonghost_callers_only <> nonghost_callers_only0 then static_error l (msg ^ "nonghost_callers_only clauses do not match.") None;
     execute_branch begin fun () ->
     with_context (Executing ([], [], l, msg0 ^ ": " ^ msg1)) $. fun () ->
+    let tparam_typeid_env = tparams0 |> flatmap @@ fun x ->
+      if tparam_carries_typeid x then
+        let paramName = x ^ "_typeid" in
+        [paramName, get_unique_var_symb paramName voidPtrType]
+      else
+        []
+    in
     let env0_0 = List.map (function (p, t) -> (p, get_unique_var_symb p t)) xmap0 in
     let currentThreadEnv = [(current_thread_name, get_unique_var_symb current_thread_name current_thread_type)] in
-    let env0 = currentThreadEnv @ env0_0 @ cenv0 in
+    let env0 = tparam_typeid_env @ currentThreadEnv @ env0_0 @ cenv0 in
     produce_asn_with_post tpenv0 [] [] env0 pre0 real_unit None None (fun h _ env0 post0_opt ->
       let post0 = match post0_opt with Some post0 -> post0 | None -> post0 in
       let bs = zip2 xmap env0_0 in
-      let env = currentThreadEnv @ List.map (fun ((p, _), (p0, v)) -> (p, v)) bs @ env00 in
+      let env = tparam_typeid_env @ currentThreadEnv @ List.map (fun ((p, _), (p0, v)) -> (p, v)) bs @ env00 in
       begin match pre with
         ExprAsn (la, False lf) when la == l ->
         assert_false h env l "Contract required" None
