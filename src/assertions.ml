@@ -508,6 +508,12 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       produce_asn_core_with_post tpenv h ghostenv env body (real_mul l coef coef') size_first size_all assuming cont_with_post
     | EnsuresAsn (l, body) ->
       cont_with_post h ghostenv env (Some body)
+    | WPredExprAsn (l, e, pts, inputParamCount, pats) ->
+      let symb = eval None env e in
+      let pts' = instantiate_types tpenv pts in
+      evalpats ghostenv env pats pts pts' $. fun ghostenv env ts ->
+      produce_chunk h (symb, false) [] coef inputParamCount ts None @@ fun h ->
+      cont h ghostenv env
     )
   
   let rec produce_asn_core tpenv h ghostenv env p coef size_first size_all (assuming: bool) cont: symexec_result =
@@ -1193,6 +1199,13 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       check_dummy_coefpat l coefpat coef;
       cont [chunk] h ghostenv env env' size
     in
+    let pred_expr_asn l coefpat e pts inputParamCount pats =
+      let g_symb = (ev e, false) in
+      let pts' = instantiate_types tpenv pts in
+      consume_chunk_core rules h ghostenv env env' l g_symb [] coef real_unit_pat inputParamCount (srcpats pats) pts pts' @@ fun chunk h coef ts size ghostenv env env' ->
+      check_dummy_coefpat l coefpat coef;
+      cont [chunk] h ghostenv env env' size
+    in
     match p with
     | WPointsTo (l, e, tp, rhs) -> points_to l real_unit_pat e tp (SrcPat rhs)
     | WPredAsn (l, g, is_global_predref, targs, pats0, pats) -> pred_asn l real_unit_pat g is_global_predref targs (srcpats pats0) (srcpats pats)
@@ -1287,6 +1300,8 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | CoefAsn (l, coefpat, WInstPredAsn (_, e_opt, st, cfin, tn, g, index, pats)) -> inst_call_pred l (SrcPat coefpat) e_opt st tn g index pats
     | EnsuresAsn (l, body) ->
       cont_with_post [] h ghostenv env env' None (Some body)
+    | WPredExprAsn (l, e, pts, inputParamCount, pats) -> pred_expr_asn l real_unit_pat e pts inputParamCount pats
+    | CoefAsn (l, coefpat, WPredExprAsn (_, e, pts, inputParamCount, pats)) -> pred_expr_asn l (SrcPat coefpat) e pts inputParamCount pats
     )
   
   let rec consume_asn_core rules tpenv h ghostenv env env' p checkDummyFracs coef cont =

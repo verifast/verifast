@@ -547,6 +547,20 @@ and of_expr = function
     of_list of_pat indices;
     of_list of_pat args
   ])
+| PredExprAsn (l, e, args) ->
+  C ("PredExprAsn", [
+    of_loc l;
+    of_expr e;
+    of_list of_pat args
+  ])
+| WPredExprAsn (l, e, pts, inputParamCount, pats) ->
+  C ("WPredExprAsn", [
+    of_loc l;
+    of_expr e;
+    of_list of_type pts;
+    of_option i inputParamCount;
+    of_list of_pat pats
+  ])
 | InstPredAsn (l, e, p, index, args) ->
   C ("InstPredAsn", [
     of_loc l;

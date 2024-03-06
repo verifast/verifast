@@ -1364,6 +1364,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | MatchAsn (l, e, pat) -> expr_mark_addr_taken e locals; pat_expr_mark_addr_taken pat locals
     | LetTypeAsn (l, x, tp, a) -> ass_mark_addr_taken a locals
     | WMatchAsn (l, e, pat, tp) -> expr_mark_addr_taken e locals; pat_expr_mark_addr_taken pat locals
+    | WPredExprAsn (_, e, _, _, pats) -> expr_mark_addr_taken e locals; List.iter (fun p -> pat_expr_mark_addr_taken p locals) pats
     | e -> expr_mark_addr_taken e locals
   
   let rec stmt_mark_addr_taken s locals pure cont =

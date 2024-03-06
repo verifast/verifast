@@ -470,6 +470,16 @@ and
       type_ list *
       pat list *
       pat list
+  | PredExprAsn of
+      loc *
+      expr *
+      pat list
+  | WPredExprAsn of
+      loc *
+      expr *
+      type_ list * (* parameter types *)
+      int option * (* inputParamCount *)
+      pat list
   | InstPredAsn of
       loc *
       expr *
@@ -1018,6 +1028,8 @@ let rec expr_loc e =
   | WPointsTo (l, e, tp, rhs) -> l
   | PredAsn (l, g, targs, ies, es) -> l
   | WPredAsn (l, g, _, targs, ies, es) -> l
+  | PredExprAsn (l, e, pats) -> l
+  | WPredExprAsn (l, e, pts, inputParamCount, pats) -> l
   | InstPredAsn (l, e, g, index, pats) -> l
   | WInstPredAsn (l, e_opt, tns, cfin, tn, g, index, pats) -> l
   | ExprAsn (l, e) -> l

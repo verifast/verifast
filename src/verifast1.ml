@@ -6040,6 +6040,17 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         end;
         let (wv, tenv') = check_pat (pn,ilist) tparams tenv t v in
         (WPointsTo (l, wlhs, t, wv), tenv', [])
+      | PredExprAsn (l, e, args) ->
+        let w, tp = check_expr (pn,ilist) tparams tenv (Some true) e in
+        let pts, inputParamCount =
+          match tp with
+            PredType (tparams, pts, inputParamCount, inductiveness) ->
+            if tparams <> [] then static_error l "Cannot call a generic predicate here" None;
+            pts, inputParamCount
+          | _ -> static_error l "The callee of a predicate assertion must be of predicate type" None
+        in
+        let wargs, tenv' = check_pats (pn,ilist) l tparams tenv pts args in
+        (WPredExprAsn (l, w, pts, inputParamCount, wargs), tenv', [])
       | PredAsn (l, p, targs, ps0, ps) ->
         let targs = List.map (check_pure_type (pn, ilist) tparams Ghost) targs in
         begin fun cont ->
@@ -6278,6 +6289,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let a =
           match e with
           | CallExpr (l, g, targs, pats0, pats, Static) -> PredAsn (l, g, targs, pats0, pats)
+          | ExprCallExpr (l, e, args) -> PredExprAsn (l, e, List.map (fun e -> LitPat e) args)
           | CallExpr (l, g, [], pats0, LitPat e::pats, Instance) ->
             let index =
               match pats0 with
@@ -6415,6 +6427,14 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | WDeref (_, ed, _) -> assert_expr_fixed fixed ed
       end;
       assume_pat_fixed fixed pv
+    | WPredExprAsn (l, e, pts, inputParamCount, pats) ->
+      begin match inputParamCount with
+        None -> static_error l "Preciseness check failure: callee is not precise." (Some "calleeisnotprecise")
+      | Some n ->
+        let (inpats, outpats) = take_drop n pats in
+        assert_pats_fixed l fixed inpats;
+        assume_pats_fixed fixed outpats
+      end
     | WPredAsn (l, g, is_global_predref, targs, pats0, pats) ->
       begin
         match g#inputParamCount with

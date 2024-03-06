@@ -24,7 +24,7 @@ predicate MutexCell_held<T>(struct MutexCell<T> *mutexCell, predicate(T) T_own, 
 @*/
 
 struct MutexCell<T> *create_MutexCell<T>(T value)
-//@ requires exists<predicate(T)>(?T_own) &*& T_own(value);
+//@ requires exists<predicate(T)>(?T_own) &*& (T_own)(value);
 //@ ensures MutexCell<T>(result, T_own);
 {
     //@ open exists(_);
