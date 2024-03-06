@@ -6768,7 +6768,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | TypePredDef (l, tparams, te, predName, lrhs, rhs)::ds ->
         check_tparams l [] tparams;
         let tp = check_pure_type ("",[]) tparams Ghost te in
-        let (l, selfTypeName, predType, symb) =
+        let (_, selfTypeName, predType, symb) =
           match try_assoc predName typepreddeclmap with
             None -> static_error l "No such type predicate" None
           | Some info -> info
@@ -6823,7 +6823,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             ctxt#assume_forall (Printf.sprintf "type_pred_def_%s_%s" predName rhs) [typePredTerm] (List.map (fun x -> ctxt#type_inductive) tparams) eq;
             iter ds
           | None ->
-            static_error l "No such predicate or predicate constructor" None
+            static_error l "No such predicate constructor" None
           end
       | _::ds ->
         iter ds

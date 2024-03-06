@@ -62,5 +62,41 @@ impl<A, B> Pair<A, B> {
         //@ open Pair_share::<A, B>(a, _t, self);
         &self.snd
     }
+    
+    pub fn replace_fst<'a>(&'a mut self, new_fst: A) -> A {
+        unsafe {
+            //@ open_full_borrow(_q_a, a, Pair_full_borrow_content::<A, B>(_t, self));
+            //@ open Pair_full_borrow_content::<A, B>(_t, self)();
+            //@ open Pair_own(_t, ?fst0, ?snd0);
+            //@ open Pair_fst(self, fst0);
+            let result = std::ptr::read(&self.fst);
+            std::ptr::write(&mut self.fst, new_fst);
+            //@ close Pair_fst(self, new_fst);
+            //@ close Pair_own(_t, new_fst, snd0);
+            //@ close Pair_full_borrow_content::<A, B>(_t, self)();
+            //@ close_full_borrow(Pair_full_borrow_content::<A, B>(_t, self));
+            //@ leak full_borrow(_, _);
+            result
+        }
+    }
+
+    pub fn replace_snd<'a>(&'a mut self, new_snd: B) -> B {
+        unsafe {
+            //@ open_full_borrow(_q_a, a, Pair_full_borrow_content::<A, B>(_t, self));
+            //@ open Pair_full_borrow_content::<A, B>(_t, self)();
+            //@ open Pair_own(_t, ?fst0, ?snd0);
+            //@ open Pair_snd(self, snd0);
+            let result = std::ptr::read(&self.snd);
+            std::ptr::write(&mut self.snd, new_snd);
+            //@ close Pair_snd(self, new_snd);
+            //@ close Pair_own(_t, fst0, new_snd);
+            //@ close Pair_full_borrow_content::<A, B>(_t, self)();
+            //@ close_full_borrow(Pair_full_borrow_content::<A, B>(_t, self));
+            //@ leak full_borrow(_, _);
+            result
+        }
+    }
+    
+    // TODO: deref_fst_mut, deref_snd_mut; requires splitting the full borrow.
 
 }
