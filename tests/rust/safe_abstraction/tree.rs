@@ -236,14 +236,14 @@ impl Tree {
     }
 
     unsafe fn accept0<'a, V: TreeVisitor>(mut x: *mut Node, mut x_is_new: bool, visitor: &'a mut V)
-    //@ req Tree(?root, 0, ?rootShape) &*& x == root &*& x_is_new &*& thread_token(?t) &*& [?q]lifetime_token(?k) &*& full_borrow(k, V_full_borrow_content(t, visitor));
-    //@ ens Tree(root, 0, rootShape) &*& thread_token(t) &*& [q]lifetime_token(k) &*& full_borrow(k, V_full_borrow_content(t, visitor));
+    //@ req Tree(?root, 0, ?rootShape) &*& x == root &*& x_is_new &*& thread_token(?t) &*& [?q]lifetime_token(?k) &*& full_borrow(k, <V>.full_borrow_content(t, visitor));
+    //@ ens Tree(root, 0, rootShape) &*& thread_token(t) &*& [q]lifetime_token(k) &*& full_borrow(k, <V>.full_borrow_content(t, visitor));
     {
         //@ Tree_inv();
         //@ close stack(0, root, rootShape, root, rootShape, 0, []);
         //@ close inv_(true, x, root, rootShape, _, _);
         loop {
-            //@ inv inv_(x_is_new, x, root, rootShape, ?stepsLeft, ?elems_todo) &*& x != 0 &*& thread_token(t) &*& [q]lifetime_token(k) &*& full_borrow(k, V_full_borrow_content(t, visitor));
+            //@ inv inv_(x_is_new, x, root, rootShape, ?stepsLeft, ?elems_todo) &*& x != 0 &*& thread_token(t) &*& [q]lifetime_token(k) &*& full_borrow(k, <V>.full_borrow_content(t, visitor));
             //@ open inv_(_, _, _, _, _, _);
             //@ if x_is_new == false { open stack(x, _, _, _, _, _, _); }
             if (*x).left.is_null() {
@@ -254,7 +254,7 @@ impl Tree {
                 if x_is_new {
                     //@ let k1 = begin_lifetime();
                     //@ let kk1 = lifetime_intersection(k, k1);
-                    //@ reborrow(kk1, k, V_full_borrow_content(t, visitor));
+                    //@ reborrow(kk1, k, <V>.full_borrow_content(t, visitor));
                     //@ lifetime_token_inv(k);
                     //@ if q < 1 { close [1 - q]hidden_lifetime_token(k1); }
                     //@ close_lifetime_intersection_token(q, k, k1);
@@ -264,7 +264,7 @@ impl Tree {
                     //@ end_lifetime(k1);
                     //@ lifetime_intersection_symm(k, k1);
                     //@ close_lifetime_intersection_dead_token(k1, k);
-                    //@ end_reborrow(kk1, k, V_full_borrow_content(t, visitor));
+                    //@ end_reborrow(kk1, k, <V>.full_borrow_content(t, visitor));
                     
                     //@ set_lsb((*x).parent as *mut u8);
                     (*x).parent = ((*x).parent as *mut u8).offset(1) as *mut Node;

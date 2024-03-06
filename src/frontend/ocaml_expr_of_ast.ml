@@ -448,6 +448,8 @@ and of_expr = function
 | TypedExpr (e, t) -> C ("TypedExpr", [of_expr e; of_type t])
 | WidenedParameterArgument e -> C ("WidenedParameterArgument", [of_expr e])
 | SizeofExpr (l, e) -> C ("SizeofExpr", [of_loc l; of_expr e])
+| TypePredExpr (l, te, x) -> C ("TypePredExpr", [of_loc l; of_type_expr te; S x])
+| WTypePredExpr (l, t, x) -> C ("WTypePredExpr", [of_loc l; of_type t; S x])
 | TypeExpr t -> C ("TypeExpr", [of_type_expr t])
 | GenericExpr (l, e, cs, def) ->
   C ("GenericExpr", [
@@ -1022,6 +1024,29 @@ and of_decl = function
     of_type_expr tp_expr;
     S name;
     of_option of_expr expr_opt
+  ])
+| ModuleDecl (l, mn, ilist, ds) ->
+  C ("ModuleDecl", [
+    of_loc l;
+    S mn;
+    of_list of_import ilist;
+    of_list of_decl ds
+  ])
+| TypePredDecl (l, te, selfTypeName, predName) ->
+  C ("TypePredDecl", [
+    of_loc l;
+    of_type_expr te;
+    S selfTypeName;
+    S predName
+  ])
+| TypePredDef (l, tparams, te, predName, lrhs, rhs) ->
+  C ("TypePredDef", [
+    of_loc l;
+    of_list s tparams;
+    of_type_expr te;
+    S predName;
+    of_loc lrhs;
+    S rhs
   ])
 and of_params params = 
   params |> of_list @@ fun (t, x) -> T [of_type_expr t; S x]

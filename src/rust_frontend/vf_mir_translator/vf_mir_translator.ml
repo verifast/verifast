@@ -1377,29 +1377,29 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             own =
               (fun t vs ->
                 Ok
-                  (Ast.CallExpr
+                  (Ast.ExprCallExpr
                      ( loc,
-                       name ^ "_own",
-                       [],
-                       [],
-                       List.map (fun e -> LitPat e) (t :: vs),
-                       Static )));
-            own_pred = Ok (Var (loc, name ^ "_own"));
+                       TypePredExpr (loc, IdentTypeExpr (loc, None, name), "own"),
+                       t :: vs )));
+            own_pred =
+              Ok (TypePredExpr (loc, IdentTypeExpr (loc, None, name), "own"));
             shr =
               (fun k t l ->
                 Ok
                   (CoefAsn
                      ( loc,
                        DummyPat,
-                       CallExpr
+                       ExprCallExpr
                          ( loc,
-                           name ^ "_share",
-                           [],
-                           [],
-                           [ LitPat k; LitPat t; LitPat l ],
-                           Static ) )));
-            shr_pred = Ok (Var (loc, name ^ "_share"));
-            full_bor_content = Ok (Var (loc, name ^ "_full_borrow_content"));
+                           TypePredExpr
+                             (loc, IdentTypeExpr (loc, None, name), "share"),
+                           [ k; t; l ] ) )));
+            shr_pred =
+              Ok (TypePredExpr (loc, IdentTypeExpr (loc, None, name), "share"));
+            full_bor_content =
+              Ok
+                (TypePredExpr
+                   (loc, IdentTypeExpr (loc, None, name), "full_borrow_content"));
             points_to =
               (fun t l vid ->
                 Error
@@ -1733,41 +1733,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         let targs =
           Util.flatmap (function Mir.GenArgType ty -> [ ty ] | _ -> []) substs
         in
-        let targs_args =
-          targs
-          |> Util.flatmap @@ fun ty ->
-             [
-               (match (Mir.interp_of ty).own_pred with
-               | Ok own_pred -> own_pred
-               | Error msg ->
-                   raise
-                     (Ast.StaticError
-                        ( call_loc,
-                          "Cannot express the ownership for some of the type \
-                           arguments: " ^ msg,
-                          None )));
-               (match (Mir.interp_of ty).full_bor_content with
-               | Ok fbc -> fbc
-               | Error msg ->
-                   raise
-                     (Ast.StaticError
-                        ( call_loc,
-                          "Cannot express the full borrow content for some of \
-                           the type arguments: " ^ msg,
-                          None )));
-               (match (Mir.interp_of ty).shr_pred with
-               | Ok shr_pred -> shr_pred
-               | Error msg ->
-                   raise
-                     (Ast.StaticError
-                        ( call_loc,
-                          "Cannot express the shared ownership for some of the \
-                           type arguments: " ^ msg,
-                          None )));
-             ]
-        in
         let targs = List.map Mir.raw_type_of targs in
-        let args = targs_args @ args in
         let args = List.map (fun expr -> Ast.LitPat expr) args in
         let call_expr =
           Ast.CallExpr
@@ -2907,35 +2873,6 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let* loc = translate_span_data span_cpn in
     Ok (params, loc)
 
-  let tparam_params loc tparam =
-    [
-      ( Ast.PredTypeExpr
-          ( loc,
-            [
-              Ast.IdentTypeExpr (loc, None, "thread_id_t");
-              Ast.IdentTypeExpr (loc, None, tparam);
-            ],
-            None ),
-        tparam ^ "_own" );
-      ( Ast.PureFuncTypeExpr
-          ( loc,
-            [
-              Ast.IdentTypeExpr (loc, None, "thread_id_t");
-              Ast.ManifestTypeExpr (loc, PtrType Void);
-              PredTypeExpr (loc, [], None);
-            ] ),
-        tparam ^ "_full_borrow_content" );
-      ( Ast.PredTypeExpr
-          ( loc,
-            [
-              Ast.IdentTypeExpr (loc, None, "lifetime_t");
-              Ast.IdentTypeExpr (loc, None, "thread_id_t");
-              Ast.ManifestTypeExpr (loc, PtrType Void);
-            ],
-            None ),
-        tparam ^ "_share" );
-    ]
-
   let translate_trait_required_fn (adt_defs : Mir.adt_def_tr list)
       (trait_name : string) (required_fn_cpn : TraitRd.RequiredFn.t) =
     let open TraitRd.RequiredFn in
@@ -2989,7 +2926,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           (*type params*) [ "Self" ],
           Some ret_ty,
           Printf.sprintf "%s::%s" trait_name name,
-          tparam_params loc "Self" @ vf_param_decls,
+          vf_param_decls,
           nonghost_callers_only,
           fn_type_clause,
           pre_post,
@@ -3149,7 +3086,6 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         let vf_bblocks = Util.flatmap translate_to_vf_basic_block bblocks in
         let span_cpn = span_get body_cpn in
         let* loc = translate_span_data span_cpn in
-        let tparam_params = Util.flatmap (tparam_params loc) tparams in
         let* closing_cbrace_loc = LocAux.get_last_col_loc loc in
         let mk_fn_decl contract body =
           let ( (nonghost_callers_only : bool),
@@ -3164,7 +3100,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               (*type params*) tparams,
               Some ret_ty,
               name,
-              tparam_params @ vf_param_decls,
+              vf_param_decls,
               nonghost_callers_only,
               fn_type_clause,
               pre_post,
@@ -3559,85 +3495,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let* full_bor_content, proof_obligs, aux_decls' =
         match (is_local, vis) with
         | false, _ | true, Mir.Restricted ->
-            if tparams <> [] then Ok (None, [], [])
-            else
-              let aux_decls' =
-                if tparams <> [] then []
-                else
-                  [
-                    Ast.Func
-                      ( def_loc,
-                        Fixpoint,
-                        (*type parameters*) [],
-                        (*return type*)
-                        Some
-                          (PredTypeExpr
-                             ( def_loc,
-                               [
-                                 IdentTypeExpr (def_loc, None, "thread_id_t");
-                                 StructTypeExpr
-                                   (def_loc, Some name, None, [], []);
-                               ],
-                               None )),
-                        name ^ "_own_",
-                        (*parameters*) [],
-                        (*nonghost_callers_only*) false,
-                        (*functype clause*) None,
-                        (*contract*) None,
-                        (*terminates*) false,
-                        (*body*) None,
-                        (*virtual*) false,
-                        (*overrides*) [] );
-                    Ast.Func
-                      ( def_loc,
-                        Fixpoint,
-                        (*type parameters*) [],
-                        (*return type*)
-                        Some
-                          (PredTypeExpr
-                             ( def_loc,
-                               [
-                                 IdentTypeExpr (def_loc, None, "lifetime_t");
-                                 IdentTypeExpr (def_loc, None, "thread_id_t");
-                                 ManifestTypeExpr (def_loc, PtrType Void);
-                               ],
-                               None )),
-                        name ^ "_share",
-                        (*parameters*) [],
-                        (*nonghost_callers_only*) false,
-                        (*functype clause*) None,
-                        (*contract*) None,
-                        (*terminates*) false,
-                        (*body*) None,
-                        (*virtual*) false,
-                        (*overrides*) [] );
-                  ]
-              in
-              let fbc_decl =
-                Ast.Func
-                  ( def_loc,
-                    Fixpoint,
-                    (*type parameters*) [],
-                    (*return type*)
-                    Some
-                      (PureFuncTypeExpr
-                         ( def_loc,
-                           [
-                             IdentTypeExpr (def_loc, None, "thread_id_t");
-                             ManifestTypeExpr (def_loc, PtrType Void);
-                             PredTypeExpr (def_loc, [], None);
-                           ] )),
-                    name ^ "_full_borrow_content",
-                    (*parameters*) [],
-                    (*nonghost_callers_only*) false,
-                    (*functype clause*) None,
-                    (*contract*) None,
-                    (*terminates*) false,
-                    (*body*) None,
-                    (*virtual*) false,
-                    (*overrides*) [] )
-              in
-              Ok (Some fbc_decl, [], aux_decls')
+            Ok (None, [], [])
         | true, Mir.Invisible ->
             Error
               (`TrAdtDef
@@ -3768,10 +3626,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                                  "Self" :: tparams,
                                  rt,
                                  name,
-                                 (_, self_own_param)
-                                 :: (_, self_full_bor_content_param)
-                                 :: (_, self_share_param)
-                                 :: ps,
+                                 ps,
                                  false,
                                  None,
                                  Some (pre, post),
@@ -3787,13 +3642,6 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                                        (Ast.ManifestTypeExpr
                                           (lf, Ast.StructType (self_ty, []))) )
                                in
-                               let self_own = Ast.Var (lf, self_ty ^ "_own_") in
-                               let self_full_bor_content =
-                                 Ast.Var (lf, self_ty ^ "_full_borrow_content")
-                               in
-                               let self_share =
-                                 Ast.Var (lf, self_ty ^ "_share")
-                               in
                                let pre =
                                  Ast.LetTypeAsn
                                    ( lf,
@@ -3806,34 +3654,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                                              self_ty_typeid,
                                              VarPat (lf, "Self_typeid") ),
                                          Ast.Sep
-                                           ( lf,
-                                             MatchAsn
-                                               ( lf,
-                                                 self_own,
-                                                 VarPat (lf, self_own_param) ),
-                                             Ast.Sep
-                                               ( lf,
-                                                 MatchAsn
-                                                   ( lf,
-                                                     self_full_bor_content,
-                                                     VarPat
-                                                       ( lf,
-                                                         self_full_bor_content_param
-                                                       ) ),
-                                                 Ast.Sep
-                                                   ( lf,
-                                                     MatchAsn
-                                                       ( lf,
-                                                         self_share,
-                                                         VarPat
-                                                           (lf, self_share_param)
-                                                       ),
-                                                     Ast.Sep
-                                                       ( lf,
-                                                         pre,
-                                                         Ast.EnsuresAsn
-                                                           (lf, post) ) ) ) ) )
-                                   )
+                                           (lf, pre, Ast.EnsuresAsn (lf, post))
+                                       ) )
                                in
                                let post = Ast.EmpAsn lf in
                                Some

@@ -1202,7 +1202,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let pred_expr_asn l coefpat e pts inputParamCount pats =
       let g_symb = (ev e, false) in
       let pts' = instantiate_types tpenv pts in
-      consume_chunk_core rules h ghostenv env env' l g_symb [] coef real_unit_pat inputParamCount (srcpats pats) pts pts' @@ fun chunk h coef ts size ghostenv env env' ->
+      consume_chunk_core rules h ghostenv env env' l g_symb [] coef coefpat inputParamCount (srcpats pats) pts pts' @@ fun chunk h coef ts size ghostenv env env' ->
       check_dummy_coefpat l coefpat coef;
       cont [chunk] h ghostenv env env' size
     in

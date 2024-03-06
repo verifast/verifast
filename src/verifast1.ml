@@ -1025,6 +1025,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       * box_action_info map
       * box_handle_predicate_info map
     type abstract_type_info = loc
+    type type_pred_decl_info =
+      loc *
+      string * (* self type name*)
+      type_ *
+      symbol
     type maps =
         struct_info map
       * union_info map
@@ -1055,6 +1060,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       * bases_constructed_pred_info map
       * cxx_vtype_pred_info map
       * inst_pred_info map map
+      * type_pred_decl_info map
     
     type implemented_prototype_info =
         string
@@ -1221,7 +1227,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       (cxx_dtor_map0: cxx_dtor_info map),
       (bases_constructed_map0: bases_constructed_pred_info map),
       (cxx_vtype_map0: cxx_vtype_pred_info map),
-      (cxx_inst_pred_map0: inst_pred_info map map)
+      (cxx_inst_pred_map0: inst_pred_info map map),
+      (typepreddeclmap0: type_pred_decl_info map)
       : maps
     ) =
 
@@ -1237,8 +1244,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     let id x = x in
     let merge_maps l
-      (structmap, unionmap, enummap, globalmap, modulemap, importmodulemap, inductivemap, purefuncmap, predctormap, struct_accessor_map, malloc_block_pred_map, new_block_pred_map, field_pred_map, predfammap, predinstmap, typedefmap, functypemap, funcmap, boxmap, classmap, interfmap, classterms, interfaceterms, abstract_types_map, cxx_ctor_map, cxx_dtor_map, bases_constructed_map, cxx_vtype_map, cxx_inst_pred_map)
-      (structmap0, unionmap0, enummap0, globalmap0, modulemap0, importmodulemap0, inductivemap0, purefuncmap0, predctormap0, struct_accessor_map0, malloc_block_pred_map0, new_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, typedefmap0, functypemap0, funcmap0, boxmap0, classmap0, interfmap0, classterms0, interfaceterms0, abstract_types_map0, cxx_ctor_map0, cxx_dtor_map0, bases_constructed_map0, cxx_vtype_map0, cxx_inst_pred_map0)
+      (structmap, unionmap, enummap, globalmap, modulemap, importmodulemap, inductivemap, purefuncmap, predctormap, struct_accessor_map, malloc_block_pred_map, new_block_pred_map, field_pred_map, predfammap, predinstmap, typedefmap, functypemap, funcmap, boxmap, classmap, interfmap, classterms, interfaceterms, abstract_types_map, cxx_ctor_map, cxx_dtor_map, bases_constructed_map, cxx_vtype_map, cxx_inst_pred_map, type_pred_decl_map)
+      (structmap0, unionmap0, enummap0, globalmap0, modulemap0, importmodulemap0, inductivemap0, purefuncmap0, predctormap0, struct_accessor_map0, malloc_block_pred_map0, new_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, typedefmap0, functypemap0, funcmap0, boxmap0, classmap0, interfmap0, classterms0, interfaceterms0, abstract_types_map0, cxx_ctor_map0, cxx_dtor_map0, bases_constructed_map0, cxx_vtype_map0, cxx_inst_pred_map0, type_pred_decl_map0)
       =
       (
 (*     append_nodups structmap structmap0 id l "struct", *)
@@ -1273,7 +1280,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
        append_nodups cxx_dtor_map cxx_dtor_map0 id l "destructor",
        bases_constructed_map @ bases_constructed_map0,
        cxx_vtype_map @ cxx_vtype_map0,
-       cxx_inst_pred_map @ cxx_inst_pred_map0)
+       cxx_inst_pred_map @ cxx_inst_pred_map0,
+       append_nodups type_pred_decl_map type_pred_decl_map0 id l "type predicate")
     in
 
     (* [merge_header_maps maps0 headers] returns [maps0] plus all elements transitively declared in [headers]. *)
@@ -1352,7 +1360,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         end
     in
 
-    let maps0 = ([], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], []) in
+    let maps0 = ([], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], []) in
     
     let (maps0, headers_included) =
       if include_prelude then
@@ -2088,8 +2096,31 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let typedefmap = typedefmap1 @ typedefmap0
   
   (* envType indicates if we are type checking in a ghost or real environment *)
-  let check_pure_type (pn,ilist) tpenv te envType = check_pure_type_core typedefmap (pn,ilist) tpenv envType te
+  let check_pure_type (pn,ilist) tpenv envType te = check_pure_type_core typedefmap (pn,ilist) tpenv te envType
   
+  let typepreddeclmap1 =
+    let rec iter (tpdm1: type_pred_decl_info map) ds =
+      match ds with
+        [] -> tpdm1
+      | TypePredDecl (l, te, selfTypeName, predName)::ds ->
+        if List.mem_assoc predName tpdm1 || List.mem_assoc predName typepreddeclmap0 then
+          static_error l "Duplicate type predicate declaration" None;
+        let tp = check_pure_type ("",[]) [selfTypeName] Ghost te in
+        let symb = mk_func_symbol predName [provertype_of_type voidPtrType] (provertype_of_type tp) Uninterp in
+        iter ((predName, (l, selfTypeName, tp, fst symb))::tpdm1) ds
+      | _::ds ->
+        iter tpdm1 ds
+    in
+    let rec iter' tpdm1 ps =
+      match ps with
+        [] -> tpdm1
+      | PackageDecl (l, pn, ilist, ds)::ps ->
+        iter' (iter tpdm1 ds) ps
+    in
+    iter' [] ps
+  
+  let typepreddeclmap = typepreddeclmap1 @ typepreddeclmap0
+
   let classmap1 =
     List.map
       begin fun (sn, (l, abstract, fin, meths, fds, constr, (super, supertargs), tparams, interfs, preds, pn, ilist)) ->
@@ -4764,6 +4795,14 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | _ ->
         (SizeofExpr (l, TypeExpr (ManifestTypeExpr (expr_loc e, t))), sizeType, None)
       end
+    | TypePredExpr (l, te, predName) ->
+      let t = check_pure_type (pn,ilist) tparams Real te in
+      begin match try_assoc predName typepreddeclmap with
+        None -> static_error l "No such type predicate" None
+      | Some (ld, selfTypeName, predType, _) ->
+        let predType' = instantiate_type [selfTypeName, t] predType in
+        (WTypePredExpr (l, t, predName), predType', None)
+      end
     | GenericExpr (l, e, cs, d) ->
       let (_, t, _) = check e in
       let matching_cases = cs |> flatmap begin fun (te, e) ->
@@ -6721,6 +6760,82 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       predctormap1
   
   let predctormap = predctormap1 @ predctormap0
+
+  let () = (* Process type predicate definitions. *)
+    let rec iter ds =
+      match ds with
+        [] -> ()
+      | TypePredDef (l, tparams, te, predName, lrhs, rhs)::ds ->
+        check_tparams l [] tparams;
+        let tp = check_pure_type ("",[]) tparams Ghost te in
+        let (l, selfTypeName, predType, symb) =
+          match try_assoc predName typepreddeclmap with
+            None -> static_error l "No such type predicate" None
+          | Some info -> info
+        in
+        (* It is tricky to guard against duplicate definitions for the same typeid (especially in the presence of type parameters).
+           For now, we do not attempt to prevent it at all, which is unsound if the user can introduce arbitrary type predicate
+           definitions. Therefore, we allow this construct to be used only by the Rust translator. *)
+        if dialect <> Some Rust then static_error l "Type predicate definitions are allowed only in Rust programs" None;
+        let predType' = instantiate_type [selfTypeName, tp] predType in
+        if tparams = [] then
+          let typeid = typeid_of_core l [] tp in
+          let type_pred_term = ctxt#mk_app symb [typeid] in
+          match try_assoc rhs predfammap with
+            Some (_, pred_tparams, nbIndices, pts, predSymb, inputParamCount, inductiveness) ->
+            if pred_tparams <> [] then static_error lrhs "The right-hand side predicate has type parameters" None;
+            if nbIndices <> 0 then static_error lrhs "The right-hand side predicate is a predicate family" None;
+            expect_type lrhs (Some true) (PredType ([], pts, inputParamCount, inductiveness)) predType';
+            ctxt#assert_term (ctxt#mk_eq type_pred_term predSymb);
+            iter ds
+          | None ->
+          match try_assoc rhs predctormap with
+            Some (PredCtorInfo (_, ctor_tparams, ctor_ps, ctor_ps', inputParamCount, _, ctorSymb)) ->
+            if ctor_tparams <> [] then static_error l "The right-hand side predicate constructor has type parameters" None;
+            let pred_type = PredType ([], List.map snd ctor_ps', inputParamCount, Inductiveness_Inductive) in
+            let rhs_type = List.fold_right (fun (_, pt) ctp -> PureFuncType (pt, ctp)) ctor_ps pred_type in
+            expect_type l (Some true) rhs_type predType';
+            ctxt#assert_term (ctxt#mk_eq type_pred_term (snd ctorSymb));
+            iter ds
+          | None ->
+            static_error l "No such predicate or predicate constructor" None
+        else
+          begin match try_assoc rhs predctormap with
+            Some (PredCtorInfo (_, ctor_tparams, ctor_ps, ctor_ps', inputParamCount, _, ctorSymb)) ->
+            let tpenv =
+              match zip ctor_tparams (List.map (fun x -> GhostTypeParam x) tparams) with
+                None -> static_error lrhs "Incorrect number of type arguments" None
+              | Some bs -> bs
+            in
+            let ctor_pts = instantiate_types tpenv (List.map snd ctor_ps) in
+            let ctor_pts' = instantiate_types tpenv (List.map snd ctor_ps') in
+            let pred_type = PredType ([], ctor_pts', inputParamCount, Inductiveness_Inductive) in
+            let rhs_type = List.fold_right (fun pt ctp -> PureFuncType (pt, ctp)) ctor_pts pred_type in
+            expect_type l (Some true) rhs_type predType';
+            ctxt#begin_formal;
+            let targs_env = List.mapi (fun i x -> (x ^ "_typeid", ctxt#mk_bound i ctxt#type_inductive)) tparams in
+            let targs = List.map snd targs_env in
+            let typeid = typeid_of_core l targs_env tp in
+            let typePredTerm = ctxt#mk_app symb [typeid] in
+            let ctorApp = List.fold_left (fun f arg -> ctxt#mk_app apply_symbol [f; arg]) (snd ctorSymb) targs in
+            let eq = ctxt#mk_eq typePredTerm ctorApp in
+            ctxt#end_formal;
+            ctxt#assume_forall (Printf.sprintf "type_pred_def_%s_%s" predName rhs) [typePredTerm] (List.map (fun x -> ctxt#type_inductive) tparams) eq;
+            iter ds
+          | None ->
+            static_error l "No such predicate or predicate constructor" None
+          end
+      | _::ds ->
+        iter ds
+    in
+    let rec iter' ps =
+      match ps with
+        [] -> ()
+      | PackageDecl (l, pn, ilist, ds)::ps ->
+        iter ds;
+        iter' ps
+    in
+    iter' ps
   
   let classmap1 =
     classmap1 |> List.map
@@ -7847,6 +7962,9 @@ let check_if_list_is_defined () =
     | SizeofExpr (l, w) ->
       ev state w $. fun state v ->
       cont state (mk_sizeof v)
+    | WTypePredExpr (l, t, predName) ->
+      let (_, _, _, symb) = List.assoc predName typepreddeclmap in
+      cont state (ctxt#mk_app symb [typeid_of_core l env t])
     | InstanceOfExpr(l, e, ManifestTypeExpr (l2, tp)) ->
       ev state e $. fun state v -> cont state (ctxt#mk_app instanceof_symbol [v; prover_type_term l2 tp])
     | _ -> static_error (expr_loc e) "Construct not supported in this position." None

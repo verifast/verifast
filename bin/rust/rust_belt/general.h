@@ -62,11 +62,41 @@ predicate_ctor u64_full_borrow_content(thread_id_t t, uint64_t *l)(;) = *l |-> ?
 predicate_ctor u128_full_borrow_content(thread_id_t t, uint128_t *l)(;) = *l |-> ?_;
 predicate_ctor usize_full_borrow_content(thread_id_t t, uintptr_t *l)(;) = *l |-> ?_;
 
-predicate type_interp<T>(; predicate(thread_id_t, T) T_own, fixpoint(thread_id_t, void *, predicate()) T_full_borrow_content, predicate(lifetime_t, thread_id_t, void *) T_share);
+type_pred_decl predicate(thread_id_t, Self) <Self>.own;
+type_pred_decl fixpoint(thread_id_t, void *, predicate()) <Self>.full_borrow_content;
+type_pred_decl predicate(lifetime_t, thread_id_t, void *) <Self>.share;
+
+type_pred_def <bool>.own = bool_own;
+//TODO: How to deal with Rust type `char`? Distinct Rust types should be mapped to distinct VF types, with distinct typeids.
+type_pred_def <void *>.own = raw_ptr_own;
+
+type_pred_def <int8_t>.own = i8_own;
+type_pred_def <int16_t>.own = i16_own;
+type_pred_def <int32_t>.own = i32_own;
+type_pred_def <int64_t>.own = i64_own;
+type_pred_def <int128_t>.own = i128_own;
+type_pred_def <intptr_t>.own = isize_own;
+
+type_pred_def <uint8_t>.own = u8_own;
+type_pred_def <uint16_t>.own = u16_own;
+type_pred_def <uint32_t>.own = u32_own;
+type_pred_def <uint64_t>.own = u64_own;
+type_pred_def <uint128_t>.own = u128_own;
+type_pred_def <uintptr_t>.own = usize_own;
+
+lemma void open_full_borrow_content<T>(thread_id_t t, T *l);
+    requires ((<T>.full_borrow_content)(t, l))();
+    ensures *l |-> ?v &*& (<T>.own)(t, v);
+
+lemma void close_full_borrow_content<T>(thread_id_t t, T *l);
+    requires *l |-> ?v &*& (<T>.own)(t, v);
+    ensures ((<T>.full_borrow_content)(t, l))();
+
+predicate type_interp<T>(;);
 
 lemma void share_full_borrow<T>(lifetime_t k, thread_id_t t, void *l);
-    requires type_interp<T>(?T_own, ?T_full_borrow_content, ?T_share) &*& full_borrow(k, T_full_borrow_content(t, l)) &*& [?q]lifetime_token(k);
-    ensures type_interp<T>(T_own, T_full_borrow_content, T_share) &*& [_]T_share(k, t, l) &*& [q]lifetime_token(k);
+    requires type_interp<T>() &*& full_borrow(k, (<T>.full_borrow_content)(t, l)) &*& [?q]lifetime_token(k);
+    ensures type_interp<T>() &*& [_](<T>.share)(k, t, l) &*& [q]lifetime_token(k);
 @*/
 
 #endif

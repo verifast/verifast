@@ -652,34 +652,6 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           Chunk ((chars__pred_symb (), true), [], real_unit, [pointerTerm; size; cs], None)
       in
       cont (chunk::h) env
-    | ExprStmt (CallExpr (l, ("open_full_borrow_content"|"close_full_borrow_content" as g), targs, indices, args, Static)) when dialect = Some Rust ->
-      let x, thread_id, ptr =
-        match targs, indices, args with
-          [IdentTypeExpr (_, None, x)], [], [LitPat thread_id; LitPat ptr] when List.mem x tparams && tparam_carries_typeid x ->
-          x, thread_id, ptr
-        | _ ->
-          static_error l (Printf.sprintf "Syntax error: %s<T>(t, l) expected" g) None
-      in
-      let thread_id = check_expr_t (pn,ilist) tparams tenv thread_id (AbstractType "thread_id_t") in
-      let ptr = check_expr_t (pn,ilist) tparams tenv ptr voidPtrType in
-      let thread_id = ev thread_id in
-      let ptr = ev ptr in
-      let x_full_borrow_content = List.assoc (x ^ "_full_borrow_content") env in
-      let x_own = List.assoc (x ^ "_own") env in
-      let fbc_term = ctxt#mk_app apply_symbol [ctxt#mk_app apply_symbol [x_full_borrow_content; thread_id]; ptr] in
-      begin match g with
-        "open_full_borrow_content" ->
-        consume_chunk rules h [] [] [] l (fbc_term, false) [] real_unit real_unit_pat None [] $. fun _ h _ _ _ _ _ _ ->
-        let value = get_unique_var_symb_non_ghost (x ^ "_value") (GhostTypeParam x) in
-        let points_to_chunk = Chunk ((generic_points_to_symb (), true), [GhostTypeParam x], real_unit, [ptr; value], None) in
-        let own_chunk = Chunk ((x_own, false), [], real_unit, [thread_id; value], None) in
-        cont (points_to_chunk::own_chunk::h) env
-      | "close_full_borrow_content" ->
-        consume_chunk rules h [] [] [] l (generic_points_to_symb (), true) [GhostTypeParam x] real_unit real_unit_pat (Some 1) [TermPat ptr; SrcPat DummyPat] $. fun _ h _ [_; value] _ _ _ _ ->
-        consume_chunk rules h [] [] [] l (x_own, false) [] real_unit real_unit_pat None [TermPat thread_id; TermPat value] $. fun _ h _ _ _ _ _ _ ->
-        let fbc_chunk = Chunk ((fbc_term, false), [], real_unit, [], None) in
-        cont (fbc_chunk::h) env
-      end
     | ExprStmt (CallExpr (l, "produce_type_interp", targs, indices, args, Static)) when dialect = Some Rust ->
       let x =
         match targs, indices, args with
@@ -696,10 +668,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           | RealFuncInfo (_, _, _) | RealMethodInfo _ -> ()
       end;
       let type_interp_pred_symb = get_pred_symb "type_interp" in
-      let x_own = List.assoc (x ^ "_own") env in
-      let x_fbc = List.assoc (x ^ "_full_borrow_content") env in
-      let x_share = List.assoc (x ^ "_share") env in
-      let type_interp_chunk = Chunk ((type_interp_pred_symb, true), [GhostTypeParam x], real_unit, [x_own; x_fbc; x_share], None) in
+      let type_interp_chunk = Chunk ((type_interp_pred_symb, true), [GhostTypeParam x], real_unit, [], None) in
       cont (type_interp_chunk::h) env
     | ExprStmt (CallExpr (l, "free", [], [], args,Static) as e) ->
       let args = List.map (function LitPat e -> e | _ -> static_error l "No patterns allowed here" None ) args in
@@ -3686,7 +3655,8 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         inductivemap1, purefuncmap1, predctormap1, struct_accessor_map1, malloc_block_pred_map1, new_block_pred_map1, 
         field_pred_map1, predfammap1, predinstmap1, typedefmap1, functypemap1, 
         funcmap1, boxmap, classmap1, interfmap1, classterms1, interfaceterms1, 
-        abstract_types_map1, cxx_ctor_map1, cxx_dtor_map1, bases_constructed_map1, cxx_vtype_map1, cxx_inst_pred_map1
+        abstract_types_map1, cxx_ctor_map1, cxx_dtor_map1, bases_constructed_map1, cxx_vtype_map1, cxx_inst_pred_map1,
+        typepreddeclmap1
       )
     )
   
