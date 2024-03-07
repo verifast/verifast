@@ -33,6 +33,7 @@ cd safe_abstraction
   verifast -c shared_primitive_types.rs
   verifast -c deque.rs
   verifast -c cell_u32.rs
+  verifast -c cell.rs
   verifast -c tree.rs
   verifast -c -allow_should_fail -allow_dead_code drop_test.rs
   verifast -c tparam_own.rs
