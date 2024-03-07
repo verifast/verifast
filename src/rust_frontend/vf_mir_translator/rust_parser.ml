@@ -259,10 +259,14 @@ let rec parse_expr_funcs allowStructExprs =
       [%let e = function%parser
         [ parse_type_args as targs;
           [%let e = function%parser
-            [ (l, Kwd "("); [%let args = rep_comma parse_pat ]; (_, Kwd ")") ] ->
-            begin match x, targs with
-              "std::mem::size_of", [t] -> SizeofExpr (l, TypeExpr t)
-            | _, _ -> CallExpr (l, x, targs, [], args, Static)
+            [ (l, Kwd "("); [%let args = rep_comma parse_pat ]; (_, Kwd ")");
+              [%let (indices, args) = function%parser
+                [ (_, Kwd "("); [%let args1 = rep_comma parse_pat ]; (_, Kwd ")") ] -> (args, args1)
+              | [ ] -> ([], args)
+              ] ] ->
+            begin match x, targs, indices, args with
+              "std::mem::size_of", [t], [], [] -> SizeofExpr (l, TypeExpr t)
+            | _ -> CallExpr (l, x, targs, indices, args, Static)
             end
           | [ ] ->
             CallExpr (l, x, targs, [], [], Static)
