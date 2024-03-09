@@ -4,35 +4,50 @@
 #include "prelude_rust_core.gh"
 #include "mask.gh"
 
+fixpoint void *Nshri() { return 0; }
+fixpoint void *Nlfti() { return (void *)1; }
+
+fixpoint mask_t Nshr() { return MaskSingle(Nshri); }
+fixpoint mask_t MaskNshrSingle(void *l) { return MaskBotPlus({pair(Nshri, MaskSingle(l))}); }
+fixpoint mask_t Nlft() { return MaskSingle(Nlfti); }
+
+predicate atomic_mask(mask_t mask);
+
 inductive lifetime_t = lifetime_ctor(int id); // Type of lifetimes
 abstract_type thread_id_t; // Type of thread IDs
 
 fixpoint lifetime_t lifetime_intersection(lifetime_t k, lifetime_t k1);
 fixpoint bool lifetime_inclusion(lifetime_t k, lifetime_t k1);
 
+// lifetime intersection is multiset union
 lemma void lifetime_intersection_symm(lifetime_t k, lifetime_t k1);
     requires true;
     ensures lifetime_intersection(k, k1) == lifetime_intersection(k1, k);
 
+// LftL-incl-isect
 lemma_auto(lifetime_intersection(k, k1)) void lifetime_inclusion_intersection(lifetime_t k, lifetime_t k1);
     requires true;
     ensures lifetime_inclusion(lifetime_intersection(k, k1), k) == true;
 
-predicate lifetime_token(lifetime_t k;); // Lifetime token
+predicate lifetime_token(lifetime_t k;);
 predicate lifetime_dead_token(lifetime_t k;);
 
 lemma void lifetime_token_inv(lifetime_t k);
     requires [?q]lifetime_token(k);
     ensures [q]lifetime_token(k) &*& 0 < q &*& q <= 1;
 
+// LftL-begin
 lemma lifetime_t begin_lifetime();
+    nonghost_callers_only
     requires true;
     ensures lifetime_token(result);
 
 lemma void end_lifetime(lifetime_t k);
+    nonghost_callers_only
     requires lifetime_token(k);
     ensures [_]lifetime_dead_token(k);
 
+// LftL-tok-inter
 lemma void close_lifetime_intersection_token(real q, lifetime_t k, lifetime_t k1);
     requires [q]lifetime_token(k) &*& [q]lifetime_token(k1);
     ensures [q]lifetime_token(lifetime_intersection(k, k1));
@@ -41,18 +56,16 @@ lemma void open_lifetime_intersection_token(real q, lifetime_t k, lifetime_t k1)
     requires [q]lifetime_token(lifetime_intersection(k, k1));
     ensures [q]lifetime_token(k) &*& [q]lifetime_token(k1);
 
+// LftL-end-inter
 lemma void close_lifetime_intersection_dead_token(lifetime_t k, lifetime_t k1);
     requires [_]lifetime_dead_token(k);
     ensures [_]lifetime_dead_token(lifetime_intersection(k, k1));
 
 // Nonatomic token
-fixpoint void *Nshr() { return 0; }
-fixpoint void *Nrust() { return (void *)1; }
-fixpoint mask_t MaskNshrSingle(void *l) { return MaskBotPlus({pair(Nshr, MaskSingle(l))}); }
-
 predicate partial_thread_token(thread_id_t t, mask_t m);
 predicate thread_token(thread_id_t t) = partial_thread_token(t, MaskTop);
 
+// NAInv-tok-split
 lemma void thread_token_split(thread_id_t t, mask_t m, mask_t to_split);
     requires partial_thread_token(t, m) &*& mask_le(to_split, m) == true;
     ensures partial_thread_token(t, mask_diff(m, to_split)) &*& partial_thread_token(t, to_split);
@@ -145,4 +158,13 @@ lemma void close_frac_borrow(real q_p, predicate(;) P);
     requires [q_p]P() &*& close_frac_borrow_token(q_p, P, ?q_lft, ?k);
     ensures [q_lft]lifetime_token(k);
 
+// Mask preserving view shifts - mask aware versions. See the documentation about Iris view shifts in general.h
+// LftL-begin
+lemma lifetime_t begin_lifetime_m();
+    requires atomic_mask(Nlft);
+    ensures atomic_mask(Nlft) &*& lifetime_token(result);
+
+lemma void end_lifetime_m(lifetime_t k);
+    requires atomic_mask(Nlft) &*& lifetime_token(k);
+    ensures atomic_mask(Nlft) &*& [_]lifetime_dead_token(k);
 #endif

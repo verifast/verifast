@@ -34,9 +34,9 @@ b- Mask-changing view shifts will only have the second form naturally.
 */
 
 /*@
-
-predicate atomic_mask(mask_t mask);
 predicate atomic_space(mask_t mask, predicate() inv;);
+/* This would be the existentially quantified `R` in the derived rule on Ralf Jung's thesis in the middle of page 67.
+See https://research.ralfj.de/phd/thesis-screen.pdf */
 predicate close_atomic_space_token(mask_t spaceMask, predicate() inv);
 
 lemma void create_atomic_space(mask_t mask, predicate() inv);
