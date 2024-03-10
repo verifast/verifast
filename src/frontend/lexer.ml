@@ -578,8 +578,18 @@ let make_lexer_core keywords ghostKeywords startpos text reportRange inComment i
         text_junk ();
         if !in_include_directive then
          ( reset_buffer (); Some (AngleBracketString (string ())) )
-         else
-         ( reset_buffer (); store c; ident2 () )
+        else
+          let c1 = text_peek () in
+          begin match c1 with
+            '=' -> text_junk (); Some (Kwd "<=")
+          | '<' ->
+            text_junk ();
+            if text_peek () = '=' then begin
+              text_junk(); Some (Kwd "<<=")
+            end else
+              Some (Kwd "<<")
+          | _ -> Some (Kwd "<")
+          end
     | '!' ->
       start_token(); text_junk ();
       if text_peek() = '=' then begin

@@ -4,6 +4,14 @@ abstract_type type_info;
 
 @*/
 
+mod ptr {
+
+    unsafe fn drop_in_place<T>(to_drop: *mut T);
+    //@ req thread_token(?t) &*& (<T>.full_borrow_content(t, to_drop))();
+    //@ ens thread_token(t) &*& *to_drop |-> _;
+
+}
+
 mod alloc {
     impl Layout {
 

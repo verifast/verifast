@@ -31,6 +31,7 @@ cd ..
 cd safe_abstraction
   verifast -c full_bor_primitive_types.rs
   verifast -c shared_primitive_types.rs
+  verifast -c deque_i32.rs
   verifast -c deque.rs
   verifast -c cell_u32.rs
   verifast -c cell.rs

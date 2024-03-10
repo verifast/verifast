@@ -5640,7 +5640,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let tparam_typeid_varname tn = tn ^ "_typeid"
 
-  let rec typeid_of_core l env t =
+  let rec typeid_of_core_core l msg env t =
   match unfold_inferred_type t with
     Int (Signed, CharRank) -> char_typeid_term
   | Int (Signed, ShortRank) -> short_typeid_term
@@ -5663,7 +5663,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   | LongDouble -> long_double_typeid_term
   | StructType (sn, targs) ->
     let _, _, _, _, s = List.assoc sn structmap in
-    ctxt#mk_app s (List.map (typeid_of_core l env) targs)
+    ctxt#mk_app s (List.map (typeid_of_core_core l msg env) targs)
   | UnionType un ->
     let _, _, s = List.assoc un unionmap in
     s
@@ -5672,10 +5672,13 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     begin try
       List.assoc x env
     with
-      Not_found -> static_error l (Printf.sprintf "Unbound variable '%s'" x) None
-    end
-  | InferredType _ -> static_error l "A type argument for a type parameter that carries a typeid could not be inferred; specify the type argument explicitly" None
-  | _ -> static_error l "Taking the typeid of this type is not yet supported" None
+      Not_found -> static_error l (Printf.sprintf "%sUnbound variable '%s'" (msg ()) x) None
+  end
+  | InferredType _ -> static_error l (Printf.sprintf "%sA type argument for a type parameter that carries a typeid could not be inferred; specify the type argument explicitly" (msg ())) None
+  | tp -> static_error l (Printf.sprintf "%sTaking the typeid of type '%s' is not yet supported" (msg ()) (string_of_type tp)) None
+
+  let no_msg _ = ""
+  let typeid_of_core l env t = typeid_of_core_core l no_msg env t
 
   let typeid_of l t = typeid_of_core l [] t
 

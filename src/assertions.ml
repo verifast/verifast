@@ -345,27 +345,36 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       produce_points_to_chunk_ l h tp' coef symbn t $. fun h ->
       cont h ghostenv env
     | WPredAsn (l, g, is_global_predref, targs, pats0, pats) ->
-      let (g_symb, pats0, pats, types, auto_info) =
+      let targs' = instantiate_types tpenv targs in
+      let (g_symb, chunk_targs, pats0, pats, types, auto_info) =
         if not is_global_predref then 
-          let Some term = try_assoc g#name env in ((term, false), pats0, pats, g#domain, None)
+          let Some term = try_assoc g#name env in ((term, false), targs', pats0, pats, g#domain, None)
        else
           begin match try_assoc g#name predfammap with
-            Some (_, _, _, declared_paramtypes, symb, _, _) -> ((symb, true), pats0, pats, g#domain, Some (g#name, declared_paramtypes))
+            Some (_, _, _, declared_paramtypes, symb, _, _) -> ((symb, true), targs', pats0, pats, g#domain, Some (g#name, declared_paramtypes))
           | None ->
             let PredCtorInfo (_, tparams, ps1, ps2, inputParamCount, body, funcsym) = List.assoc g#name predctormap in
-            if tparams <> [] then static_error l "Generic predicate constructor assertions are not yet supported" None;
+            let typeid_msg () = Printf.sprintf "Taking typeids of predicate constructor type arguments <%s>: " (String.concat ", " (List.map string_of_type targs)) in
+            let targs_typeids = List.map (typeid_of_core_core l typeid_msg env) targs' in
             let ctorargs = List.map (function (LitPat e | WCtorPat (_, _, _, _, _, _, _, Some e)) -> ev e | _ -> static_error l "Patterns are not supported in predicate constructor argument positions." None) pats0 in
-            let g_symb = mk_app funcsym ctorargs in
+            let tpenv0 = List.combine tparams targs in
+            let ctorargs = List.map2 begin fun (_, pt) v ->
+                let pt1 = instantiate_type tpenv0 pt in
+                prover_convert_term v pt1 pt
+              end ps1 ctorargs
+            in
+            let g_symb = mk_app funcsym (targs_typeids @ ctorargs) in
             let (symbol, symbol_term) = funcsym in
-            register_pred_ctor_application g_symb symbol symbol_term [] ctorargs inputParamCount;
-            ((g_symb, false), [], pats, List.map snd ps2, None)
+            register_pred_ctor_application g_symb symbol symbol_term targs' ctorargs inputParamCount;
+            let pts = List.map (fun (_, pt) -> instantiate_type tpenv0 pt) ps2 in
+            ((g_symb, false), [], [], pats, pts, None)
           end
       in
-      let targs = instantiate_types tpenv targs in
+      let targs = targs' in
       let domain = instantiate_types tpenv types in
       evalpats ghostenv env (pats0 @ pats) types domain (fun ghostenv env ts ->
         let input_param_count = match g#inputParamCount with None -> None | Some c -> Some (c + (List.length pats0)) in
-        let do_assume_chunk () = produce_chunk h g_symb targs coef input_param_count ts size_first (fun h -> cont h ghostenv env) in
+        let do_assume_chunk () = produce_chunk h g_symb chunk_targs coef input_param_count ts size_first (fun h -> cont h ghostenv env) in
         match
           if assuming then None else
           match auto_info with
@@ -1136,27 +1145,31 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       if g#name = "junk" && is_global_predref then
         cont h [] ghostenv env env' None
       else
-      let (g_symb, pats0, pats, types) =
+      let targs' = instantiate_types tpenv targs in
+      let (g_symb, chunk_targs, pats0, pats, types) =
         if is_global_predref then
            match try_assoc g#name predfammap with
-            Some (_, _, _, _, symb, _, _) -> ((symb, true), pats0, pats, g#domain)
+            Some (_, _, _, _, symb, _, _) -> ((symb, true), targs', pats0, pats, g#domain)
           | None -> 
             let PredCtorInfo (_, tparams, ps1, ps2, inputParamCount, body, funcsym) = List.assoc g#name predctormap in
-            if tparams <> [] then static_error l "Generic predicate constructor assertions are not yet supported" None;
+            let typeid_msg () = Printf.sprintf "Taking typeids of predicate constructor type arguments <%s>: " (String.concat ", " (List.map string_of_type targs)) in
+            let targs_typeids = List.map (typeid_of_core_core l typeid_msg env) targs' in
             let ctorargs = List.map (function SrcPat (LitPat e | WCtorPat (_, _, _, _, _, _, _, Some e)) -> ev e | _ -> static_error l "Patterns are not supported in predicate constructor argument positions." None) pats0 in
-            let g_symb = mk_app funcsym ctorargs in
+            let tpenv0 = List.combine tparams targs in
+            let ctorargs = List.map2 (fun (_, pt) v -> prover_convert_term v (instantiate_type tpenv0 pt) pt) ps1 ctorargs in
+            let g_symb = mk_app funcsym (targs_typeids @ ctorargs) in
             let (symbol, symbol_term) = funcsym in
-            register_pred_ctor_application g_symb symbol symbol_term targs ctorargs inputParamCount;
-            ((g_symb, false), [], pats, List.map snd ps2)
+            register_pred_ctor_application g_symb symbol symbol_term targs' ctorargs inputParamCount;
+            ((g_symb, false), [], [], pats, List.map (fun (_, pt) -> instantiate_type tpenv0 pt) ps2)
         else
           match try_assoc g#name env with
             None -> assert_false [] env l (Printf.sprintf "Unbound variable '%s'" g#name) None
-          | Some term -> ((term, false), pats0, pats, g#domain)
+          | Some term -> ((term, false), targs', pats0, pats, g#domain)
       in
-      let targs = instantiate_types tpenv targs in
+      let targs = targs' in
       let domain = instantiate_types tpenv types in
       let inputParamCount = match g#inputParamCount with None -> None | Some n -> Some (List.length pats0 + n) in
-      consume_chunk_core rules h ghostenv env env' l g_symb targs coef coefpat inputParamCount (pats0 @ pats) types domain (fun chunk h coef ts size ghostenv env env' ->
+      consume_chunk_core rules h ghostenv env env' l g_symb chunk_targs coef coefpat inputParamCount (pats0 @ pats) types domain (fun chunk h coef ts size ghostenv env env' ->
         check_dummy_coefpat l coefpat coef;
         cont [chunk] h ghostenv env env' size
       )

@@ -21,6 +21,8 @@ let parse_right_angle_bracket stream = stream |> function%parser
   [ (_, Kwd ">") ] -> ()
 | [ (Lexed ((path, line, col), (path', line', col')), Kwd ">>") ] ->
   Lexer.Stream.push (Some (Lexed ((path, line, col + 1), (path', line', col')), Kwd ">")) stream
+| [ (Lexed ((path, line, col), (path', line', col')), Ident ">>>") ] ->
+  Lexer.Stream.push (Some (Lexed ((path, line, col + 1), (path', line', col')), Kwd ">>")) stream
 
 let rec parse_type = function%parser
   [ (l, Ident "i8") ] -> ManifestTypeExpr (l, Int (Signed, FixedWidthRank 0))
@@ -242,6 +244,7 @@ let rec parse_expr_funcs allowStructExprs =
         end
       in
       SwitchExprClause (l, x, pats, rhs)
+    | Var (lv, x) -> SwitchExprClause (l, x, [], rhs)
     | _ -> raise (ParseException (expr_loc pat, "Match arm pattern must be constructor application"))
     end
   and parse_match_expr_rest = function%parser

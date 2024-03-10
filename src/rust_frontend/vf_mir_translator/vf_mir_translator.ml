@@ -375,6 +375,7 @@ module Mir = struct
   type adt_def_tr = {
     loc : Ast.loc;
     name : string;
+    tparams : string list;
     fds : field_def_tr list;
     def : Ast.decl;
     aux_decls : Ast.decl list;
@@ -2685,8 +2686,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let post_asn = Sep (contract_loc, post_na_token, post_asn) in
     Ok (pre_asn, post_asn)
 
-  let gen_drop_contract adt_defs self_ty limpl =
-    let { loc = ls; fds } : Mir.adt_def_tr =
+  let gen_drop_contract adt_defs self_ty self_ty_targs limpl =
+    let { loc = ls; tparams; fds } : Mir.adt_def_tr =
       List.find
         (function ({ name } : Mir.adt_def_tr) -> name = self_ty)
         adt_defs
@@ -2699,11 +2700,24 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           Ast.CallExpr
             ( ls,
               self_ty ^ "_full_borrow_content",
-              [],
+              self_ty_targs,
               [ LitPat (Var (ls, "_t")); LitPat (Var (ls, "self")) ],
               [],
               Static ) )
     in
+    List.iter2
+      (fun targ tparam ->
+        match targ with
+        | Ast.IdentTypeExpr (_, None, x) when x = tparam -> ()
+        | Ast.ManifestTypeExpr (_, GhostTypeParam x) when x = tparam -> ()
+        | _ ->
+            raise
+              (Ast.StaticError
+                 ( limpl,
+                   "A drop function for a struct type whose type arguments are \
+                    not identical to its type parameters is not yet supported",
+                   None )))
+      self_ty_targs tparams;
     let post =
       Ast.Sep
         ( ls,
@@ -2720,16 +2734,16 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                           type of field " ^ name,
                          None ))
               | Ok fbc ->
+                  let fbc_args = [
+                    Ast.Var (loc, "_t");
+                    AddressOf (loc, Read (loc, Var (loc, "self"), name));
+                  ] in
                   let fbc_call fbc_name =
                     Ast.CallExpr
                       ( loc,
                         fbc_name,
                         [],
-                        [
-                          LitPat (Ast.Var (loc, "_t"));
-                          LitPat
-                            (AddressOf (loc, Read (loc, Var (loc, "self"), name)));
-                        ],
+                        List.map (fun e -> Ast.LitPat e) fbc_args,
                         [],
                         Static )
                   in
@@ -2737,20 +2751,13 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                     ( loc,
                       (match fbc with
                       | Var (_, fbc) -> fbc_call fbc
-                      | _ ->
-                          let fbc_name =
-                            Printf.sprintf "__%s_full_borrow_content__" name
-                          in
-                          Ast.Sep
-                            ( loc,
-                              MatchAsn (loc, fbc, VarPat (loc, fbc_name)),
-                              fbc_call fbc_name )),
+                      | _ -> Ast.ExprCallExpr (loc, fbc, fbc_args)),
                       asn ))
             fds
             (Ast.CallExpr
                ( limpl,
                  "struct_" ^ self_ty ^ "_padding",
-                 [],
+                 self_ty_targs,
                  [],
                  [ LitPat (Var (limpl, "self")) ],
                  Static )) )
@@ -3063,11 +3070,13 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             let* pre_post_template =
               if is_drop_fn_get body_cpn then
                 let ({ ty = self_ty } :: _) = param_decls in
-                let (PtrTypeExpr (_, StructTypeExpr (_, Some self_ty, _, _, _)))
+                let (PtrTypeExpr
+                      (_, StructTypeExpr (_, Some self_ty, _, _, self_ty_targs)))
                     =
                   Mir.basic_type_of self_ty
                 in
-                gen_drop_contract body_tr_defs_ctx.adt_defs self_ty contract_loc
+                gen_drop_contract body_tr_defs_ctx.adt_defs self_ty
+                  self_ty_targs contract_loc
               else
                 gen_contract body_tr_defs_ctx.adt_defs contract_loc
                   lft_param_names param_decls ret_place_decl
@@ -3583,6 +3592,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
              {
                loc = def_loc;
                name;
+               tparams;
                fds;
                def;
                aux_decls = aux_decls @ aux_decls';
