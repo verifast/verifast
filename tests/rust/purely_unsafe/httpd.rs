@@ -7,7 +7,7 @@ struct Buffer {
 /*@
 
 pred Buffer_own(buffer: Buffer; size: usize, length: usize) =
-    size == buffer.size &*& size <= 30000 &*&
+    size == buffer.size &*& size <= isize::MAX &*&
     length == buffer.length &*&
     alloc_block(buffer.buffer, size) &*&
     integers_(buffer.buffer, 1, false, length, _) &*&
@@ -32,7 +32,7 @@ pred Buffer(buffer: *Buffer; size: usize, length: usize) =
 
 impl Buffer {
     unsafe fn new(size: usize) -> Buffer
-    //@ req 1 <= size &*& size < 30000;
+    //@ req 1 <= size &*& size < isize::MAX;
     //@ ens Buffer_own(result, size, 0);
     {
         let layout = std::alloc::Layout::from_size_align_unchecked(size, 1);
@@ -45,7 +45,7 @@ impl Buffer {
     }
 
     unsafe fn reserve(buffer: *mut Buffer, mut size: usize)
-    //@ req Buffer(buffer, ?size0, ?length) &*& size < 30000;
+    //@ req Buffer(buffer, ?size0, ?length) &*& size < isize::MAX;
     //@ ens Buffer(buffer, ?size1, length) &*& size1 - length >= size;
     {
         //@ open Buffer(_, _, _);
@@ -56,8 +56,8 @@ impl Buffer {
             if size < (*buffer).size {
                 size = (*buffer).size; // Always grow by at least a factor of two to avoid too much copying.
             }
-            //@ assert size <= 30000;
-            if 30000 - (size as isize) < (*buffer).size as isize {
+            //@ assert size <= isize::MAX;
+            if isize::MAX - (size as isize) < (*buffer).size as isize {
                 std::process::abort();
             }
             let new_size = (*buffer).size + size;
@@ -75,7 +75,7 @@ impl Buffer {
 }
 
 unsafe fn memchr(mut haystack: *const u8, mut size: usize, needle: u8) -> *const u8
-//@ req [?f]integers_(haystack, 1, false, size, ?cs) &*& size <= 30000;
+//@ req [?f]integers_(haystack, 1, false, size, ?cs) &*& size <= isize::MAX;
 //@ ens [f]integers_(haystack, 1, false, size, cs) &*& 0 <= result as usize - haystack as usize &*& result as usize - haystack as usize <= size &*& result == haystack + (result as usize - haystack as usize);
 {
     //@ let haystack0 = haystack;

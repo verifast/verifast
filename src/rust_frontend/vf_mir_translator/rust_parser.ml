@@ -278,7 +278,12 @@ let rec parse_expr_funcs allowStructExprs =
       | [ (_, Ident x1); [%let e = parse_path_rest l (x ^ "::" ^ x1) ] ] -> e
       ]
     ] -> e
-  | [ ] -> Var (l, x)
+  | [ ] ->
+    match x with
+      "isize::MIN" -> Operation (l, MinValue (Int (Signed, PtrRank)), [])
+    | "isize::MAX" -> Operation (l, MaxValue (Int (Signed, PtrRank)), [])
+    | "usize::MAX" -> Operation (l, MaxValue (Int (Unsigned, PtrRank)), [])
+    | _ -> Var (l, x)
   and parse_block_expr = function%parser
     [ (_, Kwd "{"); parse_expr as e; (_, Kwd "}") ] -> e
   and parse_pat0 = function%parser
