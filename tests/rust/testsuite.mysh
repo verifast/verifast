@@ -25,7 +25,7 @@ cd purely_unsafe
   verifast -c tree3.rs
   verifast -c generic_structs.rs
   verifast -c str.rs
-  verifast -prover z3v4.5 -c -extern ../unverified/platform httpd.rs
+  verifast -prover z3v4.5 -target LP64 -c -extern ../unverified/platform httpd.rs
   verifast -prover z3v4.5 -c -extern ../unverified/platform mt_account_transfer.rs
 cd ..
 cd safe_abstraction
