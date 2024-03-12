@@ -26,7 +26,7 @@ pub unsafe fn fork(run: unsafe fn(data: *mut u8), data: *mut u8) {
     ptr::write(addr_of_mut!((*run_closure).run), run);
     ptr::write(addr_of_mut!((*run_closure).data), data);
     let mut id = std::mem::MaybeUninit::<libc::pthread_t>::uninit();
-    let result = libc::pthread_create(id.as_mut_ptr(), ptr::null(), run_closure_run, data as *mut libc::c_void);
+    let result = libc::pthread_create(id.as_mut_ptr(), ptr::null(), run_closure_run, run_closure as *mut libc::c_void);
     if result != 0 {
         eprintln!("pthread_create() returned error code {}", result);
         std::process::abort();

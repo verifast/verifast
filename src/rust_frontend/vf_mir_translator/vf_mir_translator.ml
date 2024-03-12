@@ -1831,6 +1831,40 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                         (`TrFnCallRExpr
                           (Printf.sprintf "Invalid (generic) arg(s) for %s"
                              fn_name)))
+              | "std::ptr::const_ptr::<impl *const T>::add"
+              | "std::ptr::mut_ptr::<impl *mut T>::add" -> (
+                  match (substs, args_cpn) with
+                  | ( [ Mir.GenArgType gen_arg_ty_info; Mir.GenArgConst ],
+                      [ arg1_cpn; arg2_cpn ] ) ->
+                      let* tmp_rvalue_binders, [ arg1; arg2 ] =
+                        translate_operands
+                          [ (arg1_cpn, fn_loc); (arg2_cpn, fn_loc) ]
+                      in
+                      Ok
+                        ( tmp_rvalue_binders,
+                          Ast.Operation (fn_loc, Ast.Add, [ arg1; CastExpr (fn_loc, ManifestTypeExpr (fn_loc, Int (Signed, PtrRank)), arg2) ]) )
+                  | _ ->
+                      Error
+                        (`TrFnCallRExpr
+                          (Printf.sprintf "Invalid (generic) arg(s) for %s"
+                            fn_name)))
+              | "std::ptr::const_ptr::<impl *const T>::sub"
+              | "std::ptr::mut_ptr::<impl *mut T>::sub" -> (
+                  match (substs, args_cpn) with
+                  | ( [ Mir.GenArgType gen_arg_ty_info; Mir.GenArgConst ],
+                      [ arg1_cpn; arg2_cpn ] ) ->
+                      let* tmp_rvalue_binders, [ arg1; arg2 ] =
+                        translate_operands
+                          [ (arg1_cpn, fn_loc); (arg2_cpn, fn_loc) ]
+                      in
+                      Ok
+                        ( tmp_rvalue_binders,
+                          Ast.Operation (fn_loc, Ast.Sub, [ arg1; CastExpr (fn_loc, ManifestTypeExpr (fn_loc, Int (Signed, PtrRank)), arg2) ]) )
+                  | _ ->
+                      Error
+                        (`TrFnCallRExpr
+                          (Printf.sprintf "Invalid (generic) arg(s) for %s"
+                            fn_name)))
               | "std::ptr::null_mut" ->
                   Ok
                     ( [],

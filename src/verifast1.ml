@@ -5694,6 +5694,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | StructType (sn, targs) -> mk_sizeof (typeid_of_core l env t)
     | UnionType un -> union_size_partial unionmap l un
     | StaticArrayType (elemTp, elemCount) -> ctxt#mk_mul (sizeof_core l env elemTp) (ctxt#mk_intlit elemCount)
+    | GhostTypeParam x -> mk_sizeof (typeid_of_core l env t)
     | _ -> static_error l ("Taking the size of type " ^ string_of_type t ^ " is not yet supported.") None
   
   let struct_size l env sn targs = sizeof_core l env (StructType (sn, targs))
