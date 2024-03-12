@@ -899,6 +899,7 @@ lemma_auto void pointers_to_chars(void *pp);
     ensures [f]chars(pp, n * sizeof(void *), chars_of_pointers(ps)) &*& has_type(pp, typeid(void *)) == true &*& pointers_of_chars(chars_of_pointers(ps)) == ps;
 
 predicate integers__(void *p, int size, bool signed_, int count; list<option<int> > vs) =
+    pointer_within_limits(p) == true &*&
     count == 0 ?
         vs == nil
     :
@@ -917,7 +918,7 @@ lemma_auto void integers__inv();
 
 lemma_auto void integers___inv();
     requires [?f]integers__(?p, ?size, ?signed_, ?count, ?vs);
-    ensures [f]integers__(p, size, signed_, count, vs) &*& length(vs) == count &*& pointer_within_limits(p + size * count) == true;
+    ensures [f]integers__(p, size, signed_, count, vs) &*& length(vs) == count &*& pointer_within_limits(p) && pointer_within_limits(p + size * count);
 
 lemma void integers__split(void *p, int offset);
     requires [?f]integers_(p, ?size, ?signed_, ?count, ?vs) &*& 0 <= offset &*& offset <= count;

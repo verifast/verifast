@@ -4,6 +4,14 @@ abstract_type type_info;
 
 @*/
 
+mod intrinsics {
+
+    unsafe fn copy_nonoverlapping<T>(src: *mut T, dst: *mut T, count: usize);
+    //@ req [?f]integers_(src as *mut u8, 1, false, count * std::mem::size_of::<T>(), ?vs) &*& integers__(dst as *mut u8, 1, false, count * std::mem::size_of::<T>(), _);
+    //@ ens [f]integers_(src as *mut u8, 1, false, count * std::mem::size_of::<T>(), vs) &*& integers_(dst as *mut u8, 1, false, count * std::mem::size_of::<T>(), vs);
+
+}
+
 mod ptr {
 
     unsafe fn drop_in_place<T>(to_drop: *mut T);
