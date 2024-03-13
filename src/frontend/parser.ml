@@ -109,7 +109,7 @@ let rust_ghost_keywords = [
   "produce_lem_ptr_chunk"; "dup_lem_ptr_chunk"; "produce_fn_ptr_chunk";
   "producing_box_pred"; "producing_handle_pred"; "producing_fresh_handle_pred"; "box"; "handle"; "any"; "split_fraction"; "by"; "merge_fractions";
   "unloadable_module"; "decreases"; "forall_"; "import_module"; "require_module"; ".."; "extends"; "permbased";
-  "terminates"; "abstract_type"; "fix_auto"; "typeid"; "activating"; "truncating"; "typedef"; "fn_type"
+  "terminates"; "abstract_type"; "fix_auto"; "typeid"; "activating"; "truncating"; "typedef"; "fn_type"; "lem_type"
 ]
 
 let java_keywords = [
@@ -146,7 +146,8 @@ let ghost_keywords = [
   "produce_lemma_function_pointer_chunk"; "duplicate_lemma_function_pointer_chunk"; "produce_function_pointer_chunk";
   "producing_box_predicate"; "producing_handle_predicate"; "producing_fresh_handle_predicate"; "box"; "handle"; "any"; "split_fraction"; "by"; "merge_fractions";
   "unloadable_module"; "decreases"; "forall_"; "import_module"; "require_module"; ".."; "extends"; "permbased";
-  "terminates"; "abstract_type"; "fixpoint_auto"; "typeid"; "activating"; "truncating"; "typedef"
+  "terminates"; "abstract_type"; "fixpoint_auto"; "typeid"; "activating"; "truncating"; "typedef";
+  "type_pred_decl"; "type_pred_def"
 ]
 
 exception CompilationError of string
@@ -1105,6 +1106,18 @@ and
       if kwd = "fixpoint_auto" then raise (ParseException (l, "Keyword 'fixpoint_auto' does not make sense here because this type of fixpoint definition is always unfolded automatically"));
       [Func (l, Fixpoint, tparams, rt, g, ps, false, None, None, false, body, false, [])]
     end
+| [ (l, Kwd "type_pred_decl"); parse_type as te; (_, Kwd "<"); (_, Ident selfTypeName); (_, Kwd ">"); (_, Kwd "."); (_, Ident predName); (_, Kwd ";") ] ->
+  [TypePredDecl (l, te, selfTypeName, predName)]
+| [ (l, Kwd "type_pred_def"); [%let tparams = parse_type_params l];
+    (_, Kwd "<"); parse_type as tp; (_, Kwd ">"); (_, Kwd "."); (_, Ident predName); (_, Kwd "=");
+    (lrhs, Ident rhs); [%let targs = parse_type_args lrhs]; (_, Kwd ";")
+  ] ->
+  let targ_names = targs |> List.map @@ function
+    IdentTypeExpr (_, None, targ_name) -> targ_name
+  | te -> raise (ParseException (type_expr_loc te, "Type parameter name expected"))
+  in
+  if targ_names <> tparams then raise (ParseException (lrhs, "Right-hand side type arguments must match definition type parameters"));
+  [TypePredDef (l, tparams, tp, predName, lrhs, rhs)]
 and
   parse_action_decls = function%parser
 | [ parse_action_decl as ad; 
@@ -2252,6 +2265,8 @@ and
   parse_expr stream = parse_assign_expr stream
 and
   parse_assign_expr = function%parser
+  [ (_, Kwd "<"); parse_type as tp; (_, Kwd ">"); (_, Kwd "."); (l, Ident x) ] ->
+  TypePredExpr (l, tp, x)
 | [ parse_sep_expr as e0; [%l e = parse_assign_expr_rest e0] ] -> e
 and
   parse_sep_expr = function%parser

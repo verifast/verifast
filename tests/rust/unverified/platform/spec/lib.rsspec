@@ -1,0 +1,111 @@
+mod sockets {
+
+    struct Socket;
+
+    //@ pred ServerSocket(socket: Socket;);
+    //@ pred Socket(socket: Socket;);
+
+    impl Socket {
+
+        unsafe fn listen(port: u16) -> Socket;
+        //@ req true;
+        //@ ens ServerSocket(result);
+
+        unsafe fn accept(self: Socket) -> Socket;
+        //@ req [?q]ServerSocket(self);
+        //@ ens [q]ServerSocket(self) &*& Socket(result);
+
+        unsafe fn receive(self: Socket, buffer: *mut u8, length: usize) -> usize;
+        //@ req [?q]Socket(self) &*& integers__(buffer, 1, false, length, _);
+        /*@
+        ens
+            result <= length &*&
+            [q]Socket(self) &*&
+            integers_(buffer, 1, false, result, _) &*&
+            integers__(buffer + result, 1, false, length - result, _);
+        @*/
+
+        unsafe fn send(self: Socket, buffer: *const u8, length: usize);
+        //@ req [?f]Socket(self) &*& [?fb]integers_(buffer, 1, false, length, ?vs);
+        //@ ens [f]Socket(self) &*& [fb]integers_(buffer, 1, false, length, vs);
+
+        unsafe fn close(self: Socket);
+        //@ req Socket(self);
+        //@ ens true;
+
+    }
+
+}
+
+mod threading {
+
+    /*@
+
+    fn_type thread_run(pre: pred(*u8)) = unsafe fn(data: *u8);
+      req pre(data);
+      ens true;
+
+    @*/
+
+    unsafe fn fork(run: *u8, data: *u8);
+    //@ req [_]is_thread_run(run, ?pre) &*& pre(data);
+    //@ ens true;
+
+    struct Mutex;
+
+    /*@
+
+    pred Mutex(mutex: Mutex;);
+    pred Mutex_state(mutex: Mutex; owner: option<usize>);
+
+    lem_type Mutex_acquire_op(mutex: Mutex, acquirer: usize, P: pred(), Q: pred()) = lem();
+        req [?f]Mutex_state(mutex, ?state) &*& P() &*& state != none || f == 1;
+        ens Mutex_state(mutex, some(acquirer)) &*& state == none &*& Q();
+
+    lem_type Mutex_acquire_ghop(mutex: Mutex, acquirer: usize, pre: pred(), post: pred()) = lem();
+        req atomic_mask(MaskTop) &*& is_Mutex_acquire_op(?op, mutex, acquirer, ?P, ?Q) &*& P() &*& pre();
+        ens atomic_mask(MaskTop) &*& is_Mutex_acquire_op(op, mutex, acquirer, P, Q) &*& Q() &*& post();
+    
+    lem_type Mutex_try_acquire_op(mutex: Mutex, acquirer: usize, P: pred(), Q: pred(bool)) = lem();
+        req [?f]Mutex_state(mutex, ?state) &*& P() &*& state != none || f == 1;
+        ens Mutex_state(mutex, match state { none() => some(acquirer), some(owner) => some(owner) }) &*& Q(state == none);
+
+    lem_type Mutex_try_acquire_ghop(mutex: Mutex, acquirer: usize, pre: pred(), post: pred(bool)) = lem();
+        req atomic_mask(MaskTop) &*& is_Mutex_try_acquire_op(?op, mutex, acquirer, ?P, ?Q) &*& P() &*& pre();
+        ens atomic_mask(MaskTop) &*& is_Mutex_try_acquire_op(op, mutex, acquirer, P, Q) &*& Q(?success) &*& post(success);
+    
+    lem_type Mutex_release_op(mutex: Mutex, releaser: usize, P: pred(), Q: pred()) = lem();
+        req Mutex_state(mutex, some(releaser)) &*& P();
+        ens Mutex_state(mutex, none) &*& Q();
+
+    lem_type Mutex_release_ghop(mutex: Mutex, releaser: usize, pre: pred(), post: pred()) = lem();
+        req atomic_mask(MaskTop) &*& is_Mutex_release_op(?op, mutex, releaser, ?P, ?Q) &*& P() &*& pre();
+        ens atomic_mask(MaskTop) &*& is_Mutex_release_op(op, mutex, releaser, P, Q) &*& Q() &*& post();
+    
+    @*/
+
+    impl Mutex {
+
+        unsafe fn new() -> Mutex;
+        //@ req true;
+        //@ ens Mutex(result) &*& Mutex_state(result, none);
+
+        unsafe fn acquire(self: Mutex);
+        //@ req [?f]Mutex(self) &*& is_Mutex_acquire_ghop(?ghop, self, currentThread, ?pre, ?post) &*& pre();
+        //@ ens [f]Mutex(self) &*& post();
+
+        unsafe fn try_acquire(self: Mutex) -> bool;
+        //@ req [?f]Mutex(self) &*& is_Mutex_try_acquire_ghop(?ghop, self, currentThread, ?pre, ?post) &*& pre();
+        //@ ens [f]Mutex(self) &*& post(result);
+
+        unsafe fn release(self: Mutex);
+        //@ req [?f]Mutex(self) &*& is_Mutex_release_ghop(?ghop, self, currentThread, ?pre, ?post) &*& pre();
+        //@ ens [f]Mutex(self) &*& post();
+
+        unsafe fn dispose(self: Mutex);
+        //@ req Mutex(self) &*& Mutex_state(self, none);
+        //@ ens true;
+
+    }
+
+}

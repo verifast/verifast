@@ -4,6 +4,22 @@ abstract_type type_info;
 
 @*/
 
+mod intrinsics {
+
+    unsafe fn copy_nonoverlapping<T>(src: *mut T, dst: *mut T, count: usize);
+    //@ req [?f]integers_(src as *mut u8, 1, false, count * std::mem::size_of::<T>(), ?vs) &*& integers__(dst as *mut u8, 1, false, count * std::mem::size_of::<T>(), _);
+    //@ ens [f]integers_(src as *mut u8, 1, false, count * std::mem::size_of::<T>(), vs) &*& integers_(dst as *mut u8, 1, false, count * std::mem::size_of::<T>(), vs);
+
+}
+
+mod ptr {
+
+    unsafe fn drop_in_place<T>(to_drop: *mut T);
+    //@ req thread_token(?t) &*& (<T>.full_borrow_content(t, to_drop))();
+    //@ ens thread_token(t) &*& *to_drop |-> _;
+
+}
+
 mod alloc {
     impl Layout {
 
@@ -25,7 +41,19 @@ mod alloc {
         };
     @*/
     //@ terminates;
-
+    
+    fn realloc(buffer: *u8, old_size: usize, new_size: usize) -> *u8;
+    //@ req integers_(buffer, 1, false, ?len, ?vs1) &*& integers__(buffer + len, 1, false, old_size - len, ?vs2) &*& alloc_block(buffer, old_size) &*& old_size <= new_size;
+    /*@
+    ens
+        if result == 0 {
+            integers_(buffer, 1, false, len, vs1) &*& integers__(buffer + len, 1, false, old_size - len, vs2) &*& alloc_block(buffer, old_size)
+        } else {
+            integers_(result, 1, false, len, vs1) &*& integers__(result + len, 1, false, old_size - len, vs2) &*&
+            integers__(result + old_size, 1, false, new_size - old_size, _) &*& alloc_block(result, new_size)
+        };
+    @*/
+    
     fn dealloc(p: *u8, size: usize);
     //@ req alloc_block(p, size) &*& integers__(p, 1, false, size, _);
     //@ ens true;
@@ -39,6 +67,11 @@ mod alloc {
 
 mod process {
     fn abort();
+    //@ req true;
+    //@ ens false;
+    //@ terminates;
+
+    fn exit(code: i32);
     //@ req true;
     //@ ens false;
     //@ terminates;

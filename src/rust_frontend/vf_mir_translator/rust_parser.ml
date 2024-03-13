@@ -14,10 +14,15 @@ let rec parse_simple_path_rest l x = function%parser
   [%let l, x = parse_simple_path_rest (Lexed(Result.get_ok @@ LocAux.cover_loc0 (lexed_loc l) (lexed_loc ll))) (x ^ "::" ^ xx)] ] -> (l, x)
 | [ ] -> (l, x)
 
+let parse_simple_path = function%parser
+  [ (l, Ident x); [%let (l, x) = parse_simple_path_rest l x] ] -> (l, x)
+
 let parse_right_angle_bracket stream = stream |> function%parser
   [ (_, Kwd ">") ] -> ()
 | [ (Lexed ((path, line, col), (path', line', col')), Kwd ">>") ] ->
   Lexer.Stream.push (Some (Lexed ((path, line, col + 1), (path', line', col')), Kwd ">")) stream
+| [ (Lexed ((path, line, col), (path', line', col')), Ident ">>>") ] ->
+  Lexer.Stream.push (Some (Lexed ((path, line, col + 1), (path', line', col')), Kwd ">>")) stream
 
 let rec parse_type = function%parser
   [ (l, Ident "i8") ] -> ManifestTypeExpr (l, Int (Signed, FixedWidthRank 0))
@@ -179,7 +184,10 @@ let rec parse_expr_funcs allowStructExprs =
     ] ->
     begin match e with
       Var (_, x) -> CallExpr (l, x, [], indices, args, Static)
-    | _ -> raise (ParseException (l, "Cannot call this expression form"))
+    | _ ->
+      if indices <> [] then static_error l "This expression form is not supported here" None;
+      let args = args |> List.map @@ function LitPat e -> e | _ -> static_error l "Patterns are not supported as arguments here" None in
+      ExprCallExpr (l, e, args)
     end
   | [] -> e
   and parse_struct_expr_field_rest lf f = function%parser
@@ -221,7 +229,9 @@ let rec parse_expr_funcs allowStructExprs =
     ] -> SwitchExpr (l, scrutinee, arms, None)
   | [ (_, Kwd "("); parse_expr as e; (_, Kwd ")") ] -> e
   | [ (l, Kwd "["); [%let pats = rep_comma parse_pat]; (_, Kwd "]") ] -> CallExpr (l, "#list", [], [], pats, Static)
+  | [ (l, CharToken c) ] -> IntLit (l, big_int_of_int (Char.code c), true, false, NoLSuffix)
   | [ (l, Kwd "typeid"); (_, Kwd "("); parse_type as t; (_, Kwd ")") ] -> Typeid (l, TypeExpr t)
+  | [ (_, Kwd "<"); parse_type as t; (_, Kwd ">"); (l, Kwd "."); (_, Ident x) ] -> TypePredExpr (l, t, x)
   and parse_match_arm = function%parser
     [ parse_expr as pat; (l, Kwd "=>"); parse_expr as rhs ] ->
     begin match pat with
@@ -234,6 +244,7 @@ let rec parse_expr_funcs allowStructExprs =
         end
       in
       SwitchExprClause (l, x, pats, rhs)
+    | Var (lv, x) -> SwitchExprClause (l, x, [], rhs)
     | _ -> raise (ParseException (expr_loc pat, "Match arm pattern must be constructor application"))
     end
   and parse_match_expr_rest = function%parser
@@ -251,10 +262,14 @@ let rec parse_expr_funcs allowStructExprs =
       [%let e = function%parser
         [ parse_type_args as targs;
           [%let e = function%parser
-            [ (l, Kwd "("); [%let args = rep_comma parse_pat ]; (_, Kwd ")") ] ->
-            begin match x, targs with
-              "std::mem::size_of", [t] -> SizeofExpr (l, TypeExpr t)
-            | _, _ -> CallExpr (l, x, targs, [], args, Static)
+            [ (l, Kwd "("); [%let args = rep_comma parse_pat ]; (_, Kwd ")");
+              [%let (indices, args) = function%parser
+                [ (_, Kwd "("); [%let args1 = rep_comma parse_pat ]; (_, Kwd ")") ] -> (args, args1)
+              | [ ] -> ([], args)
+              ] ] ->
+            begin match x, targs, indices, args with
+              "std::mem::size_of", [t], [], [] -> SizeofExpr (l, TypeExpr t)
+            | _ -> CallExpr (l, x, targs, indices, args, Static)
             end
           | [ ] ->
             CallExpr (l, x, targs, [], [], Static)
@@ -263,7 +278,12 @@ let rec parse_expr_funcs allowStructExprs =
       | [ (_, Ident x1); [%let e = parse_path_rest l (x ^ "::" ^ x1) ] ] -> e
       ]
     ] -> e
-  | [ ] -> Var (l, x)
+  | [ ] ->
+    match x with
+      "isize::MIN" -> Operation (l, MinValue (Int (Signed, PtrRank)), [])
+    | "isize::MAX" -> Operation (l, MaxValue (Int (Signed, PtrRank)), [])
+    | "usize::MAX" -> Operation (l, MaxValue (Int (Unsigned, PtrRank)), [])
+    | _ -> Var (l, x)
   and parse_block_expr = function%parser
     [ (_, Kwd "{"); parse_expr as e; (_, Kwd "}") ] -> e
   and parse_pat0 = function%parser
@@ -370,7 +390,7 @@ let rec parse_stmt = function%parser
     ]
   ] -> ProduceLemmaFunctionPointerChunkStmt (l, None, Some ftclause, body)
 | [ (l, Kwd "produce_fn_ptr_chunk"); 
-    (li, Ident ftn);
+    [%let (li, ftn) = parse_simple_path];
     [%let targs = function%parser
       [ parse_type_args as targs ] -> targs
     | [ ] -> []
@@ -392,7 +412,7 @@ let rec parse_stmt = function%parser
 and parse_match_stmt_arm = function%parser
   [ parse_expr as pat; (l, Kwd "=>"); parse_block_stmt as s ] -> SwitchStmtClause (l, pat, [s])
 and parse_produce_lemma_function_pointer_chunk_stmt_function_type_clause = function%parser
-  [ (li, Ident ftn);
+  [ [%let (li, ftn) = parse_simple_path];
     (_, Kwd "("); [%let args = rep_comma parse_expr]; (_, Kwd ")");
     (_, Kwd "("); [%let params = rep_comma (function%parser [ (l, Ident x) ] -> (l, x))]; (_, Kwd ")");
     (openBraceLoc, Kwd "{");
@@ -408,6 +428,7 @@ and parse_stmts stream = rep parse_stmt stream
 
 let parse_param = function%parser
   [ (_, Ident x); (_, Kwd ":"); parse_type as t ] -> t, x
+| [ (_, Kwd "self"); (_, Kwd ":"); parse_type as t ] -> t, "self"
 
 let parse_pred_paramlist = function%parser
   [ (_, Kwd "(");
@@ -543,6 +564,16 @@ let parse_ghost_decl = function%parser
      | [ ] -> false
     ]
   ] -> [FuncTypeDecl (l, Real, rt, ftn, [], ftps, ps, (pre, post, terminates))]
+| [ (l, Kwd "lem_type"); (lftn, Ident ftn); (_, Kwd "("); [%let ftps = rep_comma parse_param]; (_, Kwd ")"); (_, Kwd "=");
+  (_, Kwd "lem"); (_, Kwd "("); [%let ps = rep_comma parse_param]; (_, Kwd ")"); 
+  [%let rt = function%parser
+    [ (_, Kwd "->"); parse_type as t ] -> Some t
+  | [ ] -> None
+  ];
+  (_, Kwd ";");
+  (_, Kwd "req"); parse_asn as pre; (_, Kwd ";");
+  (_, Kwd "ens"); parse_asn as post; (_, Kwd ";")
+] -> [FuncTypeDecl (l, Ghost, rt, ftn, [], ftps, ps, (pre, post, false))]
 | [ (l, Kwd "abstract_type"); (_, Ident tn); (_, Kwd ";") ] -> [AbstractTypeDecl (l, tn)]
 
 let parse_ghost_decls stream = List.flatten (rep parse_ghost_decl stream)
@@ -555,17 +586,47 @@ let prefix_decl_name l prefix = function
   Func (l, k, tparams, rt, prefix ^ g, ps, nonghost_callers_only, ft, co, terminates, body, isVirtual, overrides)
 | AbstractTypeDecl (l, tn) ->
   AbstractTypeDecl (l, prefix ^ tn)
-| _ -> static_error l "Items other than functions are not yet supported here" None
+| Struct (l, sn, tparams, body, attrs) ->
+  Struct (l, prefix ^ sn, tparams, body, attrs)
+| PredFamilyDecl (l, g, tparams, indexCount, pts, inputParamCount, inductiveness) ->
+  PredFamilyDecl (l, prefix ^ g, tparams, indexCount, pts, inputParamCount, inductiveness)
+| PredFamilyInstanceDecl (l, g, tparams, indices, pts, body) ->
+  PredFamilyInstanceDecl (l, prefix ^ g, tparams, indices, pts, body)
+| _ -> static_error l "Some of these kinds of items are not yet supported here" None
 
 let rec parse_decl = function%parser
-  [ (l, Kwd ("impl"|"mod")); (lx, Ident x); (_, Kwd "{");
+  [ (l, Kwd "impl"); (lx, Ident x); (_, Kwd "{");
     [%let ds = rep parse_decl];
     (_, Kwd "}")
   ] ->
   let prefix = x ^ "::" in
   ds |> List.flatten |> List.map (prefix_decl_name l prefix)
+| [ (l, Kwd "mod"); (lx, Ident x); (_, Kwd "{");
+    [%let ds = rep parse_decl];
+    (_, Kwd "}")
+  ] -> [ModuleDecl (l, x, [], List.flatten ds)]
 | [ (l, Kwd "fn"); [%let d = parse_func_rest Regular] ] -> [d]
+| [ (_, Kwd "unsafe"); (l, Kwd "fn"); [%let d = parse_func_rest Regular] ] -> [d]
+| [ (_, Kwd "struct"); (l, Ident sn); (_, Kwd ";") ] ->
+  [
+    Struct (l, sn, [], None, []);
+    TypedefDecl (l, StructTypeExpr (l, Some sn, None, [], []), sn, [])
+  ]
 | [ parse_ghost_decl_block as ds ] -> ds
 
 let parse_decls = function%parser
   [ [%let ds = rep parse_decl] ] -> List.flatten ds
+
+let flatten_module_decls ltop ds =
+  let rec iter lp pn ilist ds0 ds cont =
+    match ds with
+      [] -> PackageDecl (lp, pn, ilist, List.rev ds0)::cont ()
+    | ModuleDecl (l, mn, ilist', mds)::ds ->
+      PackageDecl (lp, pn, ilist, List.rev ds0)::
+      iter l (if pn = "" then mn else pn ^ "::" ^ mn) ilist' [] mds begin fun () ->
+        iter lp pn ilist [] ds cont
+      end
+    | d::ds ->
+      iter lp pn ilist (d::ds0) ds cont
+  in
+  iter ltop "" [] [] ds (fun () -> [])

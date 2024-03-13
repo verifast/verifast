@@ -244,7 +244,7 @@ type
   | EnumElemName of big_int
   | GlobalName
   | ModuleName
-  | PureFuncName
+  | PureFuncName of type_ list (* Type arguments for type parameters that carry a typeid *)
   | ClassOrInterfaceNameScope
   | PackageNameScope
 
@@ -470,6 +470,16 @@ and
       type_ list *
       pat list *
       pat list
+  | PredExprAsn of
+      loc *
+      expr *
+      pat list
+  | WPredExprAsn of
+      loc *
+      expr *
+      type_ list * (* parameter types *)
+      int option * (* inputParamCount *)
+      pat list
   | InstPredAsn of
       loc *
       expr *
@@ -521,6 +531,8 @@ and
   | MatchAsn of loc * expr * pat
   | WMatchAsn of loc * expr * pat * type_
   | LetTypeAsn of loc * string * type_ * asn (* `let_type U = T in A` means A with type T substituted for type parameter U *)
+  | TypePredExpr of loc * type_expr * string
+  | WTypePredExpr of loc * type_ * string
 and
   asn = expr
 and
@@ -887,6 +899,9 @@ and
   | UnloadableModuleDecl of loc
   | ImportModuleDecl of loc * string
   | RequireModuleDecl of loc * string
+  | ModuleDecl of loc * string * import list * decl list (* A Rust module. Is flattened into a list of PackageDecl after parsing. *)
+  | TypePredDecl of loc * type_expr * string * string
+  | TypePredDef of loc * string list * type_expr * string * loc * string
 and (* shared box is deeltje ghost state, waarde kan enkel via actions gewijzigd worden, handle predicates geven info over de ghost state, zelfs als er geen eigendom over de box is*)
   action_decl = (* ?action_decl *)
   | ActionDecl of loc * string * bool (* does performing this action require a corresponding action permission? *) * (type_expr * string) list * expr * expr
@@ -1017,12 +1032,16 @@ let rec expr_loc e =
   | WPointsTo (l, e, tp, rhs) -> l
   | PredAsn (l, g, targs, ies, es) -> l
   | WPredAsn (l, g, _, targs, ies, es) -> l
+  | PredExprAsn (l, e, pats) -> l
+  | WPredExprAsn (l, e, pts, inputParamCount, pats) -> l
   | InstPredAsn (l, e, g, index, pats) -> l
   | WInstPredAsn (l, e_opt, tns, cfin, tn, g, index, pats) -> l
   | ExprAsn (l, e) -> l
   | MatchAsn (l, e, pat) -> l
   | WMatchAsn (l, e, pat, tp) -> l
   | LetTypeAsn (l, x, t, p) -> l
+  | TypePredExpr (l, t, x) -> l
+  | WTypePredExpr (l, t, x) -> l
   | Sep (l, p1, p2) -> l
   | IfAsn (l, e, p1, p2) -> l
   | SwitchAsn (l, e, sacs) -> l

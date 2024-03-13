@@ -83,7 +83,7 @@ module Make (Args : RUST_FE_ARGS) = struct
       let env = env @ [ entry ] in
       Ok (Array.of_list env)
 
-  let run_vf_mir_exporter (rs_file_path : string) =
+  let run_vf_mir_exporter (rustc_args : string list) (rs_file_path : string) =
     try
       (*** TODO @Nima: Get these names from build system *)
       let tchain_name = "nightly-2023-12-31" in
@@ -100,7 +100,7 @@ module Make (Args : RUST_FE_ARGS) = struct
       if not (Array.exists (String.starts_with ~prefix:rustc_driver_prefix) (Sys.readdir tchain_lib)) then
         Error (`RustcDriverMissing tchain_name)
       else
-      let args = [| bin_path; rs_file_path; "--sysroot=" ^ tchain_root |] in
+      let args = Array.of_list ([bin_path; rs_file_path; "--sysroot=" ^ tchain_root] @ rustc_args) in
       let current_env = Unix.environment () in
       let* env = add_path_to_env_var current_env (match Vfconfig.platform with MacOS -> "DYLD_LIBRARY_PATH" | Windows -> "PATH" | _ -> "LD_LIBRARY_PATH") tchain_lib in
       let chns = Unix.open_process_args_full bin_path args env in
@@ -111,8 +111,8 @@ module Make (Args : RUST_FE_ARGS) = struct
         let emsg = SysUtil.gen_unix_error_msg ecode fname param in
         Error (`SysCallFailed emsg)
 
-  let get_vf_mir_rd (rs_file_path : string) =
-    let* msg_in_chn, out_chn, err_in_chn = run_vf_mir_exporter rs_file_path in
+  let get_vf_mir_rd (rustc_args : string list) (rs_file_path : string) =
+    let* msg_in_chn, out_chn, err_in_chn = run_vf_mir_exporter rustc_args rs_file_path in
     let module CpIO = Capnp_unix.IO in
     let msg_rd_ctx =
       CpIO.create_read_context_for_channel ~compression:`None msg_in_chn
@@ -204,9 +204,9 @@ module Make (Args : RUST_FE_ARGS) = struct
             (`RustMirDesFailed
               ("Cannot create VF MIR from the received message. " ^ emsg)))
 
-  let parse_rs_file (rs_file_path : string) =
-    match get_vf_mir_rd rs_file_path with
-    | Ok vf_mir_rd -> VfMirTr.translate_vf_mir vf_mir_rd Args.report_should_fail
+  let parse_rs_file (rustc_args : string list) (extern_specs : string list) (rs_file_path : string) =
+    match get_vf_mir_rd rustc_args rs_file_path with
+    | Ok vf_mir_rd -> VfMirTr.translate_vf_mir extern_specs vf_mir_rd Args.report_should_fail
     | Error einfo ->
         let gen_emsg = "Rust frontend failed to generate VF MIR: " in
         let desc =

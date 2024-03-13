@@ -83,7 +83,7 @@ let of_ident_scope = function
 | EnumElemName n -> C ("EnumElemName", [BigInt n])
 | GlobalName -> c "GlobalName"
 | ModuleName -> c "ModuleName"
-| PureFuncName -> c "PureFuncName"
+| PureFuncName typeid_types -> C ("PureFuncName", [of_list of_type typeid_types])
 | ClassOrInterfaceNameScope -> c "ClassOrInterfaceNameScope"
 | PackageNameScope -> c "PackageNameScope"
 
@@ -448,6 +448,8 @@ and of_expr = function
 | TypedExpr (e, t) -> C ("TypedExpr", [of_expr e; of_type t])
 | WidenedParameterArgument e -> C ("WidenedParameterArgument", [of_expr e])
 | SizeofExpr (l, e) -> C ("SizeofExpr", [of_loc l; of_expr e])
+| TypePredExpr (l, te, x) -> C ("TypePredExpr", [of_loc l; of_type_expr te; S x])
+| WTypePredExpr (l, t, x) -> C ("WTypePredExpr", [of_loc l; of_type t; S x])
 | TypeExpr t -> C ("TypeExpr", [of_type_expr t])
 | GenericExpr (l, e, cs, def) ->
   C ("GenericExpr", [
@@ -546,6 +548,20 @@ and of_expr = function
     of_list of_type targs;
     of_list of_pat indices;
     of_list of_pat args
+  ])
+| PredExprAsn (l, e, args) ->
+  C ("PredExprAsn", [
+    of_loc l;
+    of_expr e;
+    of_list of_pat args
+  ])
+| WPredExprAsn (l, e, pts, inputParamCount, pats) ->
+  C ("WPredExprAsn", [
+    of_loc l;
+    of_expr e;
+    of_list of_type pts;
+    of_option i inputParamCount;
+    of_list of_pat pats
   ])
 | InstPredAsn (l, e, p, index, args) ->
   C ("InstPredAsn", [
@@ -1008,6 +1024,29 @@ and of_decl = function
     of_type_expr tp_expr;
     S name;
     of_option of_expr expr_opt
+  ])
+| ModuleDecl (l, mn, ilist, ds) ->
+  C ("ModuleDecl", [
+    of_loc l;
+    S mn;
+    of_list of_import ilist;
+    of_list of_decl ds
+  ])
+| TypePredDecl (l, te, selfTypeName, predName) ->
+  C ("TypePredDecl", [
+    of_loc l;
+    of_type_expr te;
+    S selfTypeName;
+    S predName
+  ])
+| TypePredDef (l, tparams, te, predName, lrhs, rhs) ->
+  C ("TypePredDef", [
+    of_loc l;
+    of_list s tparams;
+    of_type_expr te;
+    S predName;
+    of_loc lrhs;
+    S rhs
   ])
 and of_params params = 
   params |> of_list @@ fun (t, x) -> T [of_type_expr t; S x]

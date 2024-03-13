@@ -899,6 +899,7 @@ lemma_auto void pointers_to_chars(void *pp);
     ensures [f]chars(pp, n * sizeof(void *), chars_of_pointers(ps)) &*& has_type(pp, typeid(void *)) == true &*& pointers_of_chars(chars_of_pointers(ps)) == ps;
 
 predicate integers__(void *p, int size, bool signed_, int count; list<option<int> > vs) =
+    pointer_within_limits(p) == true &*&
     count == 0 ?
         vs == nil
     :
@@ -915,6 +916,10 @@ lemma_auto void integers__inv();
     requires [?f]integers_(?p, ?size, ?signed_, ?count, ?vs);
     ensures [f]integers_(p, size, signed_, count, vs) &*& length(vs) == count &*& pointer_within_limits(p + size * count) == true;
 
+lemma_auto void integers___inv();
+    requires [?f]integers__(?p, ?size, ?signed_, ?count, ?vs);
+    ensures [f]integers__(p, size, signed_, count, vs) &*& length(vs) == count &*& pointer_within_limits(p) && pointer_within_limits(p + size * count);
+
 lemma void integers__split(void *p, int offset);
     requires [?f]integers_(p, ?size, ?signed_, ?count, ?vs) &*& 0 <= offset &*& offset <= count;
     ensures
@@ -922,11 +927,24 @@ lemma void integers__split(void *p, int offset);
         [f]integers_(p + size * offset, size, signed_, count - offset, drop(offset, vs)) &*&
         vs == append(take(offset, vs), drop(offset, vs));
 
+lemma void integers___split(void *p, int offset);
+    requires [?f]integers__(p, ?size, ?signed_, ?count, ?vs) &*& 0 <= offset &*& offset <= count;
+    ensures
+        [f]integers__(p, size, signed_, offset, take(offset, vs)) &*&
+        [f]integers__(p + size * offset, size, signed_, count - offset, drop(offset, vs)) &*&
+        vs == append(take(offset, vs), drop(offset, vs));
+
 lemma void integers__join(void *p);
     requires
         [?f]integers_(p, ?size, ?signed_, ?count1, ?vs1) &*&
         [f]integers_(p + size * count1, size, signed_, ?count2, ?vs2);
     ensures [f]integers_(p, size, signed_, count1 + count2, append(vs1, vs2));
+
+lemma void integers___join(void *p);
+    requires
+        [?f]integers__(p, ?size, ?signed_, ?count1, ?vs1) &*&
+        [f]integers__(p + size * count1, size, signed_, ?count2, ?vs2);
+    ensures [f]integers__(p, size, signed_, count1 + count2, append(vs1, vs2));
 
 lemma_auto void integers__to_integers__(void *p);
     requires [?f]integers_(p, ?size, ?signed_, ?count, ?vs);

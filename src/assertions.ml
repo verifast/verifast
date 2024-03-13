@@ -345,27 +345,36 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       produce_points_to_chunk_ l h tp' coef symbn t $. fun h ->
       cont h ghostenv env
     | WPredAsn (l, g, is_global_predref, targs, pats0, pats) ->
-      let (g_symb, pats0, pats, types, auto_info) =
+      let targs' = instantiate_types tpenv targs in
+      let (g_symb, chunk_targs, pats0, pats, types, auto_info) =
         if not is_global_predref then 
-          let Some term = try_assoc g#name env in ((term, false), pats0, pats, g#domain, None)
+          let Some term = try_assoc g#name env in ((term, false), targs', pats0, pats, g#domain, None)
        else
           begin match try_assoc g#name predfammap with
-            Some (_, _, _, declared_paramtypes, symb, _, _) -> ((symb, true), pats0, pats, g#domain, Some (g#name, declared_paramtypes))
+            Some (_, _, _, declared_paramtypes, symb, _, _) -> ((symb, true), targs', pats0, pats, g#domain, Some (g#name, declared_paramtypes))
           | None ->
             let PredCtorInfo (_, tparams, ps1, ps2, inputParamCount, body, funcsym) = List.assoc g#name predctormap in
-            if tparams <> [] then static_error l "Generic predicate constructor assertions are not yet supported" None;
+            let typeid_msg () = Printf.sprintf "Taking typeids of predicate constructor type arguments <%s>: " (String.concat ", " (List.map string_of_type targs)) in
+            let targs_typeids = List.map (typeid_of_core_core l typeid_msg env) targs' in
             let ctorargs = List.map (function (LitPat e | WCtorPat (_, _, _, _, _, _, _, Some e)) -> ev e | _ -> static_error l "Patterns are not supported in predicate constructor argument positions." None) pats0 in
-            let g_symb = mk_app funcsym ctorargs in
+            let tpenv0 = List.combine tparams targs in
+            let ctorargs = List.map2 begin fun (_, pt) v ->
+                let pt1 = instantiate_type tpenv0 pt in
+                prover_convert_term v pt1 pt
+              end ps1 ctorargs
+            in
+            let g_symb = mk_app funcsym (targs_typeids @ ctorargs) in
             let (symbol, symbol_term) = funcsym in
-            register_pred_ctor_application g_symb symbol symbol_term [] ctorargs inputParamCount;
-            ((g_symb, false), [], pats, List.map snd ps2, None)
+            register_pred_ctor_application g_symb symbol symbol_term targs' ctorargs inputParamCount;
+            let pts = List.map (fun (_, pt) -> instantiate_type tpenv0 pt) ps2 in
+            ((g_symb, false), [], [], pats, pts, None)
           end
       in
-      let targs = instantiate_types tpenv targs in
+      let targs = targs' in
       let domain = instantiate_types tpenv types in
       evalpats ghostenv env (pats0 @ pats) types domain (fun ghostenv env ts ->
         let input_param_count = match g#inputParamCount with None -> None | Some c -> Some (c + (List.length pats0)) in
-        let do_assume_chunk () = produce_chunk h g_symb targs coef input_param_count ts size_first (fun h -> cont h ghostenv env) in
+        let do_assume_chunk () = produce_chunk h g_symb chunk_targs coef input_param_count ts size_first (fun h -> cont h ghostenv env) in
         match
           if assuming then None else
           match auto_info with
@@ -508,6 +517,12 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       produce_asn_core_with_post tpenv h ghostenv env body (real_mul l coef coef') size_first size_all assuming cont_with_post
     | EnsuresAsn (l, body) ->
       cont_with_post h ghostenv env (Some body)
+    | WPredExprAsn (l, e, pts, inputParamCount, pats) ->
+      let symb = eval None env e in
+      let pts' = instantiate_types tpenv pts in
+      evalpats ghostenv env pats pts pts' $. fun ghostenv env ts ->
+      produce_chunk h (symb, false) [] coef inputParamCount ts None @@ fun h ->
+      cont h ghostenv env
     )
   
   let rec produce_asn_core tpenv h ghostenv env p coef size_first size_all (assuming: bool) cont: symexec_result =
@@ -898,6 +913,9 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       Parameters:
         rules -- The automation rules
         h (heap): chunk list -- The heap
+        typeid_env: (string * term) list -- Maps each type parameter in the current toplevel scope
+          (i.e. the type parameters that may appear in chunk type arguments in the heap) to its typeid.
+          Do not confuse these type parameters with the type parameters visible to the chunk assertion being consumed.
         ghostenv (ghostEnvironment): string list -- The list of ghost variables. Used to check that ghost variables are not used in real code.
         env (environment): (string * term) list -- The environment that binds variable names to their symbolic value. Updated with new bindings.
         env' (unboundVariableBindings): (string * term) list -- Bindings of variables that were declared but not bound. (Happens when you do not specify values for all predicate parameters when closing a chunk.)
@@ -923,7 +941,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             env: (string * term) list -- Updated environment
             env': (string * term) list -- Updated list of bindings of declared but unbound variables
     *)
-  let consume_chunk_core rules h ghostenv env env' l g targs coef coefpat inputParamCount pats tps0 tps cont =
+  let consume_chunk_core rules h typeid_env ghostenv env env' l g targs coef coefpat inputParamCount pats tps0 tps cont =
     if !verbosity >= 4 then printff "%10.6fs: Consuming chunk %s\n" (Perf.time ()) (string_of_chunk_asn env g targs coef coefpat pats);
     let old_depth = !consume_chunk_recursion_depth in
     let rec consume_chunk_core_core h =
@@ -985,7 +1003,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 match rules with
                  [] -> cont ()
                 | rule::rules ->
-                  rule l h env targs terms_are_well_typed coef coefpat ts $. fun h ->
+                  rule l h typeid_env targs terms_are_well_typed coef coefpat ts $. fun h ->
                   match h with
                     None -> iter rules
                   | Some h ->
@@ -1024,16 +1042,16 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     consume_chunk_core_core h
   
   (** [cont] is called as [cont chunk h coef ts size ghostenv env env']. See docs at consume_chunk_core. *)
-  let consume_chunk rules h ghostenv env env' l g targs coef coefpat inputParamCount pats cont =
+  let consume_chunk rules h typeid_env ghostenv env env' l g targs coef coefpat inputParamCount pats cont =
     let tps = List.map (fun _ -> intType) pats in (* dummies, to indicate that no prover type conversions are needed *)
-    consume_chunk_core rules h ghostenv env env' l g targs coef coefpat inputParamCount pats tps tps cont
+    consume_chunk_core rules h typeid_env ghostenv env env' l g targs coef coefpat inputParamCount pats tps tps cont
   
   let srcpat pat = SrcPat pat
   let srcpats pats = List.map srcpat pats
 
   let dummypat = SrcPat DummyPat
   
-  let consume_points_to_chunk__core rules h ghostenv env env' l type0 type_ coef coefpat addr rhs consumeUninitChunk cont =
+  let consume_points_to_chunk__core rules h typeid_env ghostenv env env' l type0 type_ coef coefpat addr rhs consumeUninitChunk cont =
     let tp0, tp =
       if consumeUninitChunk && rhs = dummypat then
         option_type type0, option_type type_
@@ -1042,26 +1060,26 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     match try_pointee_pred_symb0 type_ with
       Some (_, predsym, _, _, _, _, _, _, _, uninit_predsym, _, _) ->
-      consume_chunk_core rules h ghostenv env env' l ((if consumeUninitChunk && rhs = dummypat then uninit_predsym else predsym), true) [] coef coefpat (Some 1) [TermPat addr; rhs] [voidPtrType; tp0] [voidPtrType; tp]
+      consume_chunk_core rules h typeid_env ghostenv env env' l ((if consumeUninitChunk && rhs = dummypat then uninit_predsym else predsym), true) [] coef coefpat (Some 1) [TermPat addr; rhs] [voidPtrType; tp0] [voidPtrType; tp]
         (fun chunk h coef [_; value] size ghostenv env env' -> cont chunk h coef value ghostenv env env')
     | None ->
     match int_rank_and_signedness type_ with
       Some (k, signedness) ->
-      consume_chunk_core rules h ghostenv env env' l ((if consumeUninitChunk && rhs = dummypat then integer___symb () else integer__symb ()), true) [] coef coefpat (Some 3)
+      consume_chunk_core rules h typeid_env ghostenv env env' l ((if consumeUninitChunk && rhs = dummypat then integer___symb () else integer__symb ()), true) [] coef coefpat (Some 3)
         [TermPat addr; TermPat (rank_size_term k); TermPat (mk_bool (signedness = Signed)); rhs] [voidPtrType; intType; Bool; tp0] [voidPtrType; intType; Bool; tp]
         (fun chunk h coef [_; _; _; value] size ghostenv env env' -> cont chunk h coef value ghostenv env env')
     | None ->
-      consume_chunk_core rules h ghostenv env env' l ((if consumeUninitChunk && rhs = dummypat then generic_points_to__symb () else generic_points_to_symb ()), true) [type_] coef coefpat (Some 1)
+      consume_chunk_core rules h typeid_env ghostenv env env' l ((if consumeUninitChunk && rhs = dummypat then generic_points_to__symb () else generic_points_to_symb ()), true) [type_] coef coefpat (Some 1)
         [TermPat addr; rhs] [voidPtrType; tp0] [voidPtrType; tp]
         (fun chunk h coef [_; value] size ghostenv env env' -> cont chunk h coef value ghostenv env env')
 
-  let consume_points_to_chunk_ rules h ghostenv env env' l type_ coef coefpat addr rhs consumeUninitChunk cont =
-    consume_points_to_chunk__core rules h ghostenv env env' l type_ type_ coef coefpat addr rhs consumeUninitChunk cont
+  let consume_points_to_chunk_ rules h typeid_env ghostenv env env' l type_ coef coefpat addr rhs consumeUninitChunk cont =
+    consume_points_to_chunk__core rules h typeid_env ghostenv env env' l type_ type_ coef coefpat addr rhs consumeUninitChunk cont
   
-  let consume_points_to_chunk rules h ghostenv env env' l type_ coef coefpat addr rhs cont =
-    consume_points_to_chunk_ rules h ghostenv env env' l type_ coef coefpat addr rhs false cont
+  let consume_points_to_chunk rules h typeid_env ghostenv env env' l type_ coef coefpat addr rhs cont =
+    consume_points_to_chunk_ rules h typeid_env ghostenv env env' l type_ coef coefpat addr rhs false cont
 
-  let consume_instance_predicate_chunk rules h ghostenv env env' l symbol (target_type, target) (index_type, index) family coef coefpat pats types cont =
+  let consume_instance_predicate_chunk rules h typeid_env ghostenv env env' l symbol (target_type, target) (index_type, index) family coef coefpat pats types cont =
     let family_target, family_target_type =
       match dialect, target_type with
       | Some Cxx, PtrType (StructType (target_type_name, [])) ->
@@ -1071,10 +1089,10 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     let consume_types = family_target_type :: index_type :: types in
     let consume_pats = TermPat family_target :: TermPat index :: srcpats pats in 
-    consume_chunk_core rules h ghostenv env env' l (symbol, true) [] coef coefpat (Some 2) consume_pats consume_types consume_types cont
+    consume_chunk_core rules h typeid_env ghostenv env env' l (symbol, true) [] coef coefpat (Some 2) consume_pats consume_types consume_types cont
 
 
-  let rec consume_asn_core_with_post rules tpenv h ghostenv env env' p checkDummyFracs coef cont_with_post =
+  let rec consume_asn_core_with_post rules tpenv h typeid_env ghostenv env env' p checkDummyFracs coef cont_with_post =
     let cont chunks h ghostenv env env' size_first = cont_with_post chunks h ghostenv env env' size_first None in
     let with_context_helper cont =
       match p with
@@ -1108,49 +1126,53 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             symb
         in
         let targs = List.map (instantiate_type tpenv) targs in
-        consume_chunk_core rules h ghostenv env env' l (symb_used, true) targs coef coefpat inputParamCount pats tps0 tps
+        consume_chunk_core rules h typeid_env ghostenv env env' l (symb_used, true) targs coef coefpat inputParamCount pats tps0 tps
           (fun chunk h coef ts size ghostenv env env' -> check_dummy_coefpat l coefpat coef; cont [chunk] h ghostenv env env' size)
       | WReadArray (la, ea, _, ei) ->
         let pats = [SrcPat (LitPat ea); SrcPat (LitPat ei); rhs] in
-        consume_chunk rules h ghostenv env env' l (array_element_symb(), true) [instantiate_type tpenv tp] coef coefpat (Some 2) pats $.
+        consume_chunk rules h typeid_env ghostenv env env' l (array_element_symb(), true) [instantiate_type tpenv tp] coef coefpat (Some 2) pats $.
         fun chunk h coef ts size ghostenv env env' ->
         check_dummy_coefpat l coefpat coef;
         cont [chunk] h ghostenv env env' size
       | WVar (lv, x, GlobalName) -> 
         let (_, type_, symbn, _) = List.assoc x globalmap in  
-        consume_points_to_chunk_ rules h ghostenv env env' l type_ coef coefpat symbn rhs true
+        consume_points_to_chunk_ rules h typeid_env ghostenv env env' l type_ coef coefpat symbn rhs true
           (fun chunk h coef _ ghostenv env env' -> check_dummy_coefpat l coefpat coef; cont [chunk] h ghostenv env env' None)
       | WDeref(ld, e, td) ->  
         let symbn = eval None env e in
         let td' = instantiate_type tpenv td in
-        consume_points_to_chunk__core rules h ghostenv env env' l td td' coef coefpat symbn rhs true
+        consume_points_to_chunk__core rules h typeid_env ghostenv env env' l td td' coef coefpat symbn rhs true
           (fun chunk h coef _ ghostenv env env' -> check_dummy_coefpat l coefpat coef; cont [chunk] h ghostenv env env' None)
     in
     let pred_asn l coefpat g is_global_predref targs pats0 pats =
       if g#name = "junk" && is_global_predref then
         cont h [] ghostenv env env' None
       else
-      let (g_symb, pats0, pats, types) =
+      let targs' = instantiate_types tpenv targs in
+      let (g_symb, chunk_targs, pats0, pats, types) =
         if is_global_predref then
            match try_assoc g#name predfammap with
-            Some (_, _, _, _, symb, _, _) -> ((symb, true), pats0, pats, g#domain)
+            Some (_, _, _, _, symb, _, _) -> ((symb, true), targs', pats0, pats, g#domain)
           | None -> 
             let PredCtorInfo (_, tparams, ps1, ps2, inputParamCount, body, funcsym) = List.assoc g#name predctormap in
-            if tparams <> [] then static_error l "Generic predicate constructor assertions are not yet supported" None;
+            let typeid_msg () = Printf.sprintf "Taking typeids of predicate constructor type arguments <%s>: " (String.concat ", " (List.map string_of_type targs)) in
+            let targs_typeids = List.map (typeid_of_core_core l typeid_msg env) targs' in
             let ctorargs = List.map (function SrcPat (LitPat e | WCtorPat (_, _, _, _, _, _, _, Some e)) -> ev e | _ -> static_error l "Patterns are not supported in predicate constructor argument positions." None) pats0 in
-            let g_symb = mk_app funcsym ctorargs in
+            let tpenv0 = List.combine tparams targs in
+            let ctorargs = List.map2 (fun (_, pt) v -> prover_convert_term v (instantiate_type tpenv0 pt) pt) ps1 ctorargs in
+            let g_symb = mk_app funcsym (targs_typeids @ ctorargs) in
             let (symbol, symbol_term) = funcsym in
-            register_pred_ctor_application g_symb symbol symbol_term targs ctorargs inputParamCount;
-            ((g_symb, false), [], pats, List.map snd ps2)
+            register_pred_ctor_application g_symb symbol symbol_term targs' ctorargs inputParamCount;
+            ((g_symb, false), [], [], pats, List.map (fun (_, pt) -> instantiate_type tpenv0 pt) ps2)
         else
           match try_assoc g#name env with
             None -> assert_false [] env l (Printf.sprintf "Unbound variable '%s'" g#name) None
-          | Some term -> ((term, false), pats0, pats, g#domain)
+          | Some term -> ((term, false), targs', pats0, pats, g#domain)
       in
-      let targs = instantiate_types tpenv targs in
+      let targs = targs' in
       let domain = instantiate_types tpenv types in
       let inputParamCount = match g#inputParamCount with None -> None | Some n -> Some (List.length pats0 + n) in
-      consume_chunk_core rules h ghostenv env env' l g_symb targs coef coefpat inputParamCount (pats0 @ pats) types domain (fun chunk h coef ts size ghostenv env env' ->
+      consume_chunk_core rules h typeid_env ghostenv env env' l g_symb chunk_targs coef coefpat inputParamCount (pats0 @ pats) types domain (fun chunk h coef ts size ghostenv env env' ->
         check_dummy_coefpat l coefpat coef;
         cont [chunk] h ghostenv env env' size
       )
@@ -1189,7 +1211,14 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           ObjType (tn, (List.map (fun tparam -> RealTypeParam tparam) ctparams)), ObjType ("java.lang.Class", [])
       in
       let index = ev index in
-      consume_instance_predicate_chunk rules h ghostenv env env' l pred_symb (target_type, target) (index_type, index) tn coef coefpat pats types @@ fun chunk h coef ts size ghostenv env env' ->
+      consume_instance_predicate_chunk rules h typeid_env ghostenv env env' l pred_symb (target_type, target) (index_type, index) tn coef coefpat pats types @@ fun chunk h coef ts size ghostenv env env' ->
+      check_dummy_coefpat l coefpat coef;
+      cont [chunk] h ghostenv env env' size
+    in
+    let pred_expr_asn l coefpat e pts inputParamCount pats =
+      let g_symb = (ev e, false) in
+      let pts' = instantiate_types tpenv pts in
+      consume_chunk_core rules h typeid_env ghostenv env env' l g_symb [] coef coefpat inputParamCount (srcpats pats) pts pts' @@ fun chunk h coef ts size ghostenv env env' ->
       check_dummy_coefpat l coefpat coef;
       cont [chunk] h ghostenv env env' size
     in
@@ -1210,11 +1239,11 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       match_pat h l ghostenv env env' false (SrcPat pat) tp tp v (fun () -> assert false) $. fun ghostenv env env' ->
       cont [] h ghostenv env env' None
     | LetTypeAsn (l, x, tp, p) ->
-      consume_asn_core_with_post rules ((x, tp)::tpenv) h ghostenv env env' p checkDummyFracs coef cont_with_post
+      consume_asn_core_with_post rules ((x, tp)::tpenv) h typeid_env ghostenv env env' p checkDummyFracs coef cont_with_post
     | Sep (l, p1, p2) ->
-      consume_asn_core_with_post rules tpenv h ghostenv env env' p1 checkDummyFracs coef (fun chunks h ghostenv env env' size post ->
+      consume_asn_core_with_post rules tpenv h typeid_env ghostenv env env' p1 checkDummyFracs coef (fun chunks h ghostenv env env' size post ->
         if post <> None then static_error l "Left-hand operand of separating conjunction cannot specify a postcondition." None;
-        consume_asn_core_with_post rules tpenv h ghostenv env env' p2 checkDummyFracs coef (fun chunks' h ghostenv env env' _ post ->
+        consume_asn_core_with_post rules tpenv h typeid_env ghostenv env env' p2 checkDummyFracs coef (fun chunks' h ghostenv env env' _ post ->
           cont_with_post (chunks @ chunks') h ghostenv env env' size post
         )
       )
@@ -1229,10 +1258,10 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       branch
         (fun _ ->
            assume (ev e) (fun _ ->
-             consume_asn_core_with_post rules tpenv h ghostenv env env' p1 checkDummyFracs coef cont_with_post))
+             consume_asn_core_with_post rules tpenv h typeid_env ghostenv env env' p1 checkDummyFracs coef cont_with_post))
         (fun _ ->
            assume (ctxt#mk_not (ev e)) (fun _ ->
-             consume_asn_core_with_post rules tpenv h ghostenv env env' p2 checkDummyFracs coef cont_with_post))
+             consume_asn_core_with_post rules tpenv h typeid_env ghostenv env env' p2 checkDummyFracs coef cont_with_post))
     | WSwitchAsn (l, e, i, cs) ->
       let cont_with_post chunks h ghostenv1 env1 env'' _ post =
         let ghostenv, env =
@@ -1272,7 +1301,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               (xs, xenv)
           in
           branch
-            (fun _ -> assume_eq t (mk_app ctorsym xs) (fun _ -> consume_asn_core_with_post rules tpenv h (pats @ ghostenv) (xenv @ env) env' p checkDummyFracs coef cont_with_post))
+            (fun _ -> assume_eq t (mk_app ctorsym xs) (fun _ -> consume_asn_core_with_post rules tpenv h typeid_env (pats @ ghostenv) (xenv @ env) env' p checkDummyFracs coef cont_with_post))
             (fun _ -> iter cs)
         | [] -> success()
       in
@@ -1287,18 +1316,20 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | CoefAsn (l, coefpat, WInstPredAsn (_, e_opt, st, cfin, tn, g, index, pats)) -> inst_call_pred l (SrcPat coefpat) e_opt st tn g index pats
     | EnsuresAsn (l, body) ->
       cont_with_post [] h ghostenv env env' None (Some body)
+    | WPredExprAsn (l, e, pts, inputParamCount, pats) -> pred_expr_asn l real_unit_pat e pts inputParamCount pats
+    | CoefAsn (l, coefpat, WPredExprAsn (_, e, pts, inputParamCount, pats)) -> pred_expr_asn l (SrcPat coefpat) e pts inputParamCount pats
     )
   
-  let rec consume_asn_core rules tpenv h ghostenv env env' p checkDummyFracs coef cont =
-    consume_asn_core_with_post rules tpenv h ghostenv env env' p checkDummyFracs coef $. fun chunks h ghostenv env env' size_first post ->
+  let rec consume_asn_core rules tpenv h typeid_env ghostenv env env' p checkDummyFracs coef cont =
+    consume_asn_core_with_post rules tpenv h typeid_env ghostenv env env' p checkDummyFracs coef $. fun chunks h ghostenv env env' size_first post ->
     cont chunks h ghostenv env env' size_first
   
-  let consume_asn rules tpenv h ghostenv env p checkDummyFracs coef cont =
-    consume_asn_core_with_post rules tpenv h ghostenv env [] p checkDummyFracs coef $. fun chunks h ghostenv env env' size_first post ->
+  let consume_asn rules tpenv h typeid_env ghostenv env p checkDummyFracs coef cont =
+    consume_asn_core_with_post rules tpenv h typeid_env ghostenv env [] p checkDummyFracs coef $. fun chunks h ghostenv env env' size_first post ->
     cont chunks h ghostenv env size_first
 
-  let rec consume_asn_with_post rules tpenv h ghostenv env p checkDummyFracs coef cont =
-    consume_asn_core_with_post rules tpenv h ghostenv env [] p checkDummyFracs coef $. fun chunks h ghostenv env env' size_first post ->
+  let rec consume_asn_with_post rules tpenv h typeid_env ghostenv env p checkDummyFracs coef cont =
+    consume_asn_core_with_post rules tpenv h typeid_env ghostenv env [] p checkDummyFracs coef $. fun chunks h ghostenv env env' size_first post ->
     cont chunks h ghostenv env size_first post
   
   let term_of_pred_index =
@@ -1357,7 +1388,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               flatmap 
                 (fun (WSwitchAsnClause (l, casename, args, boxinginfo, asn)) ->
                   if (List.length args) = 0 then
-                    let cond = WOperation (l, Eq, [e; WVar (l, casename, PureFuncName)], AnyType) in
+                    let cond = WOperation (l, Eq, [e; WVar (l, casename, PureFuncName [])], AnyType) in
                     iter (cond :: conds) asn cont
                   else 
                    []
@@ -1784,7 +1815,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                         in
                         let new_coef = wanted_coef |> Option.value ~default:new_coef in
                         with_context (Executing (h, env, outer_l, ("Auto-closing predicate with coefficient " ^ ctxt#pprint new_coef))) @@ fun () ->
-                        consume_asn rules tpenv h ghostenv env outer_wbody checkDummyFracs new_coef @@ fun _ h ghostenv env2 size_first ->
+                        consume_asn rules tpenv h typeid_env ghostenv env outer_wbody checkDummyFracs new_coef @@ fun _ h ghostenv env2 size_first ->
                           let outputParams = outer_formal_args |> drop @@ List.length outer_formal_input_args in
                           let outputArgs = List.map (fun (x, tp0) -> let tp = instantiate_type tpenv tp0 in (prover_convert_term (List.assoc x env2) tp0 tp)) outputParams in
                           with_context (Executing (h, [], outer_l, "Producing auto-closed chunk")) @@ fun () ->
@@ -2123,7 +2154,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let env = List.map2 (fun (x, tp0) t -> let tp = instantiate_type tpenv tp0 in (x, prover_convert_term t tp tp0)) inputParams inputArgs in
             List.exists (fun conds -> for_all_rev (fun cond -> ctxt#query (eval None env cond)) conds) conds
           in
-          let exec_func h targs coef coefpat ts cont =
+          let exec_func h typeid_env targs coef coefpat ts cont =
             let rules = rules_cell in
             let (indices, inputArgs) = take_drop indexCount ts in
             let Some tpenv = zip predinst_tparams targs in
@@ -2133,7 +2164,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let coef = match coefpat with TermPat f -> (real_mul dummy_loc coef f) | SrcPat (DummyPat) -> get_dummy_frac_term () | SrcPat (LitPat _) -> assert false; | SrcPat (VarPat(_, x)) -> real_unit  in
             with_context PushSubcontext $. fun () ->
             with_context (Executing (h, env, l, "Auto-closing predicate")) $. fun () ->
-            consume_asn rules tpenv h ghostenv env wbody checkDummyFracs coef $. fun _ h ghostenv env size_first ->
+            consume_asn rules tpenv h typeid_env ghostenv env wbody checkDummyFracs coef $. fun _ h ghostenv env size_first ->
             let outputArgs = List.map (fun (x, tp0) -> let tp = instantiate_type tpenv tp0 in (prover_convert_term (List.assoc x env) tp0 tp)) outputParams in
             with_context (Executing (h, [], l, "Producing auto-closed chunk")) $. fun () ->
             with_context PopSubcontext $. fun () ->
@@ -2141,7 +2172,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           in
           let rule l h typeid_env targs terms_are_well_typed coef coefpat ts cont =
             (*let _ = print_endline "trying to close empty predicate" in*)
-            if terms_are_well_typed && match_func h targs ts then exec_func h targs coef coefpat ts (fun h -> cont (Some h)) else cont None
+            if terms_are_well_typed && match_func h targs ts then exec_func h typeid_env targs coef coefpat ts (fun h -> cont (Some h)) else cont None
           in
           rule
         in
@@ -2349,7 +2380,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   let rules = rules_cell in
                   with_context PushSubcontext $. fun () ->
                   with_context (Executing (h, env, asn_loc wbody, "Auto-closing array slice")) $. fun () ->
-                  consume_asn rules tpenv h ghostenv env wbody true coef' $. fun _ h ghostenv env size_first ->
+                  consume_asn rules tpenv h typeid_env ghostenv env wbody true coef' $. fun _ h ghostenv env size_first ->
                   with_context PopSubcontext $. fun () ->
                   match try_assoc xvalue env with
                     None -> cont None

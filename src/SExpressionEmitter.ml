@@ -193,7 +193,7 @@ let sexpr_of_ident_scope (scope : ident_scope) : sexpression =
     | EnumElemName n     -> Symbol "enumeration-member"
     | GlobalName         -> Symbol "global"
     | ModuleName         -> Symbol "module"
-    | PureFuncName       -> Symbol "pure-function"
+    | PureFuncName _     -> Symbol "pure-function"
     | ClassOrInterfaceNameScope
                          -> Symbol "class-or-interface-name"
     | PackageNameScope   -> Symbol "package-name"

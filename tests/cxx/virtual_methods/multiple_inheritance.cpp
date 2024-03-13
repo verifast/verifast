@@ -83,6 +83,9 @@ public:
     //@ requires true;
     //@ ensures SourceDyn(&typeid(Node)) &*& SourceOk();
     {
+      setTarget(this);
+      //@ close TargetOk();
+      setSource(this);
       //@ open Node_vtype(this, &typeid(Node));
     }
 
@@ -90,10 +93,7 @@ public:
     //@ requires SourceDyn(thisType) &*& SourceOk();
     //@ ensures true;
     {
-      //@ open this->TargetDyn(&typeid(struct Target))(thisType);
-      setTarget(this);
-      //@ close TargetOk();
-      setSource(this);
+      //@ close Node_vtype(this, &typeid(Node));
     }
 
     virtual void setTarget(Target *target)
