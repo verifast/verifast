@@ -374,12 +374,11 @@ struct Expr {
   }
 
   struct IntLit {
-    value @0 :Text; # Deprecated
-    uSuffix @1 :Bool;
-    lSuffix @2 :SufKind;
-    base @3 :NbBase;
-    lowBits @4 :UInt64;
-    highBits @5 :UInt64; # Reserved for future use with 128 Bit Integers
+    uSuffix @0 :Bool;
+    lSuffix @1 :SufKind;
+    base @2 :NbBase;
+    lowBits @3 :UInt64;
+    highBits @4 :UInt64; # Reserved for future use with 128 Bit Integers
   }
 
   struct Call {
