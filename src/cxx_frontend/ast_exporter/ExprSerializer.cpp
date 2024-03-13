@@ -109,48 +109,20 @@ bool checkSuffixIgnoreCase(const clang::StringRef str, const char suffix,
   return false;
 }
 
-std::string hexStringOf(unsigned value) {
-  static const char hexDigits[16] = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};
-  const size_t bufSize = sizeof(value) * 2 + 2;
-  size_t offset = bufSize;
-  char buf[ bufSize ];
-
-  // Translate half-bytes to hex digits and write them to buf beginning at the end
-  for(; value; value >>= 4) {
-    buf[--offset] = hexDigits[value & 0xF];
-  }
-
-  // Prepend "0x"
-  buf[--offset] = 'x';
-  buf[--offset] = '0';
-
-  // Convert char sequence to std::string and return it
-  return std::string(buf + offset, bufSize - offset);
-}
-
 bool ExprSerializer::VisitCharacterLiteral(clang::CharacterLiteral const * const lit) {
-  llvm::SmallString<15> buffer;
-  bool invalid{false};
-  clang::StringRef spelling = clang::Lexer::getSpelling(
-    getSourceManager().getSpellingLoc(lit->getBeginLoc()), buffer,
-    getSourceManager(), getContext().getLangOpts(), &invalid);
-  assert(!invalid);
-
-  assert(spelling.size() > 2);
-
-  bool uSuf{false};
-
-  // Check if encoding prefix (u8, u, U, L) is 'u' or 'U' as these are defined unsigned according to C++ standard
-  if(spelling.size() >= 2 && (spelling[0] == 'u' || spelling[0] == 'U') && spelling[1] != '8') {
-    uSuf = true;
-  }
+  using CharKind = clang::CharacterLiteral::CharacterKind;
+  // Check if encoding is UTF16 or UTF32 as their types are defined unsigned according to C++ standard
+  CharKind const kind = lit->getKind();
+  bool const uSuf = (kind == CharKind::UTF16 || kind == CharKind::UTF32);
 
   // Initialize IntLit
   ::stubs::Expr::IntLit::Builder intLit = m_builder.initIntLit();
   intLit.setUSuffix(uSuf);
   intLit.setLSuffix(stubs::SufKind::NO_SUF);
-  intLit.setBase(stubs::NbBase::HEX); // !BAD HACK! This implies decimal==false and ensures correct decoding of the hex encoded value in later steps
-  intLit.setValue(hexStringOf(lit->getValue()));
+  intLit.setBase(stubs::NbBase::CHARACTER);
+  static_assert(sizeof(lit->getValue()) < 8); // Ensure that the value always fits into a single uint64_t
+  intLit.setLowBits(lit->getValue());
+  intLit.setHighBits(0);
 
   return true;
 }
@@ -190,8 +162,12 @@ bool ExprSerializer::VisitIntegerLiteral(const clang::IntegerLiteral *lit) {
                                                      : stubs::NbBase::DECIMAL;
   intLit.setBase(base);
 
-  auto valStr = spelling.substr(0, spelling.size() - lCount - uSuf);
-  intLit.setValue(valStr.str());
+  llvm::APInt const val = lit->getValue();
+
+  assert(val.getNumWords() <= 2);
+  if(val.getNumWords() >= 2) intLit.setHighBits(val.getRawData()[1]);
+  if(val.getNumWords() >= 1) intLit.setLowBits(val.getRawData()[0]);
+
   return true;
 }
 

@@ -107,6 +107,16 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
     | _ -> Error.error loc "Unsupported binary expression."
 
   and transl_int_lit_expr (loc : Ast.loc) (int_lit : E.IntLit.t) : Ast.expr =
+    let open Stdint in
+    let open Big_int in
+    let big_int_of_uint64 (value : Stdint.uint64) =
+      let lowPart = Uint64.to_int64 (Uint64.logand value (Uint64.of_int 0xFFFFFFFF)) in
+      let highPart = Uint64.to_int64 (Uint64.shift_right value 32) in
+      let result = ref (big_int_of_int64 highPart) in
+      result := shift_left_big_int !result 32;
+      or_big_int (big_int_of_int64 lowPart) !result
+    in
+
     let open E.IntLit in
     let l_suf =
       match l_suffix_get int_lit with
@@ -114,14 +124,15 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
       | R.SufKind.LLSuf -> Ast.LLSuffix
       | R.SufKind.NoSuf -> Ast.NoLSuffix
     in
-    let str_value = value_get int_lit in
-    let dec, value =
+    let dec =
       match base_get int_lit with
-      | R.NbBase.Decimal -> (true, Big_int.big_int_of_string str_value)
-      | R.NbBase.Octal -> (false, Lexer.big_int_of_octal_string str_value)
-      | R.NbBase.Hex -> (false, Lexer.big_int_of_hex_string str_value)
+      | R.NbBase.Decimal -> true
+      | _ -> false
     in
     let u_suf = u_suffix_get int_lit in
+    let low_bits = big_int_of_uint64 (low_bits_get int_lit) in
+    let high_bits = big_int_of_uint64 (high_bits_get int_lit) in
+    let value = or_big_int (shift_left_big_int high_bits 64) low_bits in
     Ast.IntLit (loc, value, dec, u_suf, l_suf)
 
   and transl_bool_lit_expr (loc : Ast.loc) (bool_lit : bool) : Ast.expr =
