@@ -58,6 +58,8 @@ module AstAux = struct
 
   let decl_loc_name_and_name_setter (d : decl) =
     match d with
+    | Inductive (loc, name, tparams, ctors) ->
+        (loc, name, fun name -> Inductive (loc, name, tparams, ctors))
     | Struct (loc, name, tparams, definition_opt, attrs) ->
         ( loc,
           name,
@@ -190,7 +192,7 @@ module AstAux = struct
   let adt_ty_name (adt : type_expr) =
     match adt with
     | StructTypeExpr (_, Some name, _, _, _) -> Ok name
-    | _ -> Error (`AdtTyName "Not an ADT")
+    | _ -> failwith "adt_ty_name: Not an ADT"
 
   let sort_decls_lexically ds =
     List.sort
@@ -358,10 +360,17 @@ module Mir = struct
   let decl_mir_adt_kind (d : Ast.decl) =
     match d with
     | Ast.Struct _ -> Ok Struct
+    | Ast.Inductive _ -> Ok Enum
     | Ast.Union _ -> failwith "Todo: Unsupported ADT"
-    | _ -> Error (`DeclMirAdtKind "Not an ADT")
+    | _ -> failwith "decl_mir_adt_kind: Not an ADT"
 
-  type aggregate_kind = AggKindAdt of { name : string; def : Ast.decl }
+  type aggregate_kind =
+    | AggKindAdt of {
+        adt_kind : adt_kind;
+        adt_name : string;
+        variant_name : string;
+        def : Ast.decl;
+      }
 
   type field_def_tr = {
     name : string;
@@ -370,7 +379,11 @@ module Mir = struct
     loc : Ast.loc;
   }
 
-  type variant_def_tr = { fields : field_def_tr list }
+  type variant_def_tr = {
+    loc : Ast.loc;
+    name : string;
+    fields : field_def_tr list;
+  }
 
   type adt_def_tr = {
     loc : Ast.loc;
@@ -892,7 +905,71 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             in
             let ty_info = Mir.TyInfoBasic { vf_ty; interp } in
             Ok ty_info)
-    | EnumKind -> failwith "Todo: AdtTy::Enum"
+    | EnumKind ->
+        let* targs =
+          ListAux.try_map
+            (fun targ_cpn -> translate_generic_arg targ_cpn loc)
+            substs_cpn
+        in
+        let targs =
+          targs
+          |> List.map @@ function
+             | Mir.GenArgLifetime ->
+                 raise
+                   (Ast.StaticError
+                      ( loc,
+                        "Lifetime arguments are not yet supported here",
+                        None ))
+             | Mir.GenArgType arg_ty -> Mir.basic_type_of arg_ty
+             | Mir.GenArgConst ->
+                 raise
+                   (Ast.StaticError
+                      (loc, "Const arguments are not yet supported here", None))
+        in
+        let vf_ty = IdentTypeExpr (loc, None, name) in
+        let sz_expr = SizeofExpr (loc, TypeExpr vf_ty) in
+        let own tid vs =
+          Error "Expressing ownership of an enum value is not yet supported"
+        in
+        let own_pred =
+          Error
+            "Expressing the ownership predicate of an enum value is not yet \
+             supported"
+        in
+        let shr lft tid l =
+          Error
+            "Expressing shared ownership of an enum value is not yet supported"
+        in
+        let shr_pred =
+          Error
+            "Expressing the shared ownership predicate of an enum value is not \
+             yet supported"
+        in
+        let full_bor_content =
+          Error
+            "Expressing the full borrow content of an enum value is not yet \
+             supported"
+        in
+        (* Todo: Nested structs *)
+        let points_to tid l vid_op =
+          Error
+            "Expressing a points-to assertion for an enum pointer is not yet \
+             supported"
+        in
+        let interp =
+          RustBelt.
+            {
+              size = sz_expr;
+              own;
+              own_pred;
+              shr;
+              shr_pred;
+              full_bor_content;
+              points_to;
+            }
+        in
+        let ty_info = Mir.TyInfoBasic { vf_ty; interp } in
+        Ok ty_info
     | UnionKind -> failwith "Todo: AdtTy::Union"
     | Undefined _ -> Error (`TrAdtTy "Unknown ADT kind")
 
@@ -1488,28 +1565,60 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                 ref None ) );
           ] )
 
-    let translate_place_element (loc : Ast.loc) (e : Ast.expr)
-        (place_elm : PlaceElementRd.t) =
+    type place_element =
+      | Deref
+      | Field of string option * int
+      | Downcast of int
+
+    let decode_place_element (place_elm : PlaceElementRd.t) : place_element =
       let open PlaceElementRd in
       match get place_elm with
-      | Deref -> Ok (Ast.Deref (loc, e))
+      | Deref -> Deref
       | Field field_data_cpn ->
           let open FieldData in
+          let index = index_get field_data_cpn in
           let name_cpn = name_get field_data_cpn in
-          let name = translate_symbol name_cpn in
-          Ok (Ast.Select (loc, e, name))
-      | Undefined _ ->
-          Error (`TrPlaceElement "Unknown place element projection")
+          let name =
+            match OptionRd.get name_cpn with
+            | Nothing -> None
+            | Something name_cpn ->
+                Some (SymbolRd.name_get (VfMirStub.Reader.of_pointer name_cpn))
+          in
+          Field (name, Stdint.Uint32.to_int index)
+      | Downcast variant_index -> Downcast (Stdint.Uint32.to_int variant_index)
+
+    let translate_projection (loc : Ast.loc) (elems : place_element list)
+        (e : Ast.expr) =
+      let rec iter elems =
+        match elems with
+        | [] -> e
+        | Deref :: elems -> Ast.Deref (loc, iter elems)
+        | Field (_, field_idx) :: Downcast variant_idx :: elems ->
+            Ast.CallExpr
+              ( loc,
+                "#inductive_projection",
+                [],
+                [],
+                [
+                  LitPat (iter elems);
+                  LitPat (WIntLit (loc, Big_int.big_int_of_int variant_idx));
+                  LitPat (WIntLit (loc, Big_int.big_int_of_int field_idx));
+                ],
+                Static )
+        | Field (Some name, _) :: elems -> Ast.Select (loc, iter elems, name)
+        | Field (None, _) :: _ ->
+            failwith "Not yet supported: Field(None, _)::_"
+        | Downcast _ :: _ -> failwith "Not yet supported: Downcast _::_"
+      in
+      iter elems
 
     let translate_place (place_cpn : PlaceRd.t) (loc : Ast.loc) =
       let open PlaceRd in
       let id_cpn = local_get place_cpn in
       let id = translate_local_decl_id id_cpn in
       let projection_cpn = projection_get_list place_cpn in
-      ListAux.try_fold_left
-        (translate_place_element loc)
-        (Ast.Var (loc, id))
-        projection_cpn
+      let place_elems = List.map decode_place_element projection_cpn in
+      Ok (translate_projection loc (List.rev place_elems) (Ast.Var (loc, id)))
 
     let translate_scalar_int (si_cpn : ScalarRd.Int.t) (ty : Ast.type_expr)
         (loc : Ast.loc) =
@@ -1842,12 +1951,22 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                       in
                       Ok
                         ( tmp_rvalue_binders,
-                          Ast.Operation (fn_loc, Ast.Add, [ arg1; CastExpr (fn_loc, ManifestTypeExpr (fn_loc, Int (Signed, PtrRank)), arg2) ]) )
+                          Ast.Operation
+                            ( fn_loc,
+                              Ast.Add,
+                              [
+                                arg1;
+                                CastExpr
+                                  ( fn_loc,
+                                    ManifestTypeExpr
+                                      (fn_loc, Int (Signed, PtrRank)),
+                                    arg2 );
+                              ] ) )
                   | _ ->
                       Error
                         (`TrFnCallRExpr
                           (Printf.sprintf "Invalid (generic) arg(s) for %s"
-                            fn_name)))
+                             fn_name)))
               | "std::ptr::const_ptr::<impl *const T>::sub"
               | "std::ptr::mut_ptr::<impl *mut T>::sub" -> (
                   match (substs, args_cpn) with
@@ -1859,12 +1978,22 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                       in
                       Ok
                         ( tmp_rvalue_binders,
-                          Ast.Operation (fn_loc, Ast.Sub, [ arg1; CastExpr (fn_loc, ManifestTypeExpr (fn_loc, Int (Signed, PtrRank)), arg2) ]) )
+                          Ast.Operation
+                            ( fn_loc,
+                              Ast.Sub,
+                              [
+                                arg1;
+                                CastExpr
+                                  ( fn_loc,
+                                    ManifestTypeExpr
+                                      (fn_loc, Int (Signed, PtrRank)),
+                                    arg2 );
+                              ] ) )
                   | _ ->
                       Error
                         (`TrFnCallRExpr
                           (Printf.sprintf "Invalid (generic) arg(s) for %s"
-                            fn_name)))
+                             fn_name)))
               | "std::ptr::null_mut" ->
                   Ok
                     ( [],
@@ -2040,7 +2169,40 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             | _ ->
                 Error
                   (`TrSwInt "Invalid SwitchTargets for a boolean discriminant"))
-        | _ -> failwith "Todo: SwitchInt TerminatorKind"
+        | Ast.ManifestTypeExpr (_, Int (_, _)) ->
+            let clauses =
+              branches
+              |> List.map @@ fun (value, target) ->
+                 Ast.SwitchStmtClause
+                   ( loc,
+                     IntLit
+                       ( loc,
+                         Big_int.big_int_of_string
+                           (Stdint.Uint128.to_string value),
+                         true,
+                         false,
+                         NoLSuffix ),
+                     [ Ast.GotoStmt (loc, target) ] )
+            in
+            let default_clause =
+              match otherwise_op with
+              | None -> []
+              | Some tgt ->
+                  [
+                    Ast.SwitchStmtDefaultClause
+                      (loc, [ Ast.GotoStmt (loc, tgt) ]);
+                  ]
+            in
+            let targets =
+              List.map snd branches
+              @ match otherwise_op with None -> [] | Some tgt -> [ tgt ]
+            in
+            Ok (Ast.SwitchStmt (loc, discr, clauses @ default_clause), targets)
+        | Ast.ManifestTypeExpr (_, tp) ->
+            failwith
+              (Printf.sprintf
+                 "Todo: SwitchInt TerminatorKind for discriminant type %s"
+                 (Verifast0.string_of_type tp))
       in
       if ListAux.is_empty tmp_rvalue_binders then Ok (main_stmt, targets)
       else
@@ -2066,6 +2228,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       | Resume -> failwith "Todo: Terminatorkind::Resume"
       | Return ->
           Ok ([ Ast.ReturnStmt (loc, Some (Ast.Var (loc, ret_place_id))) ], [])
+      | Unreachable -> Ok ([ Ast.Assert (loc, False loc) ], [])
       | Call fn_call_data_cpn -> translate_fn_call fn_call_data_cpn loc
       | Drop ->
           raise
@@ -2136,33 +2299,54 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       | Tuple -> failwith "Todo: AggregateKind::Tuple"
       | Adt adt_data_cpn ->
           let open AdtData in
-          let id_cpn = id_get adt_data_cpn in
-          let def_path = translate_adt_def_id id_cpn in
-          let name = TrName.translate_def_path def_path in
-          let* adt_def_opt = State.get_adt_def name in
+          let adt_id_cpn = adt_id_get adt_data_cpn in
+          let adt_def_path = translate_adt_def_id adt_id_cpn in
+          let adt_name = TrName.translate_def_path adt_def_path in
+          let* adt_def_opt = State.get_adt_def adt_name in
           let* adt_def =
             Option.to_result
-              ~none:(`TrAggregateKind ("No decl found for " ^ name))
+              ~none:(`TrAggregateKind ("No decl found for " ^ adt_name))
               adt_def_opt
           in
           (*check it is an adt*)
-          let* _ = Mir.decl_mir_adt_kind adt_def.def in
+          let* adt_kind = Mir.decl_mir_adt_kind adt_def.def in
           let variant_idx_cpn = variant_idx_get adt_data_cpn in
+          let variant_name = variant_id_get adt_data_cpn in
           let substs_cpn = substs_get_list adt_data_cpn in
-          Ok Mir.(AggKindAdt { name; def = adt_def.def })
+          Ok
+            Mir.(
+              AggKindAdt { adt_kind; adt_name; variant_name; def = adt_def.def })
       | Closure -> failwith "Todo: AggregateKind::Closure"
       | Generator -> failwith "Todo: AggregateKind::Generator"
       | Undefined _ -> Error (`TrAggregateKind "Unknown AggregateKind")
 
     let translate_aggregate (agg_data_cpn : AggregateDataRd.t) (loc : Ast.loc) =
       let open AggregateDataRd in
+      let operands_cpn = operands_get_list agg_data_cpn in
+      let operands_cpn = List.map (fun op -> (op, loc)) operands_cpn in
+      let* tmp_rvalue_binders, operand_exprs =
+        translate_operands operands_cpn
+      in
       let agg_kind_cpn = aggregate_kind_get agg_data_cpn in
       let* agg_kind = translate_aggregate_kind agg_kind_cpn in
       match agg_kind with
-      | AggKindAdt { name; def = adt_def } -> (
-          let* adt_kind = Mir.decl_mir_adt_kind adt_def in
+      | AggKindAdt { adt_kind; adt_name; variant_name; def = adt_def } -> (
           match adt_kind with
-          | Enum | Union -> failwith "Todo: Unsupported Adt kind for aggregate"
+          | Enum ->
+              let init_stmts_builder lhs_place =
+                let arg_pats = List.map (fun e -> Ast.LitPat e) operand_exprs in
+                let assignment =
+                  Ast.ExprStmt
+                    (AssignExpr
+                       ( loc,
+                         lhs_place,
+                         CallExpr (loc, variant_name, [], [], arg_pats, Static)
+                       ))
+                in
+                tmp_rvalue_binders @ [ assignment ]
+              in
+              Ok (`TrRvalueAggregate init_stmts_builder)
+          | Union -> failwith "Todo: Unsupported Adt kind for aggregate"
           | Struct ->
               let* fields_opt = AstAux.decl_fields adt_def in
               let* fields =
@@ -2170,21 +2354,28 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   ~none:(`TrAggregate "Struct without fields definition")
                   fields_opt
               in
-              let operands_cpn = operands_get_list agg_data_cpn in
               if List.length operands_cpn <> List.length fields then
                 Error
                   (`TrAggregate
                     "The number of struct fields and initializing operands are \
                      different")
               else
-                let operands_cpn =
-                  List.map (fun op -> (op, loc)) operands_cpn
-                in
-                let* tmp_rvalue_binders, operand_exprs =
-                  translate_operands operands_cpn
-                in
                 let field_names = List.map AstAux.field_name fields in
-                Ok (tmp_rvalue_binders, List.combine field_names operand_exprs))
+                let init_stmts_builder lhs_place =
+                  let field_init_stmts =
+                    List.map
+                      (fun (field_name, init_expr) ->
+                        let open Ast in
+                        ExprStmt
+                          (AssignExpr
+                             ( loc,
+                               Select (loc, lhs_place, field_name),
+                               init_expr )))
+                      (List.combine field_names operand_exprs)
+                  in
+                  tmp_rvalue_binders @ field_init_stmts
+                in
+                Ok (`TrRvalueAggregate init_stmts_builder))
 
     let translate_rvalue (rvalue_cpn : RvalueRd.t) (loc : Ast.loc) =
       let open RvalueRd in
@@ -2259,11 +2450,18 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           in
           let* operand = tr_operand operand in
           Ok (`TrRvalueUnaryOp (operator, operand))
-      | Aggregate agg_data_cpn ->
-          let* tmp_rvalue_binders, fields_init =
-            translate_aggregate agg_data_cpn loc
-          in
-          Ok (`TrRvalueAggregate (tmp_rvalue_binders, fields_init))
+      | Aggregate agg_data_cpn -> translate_aggregate agg_data_cpn loc
+      | Discriminant place_cpn ->
+          let* place_expr = translate_place place_cpn loc in
+          Ok
+            (`TrRvalueExpr
+              (Ast.CallExpr
+                 ( loc,
+                   "#inductive_ctor_index",
+                   [],
+                   [],
+                   [ LitPat place_expr ],
+                   Static )))
       | Undefined _ -> Error (`TrRvalue "Unknown Rvalue kind")
 
     let translate_statement_kind (statement_kind_cpn : StatementKindRd.t)
@@ -2393,25 +2591,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                         ref [] )
                   in
                   Ok [ block_stmt ])
-          | `TrRvalueAggregate (tmp_rvalue_binders, fields_init) ->
-              let field_init_stmts =
-                List.map
-                  (fun (field_name, init_expr) ->
-                    let open Ast in
-                    ExprStmt
-                      (AssignExpr
-                         (loc, Select (loc, lhs_place, field_name), init_expr)))
-                  fields_init
-              in
-              let block_stmt =
-                Ast.BlockStmt
-                  ( loc,
-                    (*decl list*) [],
-                    tmp_rvalue_binders @ field_init_stmts,
-                    loc,
-                    ref [] )
-              in
-              Ok [ block_stmt ])
+          | `TrRvalueAggregate init_stmts_builder ->
+              Ok (init_stmts_builder lhs_place))
       | Nop -> Ok []
       | Undefined _ -> Error (`TrStatementKind "Unknown StatementKind")
 
@@ -2768,10 +2949,12 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                           type of field " ^ name,
                          None ))
               | Ok fbc ->
-                  let fbc_args = [
-                    Ast.Var (loc, "_t");
-                    AddressOf (loc, Read (loc, Var (loc, "self"), name));
-                  ] in
+                  let fbc_args =
+                    [
+                      Ast.Var (loc, "_t");
+                      AddressOf (loc, Read (loc, Var (loc, "self"), name));
+                    ]
+                  in
                   let fbc_call fbc_name =
                     Ast.CallExpr
                       ( loc,
@@ -3208,9 +3391,11 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
 
   let translate_variant_def (vdef_cpn : VariantDefRd.t) =
     let open VariantDefRd in
+    let* loc = translate_span_data (span_get vdef_cpn) in
+    let name = name_get vdef_cpn in
     let fields_cpn = fields_get_list vdef_cpn in
     let* fields = ListAux.try_map translate_field_def fields_cpn in
-    Ok Mir.{ fields }
+    Ok Mir.{ loc; name; fields }
 
   let gen_adt_full_borrow_content adt_kind name tparams
       (variants : Mir.variant_def_tr list) adt_def_loc =
@@ -3562,7 +3747,19 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   tparams )
             in
             Ok (Mir.Struct, fds, struct_decl, [ struct_typedef_aux ])
-        | EnumKind -> failwith "Todo: AdtDef::Enum"
+        | EnumKind ->
+            let ctors =
+              variants
+              |> List.map @@ fun Mir.{ loc; name; fields } ->
+                 let ps =
+                   fields
+                   |> List.map @@ fun Mir.{ name; ty } ->
+                      (name, Mir.basic_type_of ty)
+                 in
+                 Ast.Ctor (loc, name, ps)
+            in
+            let decl = Ast.Inductive (def_loc, name, tparams, ctors) in
+            Ok (Mir.Enum, [], decl, [])
         | UnionKind -> failwith "Todo: AdtDef::Union"
         | Undefined _ -> Error (`TrAdtDef "Unknown ADT kind")
       in

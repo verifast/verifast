@@ -28,6 +28,7 @@ cd purely_unsafe
   verifast -prover z3v4.5 -target LP64 -c -extern ../unverified/platform httpd.rs
   verifast -prover z3v4.5 -c -extern ../unverified/platform mt_account_transfer.rs
   verifast -prover z3v4.5 -target LP64 -c -extern ../unverified/platform httpd_mt.rs
+  verifast -c my_option.rs
 cd ..
 cd safe_abstraction
   verifast -c full_bor_primitive_types.rs

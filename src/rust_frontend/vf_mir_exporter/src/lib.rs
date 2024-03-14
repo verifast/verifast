@@ -859,8 +859,10 @@ mod vf_mir_builder {
             debug!("Encoding ADT definition {:?}", adt_def);
             let id_cpn = adt_def_cpn.reborrow().init_id();
             Self::encode_adt_def_id(enc_ctx, adt_def.did(), id_cpn);
+            let mut variant_index = 0;
             adt_def_cpn.fill_variants(adt_def.variants(), |variant_cpn, variant| {
-                Self::encode_variant_def(tcx, enc_ctx, variant, variant_cpn);
+                Self::encode_variant_def(tcx, enc_ctx, variant_index, variant, variant_cpn);
+                variant_index += 1;
             });
             let kind_cpn = adt_def_cpn.reborrow().init_kind();
             Self::encode_adt_kind(adt_def.adt_kind(), kind_cpn);
@@ -895,12 +897,27 @@ mod vf_mir_builder {
         fn encode_variant_def(
             tcx: TyCtxt<'tcx>,
             enc_ctx: &mut EncCtx<'tcx, 'a>,
+            variant_index: u32,
             vdef: &ty::VariantDef,
             mut vdef_cpn: variant_def_cpn::Builder<'_>,
         ) {
+            vdef_cpn.set_name(vdef.name.as_str());
+            Self::encode_span_data(
+                tcx,
+                &tcx.def_span(vdef.def_id).data(),
+                vdef_cpn.reborrow().init_span(),
+            );
             vdef_cpn.fill_fields(&vdef.fields, |field_cpn, field| {
                 Self::encode_field_def(tcx, enc_ctx, field, field_cpn);
             });
+            match vdef.discr {
+                ty::VariantDiscr::Explicit(_) => todo!(),
+                ty::VariantDiscr::Relative(discr) => {
+                    if discr != variant_index {
+                        todo!()
+                    }
+                }
+            }
         }
 
         fn encode_field_def(
@@ -1676,7 +1693,25 @@ mod vf_mir_builder {
                     Self::encode_operand(tcx, enc_ctx, operand, operand_cpn);
                 }
                 // Read the discriminant of an ADT.
-                mir::Rvalue::Discriminant(place) => todo!(),
+                mir::Rvalue::Discriminant(place) => {
+                    if let EncKind::Body(body) = enc_ctx.mode {
+                        let ty = place.ty(body, tcx);
+                        if let Some(adt_def) = ty.ty.ty_adt_def() {
+                            let variants_count = adt_def.variants().len();
+                            for i in 0..variants_count {
+                                match ty.ty.discriminant_for_variant(tcx, i.into()) {
+                                    None => {}
+                                    Some(discr) => {
+                                        if discr.val != i.try_into().unwrap() {
+                                            todo!()
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Self::encode_place(enc_ctx, place, rvalue_cpn.init_discriminant());
+                }
                 // Creates an aggregate value, like a tuple or struct.
                 mir::Rvalue::Aggregate(box aggregate_kind, operands) => {
                     let mut aggregate_data_cpn = rvalue_cpn.init_aggregate();
@@ -1722,19 +1757,18 @@ mod vf_mir_builder {
                     _user_type_annot_idx_opt,
                     _union_active_field_opt,
                 ) => {
-                    if enc_ctx.tcx.adt_def(def_id.expect_local()).adt_kind() != ty::AdtKind::Struct
-                    {
-                        todo!()
-                    }
                     let mut adt_data_cpn = agg_kind_cpn.init_adt();
-                    let id_cpn = adt_data_cpn.reborrow().init_id();
-                    Self::encode_adt_def_id(enc_ctx, *def_id, id_cpn);
+                    let adt_id_cpn = adt_data_cpn.reborrow().init_adt_id();
+                    Self::encode_adt_def_id(enc_ctx, *def_id, adt_id_cpn);
 
                     let v_idx_cpn = adt_data_cpn.reborrow().init_variant_idx();
                     capnp_utils::encode_u_int128(
                         variant_idx.index().try_into().unwrap(),
                         v_idx_cpn,
                     );
+
+                    let adt_def = enc_ctx.tcx.adt_def(def_id);
+                    adt_data_cpn.set_variant_id(adt_def.variant(*variant_idx).name.as_str());
 
                     let substs_cpn = adt_data_cpn.reborrow().init_substs(substs.len());
                     Self::encode_ty_args(enc_ctx, substs, substs_cpn);
@@ -1826,6 +1860,7 @@ mod vf_mir_builder {
                 }
                 mir::TerminatorKind::UnwindResume => terminator_kind_cpn.set_resume(()),
                 mir::TerminatorKind::Return => terminator_kind_cpn.set_return(()),
+                mir::TerminatorKind::Unreachable => terminator_kind_cpn.set_unreachable(()),
                 mir::TerminatorKind::Call {
                     func,
                     args,
@@ -2229,19 +2264,23 @@ mod vf_mir_builder {
                 mir::ProjectionElem::Deref => place_elm_cpn.set_deref(()),
                 mir::ProjectionElem::Field(field, fty) => {
                     let mut field_data_cpn = place_elm_cpn.init_field();
-                    let idx_cpn = field_data_cpn.reborrow().init_idx();
-                    capnp_utils::encode_u_int128(field.index().try_into().unwrap(), idx_cpn);
+                    field_data_cpn.set_index(field.as_u32());
                     let adt_def = ty
                         .ty_adt_def()
                         .expect(&format!("{:?} type for a PlaceElem::Field projection", ty));
-                    let name = adt_def.non_enum_variant().fields[*field].name;
-                    let name_cpn = field_data_cpn.reborrow().init_name();
-                    Self::encode_symbol(&name, name_cpn);
+                    if adt_def.is_struct() {
+                        let name = adt_def.non_enum_variant().fields[*field].name;
+                        let name_cpn = field_data_cpn.reborrow().init_name();
+                        Self::encode_symbol(&name, name_cpn.init_something());
+                    }
                     let ty_cpn = field_data_cpn.init_ty();
                     Self::encode_ty(enc_ctx.tcx, enc_ctx, *fty, ty_cpn);
                     /* Todo @Nima: When `encode_ty` becomes a method of `EncCtx` there would not be
                      * such strange arguments `enc_ctx.tcx` and `enc_tcx`
                      */
+                }
+                mir::ProjectionElem::Downcast(symbol, variant_idx) => {
+                    place_elm_cpn.set_downcast(variant_idx.as_u32());
                 }
                 _ => todo!(),
             }

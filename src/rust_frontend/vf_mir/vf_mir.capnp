@@ -220,7 +220,8 @@ struct Ty {
                 span @3: SpanData;
             }
 
-            #name @0: Text;
+            span @2: SpanData;
+            name @1: Text;
             #discr @1: UInt64;
             fields @0: List(FieldDef);
         }
@@ -319,13 +320,14 @@ struct Body {
     struct Place {
         struct PlaceElement {
             struct FieldData {
-                idx @0: BigUInt;
-                name @1: Symbol;
+                index @0: UInt32;
+                name @1: Option(Symbol);
                 ty @2: Ty;
             }
             union {
                 deref @0: Void;
                 field @1: FieldData;
+                downcast @2: UInt32;
             }
         }
 
@@ -463,8 +465,9 @@ struct Body {
             struct AggregateData {
                 struct AggregateKind {
                     struct AdtData {
-                        id @0: Ty.AdtDefId;
+                        adtId @0: Ty.AdtDefId;
                         variantIdx @1: BigUInt;
+                        variantId @5: Text;
                         substs @2: List(Ty.GenArg);
                         userTypeAnnotationIndex @3: Void;
                         unionActiveField @4: Void;
@@ -490,6 +493,7 @@ struct Body {
                 binaryOp @4: BinaryOpData;
                 unaryOp @6: UnaryOpData;
                 aggregate @5: AggregateData;
+                discriminant @7: Place;
             }
         }
 
@@ -544,6 +548,7 @@ struct Body {
                     switchInt @1: SwitchIntData;
                     resume @2: Void;
                     return @3: Void;
+                    unreachable @6: Void;
                     call @4: FnCallData;
                     drop @5: Void;
                 }
