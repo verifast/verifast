@@ -358,6 +358,7 @@ enum NbBase {
   decimal @0;
   octal @1;
   hex @2;
+  character @3;
 }
 
 struct Expr {
@@ -373,10 +374,11 @@ struct Expr {
   }
 
   struct IntLit {
-    value @0 :Text;
-    uSuffix @1 :Bool;
-    lSuffix @2 :SufKind;
-    base @3 :NbBase;
+    uSuffix @0 :Bool;
+    lSuffix @1 :SufKind;
+    base @2 :NbBase;
+    lowBits @3 :UInt64;
+    highBits @4 :UInt64; # Reserved for future use with 128 Bit Integers
   }
 
   struct Call {

@@ -109,6 +109,24 @@ bool checkSuffixIgnoreCase(const clang::StringRef str, const char suffix,
   return false;
 }
 
+bool ExprSerializer::VisitCharacterLiteral(clang::CharacterLiteral const * const lit) {
+  using CharKind = clang::CharacterLiteral::CharacterKind;
+  // Check if encoding is UTF16 or UTF32 as their types are defined unsigned according to C++ standard
+  CharKind const kind = lit->getKind();
+  bool const uSuf = (kind == CharKind::UTF16 || kind == CharKind::UTF32);
+
+  // Initialize IntLit
+  ::stubs::Expr::IntLit::Builder intLit = m_builder.initIntLit();
+  intLit.setUSuffix(uSuf);
+  intLit.setLSuffix(stubs::SufKind::NO_SUF);
+  intLit.setBase(stubs::NbBase::CHARACTER);
+  static_assert(sizeof(lit->getValue()) < 8); // Ensure that the value always fits into a single uint64_t
+  intLit.setLowBits(lit->getValue());
+  intLit.setHighBits(0);
+
+  return true;
+}
+
 bool ExprSerializer::VisitIntegerLiteral(const clang::IntegerLiteral *lit) {
   llvm::SmallString<16> buffer;
   bool invalid(false);
@@ -144,8 +162,12 @@ bool ExprSerializer::VisitIntegerLiteral(const clang::IntegerLiteral *lit) {
                                                      : stubs::NbBase::DECIMAL;
   intLit.setBase(base);
 
-  auto valStr = spelling.substr(0, spelling.size() - lCount - uSuf);
-  intLit.setValue(valStr.str());
+  llvm::APInt const val = lit->getValue();
+
+  assert(val.getNumWords() <= 2);
+  if(val.getNumWords() >= 2) intLit.setHighBits(val.getRawData()[1]);
+  if(val.getNumWords() >= 1) intLit.setLowBits(val.getRawData()[0]);
+
   return true;
 }
 
