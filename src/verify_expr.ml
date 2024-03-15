@@ -2611,6 +2611,53 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             | _ ->
               cont (Chunk ((get_pred_symb "malloc_block", true), [], real_unit, [result; sizeof_core l env t], None)::h)
         end
+    | WFunCall (l, "#inductive_ctor_index", [InductiveType (i, targs)], [w], Static) ->
+      eval_h h env w $. fun h env v ->
+      let (_, inductive_tparams, ctormap, _, _, _, _, _) = List.assoc i inductivemap in
+      let rec iter ctor_index ctormap =
+        let (cn, (pfn, (_, _, _, pts, ctorsymb)))::ctormap = ctormap in
+        let verify_case () =
+          let args = pts |> List.map @@ fun (x, pt) ->
+            get_unique_var_symb (x ^ "__") pt
+          in
+          assume (ctxt#mk_eq v (mk_app ctorsymb args)) $. fun () ->
+          cont h env (ctxt#mk_intlit ctor_index)
+        in
+        if ctormap = [] then verify_case () else branch verify_case (fun () -> iter (ctor_index + 1) ctormap)
+      in
+      iter 0 ctormap
+    | WFunCall (l, "#inductive_projection", [InductiveType (i, targs)], [w; WIntLit (_, ctor_index); WIntLit (_, arg_index)], Static) ->
+      let ctor_index = int_of_big_int ctor_index in
+      let arg_index = int_of_big_int arg_index in
+      eval_h h env w $. fun h env v ->
+      let (_, inductive_tparams, ctormap, _, _, _, _, _) = List.assoc i inductivemap in
+      let tpenv = List.combine inductive_tparams targs in
+      let rx, rt =
+        let (cn, (pfn, (_, _, _, pts, _))) = List.nth ctormap ctor_index in
+        List.nth pts arg_index
+      in
+      let rec iter ctor_index' ctormap =
+        let (cn, (pfn, (_, _, _, pts, ctorsymb)))::ctormap = ctormap in
+        let verify_case () =
+          let args = pts |> List.map @@ fun (x, pt) ->
+            get_unique_var_symb (x ^ "_") pt
+          in
+          assume (ctxt#mk_eq v (mk_app ctorsymb args)) $. fun () ->
+          let result =
+            if ctor_index' = ctor_index then
+              List.nth args arg_index
+            else begin
+              get_unique_var_symb (rx ^ " ") rt
+            end
+          in
+          cont h env (prover_convert_term result rt (instantiate_type tpenv rt))
+        in
+        if ctormap = [] then verify_case () else begin
+          execute_branch verify_case;
+          iter (ctor_index' + 1) ctormap
+        end
+      in
+      iter 0 ctormap
     | WFunPtrCall (l, e, ftn, args) ->
       has_heap_effects ();
       eval_h h env e $. fun h env fterm ->

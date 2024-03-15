@@ -4475,6 +4475,19 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | _ -> static_error l "List expression must not contain patterns" None
       in
       check (to_list_expr pats)
+    | CallExpr (l, "#inductive_ctor_index", [], [], [LitPat e], Static) ->
+      let w, t, _ = check e in
+      let InductiveType (i, targs) = t in
+      (WFunCall (l, "#inductive_ctor_index", [t], [w], Static), Int (Signed, PtrRank), None)
+    | CallExpr (l, "#inductive_projection", [], [], [LitPat e; LitPat (WIntLit (_, ctor_index) as i1); LitPat (WIntLit (_, arg_index) as i2)], Static) ->
+      let w, t, _ = check e in
+      let InductiveType (i, targs) = t in
+      let (_, inductive_tparams, ctormap, _, _, _, _, _) = List.assoc i inductivemap in
+      let tpenv = List.combine inductive_tparams targs in
+      let (_, (_, (_, _, _, param_names_types, _))) = List.nth ctormap (int_of_big_int ctor_index) in
+      let (x, tp) = List.nth param_names_types (int_of_big_int arg_index) in
+      let tp = instantiate_type tpenv tp in
+      (WFunCall (l, "#inductive_projection", [t], [w; i1; i2], Static), tp, None)
     | ExprCallExpr (l, e, es) ->
       let (w, t, _) = check e in
       begin match (t, es) with
