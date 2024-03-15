@@ -926,7 +926,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                    (Ast.StaticError
                       (loc, "Const arguments are not yet supported here", None))
         in
-        let vf_ty = IdentTypeExpr (loc, None, name) in
+        let vf_ty = ConstructedTypeExpr (loc, name, targs) in
         let sz_expr = SizeofExpr (loc, TypeExpr vf_ty) in
         let own tid vs =
           Error "Expressing ownership of an enum value is not yet supported"
