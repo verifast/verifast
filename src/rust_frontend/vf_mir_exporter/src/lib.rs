@@ -1416,6 +1416,10 @@ mod vf_mir_builder {
                     ty_kind_cpn.set_param(&param_ty.to_string());
                 }
                 ty::TyKind::Str => ty_kind_cpn.set_str(()),
+                ty::TyKind::Slice(elem_ty) => {
+                    let elem_ty_cpn = ty_kind_cpn.init_slice();
+                    Self::encode_ty(tcx, enc_ctx, *elem_ty, elem_ty_cpn);
+                }
                 _ => todo!("Unsupported type kind"),
             }
         }

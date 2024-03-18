@@ -281,6 +281,7 @@ struct Ty {
             tuple @8: List(GenArg);
             param @11: Text;
             str @12: Void;
+            slice @13: Ty;
         }
     }
 

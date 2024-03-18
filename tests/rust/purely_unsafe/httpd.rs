@@ -133,11 +133,18 @@ unsafe fn read_line(socket: platform::sockets::Socket, buffer: *mut Buffer)
     }
 }
 
+unsafe fn send_bytes<'a>(socket: platform::sockets::Socket, bytes: &'a [u8])
+//@ req [?fs]platform::sockets::Socket(socket) &*& [?ft]integers_(bytes.ptr, 1, false, bytes.len, _);
+//@ ens [fs]platform::sockets::Socket(socket) &*& [ft]integers_(bytes.ptr, 1, false, bytes.len, _);
+{
+    socket.send(bytes.as_ptr(), bytes.len());
+}
+
 unsafe fn send_str<'a>(socket: platform::sockets::Socket, text: &'a str)
 //@ req [?fs]platform::sockets::Socket(socket) &*& [?ft]integers_(text.ptr, 1, false, text.len, _);
 //@ ens [fs]platform::sockets::Socket(socket) &*& [ft]integers_(text.ptr, 1, false, text.len, _);
 {
-    socket.send(text.as_ptr(), text.len());
+    send_bytes(socket, text.as_bytes());
 }
 
 unsafe fn handle_connection(buffer: *mut Buffer, socket: platform::sockets::Socket)

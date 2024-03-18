@@ -10,6 +10,8 @@ struct std_tuple_0_ {};
 
 struct str_ref { void *ptr; uintptr_t len; };
 
+struct slice_ref<T> { T *ptr; uintptr_t len; };
+
 typedef int main(int argc, char **argv);
     //@ requires 0 <= argc &*& [_]argv(argv, argc, ?arguments);
     //@ ensures junk();

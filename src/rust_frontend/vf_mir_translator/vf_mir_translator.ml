@@ -1144,6 +1144,44 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             { size; own; own_pred; shr; shr_pred; full_bor_content; points_to };
       }
 
+  and slice_ref_ty_info loc elem_ty_info =
+    let open Ast in
+    let vf_ty =
+      StructTypeExpr
+        (loc, Some "slice_ref", None, [], [ Mir.basic_type_of elem_ty_info ])
+    in
+    let size = SizeofExpr (loc, TypeExpr vf_ty) in
+    let own tid vs =
+      Error "Expressing ownership of &[_] values is not yet supported"
+    in
+    let own_pred =
+      Error
+        "Passing type &[_] as a type argument to a generic function is not yet \
+         supported"
+    in
+    let shr lft tid l =
+      Error "Expressing shared ownership of &[_] values is not yet supported"
+    in
+    let shr_pred =
+      Error "Expressing shared ownership of &[_] values is not yet supported"
+    in
+    let full_bor_content =
+      Error
+        "Expressing the full borrow content of &[_] values is not yet supported"
+    in
+    let points_to tid l vid_op =
+      Error
+        "Expressing a points-to assertion for a &[_] object is not yet \
+         supported"
+    in
+    Mir.TyInfoBasic
+      {
+        vf_ty;
+        interp =
+          RustBelt.
+            { size; own; own_pred; shr; shr_pred; full_bor_content; points_to };
+      }
+
   and translate_generic_arg (gen_arg_cpn : GenArgRd.t) (loc : Ast.loc) =
     let open GenArgRd in
     let kind_cpn = kind_get gen_arg_cpn in
@@ -1274,6 +1312,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let ty_cpn = ty_get ref_ty_cpn in
     match TyRd.TyKind.get @@ TyRd.kind_get ty_cpn with
     | Str -> Ok (str_ref_ty_info loc)
+    | Slice elem_ty_cpn ->
+        let* elem_ty_info = translate_ty elem_ty_cpn loc in
+        Ok (slice_ref_ty_info loc elem_ty_info)
     | _ ->
         let* pointee_ty_info = translate_ty ty_cpn loc in
         let pointee_ty = Mir.basic_type_of pointee_ty_info in
@@ -2031,18 +2072,46 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                     translate_operands [ (arg_cpn, fn_loc) ]
                   in
                   Ok (tmp_rvalue_binders, arg)
-              | "core::str::<impl str>::as_ptr" ->
+              | "core::str::<impl str>::as_ptr"
+              | "core::slice::<impl [T]>::as_ptr" ->
                   let [ arg_cpn ] = args_cpn in
                   let* tmp_rvalue_binders, [ arg ] =
                     translate_operands [ (arg_cpn, fn_loc) ]
                   in
                   Ok (tmp_rvalue_binders, Ast.Select (fn_loc, arg, "ptr"))
-              | "core::str::<impl str>::len" ->
+              | "core::str::<impl str>::len" | "core::slice::<impl [T]>::len" ->
                   let [ arg_cpn ] = args_cpn in
                   let* tmp_rvalue_binders, [ arg ] =
                     translate_operands [ (arg_cpn, fn_loc) ]
                   in
                   Ok (tmp_rvalue_binders, Ast.Select (fn_loc, arg, "len"))
+              | "core::str::<impl str>::as_bytes" ->
+                  let [ arg_cpn ] = args_cpn in
+                  let* tmp_rvalue_binders, [ arg ] =
+                    translate_operands [ (arg_cpn, fn_loc) ]
+                  in
+                  let slice_u8_ref_ty =
+                    Ast.StructTypeExpr
+                      ( fn_loc,
+                        Some "slice_ref",
+                        None,
+                        [],
+                        [
+                          ManifestTypeExpr
+                            (fn_loc, Int (Unsigned, FixedWidthRank 0));
+                        ] )
+                  in
+                  Ok
+                    ( tmp_rvalue_binders,
+                      Ast.CastExpr
+                        ( fn_loc,
+                          slice_u8_ref_ty,
+                          InitializerList
+                            ( fn_loc,
+                              [
+                                (None, Select (fn_loc, arg, "ptr"));
+                                (None, Select (fn_loc, arg, "len"));
+                              ] ) ) )
               | _ -> translate_regular_fn_call substs fn_name)
           | _ ->
               Error
