@@ -4,11 +4,12 @@
 #include "prelude_rust_core.gh"
 #include "mask.gh"
 
-fixpoint void *Nshri() { return 0; }
-fixpoint void *Nlfti() { return (void *)1; }
+fixpoint void *Nlfti() { return 0; }
+fixpoint void *Nlrusti() { return (void *)1; }
+fixpoint void *Nshri() { return (void *)2; }
 
-fixpoint mask_t Nshr() { return MaskSingle(Nshri); }
-fixpoint mask_t MaskNshrSingle(void *l) { return MaskBotPlus({pair(Nshri, MaskSingle(l))}); }
+fixpoint mask_t Nshr() { return MaskLin({Nlrusti, Nshri}); }
+fixpoint mask_t MaskNshrSingle(void *l) { return MaskLin({Nlrusti, Nshri, l}); }
 fixpoint mask_t Nlft() { return MaskSingle(Nlfti); }
 
 predicate atomic_mask(mask_t mask);
