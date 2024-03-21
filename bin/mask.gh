@@ -13,10 +13,10 @@ fixpoint mask_t MaskTop() { return MaskTopMinus({}); }
 fixpoint mask_t MaskBot() { return MaskBotPlus({}); }
 fixpoint mask_t MaskSingle(void *l) { return MaskBotPlus({pair(l, MaskTopMinus({}))}); }
 
-fixpoint mask_t MaskLin(list<void *> ns) {
+fixpoint mask_t MaskNs(list<void *> ns) {
   switch(ns) {
     case nil: return MaskTop;
-    case cons(n, ns1): return MaskBotPlus({pair(n, MaskLin(ns1))});
+    case cons(n, ns1): return MaskBotPlus({pair(n, MaskNs(ns1))});
   }
 }
 
