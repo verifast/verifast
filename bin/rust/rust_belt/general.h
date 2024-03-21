@@ -3,10 +3,40 @@
 
 #include "stdint.h"
 //@ #include "lifetime_logic.gh"
-/*@
 
-predicate atomic_mask(mask_t mask);
+/*
+Iris View Shifts
+
+In Iris, the mask mechanism prevents one from re-opening an invariant and duplicating its resources. Mask-changing view shifts which reduce the mask,
+imply the possibility of opened invariants in the state after the view shift. So, mask-changing view shifts can just be used
+in the context of the proof for a triple around an atomic expression (see HOARE-VS-ATOMIC) or another view shift (VS-TRANS).
+let us call these contexts atomic contexts.
+
+Mask-preserving view shifts, on the other hand, imply that in the proof of the view shift an invariant under the mask might have been opened and closed,
+i.e. the mask is needed but no newly opened invariant after the view shift.
+Mask-preserving view shifts are allowed around any Hoare triple with the same mask (see HOARE-VS).
+
+Here, in VeriFast, view shifts are represented as lemmas. To represent Iris's rules our design needs the following properties:
+1- All forms of view shifts cannot be used when their mask is not available.
+2- Mask-changing view shifts are only allowed in atomic contexts
+
+To spare users some burden when working with mask-preserving view shifts in non-atomic contexts, the mechanism is as follows:
+a- Mask-preserving view shifts are represented as a pair of lemmas:
+    - First a `nonghost_callers_only` lemma without any notion of mask in its contract. Intuitively, we assume an imaginary `mask(Top)` token is provided
+    at the beginning of the verification of each function. A mask-preserving view shift can be satisfied as we always have all masks available.
+    No other view shift has opened any mask because mask-changing ones are not applicable here as we will see soon.
+    These maskless lemmas are not usable in an atomic context where a mask might have been opened because those contexts are all ghost contexts.
+    - Second, another mask-aware version of the lemma with specs like `req atomic_mask(Nlft) ...; ens atomic_mask(Nlft);` which is not `nonghost_callers_only`.
+    These are usable in atomic contexts where masks might have been opened. In such a context, `atomic_mask(m)` tokens are provided,
+    showing the mask `m` is available and witnessing we are in an atomic context at the same time. As mentioned earlier,
+    these mask-aware lemmas are not usable in real function bodies as there is no explicit `atomic_mask(m)` available there.
+b- Mask-changing view shifts will only have the second form naturally.
+*/
+
+/*@
 predicate atomic_space(mask_t mask, predicate() inv;);
+/* This would be the existentially quantified `R` in the derived rule on Ralf Jung's thesis in the middle of page 67.
+See https://research.ralfj.de/phd/thesis-screen.pdf */
 predicate close_atomic_space_token(mask_t spaceMask, predicate() inv);
 
 lemma void create_atomic_space(mask_t mask, predicate() inv);

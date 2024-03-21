@@ -3658,6 +3658,16 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         let params =
           [ lft_param "k"; thread_id_param "t"; void_ptr_param "l" ]
         in
+        let atomic_mask_token =
+          CallExpr
+            ( adt_def_loc,
+              "atomic_mask",
+              (*type arguments*) [],
+              (*indices*) [],
+              (*arguments*)
+              [ lpat_var "Nlft" ],
+              Static )
+        in
         let fbor_pred =
           CallExpr
             ( adt_def_loc,
@@ -3692,10 +3702,18 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   [ lpat_var "k" ],
                   Static ) )
         in
-        let pre =
-          add_type_interp_asn
-            (Sep (adt_def_loc, fbor_pred, lft_token (VarPat (adt_def_loc, "q"))))
+        let (Some pre) =
+          AstAux.list_to_sep_conj
+            (List.map
+               (fun asn -> (adt_def_loc, asn))
+               [
+                 atomic_mask_token;
+                 fbor_pred;
+                 lft_token (VarPat (adt_def_loc, "q"));
+               ])
+            None
         in
+        let pre = add_type_interp_asn pre in
         let share_pred =
           CoefAsn
             ( adt_def_loc,
@@ -3708,10 +3726,14 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   (*arguments*) List.map lpat_var [ "k"; "t"; "l" ],
                   Static ) )
         in
-        let post =
-          add_type_interp_asn
-            (Sep (adt_def_loc, share_pred, lft_token (lpat_var "q")))
+        let (Some post) =
+          AstAux.list_to_sep_conj
+            (List.map
+               (fun asn -> (adt_def_loc, asn))
+               [ atomic_mask_token; share_pred; lft_token (lpat_var "q") ])
+            None
         in
+        let post = add_type_interp_asn post in
         let share_po =
           Func
             ( adt_def_loc,

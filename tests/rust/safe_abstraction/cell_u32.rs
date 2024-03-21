@@ -38,8 +38,8 @@ lem CellU32_share_mono(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *CellU3
 }
 
 lem CellU32_share_full(k: lifetime_t, t: thread_id_t, l: *CellU32)
-  req full_borrow(k, CellU32_full_borrow_content(t, l)) &*& [?q]lifetime_token(k);
-  ens [_]CellU32_share(k, t, l) &*& [q]lifetime_token(k);
+  req atomic_mask(Nlft) &*& full_borrow(k, CellU32_full_borrow_content(t, l)) &*& [?q]lifetime_token(k);
+  ens atomic_mask(Nlft) &*& [_]CellU32_share(k, t, l) &*& [q]lifetime_token(k);
 {
   produce_lem_ptr_chunk implies(CellU32_full_borrow_content(t, l), CellU32_nonatomic_borrow_content(l, t))() {
     open CellU32_full_borrow_content(t, l)();
@@ -52,7 +52,7 @@ lem CellU32_share_full(k: lifetime_t, t: thread_id_t, l: *CellU32)
       full_borrow_implies(k, CellU32_full_borrow_content(t, l), CellU32_nonatomic_borrow_content(l, t));
     }
   }
-  full_borrow_into_nonatomic_borrow(k, t, MaskNshrSingle(l), CellU32_nonatomic_borrow_content(l, t));
+  full_borrow_into_nonatomic_borrow_m(k, t, MaskNshrSingle(l), CellU32_nonatomic_borrow_content(l, t));
   close CellU32_share(k, t, l);
   leak CellU32_share(k, t, l);
 }
