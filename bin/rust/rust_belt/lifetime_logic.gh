@@ -137,12 +137,14 @@ lemma void nonatomic_borrow_mask_sup(lifetime_t k, thread_id_t t, mask_t m, mask
 
 predicate close_nonatomic_borrow_token(predicate() P, real q, lifetime_t k, thread_id_t t, mask_t m);
 
-// Rule LftL-Na-Acc
+// LftL-na-acc
 lemma void open_nonatomic_borrow(lifetime_t k, thread_id_t t, mask_t m, real q);
+    nonghost_callers_only
     requires [_]nonatomic_borrow(k, t, m, ?P) &*& [q]lifetime_token(k) &*& partial_thread_token(t, m);
     ensures P() &*& close_nonatomic_borrow_token(P, q, k, t, m);
 
 lemma void close_nonatomic_borrow();
+    nonghost_callers_only
     requires close_nonatomic_borrow_token(?P, ?q, ?k, ?t, ?m) &*& P();
     ensures [q]lifetime_token(k) &*& partial_thread_token(t, m);
 
@@ -154,22 +156,27 @@ Therefore the precondition does not need to be checked in the `requires` clause 
 
 predicate frac_borrow(lifetime_t k, predicate(;) P);
 
+// LftL-bor-fracture
 lemma void full_borrow_into_frac(lifetime_t k, predicate(;) P);
+    nonghost_callers_only
     requires full_borrow(k, P);
     ensures [_]frac_borrow(k, P);
 
+// LftL-fract-shorten
 lemma void frac_borrow_mono(lifetime_t k, lifetime_t k1, predicate(;) P);
     requires [_]frac_borrow(k, P) &*& lifetime_inclusion(k1, k) == true;
     ensures [_]frac_borrow(k1, P);
 
 predicate close_frac_borrow_token(real q_p, predicate(;) P, real q_lft, lifetime_t k);
 
-// Rule LftL-fract-acc
+// LftL-fract-acc
 lemma void open_frac_borrow(lifetime_t k, predicate(;) P, real q_lft);
+    nonghost_callers_only
     requires [_]frac_borrow(k, P) &*& [q_lft]lifetime_token(k);
     ensures [?q_p]P() &*& close_frac_borrow_token(q_p, P, q_lft, k);
 
 lemma void close_frac_borrow(real q_p, predicate(;) P);
+    nonghost_callers_only
     requires [q_p]P() &*& close_frac_borrow_token(q_p, P, ?q_lft, ?k);
     ensures [q_lft]lifetime_token(k);
 
@@ -204,5 +211,28 @@ lemma void end_reborrow_m(lifetime_t k1, lifetime_t k, predicate() P);
 lemma void full_borrow_into_nonatomic_borrow_m(lifetime_t k, thread_id_t t, mask_t m, predicate() P);
     requires atomic_mask(Nlft) &*& full_borrow(k, P) &*& !mask_is_empty(m);
     ensures atomic_mask(Nlft) &*& [_]nonatomic_borrow(k, t, m, P);
+
+// LftL-na-acc
+lemma void open_nonatomic_borrow_m(lifetime_t k, thread_id_t t, mask_t m, real q);
+    requires atomic_mask(mask_union(Nlft, m)) &*& [_]nonatomic_borrow(k, t, m, ?P) &*& [q]lifetime_token(k) &*& partial_thread_token(t, m);
+    ensures atomic_mask(mask_union(Nlft, m)) &*& P() &*& close_nonatomic_borrow_token(P, q, k, t, m);
+
+lemma void close_nonatomic_borrow_m();
+    requires close_nonatomic_borrow_token(?P, ?q, ?k, ?t, ?m) &*& P() &*& atomic_mask(mask_union(Nlft, m));
+    ensures [q]lifetime_token(k) &*& partial_thread_token(t, m) &*& atomic_mask(mask_union(Nlft, m));
+
+// LftL-bor-fracture
+lemma void full_borrow_into_frac_m(lifetime_t k, predicate(;) P);
+    requires atomic_mask(Nlft) &*& full_borrow(k, P);
+    ensures atomic_mask(Nlft) &*& [_]frac_borrow(k, P);
+
+// LftL-fract-acc
+lemma void open_frac_borrow_m(lifetime_t k, predicate(;) P, real q_lft);
+    requires atomic_mask(Nlft) &*& [_]frac_borrow(k, P) &*& [q_lft]lifetime_token(k);
+    ensures atomic_mask(Nlft) &*& [?q_p]P() &*& close_frac_borrow_token(q_p, P, q_lft, k);
+
+lemma void close_frac_borrow_m(real q_p, predicate(;) P);
+    requires atomic_mask(Nlft) &*& [q_p]P() &*& close_frac_borrow_token(q_p, P, ?q_lft, ?k);
+    ensures atomic_mask(Nlft) &*& [q_lft]lifetime_token(k);
 
 #endif
