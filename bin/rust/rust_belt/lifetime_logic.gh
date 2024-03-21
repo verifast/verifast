@@ -126,9 +126,14 @@ lemma void full_borrow_into_nonatomic_borrow(lifetime_t k, thread_id_t t, mask_t
     requires full_borrow(k, P) &*& !mask_is_empty(m);
     ensures [_]nonatomic_borrow(k, t, m, P);
 
+// LftL-na-shorten
 lemma void nonatomic_borrow_mono(lifetime_t k, lifetime_t k1, thread_id_t t, mask_t m, predicate() P);
     requires [_]nonatomic_borrow(k, t, m, P) &*& lifetime_inclusion(k1, k) == true;
     ensures [_]nonatomic_borrow(k1, t, m, P);
+
+lemma void nonatomic_borrow_mask_sup(lifetime_t k, thread_id_t t, mask_t m, mask_t m1, predicate() P);
+    requires [_]nonatomic_borrow(k, t, m, P) &*& mask_le(m, m1) == true;
+    ensures [_]nonatomic_borrow(k, t, m1, P);
 
 predicate close_nonatomic_borrow_token(predicate() P, real q, lifetime_t k, thread_id_t t, mask_t m);
 
