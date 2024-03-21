@@ -49,7 +49,7 @@ jobs:
           name: binary-package-ubuntu
 
       - name: Install cosign
-        uses: sigstore/cosign-installer@v3.0.2
+        uses: sigstore/cosign-installer@v3.4.0
 
       - name: Sign artifact
         run: |
@@ -177,7 +177,7 @@ jobs:
           name: binary-package-macos
 
       - name: Install cosign
-        uses: sigstore/cosign-installer@v3.0.2
+        uses: sigstore/cosign-installer@v3.4.0
 
       - name: Sign artifact
         run: |
@@ -297,7 +297,7 @@ jobs:
           name: binary-package-windows
 
       - name: Install cosign
-        uses: sigstore/cosign-installer@v3.0.2
+        uses: sigstore/cosign-installer@v3.4.0
 
       - name: Sign artifact
         run: |
