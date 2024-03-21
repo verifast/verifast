@@ -38,8 +38,8 @@ lem Cell_share_mono<T>(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *Cell<T
 }
 
 lem Cell_share_full<T>(k: lifetime_t, t: thread_id_t, l: *Cell<T>)
-  req full_borrow(k, Cell_full_borrow_content(t, l)) &*& [?q]lifetime_token(k);
-  ens [_]Cell_share(k, t, l) &*& [q]lifetime_token(k);
+  req atomic_mask(Nlft) &*& full_borrow(k, Cell_full_borrow_content(t, l)) &*& [?q]lifetime_token(k);
+  ens atomic_mask(Nlft) &*& [_]Cell_share(k, t, l) &*& [q]lifetime_token(k);
 {
   produce_lem_ptr_chunk implies(Cell_full_borrow_content(t, l), Cell_nonatomic_borrow_content(l, t))() {
     open Cell_full_borrow_content::<T>(t, l)();
@@ -52,7 +52,7 @@ lem Cell_share_full<T>(k: lifetime_t, t: thread_id_t, l: *Cell<T>)
       full_borrow_implies(k, Cell_full_borrow_content(t, l), Cell_nonatomic_borrow_content(l, t));
     }
   }
-  full_borrow_into_nonatomic_borrow(k, t, MaskNshrSingle(l), Cell_nonatomic_borrow_content(l, t));
+  full_borrow_into_nonatomic_borrow_m(k, t, MaskNshrSingle(l), Cell_nonatomic_borrow_content(l, t));
   close Cell_share(k, t, l);
   leak Cell_share(k, t, l);
 }

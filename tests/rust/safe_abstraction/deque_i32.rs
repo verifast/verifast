@@ -98,8 +98,8 @@ lem Deque_share_mono(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *Deque)
 }
 
 lem Deque_share_full(k: lifetime_t, t: thread_id_t, l: *Deque)
-    req full_borrow(k, Deque_full_borrow_content(t, l)) &*& [?q]lifetime_token(k);
-    ens [_]Deque_share(k, t, l) &*& [q]lifetime_token(k);
+    req atomic_mask(Nlft) &*& full_borrow(k, Deque_full_borrow_content(t, l)) &*& [?q]lifetime_token(k);
+    ens atomic_mask(Nlft) &*& [_]Deque_share(k, t, l) &*& [q]lifetime_token(k);
 {
     produce_lem_ptr_chunk implies(Deque_full_borrow_content(t, l), Deque_frac_borrow_content(t, l))() {
         open Deque_full_borrow_content(t, l)();
@@ -110,7 +110,7 @@ lem Deque_share_full(k: lifetime_t, t: thread_id_t, l: *Deque)
             full_borrow_implies(k, Deque_full_borrow_content(t, l), Deque_frac_borrow_content(t, l));
         }
     }
-    full_borrow_into_frac(k, Deque_frac_borrow_content(t, l));
+    full_borrow_into_frac_m(k, Deque_frac_borrow_content(t, l));
     assert [?q_f]frac_borrow(_, _);
     close [q_f]Deque_share(k, t, l);
 }
