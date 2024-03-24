@@ -9,60 +9,61 @@ About the definitions:
     if the mutex is locked or not.
 */
 
+/*@
+// dummy
+pred sys::locks::Mutex_own(t: thread_id_t, m: *u32);
+pred sys::locks::Mutex_share(k: lifetime_t, t: thread_id_t, l: *sys::locks::Mutex;) = true;
+lem sys::locks::Mutex_share_mono(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *sys::locks::Mutex)
+req lifetime_inclusion(k1, k) == true &*& [_]sys::locks::Mutex_share(k, t, l);
+ens [_]sys::locks::Mutex_share(k1, t, l);
+{}
+lem sys::locks::Mutex_share_full(k: lifetime_t, t: thread_id_t, l: *sys::locks::Mutex)
+req full_borrow(k, sys::locks::Mutex_full_borrow_content(t, l)) &*& [?q]lifetime_token(k);
+ens [_]sys::locks::Mutex_share(k, t, l) &*& [q]lifetime_token(k);
+{
+    leak full_borrow(_, _);
+}
+// ymmud
+
+pred SysMutex(m: sys::locks::Mutex; P: pred());
+pred SysMutex_share(l: *sys::locks::Mutex; P: pred());
+lem SysMutex_share_full(l: *sys::locks::Mutex);
+    req *l |-> ?m &*& SysMutex(m, ?P);
+    ens SysMutex_share(l, P);
+lem SysMutex_end_share(l: *sys::locks::Mutex);
+   req SysMutex_share(l, ?P);
+   ens *l |-> ?m &*& SysMutex(m, P);
+
+pred SysMutex::new_ghost_arg(P: pred()) = true;
+pred SysMutex_locked(l: *sys::locks::Mutex, P: pred(); t: thread_id_t);
+/* When we have the whole `SysMutex` chunk it means frame is empty, i.e. no other thread has access to this mutex. */
+lem SysMutex_renew(m: sys::locks::Mutex, Q: pred());
+    req SysMutex(m, ?P) &*& Q();
+    ens SysMutex(m, Q);
+/* With these specification we cannot know if the mutex is free, but in presence of `SysMutex_locked(...) we know it is locked.
+   So the proof sketch for this lemma would be:
+   No other thread has access to this mutex.
+   If
+       - The mutex is free and the resource `P` is protected by mutex; It is in the mutex so to speak. We substitute `P` with `Q`
+       and from this point there will be no `[q]SysMutex(m, P)` anywhere. It means we forget about `P`. The state is just like after
+       a call to `sys::locks::Mutex::new` to protect `Q()`.
+
+       - The mutex is locked it means there should be a `SysMutex_locked(m, P(), ?t, ?q)` and `P()` in resources of some thread(s).
+       Operations in this state:
+           - `lock` gets verified which is fine because this call will not terminate unless someone frees the lock. after that we get
+           `Q() &*& SysMutex_locked(m, Q, ..)` and we are in a consistent state.
+           - `unlock` needs to be called by thread `t` and requires `SysMutex_locked(m, P, ?t, ..) &*& P()`. It will soundly free the
+           mutex but here the P() is leaked again. state from here is consistent.
+           - `drop` will get verified and it is sound because `sys::locks::Mutex` implementation simply leaks a locked mutex.
+*/
+@*/
+
 mod sys {
     pub mod locks {
         use std::process::abort;
         pub struct Mutex {
             m: *mut u32,
         }
-        /*@
-        // dummy
-        pred sys::locks::Mutex_own(t: thread_id_t, m: *u32);
-        pred sys::locks::Mutex_share(k: lifetime_t, t: thread_id_t, l: *sys::locks::Mutex;) = true;
-        lem sys::locks::Mutex_share_mono(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *sys::locks::Mutex)
-        req lifetime_inclusion(k1, k) == true &*& [_]sys::locks::Mutex_share(k, t, l);
-        ens [_]sys::locks::Mutex_share(k1, t, l);
-        {}
-        lem sys::locks::Mutex_share_full(k: lifetime_t, t: thread_id_t, l: *sys::locks::Mutex)
-        req full_borrow(k, sys::locks::Mutex_full_borrow_content(t, l)) &*& [?q]lifetime_token(k);
-        ens [_]sys::locks::Mutex_share(k, t, l) &*& [q]lifetime_token(k);
-        {
-            leak full_borrow(_, _);
-        }
-        // ymmud
-
-        pred SysMutex(m: sys::locks::Mutex; P: pred());
-        pred SysMutex_share(l: *sys::locks::Mutex; P: pred());
-        lem SysMutex_share_full(l: *sys::locks::Mutex);
-            req *l |-> ?m &*& SysMutex(m, ?P);
-            ens SysMutex_share(l, P);
-        lem SysMutex_end_share(l: *sys::locks::Mutex);
-           req SysMutex_share(l, ?P);
-           ens *l |-> ?m &*& SysMutex(m, P);
-
-        pred SysMutex::new_ghost_arg(P: pred()) = true;
-        pred SysMutex_locked(l: *sys::locks::Mutex, P: pred(); t: thread_id_t);
-        /* When we have the whole `SysMutex` chunk it means frame is empty, i.e. no other thread has access to this mutex. */
-        lem SysMutex_renew(m: sys::locks::Mutex, Q: pred());
-            req SysMutex(m, ?P) &*& Q();
-            ens SysMutex(m, Q);
-        /* With these specification we cannot know if the mutex is free, but in presence of `SysMutex_locked(...) we know it is locked.
-           So the proof sketch for this lemma would be:
-           No other thread has access to this mutex.
-           If
-               - The mutex is free and the resource `P` is protected by mutex; It is in the mutex so to speak. We substitute `P` with `Q`
-               and from this point there will be no `[q]SysMutex(m, P)` anywhere. It means we forget about `P`. The state is just like after
-               a call to `sys::locks::Mutex::new` to protect `Q()`.
-
-               - The mutex is locked it means there should be a `SysMutex_locked(m, P(), ?t, ?q)` and `P()` in resources of some thread(s).
-               Operations in this state:
-                   - `lock` gets verified which is fine because this call will not terminate unless someone frees the lock. after that we get
-                   `Q() &*& SysMutex_locked(m, Q, ..)` and we are in a consistent state.
-                   - `unlock` needs to be called by thread `t` and requires `SysMutex_locked(m, P, ?t, ..) &*& P()`. It will soundly free the
-                   mutex but here the P() is leaked again. state from here is consistent.
-                   - `drop` will get verified and it is sound because `sys::locks::Mutex` implementation simply leaks a locked mutex.
-        */
-        @*/
 
         impl Mutex {
             pub unsafe fn new() -> Mutex
@@ -137,8 +138,8 @@ lem MutexU32_share_mono(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *Mutex
 }
 
 lem MutexU32_share_full(k: lifetime_t, t: thread_id_t, l: *MutexU32)
-    req full_borrow(k, MutexU32_full_borrow_content0(t, l)) &*& [?q]lifetime_token(k);
-    ens [_]MutexU32_share(k, t, l) &*& [q]lifetime_token(k);
+    req atomic_mask(Nlft) &*& full_borrow(k, MutexU32_full_borrow_content0(t, l)) &*& [?q]lifetime_token(k);
+    ens atomic_mask(Nlft) &*& [_]MutexU32_share(k, t, l) &*& [q]lifetime_token(k);
 {
 
     produce_lem_ptr_chunk implies(sep(MutexU32_fbc_inner(l), u32_full_borrow_content(t, &(*l).data)), MutexU32_full_borrow_content0(t, l))() {
@@ -158,10 +159,10 @@ lem MutexU32_share_full(k: lifetime_t, t: thread_id_t, l: *MutexU32)
         }{
             full_borrow_implies(k, MutexU32_full_borrow_content0(t, l), sep(MutexU32_fbc_inner(l), u32_full_borrow_content(t, &(*l).data)));
         }
-        full_borrow_split(k, MutexU32_fbc_inner(l), u32_full_borrow_content(t, &(*l).data));
-        open_full_borrow_strong(k, MutexU32_fbc_inner(l), q);
+        full_borrow_split_m(k, MutexU32_fbc_inner(l), u32_full_borrow_content(t, &(*l).data));
+        open_full_borrow_strong_m(k, MutexU32_fbc_inner(l), q);
         assert exists(?kstrong);
-        produce_lem_ptr_chunk full_borrow_convert_strong(MutexU32_frac_borrow_content(k, t, l), kstrong, MutexU32_fbc_inner(l))() {
+        produce_lem_ptr_chunk full_borrow_convert_strong(True, MutexU32_frac_borrow_content(k, t, l), kstrong, MutexU32_fbc_inner(l))() {
             open MutexU32_frac_borrow_content(k, t, l)();
             SysMutex_end_share(&(*l).inner);
             assert (*l).inner |-> ?inner;
@@ -174,8 +175,8 @@ lem MutexU32_share_full(k: lifetime_t, t: thread_id_t, l: *MutexU32)
             SysMutex_renew(inner, full_borrow_wrapper(k, u32_full_borrow_content(t, &(*l).data)));
             SysMutex_share_full(&(*l).inner);
             close MutexU32_frac_borrow_content(k, t, l)();
-            close_full_borrow_strong(kstrong, MutexU32_fbc_inner(l), MutexU32_frac_borrow_content(k, t, l));
-            full_borrow_into_frac(kstrong, MutexU32_frac_borrow_content(k, t, l));
+            close_full_borrow_strong_m(kstrong, MutexU32_fbc_inner(l), MutexU32_frac_borrow_content(k, t, l));
+            full_borrow_into_frac_m(kstrong, MutexU32_frac_borrow_content(k, t, l));
             frac_borrow_mono(kstrong, k, MutexU32_frac_borrow_content(k, t, l));
             open exists(kstrong); assert [?qfb]frac_borrow(k, MutexU32_frac_borrow_content(k, t, l));
             close [qfb]exists_np(k);
@@ -314,7 +315,7 @@ impl MutexGuardU32 {
         //@ lifetime_token_trade_back(qkml, kmlong);
         let r = unsafe { &mut *(*self.lock).data.get() };
         /*@
-        produce_lem_ptr_chunk full_borrow_convert_strong(
+        produce_lem_ptr_chunk full_borrow_convert_strong(True,
             sep(MutexGuardU32_fbc_rest(km, kmlong, t, self, lock), full_borrow_wrapper(kmlong, u32_full_borrow_content(t, &(*lock).data))),
             kstrong,
             MutexGuardU32_full_borrow_content0(km, t, self))() {
