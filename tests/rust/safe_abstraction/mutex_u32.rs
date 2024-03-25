@@ -160,8 +160,7 @@ lem MutexU32_share_full(k: lifetime_t, t: thread_id_t, l: *MutexU32)
             full_borrow_implies(k, MutexU32_full_borrow_content0(t, l), sep(MutexU32_fbc_inner(l), u32_full_borrow_content(t, &(*l).data)));
         }
         full_borrow_split_m(k, MutexU32_fbc_inner(l), u32_full_borrow_content(t, &(*l).data));
-        open_full_borrow_strong_m(k, MutexU32_fbc_inner(l), q);
-        assert exists(?kstrong);
+        let kstrong = open_full_borrow_strong_m(k, MutexU32_fbc_inner(l), q);
         produce_lem_ptr_chunk full_borrow_convert_strong(True, MutexU32_frac_borrow_content(k, t, l), kstrong, MutexU32_fbc_inner(l))() {
             open MutexU32_frac_borrow_content(k, t, l)();
             SysMutex_end_share(&(*l).inner);
@@ -297,8 +296,7 @@ impl MutexGuardU32 {
     @*/
     //@ ens thread_token(t) &*& [qa]lifetime_token(a) &*& full_borrow(a, u32_full_borrow_content(t, result));
     {
-        //@ open_full_borrow_strong(a, MutexGuardU32_full_borrow_content0(km, t, self), qa/2);
-        //@ assert exists(?kstrong);
+        //@ let kstrong = open_full_borrow_strong(a, MutexGuardU32_full_borrow_content0(km, t, self), qa/2);
         //@ open MutexGuardU32_full_borrow_content0(km, t, self)();
         //@ open MutexGuardU32_own(km)(t, ?lock);
 

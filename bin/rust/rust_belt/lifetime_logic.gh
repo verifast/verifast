@@ -143,10 +143,10 @@ lemma void close_full_borrow(predicate() P);
 // LftL-bor-acc-strong
 predicate close_full_borrow_token_strong(lifetime_t k1, predicate() P, real q, lifetime_t k);
 
-lemma void open_full_borrow_strong(lifetime_t k, predicate() P, real q);
+lemma lifetime_t open_full_borrow_strong(lifetime_t k, predicate() P, real q);
     nonghost_callers_only
     requires full_borrow(k, P) &*& [q]lifetime_token(k);
-    ensures exists(?k1) &*& lifetime_inclusion(k, k1) == true &*& P() &*& close_full_borrow_token_strong(k1, P, q, k);
+    ensures lifetime_inclusion(k, result) == true &*& P() &*& close_full_borrow_token_strong(result, P, q, k);
 
 typedef lemma void full_borrow_convert_strong(predicate() Ctx, predicate() Q, lifetime_t k1, predicate() P)();
     requires Ctx() &*& Q() &*& [_]lifetime_dead_token(k1); // Empty mask
@@ -267,12 +267,12 @@ lemma void close_frac_borrow(real q_p, predicate(;) P);
 // LftL-fract-acc-atomic
 predicate close_frac_borrow_token_atomic(bool b, real q, predicate(;) P, lifetime_t k);
 
-lemma void open_frac_borrow_atomic(lifetime_t k, predicate(;) P);
+lemma bool open_frac_borrow_atomic(lifetime_t k, predicate(;) P);
     requires atomic_mask(?mask) &*& mask_le(Nlft, mask) == true &*& [_]frac_borrow(k, P);
-    ensures atomic_mask(mask_diff(mask, Nlft)) &*& exists(?b) &*& exists(?q) &*& (b ? [q]P() : [_]lifetime_dead_token(k)) &*& close_frac_borrow_token_atomic(b, q, P, k);
+    ensures atomic_mask(mask_diff(mask, Nlft)) &*& exists(?q) &*& (result ? [q]P() : [_]lifetime_dead_token(k)) &*& close_frac_borrow_token_atomic(result, q, P, k);
 
 lemma void close_frac_borrow_atomic(predicate(;) P, lifetime_t k);
-    requires atomic_mask(?mask) &*& close_frac_borrow_token_atomic(?b, ?q, P, k) &*& (b ? [q]P() : [_]lifetime_dead_token(k));
+    requires atomic_mask(?mask) &*& close_frac_borrow_token_atomic(?b, ?q, P, k) &*& (b ? [q]P() : true);
     ensures atomic_mask(mask_union(mask, Nlft));
 
 // Mask preserving view shifts - mask aware versions. See the documentation about Iris view shifts in general.h
@@ -313,9 +313,9 @@ lemma void close_full_borrow_m(predicate() P);
     ensures atomic_mask(mask) &*& full_borrow(k, P) &*& [q]lifetime_token(k);
 
 // LftL-bor-acc-strong
-lemma void open_full_borrow_strong_m(lifetime_t k, predicate() P, real q);
+lemma lifetime_t open_full_borrow_strong_m(lifetime_t k, predicate() P, real q);
     requires atomic_mask(?mask) &*& mask_le(Nlft, mask) == true &*& full_borrow(k, P) &*& [q]lifetime_token(k);
-    ensures atomic_mask(mask) &*& exists(?k1) &*& lifetime_inclusion(k, k1) == true &*& P() &*& close_full_borrow_token_strong(k1, P, q, k);
+    ensures atomic_mask(mask) &*& lifetime_inclusion(k, result) == true &*& P() &*& close_full_borrow_token_strong(result, P, q, k);
 
 lemma void close_full_borrow_strong_m(lifetime_t k1, predicate() P, predicate() Q);
     requires atomic_mask(?mask) &*& mask_le(Nlft, mask) == true &*& close_full_borrow_token_strong(k1, P, ?q, ?k) &*& is_full_borrow_convert_strong(?f, ?Ctx, Q, k1, P) &*& Ctx() &*& Q();
