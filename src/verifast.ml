@@ -3759,6 +3759,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let report_should_fail = reportShouldFail
             let report_range = reportRange
             let report_macro_call = reportMacroCall
+            let verbose_flags = verbose_flags
           end
         )
         in

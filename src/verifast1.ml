@@ -62,6 +62,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let {
     option_verbose=initial_verbosity;
+    option_verbose_flags=verbose_flags;
     option_vfbindings=vfbindings;
     option_allow_should_fail=allow_should_fail;
     option_emit_manifest=emit_manifest;

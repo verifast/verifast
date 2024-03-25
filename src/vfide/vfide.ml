@@ -1481,6 +1481,7 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
             begin try
               let options = {
                 option_verbose = 0;
+                option_verbose_flags = [];
                 option_use_java_frontend = !useJavaFrontend;
                 option_enforce_annotations = enforceAnnotations;
                 option_allow_should_fail = true;

@@ -382,6 +382,7 @@ let _ =
   let stats = ref false in
   let json = ref false in
   let verbose = ref 0 in
+  let verbose_flags = ref [] in
   let vfbindings = ref Vfbindings.default in
   let prover: string ref = ref default_prover in
   let compileOnly = ref false in
@@ -444,6 +445,7 @@ let _ =
             ; "-read_options_from_source_file", Set readOptionsFromSourceFile, "Retrieve disable_overflow_check, prover, target settings from first line of .c/.java file; syntax: //verifast_options{disable_overflow_check prover:z3v4.5 target:32bit}"
             ; "-json", Set json, "Report result as JSON"
             ; "-verbose", Set_int verbose, "-1 = file processing; 1 = statement executions; 2 = produce/consume steps; 4 = prover queries."
+            ; "-verbose_flag", String (fun flag -> verbose_flags := flag::!verbose_flags), "Enable particular verbose output. Flags: rust_exporter"
             ; "-prover", String (fun str -> prover := str), "Set SMT prover (" ^ list_provers() ^ ")."
             ; "-c", Set compileOnly, "Compile only, do not perform link checking."
             ; "-shared", Set isLibrary, "The file is a library (i.e. no main function required)."
@@ -496,6 +498,7 @@ let _ =
         let vfbindings = Vfbindings.set Vfparam_include_paths includePaths vfbindings in
         let options = {
           option_verbose = !verbose;
+          option_verbose_flags = !verbose_flags;
           option_vfbindings = vfbindings;
           option_allow_should_fail = !allowShouldFail;
           option_emit_manifest = !emitManifest;

@@ -296,6 +296,7 @@ let vtype_pred_name sn = sn ^ "_vtype"
 
 type options = {
   option_verbose: int;
+  option_verbose_flags: string list;
   option_vfbindings: Vfbindings.t;
   option_allow_should_fail: bool;
   option_emit_manifest: bool;

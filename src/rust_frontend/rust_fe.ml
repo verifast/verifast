@@ -3,6 +3,7 @@ module type RUST_FE_ARGS = sig
   val report_should_fail : string -> Ast.loc0 -> unit
   val report_range : Lexer.range_kind -> Ast.loc0 -> unit
   val report_macro_call : Ast.loc0 -> Ast.loc0 -> unit
+  val verbose_flags : string list
 end
 
 module Make (Args : RUST_FE_ARGS) = struct
@@ -176,7 +177,9 @@ module Make (Args : RUST_FE_ARGS) = struct
       try
         (*** TODO @Nima: Can we force to close channels in case of exception *)
         match Unix.close_process_full (msg_in_chn, out_chn, err_in_chn) with
-        | Unix.WEXITED 0 -> Ok ()
+        | Unix.WEXITED 0 ->
+          if List.mem "rust_exporter" Args.verbose_flags then print_endline emsgs;
+          Ok ()
         | result ->
             Error (`RustMirExpFailed (result, emsgs))
       with Unix.Unix_error (ecode, fname, param) ->
