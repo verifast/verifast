@@ -41,6 +41,7 @@ cd safe_abstraction
   verifast -c -allow_should_fail -allow_dead_code drop_test.rs
   verifast -c tparam_own.rs
   verifast -c generic_pair.rs
+  verifast -c mutex_u32.rs
 cd ..
 end_parallel
 end_sequential
