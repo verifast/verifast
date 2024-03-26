@@ -84,6 +84,11 @@ module AstAux = struct
           g,
           fun g ->
             PredCtorDecl (l, g, tparams, ctor_ps, ps, inputParamCount, body) )
+    | FuncTypeDecl (l, gh, rt, ftn, tparams, ftxs, xs, contract) ->
+        ( l,
+          ftn,
+          fun ftn -> FuncTypeDecl (l, gh, rt, ftn, tparams, ftxs, xs, contract)
+        )
     | Func
         ( l,
           k,
@@ -115,6 +120,27 @@ module AstAux = struct
                 body_opt,
                 is_virtual,
                 overrides ) )
+
+  let decl_map_of (ds : decl list) =
+    let rec iter mn ds cont =
+      match ds with
+      | [] -> cont ()
+      | ModuleDecl (l, mn1, ilist, mds) :: ds ->
+          iter (if mn = "" then mn1 else mn ^ "::" ^ mn1) mds @@ fun () ->
+          iter mn ds cont
+      | d :: ds ->
+          let _, dname, _ = decl_loc_name_and_name_setter d in
+          ((if mn = "" then dname else mn ^ "::" ^ dname), d) :: iter mn ds cont
+    in
+    iter "" ds (fun () -> [])
+
+  let decl_map_contains_pred_fam_inst map name =
+    map
+    |> List.exists @@ function
+       | name', Ast.PredFamilyInstanceDecl (_, _, _, _, _, _) when name' = name
+         ->
+           true
+       | _ -> false
 
   let decl_name (d : decl) =
     match d with
@@ -3868,7 +3894,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         in
         Ok [ share_mono_po; share_po ]
 
-  let translate_adt_def (adt_def_cpn : AdtDefRd.t) =
+  let translate_adt_def (ghost_decl_map : (string * Ast.decl) list)
+      (adt_def_cpn : AdtDefRd.t) =
     let open AdtDefRd in
     let id_cpn = id_get adt_def_cpn in
     let def_path = translate_adt_def_id id_cpn in
@@ -3966,60 +3993,58 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         | UnionKind -> failwith "Todo: AdtDef::Union"
         | Undefined _ -> Error (`TrAdtDef "Unknown ADT kind")
       in
-      (* Todo: Should we have full_borrow_content for private structs? In particular a private function can have a mutable reference to a private struct. *)
       let* full_bor_content, proof_obligs, aux_decls' =
-        match (is_local, vis) with
-        | false, _ | true, Mir.Restricted -> Ok (None, [], [])
-        | true, Mir.Invisible ->
-            Error
-              (`TrAdtDef
-                ("The " ^ def_path
-               ^ " ADT definition is local and locally invisible"))
-        | true, Mir.Public ->
-            let* full_bor_content =
-              gen_adt_full_borrow_content kind name tparams variants def_loc
+        if
+          is_local
+          && (AstAux.decl_map_contains_pred_fam_inst ghost_decl_map
+                (name ^ "_own")
+             || AstAux.decl_map_contains_pred_fam_inst ghost_decl_map
+                  (name ^ "_share"))
+        then
+          let* full_bor_content =
+            gen_adt_full_borrow_content kind name tparams variants def_loc
+          in
+          let* proof_obligs = gen_adt_proof_obligs def tparams in
+          let own__pred_decls =
+            let own_args =
+              fds
+              |> List.map @@ fun (fd : Mir.field_def_tr) ->
+                 Ast.LitPat (Select (def_loc, Var (def_loc, "v"), fd.name))
             in
-            let* proof_obligs = gen_adt_proof_obligs def tparams in
-            let own__pred_decls =
-              let own_args =
-                fds
-                |> List.map @@ fun (fd : Mir.field_def_tr) ->
-                   Ast.LitPat (Select (def_loc, Var (def_loc, "v"), fd.name))
-              in
-              [
-                Ast.PredFamilyDecl
-                  ( def_loc,
-                    name ^ "_own_",
-                    tparams,
-                    0,
-                    [
-                      IdentTypeExpr (def_loc, None, "thread_id_t");
-                      StructTypeExpr
-                        (def_loc, Some name, None, [], tparams_targs);
-                    ],
-                    None,
-                    Ast.Inductiveness_Inductive );
-                Ast.PredFamilyInstanceDecl
-                  ( def_loc,
-                    name ^ "_own_",
-                    tparams,
-                    [],
-                    [
-                      (IdentTypeExpr (def_loc, None, "thread_id_t"), "t");
-                      ( StructTypeExpr
-                          (def_loc, Some name, None, [], tparams_targs),
-                        "v" );
-                    ],
-                    CallExpr
-                      ( def_loc,
-                        name ^ "_own",
-                        tparams_targs,
-                        [],
-                        LitPat (Var (def_loc, "t")) :: own_args,
-                        Static ) );
-              ]
-            in
-            Ok (Some full_bor_content, proof_obligs, own__pred_decls)
+            [
+              Ast.PredFamilyDecl
+                ( def_loc,
+                  name ^ "_own_",
+                  tparams,
+                  0,
+                  [
+                    IdentTypeExpr (def_loc, None, "thread_id_t");
+                    StructTypeExpr (def_loc, Some name, None, [], tparams_targs);
+                  ],
+                  None,
+                  Ast.Inductiveness_Inductive );
+              Ast.PredFamilyInstanceDecl
+                ( def_loc,
+                  name ^ "_own_",
+                  tparams,
+                  [],
+                  [
+                    (IdentTypeExpr (def_loc, None, "thread_id_t"), "t");
+                    ( StructTypeExpr
+                        (def_loc, Some name, None, [], tparams_targs),
+                      "v" );
+                  ],
+                  CallExpr
+                    ( def_loc,
+                      name ^ "_own",
+                      tparams_targs,
+                      [],
+                      LitPat (Var (def_loc, "t")) :: own_args,
+                      Static ) );
+            ]
+          in
+          Ok (Some full_bor_content, proof_obligs, own__pred_decls)
+        else Ok (None, [], [])
       in
       Ok
         (Some
@@ -4037,26 +4062,20 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
 
   (** Checks for the existence of a lemma for proof obligation in ghost code.
       The consistency of the lemma with proof obligation will be checked by VeriFast later *)
-  let check_proof_obligation gh_decls po =
+  let check_proof_obligation gh_decl_map po =
     let loc = AstAux.decl_loc po in
     let* po_name =
       Option.to_result
         ~none:(`ChekProofObligationFatal "Proof obligation without a name")
         (AstAux.decl_name po)
     in
-    let check decl =
-      match decl with
-      | Ast.Func (_, _, _, _, name, _, _, _, _, _, Some body, _, _)
-        when po_name = name ->
-          true
-      | _ -> false
-    in
-    if List.exists check gh_decls then
-      Ok () (*in case of duplicates VeriFast complains later*)
-    else
-      Error
-        (`ChekProofObligationFailed
-          (loc, "Lemma " ^ po_name ^ " Should be proven"))
+    match Util.try_assoc po_name gh_decl_map with
+    | Some (Ast.Func (_, _, _, _, _, _, _, _, _, _, Some body, _, _)) ->
+        Ok () (*in case of duplicates VeriFast complains later*)
+    | _ ->
+        Error
+          (`CheckProofObligationFailed
+            (loc, "Lemma " ^ po_name ^ " should be proven"))
 
   type trait_impl = {
     loc : Ast.loc;
@@ -4185,9 +4204,22 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       directives
       |> List.iter (fun ({ span; raw } : Mir.annot) ->
              report_should_fail raw (Ast.lexed_loc span));
+      let* module_decls =
+        ListAux.try_map translate_module (VfMirRd.modules_get_list vf_mir_cpn)
+      in
+      let ghost_decl_batches_cpn =
+        VfMirRd.ghost_decl_batches_get_list vf_mir_cpn
+      in
+      let* ghost_decl_batches =
+        ListAux.try_map translate_ghost_decl_batch ghost_decl_batches_cpn
+      in
+      let ghost_decls = module_decls @ List.flatten ghost_decl_batches in
+      let ghost_decl_map = AstAux.decl_map_of ghost_decls in
       let adt_defs_cpn = VfMirRd.adt_defs_get vf_mir_cpn in
       let* adt_defs_cpn = CapnpAux.ind_list_get_list adt_defs_cpn in
-      let* adt_defs = ListAux.try_map translate_adt_def adt_defs_cpn in
+      let* adt_defs =
+        ListAux.try_map (translate_adt_def ghost_decl_map) adt_defs_cpn
+      in
       let adt_defs = List.filter_map Fun.id adt_defs in
       (* Todo @Nima: External definitions and their corresponding ghost headers inclusion should be handled in a better way *)
       (* Todo @Nima: The MIR exporter encodes `ADT`s and adds the `ADT` declarations used in them later in the same array.
@@ -4209,19 +4241,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let adts_full_bor_content_preds =
         List.filter_map Fun.id adts_full_bor_content_preds
       in
-      let* module_decls =
-        ListAux.try_map translate_module (VfMirRd.modules_get_list vf_mir_cpn)
-      in
-      let ghost_decl_batches_cpn =
-        VfMirRd.ghost_decl_batches_get_list vf_mir_cpn
-      in
-      let* ghost_decl_batches =
-        ListAux.try_map translate_ghost_decl_batch ghost_decl_batches_cpn
-      in
-      let ghost_decls = module_decls @ List.flatten ghost_decl_batches in
       let* _ =
         ListAux.try_map
-          (fun po -> check_proof_obligation ghost_decls po)
+          (fun po -> check_proof_obligation ghost_decl_map po)
           adts_proof_obligs
       in
       let* traits_cpn =
@@ -4356,7 +4378,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         | `IntAuxToInt ->
             raise
               (Parser.CompilationError "Rust Translator Error: to int failed")
-        | `ChekProofObligationFailed (loc, str) | `TrBodyFailed (loc, str) ->
+        | `CheckProofObligationFailed (loc, str) | `TrBodyFailed (loc, str) ->
             raise (Ast.StaticError (loc, str, None)))
 
   (* Todo @Nima: We should add error handling parts at the end of `translate_*` functions *)

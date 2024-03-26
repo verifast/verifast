@@ -12,20 +12,6 @@ About the definitions:
 */
 
 /*@
-// dummy
-pred sys::locks::Mutex_own(t: thread_id_t, m: *u32);
-pred sys::locks::Mutex_share(k: lifetime_t, t: thread_id_t, l: *sys::locks::Mutex;) = true;
-lem sys::locks::Mutex_share_mono(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *sys::locks::Mutex)
-    req lifetime_inclusion(k1, k) == true &*& [_]sys::locks::Mutex_share(k, t, l);
-    ens [_]sys::locks::Mutex_share(k1, t, l);
-{}
-lem sys::locks::Mutex_share_full(k: lifetime_t, t: thread_id_t, l: *sys::locks::Mutex)
-    req full_borrow(k, sys::locks::Mutex_full_borrow_content(t, l)) &*& [?q]lifetime_token(k);
-    ens [_]sys::locks::Mutex_share(k, t, l) &*& [q]lifetime_token(k);
-{
-    leak full_borrow(_, _);
-}
-// ymmud
 
 pred SysMutex(m: sys::locks::Mutex; P: pred());
 pred SysMutex_share(l: *sys::locks::Mutex; P: pred());

@@ -11,19 +11,19 @@ struct Buffer {
 
 /*@
 
-pred Buffer_own(buffer: Buffer; size: usize, length: usize) =
+pred Buffer_(buffer: Buffer; size: usize, length: usize) =
     size == buffer.size &*& size <= isize::MAX &*&
     length == buffer.length &*&
     alloc_block(buffer.buffer, size) &*&
     integers_(buffer.buffer, 1, false, length, _) &*&
     integers__(buffer.buffer + length, 1, false, size - length, _);
 
-lem_auto Buffer_own_inv()
-    req [?f]Buffer_own(?buffer, ?size, ?length);
-    ens [f]Buffer_own(buffer, size, length) &*& size == buffer.size &*& length == buffer.length &*& length <= size &*& size <= isize::MAX;
+lem_auto Buffer__inv()
+    req [?f]Buffer_(?buffer, ?size, ?length);
+    ens [f]Buffer_(buffer, size, length) &*& size == buffer.size &*& length == buffer.length &*& length <= size &*& size <= isize::MAX;
 {
-    open Buffer_own(buffer, size, length);
-    close [f]Buffer_own(buffer, size, length);
+    open Buffer_(buffer, size, length);
+    close [f]Buffer_(buffer, size, length);
 }
 
 pred Buffer(buffer: *Buffer; size: usize, length: usize) =
@@ -31,21 +31,21 @@ pred Buffer(buffer: *Buffer; size: usize, length: usize) =
     (*buffer).buffer |-> ?buf &*&
     (*buffer).size |-> size &*&
     (*buffer).length |-> length &*&
-    Buffer_own(Buffer { buffer: buf, size, length }, size, length);
+    Buffer_(Buffer { buffer: buf, size, length }, size, length);
 
 @*/
 
 impl Buffer {
     unsafe fn new(size: usize) -> Buffer
     //@ req 1 <= size &*& size <= isize::MAX;
-    //@ ens Buffer_own(result, size, 0);
+    //@ ens Buffer_(result, size, 0);
     {
         let layout = std::alloc::Layout::from_size_align_unchecked(size, 1);
         let buffer = std::alloc::alloc(layout);
         if buffer.is_null() {
             std::alloc::handle_alloc_error(layout);
         }
-        //@ close Buffer_own(Buffer { buffer, size, length: 0}, _, _);
+        //@ close Buffer_(Buffer { buffer, size, length: 0}, _, _);
         Buffer { buffer, size, length: 0 }
     }
 
@@ -54,7 +54,7 @@ impl Buffer {
     //@ ens Buffer(buffer, ?size1, length) &*& size1 - length >= size;
     {
         //@ open Buffer(_, _, _);
-        //@ open Buffer_own(_, _, _);
+        //@ open Buffer_(_, _, _);
         //@ integers___inv();
         //@ let buf = (*buffer).buffer;
         if (*buffer).size - (*buffer).length < size {
@@ -74,7 +74,7 @@ impl Buffer {
             (*buffer).buffer = new_buffer;
             (*buffer).size = new_size;
             //@ integers___join(new_buffer + length);
-            //@ close Buffer_own(Buffer { buffer: new_buffer, size: new_size, length }, _, _);
+            //@ close Buffer_(Buffer { buffer: new_buffer, size: new_size, length }, _, _);
         }
     }
 
@@ -84,8 +84,8 @@ impl Buffer {
     {
         Self::reserve(buffer, (*other).length);
         //@ open [1]Buffer(_, _, _);
-        //@ open [1]Buffer_own(_, _, _);
-        //@ open [f]Buffer_own(_, _, _);
+        //@ open [1]Buffer_(_, _, _);
+        //@ open [f]Buffer_(_, _, _);
         //@ integers___split((*buffer).buffer + (*buffer).length, (*other).length);
         std::ptr::copy_nonoverlapping((*other).buffer, (*buffer).buffer.add((*buffer).length), (*other).length);
         //@ integers__join((*buffer).buffer);
@@ -94,7 +94,7 @@ impl Buffer {
 
     unsafe fn clone(buffer: *mut Buffer) -> Buffer
     //@ req Buffer(buffer, ?size, ?length);
-    //@ ens Buffer(buffer, size, length) &*& Buffer_own(result, _, length);
+    //@ ens Buffer(buffer, size, length) &*& Buffer_(result, _, length);
     {
         let mut result = Buffer::new(if (*buffer).length == 0 { 1 } else { (*buffer).length });
         Buffer::push_buffer(&mut result as *mut Buffer, buffer);
@@ -106,7 +106,7 @@ impl Buffer {
     //@ ens (*buffer).buffer |-> _ &*& (*buffer).size |-> _ &*& (*buffer).length |-> _ &*& struct_Buffer_padding(buffer);
     {
         //@ open Buffer(_, _, _);
-        //@ open Buffer_own(_, _, _);
+        //@ open Buffer_(_, _, _);
         //@ integers__to_integers__((*buffer).buffer);
         //@ integers___join((*buffer).buffer);
         std::alloc::dealloc((*buffer).buffer, std::alloc::Layout::from_size_align_unchecked((*buffer).size, 1));
@@ -147,13 +147,13 @@ unsafe fn read_line(socket: platform::sockets::Socket, buffer: *mut Buffer)
         const RECV_BUF_SIZE: usize = 1000;
         Buffer::reserve(buffer, RECV_BUF_SIZE);
         //@ open Buffer(_, _, _);
-        //@ open Buffer_own(?buf, _, _);
+        //@ open Buffer_(?buf, _, _);
         //@ integers___split(buf.buffer + buf.length, 1000);
         let count = socket.receive((*buffer).buffer.offset((*buffer).length as isize), RECV_BUF_SIZE);
         //@ integers__join(buf.buffer);
         //@ integers___join(buf.buffer + buf.length + count);
         if count == 0 {
-            //@ close Buffer_own(buf, _, _);
+            //@ close Buffer_(buf, _, _);
             break;
         }
         (*buffer).length = offset + count;
@@ -229,7 +229,7 @@ unsafe fn handle_connection(data: *mut u8)
     Buffer::drop(&mut line_buffer as *mut Buffer);
 
     send_str(socket, "HTTP/1.0 200 OK\r\n\r\n");
-    //@ open Buffer_own(_, _, _);
+    //@ open Buffer_(_, _, _);
     socket.send(buffer_copy.buffer, buffer_copy.length);
     socket.close();
 
@@ -251,7 +251,7 @@ fn main() {
         let server_socket = platform::sockets::Socket::listen(port);
         print("Listening on port 10000...");
         let mut buffer = Buffer::new(1000);
-        //@ assert Buffer_own(?buf, 1000, 0);
+        //@ assert Buffer_(?buf, 1000, 0);
         //@ assert buffer.buffer |-> buf.buffer &*& buffer.size |-> 1000 &*& buffer.length |-> 0;
         //@ assert buf == Buffer { buffer: buf.buffer, size: buf.size, length: buf.length };
         //@ close Buffer(&buffer, _, _);
