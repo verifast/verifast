@@ -577,6 +577,11 @@ struct Body {
         value @2: VarDebugInfoContents;
     }
 
+    struct GhostDeclBlock {
+        start @0: Annotation;
+        closeBraceSpan @1: SpanData; # After preprocessing, to match against the span of the inserted VeriFast_ghost_command() call.
+    }
+
     defKind @0: DefKind;
     defPath @1: Text;
     contract @2: Contract;
@@ -587,6 +592,7 @@ struct Body {
     impSpan @7: SpanData;
     varDebugInfo @8: List(VarDebugInfo);
     ghostStmts @9: List(Annotation);
+    ghostDeclBlocks @15: List(GhostDeclBlock); # A Rust block starting with a ghost range containing ghost declarations (local predicates and lemmas)
     unsafety @10: Unsafety;
     implBlockHirGenerics @14: Option(Hir.Generics);
     hirGenerics @11: Hir.Generics;

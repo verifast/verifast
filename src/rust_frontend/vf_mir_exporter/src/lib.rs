@@ -2,6 +2,7 @@
 #![feature(extract_if)]
 #![feature(box_patterns)]
 #![feature(split_array)]
+#![feature(byte_slice_trim_ascii)]
 #![allow(unused_imports)]
 #![allow(unused_variables)]
 #![deny(warnings)]
@@ -1069,7 +1070,7 @@ mod vf_mir_builder {
                 Self::encode_var_debug_info(tcx, enc_ctx, vdi, vdi_cpn);
             });
 
-            let ghost_stmts = enc_ctx
+            let mut ghost_stmts = enc_ctx
                 .annots
                 .extract_if(|annot| {
                     imp_span_data.contains(annot.span().expect("Dummy ghost range").data())
@@ -1081,8 +1082,16 @@ mod vf_mir_builder {
                 def_path
             );
 
+            let ghost_decl_blocks = ghost_stmts.extract_if(|annot| {
+                annot.is_block_decls
+            }).collect::<LinkedList<_>>();
+
             body_cpn.fill_ghost_stmts(&ghost_stmts, |ghost_stmt_cpn, ghost_stmt| {
                 Self::encode_annotation(tcx, &ghost_stmt, ghost_stmt_cpn);
+            });
+            body_cpn.fill_ghost_decl_blocks(&ghost_decl_blocks, |mut ghost_decl_block_cpn, ghost_decl_block| {
+                Self::encode_annotation(tcx, &ghost_decl_block, ghost_decl_block_cpn.reborrow().init_start());
+                Self::encode_span_data(tcx, &ghost_decl_block.block_end_span().data(), ghost_decl_block_cpn.init_close_brace_span());
             });
         }
 
