@@ -293,9 +293,9 @@ module Mir = struct
     terminator : Ast.stmt list;
     successors : string list;
     mutable walk_state : bb_walk_state;
-    mutable is_loop_head : bool;
+    mutable is_block_head : bool;
     mutable parent : basic_block option;
-        (* If this BB is inside a loop (i.e. not the head), points to the innermost containing loop's loop head *)
+        (* If this BB is inside a block (i.e. not the head), points to the innermost containing block's block head *)
     mutable children : basic_block list;
   }
 
@@ -638,6 +638,20 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let* gh_decl_b = translate_annotation gh_decl_batch_cpn in
     let gh_decl_b = translate_annot_to_vf_parser_inp gh_decl_b in
     Ok (VfMirAnnotParser.parse_ghost_decl_batch gh_decl_b)
+
+  let translate_ghost_decl_block (gdb_cpn : BodyRd.GhostDeclBlock.t) =
+    let open BodyRd.GhostDeclBlock in
+    let open AnnotationRd in
+    let* gh_decl_b = translate_annotation (start_get gdb_cpn) in
+    let gh_decl_b_parser_input = translate_annot_to_vf_parser_inp gh_decl_b in
+    let ghost_decls =
+      VfMirAnnotParser.parse_ghost_decl_batch gh_decl_b_parser_input
+    in
+    let* closeBraceSpan = translate_span_data (close_brace_span_get gdb_cpn) in
+    let ghost_decl_block =
+      Ast.BlockStmt (gh_decl_b.span, ghost_decls, [], closeBraceSpan, ref [])
+    in
+    Ok ghost_decl_block
 
   let translate_mutability (mutability_cpn : MutabilityRd.t) =
     match MutabilityRd.get mutability_cpn with
@@ -2704,19 +2718,71 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             terminator;
             successors;
             walk_state = NotSeen;
-            is_loop_head = false;
+            is_block_head = false;
             parent = None;
             children = [];
           }
         in
         Ok (Some bblock)
 
-    let find_loops (bblocks : Mir.basic_block list) =
+    let find_blocks (bblocks : Mir.basic_block list) =
       let open Mir in
+      let explicit_block_heads_table = Hashtbl.create 10 in
       let bblocks_table = Hashtbl.create 100 in
+      let explicit_block_ends = ref [] in
       bblocks
       |> List.iter (fun (bb : Mir.basic_block) ->
-             Hashtbl.add bblocks_table bb.id bb);
+             match bb.terminator with
+             | [
+              Ast.BlockStmt
+                ( l,
+                  decls,
+                  [
+                    ExprStmt
+                      (CallExpr
+                        (_, "#ghost_decl_block_start", [], [], [], Static));
+                  ],
+                  closeBraceLoc,
+                  _ );
+              Ast.GotoStmt (lg, target);
+             ] ->
+                 let id =
+                   Printf.sprintf "bh%d"
+                     (Hashtbl.length explicit_block_heads_table)
+                 in
+                 let fixed_bb =
+                   {
+                     bb with
+                     terminator = [ Ast.GotoStmt (l, id) ];
+                     successors = [ id ];
+                   }
+                 in
+                 let bh =
+                   { bb with id; is_block_head = true; statements = [] }
+                 in
+                 Hashtbl.add bblocks_table bb.id fixed_bb;
+                 Hashtbl.add bblocks_table id bh;
+                 Hashtbl.add explicit_block_heads_table closeBraceLoc bh
+             | [
+              Ast.ExprStmt
+                (CallExpr
+                  (closeBraceLoc, "#ghost_decl_block_end", [], [], [], Static));
+              (Ast.GotoStmt (lg, target) as gotoStmt);
+             ] ->
+                 explicit_block_ends :=
+                   (closeBraceLoc, gotoStmt, bb) :: !explicit_block_ends
+             | _ -> Hashtbl.add bblocks_table bb.id bb);
+      !explicit_block_ends
+      |> List.iter (fun (closeBraceLoc, gotoStmt, (bb : Mir.basic_block)) ->
+             let head_bb =
+               Hashtbl.find explicit_block_heads_table closeBraceLoc
+             in
+             Hashtbl.add bblocks_table bb.id
+               {
+                 bb with
+                 terminator = [ gotoStmt ];
+                 successors = head_bb.id :: bb.successors;
+               });
       let entry_id = (List.hd bblocks).id in
       let toplevel_blocks = ref [] in
       let rec set_parent (bb : basic_block) k k' path =
@@ -2751,7 +2817,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             | Some bb' -> bb'.children <- bb :: bb'.children)
         | Walking (k', _) ->
             (*Printf.printf "Found a loop with head at rank %d: %s\n" k' (String.concat " -> " (List.map (fun (bb: basic_block) -> bb.id) (List.rev (bb::path))));*)
-            bb.is_loop_head <- true;
+            bb.is_block_head <- true;
             set_parent bb k' (k - 1) path
         | Exhausted -> (
             match bb.parent with
@@ -2781,49 +2847,65 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let rec translate_to_vf_basic_block
         ({
            id;
-           statements = stmts;
+           statements = stmts0;
            terminator = trm;
            successors;
-           is_loop_head;
+           is_block_head;
            children;
          } :
           Mir.basic_block) =
-      if ListAux.is_empty trm then failwith "Basic block without any terminator"
-      else
-        (* let embed_ghost_stmts all_stmts stmt =
-             let loc_stmt = stmt |> Ast.stmt_loc |> Ast.lexed_loc in
-             let* ghost_stmts = State.fetch_ghost_stmts_before loc_stmt in
-             Ok (all_stmts @ ghost_stmts @ [ stmt ])
-           in *)
-        let stmts = stmts @ trm in
-        (* let* stmts = ListAux.try_fold_left embed_ghost_stmts [] stmts in *)
-        let loc = stmts |> List.hd |> Ast.stmt_loc in
-        let stmts =
-          if is_loop_head then
-            let children_stmts =
-              Util.flatmap translate_to_vf_basic_block children
-            in
-            [
-              (match stmts with
-              | Ast.PureStmt (lp, InvariantStmt (linv, inv)) :: stmts ->
-                  Ast.WhileStmt
-                    ( loc,
-                      True loc,
-                      Some (LoopInv inv),
-                      None,
-                      stmts @ children_stmts @ [ Ast.LabelStmt (loc, id) ],
-                      [] )
-              | _ ->
-                  Ast.BlockStmt
-                    ( loc,
-                      [],
-                      Ast.LabelStmt (loc, id) :: (stmts @ children_stmts),
-                      loc,
-                      ref [] ));
-            ]
-          else stmts
-        in
-        Ast.LabelStmt (loc, id) :: stmts
+      let stmts = stmts0 @ trm in
+      (* let* stmts = ListAux.try_fold_left embed_ghost_stmts [] stmts in *)
+      let loc = stmts |> List.hd |> Ast.stmt_loc in
+      let stmts =
+        if is_block_head then
+          let children_stmts =
+            Util.flatmap translate_to_vf_basic_block children
+          in
+          match trm with
+          | [
+           Ast.BlockStmt
+             ( l,
+               decls,
+               [
+                 ExprStmt
+                   (CallExpr (_, "#ghost_decl_block_start", [], [], [], Static));
+               ],
+               closeBraceLoc,
+               _ );
+           (Ast.GotoStmt (lg, target) as gotoStmt);
+          ] ->
+              [
+                Ast.BlockStmt
+                  ( loc,
+                    decls,
+                    Ast.LabelStmt (loc, id)
+                    :: (stmts0 @ [ gotoStmt ] @ children_stmts),
+                    closeBraceLoc,
+                    ref [] );
+              ]
+          | _ ->
+              [
+                (match stmts with
+                | Ast.PureStmt (lp, InvariantStmt (linv, inv)) :: stmts ->
+                    Ast.WhileStmt
+                      ( loc,
+                        True loc,
+                        Some (LoopInv inv),
+                        None,
+                        stmts @ children_stmts @ [ Ast.LabelStmt (loc, id) ],
+                        [] )
+                | _ ->
+                    Ast.BlockStmt
+                      ( loc,
+                        [],
+                        Ast.LabelStmt (loc, id) :: (stmts @ children_stmts),
+                        loc,
+                        ref [] ));
+              ]
+        else stmts
+      in
+      Ast.LabelStmt (loc, id) :: stmts
 
     let translate_var_debug_info_contents (vdic_cpn : VarDebugInfoContentsRd.t)
         (loc : Ast.loc) =
@@ -3254,6 +3336,32 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           LocAux.try_compare_loc l1 l2)
         ghost_stmts
     in
+    let* ghost_decl_blocks =
+      ListAux.try_map translate_ghost_decl_block
+        (ghost_decl_blocks_get_list body_cpn)
+    in
+    let ghost_decl_block_start_stmts =
+      ghost_decl_blocks
+      |> List.map @@ fun (Ast.BlockStmt (l, decls, [], closeBraceLoc, _)) ->
+         Ast.BlockStmt
+           ( l,
+             decls,
+             [
+               ExprStmt
+                 (CallExpr (l, "#ghost_decl_block_start", [], [], [], Static));
+             ],
+             closeBraceLoc,
+             ref [] )
+    in
+    let ghost_decl_block_end_stmts =
+      ghost_decl_blocks
+      |> List.map @@ fun (Ast.BlockStmt (l, decls, [], closeBraceLoc, _)) ->
+         Ast.ExprStmt
+           (CallExpr (closeBraceLoc, "#ghost_decl_block_end", [], [], [], Static))
+    in
+    let ghost_stmts =
+      ghost_decl_block_start_stmts @ ghost_decl_block_end_stmts @ ghost_stmts
+    in
     let imp_span_cpn = imp_span_get body_cpn in
     let* imp_loc = translate_span_data imp_span_cpn in
     let open TrBody (struct
@@ -3380,8 +3488,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             (fun bblock_cpn -> translate_basic_block ret_place_id bblock_cpn)
             bblocks_cpn
         in
-        let toplevel_blocks = find_loops bblocks in
-        let vf_bblocks = Util.flatmap translate_to_vf_basic_block bblocks in
+        let toplevel_blocks = find_blocks bblocks in
+        let vf_bblocks =
+          Util.flatmap translate_to_vf_basic_block toplevel_blocks
+        in
         let span_cpn = span_get body_cpn in
         let* loc = translate_span_data span_cpn in
         let* closing_cbrace_loc = LocAux.get_last_col_loc loc in
