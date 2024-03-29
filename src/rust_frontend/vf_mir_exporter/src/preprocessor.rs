@@ -58,6 +58,8 @@ impl<'a> TextIterator<'a> {
 #[derive(Debug)]
 pub struct GhostRange {
     in_fn_body: bool,
+    pub is_block_decls: bool, // This ghost range contains the ghost decls of a block with ghost decls.
+    pub block_end: Option<SrcPos>, // The position of the closing brace of the block with ghost decls.
     pub end_of_preceding_token: SrcPos,
     start: SrcPos,
     end: SrcPos,
@@ -82,6 +84,18 @@ impl GhostRange {
             ))
         };
     }
+    pub fn block_end_span(&self) -> rustc_span::Span {
+        let start_span = self.span.unwrap();
+        let end_byte_pos = self.block_end.unwrap().byte_pos;
+        use rustc_span::{BytePos, Span, SyntaxContext};
+        let source_file_start_pos = start_span.lo() - BytePos(self.start.byte_pos);
+        Span::new(
+            source_file_start_pos + BytePos(end_byte_pos),
+            source_file_start_pos + BytePos(end_byte_pos + 1),
+            SyntaxContext::root(),
+            None,
+        )
+    }
     pub fn span(&self) -> Option<rustc_span::Span> {
         self.span
     }
@@ -94,6 +108,14 @@ impl GhostRange {
     pub fn end_pos(&self) -> SrcPos {
         self.end
     }
+}
+
+fn ghost_range_contents_is_block_decls(contents: &str) -> bool {
+    let trimmed_contents = contents.trim_ascii_start();
+    trimmed_contents.starts_with("pred ")
+        || trimmed_contents.starts_with("lem ")
+        || trimmed_contents.starts_with("lem_auto ")
+        || trimmed_contents.starts_with("lem_auto(")
 }
 
 /// If a ghost range occurs at the toplevel before the first token in a file,
@@ -129,6 +151,12 @@ pub fn preprocess(
     let mut inside_whitespace = true;
     let mut start_of_whitespace = cs.pos; // Only meaningful when inside whitespace. Note: comments
                                           // count as whitespace.
+    let mut start_of_block: SrcPos = cs.pos; // Only meaningful when inside a block.
+    struct OpenBlock {
+        start_ghost_range_index: usize, // An index into `ghost_ranges`
+        brace_depth: i32,               // The number of *enclosing* blocks.
+    }
+    let mut open_blocks: Vec<OpenBlock> = Vec::new();
     loop {
         let was_inside_word = inside_word;
         inside_word = false;
@@ -149,6 +177,7 @@ pub fn preprocess(
                         next_block_is_fn_body = false;
                     }
                     '{' => {
+                        start_of_block = cs.pos;
                         cs.next();
                         output.push('{');
                         if next_block_is_fn_body {
@@ -159,12 +188,20 @@ pub fn preprocess(
                         brace_depth += 1;
                     }
                     '}' => {
+                        if let Some(last) = open_blocks.last() {
+                            if last.brace_depth == brace_depth {
+                                ghost_ranges[last.start_ghost_range_index].block_end = Some(cs.pos);
+                                open_blocks.pop();
+                                output.push_str(VF_GHOST_CMD_TAG);
+                                cs.pos.byte_pos += VF_GHOST_CMD_TAG_LEN;
+                            }
+                        }
                         cs.next();
-                        output.push('}');
                         brace_depth -= 1;
                         if fn_body_brace_depth == brace_depth {
                             fn_body_brace_depth = -1;
                         }
+                        output.push('}');
                     }
                     '/' => {
                         cs.next();
@@ -221,6 +258,18 @@ pub fn preprocess(
                                                 }
                                             }
                                         }
+                                        let is_block_decls = in_fn_body
+                                            && start_of_whitespace.byte_pos
+                                                == start_of_block.byte_pos + 1
+                                            && ghost_range_contents_is_block_decls(
+                                                contents.strip_prefix("//@").unwrap(),
+                                            );
+                                        if is_block_decls {
+                                            open_blocks.push(OpenBlock {
+                                                start_ghost_range_index: ghost_ranges.len(),
+                                                brace_depth: brace_depth - 1,
+                                            });
+                                        }
                                         ghost_ranges.push(Box::new(GhostRange {
                                             in_fn_body,
                                             end_of_preceding_token: start_of_whitespace,
@@ -228,6 +277,8 @@ pub fn preprocess(
                                             end,
                                             contents,
                                             span: None,
+                                            is_block_decls,
+                                            block_end: None,
                                         }));
                                     }
                                     Some('~') => {
@@ -262,6 +313,8 @@ pub fn preprocess(
                                             end,
                                             contents,
                                             span: None,
+                                            is_block_decls: false,
+                                            block_end: None,
                                         }));
                                         loop {
                                             match cs.peek() {
@@ -321,6 +374,8 @@ pub fn preprocess(
                                     },
                                     contents: String::new(),
                                     span: None,
+                                    is_block_decls: false,
+                                    block_end: None,
                                 });
                                 let mut is_ghost_range = false;
                                 match cs.peek() {
@@ -411,6 +466,18 @@ pub fn preprocess(
                                     //         .truncate(ghost_range.contents.len() - 1);
                                     //     ghost_range.end.column -= 1;
                                     // }
+                                    ghost_range.is_block_decls = fn_body_brace_depth != -1
+                                        && start_of_whitespace.byte_pos
+                                            == start_of_block.byte_pos + 1
+                                        && ghost_range_contents_is_block_decls(
+                                            ghost_range.contents.strip_prefix("/*@").unwrap(),
+                                        );
+                                    if ghost_range.is_block_decls {
+                                        open_blocks.push(OpenBlock {
+                                            start_ghost_range_index: ghost_ranges.len(),
+                                            brace_depth: brace_depth - 1,
+                                        });
+                                    }
                                     ghost_ranges.push(ghost_range);
                                 }
                             }
