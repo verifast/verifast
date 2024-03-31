@@ -1,3 +1,5 @@
+use std::io::Write;
+
 struct Buffer {
     buffer: *mut u8,
     size: usize,
@@ -159,10 +161,20 @@ unsafe fn handle_connection(buffer: *mut Buffer, socket: platform::sockets::Sock
     socket.close();
 }
 
+unsafe fn print<'a>(text: &'a str)
+//@ req thread_token(?t) &*& [?f]integers_(text.ptr, 1, false, text.len, ?cs);
+//@ ens thread_token(t) &*& [f]integers_(text.ptr, 1, false, text.len, cs);
+{
+    let mut stdout = std::io::stdout();
+    stdout.write(text.as_bytes()).unwrap();
+    std::mem::drop(stdout);
+}
+
 fn main() {
     unsafe {
         let port: u16 = 10000;
         let server_socket = platform::sockets::Socket::listen(port);
+        print("Listening on port 10000...\n");
         let mut buffer = Buffer::new(1000);
         //@ assert Buffer_own(?buf, 1000, 0);
         //@ assert buffer.buffer |-> buf.buffer &*& buffer.size |-> 1000 &*& buffer.length |-> 0;

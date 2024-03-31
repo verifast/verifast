@@ -56,8 +56,31 @@ let rec parse_type = function%parser
     [%let mutability = opt (function%parser [ (_, Kwd "const") ] -> () | [ (_, Kwd "mut") ] -> ()) ];
     parse_type as t
   ] -> ignore mutability; PtrTypeExpr (l, t)
+| [ (l, Kwd "&");
+    [%let mutability  = opt (function%parser [ (_, Kwd "mut") ] -> ())];
+    [%let tp = function%parser
+       [ (ls, Kwd "["); parse_type as elemTp; (_, Kwd "]") ] -> StructTypeExpr (ls, Some "slice_ref", None, [], [elemTp])
+     | [ parse_type as tp ] -> PtrTypeExpr (l, tp)
+    ]
+  ] -> tp
 | [ (l, Kwd "any") ] -> ManifestTypeExpr (l, AnyType)
 | [ (l, Kwd "Self") ] -> IdentTypeExpr (l, None, "Self")
+| [ (l, Kwd "(");
+    [%let tp = function%parser
+       [ (_, Kwd ")") ] -> StructTypeExpr (l, Some "std_tuple_0_", None, [], [])
+     | [ parse_type as tp1;
+         [%let tp = function%parser
+            [ (_, Kwd ")") ] -> tp1
+          | [ (_, Kwd ",");
+              [%let tps = rep_comma parse_type];
+              (_, Kwd ")") ] ->
+              let tps = tp1::tps in
+              let struct_name = Printf.sprintf "std_tuple_%d_" (List.length tps) in
+              StructTypeExpr (l, Some struct_name, None, [], tps)
+         ]
+       ] -> tp
+    ]
+    ] -> tp
 and parse_type_with_opt_name = function%parser
   [ parse_type as t;
     [%let (x, t) = function%parser
@@ -594,17 +617,56 @@ let prefix_decl_name l prefix = function
   PredFamilyInstanceDecl (l, prefix ^ g, tparams, indices, pts, body)
 | _ -> static_error l "Some of these kinds of items are not yet supported here" None
 
+let decl_add_type_params l tparams = function
+  Func (l, k, tparams', rt, g, ps, nonghost_callers_only, ft, co, terminates, body, isVirtual, overrides) ->
+  Func (l, k, tparams @ tparams', rt, g, ps, nonghost_callers_only, ft, co, terminates, body, isVirtual, overrides)
+| _ -> static_error l "Some of these kinds of items are not yet supported here" None
+
+let parse_enum_ctor = function%parser
+  [ (lc, Ident c);
+    [%let ctor = function%parser
+       [ (_, Kwd "("); [%let params = rep_comma parse_type]; (_, Kwd ")") ] ->
+       Ast.Ctor (lc, c, List.mapi (fun i tp -> Printf.sprintf "%d" i, tp) params)
+     | [ (_, Kwd "{"); [%let params = rep_comma parse_param]; (_, Kwd "}") ] ->
+       Ast.Ctor (lc, c, List.map (fun (tp, x) -> (x, tp)) params)
+     | [ ] ->
+       Ast.Ctor (lc, c, [])
+    ]
+  ] -> ctor
+
 let rec parse_decl = function%parser
-  [ (l, Kwd "impl"); (lx, Ident x); (_, Kwd "{");
+  [ (l, Kwd "impl"); parse_type_params as tparams; parse_type as tp; (_, Kwd "{");
+    [%let ds = rep parse_decl];
+    (_, Kwd "}")
+  ] ->
+  let (lx, x, targs) =
+    match tp with
+    | IdentTypeExpr (lx, None, x) -> (lx, x, [])
+    | ConstructedTypeExpr (lx, x, targs) ->
+      let targs = targs |> List.map @@ function
+          IdentTypeExpr (ltarg, None, x) -> x
+        | targ -> static_error (type_expr_loc targ) "This form of type is not yet supported here" None
+      in
+      (lx, x, targs)
+    | _ -> static_error (type_expr_loc tp) "This form of type is not supported here" None
+  in
+  let prefix = x ^ (if targs = [] then "" else "::<" ^ String.concat ", " targs ^ ">") ^ "::" in
+  let ds = ds |> List.flatten |> List.map (prefix_decl_name l prefix) in
+  List.map (decl_add_type_params l tparams) ds
+| [ (l, Kwd "trait"); (lx, Ident x); (_, Kwd "{");
     [%let ds = rep parse_decl];
     (_, Kwd "}")
   ] ->
   let prefix = x ^ "::" in
-  ds |> List.flatten |> List.map (prefix_decl_name l prefix)
+  let ds = ds |> List.flatten |> List.map (prefix_decl_name l prefix) in
+  let ds = List.map (decl_add_type_params l ["Self"]) ds in
+  ds
 | [ (l, Kwd "mod"); (lx, Ident x); (_, Kwd "{");
     [%let ds = rep parse_decl];
     (_, Kwd "}")
   ] -> [ModuleDecl (l, x, [], List.flatten ds)]
+| [ (l, Kwd "type"); (lx, Ident x); parse_type_params as tparams; (_, Kwd "="); parse_type as tp; (_, Kwd ";") ] ->
+  [TypedefDecl (l, tp, x, tparams)]
 | [ (l, Kwd "fn"); [%let d = parse_func_rest Regular] ] -> [d]
 | [ (_, Kwd "unsafe"); (l, Kwd "fn"); [%let d = parse_func_rest Regular] ] -> [d]
 | [ (_, Kwd "struct"); (l, Ident sn); (_, Kwd ";") ] ->
@@ -612,6 +674,13 @@ let rec parse_decl = function%parser
     Struct (l, sn, [], None, []);
     TypedefDecl (l, StructTypeExpr (l, Some sn, None, [], []), sn, [])
   ]
+| [ (_, Kwd "enum"); (l, Ident en); parse_type_params as tparams; (_, Kwd "{");
+    [%let ctors = rep (function%parser
+       [ parse_enum_ctor as ctor;
+         [%let dummy = function%parser [ (_, Kwd ",") ] -> () | [ ] -> ()]
+       ] -> ctor)];
+    (_, Kwd "}")
+  ] -> [Inductive (l, en, tparams, ctors)]
 | [ parse_ghost_decl_block as ds ] -> ds
 
 let parse_decls = function%parser

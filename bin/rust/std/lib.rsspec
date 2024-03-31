@@ -12,6 +12,14 @@ mod intrinsics {
 
 }
 
+mod mem {
+
+    fn drop<T>(value: T);
+    //@ req thread_token(?t) &*& <T>.own(t, value);
+    //@ ens thread_token(t);
+    
+}
+
 mod ptr {
 
     unsafe fn drop_in_place<T>(to_drop: *mut T);
@@ -77,3 +85,48 @@ mod process {
     //@ terminates;
 }
 //Todo @Nima: Edit Rust parser so it substitutes `!` type with std_empty_ union
+
+mod result {
+
+    enum Result<T, E> {
+        Ok(T),
+        Err(E),
+    }
+    
+    //@ pred Result_own<T, E>(t: thread_id_t, v: Result<T, E>);
+    
+    impl<T, E> Result<T, E> {
+    
+        fn unwrap(self: Result<T, E>) -> T;
+        //@ req thread_token(?t) &*& Result_own::<T, E>(t, self);
+        //@ ens thread_token(t);
+    
+    }
+
+}
+
+mod io {
+
+    struct Error;
+    
+    type Result<T> = std::result::Result<T, Error>;
+    
+    trait Write {
+    
+        fn write(self: *Self, buf: &[u8]) -> Result<usize>;
+        //@ req thread_token(?t) &*& *self |-> ?self0 &*& <Self>.own(t, self0) &*& [?f]integers_(buf.ptr, 1, false, buf.len, ?bs);
+        //@ ens thread_token(t) &*& *self |-> ?self1 &*& <Self>.own(t, self1) &*& [f]integers_(buf.ptr, 1, false, buf.len, bs) &*& std::result::Result_own::<usize, Error>(t, result);
+        
+        fn flush(self: *Self) -> Result<()>;
+        //@ req thread_token(?t) &*& *self |-> ?self0 &*& <Self>.own(t, self0);
+        //@ ens thread_token(t) &*& *self |-> ?self1 &*& <Self>.own(t, self1);
+        
+    }
+
+    struct Stdout;
+    
+    fn stdout() -> Stdout;
+    //@ req thread_token(?t);
+    //@ ens thread_token(t) &*& <Stdout>.own(t, result);
+
+}
