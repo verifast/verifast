@@ -19,7 +19,7 @@ i.e. in VeriFast the `[[u32]].OWN` is implicitly persistent.
 */
 
 pred_ctor CellU32_nonatomic_borrow_content(l: *CellU32, t: thread_id_t)(;) =
-  CellU32_v(l, ?v) &*& struct_CellU32_padding(l) &*& CellU32_own(t, v);
+  (*l).v |-> ?v &*& struct_CellU32_padding(l);
 
 // `SHR` for Cell<u32>
 pred CellU32_share(k: lifetime_t, t: thread_id_t, l: *CellU32) =
@@ -59,7 +59,7 @@ lem CellU32_share_full(k: lifetime_t, t: thread_id_t, l: *CellU32)
 @*/
 
 impl CellU32 {
-    fn new(u: u32) -> CellU32 {
+    pub fn new(u: u32) -> CellU32 {
         let c = CellU32 {
             v: std::cell::UnsafeCell::new(u),
         };
@@ -68,7 +68,7 @@ impl CellU32 {
     }
 
     /* VeriFast generates the contract of the safe functions based on the function's semantic type */
-    fn get<'a>(&'a self) -> u32 {
+    pub fn get<'a>(&'a self) -> u32 {
         //@ open CellU32_share(a, _t, self);
         //@ assert [_]nonatomic_borrow(a, _t, ?_m, _);
         //@ open thread_token(_t);
@@ -83,7 +83,7 @@ impl CellU32 {
 
     /* User can also write the contract of safe functions to have it explicit.
     Verifast would check the compatibility of the contract with the function semantic type. */
-    fn set<'a>(&'a self, u: u32)
+    pub fn set<'a>(&'a self, u: u32)
     //@ req thread_token(?t) &*& [?q]lifetime_token(?a) &*& [_]CellU32_share(a, t, self);
     //@ ens thread_token(t) &*& [q]lifetime_token(a);
     {
@@ -101,7 +101,7 @@ impl CellU32 {
         //@ close thread_token(t);
     }
 
-    fn swap<'a>(&'a self, other: &'a Self) {
+    pub fn swap<'a>(&'a self, other: &'a Self) {
         //@ open CellU32_share(a, _t, self);
         //@ open CellU32_share(a, _t, other);
         if self as *const CellU32 == other as *const CellU32 {
