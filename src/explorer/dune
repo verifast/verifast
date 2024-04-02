@@ -1,4 +1,4 @@
 (executable
  (name explorer)
  (preprocess (pps ppx_parser))
- (libraries num verifast))
+ (libraries verifast))
