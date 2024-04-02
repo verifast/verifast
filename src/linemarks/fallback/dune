@@ -2,4 +2,4 @@
  ;; Optional: only available if lablgtk2 is present
  (optional)
  (name linemarks_fallback)
- (libraries lablgtk2))
+ (libraries (re_export lablgtk2)))

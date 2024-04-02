@@ -1,6 +1,6 @@
 (library
  (name cxx_frontend_stubs)
- (libraries capnp capnp.unix)
+ (libraries stdint capnp capnp.unix)
  (wrapped false))
 (rule
  (targets stubs_ast.mli stubs_ast.ml)

@@ -3,8 +3,4 @@
  (optional)
  (name linemarks)
  (libraries
-  (select
-   linemarks.ml
-   from
-   (linemarks_default -> linemarks.default.ml)
-   (linemarks_fallback -> linemarks.fallback.ml))))
+  (re_export linemarks_default)))

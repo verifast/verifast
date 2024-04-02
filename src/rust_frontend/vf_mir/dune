@@ -1,6 +1,6 @@
 (library
  (name vf_mir)
- (libraries capnp))
+ (libraries stdint capnp))
 
 (rule
  (targets vf_mir.mli vf_mir.ml)

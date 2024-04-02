@@ -2,4 +2,4 @@
  (name java_frontend)
  (wrapped false)
  (preprocess (pps ppx_parser))
- (libraries num str threads unix frontend))
+ (libraries camlp-streams num str threads unix (re_export frontend)))

@@ -19,4 +19,4 @@
 (library
  (optional)
  (name branch_png)
- (libraries lablgtk2))
+ (libraries (re_export lablgtk2)))

@@ -4,7 +4,7 @@
  ;; Optional: only available if lablgtk2 and lablgtk2.sourceview2 are present
  (optional)
  (name linemarks_default)
- (libraries lablgtk2 lablgtk2.sourceview2)
+ (libraries (re_export lablgtk2) (re_export lablgtk2.sourceview2))
  ; Pass flags to c compiler when constructing the library
  ; archive file for the C stubs. E.g. to pass -lbar to the linker.
  (c_library_flags

@@ -4,4 +4,4 @@
   (per_module
    ((pps ppx_parser)
     annotation_parser)))
- (libraries frontend cxx_frontend_stubs))
+ (libraries stdint camlp-streams capnp capnp.unix (re_export frontend) cxx_frontend_stubs))

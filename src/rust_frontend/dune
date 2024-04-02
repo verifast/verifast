@@ -1,4 +1,4 @@
 (library
  (name rust_frontend)
  (wrapped false)
- (libraries frontend vf_mir_translator vfconfig capnp.unix))
+ (libraries (re_export frontend) vf_mir_translator vfconfig capnp capnp.unix))

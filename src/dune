@@ -4,7 +4,7 @@
  (c_library_flags
   %{env:OCAMLOPT_CCLIB_FLAGS=}
   -L %{env:Z3_DLL_DIR=../../../lib})
- (libraries num Z3 json perf java_frontend cxx_frontend rust_frontend))
+ (libraries num Z3 stopwatch perf (re_export frontend) java_frontend cxx_frontend rust_frontend))
 (env
   (dev
     ; OCaml warning numbers:
