@@ -853,6 +853,7 @@ and of_stmt = function
     of_list of_stmt ss_finally
   ])
 | Break l -> C ("Break", [of_loc l])
+| Continue l -> C ("Continue", [of_loc l])
 | SuperConstructorCall (l, es) ->
   C ("SuperConstructorCall", [of_loc l; of_list of_expr es])
 and of_loop_spec = function

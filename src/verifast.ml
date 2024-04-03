@@ -154,6 +154,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let l = stmt_loc s in
     if not (is_transparent_stmt s) then begin !stats#stmtExec l; reportStmtExec l end;
     let break_label () = if pure then "#ghostBreak" else "#break" in
+    let continue_label () = if pure then "#ghostContinue" else "#continue" in
     let free_locals closeBraceLoc h tenv env locals cont =
       let rec free_locals_core h locals =
         match locals with
@@ -1727,7 +1728,6 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | WhileStmt (l, e, None, dec, ss, final_ss) ->
       static_error l "Loop invariant required." None
     | WhileStmt (l, e, Some (LoopInv p), dec, ss, final_ss) ->
-      let ss = ss @ final_ss in (* CAVEAT: if we add support for 'continue', this needs to change. *)
       if not pure then begin
         match ss with PureStmt (lp, _)::_ -> static_error lp "Pure statement not allowed here." None | _ -> ()
       end;
@@ -1736,7 +1736,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let break h env = cont h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
       let lblenv = (break_label (), fun blocks_done sizemap tenv ghostenv h env -> break h env)::lblenv in
       let e = check_condition (pn,ilist) tparams tenv e in
-      let xs = (expr_assigned_variables e) @ (block_assigned_variables ss) in
+      let xs = expr_assigned_variables e @ block_assigned_variables ss @ block_assigned_variables final_ss in
       let xs = List.filter (fun x -> match try_assoc x tenv with None -> false | Some (RefType _) -> false | _ -> true) xs in
       let (p, tenv') = check_asn (pn,ilist) tparams tenv p in
       let dec = (match dec with None -> None | Some(e) -> Some(check_expr_t_pure tenv' e intt)) in
@@ -1772,8 +1772,16 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           end
       end $. fun () ->
       begin fun continue ->
+        let lblenv = (continue_label (), fun blocks_done sizemap tenv ghostenv h env -> continue h env)::lblenv in
         verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv' ghostenv' h' env' ss
           (fun _ _ _ h'' env -> continue h'' env)
+          return_cont
+          econt
+      end $. fun h' env' ->
+      let env' = List.filter (fun (x, _) -> List.mem_assoc x tenv) env' in
+      begin fun continue' ->
+        verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv' ghostenv' h' env' final_ss
+          (fun _ _ _ h'' env -> continue' h'' env)
           return_cont
           econt
       end $. fun h' env ->
@@ -1843,7 +1851,6 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         in
         iter [] ss
       in
-      let ss_before = ss_before @ final_ss in
       let xs_ss_after = block_assigned_variables ss_after in
       let exit_loop h' env' cont =
         execute_branch (fun () -> check_post h' env');
@@ -1878,7 +1885,14 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           end
       end $. fun () ->
       begin fun continue ->
+        let lblenv = (continue_label (), fun blocks_done sizemap tenv ghostenv h env -> continue h tenv env)::lblenv in
         verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv'' ghostenv' h' env' ss_before
+          (fun _ tenv''' _ h' env' -> continue h' tenv''' env')
+          return_cont
+          econt
+      end $. fun h' tenv''' env' ->
+      begin fun continue ->
+        verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv''' ghostenv' h' env' final_ss
           (fun _ tenv''' _ h' env' -> free_locals endBodyLoc h' tenv''' env' !locals_to_free (fun h' _ -> continue h' tenv''' env'))
           return_cont
           econt
@@ -2366,6 +2380,11 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | Break l ->
       begin match try_assoc (break_label ()) lblenv with
         None -> static_error l "Unexpected break statement" None
+      | Some cont -> cont blocks_done sizemap tenv ghostenv h env
+      end
+    | Continue l ->
+      begin match try_assoc (continue_label ()) lblenv with
+        None -> static_error l "Unexpected continue statement" None
       | Some cont -> cont blocks_done sizemap tenv ghostenv h env
       end
     | SuperConstructorCall(l, es) -> static_error l "super must be first statement of constructor." None

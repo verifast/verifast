@@ -97,6 +97,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | LabelStmt _ -> []
     | InvariantStmt _ -> []
     | Break _ -> []
+    | Continue _ -> []
     | SuperConstructorCall(_, es) -> flatmap (fun e -> expr_assigned_variables e) es
 
   let get_points_to h p predSymb typeid_env targs l cont =
@@ -1400,7 +1401,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | IfStmt(l, e, ss1, ss2) -> 
         expr_mark_addr_taken e locals; 
         stmts_mark_addr_taken ss1 locals pure (fun locals -> stmts_mark_addr_taken ss2 locals pure (fun _ -> ())); cont locals
-    | LabelStmt _ | GotoStmt _ | NoopStmt _ | Break _ | Throw _ | TryFinally _ | TryCatch _ -> cont locals
+    | LabelStmt _ | GotoStmt _ | NoopStmt _ | Break _ | Continue _ | Throw _ | TryFinally _ | TryCatch _ -> cont locals
     | ReturnStmt(_, Some (Var (_, x) | WVar (_, x, _))) when dialect = Some Cxx && not pure -> mark_if_local locals x
     | ReturnStmt(_, Some(e)) ->  expr_mark_addr_taken e locals; cont locals
     | ReturnStmt(_, None) -> cont locals
@@ -1507,7 +1508,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | ReturnStmt(_, None) -> []
     | WhileStmt(_, e1, loopspecopt, e2, ss, final_ss) -> (expr_address_taken e1) @ (match e2 with None -> [] | Some(e2) -> expr_address_taken e2) @ (List.flatten (List.map (fun s -> stmt_address_taken s) ss)) @ flatmap (stmt_address_taken) final_ss
     | BlockStmt(_, decls, ss, _, _) -> (List.flatten (List.map (fun s -> stmt_address_taken s) ss))
-    | LabelStmt _ | GotoStmt _ | NoopStmt _ | Break _ | Throw _ | TryFinally _ | TryCatch _ -> []
+    | LabelStmt _ | GotoStmt _ | NoopStmt _ | Break _ | Continue _ | Throw _ | TryFinally _ | TryCatch _ -> []
     | _ -> []
   
   let nonempty_pred_symbs =

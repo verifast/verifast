@@ -1912,6 +1912,7 @@ and
 | [ (l, Kwd "break"); 
     (_, Kwd ";") 
   ] -> Break(l)
+| [ (l, Kwd "continue"); (_, Kwd ";") ] -> Continue l
 | [ (l, Kwd "try");
     parse_block as body;
     [%l

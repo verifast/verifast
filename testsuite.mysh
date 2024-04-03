@@ -467,6 +467,7 @@ cd tutorial_solutions
   verifast_both -target 32bit students.c
 cd ..
 cd tests
+  verifast -c continue.c
   verifast -c generic_points_to.c
   verifast -c struct_points_to.c
   verifast -c -prover z3v4.5 generic_points_to.c

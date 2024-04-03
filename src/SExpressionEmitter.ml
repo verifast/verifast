@@ -909,6 +909,8 @@ let rec sexpr_of_stmt (stmt : stmt) : sexpression =
                  ; "stmts2", sexpr_of_list sexpr_of_stmt stmts2 ]
     | Break (loc) ->
       List [ Symbol "stmt-break" ]
+    | Continue loc ->
+      List [ Symbol "stmt-continue" ]
     | SuperConstructorCall (loc, args) ->
       build_list [ Symbol "stmt-supercall" ]
                  [ "arguments", List (List.map sexpr_of_expr args) ]

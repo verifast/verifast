@@ -733,6 +733,7 @@ and
       loc *
       stmt list
   | Break of loc
+  | Continue of loc
   | SuperConstructorCall of loc * expr list
 and
   loop_spec = (* ?loop_spec *)
@@ -1093,6 +1094,7 @@ let stmt_loc s =
   | DuplicateLemmaFunctionPointerChunkStmt (l, _) -> l
   | ProduceFunctionPointerChunkStmt (l, ftn, fpe, targs, args, params, openBraceLoc, ss, closeBraceLoc) -> l
   | Break (l) -> l
+  | Continue l -> l
   | SuperConstructorCall(l, _) -> l
 
 let stmt_fold_open f state s =
