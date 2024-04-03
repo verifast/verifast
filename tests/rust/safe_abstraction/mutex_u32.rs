@@ -3,10 +3,12 @@
 
 /*
 About the definitions:
-    Since in the proof of `MutexU32::lock` we need to close the `frac_borrow`,
-    in the `sys::locks::Mutex` interface; i.e. `SysMutex` fractions required by `sys::locks::Mutex::lock` to lock the mutex should be turened back from the method,
-    we cannot keep track of `SysMutex` fractions used to get the lock. So we adapth an interface for `sys::locks::Mutex` such that it does not care
-    if the mutex is locked or not.
+    Since to have `MutexU32::lock` verified we need to return the `[qa]lifetime_token(a)` back, we need to close the `frac_borrow` before the method ends.
+    To close that `frac_borrow` we need the `SysMutex_share` fraction used to lock the `sys::locks::Mutex` back.
+    That means the spec of `sys::locks::Mutex::lock` must return the `SysMutex_share` fraction it receives.
+    The latter means neither to have a full chunk of `SysMutex_share` nor a full chunk of `SysMutex` means the mutex is unlocked.
+    However, it does not make any problem, because if destroying a locked mutex is an undefined behaviour the implementation of `sys::locks::Mutex::drop`
+    just forgets about the mutex.
 */
 
 /*@
@@ -14,12 +16,12 @@ About the definitions:
 pred sys::locks::Mutex_own(t: thread_id_t, m: *u32);
 pred sys::locks::Mutex_share(k: lifetime_t, t: thread_id_t, l: *sys::locks::Mutex;) = true;
 lem sys::locks::Mutex_share_mono(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *sys::locks::Mutex)
-req lifetime_inclusion(k1, k) == true &*& [_]sys::locks::Mutex_share(k, t, l);
-ens [_]sys::locks::Mutex_share(k1, t, l);
+    req lifetime_inclusion(k1, k) == true &*& [_]sys::locks::Mutex_share(k, t, l);
+    ens [_]sys::locks::Mutex_share(k1, t, l);
 {}
 lem sys::locks::Mutex_share_full(k: lifetime_t, t: thread_id_t, l: *sys::locks::Mutex)
-req full_borrow(k, sys::locks::Mutex_full_borrow_content(t, l)) &*& [?q]lifetime_token(k);
-ens [_]sys::locks::Mutex_share(k, t, l) &*& [q]lifetime_token(k);
+    req full_borrow(k, sys::locks::Mutex_full_borrow_content(t, l)) &*& [?q]lifetime_token(k);
+    ens [_]sys::locks::Mutex_share(k, t, l) &*& [q]lifetime_token(k);
 {
     leak full_borrow(_, _);
 }
