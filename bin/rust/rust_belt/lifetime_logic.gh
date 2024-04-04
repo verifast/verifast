@@ -158,11 +158,11 @@ lemma void close_full_borrow_strong(lifetime_t k1, predicate() P, predicate() Q)
     ensures full_borrow(k1, Q) &*& [q]lifetime_token(k) &*& is_full_borrow_convert_strong(f, Ctx, Q, k1, P);
 
 // LftL-bor-unnest
-predicate_ctor full_borrow_wrapper(lifetime_t k, predicate() P)(;) = full_borrow(k, P);
+predicate_ctor full_borrow_(lifetime_t k, predicate() P)(;) = full_borrow(k, P);
 
 lemma void full_borrow_unnest(lifetime_t k1, lifetime_t k, predicate() P);
     nonghost_callers_only
-    requires full_borrow(k1, full_borrow_wrapper(k, P));
+    requires full_borrow(k1, full_borrow_(k, P));
     ensures full_borrow(lifetime_intersection(k1, k), P);
 
 // LftL-reborrow
@@ -275,6 +275,11 @@ lemma void close_frac_borrow_atomic(predicate(;) P, lifetime_t k);
     requires atomic_mask(?mask) &*& close_frac_borrow_token_atomic(?b, ?q, P, k) &*& (b ? [q]P() : true);
     ensures atomic_mask(mask_union(mask, Nlft));
 
+// frac_bor_iff in RustBelt repo
+lemma void frac_borrow_implies(lifetime_t k, predicate(;) P, predicate(;) P1);
+    requires frac_borrow(k, P) &*& is_implies(?f, P, P1) &*& is_implies(?f1, P1, P);
+    ensures frac_borrow(k, P1) &*& is_implies(f, P, P1) &*& is_implies(f1, P1, P);
+
 // Mask preserving view shifts - mask aware versions. See the documentation about Iris view shifts in general.h
 // LftL-incl
 lemma void lifetime_token_trade_m(lifetime_t k, real q, lifetime_t k1);
@@ -323,7 +328,7 @@ lemma void close_full_borrow_strong_m(lifetime_t k1, predicate() P, predicate() 
 
 // LftL-bor-unnest
 lemma void full_borrow_unnest_m(lifetime_t k1, lifetime_t k, predicate() P);
-    requires atomic_mask(?mask) &*& mask_le(Nlft, mask) == true &*& full_borrow(k1, full_borrow_wrapper(k, P));
+    requires atomic_mask(?mask) &*& mask_le(Nlft, mask) == true &*& full_borrow(k1, full_borrow_(k, P));
     ensures atomic_mask(mask) &*& full_borrow(lifetime_intersection(k1, k), P);
 
 lemma void reborrow_m(lifetime_t k1, lifetime_t k, predicate() P);
