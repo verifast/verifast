@@ -96,6 +96,8 @@ type_pred_decl predicate(thread_id_t, Self) <Self>.own;
 type_pred_decl fixpoint(thread_id_t, void *, predicate()) <Self>.full_borrow_content;
 type_pred_decl predicate(lifetime_t, thread_id_t, void *) <Self>.share;
 
+predicate_ctor own<T>(thread_id_t t)(T v) = (<T>.own)(t, v);
+
 type_pred_def <bool>.own = bool_own;
 //TODO: How to deal with Rust type `char`? Distinct Rust types should be mapped to distinct VF types, with distinct typeids.
 type_pred_def <void *>.own = raw_ptr_own;

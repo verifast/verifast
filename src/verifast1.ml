@@ -5771,14 +5771,14 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let has_type_symb = lazy_purefuncsymb "has_type"
 
   let mk_ptr_add p off = mk_app (ptr_add_symb ()) [p; off]
-  let rec mk_ptr_add_ l p off elemType =
+  let rec mk_ptr_add_ l env p off elemType =
     match elemType with
       Void|Int (_, CharRank) ->
       mk_app (ptr_add_symb ()) [p; off]
     | StaticArrayType (elemTp, elemCount) ->
-      mk_ptr_add_ l p (ctxt#mk_mul off (ctxt#mk_intlit elemCount)) elemTp
+      mk_ptr_add_ l env p (ctxt#mk_mul off (ctxt#mk_intlit elemCount)) elemTp
     | _ ->
-      mk_app (ptr_add__symb ()) [p; off; typeid_of l elemType]
+      mk_app (ptr_add__symb ()) [p; off; typeid_of_core l env elemType]
   let mk_field_ptr p structTypeid off = mk_app (field_ptr_symb ()) [p; structTypeid; off]
   let mk_field_ptr_ l env p targs structTypeidFunc offsetFunc =
     let targ_typeids = List.map (typeid_of_core l env) targs in
@@ -6072,7 +6072,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let p = new predref predname [PtrType Void; intType; Bool; intType; list_type pred_elemtype] (Some 4) in
             (WPredAsn (l, p, true, [], [], [LitPat wfirst; LitPat (SizeofExpr (l, TypeExpr (ManifestTypeExpr (l, elemtype)))); LitPat (if signedness = Signed then True l else False l); wlength; wrhs]), tenv, [])
           | None ->
-            static_error l (Printf.sprintf "Array points-to notation is not supported for element type '%s'" (string_of_type elemtype)) None
+            let array_pred_name, elemtype' = if wrhs = DummyPat then "array_", option_type elemtype else "array", elemtype in
+            let p = new predref array_pred_name [PtrType elemtype; intType; list_type elemtype'] (Some 2) in
+            (WPredAsn (l, p, true, [elemtype], [], [LitPat wfirst; wlength; wrhs]), tenv, [])
           end
         | Java ->
           let elemtype =
@@ -7458,7 +7460,7 @@ let check_if_list_is_defined () =
     end;
     v
 
-  let eval_op l truncating op e1 v1 e2 v2 t ass_term =
+  let eval_op l env truncating op e1 v1 e2 v2 t ass_term =
     let check_overflow0 v =
       begin match ass_term with
         Some assert_term ->
@@ -7493,7 +7495,7 @@ let check_if_list_is_defined () =
       | Int (_, _) ->
         check_overflow (ctxt#mk_add v1 v2)
       | PtrType t ->
-        check_pointer_within_limits ass_term l (mk_ptr_add_ l v1 v2 t)
+        check_pointer_within_limits ass_term l (mk_ptr_add_ l env v1 v2 t)
       | RealType ->
         ctxt#mk_real_add v1 v2
       end
@@ -7502,7 +7504,7 @@ let check_if_list_is_defined () =
         Int (_, _) ->
         check_overflow (ctxt#mk_sub v1 v2)
       | PtrType t ->
-        check_pointer_within_limits ass_term l (mk_ptr_add_ l v1 (ctxt#mk_sub int_zero_term v2) t)
+        check_pointer_within_limits ass_term l (mk_ptr_add_ l env v1 (ctxt#mk_sub int_zero_term v2) t)
       | RealType ->
         ctxt#mk_real_sub v1 v2
       end
@@ -7830,9 +7832,9 @@ let check_if_list_is_defined () =
       end;
       cont state v
     | TruncatingExpr (l, WOperation (lo, op, ([e1; e2] as es), t)) ->
-      evs state es $. fun state [v1; v2] -> cont state (eval_op l true op e1 v1 e2 v2 t ass_term)
+      evs state es $. fun state [v1; v2] -> cont state (eval_op l env true op e1 v1 e2 v2 t ass_term)
     | WOperation (l, op, ([e1; e2] as es), t) ->
-      evs state es $. fun state [v1; v2] -> cont state (eval_op l false op e1 v1 e2 v2 t ass_term)
+      evs state es $. fun state [v1; v2] -> cont state (eval_op l env false op e1 v1 e2 v2 t ass_term)
     | ArrayLengthExpr (l, e) ->
       ev state e $. fun state t ->
       begin match ass_term with
@@ -7905,7 +7907,7 @@ let check_if_list_is_defined () =
         | WReadArray (le, w1, tp, w2) ->
           ev state w1 $. fun state arr ->
           ev state w2 $. fun state index ->
-          cont state (check_pointer_within_limits ass_term le (mk_ptr_add_ le arr index tp))
+          cont state (check_pointer_within_limits ass_term le (mk_ptr_add_ le env arr index tp))
         | WVar (l, x, GlobalName) ->
           let Some (l, tp, symbol, init) = try_assoc x globalmap in cont state symbol
         (* The address of a function symbol is commonly used in the

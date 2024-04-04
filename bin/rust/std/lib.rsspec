@@ -29,6 +29,7 @@ mod ptr {
 }
 
 mod alloc {
+
     impl Layout {
 
         fn from_size_align_unchecked(size: usize, align: usize) -> usize;
@@ -71,6 +72,9 @@ mod alloc {
     //@ req true;
     //@ ens false;
     //@ terminates;
+    
+    struct Global;
+    
 }
 
 mod process {
@@ -103,6 +107,55 @@ mod result {
     
     }
 
+}
+
+mod vec {
+
+    struct Vec<T, A>;
+    
+    //@ pred Vec<T, A>(self: Vec<T, A>, capacity: usize, elems: list<T>); // This predicate does *not* assert ownership of the elements.
+    //@ pred Vec_minus_buffer<T, A>(self: Vec<T, A>, capacity: usize, len: usize, buffer: *T);
+    
+    /*@
+    
+    lem Vec_separate_buffer<T, A>(self: Vec<T, A>);
+        req [?f]Vec::<T, A>(self, ?capacity, ?elems);
+        ens [f]Vec_minus_buffer::<T, A>(self, capacity, length(elems), ?buffer) &*& [f]buffer[..length(elems)] |-> elems &*& [f]buffer[length(elems)..capacity] |-> _;
+    
+    lem Vec_unseparate_buffer<T, A>(self: Vec<T, A>);
+        req [?f]Vec_minus_buffer::<T, A>(self, ?capacity, ?len, ?buffer) &*& [f]buffer[..len] |-> ?elems &*& [f]buffer[len..capacity] |-> _;
+        ens [f]Vec::<T, A>(self, capacity, elems);
+    
+    lem Vec_to_own<T, A>(self: Vec<T, A>);
+        req thread_token(?t) &*& Vec::<T, A>(self, ?capacity, ?elems) &*& foreach(elems, own::<T>(t));
+        ens thread_token(t) &*& <Vec<T, A>>.own(t, self);
+    
+    @*/
+    
+    impl<T> Vec<T> {
+    
+        fn new() -> Vec<T, std::alloc::Global>;
+        //@ req true;
+        //@ ens Vec(result, _, []);
+    
+    }
+    
+    impl<T, A> Vec<T, A> {
+    
+        fn len(self: *Vec<T, A>) -> usize;
+        //@ req [?f](*self |-> ?self_) &*& [f]Vec::<T, A>(self_, ?capacity, ?elems);
+        //@ ens [f](*self |-> self_) &*& [f]Vec::<T, A>(self_, capacity, elems) &*& result == length(elems);
+    
+        fn push(self: *Vec<T, A>, elem: T);
+        //@ req *self |-> ?self0 &*& Vec::<T, A>(self0, _, ?elems0);
+        //@ ens *self |-> ?self1 &*& Vec::<T, A>(self1, _, append(elems0, [elem]));
+        
+        fn as_ptr(self: *Vec<T, A>) -> *T;
+        //@ req [?f](*self |-> ?self_) &*& [f]Vec_minus_buffer::<T, A>(self_, ?capacity, ?len, ?buffer);
+        //@ ens [f](*self |-> self_) &*& [f]Vec_minus_buffer::<T, A>(self_, capacity, len, buffer) &*& result == buffer;
+
+    }
+    
 }
 
 mod io {

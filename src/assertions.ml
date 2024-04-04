@@ -257,6 +257,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       iter [] h
 
   let produce_points_to_chunk l h type_ coef addr value cont =
+    let type_ = unfold_inferred_type type_ in
     begin fun cont ->
       if coef != real_unit && coef != real_half then
         assume (ctxt#mk_real_lt real_zero coef) cont
@@ -305,7 +306,14 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     produce_chunk h (symbol, true) [] coef (Some 2) (family_target :: index :: arguments) size_first @@ fun h ->
     cont h family_target
 
-  let rec produce_asn_core_with_post tpenv h ghostenv env p coef size_first size_all (assuming: bool) cont_with_post: symexec_result =
+  let typeid_env_of_tpenv l env tpenv =
+    tpenv |> flatmap @@ fun (tparam, tp) ->
+      if tparam_carries_typeid tparam then
+        [(tparam ^ "_typeid", typeid_of_core l env tp)]
+      else
+        []
+
+    let rec produce_asn_core_with_post tpenv h ghostenv env p coef size_first size_all (assuming: bool) cont_with_post: symexec_result =
     let cont h env ghostenv = cont_with_post h env ghostenv None in
     let with_context_helper cont =
       match p with
@@ -388,10 +396,11 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | Some ((frac, tparams, xs1, xs2, pre, post), declared_paramtypes) ->
           let ts = List.map (fun (t, (tp0, tp)) -> prover_convert_term t tp0 tp) (zip2 ts (zip2 domain declared_paramtypes)) in
           let produce_post env' =
-            let env'' = env' @ zip2 (xs1@xs2) ts in
+            let tpenv = zip2 tparams targs in
+            let env'' = env' @ zip2 (xs1@xs2) ts @ typeid_env_of_tpenv l env tpenv in
             with_context PushSubcontext $. fun () ->
             with_context (Executing (h, env'', l, "Applying autolemma")) $. fun () ->
-            produce_asn_core_with_post (zip2 tparams targs) h [] env'' post real_unit size_first size_all true $. fun h_ _ _ _ ->
+            produce_asn_core_with_post tpenv h [] env'' post real_unit size_first size_all true $. fun h_ _ _ _ ->
             with_context PopSubcontext $. fun () ->
             cont h_ ghostenv env
           in
@@ -808,7 +817,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     match slices with
       None ->
-        begin match lookup_integer__chunk_core h (mk_ptr_add_ l a i tp) k signedness with
+        begin match lookup_integer__chunk_core h (mk_ptr_add_ l env a i tp) k signedness with
           None ->
           assert_false h env l
             (sprintf "No matching array chunk: integers_(%s, %s, %s, 0<=%s<n, _)"
@@ -840,7 +849,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     match slices with
       None ->
-        begin match lookup_points_to_chunk_core h predsym [] (mk_ptr_add_ l a i tp) with
+        begin match lookup_points_to_chunk_core h predsym [] (mk_ptr_add_ l env a i tp) with
           None ->
           assert_false h env l
             (sprintf "No matching array chunk: %s(%s, 0<=%s<n, _)"
@@ -1052,6 +1061,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let dummypat = SrcPat DummyPat
   
   let consume_points_to_chunk__core rules h typeid_env ghostenv env env' l type0 type_ coef coefpat addr rhs consumeUninitChunk cont =
+    let type_ = unfold_inferred_type type_ in
     let tp0, tp =
       if consumeUninitChunk && rhs = dummypat then
         option_type type0, option_type type_
@@ -1353,13 +1363,6 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       end
       predinstmap
   
-  let typeid_env_of_tpenv l env tpenv =
-    tpenv |> flatmap @@ fun (tparam, tp) ->
-      if tparam_carries_typeid tparam then
-        [(tparam ^ "_typeid", typeid_of_core l env tp)]
-      else
-        []
-
   (* Those predicate instances that, under certain conditions on the input parameters, are likely to be closeable. *)
   let empty_preds =
     flatmap
