@@ -212,6 +212,15 @@ let rec parse_expr_funcs allowStructExprs =
       let args = args |> List.map @@ function LitPat e -> e | _ -> static_error l "Patterns are not supported as arguments here" None in
       ExprCallExpr (l, e, args)
     end
+  | [ (l, Kwd "[");
+      [%let p1 = opt parse_pat];
+      [%let index = function%parser
+         [ (li, Kwd ".."); [%let p2 = opt parse_pat] ] -> SliceExpr (li, p1, p2)
+       | [ ] -> match p1 with Some (LitPat e) -> e | _ -> static_error l "Malformed array access" None
+      ];
+      (_, Kwd "]");
+      [%let e = parse_suffix (ReadArray (l, e, index))]
+    ] -> e
   | [] -> e
   and parse_struct_expr_field_rest lf f = function%parser
     [ (_, Kwd ":"); parse_expr as e ] -> (Some (lf, f), e)
@@ -669,10 +678,11 @@ let rec parse_decl = function%parser
   [TypedefDecl (l, tp, x, tparams)]
 | [ (l, Kwd "fn"); [%let d = parse_func_rest Regular] ] -> [d]
 | [ (_, Kwd "unsafe"); (l, Kwd "fn"); [%let d = parse_func_rest Regular] ] -> [d]
-| [ (_, Kwd "struct"); (l, Ident sn); (_, Kwd ";") ] ->
+| [ (_, Kwd "struct"); (l, Ident sn); parse_type_params as tparams; (_, Kwd ";") ] ->
   [
-    Struct (l, sn, [], None, []);
-    TypedefDecl (l, StructTypeExpr (l, Some sn, None, [], []), sn, [])
+    Struct (l, sn, tparams, None, []);
+    let targs = List.map (fun x -> IdentTypeExpr (l, None, x)) tparams in
+    TypedefDecl (l, StructTypeExpr (l, Some sn, None, [], targs), sn, tparams)
   ]
 | [ (_, Kwd "enum"); (l, Ident en); parse_type_params as tparams; (_, Kwd "{");
     [%let ctors = rep (function%parser

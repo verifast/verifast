@@ -986,6 +986,24 @@ predicate long_doubles(long double *p, int count; list<long double> values) =
     :
         long_double(p, ?value) &*& long_doubles(p + 1, count - 1, ?values0) &*& values == cons(value, values0);
 
+predicate array_<T>(T *p, int count; list<option<T> > values) =
+    pointer_within_limits(p) == true &*&
+    count == 0 ?
+        values == nil
+    :
+        generic_points_to_(p, ?value) &*& array_(p + 1, count - 1, ?values0) &*& values == cons(value, values0);
+
+predicate array<T>(T *p, int count; list<T> values) =
+    pointer_within_limits(p) == true &*&
+    count == 0 ?
+        values == nil
+    :
+        *p |-> ?value &*& array(p + 1, count - 1, ?values0) &*& values == cons(value, values0);
+
+lemma_auto void array_inv<T>();
+    requires [?f]array<T>(?p, ?count, ?elems);
+    ensures [f]array<T>(p, count, elems) &*& count == length(elems) &*& pointer_within_limits(p) == true &*& pointer_within_limits(p + count) == true;
+
 predicate divrem(int D, int d; int q, int r); // Rounds towards negative infinity, unlike C integer division and remainder.
 
 lemma void divrem_intro(int D, int d, int q, int r);
