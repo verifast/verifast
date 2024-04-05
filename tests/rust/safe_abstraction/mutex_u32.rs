@@ -36,7 +36,6 @@ lem SysMutex_end_share(l: *sys::locks::Mutex);
    req SysMutex_share(l, ?P);
    ens *l |-> ?m &*& SysMutex(m, P);
 
-pred SysMutex::new_ghost_arg(P: pred()) = true;
 pred SysMutex_locked(l: *sys::locks::Mutex, P: pred(); t: thread_id_t);
 
 lem SysMutex_renew(m: sys::locks::Mutex, Q: pred());
@@ -76,13 +75,13 @@ mod sys {
 
         impl Mutex {
             pub unsafe fn new() -> Mutex
-            //@ req SysMutex::new_ghost_arg(?P) &*& P();
+            //@ req exists::<pred()>(?P) &*& P();
             //@ ens SysMutex(result, P);
             {
                 abort();
             }
 
-            // Todo: Use `current_thread` var in `SysMutex_locked` like in the `threading.h`. The `SysMutex` interface does not need `thread_token` in the contracts.
+            // TODO: Use `current_thread` var in `SysMutex_locked` like in the `threading.h`. The `SysMutex` interface does not need `thread_token` in the contracts.
             pub unsafe fn lock<'a>(&'a self)
             //@ req thread_token(?t) &*& [?q]SysMutex_share(self, ?P);
             //@ ens thread_token(t) &*& [q]SysMutex_share(self, P) &*& SysMutex_locked(self, P, t) &*& P();
@@ -97,7 +96,7 @@ mod sys {
                 abort();
             }
 
-            // Todo: impl Drop for Mutex
+            // TODO: impl Drop for Mutex
             unsafe fn drop<'a>(&'a mut self)
             //@ req (*self) |-> ?m &*& SysMutex(m, _);
             //@ ens (*self) |-> m;
@@ -113,7 +112,7 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
-// Todo: MutexU32 should be public type
+// TODO: MutexU32 should be public type
 struct MutexU32 {
     inner: sys::locks::Mutex,
     data: UnsafeCell<u32>,
@@ -144,7 +143,7 @@ lem MutexU32_share_mono(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *Mutex
     open MutexU32_share(k, t, l); assert [_]exists_np(?kfcc);
     frac_borrow_mono(k, k1, MutexU32_frac_borrow_content(kfcc, t, l));
     assert [?q]frac_borrow(k1, _); close [q]exists_np(kfcc);
-    // Todo: Why does VeriFast not just close using any dummy fraction when it is trying to close a dummy fraction?
+    // TODO: Why does VeriFast not just close using any dummy fraction when it is trying to close a dummy fraction?
     lifetime_inclusion_trans(k1, k, kfcc);
     close [q]MutexU32_share(k1, t, l);
 }
@@ -290,11 +289,11 @@ lem MutexU32_sync(t: thread_id_t, t1: thread_id_t)
 
 impl MutexU32 {
     pub fn new(v: u32) -> MutexU32 {
-        //@ close SysMutex::new_ghost_arg(True);
+        //@ close exists::<pred()>(True);
         let inner = unsafe { sys::locks::Mutex::new() };
         let data = UnsafeCell::new(v);
         let r = MutexU32 { inner, data };
-        // Todo: Dereferencing a pointer of type struct sys::locks::Mutex is not yet supported.
+        // TODO: Dereferencing a pointer of type struct sys::locks::Mutex is not yet supported.
         // close MutexU32_own(_t, inner, data); Next line is a workaround
         //@ close MutexU32_own(_t, sys::locks::Mutex { m: inner.m }, data);
         r
@@ -325,7 +324,7 @@ impl MutexU32 {
     }
 }
 
-/* Todo: MutexGuardU32 should be defined as
+/* TODO: MutexGuardU32 should be defined as
 pub struct MutexGuardU32<'a> {
     lock: &'a MutexU32,
 }
@@ -349,7 +348,7 @@ lem MutexGuardU32_sync(km: lifetime_t, t: thread_id_t, t1: thread_id_t)
 @*/
 
 /*@
-// Todo: Is this extra lifetime `klong` necessary here?
+// TODO: Is this extra lifetime `klong` necessary here?
 pred_ctor MutexGuardU32_own(km: lifetime_t)(t: thread_id_t, lock: *MutexU32) =
     [_]exists_np(?klong) &*& lifetime_inclusion(km, klong) == true &*& [_]frac_borrow(km, MutexU32_frac_borrow_content(klong, t, lock))
     &*& SysMutex_locked(&(*lock).inner, full_borrow_(klong, u32_full_borrow_content(t, &(*lock).data)), t)
@@ -384,10 +383,10 @@ lem MutexGuardU32_full_share(k: lifetime_t, t: thread_id_t, l: *MutexGuardU32)
 @*/
 impl MutexGuardU32 {
     unsafe fn new<'a>(lock: &'a MutexU32) -> MutexGuardU32
-/*@ req thread_token(?t) &*& [?qa]lifetime_token(?a) &*& [_]exists_np(?km) &*& lifetime_inclusion(a, km) == true
-    &*& [_]frac_borrow(a, MutexU32_frac_borrow_content(km, t, lock))
-    &*& SysMutex_locked(&(*lock).inner, full_borrow_(km, u32_full_borrow_content(t, &(*lock).data)), t)
-    &*& full_borrow(km, u32_full_borrow_content(t, &(*lock).data));
+    /*@ req thread_token(?t) &*& [?qa]lifetime_token(?a) &*& [_]exists_np(?km) &*& lifetime_inclusion(a, km) == true
+        &*& [_]frac_borrow(a, MutexU32_frac_borrow_content(km, t, lock))
+        &*& SysMutex_locked(&(*lock).inner, full_borrow_(km, u32_full_borrow_content(t, &(*lock).data)), t)
+        &*& full_borrow(km, u32_full_borrow_content(t, &(*lock).data));
     @*/
     //@ ens thread_token(t) &*& [qa]lifetime_token(a) &*& MutexGuardU32_own(a)(t, result.lock);
     {
@@ -396,14 +395,14 @@ impl MutexGuardU32 {
     }
 
     /*
-    Todo: deref_mut should be in the implementation of the trait `DerefMut`. Support for the implementation for standard library traits is
+    TODO: deref_mut should be in the implementation of the trait `DerefMut`. Support for the implementation for standard library traits is
     needed for that.
-    Todo: deref_mut should be a safe function */
+    TODO: deref_mut should be a safe function */
     unsafe fn deref_mut<'a>(&'a mut self) -> &'a mut u32
     /*@ req thread_token(?t) &*& [?qa]lifetime_token(?a) &*& exists(?km)
         &*& full_borrow(a, MutexGuardU32_full_borrow_content0(km, t, self))
         &*& lifetime_inclusion(a, km) == true;
-    /* Todo: This inclusion must be generated automatically by translator based on reference and its target lifetimes.
+    /* TODO: This inclusion must be generated automatically by translator based on reference and its target lifetimes.
        The target lifetimes always outlive reference lifetime out of compiler guarantees of wellformedness of types.
     */
     @*/
@@ -452,14 +451,14 @@ impl MutexGuardU32 {
         //@ leak full_borrow(kstrong, _);
         r
     }
-    /* Todo: Since the single parameter of `drop` is a mutable reference, when we open the full borrow and destroy the meaning of `[[T]].OWN`
+    /* TODO: Since the single parameter of `drop` is a mutable reference, when we open the full borrow and destroy the meaning of `[[T]].OWN`
     we will not be able to close borrow again. It is fine because the value is getting dropped and will not get used after our borrow lifetime ends.
     However, to get our lifetime back we need to close the borrow wich after destroying the `Own` predicate is not always possible.
     One way to handle this is to generate a different contract for `drop` implementations which does not return the lifetime token corresponding to lifetime
     of the mutable reference. It will represent the fact that we know for this special case, i.e. `drop` this external lifetime will immediately end
     after this function call and the original value will not be used afterward too.
     */
-    // Todo: It should be an `impl` of `Drop` and a safe function
+    // TODO: It should be an `impl` of `Drop` and a safe function
     unsafe fn drop<'a>(&'a mut self)
     /*@ req thread_token(?t) &*& [?qa]lifetime_token(?a) &*& exists(?km)
         &*& full_borrow(a, MutexGuardU32_full_borrow_content0(km, t, self)) &*& lifetime_inclusion(a, km) == true;
