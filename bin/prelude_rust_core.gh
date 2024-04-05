@@ -1004,6 +1004,22 @@ lemma_auto void array_inv<T>();
     requires [?f]array<T>(?p, ?count, ?elems);
     ensures [f]array<T>(p, count, elems) &*& count == length(elems) &*& pointer_within_limits(p) == true &*& pointer_within_limits(p + count) == true;
 
+lemma void u8_array__to_integers__(unsigned __int8 *p);
+    requires [?f]array_<unsigned __int8>(p, ?count, ?elems);
+    ensures [f]integers__(p, 1, false, count, elems);
+
+lemma void u8_array_to_integers_(unsigned __int8 *p);
+    requires [?f]array<unsigned __int8>(p, ?count, ?elems);
+    ensures [f]integers_(p, 1, false, count, elems);
+
+lemma void integers___to_u8_array_(unsigned __int8 *p);
+    requires [?f]integers__(p, 1, false, ?count, ?elems);
+    ensures [f]array_(p, count, elems);
+
+lemma void integers__to_u8_array(unsigned __int8 *p);
+    requires [?f]integers_(p, 1, false, ?count, ?elems);
+    ensures [f]array(p, count, elems);
+
 predicate divrem(int D, int d; int q, int r); // Rounds towards negative infinity, unlike C integer division and remainder.
 
 lemma void divrem_intro(int D, int d, int q, int r);

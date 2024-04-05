@@ -118,9 +118,13 @@ mod vec {
     
     /*@
     
-    lem Vec_separate_buffer<T, A>(self: Vec<T, A>);
+    lem_auto Vec_inv<T, A>();
+        req [?f]Vec::<T, A>(?vec, ?capacity, ?elems);
+        ens [f]Vec::<T, A>(vec, capacity, elems) &*& length(elems) <= capacity &*& capacity <= isize::MAX;
+    
+    lem Vec_separate_buffer<T, A>(self: Vec<T, A>) -> *T;
         req [?f]Vec::<T, A>(self, ?capacity, ?elems);
-        ens [f]Vec_minus_buffer::<T, A>(self, capacity, length(elems), ?buffer) &*& [f]buffer[..length(elems)] |-> elems &*& [f]buffer[length(elems)..capacity] |-> _;
+        ens [f]Vec_minus_buffer::<T, A>(self, capacity, length(elems), result) &*& [f]result[..length(elems)] |-> elems &*& [f]result[length(elems)..capacity] |-> _;
     
     lem Vec_unseparate_buffer<T, A>(self: Vec<T, A>);
         req [?f]Vec_minus_buffer::<T, A>(self, ?capacity, ?len, ?buffer) &*& [f]buffer[..len] |-> ?elems &*& [f]buffer[len..capacity] |-> _;
@@ -150,10 +154,26 @@ mod vec {
         //@ req *self |-> ?self0 &*& Vec::<T, A>(self0, _, ?elems0);
         //@ ens *self |-> ?self1 &*& Vec::<T, A>(self1, _, append(elems0, [elem]));
         
-        fn as_ptr(self: *Vec<T, A>) -> *T;
+        fn reserve(self: *Vec<T, A>, additional: usize);
+        //@ req *self |-> ?self0 &*& Vec::<T, A>(self0, _, ?elems);
+        //@ ens *self |-> ?self1 &*& Vec::<T, A>(self1, ?capacity, elems) &*& length(elems) + additional <= capacity;
+        
+        fn as_mut_ptr(self: *Vec<T, A>) -> *mut T;
+        //@ req [?f](*self |-> ?self_) &*& [f]Vec_minus_buffer::<T, A>(self_, ?capacity, ?len, ?buffer);
+        //@ ens [f](*self |-> self_) &*& [f]Vec_minus_buffer::<T, A>(self_, capacity, len, buffer) &*& result == buffer;
+        
+        fn as_ptr(self: *Vec<T, A>) -> *const T;
         //@ req [?f](*self |-> ?self_) &*& [f]Vec_minus_buffer::<T, A>(self_, ?capacity, ?len, ?buffer);
         //@ ens [f](*self |-> self_) &*& [f]Vec_minus_buffer::<T, A>(self_, capacity, len, buffer) &*& result == buffer;
 
+        fn spare_capacity_mut(self: *Vec<T, A>) -> &[T];
+        //@ req [?f](*self |-> ?self_) &*& [f]Vec_minus_buffer::<T, A>(self_, ?capacity, ?len, ?buffer);
+        //@ ens [f](*self |-> self_) &*& [f]Vec_minus_buffer::<T, A>(self_, capacity, len, buffer) &*& result.ptr == buffer + len &*& result.len == capacity - len;
+
+        fn set_len(self: *Vec<T, A>, new_len: usize);
+        //@ req *self |-> ?self0 &*& Vec_minus_buffer::<T, A>(self0, ?capacity, ?len, ?buffer) &*& new_len <= capacity;
+        //@ ens *self |-> ?self1 &*& Vec_minus_buffer::<T, A>(self1, capacity, new_len, buffer);
+        
     }
     
 }
