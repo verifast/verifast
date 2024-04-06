@@ -451,106 +451,24 @@ impl MutexGuardU32 {
         //@ leak full_borrow(kstrong, _);
         r
     }
-    /* TODO: Since the single parameter of `drop` is a mutable reference, when we open the full borrow and destroy the meaning of `[[T]].OWN`
-    we will not be able to close borrow again. It is fine because the value is getting dropped and will not get used after our borrow lifetime ends.
-    However, to get our lifetime back we need to close the borrow wich after destroying the `Own` predicate is not always possible.
-    One way to handle this is to generate a different contract for `drop` implementations which does not return the lifetime token corresponding to lifetime
-    of the mutable reference. It will represent the fact that we know for this special case, i.e. `drop` this external lifetime will immediately end
-    after this function call and the original value will not be used afterward too.
-    */
+
     // TODO: It should be an `impl` of `Drop` and a safe function
     unsafe fn drop<'a>(&'a mut self)
-    /*@ req thread_token(?t) &*& [?qa]lifetime_token(?a) &*& exists(?km)
-        &*& full_borrow(a, MutexGuardU32_full_borrow_content0(km, t, self)) &*& lifetime_inclusion(a, km) == true;
-    @*/
-    //@ ens thread_token(t) /* &*& [qa]lifetime_token(a) */; // read the comment above
+    //@ req thread_token(?t) &*& exists(?km) &*& [?qkm]lifetime_token(km) &*& MutexGuardU32_full_borrow_content0(km, t, self)();
+    //@ ens thread_token(t) &*& [qkm]lifetime_token(km) &*& (*self).lock |-> ?lock &*& [_]MutexU32_share(km, t, lock);
     {
-        //@ open_full_borrow(qa/2, a, MutexGuardU32_full_borrow_content0(km, t, self));
         //@ open MutexGuardU32_full_borrow_content0(km, t, self)();
         //@ open MutexGuardU32_own(km)(t, ?lock);
-        //@ assert [_]exists_np(?kmlong);
-        //@ lifetime_token_trade(a, qa/2, km);
-        //@ assert [?qkm]lifetime_token(km);
+        //@ open [_]exists_np(?kmlong);
         //@ open_frac_borrow(km, MutexU32_frac_borrow_content(kmlong, t, lock), qkm);
         //@ open MutexU32_frac_borrow_content(kmlong, t, lock)();
         unsafe {
             (*self.lock).inner.unlock();
         }
         //@ assert [?qp]SysMutex_share(&(*lock).inner, _);
-        //@ close [qp]MutexU32_frac_borrow_content(kmlong, t, lock)();
         //@ close_frac_borrow(qp, MutexU32_frac_borrow_content(kmlong, t, lock));
-        //@ lifetime_token_trade_back(qkm, km);
-        //@ leak (*self).lock |-> _;
-        //@ leak close_full_borrow_token(_, _, _);
-        //@ leak [_]lifetime_token(a);
+        //@ assert [?qfrac]frac_borrow(km, _);
+        //@ close [qfrac]exists_np(kmlong);
+        //@ close [qfrac]MutexU32_share(km, t, lock);
     }
 }
-// /*
-// impl MutexU32 {
-//     pub fn new(v: u32) -> MutexU32 {
-//         MutexU32 {
-//             inner: unsafe { sys::locks::Mutex::new() },
-//             data: UnsafeCell::new(v),
-//         }
-//     }
-
-//     pub fn lock<'a>(&'a self) -> MutexGuardU32/*<'a>*/ {
-//         unsafe {
-//             self.inner.lock();
-//             MutexGuardU32::new(self)
-//         }
-//     }
-
-//     pub fn unlock<'a>(guard: MutexGuardU32/*<'a>*/) {
-//         drop(guard);
-//     }
-// }
-// */
-// /*
-// impl MutexU32 {
-//     pub fn new(v: u32) -> MutexU32 {
-//         MutexU32 {
-//             inner: sys::locks::Mutex::new(),
-//             data: UnsafeCell::new(v),
-//         }
-//     }
-
-//     pub fn lock<'a>(&'a self) -> MutexGuardU32<'a> {
-//         unsafe {
-//             self.inner.lock();
-//             MutexGuardU32::new(self)
-//         }
-//     }
-
-//     pub fn unlock<'a>(guard: MutexGuardU32<'a>) {
-//         drop(guard);
-//     }
-// }
-
-// impl<'mutex> MutexGuardU32<'mutex> {
-//     unsafe fn new(lock: &'mutex MutexU32) -> MutexGuardU32<'mutex> {
-//         MutexGuardU32 { lock }
-//     }
-// }
-
-// impl Deref for MutexGuardU32<'_> {
-//     type Target = u32;
-//     fn deref<'a>(&'a self) -> &'a u32 {
-//         unsafe { &*self.lock.data.get() }
-//     }
-// }
-
-// impl DerefMut for MutexGuardU32<'_> {
-//     fn deref_mut<'a>(&'a mut self) -> &'a mut u32 {
-//         unsafe { &mut *self.lock.data.get() }
-//     }
-// }
-
-// impl Drop for MutexGuardU32<'_> {
-//     fn drop<'a>(&'a mut self) {
-//         unsafe {
-//             self.lock.inner.unlock();
-//         }
-//     }
-// }
-// */
