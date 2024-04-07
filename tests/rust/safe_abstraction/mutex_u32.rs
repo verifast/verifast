@@ -98,33 +98,32 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
-// TODO: MutexU32 should be public type
 pub struct MutexU32 {
     inner: sys::locks::Mutex,
     data: UnsafeCell<u32>,
 }
 
-unsafe impl Send for MutexU32 {}
-unsafe impl Sync for MutexU32 {}
-
 /*@
+
 pred True(;) = true;
 pred MutexU32_own(t: thread_id_t, inner: sys::locks::Mutex, data: u32) = SysMutex(inner, True);
 
 pred_ctor MutexU32_fbc_inner(l: *MutexU32)(;) = (*l).inner |-> ?inner &*& SysMutex(inner, True) &*& struct_MutexU32_padding(l);
 
-pred_ctor MutexU32_frac_borrow_content(kfcc: lifetime_t, t: thread_id_t, l: *MutexU32)(;) =
-    SysMutex_share(&(*l).inner, full_borrow_(kfcc, u32_full_borrow_content(t, &(*l).data))) &*& struct_MutexU32_padding(l);
+fix t0() -> thread_id_t { default_value }
+
+pred_ctor MutexU32_frac_borrow_content(kfcc: lifetime_t, l: *MutexU32)(;) =
+    SysMutex_share(&(*l).inner, full_borrow_(kfcc, u32_full_borrow_content(t0, &(*l).data))) &*& struct_MutexU32_padding(l);
 
 pred MutexU32_share(k: lifetime_t, t: thread_id_t, l: *MutexU32) =
-    exists_np(?kfcc) &*& lifetime_inclusion(k, kfcc) == true &*& frac_borrow(k, MutexU32_frac_borrow_content(kfcc, t, l));
+    exists_np(?kfcc) &*& lifetime_inclusion(k, kfcc) == true &*& frac_borrow(k, MutexU32_frac_borrow_content(kfcc, l));
 
 lem MutexU32_share_mono(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *MutexU32)
     req lifetime_inclusion(k1, k) == true &*& [_]MutexU32_share(k, t, l);
     ens [_]MutexU32_share(k1, t, l);
 {
     open MutexU32_share(k, t, l); assert [_]exists_np(?kfcc);
-    frac_borrow_mono(k, k1, MutexU32_frac_borrow_content(kfcc, t, l));
+    frac_borrow_mono(k, k1, MutexU32_frac_borrow_content(kfcc, l));
     assert [?q]frac_borrow(k1, _); close [q]exists_np(kfcc);
     // TODO: Why does VeriFast not just close using any dummy fraction when it is trying to close a dummy fraction?
     lifetime_inclusion_trans(k1, k, kfcc);
@@ -136,27 +135,28 @@ lem MutexU32_share_full(k: lifetime_t, t: thread_id_t, l: *MutexU32)
     ens atomic_mask(Nlft) &*& [_]MutexU32_share(k, t, l) &*& [q]lifetime_token(k);
 {
 
-    produce_lem_ptr_chunk implies(sep(MutexU32_fbc_inner(l), u32_full_borrow_content(t, &(*l).data)), MutexU32_full_borrow_content(t, l))() {
-        open sep(MutexU32_fbc_inner(l), u32_full_borrow_content(t, &(*l).data))();
-        open MutexU32_fbc_inner(l)(); open u32_full_borrow_content(t, &(*l).data)();
+    produce_lem_ptr_chunk implies(sep(MutexU32_fbc_inner(l), u32_full_borrow_content(t0, &(*l).data)), MutexU32_full_borrow_content(t, l))() {
+        open sep(MutexU32_fbc_inner(l), u32_full_borrow_content(t0, &(*l).data))();
+        open MutexU32_fbc_inner(l)();
+        open u32_full_borrow_content(t0, &(*l).data)();
         assert (*l).inner |-> ?inner &*& (*l).data |-> ?data;
         close MutexU32_own(t, inner, data);
         close MutexU32_full_borrow_content(t, l)();
     }{
-        produce_lem_ptr_chunk implies(MutexU32_full_borrow_content(t, l), sep(MutexU32_fbc_inner(l), u32_full_borrow_content(t, &(*l).data)))() {
+        produce_lem_ptr_chunk implies(MutexU32_full_borrow_content(t, l), sep(MutexU32_fbc_inner(l), u32_full_borrow_content(t0, &(*l).data)))() {
             open MutexU32_full_borrow_content(t, l)();
             assert (*l).inner |-> ?inner &*& (*l).data |-> ?data;
             open MutexU32_own(t, inner, data);
             close MutexU32_fbc_inner(l)();
-            close u32_full_borrow_content(t, &(*l).data)();
-            close sep(MutexU32_fbc_inner(l), u32_full_borrow_content(t, &(*l).data))();
+            close u32_full_borrow_content(t0, &(*l).data)();
+            close sep(MutexU32_fbc_inner(l), u32_full_borrow_content(t0, &(*l).data))();
         }{
-            full_borrow_implies(k, MutexU32_full_borrow_content(t, l), sep(MutexU32_fbc_inner(l), u32_full_borrow_content(t, &(*l).data)));
+            full_borrow_implies(k, MutexU32_full_borrow_content(t, l), sep(MutexU32_fbc_inner(l), u32_full_borrow_content(t0, &(*l).data)));
         }
-        full_borrow_split_m(k, MutexU32_fbc_inner(l), u32_full_borrow_content(t, &(*l).data));
+        full_borrow_split_m(k, MutexU32_fbc_inner(l), u32_full_borrow_content(t0, &(*l).data));
         let kstrong = open_full_borrow_strong_m(k, MutexU32_fbc_inner(l), q);
-        produce_lem_ptr_chunk full_borrow_convert_strong(True, MutexU32_frac_borrow_content(k, t, l), kstrong, MutexU32_fbc_inner(l))() {
-            open MutexU32_frac_borrow_content(k, t, l)();
+        produce_lem_ptr_chunk full_borrow_convert_strong(True, MutexU32_frac_borrow_content(k, l), kstrong, MutexU32_fbc_inner(l))() {
+            open MutexU32_frac_borrow_content(k, l)();
             SysMutex_end_share(&(*l).inner);
             assert (*l).inner |-> ?inner;
             SysMutex_renew(inner, True);
@@ -164,20 +164,26 @@ lem MutexU32_share_full(k: lifetime_t, t: thread_id_t, l: *MutexU32)
         }{
             open MutexU32_fbc_inner(l)();
             assert (*l).inner |-> ?inner;
-            close full_borrow_(k, u32_full_borrow_content(t, &(*l).data))();
-            SysMutex_renew(inner, full_borrow_(k, u32_full_borrow_content(t, &(*l).data)));
+            close full_borrow_(k, u32_full_borrow_content(t0, &(*l).data))();
+            SysMutex_renew(inner, full_borrow_(k, u32_full_borrow_content(t0, &(*l).data)));
             SysMutex_share_full(&(*l).inner);
-            close MutexU32_frac_borrow_content(k, t, l)();
-            close_full_borrow_strong_m(kstrong, MutexU32_fbc_inner(l), MutexU32_frac_borrow_content(k, t, l));
-            full_borrow_into_frac_m(kstrong, MutexU32_frac_borrow_content(k, t, l));
-            frac_borrow_mono(kstrong, k, MutexU32_frac_borrow_content(k, t, l));
-            open exists(kstrong); assert [?qfb]frac_borrow(k, MutexU32_frac_borrow_content(k, t, l));
+            close MutexU32_frac_borrow_content(k, l)();
+            close_full_borrow_strong_m(kstrong, MutexU32_fbc_inner(l), MutexU32_frac_borrow_content(k, l));
+            full_borrow_into_frac_m(kstrong, MutexU32_frac_borrow_content(k, l));
+            frac_borrow_mono(kstrong, k, MutexU32_frac_borrow_content(k, l));
+            open exists(kstrong); assert [?qfb]frac_borrow(k, MutexU32_frac_borrow_content(k, l));
             close [qfb]exists_np(k);
             lifetime_inclusion_refl(k);
             close [qfb]MutexU32_share(k, t, l);
         }
     }
 }
+
+@*/
+
+unsafe impl Send for MutexU32 {}
+
+/*@
 
 lem MutexU32_send(t: thread_id_t, t1: thread_id_t)
     req MutexU32_own(t, ?inner, ?data);
@@ -187,87 +193,20 @@ lem MutexU32_send(t: thread_id_t, t1: thread_id_t)
     close MutexU32_own(t1, inner, data);
 }
 
+@*/
+
+unsafe impl Sync for MutexU32 {}
+
+/*@
+
 lem MutexU32_sync(t: thread_id_t, t1: thread_id_t)
     req MutexU32_share(?k, t, ?l);
     ens MutexU32_share(k, t1, l);
 {
     open MutexU32_share(k, t, l);
-    assert exists_np(?kfcc);
-    produce_lem_ptr_chunk implies(MutexU32_frac_borrow_content(kfcc, t, l), MutexU32_frac_borrow_content(kfcc, t1, l))() {
-        produce_lem_ptr_chunk implies(full_borrow_(kfcc, u32_full_borrow_content(t, &(*l).data)), full_borrow_(kfcc, u32_full_borrow_content(t1, &(*l).data)))() {
-            produce_lem_ptr_chunk implies(u32_full_borrow_content(t, &(*l).data), u32_full_borrow_content(t1, &(*l).data))() {
-                open u32_full_borrow_content(t, &(*l).data)();
-                close u32_full_borrow_content(t1, &(*l).data)();
-            }{
-                produce_lem_ptr_chunk implies(u32_full_borrow_content(t1, &(*l).data), u32_full_borrow_content(t, &(*l).data))() {
-                    open u32_full_borrow_content(t1, &(*l).data)();
-                    close u32_full_borrow_content(t, &(*l).data)();
-                }{
-                    open full_borrow_(kfcc, u32_full_borrow_content(t, &(*l).data))();
-                    full_borrow_implies(kfcc, u32_full_borrow_content(t, &(*l).data), u32_full_borrow_content(t1, &(*l).data));
-                    close full_borrow_(kfcc, u32_full_borrow_content(t1, &(*l).data))();
-                }
-            }
-        }{
-            produce_lem_ptr_chunk implies(full_borrow_(kfcc, u32_full_borrow_content(t1, &(*l).data)), full_borrow_(kfcc, u32_full_borrow_content(t, &(*l).data)))() {
-                produce_lem_ptr_chunk implies(u32_full_borrow_content(t, &(*l).data), u32_full_borrow_content(t1, &(*l).data))() {
-                    open u32_full_borrow_content(t, &(*l).data)();
-                    close u32_full_borrow_content(t1, &(*l).data)();
-                }{
-                    produce_lem_ptr_chunk implies(u32_full_borrow_content(t1, &(*l).data), u32_full_borrow_content(t, &(*l).data))() {
-                        open u32_full_borrow_content(t1, &(*l).data)();
-                        close u32_full_borrow_content(t, &(*l).data)();
-                    }{
-                        open full_borrow_(kfcc, u32_full_borrow_content(t1, &(*l).data))();
-                        full_borrow_implies(kfcc, u32_full_borrow_content(t1, &(*l).data), u32_full_borrow_content(t, &(*l).data));
-                        close full_borrow_(kfcc, u32_full_borrow_content(t, &(*l).data))();
-                    }
-                }
-            }{
-                SysMutex_share_implies(&(*l).inner, full_borrow_(kfcc, u32_full_borrow_content(t, &(*l).data)), full_borrow_(kfcc, u32_full_borrow_content(t1, &(*l).data)));
-            }
-        }
-    }{
-        produce_lem_ptr_chunk implies(MutexU32_frac_borrow_content(kfcc, t1, l), MutexU32_frac_borrow_content(kfcc, t, l))() {
-            produce_lem_ptr_chunk implies(full_borrow_(kfcc, u32_full_borrow_content(t, &(*l).data)), full_borrow_(kfcc, u32_full_borrow_content(t1, &(*l).data)))() {
-                produce_lem_ptr_chunk implies(u32_full_borrow_content(t, &(*l).data), u32_full_borrow_content(t1, &(*l).data))() {
-                    open u32_full_borrow_content(t, &(*l).data)();
-                    close u32_full_borrow_content(t1, &(*l).data)();
-                }{
-                    produce_lem_ptr_chunk implies(u32_full_borrow_content(t1, &(*l).data), u32_full_borrow_content(t, &(*l).data))() {
-                        open u32_full_borrow_content(t1, &(*l).data)();
-                        close u32_full_borrow_content(t, &(*l).data)();
-                    }{
-                        open full_borrow_(kfcc, u32_full_borrow_content(t, &(*l).data))();
-                        full_borrow_implies(kfcc, u32_full_borrow_content(t, &(*l).data), u32_full_borrow_content(t1, &(*l).data));
-                        close full_borrow_(kfcc, u32_full_borrow_content(t1, &(*l).data))();
-                    }
-                }
-            }{
-                produce_lem_ptr_chunk implies(full_borrow_(kfcc, u32_full_borrow_content(t1, &(*l).data)), full_borrow_(kfcc, u32_full_borrow_content(t, &(*l).data)))() {
-                    produce_lem_ptr_chunk implies(u32_full_borrow_content(t, &(*l).data), u32_full_borrow_content(t1, &(*l).data))() {
-                        open u32_full_borrow_content(t, &(*l).data)();
-                        close u32_full_borrow_content(t1, &(*l).data)();
-                    }{
-                        produce_lem_ptr_chunk implies(u32_full_borrow_content(t1, &(*l).data), u32_full_borrow_content(t, &(*l).data))() {
-                            open u32_full_borrow_content(t1, &(*l).data)();
-                            close u32_full_borrow_content(t, &(*l).data)();
-                        }{
-                            open full_borrow_(kfcc, u32_full_borrow_content(t1, &(*l).data))();
-                            full_borrow_implies(kfcc, u32_full_borrow_content(t1, &(*l).data), u32_full_borrow_content(t, &(*l).data));
-                            close full_borrow_(kfcc, u32_full_borrow_content(t, &(*l).data))();
-                        }
-                    }
-                }{
-                    SysMutex_share_implies(&(*l).inner, full_borrow_(kfcc, u32_full_borrow_content(t1, &(*l).data)), full_borrow_(kfcc, u32_full_borrow_content(t, &(*l).data)));
-                }
-            }
-        }{
-            frac_borrow_implies(k, MutexU32_frac_borrow_content(kfcc, t, l), MutexU32_frac_borrow_content(kfcc, t1, l));
-            close MutexU32_share(k, t1, l);
-        }
-    }
+    close MutexU32_share(k, t1, l);
 }
+
 @*/
 
 impl MutexU32 {
@@ -296,12 +235,12 @@ impl MutexU32 {
         unsafe {
             //@ open MutexU32_share(a, t, self);
             //@ assert [_]exists_np(?klong);
-            //@ open_frac_borrow(a, MutexU32_frac_borrow_content(klong, t, self), qa);
-            //@ open MutexU32_frac_borrow_content(klong, t, self)();
+            //@ open_frac_borrow(a, MutexU32_frac_borrow_content(klong, self), qa);
+            //@ open MutexU32_frac_borrow_content(klong, self)();
             self.inner.lock();
             //@ assert [?qp]SysMutex_share(&(*self).inner, _);
-            //@ close [qp]MutexU32_frac_borrow_content(klong, t, self)();
-            //@ close_frac_borrow(qp, MutexU32_frac_borrow_content(klong, t, self));
+            //@ close [qp]MutexU32_frac_borrow_content(klong, self)();
+            //@ close_frac_borrow(qp, MutexU32_frac_borrow_content(klong, self));
             MutexGuardU32::new(self)
         }
     }
@@ -333,14 +272,14 @@ lem MutexGuardU32_sync(km: lifetime_t, t: thread_id_t, t1: thread_id_t)
 /*@
 // TODO: Is this extra lifetime `klong` necessary here?
 pred_ctor MutexGuardU32_own(km: lifetime_t)(t: thread_id_t, lock: *MutexU32) =
-    [_]exists_np(?klong) &*& lifetime_inclusion(km, klong) == true &*& [_]frac_borrow(km, MutexU32_frac_borrow_content(klong, t, lock))
-    &*& SysMutex_locked(&(*lock).inner, full_borrow_(klong, u32_full_borrow_content(t, &(*lock).data)), t)
-    &*& full_borrow(klong, u32_full_borrow_content(t, &(*lock).data));
+    [_]exists_np(?klong) &*& lifetime_inclusion(km, klong) == true &*& [_]frac_borrow(km, MutexU32_frac_borrow_content(klong, lock))
+    &*& SysMutex_locked(&(*lock).inner, full_borrow_(klong, u32_full_borrow_content(t0, &(*lock).data)), t)
+    &*& full_borrow(klong, u32_full_borrow_content(t0, &(*lock).data));
 
 pred_ctor MutexGuardU32_fbc_rest(km: lifetime_t, klong: lifetime_t, t: thread_id_t, l: *MutexGuardU32, lock: *MutexU32)() =
     (*l).lock |-> lock &*& lifetime_inclusion(km, klong) == true
-    &*& [_]frac_borrow(km, MutexU32_frac_borrow_content(klong, t, lock))
-    &*& SysMutex_locked(&(*lock).inner, full_borrow_(klong, u32_full_borrow_content(t, &(*lock).data)), t);
+    &*& [_]frac_borrow(km, MutexU32_frac_borrow_content(klong, lock))
+    &*& SysMutex_locked(&(*lock).inner, full_borrow_(klong, u32_full_borrow_content(t0, &(*lock).data)), t);
 
 pred_ctor MutexGuardU32_full_borrow_content0(km: lifetime_t, t: thread_id_t, l: *MutexGuardU32)() =
     (*l).lock |-> ?lock &*& MutexGuardU32_own(km)(t, lock);
@@ -367,9 +306,9 @@ lem MutexGuardU32_full_share(k: lifetime_t, t: thread_id_t, l: *MutexGuardU32)
 impl MutexGuardU32 {
     unsafe fn new<'a>(lock: &'a MutexU32) -> MutexGuardU32
     /*@ req thread_token(?t) &*& [?qa]lifetime_token(?a) &*& [_]exists_np(?km) &*& lifetime_inclusion(a, km) == true
-        &*& [_]frac_borrow(a, MutexU32_frac_borrow_content(km, t, lock))
-        &*& SysMutex_locked(&(*lock).inner, full_borrow_(km, u32_full_borrow_content(t, &(*lock).data)), t)
-        &*& full_borrow(km, u32_full_borrow_content(t, &(*lock).data));
+        &*& [_]frac_borrow(a, MutexU32_frac_borrow_content(km, lock))
+        &*& SysMutex_locked(&(*lock).inner, full_borrow_(km, u32_full_borrow_content(t0, &(*lock).data)), t)
+        &*& full_borrow(km, u32_full_borrow_content(t0, &(*lock).data));
     @*/
     //@ ens thread_token(t) &*& [qa]lifetime_token(a) &*& MutexGuardU32_own(a)(t, result.lock);
     {
@@ -400,38 +339,51 @@ impl MutexGuardU32 {
         //@ lifetime_inclusion_trans(a, km, kmlong);
         //@ lifetime_token_trade(a, qa/2, kmlong);
         //@ assert [?qkml]lifetime_token(kmlong);
-        //@ open_full_borrow(qkml, kmlong, u32_full_borrow_content(t, &(*lock).data));
-        //@ open u32_full_borrow_content(t, &(*lock).data)();
+        //@ open_full_borrow(qkml, kmlong, u32_full_borrow_content(t0, &(*lock).data));
+        //@ open u32_full_borrow_content(t0, &(*lock).data)();
         //@ integer__limits(&(*lock).data);
-        //@ close u32_full_borrow_content(t, &(*lock).data)();
-        //@ close_full_borrow(u32_full_borrow_content(t, &(*lock).data));
+        //@ close u32_full_borrow_content(t0, &(*lock).data)();
+        //@ close_full_borrow(u32_full_borrow_content(t0, &(*lock).data));
         //@ lifetime_token_trade_back(qkml, kmlong);
         let r = unsafe { &mut *(*self.lock).data.get() };
         /*@
         produce_lem_ptr_chunk full_borrow_convert_strong(True,
-            sep(MutexGuardU32_fbc_rest(km, kmlong, t, self, lock), full_borrow_(kmlong, u32_full_borrow_content(t, &(*lock).data))),
+            sep(MutexGuardU32_fbc_rest(km, kmlong, t, self, lock), full_borrow_(kmlong, u32_full_borrow_content(t0, &(*lock).data))),
             kstrong,
             MutexGuardU32_full_borrow_content0(km, t, self))() {
-                open sep(MutexGuardU32_fbc_rest(km, kmlong, t, self, lock), full_borrow_(kmlong, u32_full_borrow_content(t, &(*lock).data)))();
+                open sep(MutexGuardU32_fbc_rest(km, kmlong, t, self, lock), full_borrow_(kmlong, u32_full_borrow_content(t0, &(*lock).data)))();
                 open MutexGuardU32_fbc_rest(km, kmlong, t, self, lock)();
-                open full_borrow_(kmlong, u32_full_borrow_content(t, &(*lock).data))();
+                open full_borrow_(kmlong, u32_full_borrow_content(t0, &(*lock).data))();
                 close exists_np(kmlong); leak exists_np(kmlong);
                 close MutexGuardU32_own(km)(t, lock);
                 close MutexGuardU32_full_borrow_content0(km, t, self)();
             }{
                 close MutexGuardU32_fbc_rest(km, kmlong, t, self, lock)();
-                close full_borrow_(kmlong, u32_full_borrow_content(t, &(*lock).data))();
-                close sep(MutexGuardU32_fbc_rest(km, kmlong, t, self, lock), full_borrow_(kmlong, u32_full_borrow_content(t, &(*lock).data)))();
+                close full_borrow_(kmlong, u32_full_borrow_content(t0, &(*lock).data))();
+                close sep(MutexGuardU32_fbc_rest(km, kmlong, t, self, lock), full_borrow_(kmlong, u32_full_borrow_content(t0, &(*lock).data)))();
                 close_full_borrow_strong(kstrong, MutexGuardU32_full_borrow_content0(km, t, self),
-                    sep(MutexGuardU32_fbc_rest(km, kmlong, t, self, lock), full_borrow_(kmlong, u32_full_borrow_content(t, &(*lock).data))));
+                    sep(MutexGuardU32_fbc_rest(km, kmlong, t, self, lock), full_borrow_(kmlong, u32_full_borrow_content(t0, &(*lock).data))));
                 full_borrow_split(kstrong, MutexGuardU32_fbc_rest(km, kmlong, t, self, lock),
-                    full_borrow_(kmlong, u32_full_borrow_content(t, &(*lock).data)));
-                full_borrow_unnest(kstrong, kmlong, u32_full_borrow_content(t, &(*lock).data));
+                    full_borrow_(kmlong, u32_full_borrow_content(t0, &(*lock).data)));
+                full_borrow_unnest(kstrong, kmlong, u32_full_borrow_content(t0, &(*lock).data));
                 lifetime_inclusion_glb(a, kstrong, kmlong);
-                full_borrow_mono(lifetime_intersection(kstrong, kmlong), a, u32_full_borrow_content(t, &(*lock).data));
+                full_borrow_mono(lifetime_intersection(kstrong, kmlong), a, u32_full_borrow_content(t0, &(*lock).data));
             }
         @*/
         //@ leak full_borrow(kstrong, _);
+        /*@
+        produce_lem_ptr_chunk implies(u32_full_borrow_content(t0, &(*lock).data), u32_full_borrow_content(t, &(*lock).data))() {
+            open u32_full_borrow_content(t0, &(*lock).data)();
+            close u32_full_borrow_content(t, &(*lock).data)();
+        } {
+            produce_lem_ptr_chunk implies(u32_full_borrow_content(t, &(*lock).data), u32_full_borrow_content(t0, &(*lock).data))() {
+                open u32_full_borrow_content(t, &(*lock).data)();
+                close u32_full_borrow_content(t0, &(*lock).data)();
+            } {
+                full_borrow_implies(a, u32_full_borrow_content(t0, &(*lock).data), u32_full_borrow_content(t, &(*lock).data));
+            }
+        }
+        @*/
         r
     }
 
@@ -443,13 +395,13 @@ impl MutexGuardU32 {
         //@ open MutexGuardU32_full_borrow_content0(km, t, self)();
         //@ open MutexGuardU32_own(km)(t, ?lock);
         //@ open [_]exists_np(?kmlong);
-        //@ open_frac_borrow(km, MutexU32_frac_borrow_content(kmlong, t, lock), qkm);
-        //@ open MutexU32_frac_borrow_content(kmlong, t, lock)();
+        //@ open_frac_borrow(km, MutexU32_frac_borrow_content(kmlong, lock), qkm);
+        //@ open MutexU32_frac_borrow_content(kmlong, lock)();
         unsafe {
             (*self.lock).inner.unlock();
         }
         //@ assert [?qp]SysMutex_share(&(*lock).inner, _);
-        //@ close_frac_borrow(qp, MutexU32_frac_borrow_content(kmlong, t, lock));
+        //@ close_frac_borrow(qp, MutexU32_frac_borrow_content(kmlong, lock));
         //@ assert [?qfrac]frac_borrow(km, _);
         //@ close [qfrac]exists_np(kmlong);
         //@ close [qfrac]MutexU32_share(km, t, lock);
