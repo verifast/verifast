@@ -903,8 +903,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             let full_bor_content =
               Ok (Var (loc, name ^ "_full_borrow_content"))
             in
-            (* Todo: Nested structs *)
-            let points_to tid l vid_op = Ok (True loc) in
+            let points_to tid l vid_op =
+              let* pat = RustBelt.Aux.vid_op_to_var_pat vid_op loc in
+              Ok (PointsTo (loc, l, pat))
+            in
             let interp =
               RustBelt.
                 {
