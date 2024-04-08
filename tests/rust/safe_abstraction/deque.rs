@@ -214,7 +214,7 @@ lem elems_share_full<T>(t: thread_id_t, nodes: list<*Node<T>>)
             }
             full_borrow_mono(klong, k, sep(<T>.full_borrow_content(t, &(*node).value), elems_fbc(t, nodes0)));
             full_borrow_split_m(k, <T>.full_borrow_content(t, &(*node).value), elems_fbc(t, nodes0));
-            share_full_borrow::<T>(k, t, &(*node).value);
+            share_full_borrow_m::<T>(k, t, &(*node).value);
             elems_share_full(t, nodes0);
             close elem_share::<T>(k, t)(node);
             close foreach(nodes, elem_share::<T>(k, t));
