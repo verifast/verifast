@@ -52,6 +52,15 @@ lemma void close_atomic_space(mask_t spaceMask);
     requires atomic_mask(?currentMask) &*& close_atomic_space_token(spaceMask, ?inv) &*& inv();
     ensures atomic_mask(mask_union(currentMask, spaceMask));
 
+typedef lemma void atomic_block(predicate() pre, predicate() post)();
+    requires atomic_mask(MaskTop) &*& pre();
+    ensures atomic_mask(MaskTop) &*& post();
+
+lemma void perform_atomically();
+    nonghost_callers_only
+    requires is_atomic_block(?block, ?pre, ?post) &*& pre();
+    ensures is_atomic_block(block, pre, post) &*& post();
+
 predicate_ctor simple_share(fixpoint(thread_id_t, void *, predicate(;)) frac_borrow_content)(lifetime_t k, thread_id_t t, void *l) =
     frac_borrow(k, frac_borrow_content(t, l));
 predicate_ctor shared_ref_own(predicate(lifetime_t, thread_id_t, void *) pointee_shr, lifetime_t k)(thread_id_t t, void *l) = [_]pointee_shr(k, t, l);
@@ -131,8 +140,13 @@ lemma void share_mono<T>(lifetime_t k, lifetime_t k1, thread_id_t t, T *l);
     ensures type_interp<T>() &*& [_](<T>.share)(k1, t, l);
 
 lemma void share_full_borrow<T>(lifetime_t k, thread_id_t t, void *l);
+    nonghost_callers_only
     requires type_interp<T>() &*& full_borrow(k, (<T>.full_borrow_content)(t, l)) &*& [?q]lifetime_token(k);
     ensures type_interp<T>() &*& [_](<T>.share)(k, t, l) &*& [q]lifetime_token(k);
+
+lemma void share_full_borrow_m<T>(lifetime_t k, thread_id_t t, void *l);
+    requires type_interp<T>() &*& atomic_mask(?mask) &*& mask_le(Nlft, mask) == true &*& full_borrow(k, (<T>.full_borrow_content)(t, l)) &*& [?q]lifetime_token(k);
+    ensures type_interp<T>() &*& atomic_mask(mask) &*& [_](<T>.share)(k, t, l) &*& [q]lifetime_token(k);
 @*/
 
 #endif
