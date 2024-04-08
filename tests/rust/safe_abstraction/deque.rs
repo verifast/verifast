@@ -173,11 +173,84 @@ pred Deque_share<T>(k: lifetime_t, t: thread_id_t, l: *Deque<T>) =
     [_]frac_borrow(k, Deque_frac_borrow_content(nodes, t, l)) &*&
     foreach(nodes, elem_share::<T>(k, t));
 
-lem Deque_share_full<T>(k: lifetime_t, t: thread_id_t, l: *Deque<T>)
-    req full_borrow(k, Deque_full_borrow_content(t, l)) &*& [?q]lifetime_token(k);
-    ens [_]Deque_share(k, t, l) &*& [q]lifetime_token(k);
+pred_ctor elems_fbc<T>(t: thread_id_t, nodes: list<*Node<T>>)() =
+    foreachp2(nodes, elem_points_to::<T>, ?elems) &*& foreach(elems, elem_own::<T>(t));
+
+pred True(;) = true;
+
+lem elems_share_full<T>(t: thread_id_t, nodes: list<*Node<T>>)
+    req type_interp::<T>() &*& atomic_mask(Nlft) &*& full_borrow(?k, elems_fbc(t, nodes)) &*& [?q]lifetime_token(k);
+    ens type_interp::<T>() &*& atomic_mask(Nlft) &*& foreach(nodes, elem_share::<T>(k, t)) &*& [q]lifetime_token(k);
 {
-    assume(false); // TODO; requires splitting the full borrow.
+    match nodes {
+        nil => {
+            leak full_borrow(_, _);
+            close foreach(nodes, elem_share::<T>(k, t));
+        }
+        cons(node, nodes0) => {
+            let klong = open_full_borrow_strong_m(k, elems_fbc(t, nodes), q);
+            produce_lem_ptr_chunk full_borrow_convert_strong(True, sep(<T>.full_borrow_content(t, &(*node).value), elems_fbc(t, nodes0)), klong, elems_fbc(t, nodes))() {
+                open sep(<T>.full_borrow_content(t, &(*node).value), elems_fbc(t, nodes0))();
+                open_full_borrow_content::<T>(t, &(*node).value);
+                open elems_fbc::<T>(t, nodes0)();
+                assert foreach(?elems0, _);
+                close Node_value(node, ?elem);
+                close elem_points_to::<T>()(node, _);
+                close foreachp2(nodes, elem_points_to::<T>(), _);
+                close elem_own::<T>(t)(elem);
+                close foreach(cons(elem, elems0), elem_own::<T>(t));
+                close elems_fbc::<T>(t, nodes)();
+            } {
+                open elems_fbc::<T>(t, nodes)();
+                open foreachp2(_, _, ?elems);
+                open elem_points_to::<T>()(node, ?elem);
+                open Node_value(node, _);
+                open foreach(_, _);
+                open elem_own::<T>(t)(elem);
+                close_full_borrow_content(t, &(*node).value);
+                close elems_fbc::<T>(t, nodes0)();
+                close sep(<T>.full_borrow_content(t, &(*node).value), elems_fbc(t, nodes0))();
+                close_full_borrow_strong_m(klong, elems_fbc(t, nodes), sep(<T>.full_borrow_content(t, &(*node).value), elems_fbc(t, nodes0)));
+            }
+            full_borrow_mono(klong, k, sep(<T>.full_borrow_content(t, &(*node).value), elems_fbc(t, nodes0)));
+            full_borrow_split_m(k, <T>.full_borrow_content(t, &(*node).value), elems_fbc(t, nodes0));
+            share_full_borrow::<T>(k, t, &(*node).value);
+            elems_share_full(t, nodes0);
+            close elem_share::<T>(k, t)(node);
+            close foreach(nodes, elem_share::<T>(k, t));
+        }
+    }
+}
+
+lem Deque_share_full<T>(k: lifetime_t, t: thread_id_t, l: *Deque<T>)
+    req type_interp::<T>() &*& atomic_mask(Nlft) &*& full_borrow(k, Deque_full_borrow_content(t, l)) &*& [?q]lifetime_token(k);
+    ens type_interp::<T>() &*& atomic_mask(Nlft) &*& [_]Deque_share(k, t, l) &*& [q]lifetime_token(k);
+{
+    let klong = open_full_borrow_strong_m(k, Deque_full_borrow_content(t, l), q);
+    open Deque_full_borrow_content::<T>(t, l)();
+    open Deque_own(t, ?sentinel, _);
+    open Deque_(sentinel, _);
+    assert Deque__(sentinel, ?nodes);
+    produce_lem_ptr_chunk full_borrow_convert_strong(True, sep(Deque_frac_borrow_content(nodes, t, l), elems_fbc(t, nodes)), klong, Deque_full_borrow_content(t, l))() {
+        open sep(Deque_frac_borrow_content(nodes, t, l), elems_fbc(t, nodes))();
+        open Deque_frac_borrow_content::<T>(nodes, t, l)();
+        assert Deque__::<T>(?sentinel1, nodes);
+        open elems_fbc::<T>(t, nodes)();
+        close Deque_own::<T>(t, sentinel1, length(nodes));
+        close Deque_full_borrow_content::<T>(t, l)();
+    } {
+        close Deque_frac_borrow_content::<T>(nodes, t, l)();
+        close elems_fbc::<T>(t, nodes)();
+        close sep(Deque_frac_borrow_content(nodes, t, l), elems_fbc(t, nodes))();
+        close_full_borrow_strong_m(klong, Deque_full_borrow_content(t, l), sep(Deque_frac_borrow_content(nodes, t, l), elems_fbc(t, nodes)));
+    }
+    full_borrow_mono(klong, k, sep(Deque_frac_borrow_content(nodes, t, l), elems_fbc(t, nodes)));
+    full_borrow_split_m(k, Deque_frac_borrow_content(nodes, t, l), elems_fbc(t, nodes));
+    full_borrow_into_frac_m(k, Deque_frac_borrow_content(nodes, t, l));
+    elems_share_full(t, nodes);
+    close exists(nodes);
+    close Deque_share(k, t, l);
+    leak Deque_share(k, t, l);
 }
 
 lem foreach_elem_share_mono<T>(k: lifetime_t, k1: lifetime_t, t: thread_id_t)

@@ -1198,10 +1198,10 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               let this = List.assoc "this" env in
               open_instance_predicate this target_tn
             end
-          | Some (PredCtorInfo (lp, tparams, ps1, ps2, inputParamCount, body, funcsym)) ->
+          | Some (PredCtorInfo (lp, predctor_tparams, ps1, ps2, inputParamCount, body, funcsym)) ->
             reportUseSite DeclKind_Predicate lp l;
             let tpenv =
-              match zip tparams targs with
+              match zip predctor_tparams targs with
                 Some bs -> bs
               | None -> static_error l "Incorrect number of type arguments" None
             in
@@ -1516,10 +1516,10 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 close_instance_predicate this tn
               | _ -> static_error l "No such predicate instance." None
               end
-            | Some (PredCtorInfo (lpred, tparams, ps1, ps2, inputParamCount, body, funcsym)) ->
+            | Some (PredCtorInfo (lpred, predctor_tparams, ps1, ps2, inputParamCount, body, funcsym)) ->
               reportUseSite DeclKind_Predicate lpred l;
               let tpenv =
-                match zip tparams targs with
+                match zip predctor_tparams targs with
                   Some tpenv -> tpenv
                 | None -> static_error l "Incorrect number of type arguments" None
               in
