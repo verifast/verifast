@@ -320,7 +320,6 @@ impl Drop for Tree {
         unsafe {
             //@ open Tree_full_borrow_content(_t, self)();
             Self::dispose_unsafe(self.root);
-            //@ close raw_ptr_full_borrow_content(_t, &(*self).root)();
         }
     }
 
