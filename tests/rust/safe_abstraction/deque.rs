@@ -571,8 +571,8 @@ impl<T> Drop for Deque<T> {
     /*@
     ens
         thread_token(_t) &*&
-        raw_ptr_full_borrow_content(_t, &(*self).sentinel)() &*&
-        i32_full_borrow_content(_t, &(*self).size)() &*&
+        (*self).sentinel |-> ?sentinel &*&
+        (*self).size |-> ?size &*&
         struct_Deque_padding(self);
     @*/
     {
@@ -582,8 +582,6 @@ impl<T> Drop for Deque<T> {
             Self::dispose_nodes((*(self.sentinel)).next, self.sentinel);
             //@ open_struct((*self).sentinel);
             std::alloc::dealloc(self.sentinel as *mut u8, std::alloc::Layout::new::<Node<T>>());
-            //@ close raw_ptr_full_borrow_content(_t, &(*self).sentinel)();
-            //@ close i32_full_borrow_content(_t, &(*self).size)();
         }
     }
 

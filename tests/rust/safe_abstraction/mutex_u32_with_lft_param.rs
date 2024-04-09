@@ -373,12 +373,14 @@ impl<'b> MutexGuardU32<'b> {
         r
     }
 
-    // TODO: It should be an `impl` of `Drop` and a safe function
-    pub unsafe fn drop<'a>(self: &'a mut MutexGuardU32<'b>)
-    //@ req thread_token(?t) &*& exists(?km) &*& [?qkm]lifetime_token(km) &*& MutexGuardU32_full_borrow_content(km, t, self)();
+}
+
+impl<'a> Drop for MutexGuardU32<'a> {
+
+    fn drop<'b>(self: &'b mut MutexGuardU32<'a>)
+    //@ req thread_token(?t) &*& [?qkm]lifetime_token(?km) &*& MutexGuardU32_full_borrow_content(km, t, self)();
     //@ ens thread_token(t) &*& [qkm]lifetime_token(km) &*& (*self).lock |-> ?lock &*& [_]MutexU32_share(km, t, lock) &*& struct_MutexGuardU32_padding(self);
     {
-        //@ open exists(km);
         //@ open MutexGuardU32_full_borrow_content(km, t, self)();
         //@ open MutexGuardU32_own(km, t, ?lock);
         //@ open [_]exists_np(?kmlong);

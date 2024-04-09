@@ -418,6 +418,7 @@ module Mir = struct
     loc : Ast.loc;
     name : string;
     tparams : string list;
+    lft_params : string list;
     fds : field_def_tr list;
     def : Ast.decl;
     aux_decls : Ast.decl list;
@@ -952,7 +953,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   points_to;
                 }
             in
-            let ty_info = Mir.TyInfoBasic { vf_ty; interp } in
+            let ty_info =
+              Mir.TyInfoGeneric
+                { vf_ty; interp; substs = gen_args; vf_ty_mono = vf_ty }
+            in
             Ok ty_info)
     | EnumKind ->
         let* targs =
@@ -1250,7 +1254,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let kind_cpn = kind_get gen_arg_cpn in
     let open GenArgKindRd in
     match get kind_cpn with
-    | Lifetime name -> `Lifetime name
+    | Lifetime region -> `Lifetime (translate_region region)
     | Type ty_cpn -> `Type (decode_ty ty_cpn)
     | Const _ -> `Const
     | Undefined _ -> `Undefined
@@ -1493,6 +1497,18 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let substs_cpn = substs_get_list adt_ty_cpn in
     (def_path, kind, List.map decode_generic_arg substs_cpn)
 
+  and decode_ref_ty (ref_ty_cpn : TyRd.RefTy.t) =
+    let open TyRd.RefTy in
+    let region_cpn = region_get ref_ty_cpn in
+    let region = translate_region region_cpn in
+    let mut_cpn = mutability_get ref_ty_cpn in
+    let mut =
+      match MutabilityRd.get mut_cpn with Mut -> true | Not -> false
+    in
+    let ty_cpn = ty_get ref_ty_cpn in
+    let ty = decode_ty ty_cpn in
+    (region, mut, ty)
+
   and decode_ty (ty_cpn : TyRd.t) =
     let open TyRd in
     let kind_cpn = kind_get ty_cpn in
@@ -1503,7 +1519,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | Char -> `Char
     | Adt adt_ty_cpn -> `Adt (decode_adt_ty adt_ty_cpn)
     | RawPtr raw_ptr_ty_cpn -> `RawPtr
-    | Ref ref_ty_cpn -> `Ref
+    | Ref ref_ty_cpn -> `Ref (decode_ref_ty ref_ty_cpn)
     | FnDef fn_def_ty_cpn -> `FnDef
     | FnPtr fn_ptr_ty_cpn -> `FnPtr
     | Never -> `Never
@@ -3129,24 +3145,110 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let post_asn = Sep (contract_loc, post_na_token, post_asn) in
     Ok (pre_asn, post_asn)
 
-  let gen_drop_contract adt_defs self_ty self_ty_targs limpl =
-    let { loc = ls; tparams; fds } : Mir.adt_def_tr =
+  let gen_drop_contract adt_defs self_ty self_ty_targs self_lft_args limpl =
+    let outlives_preds = [] in
+    let open Ast in
+    let { loc = ls; tparams; lft_params; fds } : Mir.adt_def_tr =
       List.find
         (function ({ name } : Mir.adt_def_tr) -> name = self_ty)
         adt_defs
     in
-    let pre =
-      Ast.Sep
-        ( ls,
-          Ast.CallExpr
-            (ls, "thread_token", [], [], [ VarPat (ls, "_t") ], Static),
-          Ast.CallExpr
-            ( ls,
-              self_ty ^ "_full_borrow_content",
-              self_ty_targs,
-              [ LitPat (Var (ls, "_t")); LitPat (Var (ls, "self")) ],
-              [],
+    (* TODO: Eliminate code duplication between gen_contract and gen_drop_contract *)
+    let bind_pat_b n = VarPat (limpl, n) in
+    let lit_pat_b n = LitPat (Var (limpl, n)) in
+    (* Todo @Nima: Move RustBelt token, etc. constructors like the following to the RustBelt module so
+       The hard-coded names will be in the same place and the code will be reusable *)
+    let nonatomic_token_b pat =
+      CallExpr
+        ( limpl,
+          "thread_token",
+          [] (*type arguments*),
+          [] (*indices*),
+          [ pat ] (*arguments*),
+          Static )
+    in
+    let thread_id_name = "_t" in
+    let pre_na_token = nonatomic_token_b (bind_pat_b thread_id_name) in
+    let post_na_token = nonatomic_token_b (lit_pat_b thread_id_name) in
+    let lft_token_b q_pat_b lft_pat_b n =
+      let coef_n = "_q_" ^ n in
+      CoefAsn
+        ( limpl,
+          q_pat_b coef_n,
+          CallExpr
+            ( limpl,
+              "lifetime_token",
+              [] (*type arguments*),
+              [] (*indices*),
+              [ lft_pat_b n ] (*arguments*),
               Static ) )
+    in
+    let lifetimes_chunk =
+      if List.length self_lft_args <= 1 then []
+      else
+        let lifetimes_list =
+          mk_list_pat limpl
+            (List.map (fun x -> VarPat (limpl, x)) self_lft_args)
+        in
+        [
+          Ast.CallExpr (limpl, "lifetimes", [], [], [ lifetimes_list ], Static);
+        ]
+    in
+    let pre_lft_tks =
+      if List.length self_lft_args <= 1 then
+        List.map
+          (fun lft_var -> lft_token_b bind_pat_b bind_pat_b lft_var)
+          self_lft_args
+      else
+        let lifetimes_list =
+          mk_list_pat limpl
+            (List.map (fun x -> VarPat (limpl, x)) self_lft_args)
+        in
+        Ast.CallExpr (limpl, "lifetimes", [], [], [ lifetimes_list ], Static)
+        :: List.map
+             (fun lft_var -> lft_token_b bind_pat_b lit_pat_b lft_var)
+             self_lft_args
+    in
+    let outlives_asns =
+      outlives_preds
+      |> List.map @@ fun (r1, r2) ->
+         Operation
+           ( limpl,
+             Eq,
+             [
+               CallExpr
+                 ( limpl,
+                   "lifetime_inclusion",
+                   [],
+                   [],
+                   [ LitPat (Var (limpl, r2)); LitPat (Var (limpl, r1)) ],
+                   Static );
+               True limpl;
+             ] )
+    in
+    let pre_lft_tks = pre_lft_tks @ outlives_asns in
+    let post_lft_tks =
+      List.map
+        (fun lft_var -> lft_token_b lit_pat_b lit_pat_b lft_var)
+        self_lft_args
+    in
+    let (Some pre) =
+      AstAux.list_to_sep_conj
+        (List.map (fun e -> (limpl, e)) pre_lft_tks)
+        (Some
+           (Ast.Sep
+              ( ls,
+                Ast.CallExpr
+                  (ls, "thread_token", [], [], [ VarPat (ls, "_t") ], Static),
+                Ast.CallExpr
+                  ( ls,
+                    self_ty ^ "_full_borrow_content",
+                    self_ty_targs,
+                    List.map
+                      (fun x -> Ast.LitPat (Var (ls, x)))
+                      (self_lft_args @ [ "_t"; "self" ]),
+                    [],
+                    Static ) )))
     in
     List.iter2
       (fun targ tparam ->
@@ -3161,51 +3263,52 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                     not identical to its type parameters is not yet supported",
                    None )))
       self_ty_targs tparams;
-    let post =
-      Ast.Sep
-        ( ls,
-          Ast.CallExpr
-            (ls, "thread_token", [], [], [ LitPat (Var (ls, "_t")) ], Static),
-          List.fold_right
-            (fun ({ name; ty; loc } : Mir.field_def_tr) asn ->
-              match (Mir.interp_of ty).full_bor_content with
-              | Error msg ->
-                  raise
-                    (Ast.StaticError
-                       ( limpl,
-                         "Cannot express the content of a full borrow of the \
-                          type of field " ^ name,
-                         None ))
-              | Ok fbc ->
-                  let fbc_args =
-                    [
-                      Ast.Var (loc, "_t");
-                      AddressOf (loc, Read (loc, Var (loc, "self"), name));
-                    ]
-                  in
-                  let fbc_call fbc_name =
-                    Ast.CallExpr
-                      ( loc,
-                        fbc_name,
-                        [],
-                        List.map (fun e -> Ast.LitPat e) fbc_args,
-                        [],
-                        Static )
-                  in
-                  Ast.Sep
-                    ( loc,
-                      (match fbc with
-                      | Var (_, fbc) -> fbc_call fbc
-                      | _ -> Ast.ExprCallExpr (loc, fbc, fbc_args)),
-                      asn ))
-            fds
-            (Ast.CallExpr
-               ( limpl,
-                 "struct_" ^ self_ty ^ "_padding",
-                 self_ty_targs,
-                 [],
-                 [ LitPat (Var (limpl, "self")) ],
-                 Static )) )
+    if self_lft_args <> lft_params then
+      raise (Ast.StaticError (limpl, "A drop function for a struct type whose lifetime arguments are not identical to its lifetime parameters is not yet supported", None));
+    let tid = Ast.Var (limpl, "_t") in
+    let (Some post) =
+      AstAux.list_to_sep_conj
+        (List.map (fun e -> (limpl, e)) post_lft_tks)
+        (Some
+           (Ast.Sep
+              ( ls,
+                Ast.CallExpr
+                  ( ls,
+                    "thread_token",
+                    [],
+                    [],
+                    [ LitPat (Var (ls, "_t")) ],
+                    Static ),
+                List.fold_right
+                  (fun ({ name; ty; loc } : Mir.field_def_tr) asn ->
+                    match
+                      let ty_interp = Mir.interp_of ty in
+                      let* points_to_asn =
+                        ty_interp.points_to tid
+                          (Read (loc, Var (loc, "self"), name))
+                          (Some name)
+                      in
+                      let* own_asn = ty_interp.own tid [ Var (loc, name) ] in
+                      Ok
+                        (Ast.Sep
+                           (loc, Ast.Sep (loc, points_to_asn, own_asn), asn))
+                    with
+                    | Ok asn -> asn
+                    | Error msg ->
+                        raise
+                          (Ast.StaticError
+                             ( loc,
+                               "Could not generate drop postcondition \
+                                conjuncts for this field",
+                               None )))
+                  fds
+                  (Ast.CallExpr
+                     ( limpl,
+                       "struct_" ^ self_ty ^ "_padding",
+                       self_ty_targs,
+                       [],
+                       [ LitPat (Var (limpl, "self")) ],
+                       Static )) )))
     in
     Ok (pre, post)
 
@@ -3586,8 +3689,22 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                     =
                   Mir.basic_type_of self_ty
                 in
+                let (input0 :: _) = inputs_get_list body_cpn in
+                let self_gen_args =
+                  match decode_ty input0 with
+                  | `Ref (_, _, `Adt (_, _, self_gen_args)) -> self_gen_args
+                  | _ -> assert false
+                in
+                let self_lft_args =
+                  Util.flatmap
+                    (function
+                      | `Lifetime name ->
+                          [ TrName.lft_name_without_apostrophe name ]
+                      | _ -> [])
+                    self_gen_args
+                in
                 gen_drop_contract body_tr_defs_ctx.adt_defs self_ty
-                  self_ty_targs contract_loc
+                  self_ty_targs self_lft_args contract_loc
               else
                 gen_contract body_tr_defs_ctx.adt_defs contract_loc
                   lft_param_names outlives_preds param_decls ret_place_decl
@@ -4166,6 +4283,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                loc = def_loc;
                name;
                tparams;
+               lft_params;
                fds;
                def;
                aux_decls = aux_decls @ aux_decls';
