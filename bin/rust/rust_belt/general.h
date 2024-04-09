@@ -147,6 +147,8 @@ lemma void share_full_borrow<T>(lifetime_t k, thread_id_t t, void *l);
 lemma void share_full_borrow_m<T>(lifetime_t k, thread_id_t t, void *l);
     requires type_interp<T>() &*& atomic_mask(?mask) &*& mask_le(Nlft, mask) == true &*& full_borrow(k, (<T>.full_borrow_content)(t, l)) &*& [?q]lifetime_token(k);
     ensures type_interp<T>() &*& atomic_mask(mask) &*& [_](<T>.share)(k, t, l) &*& [q]lifetime_token(k);
+
+predicate lifetimes(list<lifetime_t> lifetimes) = true; // Serves only to carry a function call's lifetime arguments.
 @*/
 
 #endif

@@ -169,7 +169,7 @@ struct Ty {
     struct GenArg {
         struct GenArgKind {
             union {
-                lifetime @0: Void;
+                lifetime @0: Region;
                 type @1: Ty;
                 const @2: Const;
             }
@@ -286,6 +286,18 @@ struct Ty {
     }
 
     kind @0: TyKind;
+}
+
+# A predicate that can appear in a 'where' clause
+struct Predicate {
+    struct Outlives {
+        region1 @0: Ty.Region;
+        region2 @1: Ty.Region;
+    }
+    union {
+        outlives @0: Outlives;
+        ignored @1: Void; # A predicate that we are ignoring for now
+    }
 }
 
 struct Body {
@@ -585,7 +597,8 @@ struct Body {
     defKind @0: DefKind;
     defPath @1: Text;
     contract @2: Contract;
-    argCount @3: UInt32;
+    output @16: Ty;
+    inputs @3: List(Ty);
     localDecls @4: List(LocalDecl);
     basicBlocks @5: List(BasicBlock);
     span @6: SpanData;
@@ -596,6 +609,7 @@ struct Body {
     unsafety @10: Unsafety;
     implBlockHirGenerics @14: Option(Hir.Generics);
     hirGenerics @11: Hir.Generics;
+    predicates @17: List(Predicate);
     isTraitFn @12: Bool;
     isDropFn @13: Bool; # Implements std::ops::Drop::drop
     # Todo @Nima: Add Visibility data

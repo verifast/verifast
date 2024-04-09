@@ -387,6 +387,7 @@ mod vf_mir_builder {
     use crate::vf_mir_capnp::unsafety as unsafety_cpn;
     use crate::vf_mir_capnp::vf_mir as vf_mir_cpn;
     use crate::vf_mir_capnp::visibility as visibility_cpn;
+    use crate::vf_mir_capnp::predicate as predicate_cpn;
     use adt_def_cpn::variant_def as variant_def_cpn;
     use basic_block_cpn::operand as operand_cpn;
     use basic_block_cpn::rvalue as rvalue_cpn;
@@ -950,6 +951,17 @@ mod vf_mir_builder {
             }
         }
 
+        fn encode_predicate(pred: &(ty::Clause<'tcx>, rustc_span::Span), mut pred_cpn: predicate_cpn::Builder<'_>) {
+            match pred.0.kind().skip_binder() {
+                ty::ClauseKind::RegionOutlives(outlives_pred) => {
+                    let mut outlives_cpn = pred_cpn.init_outlives();
+                    Self::encode_region(outlives_pred.0, outlives_cpn.reborrow().init_region1());
+                    Self::encode_region(outlives_pred.1, outlives_cpn.reborrow().init_region2());
+                }
+                _ => pred_cpn.set_ignored(()),
+            }
+        }
+
         fn encode_body(enc_ctx: &mut EncCtx<'tcx, 'a>, mut body_cpn: body_cpn::Builder<'_>) {
             let tcx = enc_ctx.tcx;
             let body = enc_ctx.body();
@@ -1010,6 +1022,11 @@ mod vf_mir_builder {
                 .expect(&format!("Failed to get HIR generics data"));
             Self::encode_hir_generics(enc_ctx, hir_gens, hir_gens_cpn);
 
+            let predicates = tcx.predicates_of(def_id).predicates;
+            let predicates_cpn = body_cpn.reborrow().fill_predicates(predicates, |pred_cpn, pred| {
+                Self::encode_predicate(pred, pred_cpn);
+            });
+
             let contract_cpn = body_cpn.reborrow().init_contract();
             let body_contract_span = crate::span_utils::body_contract_span(tcx, body);
             let contract_annots = enc_ctx
@@ -1020,15 +1037,30 @@ mod vf_mir_builder {
                 .collect::<LinkedList<_>>();
             Self::encode_contract(tcx, contract_annots, &body_contract_span, contract_cpn);
 
-            let arg_count = body.arg_count.try_into().expect(&format!(
-                "The number of args of {} cannot be stored in a Capnp message",
-                def_path
-            ));
-            body_cpn.set_arg_count(arg_count);
+            let polysig = tcx.fn_sig(def_id);
+            let sig0 = polysig.skip_binder();
+            let sig = sig0.skip_binder();
+            Self::encode_ty(
+                tcx,
+                enc_ctx,
+                sig.output(),
+                body_cpn.reborrow().init_output(),
+            );
+            body_cpn.fill_inputs(
+                sig.inputs(),
+                |input_cpn, input| {
+                    Self::encode_ty(
+                        tcx,
+                        enc_ctx,
+                        *input,
+                        input_cpn,
+                    );
+                },
+            );
 
             let local_decls_count = body.local_decls().len();
             assert!(
-                local_decls_count > arg_count as usize,
+                local_decls_count > sig.inputs().len() as usize,
                 "Local declarations of {} are not more than its args",
                 def_path
             );
@@ -1530,10 +1562,8 @@ mod vf_mir_builder {
 
         fn encode_region(region: ty::Region<'tcx>, mut region_cpn: region_cpn::Builder<'_>) {
             debug!("Encoding region {:?}", region);
-            // MIR borrow-checker changes all regions to fresh `ReVar` and generates constraints for them and then tries to resolve the constraints
-            // We do not expect to receive any other kind of `Region` because we are getting borrow-checked MIR
             match region.kind() {
-                ty::RegionKind::ReEarlyParam(_early_bound_region) => bug!(),
+                ty::RegionKind::ReEarlyParam(_early_bound_region) => region_cpn.set_id(_early_bound_region.name.as_str()),
                 ty::RegionKind::ReBound(de_bruijn_index, bound_region) => match bound_region.kind {
                     ty::BoundRegionKind::BrAnon => todo!(),
                     ty::BoundRegionKind::BrNamed(def_id, symbol) => {
@@ -1545,7 +1575,7 @@ mod vf_mir_builder {
                 ty::RegionKind::ReStatic => bug!(),
                 ty::RegionKind::ReVar(_) | ty::RegionKind::ReErased => {
                     // Todo @Nima: We should find a mapping of `RegionVid`s and lifetime variable names at `hir`
-                    region_cpn.set_id(/*&format!("{:?}", region)*/ "a");
+                    region_cpn.set_id(/*&format!("{:?}", region)*/ "'erased");
                 }
                 ty::RegionKind::RePlaceholder(_placeholder_region) => bug!(),
                 _ => bug!(),
@@ -1562,7 +1592,10 @@ mod vf_mir_builder {
             let kind_cpn = gen_arg_cpn.init_kind();
             let kind = gen_arg.unpack();
             match kind {
-                ty::GenericArgKind::Lifetime(_) => todo!("Lifetime generic arg"),
+                ty::GenericArgKind::Lifetime(region) => {
+                    let region_cpn = kind_cpn.init_lifetime();
+                    Self::encode_region(region, region_cpn);
+                }
                 ty::GenericArgKind::Type(ty) => {
                     let ty_cpn = kind_cpn.init_type();
                     Self::encode_ty(tcx, enc_ctx, ty, ty_cpn);
