@@ -596,6 +596,7 @@ struct Body {
 
     defKind @0: DefKind;
     defPath @1: Text;
+    moduleDefPath @18: Text; # Empty string if in crate root
     contract @2: Contract;
     output @16: Ty;
     inputs @3: List(Ty);

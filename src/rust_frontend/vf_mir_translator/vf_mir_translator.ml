@@ -224,8 +224,8 @@ module AstAux = struct
     List.sort
       (fun d d1 ->
         compare
-          (Ast.lexed_loc @@ decl_loc @@ d)
-          (Ast.lexed_loc @@ decl_loc @@ d1))
+          (Ast.lexed_loc @@ decl_loc @@ snd d)
+          (Ast.lexed_loc @@ decl_loc @@ snd d1))
       ds
 end
 
@@ -3459,21 +3459,28 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | DefKind.Fn ->
         let def_path = def_path_get body_cpn in
         let name = TrName.translate_def_path def_path in
+        let moduleName = module_def_path_get body_cpn in
+        let split_name =
+          if moduleName = "" then (moduleName, name)
+          else (
+            assert (String.starts_with ~prefix:(moduleName ^ "::") name);
+            ( moduleName,
+              String.sub name
+                (String.length moduleName + 2)
+                (String.length name - String.length moduleName - 2) ))
+        in
         (*Printf.printf "Translating body %s...\n" name;*)
-        let* tparams =
+        let* impl_block_gens =
           match impl_block_hir_generics_get body_cpn |> OptionRd.get with
           | Nothing -> Ok []
           | Something hir_gens_cpn_ptr ->
               let hir_gens_cpn = VfMirStub.Reader.of_pointer hir_gens_cpn_ptr in
               let* gens, gens_loc = translate_hir_generics hir_gens_cpn in
-              Ok
-                (Util.flatmap
-                   (function
-                     | name, Hir.GenParamType, loc -> [ name ] | _ -> [])
-                   gens)
+              Ok gens
         in
         let hir_gens_cpn = hir_generics_get body_cpn in
         let* gens, gens_loc = translate_hir_generics hir_gens_cpn in
+        let gens = impl_block_gens @ gens in
         let* lft_param_names =
           ListAux.try_filter_map
             (fun (name, kind, loc) ->
@@ -3484,10 +3491,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             gens
         in
         let tparams =
-          tparams
-          @ Util.flatmap
-              (function name, Hir.GenParamType, loc -> [ name ] | _ -> [])
-              gens
+          Util.flatmap
+            (function name, Hir.GenParamType, loc -> [ name ] | _ -> [])
+            gens
         in
         let tparams =
           if is_trait_fn_get body_cpn then "Self" :: tparams else tparams
@@ -3637,11 +3643,11 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           | None -> None
           | Some contract_template ->
               let body_sig = mk_fn_decl contract_template None in
-              Some body_sig
+              Some (split_name, body_sig)
         in
         Ok
           ( body_sig_opt,
-            body,
+            (split_name, body),
             ({ id = loc; info = env_map } : VF0.debug_info_rust_fe) )
     | DefKind.AssocFn -> failwith "Todo: MIR Body kind AssocFn"
     | _ -> Error (`TrBodyFatal "Unknown MIR Body kind")
@@ -4306,6 +4312,24 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       iter segments
     else d
 
+  let modularize_fn_decl
+      (((moduleName : string), (fnName : string)), (d : Ast.decl)) : Ast.decl =
+    let l, name, name_setter = AstAux.decl_loc_name_and_name_setter d in
+    if moduleName <> "" then
+      let d = name_setter fnName in
+      let segments = String.split_on_char ':' moduleName in
+      let rec iter = function
+        | segment :: "" :: segments ->
+            Ast.ModuleDecl (l, segment, [], [ iter segments ])
+        | [ segment ] -> Ast.ModuleDecl (l, segment, [], [ d ])
+        | _ ->
+            failwith
+              (Printf.sprintf "Unexpected shape of Rust module name: '%s'"
+                 moduleName)
+      in
+      iter segments
+    else d
+
   let translate_vf_mir (extern_specs : string list) (vf_mir_cpn : VfMirRd.t)
       (report_should_fail : string -> Ast.loc0 -> unit) =
     let job _ =
@@ -4377,7 +4401,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       *)
       let body_sigs = AstAux.sort_decls_lexically body_sigs in
       let body_decls = AstAux.sort_decls_lexically body_decls in
-      let traits_and_body_decls = traits_decls @ body_decls in
+      let traits_and_body_decls = traits_decls @ List.map snd body_decls in
       let* trait_impls =
         translate_trait_impls (VfMirRd.trait_impls_get_list vf_mir_cpn)
       in
@@ -4394,7 +4418,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           (traits_decls @ trait_impl_prototypes @ adt_decls @ aux_decls
          @ adts_full_bor_content_preds @ adts_proof_obligs)
         @ ghost_decls
-        @ List.map modularize_decl (body_sigs @ body_decls)
+        @ List.map modularize_fn_decl (body_sigs @ body_decls)
       in
       (* Todo @Nima: we should add necessary inclusions during translation *)
       let extern_header_names =

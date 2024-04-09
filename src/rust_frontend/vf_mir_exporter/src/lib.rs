@@ -1003,6 +1003,11 @@ mod vf_mir_builder {
             let def_path = tcx.def_path_str(def_id);
             body_cpn.set_def_path(&def_path);
 
+            let parent_module = tcx.parent_module_from_def_id(def_id.expect_local());
+            if parent_module != rustc_span::def_id::LocalModDefId::CRATE_DEF_ID {
+                body_cpn.set_module_def_path(&tcx.def_path_str(parent_module.to_def_id()));
+            }
+
             Self::encode_unsafety(
                 tcx.fn_sig(def_id).skip_binder().unsafety(),
                 body_cpn.reborrow().init_unsafety(),
