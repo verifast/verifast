@@ -20,11 +20,11 @@ concept IsAstNode = IsAnyOf<T, clang::Decl, clang::Stmt, clang::Expr,
                             clang::Type, clang::TypeLoc>;
 
 template <typename T>
-concept IsWhileAstNode = IsAnyOf<T, clang::WhileStmt, clang::DoStmt>;
+concept IsLoopAstNode = IsAnyOf<T, clang::WhileStmt, clang::DoStmt, clang::ForStmt>;
 
 #else
 #define IsAnyOf typename
 #define IsStubsNode typename
 #define IsAstNode typename
-#define IsWhileAstNode typename
+#define IsLoopAstNode typename
 #endif

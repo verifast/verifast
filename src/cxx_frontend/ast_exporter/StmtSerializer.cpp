@@ -83,7 +83,11 @@ bool StmtSerializer::VisitNullStmt(const clang::NullStmt *stmt) {
   return true;
 }
 
-template <IsWhileAstNode While>
+inline clang::SourceLocation getLoc(clang::ForStmt const * const stmt) {return stmt->getForLoc();}
+inline clang::SourceLocation getLoc(clang::WhileStmt const * const stmt) {return stmt->getWhileLoc();}
+inline clang::SourceLocation getLoc(clang::DoStmt const * const stmt) {return stmt->getWhileLoc();}
+
+template <IsLoopAstNode While>
 bool StmtSerializer::serializeWhileStmt(stubs::Stmt::While::Builder builder,
                                         const While *stmt) {
 
@@ -101,7 +105,7 @@ bool StmtSerializer::serializeWhileStmt(stubs::Stmt::While::Builder builder,
   }
 
   auto whileLoc = builder.initWhileLoc();
-  auto whileBegin = stmt->getWhileLoc();
+  auto whileBegin = getLoc(stmt);
   serializeSourceRange(whileLoc, whileBegin, getSourceManager(),
                        getContext().getLangOpts());
 
@@ -118,6 +122,30 @@ bool StmtSerializer::VisitWhileStmt(const clang::WhileStmt *stmt) {
 bool StmtSerializer::VisitDoStmt(const clang::DoStmt *stmt) {
   auto doWhi = m_builder.initDoWhile();
   return serializeWhileStmt(doWhi, stmt);
+}
+
+bool StmtSerializer::VisitForStmt(const clang::ForStmt *stmt) {
+  using ForStmtBuilder = ::stubs::Stmt::For::Builder;
+  using StmtBuilder = ::stubs::Node<stubs::Stmt>::Builder;
+  using ExprBuilder = ::stubs::Node<stubs::Expr>::Builder;
+  using WhileBuilder = ::stubs::Stmt::While::Builder;
+
+  // Initialize For loop
+  ForStmtBuilder forBuilder = m_builder.initFor();
+
+  // Initialize Init of For loop [ for(init cond; iter) body; ]
+  StmtBuilder initBuilder = forBuilder.initInit();
+  m_serializer.serializeStmt(initBuilder, stmt->getInit());
+
+  // Initialize Condition and Body of For loop as While
+  WhileBuilder whileBuilder = forBuilder.initInsideWhile();
+  if(serializeWhileStmt(whileBuilder, stmt) == 0) return false;
+
+  // Initialize Iteration of For loop
+  ExprBuilder iterationBuilder = forBuilder.initIteration();
+  m_serializer.serializeExpr(iterationBuilder, stmt->getInc());
+
+  return true;
 }
 
 bool StmtSerializer::VisitBreakStmt(const clang::BreakStmt *stmt) {

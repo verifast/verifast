@@ -138,6 +138,12 @@ struct Stmt {
     whileLoc @3 :Loc;
   }
 
+  struct For {
+    init @0 :StmtNode;
+    insideWhile @1 :While;
+    iteration @2 :ExprNode;
+  }
+
   struct Case {
     lhs @0 :ExprNode;
     stmt @1 :StmtNode; # optional
@@ -168,6 +174,7 @@ struct Stmt {
     switch @12 :Switch;
     case @13 :Case;
     defCase @14 :DefCase;
+    for @15 :For;
   }
 }
 
