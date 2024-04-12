@@ -22,7 +22,9 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
     | Null -> transl_null_stmt loc
     | While w -> transl_while_stmt loc w
     | DoWhile w -> transl_do_while_stmt loc w
+    | For f -> transl_for_stmt loc f
     | Break -> transl_break_stmt loc
+    | Continue -> transl_continue_stmt loc
     | Compound c -> transl_compound_stmt loc c
     (* TODO: check if this is translated correctly *)
     (* | Switch s            -> transl_switch_stmt loc s *)
@@ -136,7 +138,15 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
         body,
         [ Ast.IfStmt (while_loc, cond, [], [ Ast.Break while_loc ]) ] )
 
+  and transl_for_stmt (loc : Ast.loc) (f : R.Stmt.For.t) : Ast.stmt =
+    let open R.Stmt.For in
+    let _, cond, body, spec, decr = transl_while_like loc (inside_while_get f) in
+    let forStmt = Ast.WhileStmt ( loc, cond, spec, decr, body, [ Ast.ExprStmt (Expr_translator.translate @@ iteration_get f) ] ) in
+    Ast.BlockStmt ( loc, [], [translate @@ init_get f; forStmt], loc, ref [] )
+
   and transl_break_stmt (loc : Ast.loc) : Ast.stmt = Ast.Break loc
+
+  and transl_continue_stmt (loc : Ast.loc) : Ast.stmt = Ast.Continue loc
 
   and transl_switch_stmt (loc : Ast.loc) (s : R.Stmt.Switch.t) : Ast.stmt =
     let open R.Stmt.Switch in

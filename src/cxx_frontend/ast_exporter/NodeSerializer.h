@@ -128,6 +128,8 @@ struct StmtSerializer : public NodeSerializer<stubs::Stmt, clang::Stmt>,
 
   bool VisitDoStmt(const clang::DoStmt *stmt);
 
+  bool VisitForStmt(const clang::ForStmt *stmt);
+
   bool VisitBreakStmt(const clang::BreakStmt *stmt);
 
   bool VisitContinueStmt(const clang::ContinueStmt *stmt);
@@ -139,7 +141,7 @@ struct StmtSerializer : public NodeSerializer<stubs::Stmt, clang::Stmt>,
   bool VisitDefaultStmt(const clang::DefaultStmt *stmt);
 
 private:
-  template <IsWhileAstNode While>
+  template <IsLoopAstNode While>
   bool serializeWhileStmt(stubs::Stmt::While::Builder builder,
                           const While *stmt);
 };
