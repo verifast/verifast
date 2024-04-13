@@ -1,10 +1,61 @@
-cmake_minimum_required(VERSION 3.15)
+cmake_minimum_required(VERSION 3.20)
 project(VF_AST_Exporter)
 
 set(LLVM_INSTALL_DIR "" CACHE PATH "LLVM installation directory")
 set(VFDEPS "" CACHE PATH "vfdeps package directory")
 set(LLVM_DIR "${LLVM_INSTALL_DIR}/lib/cmake/llvm")
 set(Clang_DIR "${LLVM_INSTALL_DIR}/lib/cmake/clang")
+set(CapnProto_DIR "${VFDEPS}/lib/cmake/CapnProto")
+
+find_package(LLVM REQUIRED CONFIG)
+find_package(Clang REQUIRED CONFIG)
+find_package(CapnProto REQUIRED CONFIG)
+
+add_definitions(${LLVM_DEFINITIONS})
+
+message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
+message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
+message(STATUS "Using CapnProtoConfig.cmake in: ${CapnProto_DIR}")
+
+set(PROJECT_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+cmake_path(GET PROJECT_DIR PARENT_PATH PARENT_DIR)
+
+set(STUBS_DIR "${PARENT_DIR}/stubs")
+set(STUBS_SCHEMA_NAME stubs_ast.capnp)
+set(STUBS_SCHEMA "${STUBS_DIR}/${STUBS_SCHEMA_NAME}")
+
+# The cap'n Proto tool expects windows native paths instead of cygwin paths
+# These variables are converted to native paths on windows if cygpath is available
+set(CAPNP_INCLUDES "${CAPNP_INCLUDE_DIRECTORY}")
+set(CAPNP_STUBS_SCHEMA "${STUBS_SCHEMA}")
+
+if(WIN32)
+  find_program(CYGPATH_EXE cygpath)
+  if (CYGPATH_EXE)
+    function(CYGPATH TARGET)
+      execute_process(COMMAND cygpath -w "${${TARGET}}" OUTPUT_VARIABLE NATIVE_PATH OUTPUT_STRIP_TRAILING_WHITESPACE)
+      set(${TARGET} "${NATIVE_PATH}" PARENT_SCOPE)
+    endfunction()
+
+    cygpath(CAPNP_INCLUDES)
+    cygpath(CAPNP_STUBS_SCHEMA)
+  endif()
+endif()
+
+# generate stubs
+add_custom_command(
+  OUTPUT "${STUBS_SCHEMA}.c++" "{STUBS_SCHEMA}.h"
+  WORKING_DIRECTORY "${STUBS_DIR}"
+  COMMAND capnp
+  ARGS 
+    compile
+    -I "${CAPNP_INCLUDES}"
+    -o "c++"
+    "${STUBS_SCHEMA_NAME}"
+  DEPENDS "${STUBS_SCHEMA}"
+  COMMENT "Compiling Cap'n Proto schema ${STUBS_SCHEMA}"
+  VERBATIM
+)
 
 add_executable(vf-cxx-ast-exporter
   VerifastASTExporter.cpp
@@ -21,20 +72,14 @@ add_executable(vf-cxx-ast-exporter
   FixedWidthInt.cpp
   AnnotationStore.cpp
   Inclusion.cpp
+  ${STUBS_SCHEMA}.c++
 )
-
-find_package(LLVM REQUIRED CONFIG)
-find_package(Clang REQUIRED CONFIG)
-
-add_definitions(${LLVM_DEFINITIONS})
-
-message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
-message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 
 target_include_directories(vf-cxx-ast-exporter
   PRIVATE
   ${LLVM_INCLUDE_DIRS}
   ${CLANG_INCLUDE_DIRS}
+  ${STUBS_DIR}
 )
 
 if(NOT LLVM_ENABLE_RTTI)
@@ -43,31 +88,14 @@ endif()
 
 llvm_map_components_to_libnames(LLVM_LIBS support)
 set(CLANG_LIBS clangAST clangBasic clangFrontend clangTooling)
-set(CAPNP_LIBS capnp)
-set(KJ_LIBS kj)
-
-set(LIBS_PATHS "")
-
-foreach(LIB IN LISTS CAPNP_LIBS KJ_LIBS)
-  set(_LIB_VAR "LIB_${LIB}")
-  find_library(${_LIB_VAR} NAMES lib${LIB}.a ${LIB}.lib PATHS "${VFDEPS}/lib" REQUIRED NO_CACHE NO_DEFAULT_PATH)
-  message(STATUS "Found lib file: ${${_LIB_VAR}}")
-  list(APPEND LIBS_PATHS ${${_LIB_VAR}})
-endforeach()
 
 set_property(TARGET vf-cxx-ast-exporter PROPERTY CXX_STANDARD 20)
 
-target_include_directories(vf-cxx-ast-exporter
-  PRIVATE
-  ${VFDEPS}/include
-  "../stubs"
-)
-
 target_link_libraries(vf-cxx-ast-exporter
   PRIVATE
-  ${LIBS_PATHS}
   ${LLVM_LIBS}
   ${CLANG_LIBS}
+  CapnProto::capnp
 )
 
 include(CheckCXXCompilerFlag)
