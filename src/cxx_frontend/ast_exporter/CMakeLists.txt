@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.15)
 project(VF_AST_Exporter)
 
 set(LLVM_INSTALL_DIR "" CACHE PATH "LLVM installation directory")
@@ -18,7 +18,7 @@ message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 message(STATUS "Using CapnProtoConfig.cmake in: ${CapnProto_DIR}")
 
 set(PROJECT_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
-cmake_path(GET PROJECT_DIR PARENT_PATH PARENT_DIR)
+get_filename_component(PARENT_DIR ${PROJECT_DIR} DIRECTORY)
 
 set(STUBS_DIR "${PARENT_DIR}/stubs")
 set(STUBS_SCHEMA_NAME stubs_ast.capnp)
