@@ -56,7 +56,8 @@ fixpoint pointer union_variant_ptr(pointer p, void *unionTypeid, int variantId) 
     return pointer_ctor(union_variant_ptr_provenance(p, unionTypeid, variantId), p.address);
 }
 
-fixpoint pointer_provenance null_pointer_provenance();
+fixpoint pointer_provenance invalid_pointer_provenance();
+fixpoint pointer_provenance null_pointer_provenance() { return invalid_pointer_provenance(); }
 fixpoint pointer null_pointer() { return pointer_ctor(null_pointer_provenance, 0); }
 
 fixpoint uintptr_t ptr_provenance_min_addr(pointer_provenance pr);

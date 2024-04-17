@@ -26,6 +26,10 @@ mod ptr {
     //@ req thread_token(?t) &*& (<T>.full_borrow_content(t, to_drop))();
     //@ ens thread_token(t) &*& *to_drop |-> _;
 
+    fn invalid_mut<T>(addr: usize) -> *mut T;
+    //@ req true;
+    //@ ens result as pointer == pointer_ctor(invalid_pointer_provenance, addr);
+
 }
 
 mod alloc {

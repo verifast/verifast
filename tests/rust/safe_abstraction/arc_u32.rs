@@ -1,3 +1,5 @@
+#![feature(strict_provenance)]
+
 use std::process::abort;
 
 pub mod ptr {
@@ -10,6 +12,14 @@ pub mod ptr {
             NonNull {
                 pointer: reference as *mut T,
             }
+        }
+
+        pub unsafe fn new_unchecked(ptr: *mut T) -> Self {
+            NonNull { pointer: ptr }
+        }
+
+        pub unsafe fn as_ref<'a>(&'a self) -> &'a T {
+            &*self.pointer
         }
     }
 }
@@ -83,5 +93,27 @@ impl ArcU32 {
 
     unsafe fn from_inner(ptr: NonNull<ArcInnerU32>) -> Self {
         Self { ptr }
+    }
+
+    fn inner<'a>(&'a self) -> &'a ArcInnerU32 {
+        unsafe { self.ptr.as_ref() }
+    }
+}
+
+impl std::ops::Deref for ArcU32 {
+    type Target = u32;
+
+    fn deref<'a>(&'a self) -> &u32 {
+        &self.inner().data
+    }
+}
+
+impl WeakU32 {
+    pub fn new() -> WeakU32 {
+        WeakU32 {
+            ptr: unsafe {
+                NonNull::new_unchecked(std::ptr::invalid_mut::<ArcInnerU32>(usize::MAX))
+            },
+        }
     }
 }
