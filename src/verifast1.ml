@@ -141,7 +141,6 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 
   let data_model = match language with Java -> Some data_model_java | CLang -> data_model
   let int_width, long_width, ptr_width = decompose_data_model data_model
-  let llong_width = LitWidth 3
   let intType = Int (Signed, IntRank)
   let sizeType = Int (Unsigned, PtrRank)
   let ptrdiff_t = Int (Signed, PtrRank)
