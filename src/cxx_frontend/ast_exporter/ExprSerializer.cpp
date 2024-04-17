@@ -207,6 +207,10 @@ bool ExprSerializer::serializeCast(const clang::CastExpr *expr, bool expl) {
     auto ce = m_builder.initBaseToDerived();
     return serializeStructToStructCast(ce, expr);
   }
+  case clang::CastKind::CK_PointerToIntegral: {
+    auto ce = m_builder.initIntegralCast();
+    return serializeStructToStructCast(ce, expr);
+  }
   default:
     if (expl)
       return false;

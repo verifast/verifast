@@ -4953,6 +4953,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | (PtrType _, PtrType _) when isCast -> Upcast (w, t, t0)
         | (Int (_, _)), (Int (_, _)) when isCast -> if definitely_is_upcast (int_rank_and_signedness t) (int_rank_and_signedness t0) then Upcast (w, t, t0) else w
         | (PtrType _), (Int (Unsigned, PtrRank)) when isCast -> WReadInductiveField (expr_loc w, w, "pointer", "pointer_ctor", "address", [], PtrType Void, PtrType Void)
+        | (PtrType _), (Int (Unsigned, m)) when isCast && definitely_is_upcast (int_rank_and_signedness t) (int_rank_and_signedness t0) -> WReadInductiveField (expr_loc w, w, "pointer", "pointer_ctor", "address", [], PtrType Void, PtrType Void)
         | (Int (_, _)), (PtrType _) when isCast && (inAnnotation = Some true || definitely_is_upcast (int_rank_and_signedness t) (int_rank_and_signedness t0)) -> WPureFunCall (expr_loc w, "pointer_ctor", [], [WPureFunCall (expr_loc w, "null_pointer_provenance", [], []); w])
         | (Int (signedness, _), (Float|Double|LongDouble)) -> floating_point_fun_call_expr funcmap (expr_loc w) t0 ("of_" ^ identifier_string_of_type (Int (signedness, FixedWidthRank max_width))) [TypedExpr (w, t)]
         | ((Float|Double|LongDouble), (Float|Double|LongDouble)) -> floating_point_fun_call_expr funcmap (expr_loc w) t0 ("of_" ^ identifier_string_of_type t) [TypedExpr (w, t)]

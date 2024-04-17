@@ -446,6 +446,7 @@ struct Expr {
     operatorCall @19 :Call;
     cleanups @20 :ExprNode;
     bindTemporary @21 :ExprNode;
+    integralCast @22 :StructToStruct;
   }
 }
 
