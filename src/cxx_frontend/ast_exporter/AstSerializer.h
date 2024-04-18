@@ -169,7 +169,7 @@ public:
 template <IsStubsNode StubsNode, IsAstNode AstNode, typename Serializer>
 class NodeListSerializer {
   static_assert(
-      std::derived_from<Serializer, NodeSerializer<StubsNode, AstNode>>,
+      std::is_base_of_v<NodeSerializer<StubsNode, AstNode>, Serializer>,
       "Serializer must be an appropriate instance of NodeSerializer");
 
 public:
