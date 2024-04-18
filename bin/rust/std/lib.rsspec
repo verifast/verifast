@@ -28,7 +28,7 @@ mod ptr {
 
     fn invalid_mut<T>(addr: usize) -> *mut T;
     //@ req true;
-    //@ ens result as pointer == pointer_ctor(invalid_pointer_provenance, addr);
+    //@ ens result as usize == addr;
 
 }
 
