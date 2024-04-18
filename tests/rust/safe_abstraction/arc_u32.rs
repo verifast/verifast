@@ -51,6 +51,10 @@ pub mod sync {
             pub fn new(v: usize) -> AtomicUsize {
                 abort();
             }
+
+            pub fn load_seq_cst<'a>(&'a self) -> usize {
+                abort();
+            }
         }
     }
 }
@@ -97,6 +101,21 @@ impl ArcU32 {
 
     fn inner<'a>(&'a self) -> &'a ArcInnerU32 {
         unsafe { self.ptr.as_ref() }
+    }
+
+    pub fn strong_count<'a>(this: &'a Self) -> usize {
+        this.inner().strong.load_seq_cst()
+    }
+
+    pub fn weak_count<'a>(this: &'a Self) -> usize {
+        let cnt = this.inner().weak.load_seq_cst();
+        // If the weak count is currently locked, the value of the
+        // count was 0 just before taking the lock.
+        if cnt == usize::MAX {
+            0
+        } else {
+            cnt - 1
+        }
     }
 }
 
