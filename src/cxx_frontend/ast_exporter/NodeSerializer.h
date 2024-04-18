@@ -297,8 +297,8 @@ private:
 
   bool serializeCast(const clang::CastExpr *expr, bool expl);
 
-  bool serializeStructToStructCast(
-      stubs::Expr::Expr::StructToStruct::Builder &builder,
+  bool serializeCast(
+      stubs::Expr::Expr::Cast::Builder &builder,
       const clang::CastExpr *expr);
 };
 
