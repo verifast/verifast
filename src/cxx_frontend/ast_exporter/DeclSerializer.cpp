@@ -149,7 +149,6 @@ void DeclSerializer::serializeBases(
   }
 }
 
-using DeclNodeOrphan = NodeOrphan<stubs::Decl>;
 bool DeclSerializer::VisitCXXRecordDecl(const clang::CXXRecordDecl *decl) {
   auto recordBuilder = m_builder.initRecord();
 
@@ -161,18 +160,17 @@ bool DeclSerializer::VisitCXXRecordDecl(const clang::CXXRecordDecl *decl) {
   recordBuilder.setKind(kind);
   if (decl->isThisDeclarationADefinition()) {
     auto orphanage = capnp::Orphanage::getForMessageContaining(m_builder);
-    llvm::SmallVector<DeclNodeOrphan> declNodeOrphans;
+    DeclListSerializer declListSerializer(orphanage, m_serializer);
     auto &store = m_serializer.getAnnStore();
     auto &SM = getSourceManager();
     llvm::SmallVector<Annotation> anns;
 
     for (auto d : decl->decls()) {
-      if (d->isImplicit() && !m_serializeImplicitDecls)
+      if (d->isImplicit() && !m_serializer.serializeImplicitDecls())
         continue;
 
       store.getUntilLoc(anns, d->getBeginLoc(), SM);
-      m_serializer.serializeAnnsToOrphans(anns, orphanage, declNodeOrphans);
-      m_serializer.serializeToOrphan(d, orphanage, declNodeOrphans);
+      declListSerializer << anns << d;
       anns.clear();
     }
 
@@ -209,10 +207,10 @@ bool DeclSerializer::VisitCXXRecordDecl(const clang::CXXRecordDecl *decl) {
     }
 
     store.getUntilLoc(anns, decl->getBraceRange().getEnd(), SM);
-    m_serializer.serializeAnnsToOrphans(anns, orphanage, declNodeOrphans);
+    declListSerializer << anns;
 
-    auto declsBuilder = bodyBuilder.initDecls(declNodeOrphans.size());
-    AstSerializer::adoptOrphansToListBuilder(declNodeOrphans, declsBuilder);
+    auto declsBuilder = bodyBuilder.initDecls(declListSerializer.size());
+    declListSerializer.adoptListToBuilder(declsBuilder);
   }
   return true;
 }
@@ -359,27 +357,28 @@ bool DeclSerializer::VisitNamespaceDecl(const clang::NamespaceDecl *decl) {
   auto ns = m_builder.initNamespace();
   ns.setName(decl->getNameAsString());
 
+  DeclListSerializer declListSerializer(
+      capnp::Orphanage::getForMessageContaining(m_builder), m_serializer);
+
   auto orphanage = capnp::Orphanage::getForMessageContaining(m_builder);
-  llvm::SmallVector<DeclNodeOrphan, 16> declNodeOrphans;
   auto &store = m_serializer.getAnnStore();
   auto &SM = getSourceManager();
   llvm::SmallVector<Annotation> anns;
 
   for (auto d : decl->decls()) {
-    if (d->isImplicit() && !m_serializeImplicitDecls)
+    if (d->isImplicit() && !m_serializer.serializeImplicitDecls())
       continue;
 
     store.getUntilLoc(anns, d->getBeginLoc(), SM);
-    m_serializer.serializeAnnsToOrphans(anns, orphanage, declNodeOrphans);
-    m_serializer.serializeToOrphan(d, orphanage, declNodeOrphans);
+    declListSerializer << anns << d;
     anns.clear();
   }
 
   store.getUntilLoc(anns, decl->getRBraceLoc(), SM);
-  m_serializer.serializeAnnsToOrphans(anns, orphanage, declNodeOrphans);
+  declListSerializer << anns;
 
-  auto decls = ns.initDecls(declNodeOrphans.size());
-  AstSerializer::adoptOrphansToListBuilder(declNodeOrphans, decls);
+  auto decls = ns.initDecls(declListSerializer.size());
+  declListSerializer.adoptListToBuilder(decls);
 
   return true;
 }

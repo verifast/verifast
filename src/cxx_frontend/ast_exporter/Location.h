@@ -3,6 +3,7 @@
 #include "stubs_ast.capnp.h"
 #include "clang/Basic/FileManager.h"
 #include "clang/Basic/SourceManager.h"
+#include "clang/AST/ASTContext.h"
 
 namespace vf {
 
@@ -25,17 +26,19 @@ struct LCF {
  * @return false if the given location \p was invalid and it was not possible to
  * decompose it.
  */
-bool decomposeLocToLCF(const clang::SourceLocation loc,
+bool decomposeLocToLCF(clang::SourceLocation loc,
                        const clang::SourceManager &SM, LCF &lcf);
 
 void serializeSourcePos(stubs::Loc::SrcPos::Builder builder, LCF lcf);
 
 void serializeSourceRange(stubs::Loc::Builder builder,
-                          const clang::SourceRange range,
+                          clang::SourceRange range,
                           const clang::SourceManager &SM,
                           const clang::LangOptions &langOpts);
 
-const clang::FileEntry *getFileEntry(const clang::SourceLocation loc,
+void serializeSourceRange(stubs::Loc::Builder builder, clang::SourceRange range, const clang::ASTContext &ASTContext);
+
+const clang::FileEntry *getFileEntry(clang::SourceLocation loc,
                                      const clang::SourceManager &SM);
 
 } // namespace vf

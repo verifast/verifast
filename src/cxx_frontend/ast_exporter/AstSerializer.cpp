@@ -4,11 +4,21 @@
 
 namespace vf {
 
+DeclListSerializer &AstSerializer::getDeclListSerializer(unsigned fd) {
+  auto it = m_fileDeclsMap.find(fd);
+  if (it != m_fileDeclsMap.end()) {
+    return it->second;
+  }
+
+  return m_fileDeclsMap
+      .emplace(std::piecewise_construct, std::forward_as_tuple(fd),
+               std::forward_as_tuple(m_orphanage, *this))
+      .first->second;
+}
+
 void AstSerializer::serializeDecl(DeclSerializer::NodeBuilder builder,
                                   const clang::Decl *decl) {
-  if (!m_serializeImplicitDecls && decl->isImplicit())
-    return;
-  DeclSerializer ser(m_ASTContext, *this, builder, m_serializeImplicitDecls);
+  DeclSerializer ser(m_ASTContext, *this, builder);
   ser.serialize(decl);
 }
 
@@ -77,23 +87,6 @@ void AstSerializer::serializeParams(
   }
 }
 
-void AstSerializer::serializeNodeDecomposed(stubs::Loc::Builder locBuilder,
-                                            stubs::Decl::Builder builder,
-                                            const clang::Decl *decl) {
-  if (!m_serializeImplicitDecls && decl->isImplicit())
-    return;
-  DeclSerializer ser(m_ASTContext, *this, locBuilder, builder,
-                     m_serializeImplicitDecls);
-  ser.serialize(decl);
-}
-
-void AstSerializer::serializeNodeDecomposed(stubs::Loc::Builder locBuilder,
-                                            stubs::Stmt::Builder builder,
-                                            const clang::Stmt *stmt) {
-  StmtSerializer ser(m_ASTContext, *this, locBuilder, builder);
-  ser.serialize(stmt);
-}
-
 void AstSerializer::serializeAnnotationClauses(
     capnp::List<stubs::Clause, capnp::Kind::STRUCT>::Builder builder,
     const clang::ArrayRef<Annotation> anns) {
@@ -147,12 +140,11 @@ void AstSerializer::serializeDeclToDeclMap(const clang::Decl *decl,
   auto range = decl->getSourceRange();
   auto entry = getFileEntry(range.getBegin(), m_SM);
   auto fileUID = entry->getUID();
-  auto &declNodeOrphans = m_fileDeclsMap[fileUID];
+  DeclListSerializer &declListSerializer = getDeclListSerializer(fileUID);
 
   llvm::SmallVector<Annotation> anns;
   m_store.getUntilLoc(anns, range.getBegin(), m_SM);
-  serializeAnnsToOrphans(anns, orphanage, declNodeOrphans);
-  serializeToOrphan(decl, orphanage, declNodeOrphans);
+  declListSerializer << anns << decl;
   auto firstDeclLoc =
       anns.empty() ? decl->getBeginLoc() : anns.front().getRange().getBegin();
   updateFirstDeclLoc(fileUID, firstDeclLoc);
@@ -193,18 +185,18 @@ void AstSerializer::serializeTU(stubs::TU::Builder builder,
     auto fileEntry = fileEntries[i];
     auto fileUID = fileEntry->getUID();
     auto file = files[i];
-    auto &declNodeOrphans = m_fileDeclsMap[fileUID];
+    DeclListSerializer &declListSerializer = getDeclListSerializer(fileUID);
 
     // Make sure to retrieve annotations after the last C++ declaration
     anns.clear();
     m_store.getAll(fileEntry, anns);
-    serializeAnnsToOrphans(anns, orphanage, declNodeOrphans);
+    declListSerializer << anns;
 
     file.setFd(fileUID);
     file.setPath(fileEntry->getName().str());
 
-    auto fileDecls = file.initDecls(declNodeOrphans.size());
-    adoptOrphansToListBuilder(declNodeOrphans, fileDecls);
+    auto fileDecls = file.initDecls(declListSerializer.size());
+    declListSerializer.adoptListToBuilder(fileDecls);
   }
 
   m_inclContext.serializeTUInclDirectives(builder, m_SM, *this);
