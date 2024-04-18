@@ -181,8 +181,8 @@ bool ExprSerializer::VisitExplicitCastExpr(
   return serializeCast(expr, true);
 }
 
-bool ExprSerializer::serializeStructToStructCast(
-    stubs::Expr::Expr::StructToStruct::Builder &builder,
+bool ExprSerializer::serializeCast(
+    stubs::Expr::Expr::Cast::Builder &builder,
     const clang::CastExpr *expr) {
   auto e = builder.initExpr();
   auto type = builder.initType();
@@ -201,11 +201,15 @@ bool ExprSerializer::serializeCast(const clang::CastExpr *expr, bool expl) {
   case clang::CastKind::CK_UncheckedDerivedToBase:
   case clang::CastKind::CK_DerivedToBase: {
     auto ce = m_builder.initDerivedToBase();
-    return serializeStructToStructCast(ce, expr);
+    return serializeCast(ce, expr);
   }
   case clang::CastKind::CK_BaseToDerived: {
     auto ce = m_builder.initBaseToDerived();
-    return serializeStructToStructCast(ce, expr);
+    return serializeCast(ce, expr);
+  }
+  case clang::CastKind::CK_PointerToIntegral: {
+    auto ce = m_builder.initIntegralCast();
+    return serializeCast(ce, expr);
   }
   default:
     if (expl)

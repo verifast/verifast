@@ -35,6 +35,7 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
     | OperatorCall o -> transl_operator_call_expr loc o
     | Cleanups c -> transl_cleanups_expr c
     | BindTemporary t -> transl_bind_temporary_expr t
+    | IntegralCast c -> transl_integral_cast loc c
     | Undefined _ -> failwith "Undefined expression"
     | _ -> Error.error loc "Unsupported expression."
 
@@ -231,12 +232,18 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
     let e = translate e in
     Ast.CxxLValueToRValue (loc, e)
 
-  and transl_derived_to_base_expr (loc : Ast.loc) (e : E.StructToStruct.t) :
+  and transl_derived_to_base_expr (loc : Ast.loc) (e : E.Cast.t) :
       Ast.expr =
-    let open E.StructToStruct in
+    let open E.Cast in
     let sub_expr = expr_get e |> translate in
     let ty = type_get e |> Type_translator.translate_decomposed loc in
     Ast.CxxDerivedToBase (loc, sub_expr, ty)
+
+  and transl_integral_cast (loc : Ast.loc) (c : E.Cast.t) : Ast.expr =
+    let open E.Cast in
+    let sub_expr = expr_get c |> translate in
+    let ty = type_get c |> Type_translator.translate_decomposed loc in
+    Ast.CastExpr (loc, ty, sub_expr)
 
   and transl_cleanups_expr (e : R.Node.t) : Ast.expr = translate e
   and transl_bind_temporary_expr (e : R.Node.t) = translate e

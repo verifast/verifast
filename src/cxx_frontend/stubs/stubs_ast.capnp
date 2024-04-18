@@ -418,7 +418,7 @@ struct Expr {
     type @2 :Type;
   }
 
-  struct StructToStruct {
+  struct Cast {
     expr @0 :ExprNode;
     type @1 :Type;
   }
@@ -441,11 +441,12 @@ struct Expr {
     delete @14 :ExprNode;
     truncating @15 :ExprNode;
     lValueToRValue @16 :ExprNode;
-    derivedToBase @17 :StructToStruct;
-    baseToDerived @18 :StructToStruct;
+    derivedToBase @17 :Cast;
+    baseToDerived @18 :Cast;
     operatorCall @19 :Call;
     cleanups @20 :ExprNode;
     bindTemporary @21 :ExprNode;
+    integralCast @22 :Cast;
   }
 }
 
