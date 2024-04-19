@@ -7,13 +7,13 @@ namespace vf {
 DeclListSerializer &AstSerializer::getDeclListSerializer(unsigned fd) {
   auto it = m_fileDeclsMap.find(fd);
   if (it != m_fileDeclsMap.end()) {
-    return it->second;
+    return *it->second;
   }
 
-  return m_fileDeclsMap
-      .emplace(std::piecewise_construct, std::forward_as_tuple(fd),
-               std::forward_as_tuple(m_orphanage, *this))
-      .first->second;
+  return *m_fileDeclsMap
+              .emplace(fd,
+                       std::make_unique<DeclListSerializer>(m_orphanage, *this))
+              .first->second;
 }
 
 void AstSerializer::serializeDecl(DeclSerializer::NodeBuilder builder,

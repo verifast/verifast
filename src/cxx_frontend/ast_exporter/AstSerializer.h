@@ -33,7 +33,8 @@ class AstSerializer {
 
   TextSerializer m_textSerializer;
   AnnotationStore &m_store;
-  std::unordered_map<unsigned, DeclListSerializer> m_fileDeclsMap;
+  std::unordered_map<unsigned, std::unique_ptr<DeclListSerializer>>
+      m_fileDeclsMap;
   std::unordered_map<unsigned, clang::SourceLocation> m_firstDeclLocMap;
 
   bool m_serializeImplicitDecls;
@@ -190,8 +191,7 @@ public:
     m_orphans.emplace_back(m_orphanage.newOrphan<stubs::Loc>(),
                            m_orphanage.newOrphan<StubsNode>());
     auto &nodeOrphan = m_orphans.back();
-    serialize(nodeOrphan.locOrphan.get(),
-                                         nodeOrphan.descOrphan.get(), item);
+    serialize(nodeOrphan.locOrphan.get(), nodeOrphan.descOrphan.get(), item);
   }
 
   template <typename Container, typename RetType>
@@ -256,7 +256,8 @@ private:
     ser.serialize(node);
   }
 
-  void serialize(LocBuilder locBuilder, DescBuilder descBuilder, const Text *text) {
+  void serialize(LocBuilder locBuilder, DescBuilder descBuilder,
+                 const Text *text) {
     TextSerializer ser(m_serializer.getASTContext());
     ser.serializeNode<StubsNode>(locBuilder, descBuilder, text);
   }
