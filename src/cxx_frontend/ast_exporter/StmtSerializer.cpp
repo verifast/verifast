@@ -3,27 +3,25 @@
 
 namespace vf {
 
-using StmtNodeOrphan = NodeOrphan<stubs::Stmt>;
 bool StmtSerializer::VisitCompoundStmt(const clang::CompoundStmt *stmt) {
-  auto orphanage = capnp::Orphanage::getForMessageContaining(m_builder);
-  llvm::SmallVector<StmtNodeOrphan, 32> stmtNodeOrphans;
+  StmtListSerializer stmtListSerializer(
+      capnp::Orphanage::getForMessageContaining(m_builder), m_serializer);
   auto &store = m_serializer.getAnnStore();
   auto &SM = getSourceManager();
   llvm::SmallVector<Annotation> anns;
 
   for (auto s : stmt->body()) {
     store.getUntilLoc(anns, s->getBeginLoc(), SM);
-    m_serializer.serializeAnnsToOrphans(anns, orphanage, stmtNodeOrphans);
-    m_serializer.serializeToOrphan(s, orphanage, stmtNodeOrphans);
+    stmtListSerializer << anns << s;
     anns.clear();
   }
 
   store.getUntilLoc(anns, stmt->getRBracLoc(), SM);
-  m_serializer.serializeAnnsToOrphans(anns, orphanage, stmtNodeOrphans);
+  stmtListSerializer << anns;
 
   auto comp = m_builder.initCompound();
-  auto children = comp.initStmts(stmtNodeOrphans.size());
-  AstSerializer::adoptOrphansToListBuilder(stmtNodeOrphans, children);
+  auto children = comp.initStmts(stmtListSerializer.size());
+  stmtListSerializer.adoptListToBuilder(children);
 
   auto rBrace = comp.initRBrace();
   auto rBraceLoc = stmt->getRBracLoc();
@@ -83,9 +81,15 @@ bool StmtSerializer::VisitNullStmt(const clang::NullStmt *stmt) {
   return true;
 }
 
-inline clang::SourceLocation getLoc(clang::ForStmt const * const stmt) {return stmt->getForLoc();}
-inline clang::SourceLocation getLoc(clang::WhileStmt const * const stmt) {return stmt->getWhileLoc();}
-inline clang::SourceLocation getLoc(clang::DoStmt const * const stmt) {return stmt->getWhileLoc();}
+inline clang::SourceLocation getLoc(clang::ForStmt const *const stmt) {
+  return stmt->getForLoc();
+}
+inline clang::SourceLocation getLoc(clang::WhileStmt const *const stmt) {
+  return stmt->getWhileLoc();
+}
+inline clang::SourceLocation getLoc(clang::DoStmt const *const stmt) {
+  return stmt->getWhileLoc();
+}
 
 template <IsLoopAstNode While>
 bool StmtSerializer::serializeWhileStmt(stubs::Stmt::While::Builder builder,
@@ -139,7 +143,8 @@ bool StmtSerializer::VisitForStmt(const clang::ForStmt *stmt) {
 
   // Initialize Condition and Body of For loop as While
   WhileBuilder whileBuilder = forBuilder.initInsideWhile();
-  if(serializeWhileStmt(whileBuilder, stmt) == 0) return false;
+  if (serializeWhileStmt(whileBuilder, stmt) == 0)
+    return false;
 
   // Initialize Iteration of For loop
   ExprBuilder iterationBuilder = forBuilder.initIteration();
