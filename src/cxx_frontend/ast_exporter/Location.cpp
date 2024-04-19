@@ -3,7 +3,7 @@
 
 namespace vf {
 
-bool decomposeLocToLCF(const clang::SourceLocation loc,
+bool decomposeLocToLCF(clang::SourceLocation loc,
                        const clang::SourceManager &SM, LCF &lcf) {
   if (loc.isInvalid()) {
     return false;
@@ -111,7 +111,13 @@ void serializeSourceRange(stubs::Loc::Builder builder, clang::SourceRange range,
   serializeLexedSourceRange(builder.initLexed(), range, SM, langOpts);
 }
 
-const clang::FileEntry *getFileEntry(const clang::SourceLocation loc,
+void serializeSourceRange(stubs::Loc::Builder builder, clang::SourceRange range,
+                          const clang::ASTContext &ASTContext) {
+  serializeSourceRange(builder, range, ASTContext.getSourceManager(),
+                       ASTContext.getLangOpts());
+}
+
+const clang::FileEntry *getFileEntry(clang::SourceLocation loc,
                                      const clang::SourceManager &SM) {
   auto id = SM.getFileID(SM.getExpansionLoc(loc));
   return SM.getFileEntryForID(id);

@@ -11,22 +11,13 @@
 
 namespace vf {
 
-/**
- * Wrapper for data related to orphans. Useful when first serializing to
- * orphans instead of serializing to an actual message. Holds two orphans: one
- * for the location of the node and another for the properties of the node.
- */
-template <IsStubsNode StubsNode> struct NodeOrphan {
-  using loc_orphan = capnp::Orphan<stubs::Loc>;
-  using node_orphan = capnp::Orphan<StubsNode>;
-  loc_orphan locOrphan;
-  node_orphan nodeOrphan;
+template <IsStubsNode StubsNode, IsAstNode AstNode, typename Serializer>
+class NodeListSerializer;
 
-  explicit NodeOrphan(loc_orphan &&lOrphan, node_orphan &&dOrphan)
-      : locOrphan(std::move(lOrphan)), nodeOrphan(std::move(dOrphan)) {}
-};
-
-using DeclNodeOrphan = NodeOrphan<stubs::Decl>;
+using DeclListSerializer =
+    NodeListSerializer<stubs::Decl, clang::Decl, DeclSerializer>;
+using StmtListSerializer =
+    NodeListSerializer<stubs::Stmt, clang::Stmt, StmtSerializer>;
 
 /**
  * Wrapper for all serializers: serializes declarations, statements,
@@ -38,9 +29,11 @@ class AstSerializer {
   clang::SourceManager &m_SM;
   InclusionContext &m_inclContext;
 
+  capnp::Orphanage m_orphanage;
+
   TextSerializer m_textSerializer;
   AnnotationStore &m_store;
-  std::unordered_map<unsigned, llvm::SmallVector<DeclNodeOrphan>>
+  std::unordered_map<unsigned, std::unique_ptr<DeclListSerializer>>
       m_fileDeclsMap;
   std::unordered_map<unsigned, clang::SourceLocation> m_firstDeclLocMap;
 
@@ -63,12 +56,16 @@ class AstSerializer {
   void printQualifiedName(const clang::NamedDecl *decl,
                           llvm::raw_string_ostream &os) const;
 
+  DeclListSerializer &getDeclListSerializer(unsigned fd);
+
 public:
   explicit AstSerializer(clang::ASTContext &context, AnnotationStore &store,
                          InclusionContext &inclContext,
+                         capnp::Orphanage orphanage,
                          bool serializeImplicitDecls)
       : m_ASTContext(context), m_SM(context.getSourceManager()),
-        m_inclContext(inclContext), m_textSerializer(context), m_store(store),
+        m_inclContext(inclContext), m_orphanage(orphanage),
+        m_textSerializer(context), m_store(store),
         m_serializeImplicitDecls(serializeImplicitDecls) {}
 
   KJ_DISALLOW_COPY(AstSerializer);
@@ -80,6 +77,8 @@ public:
   AnnotationStore &getAnnStore() { return m_store; }
 
   const clang::ASTContext &getASTContext() const { return m_ASTContext; }
+
+  bool serializeImplicitDecls() const { return m_serializeImplicitDecls; }
 
   /**
    * Serializes a declaration.
@@ -128,32 +127,6 @@ public:
       llvm::ArrayRef<clang::ParmVarDecl *> params);
 
   /**
-   * Serializes a declaration. Useful when serializing to orphans instead of
-   * serializing to an actual message.
-   * @param locBuilder builder that is used to serialize the location of the
-   * declaration.
-   * @param builder builder that is used to serialize the properties of the
-   * declaration.
-   * @param decl declaration that has to be serialized.
-   */
-  void serializeNodeDecomposed(stubs::Loc::Builder locBuilder,
-                               stubs::Decl::Builder builder,
-                               const clang::Decl *decl);
-
-  /**
-   * Serializes a statement. Useful when serializing to orphans instead of
-   * serializing to an actual message.
-   * @param locBuilder builder that is used to serialize the location of the
-   * statement.
-   * @param builder builder that is used to serialize the properties of the
-   * statement.
-   * @param stmt statement that has to be serialized.
-   */
-  void serializeNodeDecomposed(stubs::Loc::Builder locBuilder,
-                               stubs::Stmt::Builder builder,
-                               const clang::Stmt *stmt);
-
-  /**
    * Serializes a translation unit. A serialized translation unit consists of a
    * list of declarations and a list consisting of file entries. Those entries
    * are simple `<unsigned, string>` pairs. I.e. a mapping from identifiers to
@@ -184,118 +157,6 @@ public:
       capnp::List<stubs::Clause, capnp::Kind::STRUCT>::Builder builder,
       const clang::ArrayRef<Annotation> anns);
 
-  /**
-   * Serializes an annotation that derives from another node (like a declaration
-   * annotation or statement annotation).
-   *
-   * @tparam StubsNode the type of base node for serialization. E.g. a
-   * declaration or statement.
-   * @param locBuilder builder that is used to serialize the location of the
-   * statement.
-   * @param builder builder that is used to serialize the actual annotation
-   * text.
-   * @param ann annotation to serialize.
-   */
-  template <IsStubsNode StubsNode>
-  void serializeAnnotationDecomposed(stubs::Loc::Builder locBuilder,
-                                     typename StubsNode::Builder descBuilder,
-                                     const Annotation &ann) {
-    m_textSerializer.serializeNode<StubsNode>(locBuilder, descBuilder, ann);
-  }
-
-  /**
-   * Serializes to an orphan. An orphan is not part (yet) of an actual
-   * serialized message. It can later be adopted to a message. This is useful
-   * when the the number of nodes is not known yet. These nodes can be
-   * serialized to a list of orphans and later be adopted to an actual message.
-   * Serializing to an orphans does not consume memory in a message.
-   *
-   * @tparam ToSerialize type of what has to be serialized.
-   * @tparam StubsNode corresponding type in the serialization.
-   * @param ser what has to be serialized.
-   * @param orphanage factory to create orphans that can be serialied to.
-   * @param[in, out] orphans collection of serialized orphans. A new orphan
-   * containing the serialized object will be added to the back of the
-   * collection.
-   */
-  template <class ToSerialize, IsStubsNode StubsNode>
-  void
-  serializeToOrphan(const ToSerialize *ser, capnp::Orphanage &orphanage,
-                    llvm::SmallVectorImpl<NodeOrphan<StubsNode>> &orphans) {
-    orphans.emplace_back(orphanage.newOrphan<stubs::Loc>(),
-                         orphanage.newOrphan<StubsNode>());
-    auto &no = orphans.back();
-    auto locBuilder = no.locOrphan.get();
-    auto descBuilder = no.nodeOrphan.get();
-    serializeNodeDecomposed(locBuilder, descBuilder, ser);
-  }
-
-  /**
-   * Serializes an annotation to an orphan.
-   *
-   * @tparam StubsNode the type of base node for serialization. E.g. a
-   * declaration or statement.
-   * @param ann annotation to serialize.
-   * @param orphanage factory to create orphans that can be serialied to.
-   * @param[in, out] orphans collection of serialized orphans. A new orphan
-   * containing the serialized annotation will be added to the back of the
-   * collection.
-   */
-  template <IsStubsNode StubsNode>
-  void
-  serializeAnnToOrphan(const Annotation &ann, capnp::Orphanage &orphanage,
-                       llvm::SmallVectorImpl<NodeOrphan<StubsNode>> &orphans) {
-    orphans.emplace_back(orphanage.newOrphan<stubs::Loc>(),
-                         orphanage.newOrphan<StubsNode>());
-    auto &dno = orphans.back();
-    auto locBuilder = dno.locOrphan.get();
-    auto descBuilder = dno.nodeOrphan.get();
-    serializeAnnotationDecomposed<StubsNode>(locBuilder, descBuilder, ann);
-  }
-
-  /**
-   * Serializes multiple annotations to orphans.
-   * @tparam StubsNode the type of base node for serialization. E.g. a
-   * declaration or statement.
-   * @tparam Container type of the container that holds the annotations to
-   * serialize.
-   * @param annotations container that holds the the annotations to serialize to
-   * orphans.
-   * @param orphanage factory to create orphans that can be serialied to.
-   * @param orphans collection of serialized orphans. New orphans
-   * containing the serialized annotations will be added to the back of the
-   * collection.
-   */
-  template <IsStubsNode StubsNode>
-  void serializeAnnsToOrphans(
-      const llvm::ArrayRef<Annotation> &annotations,
-      capnp::Orphanage &orphanage,
-      llvm::SmallVectorImpl<NodeOrphan<StubsNode>> &orphans) {
-    for (auto &ann : annotations) {
-      serializeAnnToOrphan(ann, orphanage, orphans);
-    }
-  }
-
-  /**
-   * Adopt a vector of orphans to a list builder. This adopts the serialized
-   * orphan objects to an actual message.
-   * @tparam StubsNode type of serialized node in the vector of orphans.
-   * @param orphans vector of orphans that has to be adopted.
-   * @param listBuilder builder of a list that will adopt the given orphans.
-   */
-  template <IsStubsNode StubsNode>
-  static void adoptOrphansToListBuilder(
-      llvm::SmallVectorImpl<NodeOrphan<StubsNode>> &orphans,
-      typename capnp::List<stubs::Node<StubsNode>, capnp::Kind::STRUCT>::Builder
-          listBuilder) {
-    size_t i(0);
-    for (auto &no : orphans) {
-      auto builder = listBuilder[i++];
-      builder.adoptLoc(std::move(no.locOrphan));
-      builder.adoptDesc(std::move(no.nodeOrphan));
-    }
-  }
-
   void validateIncludesBeforeFirstDecl(
       unsigned fd,
       clang::ArrayRef<std::reference_wrapper<const IncludeDirective>>
@@ -304,6 +165,106 @@ public:
   std::string getQualifiedName(const clang::NamedDecl *decl) const;
 
   std::string getQualifiedFuncName(const clang::FunctionDecl *decl) const;
+};
+
+template <IsStubsNode StubsNode, IsAstNode AstNode, typename Serializer>
+class NodeListSerializer {
+  static_assert(
+      std::is_base_of_v<NodeSerializer<StubsNode, AstNode>, Serializer>,
+      "Serializer must be an appropriate instance of NodeSerializer");
+
+public:
+  using ListBuilder = typename capnp::List<stubs::Node<StubsNode>,
+                                           capnp::Kind::STRUCT>::Builder;
+  using LocBuilder = stubs::Loc::Builder;
+  using DescBuilder = typename StubsNode::Builder;
+
+  KJ_DISALLOW_COPY(NodeListSerializer);
+
+  NodeListSerializer(capnp::Orphanage orphanage, AstSerializer &serializer)
+      : m_orphanage(orphanage), m_serializer(serializer) {}
+
+  NodeListSerializer(NodeListSerializer &&) = default;
+  NodeListSerializer &operator=(NodeListSerializer &&) = default;
+
+  template <typename T> void serialize(const T *item) {
+    m_orphans.emplace_back(m_orphanage.newOrphan<stubs::Loc>(),
+                           m_orphanage.newOrphan<StubsNode>());
+    auto &nodeOrphan = m_orphans.back();
+    serialize(nodeOrphan.locOrphan.get(), nodeOrphan.descOrphan.get(), item);
+  }
+
+  template <typename Container, typename RetType>
+  using enable_if_iterable = typename std::enable_if<
+      std::is_same_v<decltype(std::begin(std::declval<Container>())),
+                     decltype(std::end(std::declval<Container>()))>,
+      RetType>::type;
+
+  template <typename Container>
+  enable_if_iterable<Container, void> serialize(const Container &container) {
+    for (auto it = container.begin(); it != container.end(); ++it) {
+      serialize(it);
+    }
+  }
+
+  size_t size() const { return m_orphans.size(); }
+
+  template <typename T> NodeListSerializer &operator<<(const T *item) {
+    serialize(item);
+    return *this;
+  }
+
+  template <typename Container>
+  enable_if_iterable<Container, NodeListSerializer &>
+  operator<<(const Container &container) {
+    serialize(container);
+    return *this;
+  }
+
+  void adoptListToBuilder(ListBuilder builder) {
+    assert(size() >= builder.size() && "Target builder too small");
+
+    size_t i(0);
+    for (auto &nodeOrphan : m_orphans) {
+      auto elementBuilder = builder[i++];
+      elementBuilder.adoptLoc(std::move(nodeOrphan.locOrphan));
+      elementBuilder.adoptDesc(std::move(nodeOrphan.descOrphan));
+    }
+  }
+
+private:
+  struct NodeOrphan {
+    using LocOrphan = capnp::Orphan<stubs::Loc>;
+    using DescOrphan = capnp::Orphan<StubsNode>;
+
+    KJ_DISALLOW_COPY(NodeOrphan);
+
+    explicit NodeOrphan(LocOrphan locOrphan, DescOrphan descOrphan)
+        : locOrphan(std::move(locOrphan)), descOrphan(std::move(descOrphan)) {}
+
+    NodeOrphan(NodeOrphan &&) = default;
+    NodeOrphan &operator=(NodeOrphan &&) = default;
+
+    LocOrphan locOrphan;
+    DescOrphan descOrphan;
+  };
+
+  void serialize(LocBuilder locBuilder, DescBuilder descBuilder,
+                 const AstNode *node) {
+    Serializer ser(m_serializer.getASTContext(), m_serializer, locBuilder,
+                   descBuilder);
+    ser.serialize(node);
+  }
+
+  void serialize(LocBuilder locBuilder, DescBuilder descBuilder,
+                 const Text *text) {
+    TextSerializer ser(m_serializer.getASTContext());
+    ser.serializeNode<StubsNode>(locBuilder, descBuilder, text);
+  }
+
+  AstSerializer &m_serializer;
+  capnp::Orphanage m_orphanage;
+  llvm::SmallVector<NodeOrphan> m_orphans;
 };
 
 } // namespace vf

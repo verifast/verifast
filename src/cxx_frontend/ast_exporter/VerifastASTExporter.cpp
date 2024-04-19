@@ -43,7 +43,10 @@ class VerifastASTConsumer : public clang::ASTConsumer {
 
 public:
   void HandleTranslationUnit(clang::ASTContext &context) override {
-    AstSerializer serializer(context, m_store, m_context, exportImplicitDecls);
+    AstSerializer serializer(
+        context, m_store, m_context,
+        capnp::Orphanage::getForMessageContaining(m_builder),
+        exportImplicitDecls);
     serializer.serializeTU(m_builder, context.getTranslationUnitDecl());
   }
 
