@@ -689,7 +689,7 @@ cd tests
     verifast -c -disable_overflow_check non_compound_stmts.cpp
     verifast -c -target Linux64 literals.cpp
     verifast -c loops.cpp
-    verifast -c -target Linux64 casts.cpp
+    verifast -c casts.cpp
   cd ..
   cd rust
     call testsuite.mysh

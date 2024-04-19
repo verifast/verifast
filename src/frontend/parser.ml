@@ -163,6 +163,7 @@ let file_specs path =
     else if Filename.check_suffix (Filename.basename path) ".javaspec" then Java, None
     else if Filename.check_suffix (Filename.basename path) ".scala" then Java, None
     else if Filename.check_suffix (Filename.basename path) ".h" then CLang, None
+    else if Filename.check_suffix (Filename.basename path) ".hpp" then CLang, Some (Cxx)
     else if Filename.check_suffix (Filename.basename path) ".rs" then CLang, Some(Rust)
     else raise (CompilationError ("unknown extension: " ^ (Filename.basename path)))
   end
