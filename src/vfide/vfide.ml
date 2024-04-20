@@ -615,7 +615,7 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
     | Some (path, mtime) ->
       if Filename.check_suffix path ".c" || Filename.check_suffix path ".h" then highlight c_keywords ghost_keywords
       else if Filename.check_suffix path ".java" || Filename.check_suffix path ".javaspec" then highlight java_keywords ghost_keywords
-      else if Filename.check_suffix path ".cpp" then highlight cxx_keywords ghost_keywords
+      else if Filename.check_suffix path ".cpp" || Filename.check_suffix path ".hpp" then highlight cxx_keywords ghost_keywords
       else if Filename.check_suffix path ".rs" then highlight rust_keywords rust_ghost_keywords
       else ()
   in
@@ -1503,7 +1503,7 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
                 else
                   (fun forest -> postProcess := (fun () -> reportExecutionForest !forest))
               in
-              if options.option_use_java_frontend || Filename.check_suffix path ".cpp" || Filename.check_suffix path ".rs" then begin
+              if options.option_use_java_frontend || Filename.check_suffix path ".cpp" || Filename.check_suffix path ".hpp" || Filename.check_suffix path ".rs" then begin
                 !buffers |> List.iter begin fun tab ->
                   perform_syntax_highlighting tab tab#buffer#start_iter tab#buffer#end_iter
                 end

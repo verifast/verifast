@@ -489,7 +489,7 @@ let _ =
             ]
   in
   let process_file filename =
-    if List.exists (Filename.check_suffix filename) [ ".c"; ".cpp"; ".java"; ".scala"; ".jarsrc"; ".javaspec"; ".rs" ]
+    if List.exists (Filename.check_suffix filename) [ ".c"; ".h"; ".cpp"; ".hpp"; ".java"; ".scala"; ".jarsrc"; ".javaspec"; ".rs" ]
     then
       begin
         let vfbindings = !vfbindings in

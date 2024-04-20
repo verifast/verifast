@@ -207,6 +207,17 @@ bool ExprSerializer::serializeCast(const clang::CastExpr *expr, bool expl) {
     auto ce = m_builder.initBaseToDerived();
     return serializeCast(ce, expr);
   }
+  case clang::CastKind::CK_NoOp: // Required for down-casts of integral types
+  case clang::CastKind::CK_IntegralCast: {
+    if (expl) {
+      auto ce = m_builder.initIntegralCast();
+      return serializeCast(ce, expr);
+    }
+    else {
+      serialize(expr->getSubExpr());
+      return true;
+    }
+  }
   case clang::CastKind::CK_PointerToIntegral: {
     auto ce = m_builder.initIntegralCast();
     return serializeCast(ce, expr);

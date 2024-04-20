@@ -66,12 +66,14 @@ let static_error l msg url = raise (StaticError (l, msg, url))
 let rec root_caller_token l =
   match l with
     Lexed l -> l
+  | DummyLoc -> dummy_loc0
   | MacroExpansion (lcall, _) -> root_caller_token lcall
   | MacroParamExpansion (lparam, _) -> root_caller_token lparam
 
 let rec lexed_loc l =
   match l with
     Lexed l -> l
+  | DummyLoc -> dummy_loc0
   | MacroExpansion (lcall, lbodyTok) -> lexed_loc lbodyTok
   | MacroParamExpansion (lparam, largTok) -> lexed_loc largTok
 

@@ -1316,7 +1316,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let (headers', maps) =
               match try_assoc path !headermap with
                 None ->
-                let header_is_import_spec = Filename.chop_extension (Filename.basename header_path) <> Filename.chop_extension (Filename.basename program_path) in
+                let header_is_import_spec = Filename.remove_extension (Filename.basename header_path) <> Filename.chop_extension (Filename.basename program_path) in
                 let (headers', ds) =
                   match language with
                     CLang ->
