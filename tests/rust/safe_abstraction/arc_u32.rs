@@ -71,6 +71,10 @@ pub mod sync {
                 abort();
             }
 
+            pub fn fetch_sub_seq_cst<'a>(&'a self, val: usize) -> usize {
+                abort();
+            }
+
             pub fn compare_exchange_seq_cst<'a>(
                 &'a self,
                 current: usize,
@@ -180,6 +184,10 @@ impl ArcU32 {
             }
         }
     }
+
+    unsafe fn get_mut_unchecked<'a>(this: &'a mut Self) -> &'a mut u32 {
+        &mut (*this.ptr.as_ptr()).data
+    }
 }
 
 impl std::ops::Deref for ArcU32 {
@@ -197,6 +205,18 @@ impl Clone for ArcU32 {
             abort();
         }
         unsafe { Self::from_inner(self.ptr) }
+    }
+}
+
+impl Drop for ArcU32 {
+    fn drop<'a>(&'a mut self) {
+        if self.inner().strong.fetch_sub_seq_cst(1) != 1 {
+            return;
+        }
+        // acquire!(self.inner().strong);
+        unsafe { std::ptr::drop_in_place(Self::get_mut_unchecked(self)) };
+        // Drop the weak ref collectively held by all strong references
+        drop(WeakU32 { ptr: self.ptr });
     }
 }
 
@@ -257,5 +277,25 @@ impl Clone for WeakU32 {
             }
         }
         WeakU32 { ptr: self.ptr }
+    }
+}
+
+impl Drop for WeakU32 {
+    fn drop<'a>(&'a mut self) {
+        let inner = if let Some(inner) = self.inner() {
+            inner
+        } else {
+            return;
+        };
+
+        if inner.weak.fetch_sub_seq_cst(1) == 1 {
+            // acquire!(inner.weak);
+            unsafe {
+                std::alloc::dealloc(
+                    self.ptr.as_ptr() as *mut u8,
+                    std::alloc::Layout::new::<ArcInnerU32>(),
+                )
+            }
+        }
     }
 }
