@@ -380,6 +380,12 @@ struct Expr {
     kind @2 :BinaryOpKind;
   }
 
+  struct ConditionalOp {
+    cond @0 :ExprNode;
+    then @1 :ExprNode;
+    else @2 :ExprNode;
+  }
+
   struct IntLit {
     uSuffix @0 :Bool;
     lSuffix @1 :SufKind;
@@ -447,6 +453,7 @@ struct Expr {
     cleanups @20 :ExprNode;
     bindTemporary @21 :ExprNode;
     integralCast @22 :Cast;
+    conditionalOp @23 :ConditionalOp;
   }
 }
 

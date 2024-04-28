@@ -239,6 +239,8 @@ struct ExprSerializer : public NodeSerializer<stubs::Expr, clang::Expr>,
 
   bool VisitBinaryOperator(const clang::BinaryOperator *bo);
 
+  bool VisitConditionalOperator(const clang::ConditionalOperator *co);
+
   bool VisitCXXBoolLiteralExpr(const clang::CXXBoolLiteralExpr *expr);
 
   bool VisitCharacterLiteral(const clang::CharacterLiteral *lit);
