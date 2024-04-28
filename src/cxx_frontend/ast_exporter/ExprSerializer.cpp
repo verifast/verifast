@@ -86,6 +86,26 @@ bool ExprSerializer::VisitBinaryOperator(const clang::BinaryOperator *bo) {
   return true;
 }
 
+bool ExprSerializer::VisitConditionalOperator(
+    clang::ConditionalOperator const * const co) {
+  using CondOpBuilder = stubs::Expr::ConditionalOp::Builder;
+  using ExprBuilder = stubs::Node<stubs::Expr>::Builder;
+
+  // Initialize Cap'n Proto elements
+  CondOpBuilder condOpBuilder = m_builder.initConditionalOp();
+
+  ExprBuilder condExpr = condOpBuilder.initCond();
+  ExprBuilder thenExpr = condOpBuilder.initThen();
+  ExprBuilder elseExpr = condOpBuilder.initElse();
+
+  // Serialize subexpressions
+  m_serializer.serializeExpr(condExpr, co->getCond());
+  m_serializer.serializeExpr(thenExpr, co->getTrueExpr());
+  m_serializer.serializeExpr(elseExpr, co->getFalseExpr());
+
+  return true;
+}
+
 bool ExprSerializer::VisitCXXBoolLiteralExpr(
     const clang::CXXBoolLiteralExpr *expr) {
   m_builder.setBoolLit(expr->getValue());
