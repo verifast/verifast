@@ -3148,7 +3148,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
   let gen_drop_contract adt_defs self_ty self_ty_targs self_lft_args limpl =
     let outlives_preds = [] in
     let open Ast in
-    let { loc = ls; tparams; lft_params; fds } : Mir.adt_def_tr =
+    let ({ loc = ls; tparams; lft_params; fds } : Mir.adt_def_tr) =
       List.find
         (function ({ name } : Mir.adt_def_tr) -> name = self_ty)
         adt_defs
@@ -3264,7 +3264,12 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                    None )))
       self_ty_targs tparams;
     if self_lft_args <> lft_params then
-      raise (Ast.StaticError (limpl, "A drop function for a struct type whose lifetime arguments are not identical to its lifetime parameters is not yet supported", None));
+      raise
+        (Ast.StaticError
+           ( limpl,
+             "A drop function for a struct type whose lifetime arguments are \
+              not identical to its lifetime parameters is not yet supported",
+             None ));
     let tid = Ast.Var (limpl, "_t") in
     let (Some post) =
       AstAux.list_to_sep_conj
