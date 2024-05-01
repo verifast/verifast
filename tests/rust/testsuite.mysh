@@ -7,6 +7,7 @@ cd unverified
   cd ..
 cd ..
 begin_parallel
+verifast -c nonnull.rs
 cd purely_unsafe
   verifast -c struct_exprs.rs
   verifast -c scalars.rs
