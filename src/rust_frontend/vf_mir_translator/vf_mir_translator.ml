@@ -485,6 +485,26 @@ module TrName = struct
        ^ n)
 
   let is_from_std_lib path = String.starts_with ~prefix:"std::" path
+
+  let split_def_path mod_path def_path =
+    let open String in
+    let rel_def_path =
+      (* e.g. mod_path = "ptr" && def_path = "ptr::NonNull::<T>::as_ptr" *)
+      if starts_with ~prefix:(mod_path ^ "::") def_path then
+        sub def_path
+          (length mod_path + 2)
+          (length def_path - length mod_path - 2)
+      else
+        (*
+        - Empty module path => crate root
+          - e.g. mod_path = "" && def_path = "foo"
+          - e.g. mod_path = "" && def_path = "<impl std::clone::Clone for ptr::NonNull<T>>::clone"
+        - The module path does not apear at the start of the path for trait implementations inside the module:
+          - e.g. mod_path = "ptr" && def_path = "<ptr::NonNull<T> as std::clone::Clone>::clone"
+        *)
+        def_path
+    in
+    (mod_path, rel_def_path)
 end
 
 module type VF_MIR_TRANSLATOR_ARGS = sig
@@ -3568,16 +3588,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         let def_path = def_path_get body_cpn in
         let name = TrName.translate_def_path def_path in
         let moduleName = module_def_path_get body_cpn in
-        let split_name =
-          if moduleName = "" then (moduleName, name)
-          else (
-            assert (String.starts_with ~prefix:(moduleName ^ "::") name);
-            ( moduleName,
-              String.sub name
-                (String.length moduleName + 2)
-                (String.length name - String.length moduleName - 2) ))
-        in
-        (*Printf.printf "Translating body %s...\n" name;*)
+        (* print_endline ("Translating Mod: " ^ moduleName ^ " --- Body: " ^ name); *)
+        let split_name = TrName.split_def_path moduleName name in
         let* impl_block_gens =
           match impl_block_hir_generics_get body_cpn |> OptionRd.get with
           | Nothing -> Ok []
@@ -4337,6 +4349,11 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
            if of_trait = "std::ops::Drop" then (
              assert (items = [ "drop" ]);
              [] (* drop is safe *))
+           else if of_trait = "std::clone::Clone" then (
+             assert (items = [ "clone" ]);
+             []
+             (* clone is safe *)
+             (* TODO: Support for traits from other crates. I think it is generally sound to ignore safe traits here *))
            else
              items
              |> List.map (fun item ->
