@@ -49,4 +49,10 @@ int main()
   bool gt = (*iw) > 4; // operator overload >
   //@ assert gt;
   delete iw;
+
+  // Test conditional operator
+  int co1 = lt ? 3 : 9;
+  int co2 = ten != 10 ? 3 : 9;
+  //@ assert co1 == 3;
+  //@ assert co2 == 9;
 }

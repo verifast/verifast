@@ -36,6 +36,7 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
     | Cleanups c -> transl_cleanups_expr c
     | BindTemporary t -> transl_bind_temporary_expr t
     | IntegralCast c -> transl_integral_cast loc c
+    | ConditionalOp op -> transl_conditional_op loc op
     | Undefined _ -> failwith "Undefined expression"
     | _ -> Error.error loc "Unsupported expression."
 
@@ -244,6 +245,13 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
     let sub_expr = expr_get c |> translate in
     let ty = type_get c |> Type_translator.translate_decomposed loc in
     Ast.CastExpr (loc, ty, sub_expr)
+
+  and transl_conditional_op (loc : Ast.loc) (op : E.ConditionalOp.t) : Ast.expr =
+    let open E.ConditionalOp in
+    let cond = translate @@ cond_get op in
+    let th = translate @@ then_get op in
+    let el = translate @@ else_get op in
+    Ast.IfExpr(loc, cond, th, el)
 
   and transl_cleanups_expr (e : R.Node.t) : Ast.expr = translate e
   and transl_bind_temporary_expr (e : R.Node.t) = translate e

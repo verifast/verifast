@@ -13,12 +13,11 @@ class ErrorRange {
 
 public:
   ErrorRange(const clang::FullSourceLoc &fullLoc) {
-    const clang::FileEntry *fileEntry = fullLoc.getFileEntry();
-    m_valid = fullLoc.isValid() && fileEntry;
+    m_valid = fullLoc.isValid() && fullLoc.getFileEntry();
     if (m_valid) {
       m_loc.l = fullLoc.getLineNumber();
       m_loc.c = fullLoc.getColumnNumber();
-      m_loc.f = fileEntry->getUID();
+      m_loc.f = fullLoc.getFileEntry()->getUID();
     }
   }
 
