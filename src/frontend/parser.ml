@@ -322,14 +322,23 @@ let register_varname x =
   if Hashtbl.mem typedefs x then begin
     match !typedef_scopes with
       scope::_ ->
-      scope := x::!scope;
+      scope := (fun () -> register_typedef x)::!scope;
       Hashtbl.remove typedefs x
+    | _ ->
+      ()
+  end
+let register_tparam x =
+  if not (Hashtbl.mem typedefs x) then begin
+    match !typedef_scopes with
+      scope::_ ->
+      scope := (fun () -> Hashtbl.remove typedefs x)::!scope;
+      Hashtbl.add typedefs x ()
     | _ ->
       ()
   end
 let pop_typedef_scope () =
   let scope::scopes = !typedef_scopes in
-  List.iter register_typedef !scope;
+  List.iter (fun f -> f()) !scope;
   typedef_scopes := scopes
 
 module type PARSER_ARGS = sig
@@ -1222,7 +1231,7 @@ and
     [%l
     decl = function%parser
     | [ (_, Kwd "(");
-        [%l () = (fun _ -> push_typedef_scope ())];
+        [%l () = (fun _ -> push_typedef_scope (); List.iter register_tparam tparams)];
         [%l ps = rep_comma parse_param];
         [%l ps = (fun _ -> List.filter filter_void_params ps)];
         (_, Kwd ")");

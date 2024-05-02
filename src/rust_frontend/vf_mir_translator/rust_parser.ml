@@ -538,7 +538,7 @@ let parse_ghost_decl = function%parser
     ];
     (_, Kwd ";")
   ] -> [Inductive (l, i, tparams, cs)]
-| [ (l, Kwd "pred"); (li, Ident g); parse_type_params as tparams; [%let l, g = parse_simple_path_rest li g];
+| [ (l, Kwd "pred"); [%let (l, g) = parse_simple_path]; parse_type_params as tparams;
     [%let (ps, inputParamCount) = parse_pred_paramlist ];
     [%let body = opt parse_pred_body ];
     (_, Kwd ";")
@@ -562,7 +562,7 @@ let parse_ghost_decl = function%parser
     | e -> raise (ParseException (expr_loc e, "typeid(T) expected"))
     in
     [PredFamilyInstanceDecl (l, g, [], indices, ps, body)]
-| [ (l, Kwd "pred_ctor"); (li, Ident g); parse_type_params as tparams;
+| [ (l, Kwd "pred_ctor"); [%let li, g = parse_simple_path]; parse_type_params as tparams;
     (_, Kwd "("); [%let ps1 = rep_comma parse_param]; (_, Kwd ")");
     [%let (ps2, inputParamCount) = parse_pred_paramlist ];
     parse_pred_body as p;
