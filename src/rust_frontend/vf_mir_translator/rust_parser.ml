@@ -60,6 +60,7 @@ let rec parse_type = function%parser
     parse_type as t
   ] -> ignore mutability; PtrTypeExpr (l, t)
 | [ (l, Kwd "&");
+    [%let lft = opt (function%parser [ (_, PrimePrefixedIdent lft) ] -> lft)];
     [%let mutability  = opt (function%parser [ (_, Kwd "mut") ] -> ())];
     [%let tp = function%parser
        [ (ls, Kwd "["); parse_type as elemTp; (_, Kwd "]") ] -> StructTypeExpr (ls, Some "slice_ref", None, [], [elemTp])
@@ -481,7 +482,11 @@ let parse_pred_body = function%parser
   [ (_, Kwd "="); parse_asn as p ] -> p
 
 let parse_type_params = function%parser
-  [ (_, Kwd "<"); [%let tparams = rep_comma (function%parser [ (_, Ident x) ] -> x)]; (_, Kwd ">") ] -> tparams
+  [ (_, Kwd "<");
+    [%let tparams = rep_comma (function%parser
+      [ (_, Ident x) ] -> Some x
+    | [ (_, PrimePrefixedIdent _) ] -> None)];
+    (_, Kwd ">") ] -> List.filter_map Fun.id tparams
 | [ ] -> []
 
 let parse_func_header k = function%parser
@@ -569,18 +574,22 @@ let parse_ghost_decl = function%parser
     (_, Kwd ";")
   ] -> [PredCtorDecl (l, g, tparams, ps1, ps2, inputParamCount, p)]
 | [ parse_lemma_keyword as k; [%let d = parse_func_rest k ] ] -> [d]
-| [ (_, Kwd "fix"); [%let (l, g, tparams, ps, rt) = parse_func_header Fixpoint]; (_, Kwd "{"); parse_expr as e; (closeBraceLoc, Kwd "}") ] ->
-  let ss =
-    match e with
-      SwitchExpr (l, e, cs, None) ->
-      let cs = cs |> List.map begin function
-        SwitchExprClause (l, cn, xs, e) ->
-        SwitchStmtClause (l, CallExpr (l, cn, [], [], List.map (fun x -> LitPat (Var (l, x))) xs, Static), [ReturnStmt (expr_loc e, Some e)])
-      end in
-      [SwitchStmt (l, e, cs)]
-    | _ -> [ReturnStmt (expr_loc e, Some e)]
-  in
-  [Func (l, Fixpoint, tparams, rt, g, ps, false, None, None, false, Some (ss, closeBraceLoc), false, [])]
+| [ (_, Kwd "fix");
+    [%let (l, g, tparams, ps, rt) = parse_func_header Fixpoint];
+    [%let body = (function%parser
+        [ (_, Kwd ";") ] -> None
+      | [ (_, Kwd "{"); parse_expr as e; (closeBraceLoc, Kwd "}") ] ->
+          let ss =
+            match e with
+              SwitchExpr (l, e, cs, None) ->
+                let cs = cs |> List.map begin function
+                  SwitchExprClause (l, cn, xs, e) ->
+                    SwitchStmtClause (l, CallExpr (l, cn, [], [], List.map (fun x -> LitPat (Var (l, x))) xs, Static), [ReturnStmt (expr_loc e, Some e)])
+                end in
+                [SwitchStmt (l, e, cs)]
+              | _ -> [ReturnStmt (expr_loc e, Some e)]
+          in Some (ss, closeBraceLoc))]
+  ] -> [Func (l, Fixpoint, tparams, rt, g, ps, false, None, None, false, body, false, [])]
 | [ (l, Kwd "fn_type"); (lftn, Ident ftn); (_, Kwd "("); [%let ftps = rep_comma parse_param]; (_, Kwd ")"); (_, Kwd "=");
     [%let unsafe = function%parser
        [ (_, Kwd "unsafe") ] -> true

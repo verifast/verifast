@@ -26,6 +26,49 @@ mod ptr {
     //@ req thread_token(?t) &*& (<T>.full_borrow_content(t, to_drop))();
     //@ ens thread_token(t) &*& *to_drop |-> _;
 
+    struct NonNull<T>;
+    /*@
+    pred NonNull_own<T>(t: thread_id_t, pointer: *T;) = pointer as usize != 0;
+    pred NonNull_share<T>(k: lifetime_t, t: thread_id_t, l: *NonNull<T>);
+    fix NonNull_ptr<T>(v: NonNull<T>) -> *T;
+    @*/
+
+    impl<T> NonNull<T> {
+        fn from<'a>(reference: &'a mut T) -> NonNull<T>;
+        //@ req thread_token(?t) &*& [?qa]lifetime_token(?a) &*& full_borrow(a, <T>.full_borrow_content(t, reference));
+        //@ ens thread_token(t) &*& [qa]lifetime_token(a) &*& NonNull_own::<T>(t, NonNull_ptr(result)) &*& NonNull_ptr(result) == reference;
+
+        unsafe fn new_unchecked(ptr: *mut T) -> NonNull<T>;
+        //@ req true;
+        //@ ens NonNull_ptr(result) == ptr;
+
+        unsafe fn as_ref<'a>(self: &'a NonNull<T>) -> &'a T;
+        //@ req [?q](*self) |-> ?v;
+        //@ ens [q](*self) |-> v &*& result == NonNull_ptr(v);
+
+        fn as_ptr(self: NonNull<T>) -> *mut T;
+        //@ req thread_token(?t) &*& NonNull_own::<T>(t, NonNull_ptr(self));
+        //@ ens thread_token(t) &*& result == NonNull_ptr(self);
+    }
+}
+
+mod boxed {
+    struct Box<T>;
+    /*@
+    pred Box_own<T>(t: thread_id_t, ptr: *T) = (<T>.full_borrow_content(t, ptr))() &*& alloc_block(ptr, std::mem::size_of::<T>());
+    fix Box_ptr<T>(b: Box<T>) -> *T;
+    @*/
+
+    impl<T> Box<T> {
+        fn new(x: T) -> Box<T>;
+        //@ req thread_token(?t) &*& <T>.own(t, x);
+        //@ ens thread_token(t) &*& Box_own::<T>(t, Box_ptr(result));
+
+        fn leak<'a>(x: Box<T>) -> &'a mut T;
+        //@ req thread_token(?t) &*& [?qa]lifetime_token(?a) &*& Box_own::<T>(t, Box_ptr(x));
+        /*@ ens thread_token(t) &*& [qa]lifetime_token(a) &*& full_borrow(a, <T>.full_borrow_content(t, result))
+            &*& alloc_block(result, std::mem::size_of::<T>()) &*& result == Box_ptr(x); @*/
+    }
 }
 
 mod alloc {
