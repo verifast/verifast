@@ -82,7 +82,7 @@ struct sum_data {
 /*@
 
 predicate_family_instance thread_run_pre(summator)(struct sum_data *data, any info) =
-    data->tree |-> ?tree &*& tree(tree, _) &*& data->sum |-> ?sum;
+    data->tree |-> ?tree &*& tree(tree, _) &*& data->sum |-> _;
 predicate_family_instance thread_run_post(summator)(struct sum_data *data, any info) =
     data->tree |-> ?tree &*& tree(tree, _) &*& data->sum |-> ?sum;
 
@@ -106,7 +106,6 @@ struct sum_data *start_sum_thread(struct tree *tree)
     struct thread *t = 0;
     if (data == 0) abort();
     //@ leak malloc_block_sum_data(data);
-    data->sum = 0;
     data->tree = tree;
     //@ close thread_run_pre(summator)(data, unit);
     t = thread_start_joinable(summator, data);
