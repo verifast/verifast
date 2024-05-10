@@ -31,7 +31,7 @@ if any thread is blocked on the futex, then either the lock is held or there is 
 */
 
 predicate_ctor mutex_inv(mutex mutex, predicate(bool) inv, int internalThreadsGhostListId, int readersId)() =
-    [1/2]mutex->held_ |-> ?held &*& (held == 0 ? mutex->heldFrac |-> _ &*& [1/2]mutex->held_ |-> held : held == 1 &*& [1/2]mutex->heldFrac |-> ?f &*& [f/2]mutex->internalThreadsGhostListId |-> _) &*&
+    [1/2]futex_word(&mutex->held_, ?held) &*& (held == 0 ? mutex->heldFrac |-> _ &*& [1/2]futex_word(&mutex->held_, held) : held == 1 &*& [1/2]mutex->heldFrac |-> ?f &*& [f/2]mutex->internalThreadsGhostListId |-> _) &*&
     inv(held == 1) &*&
     ghost_list<unit>(readersId, ?readers) &*& (held == 1 ? true : call_perms_(length(readers), mutex_acquire)) &*&
     [1/2]mutex->nbWaiting |-> ?nbWaiting &*& 0 <= nbWaiting &*&
@@ -52,7 +52,7 @@ predicate mutex(mutex mutex; predicate(bool held) inv) =
     futex(&mutex->held_, mutex_futex_inv(mutex), mutex_futex_dequeue_post(internalThreadsGhostListId), mutex_acquire);
 
 predicate mutex_held(mutex mutex, predicate(bool) inv, real f) =
-    [1/2]mutex->held_ |-> 1 &*&
+    [1/2]futex_word(&mutex->held_, 1) &*&
     [1/2]mutex->heldFrac |-> f &*&
     [f]malloc_block_mutex(mutex) &*&
     [f]mutex->inv_ |-> inv &*&
@@ -153,7 +153,7 @@ requires
             predicate post_(bool success_) =
                 [f]atomic_space(create_mutex, mutex_inv(mutex, inv, internalThreadsGhostListId, readersId)) &*&
                 success_ ?
-                    [1/2]mutex->held_ |-> 1 &*&
+                    [1/2]futex_word(&mutex->held_, 1) &*&
                     [1/2]mutex->heldFrac |-> f &*&
                     post()
                 :
@@ -164,13 +164,13 @@ requires
                     is_mutex_acquire_ghost_op(aop, inv, obs, waitInv, post) &*& waitInv();
             @*/
             /*@
-            produce_lemma_function_pointer_chunk atomic_weak_compare_and_set_int_ghost_op(&mutex->held_, 0, 1, pre_, post_)() {
+            produce_lemma_function_pointer_chunk atomic_weak_compare_and_set_futex_word_ghost_op(&mutex->held_, 0, 1, pre_, post_)() {
                 open pre_();
                 open_atomic_space(create_mutex, mutex_inv(mutex, inv, internalThreadsGhostListId, readersId));
                 open mutex_inv(mutex, inv, internalThreadsGhostListId, readersId)();
                 
-                assert [_]mutex->held_ |-> ?held;
-                assert is_atomic_weak_compare_and_set_int_op(?op, &mutex->held_, 0, 1, ?P, ?Q);
+                assert [_]futex_word(&mutex->held_, ?held);
+                assert is_atomic_weak_compare_and_set_futex_word_op(?op, &mutex->held_, 0, 1, ?P, ?Q);
                 op();
                 
                 if (held == 0) {
@@ -200,7 +200,7 @@ requires
             };
             @*/
             //@ close pre_();
-            success = atomic_weak_compare_and_set_int(&mutex->held_, 0, 1);
+            success = atomic_weak_compare_and_set_futex_word(&mutex->held_, 0, 1);
             if (success) {
                 //@ open post_(_);
                 //@ leak is_mutex_acquire_wait_ghost_op(wop, inv, obs, waitInv);
@@ -240,7 +240,8 @@ requires
                 assert is_futex_wait_enqueue_op(?op, &mutex->held_, ?P, ?Q);
                 op();
                 
-                if (mutex->held_ == 1) {
+                assert [_]futex_word(&mutex->held_, ?held);
+                if (held == 1) {
                     if (spurious)
                         leak call_perm_(_, mutex_acquire);
                     else
@@ -279,7 +280,8 @@ requires
                 
                 assert is_futex_wait_wait_op(?op, obs, ?P, ?Q);
                 
-                if (mutex->held_ == 1) {
+                assert [_]futex_word(&mutex->held_, ?held);
+                if (held == 1) {
                     predicate P_() = is_futex_wait_wait_op(op, obs, P, Q) &*& P();
                     predicate Q_() = is_futex_wait_wait_op(op, obs, P, Q) &*& Q();
                     produce_lemma_function_pointer_chunk mutex_acquire_wait_op(obs, P_, Q_)(level) {
@@ -353,7 +355,7 @@ void mutex_release(mutex mutex)
         /*@
         predicate pre_() =
             call_below_perm_(currentThread, mutex_release) &*&
-            [1/2]mutex->held_ |-> 1 &*&
+            [1/2]futex_word(&mutex->held_, 1) &*&
             [1/2]mutex->heldFrac |-> f &*&
             is_mutex_release_ghost_op(rop, inv, pre, post) &*& pre() &*&
             [f]atomic_space(create_mutex, mutex_inv(mutex, inv, internalThreadsGhostListId, readersId));
@@ -365,12 +367,12 @@ void mutex_release(mutex mutex)
             [f]atomic_space(create_mutex, mutex_inv(mutex, inv, internalThreadsGhostListId, readersId));
         @*/
         /*@
-        produce_lemma_function_pointer_chunk atomic_store_int_ghost_op(&mutex->held_, 0, pre_, post_)() {
+        produce_lemma_function_pointer_chunk atomic_store_futex_word_ghost_op(&mutex->held_, 0, pre_, post_)() {
             open pre_();
             open_atomic_space(create_mutex, mutex_inv(mutex, inv, internalThreadsGhostListId, readersId));
             open mutex_inv(mutex, inv, internalThreadsGhostListId, readersId)();
             
-            assert is_atomic_store_int_op(?op, _, _, _, _);
+            assert is_atomic_store_futex_word_op(?op, _, _, _, _);
             op();
             
             assert ghost_list(readersId, ?readers);
@@ -391,7 +393,7 @@ void mutex_release(mutex mutex)
         };
         @*/
         //@ close pre_();
-        atomic_store_int(&mutex->held_, 0);
+        atomic_store_futex_word(&mutex->held_, 0);
         //@ open post_();
     }
     //@ assert post(?obs1);
@@ -449,12 +451,12 @@ void mutex_dispose(mutex mutex)
 //@ terminates;
 {
     //@ open mutex(mutex, inv);
-    //@ destroy_futex(&mutex->held_);
     //@ int internalThreadsGhostListId = mutex->internalThreadsGhostListId;
     //@ int readersId = mutex->readersId;
-    //@ open mutex_futex_inv(mutex)(?nbWaiting);
     //@ destroy_atomic_space();
     //@ open mutex_inv(mutex, inv, internalThreadsGhostListId, readersId)();
+    //@ destroy_futex(&mutex->held_);
+    //@ open mutex_futex_inv(mutex)(?nbWaiting);
     free(mutex);
     //@ leak ghost_list(_, _);
     //@ leak n_obs(_);

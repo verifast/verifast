@@ -193,21 +193,23 @@ lemma void discharge_ob(level level);
 
 predicate futex(int *word, predicate(int nbWaiting) inv, predicate() dequeuePost, void *callPermFunc;);
 
+// create_futex consumes the word to ensure that no two futexes, with different values for `dequeuePost` or `callPermFunc`, are active at the same word.
+
 lemma void create_futex(int *word, predicate(int nbWaiting) inv, predicate() dequeuePost, void *callPermFunc);
-    requires inv(0);
-    ensures futex(word, inv, dequeuePost, callPermFunc);
+    requires *word |-> ?value &*& inv(0);
+    ensures futex_word(word, value) &*& futex(word, inv, dequeuePost, callPermFunc);
 
 lemma void destroy_futex(int *word);
-    requires futex(word, ?inv, ?dequeuePost, ?callPermFunc);
-    ensures inv(0);
+    requires futex_word(word, ?value) &*& futex(word, ?inv, ?dequeuePost, ?callPermFunc);
+    ensures *word |-> value &*& inv(0);
 
 @*/
 
 /*@
 
 typedef lemma void futex_wait_enqueue_op(int *word, predicate() P, predicate(int) Q)();
-    requires [?f]*word |-> ?value &*& P();
-    ensures [f]*word |-> value &*& Q(value);
+    requires [?f]futex_word(word, ?value) &*& P();
+    ensures [f]futex_word(word, value) &*& Q(value);
 
 typedef lemma void futex_wait_enqueue_ghost_op(int *word, predicate(int) inv, int val, predicate() pre, predicate(list<level>) waitInv, predicate(bool) post)();
     requires inv(?nbWaiting) &*& is_futex_wait_enqueue_op(?op, word, ?P, ?Q) &*& P() &*& pre() &*& atomic_spaces({});
