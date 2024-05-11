@@ -45,37 +45,39 @@ lemma void atomic_noop();
 
 @*/
 
+//@ predicate futex_word(int *word; int value);
+
 /*@
 
-typedef lemma void atomic_weak_compare_and_set_int_op(int *object, int oldValue, int newValue, predicate() P, predicate(bool) Q)();
-    requires [?f]*object |-> ?value &*& P() &*& value != oldValue || f == 1;
-    ensures [f]*object |-> (value == oldValue ? newValue : value) &*& Q(value == oldValue);
+typedef lemma void atomic_weak_compare_and_set_futex_word_op(int *object, int oldValue, int newValue, predicate() P, predicate(bool) Q)();
+    requires [?f]futex_word(object, ?value) &*& P() &*& value != oldValue || f == 1;
+    ensures [f]futex_word(object, value == oldValue ? newValue : value) &*& Q(value == oldValue);
 
-typedef lemma void atomic_weak_compare_and_set_int_ghost_op(int *object, int oldValue, int newValue, predicate() pre, predicate(bool) post)();
-    requires atomic_spaces({}) &*& is_atomic_weak_compare_and_set_int_op(?op, object, oldValue, newValue, ?P, ?Q) &*& P() &*& pre();
-    ensures atomic_spaces({}) &*& is_atomic_weak_compare_and_set_int_op(op, object, oldValue, newValue, P, Q) &*& Q(?success) &*& post(success);
+typedef lemma void atomic_weak_compare_and_set_futex_word_ghost_op(int *object, int oldValue, int newValue, predicate() pre, predicate(bool) post)();
+    requires atomic_spaces({}) &*& is_atomic_weak_compare_and_set_futex_word_op(?op, object, oldValue, newValue, ?P, ?Q) &*& P() &*& pre();
+    ensures atomic_spaces({}) &*& is_atomic_weak_compare_and_set_futex_word_op(op, object, oldValue, newValue, P, Q) &*& Q(?success) &*& post(success);
 
 @*/
 
-bool atomic_weak_compare_and_set_int(int *object, int oldValue, int newValue);
-//@ requires is_atomic_weak_compare_and_set_int_ghost_op(?ghop, object, oldValue, newValue, ?pre, ?post) &*& pre();
+bool atomic_weak_compare_and_set_futex_word(int *object, int oldValue, int newValue);
+//@ requires is_atomic_weak_compare_and_set_futex_word_ghost_op(?ghop, object, oldValue, newValue, ?pre, ?post) &*& pre();
 //@ ensures result ? post(true) : exists<bool>(?spurious) &*& spurious ? pre() &*& call_perm_top() : post(false);
 //@ terminates;
 
 /*@
 
-typedef lemma void atomic_store_int_op(int *object, int value, predicate() P, predicate() Q)();
-    requires *object |-> _ &*& P();
-    ensures *object |-> value &*& Q();
+typedef lemma void atomic_store_futex_word_op(int *object, int value, predicate() P, predicate() Q)();
+    requires futex_word(object, _) &*& P();
+    ensures futex_word(object, value) &*& Q();
 
-typedef lemma void atomic_store_int_ghost_op(int *object, int value, predicate() pre, predicate() post)();
-    requires atomic_spaces({}) &*& is_atomic_store_int_op(?op, object, value, ?P, ?Q) &*& P() &*& pre();
-    ensures atomic_spaces({}) &*& is_atomic_store_int_op(op, object, value, P, Q) &*& Q() &*& post();
+typedef lemma void atomic_store_futex_word_ghost_op(int *object, int value, predicate() pre, predicate() post)();
+    requires atomic_spaces({}) &*& is_atomic_store_futex_word_op(?op, object, value, ?P, ?Q) &*& P() &*& pre();
+    ensures atomic_spaces({}) &*& is_atomic_store_futex_word_op(op, object, value, P, Q) &*& Q() &*& post();
 
 @*/
 
-void atomic_store_int(int *object, int value);
-//@ requires is_atomic_store_int_ghost_op(?ghop, object, value, ?pre, ?post) &*& pre();
+void atomic_store_futex_word(int *object, int value);
+//@ requires is_atomic_store_futex_word_ghost_op(?ghop, object, value, ?pre, ?post) &*& pre();
 //@ ensures post();
 //@ terminates;
 
