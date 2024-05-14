@@ -53,6 +53,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | AssignExpr (l, e1, e2) -> expr_assigned_variables e1 @ expr_assigned_variables e2
     | AssignOpExpr (l, (Var (_, x) | WVar (_, x, _)), op, e, _) -> [x] @ expr_assigned_variables e
     | AssignOpExpr (l, e1, op, e2, _) -> expr_assigned_variables e1 @ expr_assigned_variables e2
+    | WAssignOpExpr (l, (Var (_, x) | WVar (_, x, _)), _, e, _) -> [x] @ expr_assigned_variables e
+    | WAssignOpExpr (l, e1, _, e2, _) -> expr_assigned_variables e1 @ expr_assigned_variables e2
     | InstanceOfExpr(_, e, _) -> expr_assigned_variables e
     | SliceExpr (l, p1, p2) -> flatmap (function Some (LitPat e) -> expr_assigned_variables e | _ -> []) [p1; p2]
     | SuperMethodCall(_, _, args) -> flatmap expr_assigned_variables args

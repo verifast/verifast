@@ -1735,8 +1735,8 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let endBodyLoc = match ss with BlockStmt(_, _, _, closeBraceLoc, _) :: _ -> closeBraceLoc | _-> l in
       let break h env = cont h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
       let lblenv = (break_label (), fun blocks_done sizemap tenv ghostenv h env -> break h env)::lblenv in
-      let e = check_condition (pn,ilist) tparams tenv e in
       let xs = expr_assigned_variables e @ block_assigned_variables ss @ block_assigned_variables final_ss in
+      let e = check_condition (pn,ilist) tparams tenv e in
       let xs = List.filter (fun x -> match try_assoc x tenv with None -> false | Some (RefType _) -> false | _ -> true) xs in
       let (p, tenv') = check_asn (pn,ilist) tparams tenv p in
       let dec = (match dec with None -> None | Some(e) -> Some(check_expr_t_pure tenv' e intt)) in
@@ -1809,13 +1809,13 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let endBodyLoc = match ss with BlockStmt(_, _, _, closeBraceLoc, _) :: _ -> closeBraceLoc | _-> l in
       let break h env = cont h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
       let lblenv = (break_label (), fun blocks_done sizemap tenv ghostenv h env -> break h env)::lblenv in
-      let e = check_condition (pn,ilist) tparams tenv e in
       let (ss, locals_to_free) = (* do we really need to do this? Aren't locals freed automatically at the end of the loop if the body is a block? *)
         match ss with
           BlockStmt(_, _, ss, _, locals_to_free) :: rest -> check_block_declarations ss; (ss @ rest, locals_to_free)
         | _ -> (ss, ref [])
       in
       let xs = (expr_assigned_variables e) @ (block_assigned_variables ss)  @ block_assigned_variables final_ss in
+      let e = check_condition (pn,ilist) tparams tenv e in
       let xs = List.filter (fun x -> match try_assoc x tenv with None -> false | Some (RefType _) -> false | _ -> true) xs in
       let (pre, tenv') = check_asn (pn,ilist) tparams tenv pre in
       let old_xs_tenv = List.map (fun x -> ("old_" ^ x, List.assoc x tenv)) xs in
@@ -3323,6 +3323,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         record_fun_timing lm (cn ^ ".<ctor>") begin fun () ->
         if !verbosity >= 1 then Printf.printf "%10.6fs: %s: Verifying constructor %s\n" (Perf.time()) (string_of_loc lm) (string_of_sign (cn, sign));
         check_focus lm closeBraceLoc $. fun () ->
+        check_should_fail () begin fun () ->
         execute_branch begin fun () ->
         with_context (Executing ([], [], lm, Printf.sprintf "Class '%s': verifying constructor" cn)) $. fun () ->
         let env = get_unique_var_symbs_non_ghost ([(current_thread_name, current_thread_type)] @ xmap) in
@@ -3402,6 +3403,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           assume_neq this (ctxt#mk_intlit 0) $. fun() -> do_body h ghostenv (("this", this)::env)
         end
         end
+        end
         end;
         verify_cons (pn,ilist) cfin cn supercn superctors boxes lems rest tparams
 
@@ -3426,6 +3428,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         if !verbosity >= 1 then Printf.printf "%10.6fs: %s: Verifying method %s\n" (Perf.time()) (string_of_loc l) g;
         if abstract then static_error l "Abstract method cannot have implementation." None;
         check_focus l closeBraceLoc $. fun () ->
+        check_should_fail () begin fun () ->
         execute_branch $. fun () ->
         with_context (Executing ([], [], l, Printf.sprintf "Verifying method '%s'" g)) $. fun () ->
         let (in_pure_context, leminfo, ghostenv) =
@@ -3467,6 +3470,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           in
           let cont sizemap tenv ghostenv h env = return_cont h tenv env None in
           verify_block (pn, ilist) [] [] allTparams boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env ss cont return_cont econt
+        end
         end
         end;
         verify_meths (pn, ilist) cfin cabstract boxes lems meths ctparams
