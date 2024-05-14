@@ -4885,6 +4885,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let (w2, t2, _) = check_with_extra_bindings [(x, t1)] (Operation (l, op, [Var (l, x); e2])) in
       let w2', _, _ = check (CastExpr (l, ManifestTypeExpr (l, t1), TypedExpr (w2, t2))) in
       (WAssignOpExpr (l, w1, x, w2', postOp), t1, None)
+    | CommaExpr (l, e1, e2) ->
+      let (w1, t1, _) = check e1 in
+      let (w2, t2, v2) = check e2 in
+      (CommaExpr (l, w1, w2), t2, v2)
     | InitializerList (l, es) ->
       let rec to_list_expr es =
         match es with

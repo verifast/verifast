@@ -532,6 +532,8 @@ let rec sexpr_of_expr (expr : expr) : sexpression =
             "op", Symbol op;
             "post", sexpr_of_bool post
           ]
+    | CommaExpr (loc, e1, e2) ->
+        List [ Symbol "expr-comma"; sexpr_of_expr e1; sexpr_of_expr e2 ]
     | InstanceOfExpr (_, expr, texpr) ->
         build_list
           [ Symbol "expr-instance-of" ]

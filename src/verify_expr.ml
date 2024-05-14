@@ -55,6 +55,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | AssignOpExpr (l, e1, op, e2, _) -> expr_assigned_variables e1 @ expr_assigned_variables e2
     | WAssignOpExpr (l, (Var (_, x) | WVar (_, x, _)), _, e, _) -> [x] @ expr_assigned_variables e
     | WAssignOpExpr (l, e1, _, e2, _) -> expr_assigned_variables e1 @ expr_assigned_variables e2
+    | CommaExpr (l, e1, e2) -> expr_assigned_variables e1 @ expr_assigned_variables e2
     | InstanceOfExpr(_, e, _) -> expr_assigned_variables e
     | SliceExpr (l, p1, p2) -> flatmap (function Some (LitPat e) -> expr_assigned_variables e | _ -> []) [p1; p2]
     | SuperMethodCall(_, _, args) -> flatmap expr_assigned_variables args
@@ -1333,6 +1334,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | ArrayTypeExpr'(_, e) ->  expr_mark_addr_taken e locals
     | AssignExpr(_, e1, e2) ->  expr_mark_addr_taken e1 locals;  expr_mark_addr_taken e2 locals
     | AssignOpExpr(_, e1, _, e2, _) -> expr_mark_addr_taken e1 locals;  expr_mark_addr_taken e2 locals
+    | CommaExpr (_, e1, e2) -> expr_mark_addr_taken e1 locals; expr_mark_addr_taken e2 locals
     | InitializerList(_, es) -> List.iter (fun (_, e) -> expr_mark_addr_taken e locals) es
     | CxxNew (_, _, Some e)
     | WCxxNew (_, _, Some e) -> expr_mark_addr_taken e locals
@@ -1491,6 +1493,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | ArrayTypeExpr'(_, e) -> expr_address_taken e
     | AssignExpr(_, e1, e2) -> (expr_address_taken e1) @ (expr_address_taken e2)
     | AssignOpExpr(_, e1, _, e2, _) -> (expr_address_taken e1) @ (expr_address_taken e2)
+    | CommaExpr (_, e1, e2) -> expr_address_taken e1 @ expr_address_taken e2
     | InitializerList (_, es) -> flatmap (fun (_, e) -> expr_address_taken e) es
     | _ -> []
   
@@ -3027,6 +3030,9 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       verify_expr (true, rhsHeapReadOnly) h env varName rhs $. fun h env vrhs ->
       write_lvalue h env lvalue vrhs $. fun h env ->
       cont h env vrhs
+    | CommaExpr (l, e1, e2) ->
+      eval_h_core readonly h env e1 $. fun h env _ ->
+      eval_h_core readonly h env e2 cont
     | AddressOf (_, WDeref (_, w, _)) ->
       eval_h_core readonly h env w cont
     | e ->

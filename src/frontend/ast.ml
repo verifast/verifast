@@ -445,6 +445,7 @@ and
        4. Assign V to L
        5. Return (postOp ? v : V)
     *)
+  | CommaExpr of loc * expr * expr
   | InstanceOfExpr of loc * expr * type_expr
   | SuperMethodCall of loc * string * expr list
   | WSuperMethodCall of loc * string (*superclass*) * string * expr list * (loc * ghostness * (type_ option) * (string * type_) list * asn * asn * (type_ * asn) list * bool (*terminates*) * int (*rank*) option * visibility)
@@ -1026,6 +1027,7 @@ let rec expr_loc e =
   | AssignExpr (l, lhs, rhs) -> l
   | AssignOpExpr (l, lhs, op, rhs, postOp) -> l
   | WAssignOpExpr (l, lhs, x, rhs, postOp) -> l
+  | CommaExpr (l, e1, e2) -> l
   | ProverTypeConversion (t1, t2, e) -> expr_loc e
   | InstanceOfExpr(l, e, tp) -> l
   | SuperMethodCall(l, _, _) -> l
@@ -1254,6 +1256,7 @@ let expr_fold_open iter state e =
   | AssignExpr (l, lhs, rhs) -> iter (iter state lhs) rhs
   | AssignOpExpr (l, lhs, op, rhs, post) -> iter (iter state lhs) rhs
   | WAssignOpExpr (l, lhs, x, rhs, post) -> iter (iter state lhs) rhs
+  | CommaExpr (l, e1, e2) -> iter (iter state e1) e2
   | InstanceOfExpr(l, e, tp) -> iter state e
   | SuperMethodCall(_, _, args) -> iters state args
   | WSuperMethodCall(_, _, _, args, _) -> iters state args
