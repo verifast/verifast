@@ -39,7 +39,7 @@ mod ptr {
         //@ ens thread_token(t) &*& [qa]lifetime_token(a) &*& NonNull_own::<T>(t, NonNull_ptr(result)) &*& NonNull_ptr(result) == reference;
 
         unsafe fn new_unchecked(ptr: *mut T) -> NonNull<T>;
-        //@ req true;
+        //@ req ptr as usize != 0;
         //@ ens NonNull_ptr(result) == ptr;
 
         unsafe fn as_ref<'a>(self: &'a NonNull<T>) -> &'a T;
