@@ -477,6 +477,7 @@ cd tests
   verifast -c inductive_field_access.c
   verifast -c -prover z3v4.5 inductive_field_access.c
   verifast -c issue357.c
+  verifast -c comma_expr.c
   verifast -c call_in_struct_init.c
   verifast -c -allow_should_fail effective_types.c
   verifast -c mul_distrib.c

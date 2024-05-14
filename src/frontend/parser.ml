@@ -1907,7 +1907,7 @@ and
     | [ (_, Kwd ";") ] -> []
     end
     ];
-    [%l cond = opt parse_expr];
+    [%l cond = opt parse_comma_expr];
     (_, Kwd ";");
     [%l update_exprs = rep_comma parse_expr];
     (_, Kwd ")");
@@ -2273,6 +2273,13 @@ and
     (_, Kwd ";") 
   ] -> SwitchAsnClause (l, c, pats, p)
 and
+  parse_comma_expr = function%parser
+  [ parse_assign_expr as e1; [%let e = parse_comma_expr_rest e1] ] -> e
+and
+  parse_comma_expr_rest e = function%parser
+  [ (l, Kwd ","); parse_comma_expr as e1 ] -> CommaExpr (l, e, e1)
+| [ ] -> e
+and
   parse_expr stream = parse_assign_expr stream
 and
   parse_assign_expr = function%parser
@@ -2577,7 +2584,7 @@ and
       in
       let parse =
         function%parser
-        | [ parse_expr as e0; 
+        | [ parse_comma_expr as e0; 
             (_, Kwd ")"); 
             [%l e = parse_expr_rest e0] 
           ] -> e

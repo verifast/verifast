@@ -488,6 +488,8 @@ and of_expr = function
     of_expr rhs;
     B postOp
   ])
+| CommaExpr (l, e1, e2) ->
+  C ("CommaExpr", [of_loc l; of_expr e1; of_expr e2])
 | InstanceOfExpr (l, e, t) ->
   C ("InstanceOfExpr", [
     of_loc l;
