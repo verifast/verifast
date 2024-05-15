@@ -42,12 +42,17 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
+      attestations: write
 
     steps:
       - uses: actions/download-artifact@v3
         with:
           name: binary-package-ubuntu
 
+      - uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: ${{ needs.build_ubuntu.outputs.artifact_name }}
+      
       - name: Install cosign
         uses: sigstore/cosign-installer@v3.4.0
 
@@ -170,11 +175,16 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
+      attestations: write
 
     steps:
       - uses: actions/download-artifact@v3
         with:
           name: binary-package-macos
+
+      - uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: ${{ needs.build_macos.outputs.artifact_name }}
 
       - name: Install cosign
         uses: sigstore/cosign-installer@v3.4.0
@@ -290,11 +300,16 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
+      attestations: write
 
     steps:
       - uses: actions/download-artifact@v3
         with:
           name: binary-package-windows
+
+      - uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: ${{ needs.build_windows.outputs.artifact_name }}
 
       - name: Install cosign
         uses: sigstore/cosign-installer@v3.4.0
