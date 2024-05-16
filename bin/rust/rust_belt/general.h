@@ -133,7 +133,9 @@ lemma void close_full_borrow_content<T>(thread_id_t t, T *l);
     requires *l |-> ?v &*& (<T>.own)(t, v);
     ensures ((<T>.full_borrow_content)(t, l))();
 
-predicate type_interp<T>(;);
+fixpoint int type_depth(void *typeId);
+
+predicate type_interp<T>(;) = ghost_rec_perm(type_depth(typeid(T)));
 
 lemma void share_mono<T>(lifetime_t k, lifetime_t k1, thread_id_t t, T *l);
     requires type_interp<T>() &*& lifetime_inclusion(k1, k) == true &*& [_](<T>.share)(k, t, l);
@@ -148,7 +150,14 @@ lemma void share_full_borrow_m<T>(lifetime_t k, thread_id_t t, void *l);
     requires type_interp<T>() &*& atomic_mask(?mask) &*& mask_le(Nlft, mask) == true &*& full_borrow(k, (<T>.full_borrow_content)(t, l)) &*& [?q]lifetime_token(k);
     ensures type_interp<T>() &*& atomic_mask(mask) &*& [_](<T>.share)(k, t, l) &*& [q]lifetime_token(k);
 
+fixpoint bool is_Send(void *type_id);
+
+lemma void Send::send<T>(thread_id_t t0, thread_id_t t1, T v);
+    requires type_interp<T>() &*& is_Send(typeid(T)) == true &*& (<T>.own)(t0, v);
+    ensures type_interp<T>() &*& (<T>.own)(t1, v);
+
 predicate lifetimes(list<lifetime_t> lifetimes) = true; // Serves only to carry a function call's lifetime arguments.
+
 @*/
 
 #endif
