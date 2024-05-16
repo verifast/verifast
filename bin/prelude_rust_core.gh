@@ -1107,6 +1107,18 @@ fixpoint bool func_lt(void *f, void *g);
 predicate call_perm_(int threadId, void *f;);
 predicate call_below_perm_(int threadId, void *f;);
 
+predicate ghost_rec_perm(int depth;); // Permission to perform `depth` nested lemma function pointer calls.
+
+predicate ghost_rec_perm_top();
+predicate ghost_rec_perm_top_unweaken_token(int depth);
+
+lemma void ghost_rec_perm_top_weaken(int depth);
+    requires ghost_rec_perm_top();
+    ensures ghost_rec_perm(depth) &*& ghost_rec_perm_top_unweaken_token(depth);
+
+lemma void ghost_rec_perm_top_unweaken();
+    requires ghost_rec_perm_top_unweaken_token(?depth) &*& ghost_rec_perm(depth);
+    ensures ghost_rec_perm_top();
 
 predicate junk(); // When consuming junk(), VeriFast will consume all chunks in the symbolic heap
 
