@@ -1,0 +1,4 @@
+enum {
+  TRUE,
+  FALSE,
+};

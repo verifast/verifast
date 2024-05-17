@@ -177,6 +177,14 @@ let opt p = function%parser [ p as v ] -> Some v | [ ] -> None
 let rec comma_rep p = function%parser [ (_, Kwd ","); p as v; [%l vs = comma_rep p] ] -> v::vs | [ ] -> []
 let rep_comma p = function%parser [ p as v; [%l vs = comma_rep p] ] -> v::vs | [ ] -> []
 let rec rep p = function%parser [ p as v; [%l vs = rep p] ] -> v::vs | [ ] -> []
+let rec comma_rep_ p = function%parser
+  [ (_, Kwd ",");
+    [%let vs = function%parser
+       [ p as v; [%l vs = comma_rep_ p] ] -> v::vs
+     | [ ] -> []]
+  ] -> vs
+| [ ] -> []
+let rep_comma_ p = function%parser [ p as v; [%l vs = comma_rep_ p] ] -> v::vs | [ ] -> []
 let rec adjacent_locs l0 l1 =
   match l0, l1 with
     MacroExpansion (lcall1, lbody1), MacroExpansion (lcall2, lbody2) when lcall1 == lcall2 ->
@@ -367,6 +375,13 @@ let get_unnamed_param_name =
     let n = !counter in
     incr counter;
     "__unnamed_param" ^ string_of_int n
+
+let get_unnamed_enum_name =
+  let counter = ref 0 in
+  fun () ->
+    let n = !counter in
+  incr counter;
+  Printf.sprintf "__unnamed_enum%d" n
 
 let rec parse_decls ?inGhostHeader =
   if match inGhostHeader with None -> false | Some b -> b then
@@ -724,7 +739,7 @@ and
   parse_enum_body = function%parser
 | [ (_, Kwd "{");
     [%l 
-    elems = rep_comma (function%parser 
+    elems = rep_comma_ (function%parser 
     | [ (_, Ident e); 
         [%l 
         init = opt (function%parser 
@@ -824,14 +839,15 @@ and
     end
     ]
   ] -> pop_typedef_scope (); register_typedef g; ds
-| [ (_, Kwd "enum"); 
-    (l, Ident n); 
+| [ (l, Kwd "enum"); 
+    [%let (l, n, hasName) = function%parser [ (l, Ident n) ] -> (l, n, true) | [ ] -> (l, get_unnamed_enum_name (), false)];
     [%l
     d = function%parser
     | [ parse_enum_body as elems; 
         (_, Kwd ";"); 
-      ] -> EnumDecl(l, n, elems)
-    | [ [%l t = parse_type_suffix (EnumTypeExpr (l, Some n, None))]; 
+      ] -> EnumDecl (l, n, elems)
+    | [ [%l () = (fun s -> if not hasName then raise (ParseException (l, "enum name or enum body expected")))];
+        [%l t = parse_type_suffix (EnumTypeExpr (l, Some n, None))]; 
         [%l d = parse_func_rest Regular (Some t)] 
       ] -> d
     ]
