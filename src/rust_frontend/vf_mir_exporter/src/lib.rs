@@ -886,6 +886,11 @@ mod vf_mir_builder {
                 .get_generics(adt_def.did().expect_local())
                 .expect(&format!("Failed to get HIR generics data"));
             Self::encode_hir_generics(enc_ctx, hir_gens, hir_gens_cpn);
+
+            let predicates = tcx.predicates_of(adt_def.did()).predicates;
+            adt_def_cpn.fill_predicates(predicates, |pred_cpn, pred| {
+                Self::encode_predicate(enc_ctx, pred, pred_cpn);
+            });
         }
 
         fn encode_adt_kind(adt_kind: ty::AdtKind, mut adt_kind_cpn: adt_kind_cpn::Builder<'_>) {
@@ -951,12 +956,19 @@ mod vf_mir_builder {
             }
         }
 
-        fn encode_predicate(pred: &(ty::Clause<'tcx>, rustc_span::Span), mut pred_cpn: predicate_cpn::Builder<'_>) {
+        fn encode_predicate(enc_ctx: &mut EncCtx<'tcx, 'a>, pred: &(ty::Clause<'tcx>, rustc_span::Span), mut pred_cpn: predicate_cpn::Builder<'_>) {
             match pred.0.kind().skip_binder() {
                 ty::ClauseKind::RegionOutlives(outlives_pred) => {
                     let mut outlives_cpn = pred_cpn.init_outlives();
                     Self::encode_region(outlives_pred.0, outlives_cpn.reborrow().init_region1());
                     Self::encode_region(outlives_pred.1, outlives_cpn.reborrow().init_region2());
+                }
+                ty::ClauseKind::Trait(trait_pred) => {
+                    let mut trait_cpn = pred_cpn.init_trait();
+                    trait_cpn.set_def_id(&enc_ctx.tcx.def_path_str(trait_pred.trait_ref.def_id));
+                    trait_cpn.fill_args(trait_pred.trait_ref.args, |arg_cpn, arg| {
+                        Self::encode_gen_arg(enc_ctx.tcx, enc_ctx, &arg, arg_cpn);
+                    });
                 }
                 _ => pred_cpn.set_ignored(()),
             }
@@ -1018,6 +1030,11 @@ mod vf_mir_builder {
                 let impl_generics_cpn = body_cpn.reborrow().init_impl_block_hir_generics();
                 let impl_generics_some_cpn = impl_generics_cpn.init_something();
                 Self::encode_hir_generics(enc_ctx, impl_hir_gens, impl_generics_some_cpn);
+
+                let impl_preds = tcx.predicates_of(impl_did).predicates;
+                body_cpn.fill_impl_block_predicates(impl_preds, |pred_cpn, pred| {
+                    Self::encode_predicate(enc_ctx, pred, pred_cpn);
+                });
             }
 
             let hir_gens_cpn = body_cpn.reborrow().init_hir_generics();
@@ -1028,8 +1045,8 @@ mod vf_mir_builder {
             Self::encode_hir_generics(enc_ctx, hir_gens, hir_gens_cpn);
 
             let predicates = tcx.predicates_of(def_id).predicates;
-            let predicates_cpn = body_cpn.reborrow().fill_predicates(predicates, |pred_cpn, pred| {
-                Self::encode_predicate(pred, pred_cpn);
+            body_cpn.reborrow().fill_predicates(predicates, |pred_cpn, pred| {
+                Self::encode_predicate(enc_ctx, pred, pred_cpn);
             });
 
             let contract_cpn = body_cpn.reborrow().init_contract();

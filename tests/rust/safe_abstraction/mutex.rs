@@ -134,10 +134,9 @@ lem Mutex_share_mono<T>(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *Mutex
 }
 
 lem Mutex_share_full<T>(k: lifetime_t, t: thread_id_t, l: *Mutex<T>)
-    req type_interp::<T>() &*& atomic_mask(Nlft) &*& full_borrow(k, Mutex_full_borrow_content(t, l)) &*& [?q]lifetime_token(k);
+    req is_Send(typeid(T)) == true &*& type_interp::<T>() &*& atomic_mask(Nlft) &*& full_borrow(k, Mutex_full_borrow_content(t, l)) &*& [?q]lifetime_token(k);
     ens type_interp::<T>() &*& atomic_mask(Nlft) &*& [_]Mutex_share(k, t, l) &*& [q]lifetime_token(k);
 {
-    assume(is_Send(typeid(T))); // TODO
     produce_lem_ptr_chunk implies(sep(Mutex_fbc_inner(l), <T>.full_borrow_content(t0, &(*l).data)), Mutex_full_borrow_content(t, l))() {
         open sep(Mutex_fbc_inner(l), <T>.full_borrow_content(t0, &(*l).data))();
         open Mutex_fbc_inner::<T>(l)();
@@ -197,11 +196,10 @@ unsafe impl<T: Send> Send for Mutex<T> {}
 
 /*@
 
-lem Mutex_send<T>(t: thread_id_t, t1: thread_id_t)
-    req type_interp::<T>() &*& Mutex_own::<T>(t, ?inner, ?data);
+lem Mutex_send<T>(t: thread_id_t, t1: thread_id_t) // TODO: Enforce this proof obligation
+    req is_Send(typeid(T)) == true &*& type_interp::<T>() &*& Mutex_own::<T>(t, ?inner, ?data);
     ens type_interp::<T>() &*& Mutex_own(t1, inner, data);
 {
-    assume(is_Send(typeid(T))); // TODO
     open Mutex_own(t, inner, data);
     Send::send::<T>(t, t1, data);
     close Mutex_own(t1, inner, data);
@@ -213,7 +211,7 @@ unsafe impl<T: Send> Sync for Mutex<T> {}
 
 /*@
 
-lem Mutex_sync<T>(t: thread_id_t, t1: thread_id_t)
+lem Mutex_sync<T>(t: thread_id_t, t1: thread_id_t) // TODO: Enforce this proof obligation
     req Mutex_share::<T>(?k, t, ?l);
     ens Mutex_share(k, t1, l);
 {
@@ -321,6 +319,7 @@ impl<'b, T: Send> MutexGuard<'b, T> {
     pub fn deref_mut<'a>(self: &'a mut MutexGuard<'b, T>) -> &'a mut T where 'b: 'a
     /*@
     req
+        is_Send(typeid(T)) == true &*&
         thread_token(?t) &*& lifetimes(cons(?km, cons(?a, nil))) &*& [?qa]lifetime_token(a) &*& [?qkm]lifetime_token(km)
         &*& full_borrow(a, MutexGuard_full_borrow_content(km, t, self))
         &*& lifetime_inclusion(a, km) == true;
@@ -329,7 +328,6 @@ impl<'b, T: Send> MutexGuard<'b, T> {
     // The target lifetimes always outlive reference lifetime out of compiler guarantees of wellformedness of types.
     //@ ens thread_token(t) &*& [qa]lifetime_token(a) &*& [qkm]lifetime_token(km) &*& full_borrow(a, <T>.full_borrow_content(t, result));
     {
-        //@ assume(is_Send(typeid(T))); // TODO
         //@ open lifetimes(_);
         //@ let kstrong = open_full_borrow_strong(a, MutexGuard_full_borrow_content(km, t, self), qa/2);
         //@ open MutexGuard_full_borrow_content::<T>(km, t, self)();

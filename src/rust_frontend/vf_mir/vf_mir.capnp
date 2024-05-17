@@ -233,6 +233,7 @@ struct Ty {
         vis @4: Visibility;
         isLocal @5: Bool;
         hirGenerics @6: Hir.Generics;
+        predicates @7: List(Predicate);
     }
 
     struct AdtTy {
@@ -294,8 +295,13 @@ struct Predicate {
         region1 @0: Ty.Region;
         region2 @1: Ty.Region;
     }
+    struct Trait { # T : Foo<A, B, C>
+        defId @0: Text; # DefId of the trait (Foo)
+        args @1: List(Ty.GenArg); # The Self type (T) followed by the trait type args (A, B, C)
+    }
     union {
         outlives @0: Outlives;
+        trait @2: Trait;
         ignored @1: Void; # A predicate that we are ignoring for now
     }
 }
@@ -609,6 +615,7 @@ struct Body {
     ghostDeclBlocks @15: List(GhostDeclBlock); # A Rust block starting with a ghost range containing ghost declarations (local predicates and lemmas)
     unsafety @10: Unsafety;
     implBlockHirGenerics @14: Option(Hir.Generics);
+    implBlockPredicates @19: List(Predicate);
     hirGenerics @11: Hir.Generics;
     predicates @17: List(Predicate);
     isTraitFn @12: Bool;

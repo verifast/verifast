@@ -2999,9 +2999,25 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | [] -> Ast.LitPat (Var (l, "nil"))
     | h :: t -> Ast.CtorPat (l, "cons", [ h; mk_list_pat l t ])
 
+  let mk_send_asn loc tparam =
+    let open Ast in
+    ExprAsn
+      ( loc,
+        CallExpr
+          ( loc,
+            "is_Send",
+            [],
+            [],
+            [
+              LitPat
+                (Typeid (loc, TypeExpr (IdentTypeExpr (loc, None, tparam))));
+            ],
+            Static ) )
+
   let gen_contract (adt_defs : Mir.adt_def_tr list) (contract_loc : Ast.loc)
       (lft_vars : string list) (outlives_preds : (string * string) list)
-      (params : Mir.local_decl list) (ret : Mir.local_decl) =
+      (send_tparams : string list) (params : Mir.local_decl list)
+      (ret : Mir.local_decl) =
     let open Ast in
     let bind_pat_b n = VarPat (contract_loc, n) in
     let lit_pat_b n = LitPat (Var (contract_loc, n)) in
@@ -3080,7 +3096,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                True contract_loc;
              ] )
     in
-    let pre_lft_tks = pre_lft_tks @ outlives_asns in
+    let send_asns = send_tparams |> List.map (mk_send_asn contract_loc) in
+    let pre_lft_tks = pre_lft_tks @ outlives_asns @ send_asns in
     let post_lft_tks =
       List.map (fun lft_var -> lft_token_b lit_pat_b lit_pat_b lft_var) lft_vars
     in
@@ -3499,7 +3516,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           gen_contract adt_defs loc
             (List.map TrName.lft_name_without_apostrophe
                (lifetime_params_get_list required_fn_cpn))
-            [] params result
+            [] [] params result
         in
         Ok (false, None, Some (pre, post), false))
     in
@@ -3527,6 +3544,35 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       CapnpAux.ind_list_get_list (TraitRd.required_fns_get trait_cpn)
     in
     ListAux.try_map (translate_trait_required_fn adt_defs name) required_fns
+
+  let decode_predicate (loc : Ast.loc) (pred_cpn : VfMirStub.Reader.Predicate.t)
+      =
+    let open VfMirStub.Reader.Predicate in
+    match get pred_cpn with
+    | Outlives outlives_pred_cpn ->
+        let open Outlives in
+        Ok
+          (`Outlives
+            ( translate_region (region1_get outlives_pred_cpn),
+              translate_region (region2_get outlives_pred_cpn) ))
+    | Trait trait_pred_cpn ->
+        let open Trait in
+        let* args =
+          ListAux.try_map
+            (fun arg -> translate_generic_arg arg loc)
+            (args_get_list trait_pred_cpn)
+        in
+        Ok (`Trait (def_id_get trait_pred_cpn, args))
+    | _ -> Ok `Ignored
+
+  let compute_send_tparams preds =
+    preds
+    |> Util.flatmap (function
+         | `Trait ("std::marker::Send", [ Mir.GenArgType selfTy ]) -> (
+             match Mir.basic_type_of selfTy with
+             | ManifestTypeExpr (_, GhostTypeParam tparam) -> [ tparam ]
+             | _ -> [])
+         | _ -> [])
 
   let translate_body (body_tr_defs_ctx : body_tr_defs_ctx) (body_cpn : BodyRd.t)
       =
@@ -3618,17 +3664,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         let tparams =
           if is_trait_fn_get body_cpn then "Self" :: tparams else tparams
         in
-        let preds =
-          predicates_get_list body_cpn
-          |> List.map @@ fun pred_cpn ->
-             let open VfMirStub.Reader.Predicate in
-             match get pred_cpn with
-             | Outlives outlives_pred_cpn ->
-                 let open Outlives in
-                 `Outlives
-                   ( translate_region (region1_get outlives_pred_cpn),
-                     translate_region (region2_get outlives_pred_cpn) )
-             | _ -> `Ignored
+        let* preds =
+          impl_block_predicates_get_list body_cpn @ predicates_get_list body_cpn
+          |> ListAux.try_map (decode_predicate imp_loc)
         in
         let outlives_preds =
           preds
@@ -3640,6 +3678,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                    ]
                | _ -> [])
         in
+        let send_tparams = compute_send_tparams preds in
         let* ret_ty_info = translate_ty (output_get body_cpn) imp_loc in
         let* param_tys =
           ListAux.try_map
@@ -3724,7 +3763,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   self_ty_targs self_lft_args contract_loc
               else
                 gen_contract body_tr_defs_ctx.adt_defs contract_loc
-                  lft_param_names outlives_preds param_decls ret_place_decl
+                  lft_param_names outlives_preds send_tparams param_decls
+                  ret_place_decl
             in
             let contract_template =
               (false, None, Some pre_post_template, false)
@@ -3924,7 +3964,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         in
         Ok fbor_content_pred_ctor
 
-  let gen_adt_proof_obligs adt_def lft_params tparams =
+  let gen_adt_proof_obligs adt_def lft_params tparams send_tparams =
     let open Ast in
     let* adt_kind = Mir.decl_mir_adt_kind adt_def in
     match adt_kind with
@@ -3963,6 +4003,11 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                       Static ),
                   asn ))
             tparams asn
+        in
+        let add_send_asns asn =
+          List.fold_right
+            (fun x asn -> Sep (adt_def_loc, mk_send_asn adt_def_loc x, asn))
+            send_tparams asn
         in
         (*TY-SHR-MONO*)
         let params =
@@ -4004,7 +4049,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   Static ) )
         in
         let pre =
-          add_type_interp_asn (Sep (adt_def_loc, lft_inc_asn, shr_asn "k"))
+          add_type_interp_asn
+            (add_send_asns (Sep (adt_def_loc, lft_inc_asn, shr_asn "k")))
         in
         let post = add_type_interp_asn (shr_asn "k1") in
         let share_mono_po =
@@ -4087,7 +4133,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                ])
             None
         in
-        let pre = add_type_interp_asn pre in
+        let pre = add_type_interp_asn (add_send_asns pre) in
         let share_pred =
           CoefAsn
             ( adt_def_loc,
@@ -4184,6 +4230,11 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let* variants = ListAux.try_map translate_variant_def variants_cpn in
       let span_cpn = span_get adt_def_cpn in
       let* def_loc = translate_span_data span_cpn in
+      let* preds =
+        predicates_get_list adt_def_cpn
+        |> ListAux.try_map (decode_predicate def_loc)
+      in
+      let send_tparams = compute_send_tparams preds in
       let tparams_targs =
         List.map (fun x -> Ast.IdentTypeExpr (def_loc, None, x)) tparams
       in
@@ -4248,7 +4299,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             gen_adt_full_borrow_content kind name tparams lft_params variants
               def_loc
           in
-          let* proof_obligs = gen_adt_proof_obligs def lft_params tparams in
+          let* proof_obligs =
+            gen_adt_proof_obligs def lft_params tparams send_tparams
+          in
           let own__pred_decls =
             if lft_params <> [] then []
             else
