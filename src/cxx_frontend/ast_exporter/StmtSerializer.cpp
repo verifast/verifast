@@ -1,215 +1,262 @@
-#include "AstSerializer.h"
-#include "clang/AST/Stmt.h"
+#include "StmtSerializer.h"
+#include "Location.h"
+#include "NodeListSerializer.h"
+#include "clang/AST/StmtVisitor.h"
+#include "clang/Basic/Diagnostic.h"
 
 namespace vf {
 
-bool StmtSerializer::VisitCompoundStmt(const clang::CompoundStmt *stmt) {
-  StmtListSerializer stmtListSerializer(
-      capnp::Orphanage::getForMessageContaining(m_builder), m_serializer);
-  auto &store = m_serializer.getAnnStore();
-  auto &SM = getSourceManager();
-  llvm::SmallVector<Annotation> anns;
+namespace {
 
-  for (auto s : stmt->body()) {
-    store.getUntilLoc(anns, s->getBeginLoc(), SM);
-    stmtListSerializer << anns << s;
-    anns.clear();
+struct StmtSerializerImpl
+    : public clang::ConstStmtVisitor<StmtSerializerImpl, bool> {
+
+  bool VisitCompoundStmt(const clang::CompoundStmt *stmt) {
+    StmtListSerializer stmtListSerializer(
+        capnp::Orphanage::getForMessageContaining(m_builder),
+        StmtSerializer(*m_ASTSerializer));
+
+    clang::SourceLocation beginLoc = stmt->getLBracLoc();
+    for (const clang::Stmt *childStmt : stmt->body()) {
+      AnnotationsRef annotations =
+          m_ASTSerializer->getAnnotationManager().getInRange(
+              beginLoc, childStmt->getBeginLoc());
+      stmtListSerializer << annotations << childStmt;
+      beginLoc = childStmt->getEndLoc();
+    }
+
+    AnnotationsRef annotations =
+        m_ASTSerializer->getAnnotationManager().getInRange(beginLoc,
+                                                           stmt->getRBracLoc());
+    stmtListSerializer << annotations;
+
+    stubs::Stmt::Compound::Builder compoundBuilder = m_builder.initCompound();
+    ListBuilder<stubs::Node<stubs::Stmt>> children =
+        compoundBuilder.initStmts(stmtListSerializer.size());
+    stmtListSerializer.adoptToListBuilder(children);
+
+    LocBuilder rBraceLocBuilder = compoundBuilder.initRBrace();
+    auto rBraceLoc = stmt->getRBracLoc();
+    m_ASTSerializer->serialize(rBraceLocBuilder, stmt->getRBracLoc());
+
+    return true;
   }
 
-  store.getUntilLoc(anns, stmt->getRBracLoc(), SM);
-  stmtListSerializer << anns;
+  bool VisitReturnStmt(const clang::ReturnStmt *stmt) {
+    stubs::Stmt::Return::Builder returnBuilder = m_builder.initReturn();
+    const clang::Expr *retVal = stmt->getRetValue();
 
-  auto comp = m_builder.initCompound();
-  auto children = comp.initStmts(stmtListSerializer.size());
-  stmtListSerializer.adoptListToBuilder(children);
-
-  auto rBrace = comp.initRBrace();
-  auto rBraceLoc = stmt->getRBracLoc();
-  serializeSourceRange(rBrace, rBraceLoc, SM, getContext().getLangOpts());
-
-  return true;
-}
-
-bool StmtSerializer::VisitReturnStmt(const clang::ReturnStmt *stmt) {
-  auto ret = m_builder.initReturn();
-  auto retVal = stmt->getRetValue();
-
-  if (retVal) {
-    auto retExpr = ret.initExpr();
-    m_serializer.serializeExpr(retExpr, retVal);
-  }
-  return true;
-}
-
-bool StmtSerializer::VisitDeclStmt(const clang::DeclStmt *stmt) {
-  auto nbChildren = std::distance(stmt->decl_begin(), stmt->decl_end());
-  auto children = m_builder.initDecl(nbChildren);
-
-  size_t i(0);
-  for (auto it = stmt->decl_begin(); it != stmt->decl_end(); ++it, ++i) {
-    auto child = children[i];
-    m_serializer.serializeDecl(child, *it);
-  }
-  return true;
-}
-
-bool StmtSerializer::VisitExpr(const clang::Expr *stmt) {
-  auto expr = m_builder.initExpr();
-
-  m_serializer.serializeExpr(expr, stmt);
-  return true;
-}
-
-bool StmtSerializer::VisitIfStmt(const clang::IfStmt *stmt) {
-  auto ifStmt = m_builder.initIf();
-
-  auto cond = ifStmt.initCond();
-  m_serializer.serializeExpr(cond, stmt->getCond());
-
-  auto then = ifStmt.initThen();
-  m_serializer.serializeStmt(then, stmt->getThen());
-
-  if (stmt->hasElseStorage()) {
-    auto el = ifStmt.initElse();
-    m_serializer.serializeStmt(el, stmt->getElse());
-  }
-  return true;
-}
-
-bool StmtSerializer::VisitNullStmt(const clang::NullStmt *stmt) {
-  m_builder.setNull();
-  return true;
-}
-
-inline clang::SourceLocation getLoc(clang::ForStmt const *const stmt) {
-  return stmt->getForLoc();
-}
-inline clang::SourceLocation getLoc(clang::WhileStmt const *const stmt) {
-  return stmt->getWhileLoc();
-}
-inline clang::SourceLocation getLoc(clang::DoStmt const *const stmt) {
-  return stmt->getWhileLoc();
-}
-
-template <IsLoopAstNode While>
-bool StmtSerializer::serializeWhileStmt(stubs::Stmt::While::Builder builder,
-                                        const While *stmt) {
-
-  auto cond = builder.initCond();
-  m_serializer.serializeExpr(cond, stmt->getCond());
-
-  llvm::SmallVector<Annotation> anns;
-  m_serializer.getAnnStore().getUntilLoc(anns, stmt->getBody()->getBeginLoc(),
-                                         getSourceManager());
-  auto specBuilder = builder.initSpec(anns.size());
-  size_t i(0);
-  for (auto &ann : anns) {
-    auto annBuilder = specBuilder[i++];
-    m_serializer.serializeAnnotationClause(annBuilder, ann);
+    if (retVal) {
+      ExprNodeBuilder retExprBuilder = returnBuilder.initExpr();
+      m_ASTSerializer->serialize(retExprBuilder, retVal);
+    }
+    return true;
   }
 
-  auto whileLoc = builder.initWhileLoc();
-  auto whileBegin = getLoc(stmt);
-  serializeSourceRange(whileLoc, whileBegin, getSourceManager(),
-                       getContext().getLangOpts());
+  bool VisitDeclStmt(const clang::DeclStmt *stmt) {
+    auto nbChildren = std::distance(stmt->decl_begin(), stmt->decl_end());
+    ListBuilder<stubs::Node<stubs::Decl>> children =
+        m_builder.initDecl(nbChildren);
 
-  auto body = builder.initBody();
-  m_serializer.serializeStmt(body, stmt->getBody());
-  return true;
-}
+    size_t i(0);
+    for (auto it = stmt->decl_begin(); it != stmt->decl_end(); ++it, ++i) {
+      DeclNodeBuilder childBuilder = children[i];
+      m_ASTSerializer->serialize(childBuilder, *it);
+    }
+    return true;
+  }
 
-bool StmtSerializer::VisitWhileStmt(const clang::WhileStmt *stmt) {
-  auto whi = m_builder.initWhile();
-  return serializeWhileStmt(whi, stmt);
-}
+  bool VisitExpr(const clang::Expr *stmt) {
+    ExprNodeBuilder exprBuilder = m_builder.initExpr();
+    m_ASTSerializer->serialize(exprBuilder, stmt);
+    return true;
+  }
 
-bool StmtSerializer::VisitDoStmt(const clang::DoStmt *stmt) {
-  auto doWhi = m_builder.initDoWhile();
-  return serializeWhileStmt(doWhi, stmt);
-}
+  bool VisitIfStmt(const clang::IfStmt *stmt) {
+    stubs::Stmt::If::Builder ifStmtBuilder = m_builder.initIf();
 
-bool StmtSerializer::VisitForStmt(const clang::ForStmt *stmt) {
-  using ForStmtBuilder = ::stubs::Stmt::For::Builder;
-  using StmtBuilder = ::stubs::Node<stubs::Stmt>::Builder;
-  using ExprBuilder = ::stubs::Node<stubs::Expr>::Builder;
-  using WhileBuilder = ::stubs::Stmt::While::Builder;
+    ExprNodeBuilder condBuilder = ifStmtBuilder.initCond();
+    m_ASTSerializer->serialize(condBuilder, stmt->getCond());
 
-  // Initialize For loop
-  ForStmtBuilder forBuilder = m_builder.initFor();
+    StmtNodeBuilder then = ifStmtBuilder.initThen();
+    m_ASTSerializer->serialize(then, stmt->getThen());
 
-  // Initialize Init of For loop [ for(init cond; iter) body; ]
-  StmtBuilder initBuilder = forBuilder.initInit();
-  m_serializer.serializeStmt(initBuilder, stmt->getInit());
+    if (stmt->hasElseStorage()) {
+      StmtNodeBuilder elseBuilder = ifStmtBuilder.initElse();
+      m_ASTSerializer->serialize(elseBuilder, stmt->getElse());
+    }
+    return true;
+  }
 
-  // Initialize Condition and Body of For loop as While
-  WhileBuilder whileBuilder = forBuilder.initInsideWhile();
-  if (serializeWhileStmt(whileBuilder, stmt) == 0)
+  bool VisitNullStmt(const clang::NullStmt *stmt) {
+    m_builder.setNull();
+    return true;
+  }
+
+  template <typename While>
+  bool serializeWhileStmt(stubs::Stmt::While::Builder builder,
+                          const While *stmt, clang::SourceLocation whileLoc,
+                          clang::SourceLocation contractStartLoc) {
+
+    ExprNodeBuilder condBuilder = builder.initCond();
+    m_ASTSerializer->serialize(condBuilder, stmt->getCond());
+
+    AnnotationsRef contract =
+        m_ASTSerializer->getAnnotationManager().getInRange(
+            contractStartLoc, stmt->getBody()->getBeginLoc());
+    ListBuilder<stubs::Clause> contractBuilder =
+        builder.initSpec(contract.size());
+    m_ASTSerializer->serialize(contractBuilder, contract);
+
+    LocBuilder whileLocBuilder = builder.initWhileLoc();
+    m_ASTSerializer->serialize(whileLocBuilder, whileLoc);
+
+    StmtNodeBuilder bodyBuilder = builder.initBody();
+    m_ASTSerializer->serialize(bodyBuilder, stmt->getBody());
+    return true;
+  }
+
+  bool VisitWhileStmt(const clang::WhileStmt *stmt) {
+    stubs::Stmt::While::Builder whileBuilder = m_builder.initWhile();
+    return serializeWhileStmt(whileBuilder, stmt, stmt->getWhileLoc(),
+                              stmt->getRParenLoc());
+  }
+
+  bool VisitDoStmt(const clang::DoStmt *stmt) {
+    stubs::Stmt::While::Builder doWhileBuilder = m_builder.initDoWhile();
+    return serializeWhileStmt(doWhileBuilder, stmt, stmt->getWhileLoc(),
+                              stmt->getDoLoc());
+  }
+
+  bool VisitForStmt(const clang::ForStmt *stmt) {
+    using ForStmtBuilder = ::stubs::Stmt::For::Builder;
+    using StmtBuilder = ::stubs::Node<stubs::Stmt>::Builder;
+    using ExprBuilder = ::stubs::Node<stubs::Expr>::Builder;
+    using WhileBuilder = ::stubs::Stmt::While::Builder;
+
+    // Initialize For loop
+    ForStmtBuilder forBuilder = m_builder.initFor();
+
+    // Initialize Init of For loop [ for(init cond; iter) body; ]
+    StmtBuilder initBuilder = forBuilder.initInit();
+    m_ASTSerializer->serialize(initBuilder, stmt->getInit());
+
+    // Initialize Condition and Body of For loop as While
+    WhileBuilder whileBuilder = forBuilder.initInsideWhile();
+    if (!serializeWhileStmt(whileBuilder, stmt, stmt->getForLoc(),
+                            stmt->getRParenLoc())) {
+      return false;
+    }
+
+    // Initialize Iteration of For loop
+    ExprBuilder iterationBuilder = forBuilder.initIteration();
+    m_ASTSerializer->serialize(iterationBuilder, stmt->getInc());
+
+    return true;
+  }
+
+  bool VisitBreakStmt(const clang::BreakStmt *stmt) {
+    m_builder.setBreak();
+    return true;
+  }
+
+  bool VisitContinueStmt(const clang::ContinueStmt *stmt) {
+    m_builder.setContinue();
+    return true;
+  }
+
+  bool VisitSwitchStmt(const clang::SwitchStmt *stmt) {
+    stubs::Stmt::Switch::Builder switchBuilder = m_builder.initSwitch();
+
+    ExprNodeBuilder condBuilder = switchBuilder.initCond();
+    m_ASTSerializer->serialize(condBuilder, stmt->getCond());
+
+    llvm::SmallVector<const clang::Stmt *> casesPtrs;
+    for (const clang::SwitchCase *swCase = stmt->getSwitchCaseList(); swCase;
+         swCase = swCase->getNextSwitchCase()) {
+      casesPtrs.push_back(swCase);
+    }
+
+    ListBuilder<stubs::Node<stubs::Stmt>> casesBuilder =
+        switchBuilder.initCases(casesPtrs.size());
+    size_t i(casesPtrs.size());
+    // clang traverses them in reverse order, so we reverse it again
+    for (const clang::Stmt *swCase : casesPtrs) {
+      StmtNodeBuilder caseBuilder = casesBuilder[--i];
+      m_ASTSerializer->serialize(caseBuilder, swCase);
+    }
+    return true;
+  }
+
+  bool VisitCaseStmt(const clang::CaseStmt *stmt) {
+    stubs::Stmt::Case::Builder swCaseBuilder = m_builder.initCase();
+
+    ExprNodeBuilder lhsBuilder = swCaseBuilder.initLhs();
+    m_ASTSerializer->serialize(lhsBuilder, stmt->getLHS());
+
+    const clang::Expr *rhs = stmt->getRHS();
+    // check if it has a rhs. Otherwise 'getSubsStmt' would point to the next
+    // case in the switch, because that next case would be treated as a sub
+    // statement in the current case statement.
+    if (rhs) {
+      StmtNodeBuilder subStmt = swCaseBuilder.initStmt();
+      m_ASTSerializer->serialize(subStmt, stmt->getSubStmt());
+    }
+    return true;
+  }
+
+  bool VisitDefaultStmt(const clang::DefaultStmt *stmt) {
+    stubs::Stmt::DefCase::Builder defStmtBuilder = m_builder.initDefCase();
+    const clang::Stmt *subStmt = stmt->getSubStmt();
+    if (subStmt) {
+      StmtNodeBuilder sub = defStmtBuilder.initStmt();
+      m_ASTSerializer->serialize(sub, subStmt);
+    }
+    return true;
+  }
+
+  bool serialize(const clang::Stmt *stmt) {
+    if (Visit(stmt)) {
+      return true;
+    }
+
+    clang::DiagnosticsEngine &diagsEngine =
+        m_ASTSerializer->getASTContext().getDiagnostics();
+    unsigned diagID =
+        diagsEngine.getCustomDiagID(clang::DiagnosticsEngine::Error,
+                                    "Statement of kind '%0' is not supported");
+    diagsEngine.Report(stmt->getBeginLoc(), diagID) << stmt->getStmtClassName();
+
     return false;
-
-  // Initialize Iteration of For loop
-  ExprBuilder iterationBuilder = forBuilder.initIteration();
-  m_serializer.serializeExpr(iterationBuilder, stmt->getInc());
-
-  return true;
-}
-
-bool StmtSerializer::VisitBreakStmt(const clang::BreakStmt *stmt) {
-  m_builder.setBreak();
-  return true;
-}
-
-bool StmtSerializer::VisitContinueStmt(const clang::ContinueStmt *stmt) {
-  m_builder.setContinue();
-  return true;
-}
-
-bool StmtSerializer::VisitSwitchStmt(const clang::SwitchStmt *stmt) {
-  auto sw = m_builder.initSwitch();
-
-  auto cond = sw.initCond();
-  m_serializer.serializeExpr(cond, stmt->getCond());
-
-  llvm::SmallVector<const clang::Stmt *, 4> casesPtrs;
-  for (auto swCase = stmt->getSwitchCaseList(); swCase;
-       swCase = swCase->getNextSwitchCase()) {
-    casesPtrs.push_back(swCase);
   }
 
-  auto cases = sw.initCases(casesPtrs.size());
-  size_t i(casesPtrs.size());
-  // clang traverses them in reverse order, so we reverse it again
-  for (auto swCase : casesPtrs) {
-    auto cas = cases[--i];
-    m_serializer.serializeStmt(cas, swCase);
-  }
-  return true;
+  StmtSerializerImpl(const ASTSerializer &serializer,
+                     stubs::Stmt::Builder builder)
+      : m_builder(builder), m_ASTSerializer(&serializer) {}
+
+  stubs::Stmt::Builder m_builder;
+  const ASTSerializer *m_ASTSerializer;
+};
+
+} // namespace
+
+void StmtSerializer::serialize(const clang::Stmt *stmt,
+                               stubs::Loc::Builder locBuilder,
+                               stubs::Stmt::Builder stmtBuilder) const {
+  assert(stmt && "Statement should not be null");
+
+  clang::SourceRange range = getRange(stmt);
+  StmtSerializerImpl serializer(*m_ASTSerializer, stmtBuilder);
+  serializer.serialize(stmt);
+  m_ASTSerializer->serialize(locBuilder, range);
 }
 
-bool StmtSerializer::VisitCaseStmt(const clang::CaseStmt *stmt) {
-  auto swCase = m_builder.initCase();
-
-  auto lhs = swCase.initLhs();
-  m_serializer.serializeExpr(lhs, stmt->getLHS());
-
-  auto rhs = stmt->getRHS();
-  // check if it has a rhs. Otherwise 'getSubsStmt' would point to the next case
-  // in the switch, because that next case would be treated as a sub statement
-  // in the current case statement.
-  if (rhs) {
-    auto subStmt = swCase.initStmt();
-    m_serializer.serializeStmt(subStmt, stmt->getSubStmt());
-  }
-  return true;
-}
-
-bool StmtSerializer::VisitDefaultStmt(const clang::DefaultStmt *stmt) {
-  auto defStmt = m_builder.initDefCase();
-  auto subStmt = stmt->getSubStmt();
-  if (subStmt) {
-    auto sub = defStmt.initStmt();
-    m_serializer.serializeStmt(sub, subStmt);
-  }
-  return true;
+void StmtSerializer::serialize(const Annotation &annotation,
+                               stubs::Loc::Builder locBuilder,
+                               stubs::Stmt::Builder stmtBuilder) const {
+  clang::SourceRange range = annotation.getRange();
+  m_ASTSerializer->serialize(locBuilder, range);
+  stmtBuilder.setAnn(annotation.getText().data());
 }
 
 } // namespace vf

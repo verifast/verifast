@@ -1,41 +1,22 @@
 #include "FixedWidthInt.h"
-#include "llvm/ADT/StringRef.h"
+#include <tuple>
+
+namespace {
+std::tuple<std::string_view, bool, unsigned> constexpr mappings[] = {
+    {"int8_t", true, 8},     {"int16_t", true, 16},   {"int32_t", true, 32},
+    {"int64_t", true, 64},   {"uint8_t", false, 8},   {"uint16_t", false, 16},
+    {"uint32_t", false, 32}, {"uint64_t", false, 64},
+};
+}
 
 namespace vf {
-llvm::Optional<FixedWidthInt> getFixedWidthFromString(llvm::StringRef name) {
-  llvm::Optional<FixedWidthInt> result;
-  if (name.equals("int8_t")) {
-    result.emplace(8, true);
-    return result;
+std::optional<FixedWidthInt> getFixedWidthFromString(std::string_view name) {
+  for (const auto &mapping : mappings) {
+    if (std::get<std::string_view>(mapping).compare(name) == 0) {
+      return std::make_optional<FixedWidthInt>(std::get<unsigned>(mapping),
+                                               std::get<bool>(mapping));
+    }
   }
-  if (name.equals("int16_t")) {
-    result.emplace(16, true);
-    return result;
-  }
-  if (name.equals("int32_t")) {
-    result.emplace(32, true);
-    return result;
-  }
-  if (name.equals("int64_t")) {
-    result.emplace(64, true);
-    return result;
-  }
-  if (name.equals("uint8_t")) {
-    result.emplace(8, false);
-    return result;
-  }
-  if (name.equals("uint16_t")) {
-    result.emplace(16, false);
-    return result;
-  }
-  if (name.equals("uint32_t")) {
-    result.emplace(32, false);
-    return result;
-  }
-  if (name.equals("uint64_t")) {
-    result.emplace(64, false);
-    return result;
-  }
-  return result;
+  return {};
 }
 } // namespace vf

@@ -31,7 +31,8 @@ set(CAPNP_STUBS_SCHEMA "${STUBS_SCHEMA}")
 
 if(WIN32)
   find_program(CYGPATH_EXE cygpath)
-  if (CYGPATH_EXE)
+
+  if(CYGPATH_EXE)
     function(CYGPATH TARGET)
       execute_process(COMMAND cygpath -w "${${TARGET}}" OUTPUT_VARIABLE NATIVE_PATH OUTPUT_STRIP_TRAILING_WHITESPACE)
       set(${TARGET} "${NATIVE_PATH}" PARENT_SCOPE)
@@ -47,31 +48,34 @@ add_custom_command(
   OUTPUT "${STUBS_SCHEMA}.c++" "{STUBS_SCHEMA}.h"
   WORKING_DIRECTORY "${STUBS_DIR}"
   COMMAND capnp
-  ARGS 
-    compile
-    -I "${CAPNP_INCLUDES}"
-    -o "c++"
-    "${STUBS_SCHEMA_NAME}"
+  ARGS
+  compile
+  -I "${CAPNP_INCLUDES}"
+  -o "c++"
+  "${STUBS_SCHEMA_NAME}"
   DEPENDS "${STUBS_SCHEMA}"
   COMMENT "Compiling Cap'n Proto schema ${STUBS_SCHEMA}"
   VERBATIM
 )
 
 add_executable(vf-cxx-ast-exporter
+  Location.cpp
   VerifastASTExporter.cpp
   DeclSerializer.cpp
   StmtSerializer.cpp
   ExprSerializer.cpp
   TypeSerializer.cpp
-  AstSerializer.cpp
-  InclusionContext.cpp
-  Annotation.cpp
+  LocationSerializer.cpp
+  ASTSerializer.cpp
+  DiagnosticSerializer.cpp
+  AnnotationManager.cpp
   CommentProcessor.cpp
-  ContextFreePPCallbacks.cpp
-  Location.cpp
+  TranslationUnitSerializer.cpp
   FixedWidthInt.cpp
-  AnnotationStore.cpp
   Inclusion.cpp
+  InclusionContext.cpp
+  InclusionSerializer.cpp
+  ContextFreePPCallbacks.cpp
   ${STUBS_SCHEMA}.c++
 )
 
@@ -86,8 +90,8 @@ if(NOT LLVM_ENABLE_RTTI)
   target_compile_options(vf-cxx-ast-exporter PRIVATE -fno-rtti)
 endif()
 
-llvm_map_components_to_libnames(LLVM_LIBS support)
-set(CLANG_LIBS clangAST clangBasic clangFrontend clangTooling)
+llvm_map_components_to_libnames(LLVM_LIBS)
+set(CLANG_LIBS clangTooling)
 
 set_property(TARGET vf-cxx-ast-exporter PROPERTY CXX_STANDARD 20)
 

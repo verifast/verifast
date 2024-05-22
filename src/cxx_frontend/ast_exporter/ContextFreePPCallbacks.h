@@ -1,68 +1,23 @@
 #pragma once
-#include "Inclusion.h"
-#include "kj/common.h"
+#include "InclusionContext.h"
 #include "clang/Lex/PPCallbacks.h"
-#include <unordered_set>
+#include "llvm/ADT/StringSet.h"
 
 namespace vf {
 
+/**
+ * @brief Callbacks that are invoked during preprocessing.
+ *
+ */
 class ContextFreePPCallbacks : public clang::PPCallbacks {
-
-  class PPDiags {
-    clang::Preprocessor &m_PP;
-
-    clang::DiagnosticsEngine &getDiagsEngine() const {
-      return m_PP.getDiagnostics();
-    }
-
-  public:
-    explicit PPDiags(clang::Preprocessor &PP) : m_PP(PP) {}
-
-    void reportMacroDivergence(const clang::Token &macroNameTok,
-                               const std::string &macroName);
-
-    void reportCtxSensitiveMacroExp(const clang::Token &macroNameTok,
-                                    const std::string &macroName,
-                                    clang::SourceLocation loc);
-
-    void reportUndefIsolatedMacro(const clang::Token &macroNameTok,
-                                  const std::string &macroName,
-                                  clang::SourceLocation loc);
-  };
-
-  InclusionContext &m_context;
-  clang::Preprocessor &m_PP;
-  const std::unordered_set<std::string> _whiteList;
-  PPDiags m_diags;
-
-  const clang::SourceManager &SM() const { return m_PP.getSourceManager(); }
-
-  void checkDivergence(const clang::Token &macroNameToken,
-                       const clang::MacroDefinition &MD);
-
-  std::string getMacroName(const clang::Token &macroNameToken) const;
-
-  bool macroAllowed(const std::string &macroName) const;
-
 public:
-  explicit ContextFreePPCallbacks(InclusionContext &context,
-                                  clang::Preprocessor &PP,
-                                  const std::vector<std::string> &whiteList)
-      : m_context(context), m_PP(PP),
-        _whiteList(whiteList.begin(), whiteList.end()), m_diags(PP) {
-    auto mainEntry = SM().getFileEntryForID(SM().getMainFileID());
-    m_context.startInclusion(*mainEntry);
-  }
-
-  KJ_DISALLOW_COPY(ContextFreePPCallbacks);
-
   void MacroUndefined(const clang::Token &macroNameTok,
                       const clang::MacroDefinition &MD,
                       const clang::MacroDirective *undef) override;
 
-  void Defined(const clang::Token &MacroNameTok,
+  void Defined(const clang::Token &macroNameTok,
                const clang::MacroDefinition &MD,
-               clang::SourceRange Range) override;
+               clang::SourceRange range) override;
 
   void Ifdef(clang::SourceLocation loc, const clang::Token &macroNameTok,
              const clang::MacroDefinition &MD) override;
@@ -77,7 +32,7 @@ public:
   // EnterFile is not called when a file is skipped due to header guards.
   void FileChanged(clang::SourceLocation loc, FileChangeReason reason,
                    clang::SrcMgr::CharacteristicKind fileType,
-                   clang::FileID prevFID = clang::FileID()) override;
+                   clang::FileID prevFID) override;
 
   // Header guards: does not enter and afterwards exit the file when it is
   // skipped.
@@ -85,14 +40,50 @@ public:
                    const clang::Token &filenameTok,
                    clang::SrcMgr::CharacteristicKind fileType) override;
 
-  void InclusionDirective(clang::SourceLocation HashLoc,
-                          const clang::Token &IncludeTok,
-                          clang::StringRef FileName, bool IsAngled,
-                          clang::CharSourceRange FilenameRange,
-                          clang::OptionalFileEntryRef File,
-                          clang::StringRef SearchPath,
-                          clang::StringRef RelativePath,
-                          const clang::Module *Imported,
-                          clang::SrcMgr::CharacteristicKind FileType) override;
+  void InclusionDirective(clang::SourceLocation hashLoc,
+                          const clang::Token &includeTok,
+                          clang::StringRef fileName, bool isAngled,
+                          clang::CharSourceRange filenameRange,
+                          clang::OptionalFileEntryRef file,
+                          clang::StringRef searchPath,
+                          clang::StringRef relativePath,
+                          const clang::Module *imported,
+                          clang::SrcMgr::CharacteristicKind fileType) override;
+
+  ContextFreePPCallbacks(InclusionContext &context,
+                         const clang::Preprocessor &preprocessor,
+                         llvm::ArrayRef<std::string> whiteList)
+      : m_context(&context), m_preprocessor(&preprocessor) {
+    for (auto s : whiteList) {
+      m_macroWhiteList.insert(s);
+    }
+    auto mainEntry = m_preprocessor->getSourceManager().getFileEntryForID(
+        m_preprocessor->getSourceManager().getMainFileID());
+    m_context->startInclusionForFile(mainEntry);
+  }
+
+private:
+  void reportMacroDivergence(const clang::Token &macroNameToken,
+                             std::string_view macroName) const;
+
+  void reportCtxSensitiveMacroExpansion(const clang::Token &macroNameToken,
+                                        std::string_view macroName,
+                                        clang::SourceLocation loc) const;
+
+  void reportUndefIsolatedMacro(const clang::Token &macroNameToken,
+                                std::string_view macroName,
+                                clang::SourceLocation loc) const;
+
+  void checkDivergence(const clang::Token &macroNameToken,
+                       const clang::MacroDefinition &MD);
+
+  std::string getMacroName(const clang::Token &macroNameToken) const;
+
+  bool macroAllowed(std::string_view macroName) const;
+
+  const clang::Preprocessor *m_preprocessor;
+  llvm::StringSet<> m_macroWhiteList;
+  InclusionContext *m_context;
 };
+
 } // namespace vf
