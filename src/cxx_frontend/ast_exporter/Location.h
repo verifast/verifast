@@ -1,44 +1,65 @@
 #pragma once
 
 #include "stubs_ast.capnp.h"
-#include "clang/Basic/FileManager.h"
+#include "clang/AST/Decl.h"
+#include "clang/AST/Expr.h"
+#include "clang/AST/Stmt.h"
+#include "clang/AST/TypeLoc.h"
+#include "clang/Basic/SourceLocation.h"
 #include "clang/Basic/SourceManager.h"
-#include "clang/AST/ASTContext.h"
+#include <optional>
 
 namespace vf {
 
-struct LCF {
-  unsigned int l;
-  unsigned int c;
-  unsigned int f;
+/**
+ * @brief Location consisting of a line, column and unique identifier. The
+ * unique identifier refers to the file the location is originating from.
+ *
+ */
+struct Location {
+  unsigned line;
+  unsigned column;
+  unsigned uid;
+
+  void serialize(stubs::Loc::SrcPos::Builder builder) const;
+
+  Location(unsigned line, unsigned column, unsigned uid)
+      : line(line), column(column), uid(uid) {}
 };
 
-/**
- * Decompose the line, column and file unique identifier from a source location.
- * The result will be placed in the given \p lcf if the given location \p loc is
- * valid and not coming from a 'real' file (not a system file).
- *
- * @param loc source location to decompose.
- * @param SM source manager.
- * @param[out] lcf struct to place the line, column and file uniques identifier
- * in.
- * @return true if the given location \p loc was valid and could be decomposed.
- * @return false if the given location \p was invalid and it was not possible to
- * decompose it.
- */
-bool decomposeLocToLCF(clang::SourceLocation loc,
-                       const clang::SourceManager &SM, LCF &lcf);
+struct Range {
+  Location begin;
+  Location end;
 
-void serializeSourcePos(stubs::Loc::SrcPos::Builder builder, LCF lcf);
+  Range(Location begin, Location end) : begin(begin), end(end) {}
+};
 
-void serializeSourceRange(stubs::Loc::Builder builder,
-                          clang::SourceRange range,
-                          const clang::SourceManager &SM,
+std::optional<Location>
+ofSourceLocation(clang::SourceLocation loc,
+                 const clang::SourceManager &sourceManager);
+
+std::optional<Range> ofSourceRange(clang::SourceRange range,
+                                   const clang::SourceManager &sourceManager);
+
+clang::SourceRange getRange(const clang::Decl *decl);
+
+clang::SourceRange getRange(const clang::Stmt *stmt);
+
+clang::SourceRange getRange(const clang::Expr *expr);
+
+clang::SourceRange getRange(clang::TypeLoc typeLoc);
+
+const clang::FileEntry *
+fileEntryOfLoc(clang::SourceLocation loc,
+               const clang::SourceManager &sourceManager);
+
+clang::Token getNextToken(clang::SourceLocation loc,
+                          const clang::SourceManager &sourceManager,
                           const clang::LangOptions &langOpts);
 
-void serializeSourceRange(stubs::Loc::Builder builder, clang::SourceRange range, const clang::ASTContext &ASTContext);
-
-const clang::FileEntry *getFileEntry(clang::SourceLocation loc,
-                                     const clang::SourceManager &SM);
+clang::Token expectNextToken(clang::SourceLocation loc,
+                             const clang::SourceManager &sourceManager,
+                             const clang::LangOptions &langOpts,
+                             clang::tok::TokenKind kind);
 
 } // namespace vf

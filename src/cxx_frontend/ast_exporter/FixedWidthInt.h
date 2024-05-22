@@ -1,6 +1,6 @@
 #pragma once
-#include "llvm/ADT/StringRef.h"
-#include "llvm/ADT/Optional.h"
+#include <optional>
+#include <string_view>
 
 namespace vf {
 
@@ -14,6 +14,6 @@ struct FixedWidthInt {
       : bits(bits), isSigned(isSigned) {}
 };
 
-llvm::Optional<FixedWidthInt> getFixedWidthFromString(llvm::StringRef name);
+std::optional<FixedWidthInt> getFixedWidthFromString(std::string_view name);
 
 }; // namespace vf

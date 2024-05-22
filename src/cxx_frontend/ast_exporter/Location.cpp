@@ -1,126 +1,165 @@
 #include "Location.h"
+#include "clang/AST/DeclVisitor.h"
+#include "clang/AST/StmtVisitor.h"
+#include "clang/AST/TypeLocVisitor.h"
 #include "clang/Lex/Lexer.h"
 
 namespace vf {
 
-bool decomposeLocToLCF(clang::SourceLocation loc,
-                       const clang::SourceManager &SM, LCF &lcf) {
+void Location::serialize(stubs::Loc::SrcPos::Builder builder) const {
+  builder.setL(line);
+  builder.setC(column);
+  builder.setFd(uid);
+}
+
+std::optional<Location>
+ofSourceLocation(clang::SourceLocation loc,
+                 const clang::SourceManager &sourceManager) {
   if (loc.isInvalid()) {
-    return false;
-  }
-  auto decLoc = SM.getDecomposedLoc(SM.getSpellingLoc(loc));
-  auto fileEntry = SM.getFileEntryForID(decLoc.first);
-
-  if (!fileEntry)
-    return false;
-
-  auto uid = fileEntry->getUID();
-  auto line = SM.getLineNumber(decLoc.first, decLoc.second);
-  auto col = SM.getColumnNumber(decLoc.first, decLoc.second);
-  lcf.l = line;
-  lcf.c = col;
-  lcf.f = uid;
-  return true;
-}
-
-void serializeSourcePos(stubs::Loc::SrcPos::Builder builder, LCF lcf) {
-  builder.setL(lcf.l);
-  builder.setC(lcf.c);
-  builder.setFd(lcf.f);
-}
-
-void serializeLexedSourceRange(stubs::Loc::Lexed::Builder builder,
-                               clang::SourceRange range,
-                               const clang::SourceManager &SM,
-                               const clang::LangOptions &langOpts) {
-  auto charRange = clang::Lexer::getAsCharRange(range, SM, langOpts);
-  LCF lcf;
-  if (decomposeLocToLCF(charRange.getBegin(), SM, lcf)) {
-    serializeSourcePos(builder.initStart(), lcf);
-  }
-  if (decomposeLocToLCF(charRange.getEnd(), SM, lcf)) {
-    serializeSourcePos(builder.initEnd(), lcf);
-  }
-}
-
-void serializeMacroArgCallStack(stubs::Loc::Builder builder,
-                                clang::CharSourceRange range,
-                                const clang::SourceManager &SM,
-                                const clang::LangOptions &langOpts) {
-  auto begin = range.getBegin();
-  auto expRange = SM.getImmediateExpansionRange(begin);
-  auto immediateMacroCallerLoc =
-      SM.getSpellingLoc(SM.getImmediateMacroCallerLoc(begin));
-
-  // Traverse stack of macro calls recursively
-  if (expRange.getBegin().isMacroID()) {
-    auto expBuilder = builder.initMacroExp();
-    auto callSiteBuilder = expBuilder.initCallSite();
-    auto bodyTokenBuilder = expBuilder.initBodyToken();
-
-    serializeMacroArgCallStack(callSiteBuilder, expRange, SM, langOpts);
-    serializeLexedSourceRange(bodyTokenBuilder.initLexed(),
-                              immediateMacroCallerLoc, SM, langOpts);
-    return;
+    return {};
   }
 
-  serializeLexedSourceRange(builder.initLexed(), immediateMacroCallerLoc, SM,
-                            langOpts);
+  std::pair<clang::FileID, unsigned> locPair =
+      sourceManager.getDecomposedLoc(sourceManager.getSpellingLoc(loc));
+  const clang::FileEntry *fileEntry =
+      sourceManager.getFileEntryForID(locPair.first);
+
+  if (!fileEntry) {
+    return {};
+  }
+
+  unsigned uid = fileEntry->getUID();
+  unsigned line = sourceManager.getLineNumber(locPair.first, locPair.second);
+  unsigned col = sourceManager.getColumnNumber(locPair.first, locPair.second);
+
+  return std::make_optional<Location>(line, col, uid);
 }
 
-void serializeSourceRange(stubs::Loc::Builder builder, clang::SourceRange range,
-                          const clang::SourceManager &SM,
+std::optional<Range> ofSourceRange(clang::SourceRange range,
+                                   const clang::SourceManager &sourceManager) {
+  if (range.isInvalid()) {
+    return {};
+  }
+
+  std::optional<Location> begin =
+      ofSourceLocation(range.getBegin(), sourceManager);
+
+  if (!begin) {
+    return {};
+  }
+
+  std::optional<Location> end = ofSourceLocation(range.getEnd(), sourceManager);
+
+  if (!end) {
+    return {};
+  }
+
+  return std::make_optional<Range>(*begin, *end);
+}
+
+namespace {
+
+// Visitors to retrieve the source range of declarations, statements,
+// expressions and type locations. Returns an invalid range for *item* if no
+// Visit method is defined for *item*.
+
+struct DeclRangeVisitor
+    : public clang::ConstDeclVisitor<DeclRangeVisitor, clang::SourceRange> {
+  clang::SourceRange VisitFunctionDecl(const clang::FunctionDecl *decl) {
+    return decl->getNameInfo().getSourceRange();
+  }
+};
+
+struct StmtRangeVisitor
+    : public clang::ConstStmtVisitor<StmtRangeVisitor, clang::SourceRange> {};
+
+struct ExprRangeVisitor
+    : public clang::ConstStmtVisitor<ExprRangeVisitor, clang::SourceRange> {};
+
+struct TypeLocRangeVisitor
+    : public clang::TypeLocVisitor<TypeLocRangeVisitor, clang::SourceRange> {};
+
+DeclRangeVisitor declRangeVisitor;
+StmtRangeVisitor stmtRangeVisitor;
+ExprRangeVisitor exprRangeVisitor;
+TypeLocRangeVisitor typeLocRangeVisitor;
+
+} // namespace
+
+clang::SourceRange getRange(const clang::Decl *decl) {
+  if (!decl || decl->isImplicit()) {
+    return {};
+  }
+
+  clang::SourceRange range = declRangeVisitor.Visit(decl);
+  if (range.isInvalid()) {
+    return decl->getSourceRange();
+  }
+
+  return range;
+}
+
+clang::SourceRange getRange(const clang::Stmt *stmt) {
+  if (!stmt) {
+    return {};
+  }
+  clang::SourceRange range = stmtRangeVisitor.Visit(stmt);
+
+  if (range.isInvalid()) {
+    return stmt->getSourceRange();
+  }
+
+  return range;
+}
+
+clang::SourceRange getRange(const clang::Expr *expr) {
+  if (!expr) {
+    return {};
+  }
+  clang::SourceRange range = exprRangeVisitor.Visit(expr);
+
+  if (range.isInvalid()) {
+    return expr->getSourceRange();
+  }
+
+  return range;
+}
+
+clang::SourceRange getRange(clang::TypeLoc typeLoc) {
+  clang::SourceRange range = typeLocRangeVisitor.Visit(typeLoc);
+
+  if (range.isInvalid()) {
+    return typeLoc.getSourceRange();
+  }
+
+  return range;
+}
+
+const clang::FileEntry *
+fileEntryOfLoc(clang::SourceLocation loc,
+               const clang::SourceManager &sourceManager) {
+  clang::SourceLocation expansionLoc = sourceManager.getExpansionLoc(loc);
+  clang::FileID id = sourceManager.getFileID(expansionLoc);
+  return sourceManager.getFileEntryForID(id);
+}
+
+clang::Token getNextToken(clang::SourceLocation loc,
+                          const clang::SourceManager &sourceManager,
                           const clang::LangOptions &langOpts) {
-  auto begin = range.getBegin();
-  auto end = range.getEnd();
-
-  // Range comes from macro expansion of one token
-  if (begin == end && begin.isMacroID()) {
-    auto expBuilder = builder.initMacroExp();
-    auto callSiteBuilder = expBuilder.initCallSite();
-    auto bodyTokenBuilder = expBuilder.initBodyToken();
-
-    // Argument expansion from function-like macro
-    if (SM.isMacroArgExpansion(begin)) {
-      auto immediateExpBegin = SM.getImmediateExpansionRange(begin).getBegin();
-
-      serializeMacroArgCallStack(
-          callSiteBuilder, SM.getImmediateExpansionRange(begin), SM, langOpts);
-
-      auto paramExpBuilder = bodyTokenBuilder.initMacroParamExp();
-      auto paramBuilder = paramExpBuilder.initParam();
-      auto argTokenBuilder = paramExpBuilder.initArgToken();
-
-      serializeSourceRange(paramBuilder, SM.getSpellingLoc(immediateExpBegin),
-                           SM, langOpts);
-      serializeSourceRange(argTokenBuilder,
-                           SM.getImmediateMacroCallerLoc(begin), SM, langOpts);
-      return;
-    }
-
-    // Simple expansion
-    serializeSourceRange(callSiteBuilder, SM.getImmediateMacroCallerLoc(begin),
-                         SM, langOpts);
-    serializeSourceRange(bodyTokenBuilder, SM.getSpellingLoc(begin), SM,
-                         langOpts);
-    return;
-  }
-
-  // Range represents one token not coming from a macro expansion, multiple
-  // tokens or concatenation of macro tokens
-  serializeLexedSourceRange(builder.initLexed(), range, SM, langOpts);
+  std::optional<clang::Token> nextToken =
+      clang::Lexer::findNextToken(loc, sourceManager, langOpts);
+  assert(nextToken && "No next token");
+  return *nextToken;
 }
 
-void serializeSourceRange(stubs::Loc::Builder builder, clang::SourceRange range,
-                          const clang::ASTContext &ASTContext) {
-  serializeSourceRange(builder, range, ASTContext.getSourceManager(),
-                       ASTContext.getLangOpts());
-}
-
-const clang::FileEntry *getFileEntry(clang::SourceLocation loc,
-                                     const clang::SourceManager &SM) {
-  auto id = SM.getFileID(SM.getExpansionLoc(loc));
-  return SM.getFileEntryForID(id);
+clang::Token expectNextToken(clang::SourceLocation loc,
+                             const clang::SourceManager &sourceManager,
+                             const clang::LangOptions &langOpts,
+                             clang::tok::TokenKind kind) {
+  clang::Token nextToken(getNextToken(loc, sourceManager, langOpts));
+  assert(nextToken.is(kind) && "Expected other token");
+  return nextToken;
+  auto s = &Location::serialize;
 }
 
 } // namespace vf

@@ -1,23 +1,24 @@
-#include "Annotation.h"
-#include "AstSerializer.h"
+#include "AnnotationManager.h"
 #include "CommentProcessor.h"
 #include "ContextFreePPCallbacks.h"
-#include "DiagnosticCollectorConsumer.h"
-#include "Inclusion.h"
-#include "Location.h"
+#include "DiagnosticSerializer.h"
+#include "InclusionContext.h"
+#include "TranslationUnitSerializer.h"
 #include "capnp/message.h"
 #include "capnp/serialize.h"
-#include "clang/AST/ASTConsumer.h"
+#include "stubs_ast.capnp.h"
 #include "clang/Frontend/CompilerInstance.h"
-#include "clang/Frontend/FrontendActions.h"
 #include "clang/Tooling/CommonOptionsParser.h"
 #include "clang/Tooling/Tooling.h"
+
 #ifdef _WIN32
 #include <fcntl.h>
 #include <io.h>
 #endif
 
-static llvm::cl::OptionCategory category("Verifast AST exporter options");
+namespace {
+
+static llvm::cl::OptionCategory category("VeriFast AST exporter options");
 
 static llvm::cl::list<std::string> allowExpansions(
     "allow_macro_expansion",
@@ -34,100 +35,100 @@ static llvm::cl::opt<bool> exportImplicitDecls(
 static llvm::cl::extrahelp
     commonHelp(clang::tooling::CommonOptionsParser::HelpMessage);
 
+} // namespace
+
 namespace vf {
 
-class VerifastASTConsumer : public clang::ASTConsumer {
-  stubs::TU::Builder m_builder;
-  AnnotationStore &m_store;
-  InclusionContext &m_context;
-
+class VeriFastASTConsumer : public clang::ASTConsumer {
 public:
   void HandleTranslationUnit(clang::ASTContext &context) override {
-    AstSerializer serializer(
-        context, m_store, m_context,
-        capnp::Orphanage::getForMessageContaining(m_builder),
-        exportImplicitDecls);
-    serializer.serializeTU(m_builder, context.getTranslationUnitDecl());
+    capnp::MallocMessageBuilder messageBuilder;
+    stubs::SerResult::Builder resultBuilder =
+        messageBuilder.initRoot<stubs::SerResult>();
+
+    TranslationUnitSerializer serializer(
+        context, *m_annotationManager, *m_inclusionContext,
+        messageBuilder.getOrphanage(), !exportImplicitDecls);
+
+    serializer.serialize(context.getTranslationUnitDecl(),
+                         resultBuilder.initTu());
+
+    if (m_diags->nbDiags() > 0) {
+      m_diags->serialize(resultBuilder.initErrors(m_diags->nbDiags()));
+    }
+
+    capnp::writeMessageToFd(1, messageBuilder);
   }
 
-  explicit VerifastASTConsumer(stubs::TU::Builder builder,
-                               AnnotationStore &store,
-                               InclusionContext &context)
-      : m_builder(builder), m_store(store), m_context(context) {}
+  VeriFastASTConsumer(const DiagnosticSerializer &diags,
+                      const AnnotationManager &annotationManager,
+                      const InclusionContext &inclusionContext)
+      : m_diags(&diags), m_annotationManager(&annotationManager),
+        m_inclusionContext(&inclusionContext) {}
+
+private:
+  const DiagnosticSerializer *m_diags;
+  const AnnotationManager *m_annotationManager;
+  const InclusionContext *m_inclusionContext;
 };
 
-class VerifastFrontendAction : public clang::ASTFrontendAction {
-  stubs::TU::Builder m_builder;
-  AnnotationStore m_store;
-  CommentProcessor m_commentProcessor;
-  InclusionContext m_context;
-  DiagnosticCollectorConsumer &m_diags;
-
+class VeriFastFrontendAction : public clang::ASTFrontendAction {
 public:
   std::unique_ptr<clang::ASTConsumer>
   CreateASTConsumer(clang::CompilerInstance &compiler,
                     llvm::StringRef inFile) override {
-    auto &PP = compiler.getPreprocessor();
-    PP.addPPCallbacks(std::make_unique<ContextFreePPCallbacks>(
-        m_context, PP, allowExpansions));
-    PP.addCommentHandler(&m_commentProcessor);
+    m_annotationManager = std::make_unique<AnnotationManager>(
+        compiler.getSourceManager(), compiler.getLangOpts());
+    m_commentProcessor =
+        std::make_unique<CommentProcessor>(*m_annotationManager);
+
     compiler.getDiagnostics().setClient(&m_diags, false);
-    return std::make_unique<VerifastASTConsumer>(m_builder, m_store, m_context);
+    compiler.getPreprocessor().addCommentHandler(m_commentProcessor.get());
+    compiler.getPreprocessor().addPPCallbacks(
+        std::make_unique<ContextFreePPCallbacks>(
+            m_inclusionContext, compiler.getPreprocessor(), allowExpansions));
+
+    return std::make_unique<VeriFastASTConsumer>(m_diags, *m_annotationManager,
+                                                 m_inclusionContext);
   }
 
-  explicit VerifastFrontendAction(stubs::TU::Builder builder,
-                                  DiagnosticCollectorConsumer &diags)
-      : m_builder(builder), m_commentProcessor(m_store), m_diags(diags) {}
+  explicit VeriFastFrontendAction()
+      : m_diags(clang::DiagnosticsEngine::Error) {}
+
+private:
+  DiagnosticSerializer m_diags;
+  std::unique_ptr<AnnotationManager> m_annotationManager;
+  std::unique_ptr<CommentProcessor> m_commentProcessor;
+  InclusionContext m_inclusionContext;
 };
 
-class VerifastActionFactory : public clang::tooling::FrontendActionFactory {
-  stubs::TU::Builder m_builder;
-
+class VeriFastActionFactory : public clang::tooling::FrontendActionFactory {
 public:
-  DiagnosticCollectorConsumer diags;
-
   std::unique_ptr<clang::FrontendAction> create() override {
-    return std::make_unique<VerifastFrontendAction>(m_builder, diags);
+    return std::make_unique<VeriFastFrontendAction>();
   }
-
-  explicit VerifastActionFactory(stubs::SerResult::Builder builder)
-      : m_builder(builder.initTu()),
-        diags(clang::DiagnosticsEngine::Level::Error) {}
 };
 
 } // namespace vf
 
 int main(int argc, const char **argv) {
-  auto expectedParser =
+  llvm::Expected<clang::tooling::CommonOptionsParser> expectedParser =
       clang::tooling::CommonOptionsParser::create(argc, argv, category);
+
   if (!expectedParser) {
     llvm::errs() << expectedParser.takeError();
   }
+
   clang::tooling::CommonOptionsParser &optionsParser = expectedParser.get();
   clang::tooling::ClangTool tool(optionsParser.getCompilations(),
                                  optionsParser.getSourcePathList());
+
 #ifdef _WIN32
   _setmode(1, _O_BINARY);
 #endif
-  capnp::MallocMessageBuilder messageBuilder;
-  auto serResultBuilder = messageBuilder.initRoot<stubs::SerResult>();
 
-  vf::VerifastActionFactory factory(serResultBuilder);
-
-  auto error = tool.run(&factory);
-
-  auto errors = factory.diags.getErrors();
-  if (errors.size() > 0) {
-    auto errorsBuilder = serResultBuilder.initErrors(errors.size());
-    size_t i(0);
-    for (; i < errors.size(); ++i) {
-      auto &error = errors[i];
-      auto errorBuilder = errorsBuilder[i];
-      error.serialize(errorBuilder);
-    }
-  }
-
-  capnp::writeMessageToFd(1, messageBuilder);
+  vf::VeriFastActionFactory factory;
+  int error = tool.run(&factory);
 
   return error;
 }

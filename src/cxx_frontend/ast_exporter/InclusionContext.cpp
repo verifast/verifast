@@ -1,28 +1,32 @@
-#include "Inclusion.h"
+#include "InclusionContext.h"
 
 namespace vf {
-
-void InclusionContext::startInclusion(const clang::FileEntry &fileEntry) {
-  auto it = m_includesMap.emplace(fileEntry.getUID(), fileEntry);
-  auto &startedIncl = it.first->second;
-  m_includesStack.push_back(&startedIncl);
-  // TODO: what if we start an inclusion that we already processed? -> does
-  // not have header guards; then it.second will be false
+void InclusionContext::startInclusionForFile(
+    const clang::FileEntry *fileEntry) {
+  auto it = m_includeMap.try_emplace(fileEntry->getUID(),
+                                     std::make_unique<Inclusion>(*fileEntry));
+  Inclusion *startedIncl = it.first->getSecond().get();
+  m_includeStack.push_back(startedIncl);
 }
 
-void InclusionContext::endInclusion() {
-  auto ended = currentInclusion();
-  m_includesStack.pop_back();
-  currentInclusion()->addInclusion(ended);
+void InclusionContext::endCurrentInclusion() {
+  Inclusion &current = currentInclusion();
+  m_includeStack.pop_back();
+  currentInclusion().addInclusion(&current);
 }
 
-void InclusionContext::serializeTUInclDirectives(
-    stubs::TU::Builder &builder, const clang::SourceManager &SM,
-    AstSerializer &serializer) const {
-  auto mainUID = SM.getFileEntryForID(SM.getMainFileID())->getUID();
-  auto &inclusion = m_includesMap.at(mainUID);
-  auto includesBuilder =
-      builder.initIncludes(inclusion.getNbIncludeDirectives());
-  inclusion.serializeIncludeDirectives(includesBuilder, SM, serializer, *this);
+Inclusion &InclusionContext::currentInclusion() const {
+  assert(hasInclusions() && "Empty stack of inclusions");
+  return *m_includeStack.back();
 }
+
+bool InclusionContext::hasInclusions() const { return !m_includeStack.empty(); }
+
+const Inclusion &InclusionContext::getInclusionOfFileUID(unsigned uid) const {
+  auto it = m_includeMap.find(uid);
+  assert(it != m_includeMap.end() && "No inclusion for file");
+
+  return *it->getSecond();
+}
+
 } // namespace vf
