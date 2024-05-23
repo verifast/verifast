@@ -227,7 +227,7 @@ let extract (f: 'a -> 'b option) (xs: 'a list) =
 let rec drop n xs = if n = 0 then xs else drop (n - 1) (List.tl xs)
 
 (** Takes the first n elements of xs *)
-let rec take n xs = if n = 0 then [] else match xs with x::xs -> x::take (n - 1) xs
+let rec take n xs = if n = 0 then [] else match xs with [] -> [] | x::xs -> x::take (n - 1) xs
 
 (* Same as [(take n xs, drop n xs)] *)
 let take_drop n xs =
