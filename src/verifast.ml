@@ -900,11 +900,30 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               produce_cxx_object l real_unit addr t eval_h verify_ctor_call init true true h env @@ fun h env ->
               iter h ((x, envTp)::tenv) ghostenv ((x, addr)::env) xs
           in
+          (* If a struct directly or indirectly contains an array, we treat it like a resource, not like a pure value. *)
+          let rec can_treat_field_purely (f, (l, gh, tp, symb, init_opt)) =
+            match tp with
+              StaticArrayType (_, _) -> false
+            | StructType (sn, _) ->
+              let (_, _, body_opt, _, _) = List.assoc sn structmap in
+              begin match body_opt with
+                None -> true
+              | Some (_, fds, _) -> List.for_all can_treat_field_purely fds
+              end
+            | _ -> true
+          in
           match t with
             StaticArrayType (elemTp, elemCount) ->
             produce_object t
-          | StructType (sn, targs) when !address_taken || (language = CLang && dialect = Some Cxx) || (let (_, _, body_opt, _, _) = List.assoc sn structmap in match body_opt with Some (_, fds, _) -> e = None | _ -> false) ->
-            (* If the variable's address is taken or the struct type has no body or it has a ghost field, treat it like a resource. *)
+          | StructType (sn, targs) when
+              !address_taken ||
+              language = CLang && dialect = Some Cxx ||
+              let (_, _, body_opt, _, _) = List.assoc sn structmap in
+              match body_opt with
+                Some (_, fds, _) ->
+                e = None || not (List.for_all can_treat_field_purely fds)
+              | _ -> false
+              ->
             produce_object (RefType t)
           | UnionType _ -> produce_object (RefType t)
           | _ ->
