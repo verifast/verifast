@@ -13,6 +13,120 @@ open Branch_png
 
 let () = Register_provers.register_provers ()
 
+type vfide_rc_file = {
+  settings: (string * string) list;
+  sections: (string * string list) list;
+}
+
+let read_rc_file path =
+  let ch = open_in path in
+  Fun.protect ~finally:(fun () -> close_in ch) begin fun () ->
+    let rec parse_section_header lineno settings sections line =
+      if not (String.ends_with ~suffix:"]" line) then failwith (Printf.sprintf "%s: line %d: ] expected at end of line" path lineno);
+      let section_key = String.sub line 1 (String.length line - 2) in
+      parse_section lineno settings sections section_key []
+    and parse_section lineno settings sections section_key section_lines =
+      match input_line ch with
+        exception End_of_file -> { settings = List.rev settings; sections = List.rev ((section_key, List.rev section_lines)::sections) }
+      | line ->
+        let line = String.trim line in
+        if line = "" || String.starts_with ~prefix:"#" line then
+          parse_section (lineno + 1) settings sections section_key section_lines
+        else if String.starts_with ~prefix:"[" line then
+          parse_section_header lineno settings ((section_key, List.rev section_lines)::sections) line
+        else
+          parse_section (lineno + 1) settings sections section_key (line::section_lines)
+    in
+    let rec parse_settings lineno settings =
+      match input_line ch with
+        exception End_of_file -> { settings = List.rev settings; sections = [] }
+      | line ->
+        let line = String.trim line in
+        if line = "" || String.starts_with ~prefix:"#" line then
+          parse_settings (lineno + 1) settings
+        else if String.starts_with ~prefix:"[" line then
+          parse_section_header lineno settings [] line
+        else
+          match String.index line '=' with
+            exception Not_found -> failwith (Printf.sprintf "%s: line %d: = expected in line" path lineno)
+          | index ->
+            let key = String.sub line 0 index in
+            let value = String.sub line (index + 1) (String.length line - index - 1) in
+            parse_settings (lineno + 1) ((key, value)::settings)
+    in
+    parse_settings 1 []
+  end
+
+let write_rc_file path {settings; sections} =
+  let ch = open_out path in
+  Fun.protect ~finally:(fun () -> close_out ch) begin fun () ->
+    List.iter (fun (key, value) -> Printf.fprintf ch "%s=%s\n" key value) settings;
+    sections |> List.iter begin fun (section_key, section_lines) ->
+      Printf.fprintf ch "\n[%s]\n" section_key;
+      List.iter (fun line -> Printf.fprintf ch "%s\n" line) section_lines;
+    end
+  end
+
+let vfiderc_path =
+  Option.map
+    (fun homepath -> Filename.concat homepath ".vfiderc")
+    (Sys.getenv_opt (match platform with Windows -> "LOCALAPPDATA" | _ -> "HOME"))
+
+type vfiderc_info = {
+  max_recent_files: int;
+  max_recent_folders: int;
+  recent_files: string list;
+  recent_folders: string list;
+  other_settings: (string * string) list;
+  other_sections: (string * string list) list;
+}
+
+let load_vfiderc () =
+  let {settings; sections} =
+    match vfiderc_path with
+    | Some vfiderc_path when Sys.file_exists vfiderc_path ->
+      read_rc_file vfiderc_path
+    | _ -> {settings = []; sections = []}
+  in
+  let max_recent_files_opt, settings = Util.remove_assoc_opt "max_recent_files" settings in
+  let max_recent_folders_opt, settings = Util.remove_assoc_opt "max_recent_folders" settings in
+  let recent_files_opt, sections = Util.remove_assoc_opt "recent_files" sections in
+  let recent_folders_opt, sections = Util.remove_assoc_opt "recent_folders" sections in
+    {
+      max_recent_files =
+        Option.value ~default:20 (Option.bind max_recent_files_opt int_of_string_opt);
+      max_recent_folders =
+        Option.value ~default:20 (Option.bind max_recent_folders_opt int_of_string_opt);
+      recent_files =
+        Option.value ~default:[] recent_files_opt;
+      recent_folders =
+        Option.value ~default:[] recent_folders_opt;
+      other_settings = settings;
+      other_sections = sections;
+    }
+
+(* Called whenever a file is opened or saved *)
+let register_recent_file path =
+  match vfiderc_path with
+    None -> () (* Don't store any persistent state *)
+  | Some vfiderc_path ->
+    let {max_recent_files; max_recent_folders; recent_files; recent_folders; other_settings; other_sections} = load_vfiderc () in
+    let recent_file = Util.abs_path path in
+    let recent_files' = Util.take max_recent_files (recent_file::List.filter (fun p -> p <> recent_file) recent_files) in
+    let recent_folder = Filename.dirname recent_file in
+    let recent_folders' = Util.take max_recent_folders (recent_folder::List.filter (fun p -> p <> recent_folder) recent_folders) in
+    if (recent_files', recent_folders') <> (recent_files, recent_folders) then 
+      write_rc_file vfiderc_path {
+        settings = [
+          "max_recent_files", string_of_int max_recent_files;
+          "max_recent_folders", string_of_int max_recent_folders;
+        ] @ other_settings;
+        sections = [
+          "recent_files", recent_files';
+          "recent_folders", recent_folders';
+        ] @ other_sections;
+      }
+
 type layout = FourThree | Widescreen
 
 let include_paths: string list ref = ref []
@@ -287,6 +401,7 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
       a "TopWindow" ~label:"Window(_Top)";
       a "BottomWindow" ~label:"Window(_Bottom)";
       a "TargetArchitecture" ~label:"_Target architecture";
+      a "OpenRecent" ~label:"Open _Recent";
       a "Stub";
       a "Help" ~label:"_Help";
       a "About" ~stock:`ABOUT ~callback:(fun _ -> showBannerDialog ())
@@ -301,6 +416,9 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
         <menu action='File'>
           <menuitem action='New' />
           <menuitem action='Open' />
+          <menu action='OpenRecent'>
+            <menuitem action='Stub' />
+          </menu>
           <menuitem action='Save' />
           <menuitem action='SaveAs' />
           <menuitem action='Close' />
@@ -378,6 +496,7 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
   let redoAction = actionGroup#get_action "Redo" in
   let windowMenuItemTop = new GMenu.menu_item (GtkMenu.MenuItem.cast (ui#get_widget "/MenuBar/TopWindow")#as_widget) in
   let windowMenuItemBottom = new GMenu.menu_item (GtkMenu.MenuItem.cast (ui#get_widget "/MenuBar/BottomWindow")#as_widget) in
+  let openRecentMenuItem = new GMenu.menu_item (GtkMenu.MenuItem.cast (ui#get_widget "/MenuBar/File/OpenRecent")#as_widget) in
   let targetMenuItem = new GMenu.menu_item (GtkMenu.MenuItem.cast (ui#get_widget "/MenuBar/Verify/TargetArchitecture")#as_widget) in
   let ignore_text_changes = ref false in
   let rootVbox = GPack.vbox ~packing:root#add () in
@@ -500,6 +619,26 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
     in
       windowMenuItemTop#set_submenu (menu subNotebook);
       windowMenuItemBottom#set_submenu (menu textNotebook)
+  in
+  let open_recent_folder_func = ref (fun _ -> ()) in
+  let open_recent_file_func = ref (fun _ -> ()) in
+  let updateOpenRecentMenu () =
+    let {recent_files; recent_folders} = load_vfiderc () in
+    let menu = GMenu.menu () in
+    recent_folders |> List.iter begin fun recent_folder ->
+      let item = GMenu.menu_item ~label:recent_folder ~packing:menu#add () in
+      ignore @@ item#connect#activate ~callback:(fun () -> !open_recent_folder_func recent_folder)
+    end;
+    ignore (GMenu.separator_item ~packing:menu#add ());
+    recent_files |> List.iter begin fun recent_file ->
+      let item = GMenu.menu_item ~label:recent_file ~packing:menu#add () in
+      ignore @@ item#connect#activate ~callback:(fun () -> !open_recent_file_func recent_file)
+    end;
+    openRecentMenuItem#set_submenu menu
+  in
+  let register_recent_file path =
+    register_recent_file path;
+    updateOpenRecentMenu ()
   in
   let targetMenu = GMenu.menu () in
   let targetMenuGroup = ref None in
@@ -840,7 +979,11 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
     tab
   in
   begin
-    let tab = match initialPath with None -> new_buffer () | Some path -> open_path path in
+    let tab =
+      match initialPath with
+        None -> updateOpenRecentMenu (); new_buffer ()
+      | Some path -> register_recent_file path; open_path path
+    in
     set_current_tab (Some tab)
   end;
   let store tab thePath =
@@ -857,17 +1000,20 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
     updateWhenTabListChanges ();
     Some thePath
   in
+  let select_file_last_dir = ref "" in
   let rec saveAs tab =
-    match GToolbox.select_file ~title:"Save" () with
+    match GToolbox.select_file ~title:"Save" ~dir:select_file_last_dir () with
       None -> None
     | Some thePath ->
       if Sys.file_exists thePath then
         match GToolbox.question_box ~title:"VeriFast" ~buttons:["Yes"; "No"; "Cancel"] "The file already exists. Overwrite?" with
-          1 -> store tab thePath
+          1 -> register_recent_file thePath; store tab thePath
         | 2 -> saveAs tab
         | _ -> None
-      else
+      else begin
+        register_recent_file thePath;
         store tab thePath
+      end
   in
   let save_core tab thePath mtime =
     if file_has_changed thePath mtime then begin
@@ -1294,12 +1440,28 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
   ignore $. (actionGroup#get_action "New")#connect#activate ~callback:(fun _ ->
     ignore (close_all () || (ignore $. new_buffer (); false))
   );
-  ignore $. (actionGroup#get_action "Open")#connect#activate ~callback:(fun _ ->
-    match GToolbox.select_file ~title:"Open" () with
-      None -> ()
-    | Some thePath ->
-      if not (close_all ()) then
+  let user_open_path thePath =
+    if not (close_all ()) then begin
+      select_file_last_dir := Filename.dirname thePath;
+      register_recent_file thePath;
       ignore (open_path thePath)
+    end
+  in
+  open_recent_folder_func := begin fun folder ->
+    match GToolbox.select_file ~title:"Open" ~dir:(ref "") ~filename:(Filename.concat folder "") () with
+      None -> ()
+    | Some thePath -> user_open_path thePath
+  end;
+  open_recent_file_func := begin fun path ->
+    if not (Sys.file_exists path) then
+      GToolbox.message_box ~title:"VeriFast IDE" ("File has been moved or deleted: " ^ path)
+    else
+      user_open_path path
+  end;
+  ignore $. (actionGroup#get_action "Open")#connect#activate ~callback:(fun _ ->
+    match GToolbox.select_file ~title:"Open" ~dir:select_file_last_dir () with
+      None -> ()
+    | Some thePath -> user_open_path thePath
   );
   ignore $. (actionGroup#get_action "Save")#connect#activate ~callback:(fun () -> match get_current_tab() with Some tab -> ignore $. save tab | None -> ());
   ignore $. (actionGroup#get_action "SaveAs")#connect#activate ~callback:(fun () -> match get_current_tab() with Some tab -> ignore $. saveAs tab | None -> ());
