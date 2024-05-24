@@ -77,6 +77,8 @@ type vfiderc_info = {
   max_recent_folders: int;
   recent_files: string list;
   recent_folders: string list;
+  other_settings: (string * string) list;
+  other_sections: (string * string list) list;
 }
 
 let load_vfiderc () =
@@ -86,15 +88,21 @@ let load_vfiderc () =
       read_rc_file vfiderc_path
     | _ -> {settings = []; sections = []}
   in
+  let max_recent_files_opt, settings = Util.remove_assoc_opt "max_recent_files" settings in
+  let max_recent_folders_opt, settings = Util.remove_assoc_opt "max_recent_folders" settings in
+  let recent_files_opt, sections = Util.remove_assoc_opt "recent_files" sections in
+  let recent_folders_opt, sections = Util.remove_assoc_opt "recent_folders" sections in
     {
       max_recent_files =
-        Option.value ~default:20 (Option.bind (List.assoc_opt "max_recent_files" settings) int_of_string_opt);
+        Option.value ~default:20 (Option.bind max_recent_files_opt int_of_string_opt);
       max_recent_folders =
-        Option.value ~default:20 (Option.bind (List.assoc_opt "max_recent_folders" settings) int_of_string_opt);
+        Option.value ~default:20 (Option.bind max_recent_folders_opt int_of_string_opt);
       recent_files =
-        Option.value ~default:[] (List.assoc_opt "recent_files" sections);
+        Option.value ~default:[] recent_files_opt;
       recent_folders =
-        Option.value ~default:[] (List.assoc_opt "recent_folders" sections);
+        Option.value ~default:[] recent_folders_opt;
+      other_settings = settings;
+      other_sections = sections;
     }
 
 (* Called whenever a file is opened or saved *)
@@ -102,7 +110,7 @@ let register_recent_file path =
   match vfiderc_path with
     None -> () (* Don't store any persistent state *)
   | Some vfiderc_path ->
-    let {max_recent_files; max_recent_folders; recent_files; recent_folders} = load_vfiderc () in
+    let {max_recent_files; max_recent_folders; recent_files; recent_folders; other_settings; other_sections} = load_vfiderc () in
     let recent_file = Util.abs_path path in
     let recent_files' = Util.take max_recent_files (recent_file::List.filter (fun p -> p <> recent_file) recent_files) in
     let recent_folder = Filename.dirname recent_file in
@@ -112,11 +120,11 @@ let register_recent_file path =
         settings = [
           "max_recent_files", string_of_int max_recent_files;
           "max_recent_folders", string_of_int max_recent_folders;
-        ];
+        ] @ other_settings;
         sections = [
           "recent_files", recent_files';
           "recent_folders", recent_folders';
-        ]
+        ] @ other_sections;
       }
 
 type layout = FourThree | Widescreen

@@ -313,6 +313,11 @@ let try_assoc2 x xys1 xys2 =
 let assoc2 x xys1 xys2 =
   let (Some y) = try_assoc2 x xys1 xys2 in y
 
+(** [remove_assoc_opt x xys] returns the value for [x] in [xys] and removes the binding for [x]. *)
+let remove_assoc_opt x xys =
+  let value = List.assoc_opt x xys in
+  value, List.remove_assoc x xys
+
 exception IsNone
 
 let get x = 
