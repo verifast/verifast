@@ -159,7 +159,6 @@ clang::Token expectNextToken(clang::SourceLocation loc,
   clang::Token nextToken(getNextToken(loc, sourceManager, langOpts));
   assert(nextToken.is(kind) && "Expected other token");
   return nextToken;
-  auto s = &Location::serialize;
 }
 
 } // namespace vf

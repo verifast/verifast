@@ -3,6 +3,7 @@
 #include "NodeListSerializer.h"
 #include "clang/AST/StmtVisitor.h"
 #include "clang/Basic/Diagnostic.h"
+#include "clang/Lex/Token.h"
 
 namespace vf {
 
@@ -75,15 +76,13 @@ struct StmtSerializerImpl
   bool VisitIfStmt(const clang::IfStmt *stmt) {
     stubs::Stmt::If::Builder ifStmtBuilder = m_builder.initIf();
 
-    ExprNodeBuilder condBuilder = ifStmtBuilder.initCond();
-    m_ASTSerializer->serialize(condBuilder, stmt->getCond());
+    m_ASTSerializer->serialize(ifStmtBuilder.initCond(), stmt->getCond());
 
     StmtNodeBuilder then = ifStmtBuilder.initThen();
     m_ASTSerializer->serialize(then, stmt->getThen());
 
     if (stmt->hasElseStorage()) {
-      StmtNodeBuilder elseBuilder = ifStmtBuilder.initElse();
-      m_ASTSerializer->serialize(elseBuilder, stmt->getElse());
+      m_ASTSerializer->serialize(ifStmtBuilder.initElse(), stmt->getElse());
     }
     return true;
   }
@@ -165,53 +164,123 @@ struct StmtSerializerImpl
     return true;
   }
 
+  using SwitchCaseSerializers =
+      std::pair<const clang::SwitchCase *, StmtListSerializer>;
+
+  void
+  serializeSwitchCases(stubs::Stmt::Switch::Builder switchBuilder,
+                       llvm::MutableArrayRef<SwitchCaseSerializers> cases) {
+    ListBuilder<stubs::Node<stubs::Stmt>> casesBuilder =
+        switchBuilder.initCases(cases.size());
+    size_t i(0);
+    for (auto &[switchCase, listSerializer] : cases) {
+      StmtNodeBuilder stmtBuilder = casesBuilder[i++];
+      m_ASTSerializer->serialize(stmtBuilder.initLoc(),
+                                 switchCase->getKeywordLoc());
+      if (const clang::CaseStmt *caseStmt =
+              llvm::dyn_cast<clang::CaseStmt>(switchCase)) {
+        stubs::Stmt::Case::Builder caseBuilder =
+            stmtBuilder.initDesc().initCase();
+        m_ASTSerializer->serialize(caseBuilder.initLhs(), caseStmt->getLHS());
+        listSerializer.adoptToListBuilder(
+            caseBuilder.initStmts(listSerializer.size()));
+        continue;
+      }
+
+      listSerializer.adoptToListBuilder(
+          stmtBuilder.initDesc().initDefCase().initStmts(
+              listSerializer.size()));
+    }
+  }
+
   bool VisitSwitchStmt(const clang::SwitchStmt *stmt) {
     stubs::Stmt::Switch::Builder switchBuilder = m_builder.initSwitch();
+    m_ASTSerializer->serialize(switchBuilder.initCond(), stmt->getCond());
 
-    ExprNodeBuilder condBuilder = switchBuilder.initCond();
-    m_ASTSerializer->serialize(condBuilder, stmt->getCond());
+    llvm::SmallVector<SwitchCaseSerializers> cases;
+    bool hasCases(false);
 
-    llvm::SmallVector<const clang::Stmt *> casesPtrs;
-    for (const clang::SwitchCase *swCase = stmt->getSwitchCaseList(); swCase;
-         swCase = swCase->getNextSwitchCase()) {
-      casesPtrs.push_back(swCase);
+    // Switch body can be any statement in C++. The statement is unreachable if
+    // it is not a case label or default case.
+    const clang::Stmt *bodyStmt = stmt->getBody();
+    if (const clang::CompoundStmt *body =
+            llvm::dyn_cast<clang::CompoundStmt>(bodyStmt)) {
+      for (const clang::Stmt *childStmt : body->body()) {
+        // Cases are nested if they do not contain a break statement
+        while (const clang::SwitchCase *switchCase =
+                   llvm::dyn_cast_or_null<clang::SwitchCase>(childStmt)) {
+          AnnotationsRef annotations =
+              m_ASTSerializer->getAnnotationManager().getSequenceAfterLoc(
+                  switchCase->getColonLoc());
+          cases.emplace_back(
+                   switchCase,
+                   StmtListSerializer(
+                       capnp::Orphanage::getForMessageContaining(m_builder),
+                       StmtSerializer(*m_ASTSerializer)))
+                  .second
+              << annotations;
+          childStmt = switchCase->getSubStmt();
+        }
+
+        if (!childStmt)
+          continue;
+
+        clang::Token nextToken =
+            getNextToken(childStmt->getEndLoc(),
+                         m_ASTSerializer->getASTContext().getSourceManager(),
+                         m_ASTSerializer->getASTContext().getLangOpts());
+
+        // Other statements for the same case are listed within the switch body
+        cases.back().second
+            << childStmt
+            << m_ASTSerializer->getAnnotationManager().getSequenceAfterLoc(
+                   nextToken.is(clang::tok::semi) ? nextToken.getLocation()
+                                                  : childStmt->getEndLoc());
+      }
+      hasCases = true;
     }
 
-    ListBuilder<stubs::Node<stubs::Stmt>> casesBuilder =
-        switchBuilder.initCases(casesPtrs.size());
-    size_t i(casesPtrs.size());
-    // clang traverses them in reverse order, so we reverse it again
-    for (const clang::Stmt *swCase : casesPtrs) {
-      StmtNodeBuilder caseBuilder = casesBuilder[--i];
-      m_ASTSerializer->serialize(caseBuilder, swCase);
+    else if (const clang::SwitchCase *switchCase =
+                 llvm::dyn_cast<clang::SwitchCase>(bodyStmt)) {
+      cases.emplace_back(
+          switchCase, StmtListSerializer(
+                          capnp::Orphanage::getForMessageContaining(m_builder),
+                          StmtSerializer(*m_ASTSerializer)));
+      if (const clang::Stmt *subStmt = switchCase->getSubStmt()) {
+        cases.back().second << subStmt;
+      }
+      hasCases = true;
     }
-    return true;
-  }
 
-  bool VisitCaseStmt(const clang::CaseStmt *stmt) {
-    stubs::Stmt::Case::Builder swCaseBuilder = m_builder.initCase();
-
-    ExprNodeBuilder lhsBuilder = swCaseBuilder.initLhs();
-    m_ASTSerializer->serialize(lhsBuilder, stmt->getLHS());
-
-    const clang::Expr *rhs = stmt->getRHS();
-    // check if it has a rhs. Otherwise 'getSubsStmt' would point to the next
-    // case in the switch, because that next case would be treated as a sub
-    // statement in the current case statement.
-    if (rhs) {
-      StmtNodeBuilder subStmt = swCaseBuilder.initStmt();
-      m_ASTSerializer->serialize(subStmt, stmt->getSubStmt());
+    if (hasCases) {
+      serializeSwitchCases(switchBuilder, cases);
+      return true;
     }
-    return true;
-  }
 
-  bool VisitDefaultStmt(const clang::DefaultStmt *stmt) {
-    stubs::Stmt::DefCase::Builder defStmtBuilder = m_builder.initDefCase();
-    const clang::Stmt *subStmt = stmt->getSubStmt();
-    if (subStmt) {
-      StmtNodeBuilder sub = defStmtBuilder.initStmt();
-      m_ASTSerializer->serialize(sub, subStmt);
-    }
+    // Body is unreachable. We serialize it as `default: break; body`
+    clang::SourceRange range = getRange(stmt);
+    StmtNodeBuilder stmtBuilder = switchBuilder.initCases(1)[0];
+    m_ASTSerializer->serialize(stmtBuilder.initLoc(), range);
+    stubs::Stmt::DefCase::Builder defCaseBuilder =
+        stmtBuilder.initDesc().initDefCase();
+
+    ListBuilder<stubs::Node<stubs::Stmt>> stmtsBuilder =
+        defCaseBuilder.initStmts(2);
+    stmtBuilder = stmtsBuilder[0];
+    m_ASTSerializer->serialize(stmtBuilder.initLoc(), range);
+    stmtBuilder.initDesc().setBreak();
+
+    stmtBuilder = stmtsBuilder[1];
+
+    m_ASTSerializer->serialize(stmtBuilder.initLoc(), range);
+    stubs::Stmt::If::Builder ifBuilder = stmtBuilder.initDesc().initIf();
+
+    ExprNodeBuilder condBuilder = ifBuilder.initCond();
+    m_ASTSerializer->serialize(condBuilder.initLoc(), range);
+    condBuilder.initDesc().setBoolLit(false);
+
+    m_ASTSerializer->serialize(ifBuilder.initThen(), bodyStmt);
+
     return true;
   }
 

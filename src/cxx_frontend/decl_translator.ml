@@ -46,7 +46,7 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
     let open D.Function in
     let name = name_get f in
     let body_opt =
-      if has_body f then Some (Stmt_translator.expect_compund_stmt @@ body_get f)
+      if has_body f then Some (Stmt_translator.expect_compound_stmt @@ body_get f)
       else None
     in
     let ng_callers_only, ft, pre_post, terminates =

@@ -146,11 +146,11 @@ struct Stmt {
 
   struct Case {
     lhs @0 :ExprNode;
-    stmt @1 :StmtNode; # optional
+    stmts @1 :List(StmtNode); # optional
   }
 
   struct DefCase {
-    stmt @0 :StmtNode; # optional
+    stmts @0 :List(StmtNode); # optional
   }
 
   struct Switch {
