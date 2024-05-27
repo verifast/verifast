@@ -45,7 +45,7 @@ void unreachable(int i)
   //@ ensures true;
 {
   int j = 0;
-  switch(i) j = 1;
+  switch(i) j = 1; //~allow_dead_code
   //@ assert j == 0;
 }
 
@@ -63,7 +63,7 @@ void single_labels()
   //@ ensures true;
 {
   int i(0);
-  switch (i) case 1: i += 1;
+  switch (i) case 1: i += 1; //~allow_dead_code
   //@ assert i == 0;
   switch (i) case 0: i += 1;
   //@ assert i == 1;
@@ -82,19 +82,19 @@ void nested()
     switch (j)
     {
     case 1:
-      r = 1;
-      break;
+      r = 1; //~allow_dead_code
+      break; //~allow_dead_code
     default:
-      break;
+      break; //~allow_dead_code
     case 2:
       //@ assert i == 0;
       r = 2;
     }
     break;
   case 1:
-    r = -1;
+    r = -1; //~allow_dead_code
   default:
-    break;
+    break; //~allow_dead_code
   }
   //@ assert r == 2;
 }

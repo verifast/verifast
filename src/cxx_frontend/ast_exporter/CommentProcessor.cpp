@@ -10,7 +10,8 @@ bool CommentProcessor::HandleComment(clang::Preprocessor &preprocessor,
 
   std::string_view text(begin, end - begin);
 
-  if (end - begin > 2 && *(begin + 2) == '~') {
+  if (text.starts_with("//~")) {
+    text.remove_prefix(3);
     m_annotationManager.addFailDirective(Text(comment, text));
     return false;
   }
