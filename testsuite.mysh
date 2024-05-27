@@ -695,6 +695,7 @@ cd tests
     verifast -c -target Linux64 literals.cpp
     verifast -c loops.cpp
     verifast -c casts.cpp
+    verifast -c switch.cpp
   cd ..
   cd rust
     call testsuite.mysh

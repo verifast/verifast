@@ -1051,6 +1051,14 @@ and of_decl = function
     of_loc lrhs;
     S rhs
   ])
+| EnumDecl (l, name, values) ->
+  C ("EnumDecl", [
+    of_loc l;
+    S name;
+    values |> of_list (fun (n, e) -> T [
+      S n; e |> of_option of_expr 
+    ]);
+  ])
 and of_params params = 
   params |> of_list @@ fun (t, x) -> T [of_type_expr t; S x]
 and of_body_ss (ss, close_brace_loc) =

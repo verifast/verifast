@@ -3,7 +3,7 @@ module S = R.Stmt
 
 module type Translator = sig
   val translate : R.Node.t -> Ast.stmt
-  val expect_compund_stmt : R.Node.t -> Ast.stmt list * Ast.loc
+  val expect_compound_stmt : R.Node.t -> Ast.stmt list * Ast.loc
 end
 
 module Make (Node_translator : Node_translator.Translator) : Translator = struct
@@ -26,8 +26,7 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
     | Break -> transl_break_stmt loc
     | Continue -> transl_continue_stmt loc
     | Compound c -> transl_compound_stmt loc c
-    (* TODO: check if this is translated correctly *)
-    (* | Switch s            -> transl_switch_stmt loc s *)
+    | Switch s -> transl_switch_stmt loc s
     | Undefined _ -> failwith "Undefined statement."
     | _ -> Error.error loc "Unsupported statement."
 
@@ -42,7 +41,7 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
         | _ -> [ translate stmt_node ])
       stmt_node
 
-  and expect_compund_stmt stmt_node =
+  and expect_compound_stmt stmt_node =
     Node_translator.map_expect_fail
       ~f:(fun l s ->
         match S.get s with
@@ -96,13 +95,10 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
   and transl_if_stmt (loc : Ast.loc) (i : R.Stmt.If.t) : Ast.stmt =
     let open R.Stmt.If in
     let cond = Expr_translator.translate @@ cond_get i in
-    let th =
-      let stmts = then_get i |> transl_stmt_as_list in
-      stmts
-    in
+    let th = [ then_get i |> translate ] in
     let el =
       if has_else i then
-        let stmts = else_get i |> transl_stmt_as_list in
+        let stmts = [ else_get i |> translate ] in
         stmts
       else []
     in
@@ -140,12 +136,21 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
 
   and transl_for_stmt (loc : Ast.loc) (f : R.Stmt.For.t) : Ast.stmt =
     let open R.Stmt.For in
-    let _, cond, body, spec, decr = transl_while_like loc (inside_while_get f) in
-    let forStmt = Ast.WhileStmt ( loc, cond, spec, decr, body, [ Ast.ExprStmt (Expr_translator.translate @@ iteration_get f) ] ) in
-    Ast.BlockStmt ( loc, [], [translate @@ init_get f; forStmt], loc, ref [] )
+    let _, cond, body, spec, decr =
+      transl_while_like loc (inside_while_get f)
+    in
+    let forStmt =
+      Ast.WhileStmt
+        ( loc,
+          cond,
+          spec,
+          decr,
+          body,
+          [ Ast.ExprStmt (Expr_translator.translate @@ iteration_get f) ] )
+    in
+    Ast.BlockStmt (loc, [], [ translate @@ init_get f; forStmt ], loc, ref [])
 
   and transl_break_stmt (loc : Ast.loc) : Ast.stmt = Ast.Break loc
-
   and transl_continue_stmt (loc : Ast.loc) : Ast.stmt = Ast.Continue loc
 
   and transl_switch_stmt (loc : Ast.loc) (s : R.Stmt.Switch.t) : Ast.stmt =
@@ -157,17 +162,17 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
              match R.Stmt.get c with
              | R.Stmt.Case c ->
                  let lhs = Expr_translator.translate @@ R.Stmt.Case.lhs_get c in
-                 let stmts, _ =
-                   if R.Stmt.Case.has_stmt c then
-                     expect_compund_stmt @@ R.Stmt.Case.stmt_get c
-                   else ([], Ast.dummy_loc)
+                 let stmts =
+                   if R.Stmt.Case.has_stmts c then
+                     R.Stmt.Case.stmts_get c |> Capnp_util.arr_map translate
+                   else []
                  in
                  Some (Ast.SwitchStmtClause (l, lhs, stmts))
              | R.Stmt.DefCase c ->
-                 let stmts, _ =
-                   if R.Stmt.DefCase.has_stmt c then
-                     expect_compund_stmt @@ R.Stmt.DefCase.stmt_get c
-                   else ([], Ast.dummy_loc)
+                 let stmts =
+                   if R.Stmt.DefCase.has_stmts c then
+                     R.Stmt.DefCase.stmts_get c |> Capnp_util.arr_map translate
+                   else []
                  in
                  Some (Ast.SwitchStmtDefaultClause (l, stmts))
              | _ -> None)
