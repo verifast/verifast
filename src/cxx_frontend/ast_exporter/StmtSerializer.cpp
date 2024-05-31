@@ -77,9 +77,7 @@ struct StmtSerializerImpl
     stubs::Stmt::If::Builder ifStmtBuilder = m_builder.initIf();
 
     m_ASTSerializer->serialize(ifStmtBuilder.initCond(), stmt->getCond());
-
-    StmtNodeBuilder then = ifStmtBuilder.initThen();
-    m_ASTSerializer->serialize(then, stmt->getThen());
+    m_ASTSerializer->serialize(ifStmtBuilder.initThen(), stmt->getThen());
 
     if (stmt->hasElseStorage()) {
       m_ASTSerializer->serialize(ifStmtBuilder.initElse(), stmt->getElse());

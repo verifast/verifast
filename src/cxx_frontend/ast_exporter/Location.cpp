@@ -68,13 +68,39 @@ struct DeclRangeVisitor
   clang::SourceRange VisitFunctionDecl(const clang::FunctionDecl *decl) {
     return decl->getNameInfo().getSourceRange();
   }
+
+  clang::SourceRange VisitVarDecl(const clang::VarDecl *decl) {
+    return decl->getLocation();
+  }
 };
 
 struct StmtRangeVisitor
-    : public clang::ConstStmtVisitor<StmtRangeVisitor, clang::SourceRange> {};
+    : public clang::ConstStmtVisitor<StmtRangeVisitor, clang::SourceRange> {
+  clang::SourceRange VisitSwitchStmt(const clang::SwitchStmt *stmt) {
+    return stmt->getSwitchLoc();
+  }
+
+  clang::SourceRange VisitIfStmt(const clang::IfStmt *stmt) {
+    return stmt->getIfLoc();
+  }
+
+  clang::SourceRange VisitDeclStmt(const clang::DeclStmt *stmt) {
+    DeclRangeVisitor visitor;
+    return visitor.Visit(*stmt->decl_begin());
+  }
+};
 
 struct ExprRangeVisitor
-    : public clang::ConstStmtVisitor<ExprRangeVisitor, clang::SourceRange> {};
+    : public clang::ConstStmtVisitor<ExprRangeVisitor, clang::SourceRange> {
+  clang::SourceRange
+  VisitBinaryOperator(const clang::BinaryOperator *binOperator) {
+    return binOperator->getOperatorLoc();
+  }
+
+  clang::SourceRange VisitCallExpr(const clang::CallExpr *expr) {
+    return expr->getCallee()->getSourceRange();
+  }
+};
 
 struct TypeLocRangeVisitor
     : public clang::TypeLocVisitor<TypeLocRangeVisitor, clang::SourceRange> {};
@@ -84,50 +110,40 @@ StmtRangeVisitor stmtRangeVisitor;
 ExprRangeVisitor exprRangeVisitor;
 TypeLocRangeVisitor typeLocRangeVisitor;
 
+template <typename Node, typename Visitor>
+clang::SourceRange getRange(const Node *node, Visitor &visitor) {
+  clang::SourceRange range = visitor.Visit(node);
+  if (range.isInvalid()) {
+    return node->getSourceRange();
+  }
+  return range;
+}
+
 } // namespace
 
 clang::SourceRange getRange(const clang::Decl *decl) {
   if (!decl || decl->isImplicit()) {
     return {};
   }
-
-  clang::SourceRange range = declRangeVisitor.Visit(decl);
-  if (range.isInvalid()) {
-    return decl->getSourceRange();
-  }
-
-  return range;
+  return getRange(decl, declRangeVisitor);
 }
 
 clang::SourceRange getRange(const clang::Stmt *stmt) {
   if (!stmt) {
     return {};
   }
-  clang::SourceRange range = stmtRangeVisitor.Visit(stmt);
-
-  if (range.isInvalid()) {
-    return stmt->getSourceRange();
-  }
-
-  return range;
+  return getRange(stmt, stmtRangeVisitor);
 }
 
 clang::SourceRange getRange(const clang::Expr *expr) {
   if (!expr) {
     return {};
   }
-  clang::SourceRange range = exprRangeVisitor.Visit(expr);
-
-  if (range.isInvalid()) {
-    return expr->getSourceRange();
-  }
-
-  return range;
+  return getRange(expr, exprRangeVisitor);
 }
 
 clang::SourceRange getRange(clang::TypeLoc typeLoc) {
   clang::SourceRange range = typeLocRangeVisitor.Visit(typeLoc);
-
   if (range.isInvalid()) {
     return typeLoc.getSourceRange();
   }
@@ -159,6 +175,7 @@ clang::Token expectNextToken(clang::SourceLocation loc,
   clang::Token nextToken(getNextToken(loc, sourceManager, langOpts));
   assert(nextToken.is(kind) && "Expected other token");
   return nextToken;
+  auto s = &Location::serialize;
 }
 
 } // namespace vf

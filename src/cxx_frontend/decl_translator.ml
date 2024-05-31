@@ -46,7 +46,8 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
     let open D.Function in
     let name = name_get f in
     let body_opt =
-      if has_body f then Some (Stmt_translator.expect_compound_stmt @@ body_get f)
+      if has_body f then
+        Some (Stmt_translator.expect_compound_stmt @@ body_get f)
       else None
     in
     let ng_callers_only, ft, pre_post, terminates =
@@ -73,16 +74,7 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
     let make_return loc =
       Ast.ReturnStmt (loc, Some (Expr_translator.make_int_lit loc 0))
     in
-    let name, body_stmts =
-      match (name, body_opt) with
-      | "main()", Some ([], l) -> ("main", Some ([ make_return l ], l))
-      | "main()", Some (body, l) ->
-          ( "main",
-            match List.rev body with
-            | Ast.ReturnStmt _ :: _ -> body_opt
-            | _ -> Some (body @ [ make_return l ], l) )
-      | _ -> (name, body_opt)
-    in
+    let name = if D.Function.is_main_get f then "main" else name in
     Ast.Func
       ( loc,
         Ast.Regular,
@@ -94,7 +86,7 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
         ft,
         pre_post,
         terminates,
-        body_stmts,
+        body_opt,
         false,
         [] )
 
@@ -344,19 +336,36 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
     let fields = fields_get decl |> Capnp_util.arr_map transl_enum_field in
     Ast.EnumDecl (loc, name, fields)
 
-    and transl_function_proto_type (loc: Ast.loc) (proto_type: R.Type.FunctionProto.t): Ast.type_expr option * (string list * (Ast.type_expr * string) list * (Ast.type_expr * string) list) * (Ast.asn * Ast.asn * bool) =
-      let open R.Type.FunctionProto in
-      let return_type = return_type_get proto_type |> Type_translator.translate_return_type in
-      let params = params_get proto_type |> Capnp_util.arr_map translate_param in
-      let contract = contract_get proto_type |> Capnp_util.arr_map Node_translator.map_annotation |> AP.parse_functype_contract loc in
-      let functype_type_params, functype_params = 
-        let ann = ghost_params_get proto_type |> Capnp_util.arr_map Node_translator.map_annotation in
-        match ann with
-        | [] -> [], []
-        | [ann] -> AP.parse_functype_ghost_params ann
-        | _ -> Error.error loc @@ "A single annotation expected of the form '/*@ ... @*/'."
+  and transl_function_proto_type (loc : Ast.loc)
+      (proto_type : R.Type.FunctionProto.t) :
+      Ast.type_expr option
+      * (string list
+        * (Ast.type_expr * string) list
+        * (Ast.type_expr * string) list)
+      * (Ast.asn * Ast.asn * bool) =
+    let open R.Type.FunctionProto in
+    let return_type =
+      return_type_get proto_type |> Type_translator.translate_return_type
+    in
+    let params = params_get proto_type |> Capnp_util.arr_map translate_param in
+    let contract =
+      contract_get proto_type
+      |> Capnp_util.arr_map Node_translator.map_annotation
+      |> AP.parse_functype_contract loc
+    in
+    let functype_type_params, functype_params =
+      let ann =
+        ghost_params_get proto_type
+        |> Capnp_util.arr_map Node_translator.map_annotation
       in
-      return_type, (functype_type_params, functype_params, params), contract
+      match ann with
+      | [] -> ([], [])
+      | [ ann ] -> AP.parse_functype_ghost_params ann
+      | _ ->
+          Error.error loc
+          @@ "A single annotation expected of the form '/*@ ... @*/'."
+    in
+    (return_type, (functype_type_params, functype_params, params), contract)
 
   and transl_typedef_decl (loc : Ast.loc) (decl : D.Typedef.t) : Ast.decl =
     let open D.Typedef in

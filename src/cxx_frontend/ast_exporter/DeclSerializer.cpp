@@ -58,6 +58,7 @@ struct DeclSerializerImpl
         functionBuilder.initParams(decl->param_size());
 
     functionBuilder.setName(name.data());
+    functionBuilder.setIsMain(decl->isMain());
 
     if (!returnTypeLoc.isNull()) {
       m_ASTSerializer->serialize(resultBuilder, returnTypeLoc.getReturnLoc());
@@ -141,12 +142,9 @@ struct DeclSerializerImpl
     }
 
     if (!isStatic) {
-      stubs::Type::Builder thisTypeBuilder = builder.initThis();
-      m_ASTSerializer->serialize(thisTypeBuilder, decl->getThisObjectType());
+      m_ASTSerializer->serialize(builder.initThis(), decl->getThisObjectType());
     }
-
-    stubs::Decl::Function::Builder funcBuilder = builder.initFunc();
-    serializeFunctionDecl(funcBuilder, decl, true);
+    serializeFunctionDecl(builder.initFunc(), decl, true);
   }
 
   bool VisitFunctionDecl(const clang::FunctionDecl *decl) {
