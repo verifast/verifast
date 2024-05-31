@@ -201,6 +201,7 @@ struct Decl {
     result @2 :TypeNode;
     params @3 :List(Param);
     contract @4 :List(Clause); # optional
+    isMain @5 :Bool;
   }
 
   struct Field {

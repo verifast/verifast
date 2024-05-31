@@ -75,8 +75,8 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
     let (Ast.Lexed l) = loc in
     AP.parse_stmt (l, text)
 
-  and transl_compound_stmt (loc : Ast.loc) (c : R.Stmt.Compound.t) : Ast.stmt =
-    let open R.Stmt.Compound in
+  and transl_compound_stmt (loc : Ast.loc) (c : S.Compound.t) : Ast.stmt =
+    let open S.Compound in
     let stmts = stmts_get c |> Capnp_util.arr_map translate in
     Ast.BlockStmt
       (loc, [], stmts, Node_translator.translate_loc @@ r_brace_get c, ref [])
@@ -84,16 +84,16 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
   and transl_expr_stmt (e : R.Node.t) : Ast.stmt =
     Ast.ExprStmt (Expr_translator.translate e)
 
-  and transl_return_stmt (loc : Ast.loc) (r : R.Stmt.Return.t) : Ast.stmt =
-    let open R.Stmt.Return in
+  and transl_return_stmt (loc : Ast.loc) (r : S.Return.t) : Ast.stmt =
+    let open S.Return in
     let expr_opt =
       if has_expr r then Some (Expr_translator.translate @@ expr_get r)
       else None
     in
     Ast.ReturnStmt (loc, expr_opt)
 
-  and transl_if_stmt (loc : Ast.loc) (i : R.Stmt.If.t) : Ast.stmt =
-    let open R.Stmt.If in
+  and transl_if_stmt (loc : Ast.loc) (i : S.If.t) : Ast.stmt =
+    let open S.If in
     let cond = Expr_translator.translate @@ cond_get i in
     let th = [ then_get i |> translate ] in
     let el =
@@ -106,10 +106,10 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
 
   and transl_null_stmt (loc : Ast.loc) : Ast.stmt = Ast.NoopStmt loc
 
-  and transl_while_like (loc : Ast.loc) (w : R.Stmt.While.t) :
+  and transl_while_like (loc : Ast.loc) (w : S.While.t) :
       Ast.loc * Ast.expr * Ast.stmt list * Ast.loop_spec option * Ast.asn option
       =
-    let open R.Stmt.While in
+    let open S.While in
     let while_loc = Node_translator.translate_loc @@ while_loc_get w in
     let cond = Expr_translator.translate @@ cond_get w in
     let body = [ translate @@ body_get w ] in
@@ -120,11 +120,11 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
     in
     (while_loc, cond, body, spec, decr)
 
-  and transl_while_stmt (loc : Ast.loc) (w : R.Stmt.While.t) : Ast.stmt =
+  and transl_while_stmt (loc : Ast.loc) (w : S.While.t) : Ast.stmt =
     let _, cond, body, spec, decr = transl_while_like loc w in
     Ast.WhileStmt (loc, cond, spec, decr, body, [])
 
-  and transl_do_while_stmt (loc : Ast.loc) (w : R.Stmt.While.t) : Ast.stmt =
+  and transl_do_while_stmt (loc : Ast.loc) (w : S.While.t) : Ast.stmt =
     let while_loc, cond, body, spec, decr = transl_while_like loc w in
     Ast.WhileStmt
       ( loc,
@@ -134,8 +134,8 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
         body,
         [ Ast.IfStmt (while_loc, cond, [], [ Ast.Break while_loc ]) ] )
 
-  and transl_for_stmt (loc : Ast.loc) (f : R.Stmt.For.t) : Ast.stmt =
-    let open R.Stmt.For in
+  and transl_for_stmt (loc : Ast.loc) (f : S.For.t) : Ast.stmt =
+    let open S.For in
     let _, cond, body, spec, decr =
       transl_while_like loc (inside_while_get f)
     in
@@ -153,25 +153,25 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
   and transl_break_stmt (loc : Ast.loc) : Ast.stmt = Ast.Break loc
   and transl_continue_stmt (loc : Ast.loc) : Ast.stmt = Ast.Continue loc
 
-  and transl_switch_stmt (loc : Ast.loc) (s : R.Stmt.Switch.t) : Ast.stmt =
-    let open R.Stmt.Switch in
+  and transl_switch_stmt (loc : Ast.loc) (s : S.Switch.t) : Ast.stmt =
+    let open S.Switch in
     let cond = Expr_translator.translate @@ cond_get s in
     let map_case case =
       case
       |> Node_translator.map_expect_fail ~f:(fun l c ->
-             match R.Stmt.get c with
-             | R.Stmt.Case c ->
-                 let lhs = Expr_translator.translate @@ R.Stmt.Case.lhs_get c in
+             match S.get c with
+             | S.Case c ->
+                 let lhs = Expr_translator.translate @@ S.Case.lhs_get c in
                  let stmts =
-                   if R.Stmt.Case.has_stmts c then
-                     R.Stmt.Case.stmts_get c |> Capnp_util.arr_map translate
+                   if S.Case.has_stmts c then
+                     S.Case.stmts_get c |> Capnp_util.arr_map translate
                    else []
                  in
                  Some (Ast.SwitchStmtClause (l, lhs, stmts))
-             | R.Stmt.DefCase c ->
+             | S.DefCase c ->
                  let stmts =
-                   if R.Stmt.DefCase.has_stmts c then
-                     R.Stmt.DefCase.stmts_get c |> Capnp_util.arr_map translate
+                   if S.DefCase.has_stmts c then
+                     S.DefCase.stmts_get c |> Capnp_util.arr_map translate
                    else []
                  in
                  Some (Ast.SwitchStmtDefaultClause (l, stmts))

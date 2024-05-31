@@ -2988,6 +2988,9 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           match (rt, retval) with
             (None, None) -> do_return h env
           | (Some tp, Some t) -> do_return h (("result", t)::env)
+          | (Some tp, None) when dialect = Some Cxx && g = "main" -> 
+            (* implicit 'return 0' for main function in C++ *)
+            do_return h (("result", int_zero_term) :: env)
           | (None, Some _) -> assert_false h env l "Void function returns a value." None
           | (Some _, None) -> assert_false h env l "Non-void function does not return a value." None
         in
