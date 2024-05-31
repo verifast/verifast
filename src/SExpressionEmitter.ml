@@ -620,13 +620,6 @@ let rec sexpr_of_expr (expr : expr) : sexpression =
             "asn1", sexpr_of_expr asn1;
             "asn2", sexpr_of_expr asn2
           ]
-    | SwitchAsn (loc, expr, clauses) ->
-        build_list
-          [ Symbol "expr-switch-asn" ]
-          [
-            "expr", sexpr_of_expr expr;
-            "clauses", sexpr_of_list sexpr_of_switch_asn_clause clauses
-          ]
     | WSwitchAsn (loc, expr, inductive_type, clauses) ->
         build_list
           [ Symbol "expr-w-switch-asn" ]
@@ -724,7 +717,7 @@ and sexpr_of_wswitch_asn_clause (c: wswitch_asn_clause) : sexpression =
           [ Symbol "w-switch-asn-clause" ]
           [
             "name", Symbol name;
-            "l", sexpr_of_list (fun x -> Symbol x) l;
+            "l", sexpr_of_list (sexpr_of_option (fun x -> Symbol x)) l;
             "ptypes", sexpr_of_list (sexpr_of_option sexpr_of_prover_type) ptypes;
             "expr", sexpr_of_expr expr
           ]
@@ -791,9 +784,6 @@ let rec sexpr_of_pred (asn : asn) : sexpression =
       build_list [ Symbol "pred-w-pred-asn"
                  ; Symbol name ]
                  [ "expr", sexpr_of_option sexpr_of_expr expr ]
-    | SwitchAsn (_, expr, _) ->
-      build_list [ Symbol "pred-switch-asn" ]
-                 [ "expr", sexpr_of_expr expr]
     | CoefAsn (_, pat, asn) ->
       List [ Symbol "pred-coef-asn";
              sexpr_of_pat pat;

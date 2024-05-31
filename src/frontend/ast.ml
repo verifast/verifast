@@ -510,10 +510,6 @@ and
       expr *
       asn *
       asn
-  | SwitchAsn of (* switch over cons van inductive type regel-expr-clauses*)
-      loc *
-      expr *
-      switch_asn_clause list
   | WSwitchAsn of (* switch over cons van inductive type regel-expr-clauses*)
       loc *
       expr *
@@ -558,7 +554,7 @@ and
   | WSwitchAsnClause of
       loc * 
       string * 
-      string list * 
+      string option list (* pattern variables, or None if _ *) *
       prover_type option list (* Boxing info *) *
       asn
 and
@@ -1049,7 +1045,6 @@ let rec expr_loc e =
   | WTypePredExpr (l, t, x) -> l
   | Sep (l, p1, p2) -> l
   | IfAsn (l, e, p1, p2) -> l
-  | SwitchAsn (l, e, sacs) -> l
   | WSwitchAsn (l, e, i, sacs) -> l
   | EmpAsn l -> l
   | ForallAsn (l, tp, i, e) -> l

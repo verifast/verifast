@@ -488,21 +488,37 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                let Some pts = zip pats tps in
                let xts =
                  if tparams = [] then
-                   List.map (fun (x, (name, (tp: type_))) -> let term = get_unique_var_symb x tp in (x, term, term)) pts
+                   pts |> List.map begin fun (x, (name, (tp: type_))) ->
+                     let symb_name =
+                       match x with
+                         Some x -> x
+                       | None ->
+                       if name = "" then "value" else name
+                     in
+                     let term = get_unique_var_symb symb_name tp in
+                     (x, term, term)
+                   end
                  else
                    let Some pts = zip pts patsInfo in
                    List.map
                      (fun ((x, (name, tp)), info) ->
-                      match info with
-                        None -> let term = get_unique_var_symb x tp in (x, term, term)
+                       let symb_name =
+                         match x with
+                           Some x -> x
+                         | None ->
+                         if name = "" then "value" else name
+                       in
+                       match info with
+                        None -> let term = get_unique_var_symb symb_name tp in (x, term, term)
                       | Some proverType ->
-                        let term = ctxt#mk_app (mk_symbol x [] (typenode_of_provertype proverType) Uninterp) [] in
+                        let term = ctxt#mk_app (mk_symbol symb_name [] (typenode_of_provertype proverType) Uninterp) [] in
                         let term' = convert_provertype term proverType ProverInductive in
                         (x, term', term)
                      )
                      pts
                in
-               let xenv = List.map (fun (x, _, t) -> (x, t)) xts in
+               let pats = flatmap (function None -> [] | Some x -> [x]) pats in
+               let xenv = flatmap (function (None, _, _) -> [] | (Some x, _, t) -> [x, t]) xts in
                assume_eq t (mk_app cs (List.map (fun (x, t, _) -> t) xts)) (fun _ -> produce_asn_core_with_post tpenv h (pats @ ghostenv) (xenv @ env) p coef size_all size_all assuming cont_with_post))
             (fun _ -> iter cs)
         | [] -> success()
@@ -1289,27 +1305,34 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let Some pts = zip pats tps in
           let (xs, xenv) =
             if tparams = [] then
-              let xts = List.map (fun (x, (name, tp)) -> (x, get_unique_var_symb x tp)) pts in
+              let xts = pts |> List.map begin fun (x, (name, tp)) ->
+                  let symb_name = match x with Some x -> x | None -> if name = "" then "value" else name in
+                  (x, get_unique_var_symb symb_name tp)
+                end
+              in
               let xs = List.map (fun (x, t) -> t) xts in
+              let xts = flatmap (fun (x, t) -> match x with Some x -> [x, t] | None -> []) xts in
               (xs, xts)
             else
               let Some pts = zip pts patsInfo in
               let xts =
                 List.map
                   (fun ((x, (name, tp)), info) ->
+                   let symb_name = match x with Some x -> x | None -> if name = "" then "value" else name in
                    match info with
-                     None -> let term = get_unique_var_symb x tp in (x, term, term)
+                     None -> let term = get_unique_var_symb symb_name tp in (x, term, term)
                    | Some proverType ->
-                     let term = ctxt#mk_app (mk_symbol x [] (typenode_of_provertype proverType) Uninterp) [] in
+                     let term = ctxt#mk_app (mk_symbol symb_name [] (typenode_of_provertype proverType) Uninterp) [] in
                      let term' = convert_provertype term proverType ProverInductive in
                      (x, term', term)
                   )
                   pts
               in
               let xs = List.map (fun (x, t, _) -> t) xts in
-              let xenv = List.map (fun (x, _, t) -> (x, t)) xts in
+              let xenv = flatmap (fun (x, _, t) -> match x with Some x -> [x, t] | None -> []) xts in
               (xs, xenv)
           in
+          let pats = flatmap (function None -> [] | Some x -> [x]) pats in
           branch
             (fun _ -> assume_eq t (mk_app ctorsym xs) (fun _ -> consume_asn_core_with_post rules tpenv h typeid_env (pats @ ghostenv) (xenv @ env) env' p checkDummyFracs coef cont_with_post))
             (fun _ -> iter cs)

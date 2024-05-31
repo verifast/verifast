@@ -6271,8 +6271,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let (wp2, _, infTps2) = check_asn tenv p2 in
         (IfAsn (l, w, wp1, wp2), tenv, infTps1 @ infTps2)
       | SwitchExpr (l, e, cs, cdef) ->
-        if cdef <> None then static_error l "A default clause is not yet supported in a switch assertion." None;
         let (w, t) = check_expr (pn,ilist) tparams tenv (Some true) e in
+        let wcdef = Option.map (fun (l, cdef) -> (l, check_asn tenv cdef)) cdef in
         begin
         match t with
         | InductiveType (i, targs) ->
@@ -6284,12 +6284,18 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let rec iter wcs (ctormap: (string * inductive_ctor_info) list) cs infTps =
               match cs with
                 [] ->
-                let _ = 
-                  match ctormap with
-                    [] -> ()
-                  | (cn, _)::_ ->
-                    static_error l ("Missing case: '" ^ cn ^ "'.") None
-                in (WSwitchAsn (l, w, i, wcs), tenv, infTps)
+                if ctormap = [] && wcdef <> None then static_error l "Superfluous default clause" None;
+                let default_wcs = 
+                  ctormap |> List.map @@ fun (cn, (_, (_, _, _, param_names_types, _))) ->
+                    let (_, ts) = List.split param_names_types in
+                    let xsInfo = ts |> List.map (fun t -> match unfold_inferred_type t with GhostTypeParam x -> Some (provertype_of_type (List.assoc x tpenv)) | _ -> None) in
+                    match wcdef with
+                      None -> static_error l (Printf.sprintf "A clause for constructor '%s' is missing" cn) None
+                    | Some (lcdef, (wcdef, _, clauseInfTps)) ->
+                      WSwitchAsnClause (lcdef, cn, List.map (fun _ -> None) param_names_types, xsInfo, wcdef)
+                in
+                let cdefInfTps = match wcdef with None -> [] | Some (_, (_, _, cdefInfTps)) -> cdefInfTps in
+                (WSwitchAsn (l, w, i, List.rev default_wcs @ wcs), tenv, cdefInfTps @ infTps)
               | SwitchExprClause (lc, cn, xs, body)::cs ->
                 begin
                 match try_assoc cn ctormap with
@@ -6312,6 +6318,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   in
                   let tenv = xmap @ tenv in
                   let (wbody, _, clauseInfTps) = check_asn tenv body in
+                  let xs = List.map (fun x -> Some x) xs in
                   iter (WSwitchAsnClause (lc, cn, xs, xsInfo, wbody)::wcs) (List.remove_assoc cn ctormap) cs (clauseInfTps @ infTps)
                 end
             in
@@ -6539,6 +6546,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         match cs with
           [] -> get fixed'
         | WSwitchAsnClause (l, c, xs, _, p)::cs ->
+          let xs = flatmap (function None -> [] | Some x -> [x]) xs in
           let fixed = check_pred_precise (xs@fixed) p in
           iter (Some (match fixed' with None -> fixed | Some fixed' -> intersect fixed' fixed)) cs
       in

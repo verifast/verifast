@@ -35,9 +35,7 @@ predicate prophecy_pointer(prophecy_id id, void *prophecy) =
         case cons(v0, vs0): return
             switch (fst(v0)) {
                 case vararg_pointer(p): return prophecy == p;
-                case vararg_int(i): return true;
-                case vararg_uint(i): return true;
-                case vararg_double(d): return true;
+                default: return true;
             };
     };
 
@@ -336,10 +334,8 @@ predicate tracked_cas_prediction(struct cas_tracker *tracker, int count; void *v
                 value == 0
             :
                 switch (nth(1, marker)) {
-                case vararg_int(i): return value == 0;
-                case vararg_uint(i): return value == 0;
                 case vararg_pointer(p): return value == p;
-                case vararg_double(d): return value == 0;
+                default: return value == 0;
                 };
         };
 

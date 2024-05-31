@@ -593,12 +593,6 @@ and of_expr = function
     of_expr a1;
     of_expr a2
   ])
-| SwitchAsn (l, e, cs) ->
-  C ("SwitchAsn", [
-    of_loc l;
-    of_expr e;
-    of_list of_switch_asn_clause cs
-  ])
 | WSwitchAsn (l, e, i, cs) ->
   C ("WSwitchAsn", [
     of_loc l;
@@ -670,7 +664,7 @@ and of_wswitch_asn_clause = function
   C ("WSwitchAsnClause", [
     of_loc l;
     S cn;
-    of_list s xs;
+    of_list (of_option s) xs;
     of_list (of_option of_prover_type) pts;
     of_expr a
   ])
