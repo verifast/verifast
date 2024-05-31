@@ -10,6 +10,9 @@ public:
     {
         //@ close EmptyPred(this);
     }
+
+    Empty(Empty const &) = delete;
+    Empty const & operator=(Empty const &) = delete;
     
     ~Empty()
     //@ requires EmptyPred(this);

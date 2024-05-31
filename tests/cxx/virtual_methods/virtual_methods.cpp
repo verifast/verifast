@@ -21,6 +21,8 @@ public:
   {
     //@ open valid(_);
   }
+
+  virtual A & operator=(A const &) = delete;
   
   int getI() const
   //@ requires this->m_i |-> ?i;

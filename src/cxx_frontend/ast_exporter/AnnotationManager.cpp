@@ -132,7 +132,7 @@ AnnotationManager::getContract(const clang::FunctionDecl *decl) const {
   if (decl->isImplicit()) {
     return {};
   }
-  if (decl->isThisDeclarationADefinition()) {
+  if (decl->doesThisDeclarationHaveABody()) {
     return getInRange(decl->getTypeSpecEndLoc(),
                       decl->getBody()->getBeginLoc());
   }
