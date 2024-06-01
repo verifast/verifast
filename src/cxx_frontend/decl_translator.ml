@@ -23,7 +23,7 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
     else
       match D.get decl_desc with
       | UnionNotInitialized -> Error.union_no_init_err "declaration"
-      | Empty -> []
+      | Empty | Deleted -> []
       | Function f -> [ transl_func_decl loc f ]
       | Ann a -> transl_ann_decls loc a
       | Record r -> transl_record_decl loc r

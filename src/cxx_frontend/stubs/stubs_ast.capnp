@@ -308,6 +308,7 @@ struct Decl {
     enumDecl @13 :Enum;
     namespace @14 :Namespace;
     functionTemplate @15 :FunctionTemplate;
+    deleted @16 :Void;
   }
 }
 

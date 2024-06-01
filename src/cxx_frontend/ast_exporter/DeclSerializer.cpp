@@ -156,6 +156,8 @@ struct DeclSerializerImpl
       // have a deleted definition." and vice versa. Thus a deleted function that
       // is virtual behaves the same as if it was not virtual.
 
+      m_builder.setDeleted();
+
       return true;
     }
     else if(decl->isDefaulted()) {

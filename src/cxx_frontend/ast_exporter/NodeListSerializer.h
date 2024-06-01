@@ -33,12 +33,6 @@ public:
         m_orphanage.newOrphan<stubs::Loc>(), m_orphanage.newOrphan<Stub>());
     m_serializer.serialize(item, nodeOrphan.locOrphan.get(),
                            nodeOrphan.descOrphan.get());
-
-    //if(std::is_convertible<T, clang::Decl const *>::value
-    if constexpr(std::is_same<stubs::Decl, Stub>::value) if(nodeOrphan.descOrphan.get().isUnionNotInitialized())
-    {
-      m_orphans.pop_back();
-    }
   }
 
   template <typename T> void serialize(llvm::ArrayRef<T> container) {
