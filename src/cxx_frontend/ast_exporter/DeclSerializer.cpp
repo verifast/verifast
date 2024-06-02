@@ -85,6 +85,8 @@ struct DeclSerializerImpl
     }
 
     if (isDef) {
+      assert(decl->doesThisDeclarationHaveABody());
+
       StmtNodeBuilder bodyBuilder = functionBuilder.initBody();
       m_ASTSerializer->serialize(bodyBuilder, decl->getBody());
     }
@@ -145,6 +147,31 @@ struct DeclSerializerImpl
       m_ASTSerializer->serialize(builder.initThis(), decl->getThisObjectType());
     }
     serializeFunctionDecl(builder.initFunc(), decl, true);
+  }
+
+  bool checkDefaultedOrDeleted(clang::CXXMethodDecl const * const decl) {
+    if(decl->isDeleted()) {
+      // Regarding deleted virtual functions the C++17 standard says "A function
+      // with a deleted definition shall not override a function that does not
+      // have a deleted definition." and vice versa. Thus a deleted function that
+      // is virtual behaves the same as if it was not virtual.
+
+      m_builder.setDeleted();
+
+      return true;
+    }
+    else if(decl->isDefaulted()) {
+      clang::DiagnosticsEngine &diagsEngine =
+        m_ASTSerializer->getASTContext().getDiagnostics();
+      unsigned id = diagsEngine.getCustomDiagID(
+        clang::DiagnosticsEngine::Error,
+        "Declaration of defaulted method function is not supported.");
+      diagsEngine.Report(decl->getBeginLoc(), id);
+
+      return true;
+    }
+
+    return false;
   }
 
   bool VisitFunctionDecl(const clang::FunctionDecl *decl) {
@@ -286,12 +313,20 @@ struct DeclSerializerImpl
   }
 
   bool VisitCXXMethodDecl(const clang::CXXMethodDecl *decl) {
+    // Serialize method only if it is not defaulted or deleted
+    // and create error when necessary
+    if(checkDefaultedOrDeleted(decl)) return true;
+
     stubs::Decl::Method::Builder methodBuilder = m_builder.initMethod();
     serializeMethodDecl(methodBuilder, decl);
     return true;
   }
 
   bool VisitCXXConstructorDecl(const clang::CXXConstructorDecl *decl) {
+    // Serialize constructor only if it is not defaulted or deleted
+    // and create error when necessary
+    if(checkDefaultedOrDeleted(decl)) return true;
+
     stubs::Decl::Ctor::Builder ctorBuilder = m_builder.initCtor();
     // nb inits will be 1 if it delegates to another ctor
     ListBuilder<stubs::Decl::Ctor::CtorInit> initBuilders =
@@ -321,6 +356,10 @@ struct DeclSerializerImpl
   }
 
   bool VisitCXXDestructorDecl(const clang::CXXDestructorDecl *decl) {
+    // Serialize destructor only if it is not defaulted or deleted
+    // and create error when necessary
+    if(checkDefaultedOrDeleted(decl)) return true;
+
     stubs::Decl::Dtor::Builder dtorBuilder = m_builder.initDtor();
 
     stubs::Decl::Method::Builder methodBuilder = dtorBuilder.initMethod();
