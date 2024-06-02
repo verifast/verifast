@@ -86,6 +86,14 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         (fun () -> assert_expr_split e2 h env l msg url)
     | _ -> with_context (Executing (h, env, expr_loc e, "Consuming expression")) (fun () -> assert_term (eval None env e) h env l msg url; SymExecSuccess)
   
+  let rec branch_many = function
+    [] -> success
+  | [cont] -> cont
+  | cont::conts -> fun () -> branch cont (branch_many conts)
+
+  let branch' cont1 cont2 =
+    if cont2 == success then cont1 else fun () -> branch cont1 cont2
+
   let rec evalpat ghost ghostenv env pat tp0 tp cont =
     match pat with
       LitPat e -> cont ghostenv env (prover_convert_term (eval None env e) tp0 tp)

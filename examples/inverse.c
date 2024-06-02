@@ -53,7 +53,7 @@ lemma void ints_unseparate_same(int *array, list<int> xs)
     ensures ints(array, M + N + 1, xs) &*& head(drop(M, xs)) == nth(M, xs);
 {
     open ints(array, M, _);
-    switch (drop(M, xs)) { case nil: case cons(x0, xs0): }
+    switch (drop(M, xs)) { default: }
     if (M != 0) {
         switch (xs) {
             case nil:
@@ -81,9 +81,9 @@ lemma void ints_unseparate(int *array, int i, list<int> xs)
 {
     open ints(array, _, _);
     if (i == 0) {
-        switch (xs) { case nil: case cons(x, xs0): }
+        switch (xs) { default: }
     } else {
-        switch (xs) { case nil: case cons(x, xs0): }
+        switch (xs) { default: }
         ints_unseparate(array + 1, i - 1, tail(xs));
     }
     close ints(array, length(xs), update(i, y, xs));

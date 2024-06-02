@@ -1013,16 +1013,41 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         InductiveType (i, targs) ->
         let (tn, targs, Some (_, itparams, ctormap, _, _, _, _, _)) = (i, targs, try_assoc' Ghost (pn,ilist) i inductivemap) in
         let (Some tpenv) = zip itparams targs in
+        let (cs, cdef) =
+          let rec iter cs cdef = function
+            [] -> List.rev cs, cdef
+          | SwitchStmtClause (lc, e, ss)::cs' -> iter ((lc, e, ss)::cs) cdef cs'
+          | SwitchStmtDefaultClause (l, ss)::cs' ->
+            if cdef <> None then static_error l "Duplicate default clause" None;
+            iter cs (Some (l, ss)) cs'
+          in
+          iter [] None cs
+        in
         let rec iter ctors cs =
           match cs with
             [] ->
             begin
-            match ctors with
-              [] -> success()
-            | _ -> static_error l ("Missing clauses: " ^ String.concat ", " ctors) None
+            match ctors, cdef with
+              [], None -> success
+            | [], Some (lcdef, _) ->
+              static_error lcdef "Superfluous default clause" None
+            | _, None ->
+              static_error l ("Missing clauses: " ^ String.concat ", " (List.map fst ctors)) None
+            | _, Some (lcdef, ss) ->
+              ctors |> List.map begin fun (cn, (_, (_, _, _, pts, ctorsym))) ->
+                fun () ->
+                let xterms = pts |> List.map @@ fun (name, tp) ->
+                  let tp' = instantiate_type tpenv tp in
+                  let term = get_unique_var_symb (if name = "" then "value" else name) tp' in
+                  match unfold_inferred_type tp with
+                    GhostTypeParam x -> convert_provertype term (provertype_of_type tp') ProverInductive
+                  | _ -> term
+                in
+                assume_eq v (mk_app ctorsym xterms) @@ fun () ->
+                verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss tcont return_cont econt
+              end |> branch_many
             end
-          | SwitchStmtDefaultClause (l, _) :: cs -> static_error l "default clause not allowed in switch over inductive datatype" None
-          | SwitchStmtClause (lc, e, ss)::cs ->
+          | (lc, e, ss)::cs ->
             let (cn, pats) =
               match e with
                 CallExpr (lcall, cn, [], [], args, Static) ->
@@ -1036,7 +1061,8 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 None -> static_error lc ("Not a constructor of type " ^ tn) None
               | Some (_, (l, _, _, pts, _)) -> pts
             in
-            let _ = if not (List.mem cn ctors) then static_error lc "Constructor already handled in earlier clause." None in
+            let _ = if not (List.mem_assoc cn ctors) then static_error lc "Constructor already handled in earlier clause." None in
+            let verify_branch () =
             let (ptenv, xterms, xenv) =
               let rec iter ptenv xterms xenv pats pts =
                 match (pats, pts) with
@@ -1063,11 +1089,14 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 None -> sizemap
               | Some(t, k) -> List.map (fun (x, tx) -> (tx, (t, k - 1))) xenv @ sizemap
             in
-            branch
-              (fun _ -> assume_eq v (mk_app ctorsym xterms) (fun _ -> verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap (ptenv @ tenv) (pats @ ghostenv) h (xenv @ env) ss tcont return_cont econt))
-              (fun _ -> iter (List.filter (function cn' -> cn' <> cn) ctors) cs)
+            assume_eq v (mk_app ctorsym xterms) @@ fun () ->
+            verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap (ptenv @ tenv) (pats @ ghostenv) h (xenv @ env) ss tcont return_cont econt
+            in
+            branch'
+              verify_branch
+              (iter (List.remove_assoc cn ctors) cs)
         in
-        iter (List.map (function (cn, _) -> cn) ctormap) cs
+        iter ctormap cs ()
       | Int (_, _) -> 
         let n = List.length (List.filter (function SwitchStmtDefaultClause (l, _) -> true | _ -> false) cs) in
         if n > 1 then static_error l "switch statement can have at most one default clause" None;
