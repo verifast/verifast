@@ -1900,8 +1900,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let vararg_pointer_symb = lazy (get_purefuncsymb "vararg_pointer")
   let vararg_double_symb = lazy (get_purefuncsymb "vararg_double")
   
-  let mk_vararg_int t = mk_app (Lazy.force vararg_int_symb) [t]
-  let mk_vararg_uint t = mk_app (Lazy.force vararg_uint_symb) [t]
+  let mk_vararg_int t_size t = mk_app (Lazy.force vararg_int_symb) [t_size; t]
+  let mk_vararg_uint t_size t = mk_app (Lazy.force vararg_uint_symb) [t_size; t]
   let mk_vararg_pointer t = mk_app (Lazy.force vararg_pointer_symb) [t]
   let mk_vararg_double t = mk_app (Lazy.force vararg_double_symb) [t]
   
@@ -1993,8 +1993,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   | _ -> tp
                 in
                 match tp_promoted with
-                  Int (Signed, IntRank) -> mk_vararg_int t
-                | Int (Unsigned, IntRank) -> mk_vararg_uint t
+                  Int (Signed, _) -> mk_vararg_int (sizeof dummy_loc tp_promoted) t
+                | Int (Unsigned, _) -> mk_vararg_uint (sizeof dummy_loc tp_promoted) t
                 | PtrType _ | StaticArrayType _ -> mk_vararg_pointer t
                 | Double -> mk_vararg_double t
                 | _ -> static_error (expr_loc e) ("Expressions of type '"^string_of_type tp^"' are not yet supported as arguments for a varargs function.") None

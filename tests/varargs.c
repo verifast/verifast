@@ -9,10 +9,14 @@ fixpoint option<int> max_varargs(list<vararg> args) {
     switch (args) {
         case nil: return some(INT_MIN);
         case cons(arg, args0): return switch (arg) {
-            case vararg_int(k): return switch (max_varargs(args0)) {
-                case none: return none;
-                case some(k0): return some(max(k, k0));
-            };
+            case vararg_int(size, k): return
+                size == sizeof(int) ?
+                    switch (max_varargs(args0)) {
+                        case none: return none;
+                        case some(k0): return some(max(k, k0));
+                    }
+                :
+                    none;
             default: return none;
         };
     }
@@ -25,7 +29,7 @@ lemma void max_varargs_ge_INT_MIN(list<vararg> args)
     switch (args) {
         case nil:
         case cons(arg, args0):
-            switch (arg) { case vararg_int(i): case vararg_uint(u): case vararg_pointer(p): case vararg_double(d): }
+            switch (arg) { default: }
             max_varargs_ge_INT_MIN(args0);
     }
 }

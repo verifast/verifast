@@ -30,10 +30,8 @@ predicate heap(list<struct object *> objects) =
 
 fixpoint void *get_vararg_as_pointer(vararg a) {
     switch (a) {
-        case vararg_int(x): return (void *)0 + x;
-        case vararg_uint(x): return (void *)x;
         case vararg_pointer(x): return x;
-        case vararg_double(d): return (void *)0;
+        default: return (void *)0;
     }
 }
 

@@ -1034,7 +1034,11 @@ lemma void string_limits(char *s);
     requires [?f]string(s, ?cs);
     ensures [f]string(s, cs) &*& object_pointer_within_limits(s, length(cs) + 1) == true;
 
-inductive vararg = vararg_int(int) | vararg_uint(unsigned int) | vararg_pointer(void *) | vararg_double(double);
+inductive vararg =
+    vararg_int(int size, int value) // An argument V of signed integer type T is encoded as vararg_int(sizeof(T), V)
+  | vararg_uint(int size, unsigned int value)
+  | vararg_pointer(void *value)
+  | vararg_double(double value);
 
 predicate varargs_(void *lastParam; list<vararg> var_args);
 

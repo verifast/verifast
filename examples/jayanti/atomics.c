@@ -367,9 +367,9 @@ void atomic_store_int(prophecy_id prophecyId, int *pv, int value)
                     take_plus(nbWrites + nbReads, 1, vs0);
                     filter_append(is_write, take(nbWrites + nbReads, vs0), take(1, drop(nbWrites + nbReads, vs0)));
                     close foreach(nil, past_prophecy);
-                    close past_prophecy(pair(oldValue, {vararg_pointer(prophecyId), vararg_int(0)}));
-                    close foreach({pair(oldValue, {vararg_pointer(prophecyId), vararg_int(0)})}, past_prophecy);
-                    foreach_append(take(nbWrites + nbReads, vs0), {pair(oldValue, {vararg_pointer(prophecyId), vararg_int(0)})});
+                    close past_prophecy(pair(oldValue, {vararg_pointer(prophecyId), vararg_int(sizeof(int), 0)}));
+                    close foreach({pair(oldValue, {vararg_pointer(prophecyId), vararg_int(sizeof(int), 0)})}, past_prophecy);
+                    foreach_append(take(nbWrites + nbReads, vs0), {pair(oldValue, {vararg_pointer(prophecyId), vararg_int(sizeof(int), 0)})});
                     close tracked_int_inv(trackedIntId)();
                     popl20_close_atomic_space();
                     close Q_();

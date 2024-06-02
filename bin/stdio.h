@@ -135,12 +135,12 @@ fixpoint option<pair<list<char *>, list<vararg> > > printf_parse_specifier(list<
                 case cons(arg, args0): return
                     c == 'd' || c == 'i' || c == 'c' ?
                         switch (arg) {
-                            case vararg_int(v): return some(pair({}, args0));
+                            case vararg_int(size, v): return size == sizeof(int) ? some(pair({}, args0)) : none;
                             default: return none;
                         }
                     : c == 'u' || c == 'o' || c == 'x' || c == 'X' ?
                         switch (arg) {
-                            case vararg_uint(v): return some(pair({}, args0));
+                            case vararg_uint(size, v): return size == sizeof(unsigned int) ? some(pair({}, args0)) : none;
                             default: return none;
                         }
                     : c == 'p' ?
@@ -158,7 +158,42 @@ fixpoint option<pair<list<char *>, list<vararg> > > printf_parse_specifier(list<
                             case vararg_pointer(v): return some(pair({v}, args0));
                             default: return none;
                         }
-                    : none;
+                    : c == 'l' ?
+                        switch (cs0) {
+                            case nil: return none;
+                            case cons(c1, cs1): return
+                                c1 == 'd' || c1 == 'i' ?
+                                    switch (arg) {
+                                        case vararg_int(size, v): return size == sizeof(long) ? some(pair({}, args0)) : none;
+                                        default: return none;
+                                    }
+                                : c1 == 'u' || c1 == 'o' || c1 == 'x' || c1 == 'X' ?
+                                    switch (arg) {
+                                        case vararg_uint(size, v): return size == sizeof(unsigned long) ? some(pair({}, args0)) : none;
+                                        default: return none;
+                                    }
+                                : c == 'l' ?
+                                    switch (cs1) {
+                                        case nil: return none;
+                                        case cons(c2, cs2): return
+                                            c2 == 'd' || c2 == 'i' ?
+                                                switch (arg) {
+                                                    case vararg_int(size, v): return size == sizeof(long long) ? some(pair({}, args0)) : none;
+                                                    default: return none;
+                                                }
+                                            : c2 == 'u' || c2 == 'o' || c2 == 'x' || c2 == 'X' ?
+                                                switch (arg) {
+                                                    case vararg_uint(size, v): return size == sizeof(unsigned long long) ? some(pair({}, args0)) : none;
+                                                    default: return none;
+                                                }
+                                            :
+                                                none;
+                                    }
+                                :
+                                    none;
+                        }
+                    :
+                        none;
             };
     }
 }
@@ -187,7 +222,7 @@ fixpoint option<pair<list<char *>, list<vararg> > > printf_parse_precision(list<
                                 case nil: return none;
                                 case cons(arg, args0): return
                                     switch (arg) {
-                                        case vararg_int(v): return printf_parse_specifier(cs00, args0);
+                                        case vararg_int(size, v): return size == sizeof(int) ? printf_parse_specifier(cs00, args0) : none;
                                         default: return none;
                                     };
                             }
@@ -221,7 +256,7 @@ fixpoint option<pair<list<char *>, list<vararg> > > printf_parse_flags(list<char
                     case nil: return none;
                     case cons(arg, args0): return
                         switch (arg) {
-                            case vararg_int(v): return printf_parse_precision(cs0, args0);
+                            case vararg_int(size, v): return size == sizeof(int) ? printf_parse_precision(cs0, args0) : none;
                             default: return none;
                         };
                 }
@@ -424,8 +459,11 @@ fixpoint option<list<format_part> > sprintf_parse_format(list<char> fcs, list<va
                                 case nil: return none;
                                 case cons(arg, args1): return
                                     switch (arg) {
-                                        case vararg_int(v): return
-                                           option_cons(format_part_int_specifier(v), sprintf_parse_format(fcs1, args1));
+                                        case vararg_int(size, v): return
+                                           size == sizeof(int) ?
+                                               option_cons(format_part_int_specifier(v), sprintf_parse_format(fcs1, args1))
+                                           :
+                                               none;
                                         default: return none;
                                     };
                             }
@@ -434,8 +472,11 @@ fixpoint option<list<format_part> > sprintf_parse_format(list<char> fcs, list<va
                                 case nil: return none;
                                 case cons(arg, args1): return
                                     switch (arg) {
-                                        case vararg_uint(v): return
-                                          option_cons(format_part_uint_specifier(v), sprintf_parse_format(fcs1, args1));
+                                        case vararg_uint(size, v): return
+                                            size == sizeof(unsigned int) ?
+                                                option_cons(format_part_uint_specifier(v), sprintf_parse_format(fcs1, args1))
+                                            :
+                                                none;
                                         default: return none;
                                     };
                             }

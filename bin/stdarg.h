@@ -22,12 +22,12 @@ void va_end(va_list ap);
 //@ terminates;
 
 int __va_arg_int(va_list *app);
-//@ requires *app |-> ?ap0 &*& va_list(ap0, ?lastParam, ?f, cons(vararg_int(?k), ?args));
+//@ requires *app |-> ?ap0 &*& va_list(ap0, ?lastParam, ?f, cons(vararg_int(sizeof(int), ?k), ?args));
 //@ ensures *app |-> ?ap1 &*& va_list(ap1, lastParam, f, args) &*& result == k &*& va_list_id(ap1) == va_list_id(ap0);
 //@ terminates;
 
 unsigned int __va_arg_uint(va_list *app);
-//@ requires *app |-> ?ap0 &*& va_list(ap0, ?lastParam, ?f, cons(vararg_uint(?k), ?args));
+//@ requires *app |-> ?ap0 &*& va_list(ap0, ?lastParam, ?f, cons(vararg_uint(sizeof(unsigned int), ?k), ?args));
 //@ ensures *app |-> ?ap1 &*& va_list(ap1, lastParam, f, args) &*& result == k &*& va_list_id(ap1) == va_list_id(ap0);
 //@ terminates;
 

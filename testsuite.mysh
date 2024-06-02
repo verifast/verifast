@@ -79,7 +79,7 @@ cd examples
       verifast -prover redux -c sqrt_with_rounding.c
     cd ..
     cd interval_arithmetic
-      verifast -prover z3v4.5 -c interval.c
+      verifast -c interval.c
     cd ..
   cd ..
   verifast_both -c -disable_overflow_check -allow_should_fail forall.c
@@ -476,6 +476,7 @@ cd tests
   verifast -c -uppercase_type_params_carry_typeid -prover z3v4.5 generic_structs.c
   verifast -c inductive_field_access.c
   verifast -c -prover z3v4.5 inductive_field_access.c
+  verifast -c -target lp64 issue516.c
   verifast -c issue513.c
   verifast -c issue511.c
   verifast -c issue507.c

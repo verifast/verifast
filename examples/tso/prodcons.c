@@ -55,19 +55,15 @@ predicate consumer(predicate(void *) p) =
 
 fixpoint void *vararg_ptr_(vararg v) {
     switch (v) {
-        case vararg_int(x): return (void *)0 + x;
-        case vararg_uint(x): return (void *)x;
         case vararg_pointer(x): return x;
-        case vararg_double(d): return (void *)0;
+        default: return (void *)0;
     }
 }
 
 fixpoint int vararg_int_(vararg v) {
     switch (v) {
-        case vararg_int(x): return x;
-        case vararg_uint(x): return 0;
-        case vararg_pointer(x): return x - (void *)0;
-        case vararg_double(d): return 0;
+        case vararg_int(size, x): return x;
+        default: return 0;
     }
 }
 
@@ -198,7 +194,7 @@ void produce(void *element)
                     close Q();
                 }
                 @*/
-                //@ produce_lemma_function_pointer_chunk(ctxt) : tso_write_ctxt<state>(&(&buffer)->contents, element, prodcons(p), state_le, prod_read_f0(contents0, prodCycle, lastWritten), (prod_write_f)(cons(vararg_pointer(element), cons(vararg_int(prodCycle), cons(vararg_pointer(lastWritten), nil)))), P, Q)(s1, s2) { call(); };
+                //@ produce_lemma_function_pointer_chunk(ctxt) : tso_write_ctxt<state>(&(&buffer)->contents, element, prodcons(p), state_le, prod_read_f0(contents0, prodCycle, lastWritten), (prod_write_f)(cons(vararg_pointer(element), cons(vararg_int(sizeof(int), prodCycle), cons(vararg_pointer(lastWritten), nil)))), P, Q)(s1, s2) { call(); };
                 //@ close P();
                 tso_write(&(&buffer)->contents, element, 1, element, prodCycle, lastWritten);
                 //@ open Q();
@@ -265,7 +261,7 @@ void *consumer()
                     close Q();
                 }
                 @*/
-                //@ produce_lemma_function_pointer_chunk(ctxt) : tso_write_ctxt<state>(&(&buffer)->contents, 0, prodcons(p), state_le, state(cycle, contents), (cons_write_f)(cons(vararg_int(cycle), nil)), P, Q)(s1, s2) { call(); };
+                //@ produce_lemma_function_pointer_chunk(ctxt) : tso_write_ctxt<state>(&(&buffer)->contents, 0, prodcons(p), state_le, state(cycle, contents), (cons_write_f)(cons(vararg_int(sizeof(int), cycle), nil)), P, Q)(s1, s2) { call(); };
                 //@ close P();
                 tso_write(&(&buffer)->contents, 0, 3, cycle);
                 //@ open Q();
