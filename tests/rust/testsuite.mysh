@@ -47,6 +47,7 @@ cd safe_abstraction
   verifast -c mutex_u32.rs
   verifast -c mutex_u32_with_lft_param.rs
   verifast -c mutex.rs
+  verifast -c rc_u32.rs
 cd ..
 end_parallel
 end_sequential
