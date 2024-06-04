@@ -445,6 +445,7 @@ let rec parse_stmt = function%parser
   ProduceFunctionPointerChunkStmt (l, ftn, fpe, targs, args, params, openBraceLoc, ss, closeBraceLoc)
 | [ parse_block_stmt as s ] -> s
 | [ parse_expr as e; (_, Kwd ";") ] -> ExprStmt e
+| [ (_, Kwd "return"); parse_expr as e; (_, Kwd ";") ] -> ReturnStmt (expr_loc e, Some e)
 and parse_match_stmt_arm = function%parser
   [ parse_expr as pat; (l, Kwd "=>"); parse_block_stmt as s ] -> SwitchStmtClause (l, pat, [s])
 and parse_produce_lemma_function_pointer_chunk_stmt_function_type_clause = function%parser

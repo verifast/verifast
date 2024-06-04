@@ -28,7 +28,7 @@ mod ptr {
 
     struct NonNull<T>;
     /*@
-    pred NonNull_own<T>(t: thread_id_t, pointer: *T;) = pointer as usize != 0;
+    pred NonNull_own<T>(t: thread_id_t, v: NonNull<T>;) = NonNull_ptr(v) as usize != 0;
     pred NonNull_share<T>(k: lifetime_t, t: thread_id_t, l: *NonNull<T>);
     fix NonNull_ptr<T>(v: NonNull<T>) -> *T;
     @*/
@@ -36,7 +36,7 @@ mod ptr {
     impl<T> NonNull<T> {
         fn from<'a>(reference: &'a mut T) -> NonNull<T>;
         //@ req thread_token(?t) &*& [?qa]lifetime_token(?a) &*& full_borrow(a, <T>.full_borrow_content(t, reference));
-        //@ ens thread_token(t) &*& [qa]lifetime_token(a) &*& NonNull_own::<T>(t, NonNull_ptr(result)) &*& NonNull_ptr(result) == reference;
+        //@ ens thread_token(t) &*& [qa]lifetime_token(a) &*& NonNull_own::<T>(t, result) &*& NonNull_ptr(result) == reference;
 
         unsafe fn new_unchecked(ptr: *mut T) -> NonNull<T>;
         //@ req ptr as usize != 0;
@@ -47,27 +47,29 @@ mod ptr {
         //@ ens [q](*self) |-> v &*& result == NonNull_ptr(v);
 
         fn as_ptr(self: NonNull<T>) -> *mut T;
-        //@ req thread_token(?t) &*& NonNull_own::<T>(t, NonNull_ptr(self));
-        //@ ens thread_token(t) &*& result == NonNull_ptr(self);
+        //@ req partial_thread_token(?t, ?m) &*& NonNull_own::<T>(t, self);
+        //@ ens partial_thread_token(t, m) &*& result == NonNull_ptr(self);
     }
 }
 
 mod boxed {
-    struct Box<T>;
+    struct Box<T, A>;
     /*@
     pred Box_own<T>(t: thread_id_t, ptr: *T) = (<T>.full_borrow_content(t, ptr))() &*& alloc_block(ptr, std::mem::size_of::<T>());
-    fix Box_ptr<T>(b: Box<T>) -> *T;
+    fix Box_ptr<T>(b: Box<T, std::alloc::Global>) -> *T;
     @*/
 
     impl<T> Box<T> {
-        fn new(x: T) -> Box<T>;
-        //@ req thread_token(?t) &*& <T>.own(t, x);
-        //@ ens thread_token(t) &*& Box_own::<T>(t, Box_ptr(result));
-
-        fn leak<'a>(x: Box<T>) -> &'a mut T;
-        //@ req thread_token(?t) &*& [?qa]lifetime_token(?a) &*& Box_own::<T>(t, Box_ptr(x));
-        /*@ ens thread_token(t) &*& [qa]lifetime_token(a) &*& full_borrow(a, <T>.full_borrow_content(t, result))
-            &*& alloc_block(result, std::mem::size_of::<T>()) &*& result == Box_ptr(x); @*/
+        fn new(x: T) -> Box<T, std::alloc::Global>;
+        //@ req true;
+        //@ ens *Box_ptr(result) |-> x;
+        // req thread_token(?t) &*& <T>.own(t, x);
+        // ens thread_token(t) &*& Box_own::<T>(t, Box_ptr(result));
+    }
+    impl<T, A> Box<T, A> {
+        fn leak<'a>(x: Box<T, std::alloc::Global>) -> &'a mut T;
+        //@ req thread_token(?t) &*& Box_own::<T>(t, Box_ptr(x));
+        //@ ens thread_token(t) &*& (<T>.full_borrow_content(t, result))() &*& alloc_block(result, std::mem::size_of::<T>()) &*& result == Box_ptr(x);
     }
 }
 
