@@ -297,7 +297,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         match xs with
           [] -> List.rev xm
         | (te, x)::xs ->
-          if List.mem_assoc x xm then static_error l "Duplicate parameter name." None;
+          if String.empty <> x && List.mem_assoc x xm then static_error l ("Duplicate parameter name '" ^ x ^ "'") None;
           if List.mem_assoc x tenv0 then static_error l ("Parameter '" ^ x ^ "' hides existing variable '" ^ x ^ "'.") None;
           let t = check_pure_type (pn,ilist) tparams1 Ghost te in
           let t =
