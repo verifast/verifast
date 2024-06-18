@@ -3,7 +3,7 @@
 //@ #include "nat.gh"
 
 /*@
-lemma_auto void is_permutation_reflexive(list<int> xs) 
+lemma_auto void is_permutation_reflexive<t>(list<t> xs) 
   requires true;
   ensures is_permutation(xs, xs) == true;
 {
