@@ -26,6 +26,14 @@ mod ptr {
     //@ req thread_token(?t) &*& (<T>.full_borrow_content(t, to_drop))();
     //@ ens thread_token(t) &*& *to_drop |-> _;
 
+    fn invalid_mut<T>(addr: usize) -> *mut T;
+    //@ req true;
+    //@ ens result as usize == addr;
+
+    fn addr<T>(ptr: *mut T) -> usize;
+    //@ req true;
+    //@ ens result == ptr as usize;
+
 }
 
 mod alloc {
