@@ -149,14 +149,6 @@ impl RcU32 {
             ret
         }
     }
-
-    // The original version in std lib is not an `unsafe` tagged method
-    unsafe fn inner<'a>(&'a self) -> &'a RcBoxU32
-    //@ req [?q](*self).ptr |-> ?nnp;
-    //@ ens [q](*self).ptr |-> nnp &*& result == std::ptr::NonNull_ptr(nnp);
-    {
-        self.ptr.as_ref()
-    }
 }
 
 impl std::ops::Deref for RcU32 {
@@ -168,7 +160,7 @@ impl std::ops::Deref for RcU32 {
             //@ assert [_]exists::<std::ptr::NonNull<RcBoxU32>>(?nnp);
             //@ open_frac_borrow(a, Rc_frac_bc(self, nnp), _q_a);
             //@ open [?qp]Rc_frac_bc(self, nnp)();
-            let r = &self.inner().value;
+            let r = &self.ptr.as_ref().value;
             //@ close [qp]Rc_frac_bc(self, nnp)();
             //@ close_frac_borrow(qp, Rc_frac_bc(self, nnp));
             //@ assert [_]exists::<lifetime_t>(?dk);
@@ -180,14 +172,14 @@ impl std::ops::Deref for RcU32 {
 }
 
 /*@
-// TODO: Prove or make VeriFast to do it automatically by `close`
-lem close_dlft_pred_(dk: lifetime_t, gid: usize) -> real;
+lem close_dlft_pred_(dk: lifetime_t, gid: usize) -> real
     req [?q]lifetime_token(dk) &*& [?q1]ghost_cell(gid, false);
-    ens [result]dlft_pred(dk)(gid, false) &*& [q - result]lifetime_token(dk) &*& [q1 - result]ghost_cell(gid, false) &*&
-        result < q &*& result < q1;
-//{
-//    if q < q1 { return q/2; } else { return q1/2; }
-//}
+    ens [result]dlft_pred(dk)(gid, false) &*& [q - result]lifetime_token(dk) &*& [q1 - result]ghost_cell(gid, false) &*& result < q &*& result < q1;
+{
+    lifetime_token_inv(dk);
+    ghost_cell_fraction_info(gid);
+    if q < q1 { return q/2; } else { return q1/2; }
+}
 @*/
 
 impl Clone for RcU32 {
@@ -197,7 +189,7 @@ impl Clone for RcU32 {
             //@ assert [_]exists::<std::ptr::NonNull<RcBoxU32>>(?nnp);
             //@ open_frac_borrow(a, Rc_frac_bc(self, nnp), _q_a/2);
             //@ open [?qp]Rc_frac_bc(self, nnp)();
-            let strong = self.inner().strong.get(); //TODO: Why do not we get pointer_within_limits req here?
+            let strong = self.ptr.as_ref().strong.get(); //TODO: Why do not we get pointer_within_limits req here?
             //@ assert [_]exists::<lifetime_t>(?dk) &*& [_]exists::<usize>(?gid) &*& [?df]exists::<real>(?frac);
             //@ open_frac_borrow(a, ticket_(dk, gid, frac), _q_a/4);
             //@ open [?qp_t]ticket_(dk, gid, frac)();
@@ -237,7 +229,7 @@ impl Drop for RcU32 {
     {
         unsafe {
             //@ open RcU32_full_borrow_content(_t, self)();
-            let strong = self.inner().strong.get();
+            let strong = self.ptr.as_ref().strong.get();
             //@ open RcU32_own(_t, ?nnp);
             //@ assert [_]exists::<lifetime_t>(?dk) &*& [_]exists::<usize>(?gid);
             //@ let ptr = std::ptr::NonNull_ptr::<RcBoxU32>(nnp);
