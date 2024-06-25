@@ -52,27 +52,6 @@ mod ptr {
     }
 }
 
-mod boxed {
-    struct Box<T, A>;
-    /*@
-    pred Box_own<T>(t: thread_id_t, ptr: *T) = (<T>.full_borrow_content(t, ptr))() &*& alloc_block(ptr, std::mem::size_of::<T>());
-    fix Box_ptr<T>(b: Box<T, std::alloc::Global>) -> *T;
-    @*/
-
-    impl<T> Box<T> {
-        fn new(x: T) -> Box<T, std::alloc::Global>;
-        //@ req true;
-        //@ ens *Box_ptr(result) |-> x;
-        // req thread_token(?t) &*& <T>.own(t, x);
-        // ens thread_token(t) &*& Box_own::<T>(t, Box_ptr(result));
-    }
-    impl<T, A> Box<T, A> {
-        fn leak<'a>(x: Box<T, std::alloc::Global>) -> &'a mut T;
-        //@ req thread_token(?t) &*& Box_own::<T>(t, Box_ptr(x));
-        //@ ens thread_token(t) &*& (<T>.full_borrow_content(t, result))() &*& alloc_block(result, std::mem::size_of::<T>()) &*& result == Box_ptr(x);
-    }
-}
-
 mod alloc {
 
     impl Layout {
