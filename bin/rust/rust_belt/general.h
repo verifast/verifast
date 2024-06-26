@@ -71,7 +71,7 @@ predicate na_inv(thread_id_t t, mask_t m, predicate() p);
 //NAInv-new-inv
 lemma void na_inv_new(thread_id_t t, mask_t m, predicate() p);
     nonghost_callers_only
-    requires p();
+    requires p() &*& !mask_is_empty(m);
     ensures [_]na_inv(t, m, p);
 //NAInv-acc
 predicate close_na_inv_token(thread_id_t t, mask_t m, predicate() p);
@@ -88,7 +88,7 @@ lemma void close_na_inv(thread_id_t t, mask_t m);
 //Mask preserving view-shifts. Mask aware versions
 //NAInv-new-inv
 lemma void na_inv_new_m(thread_id_t t, mask_t m, predicate() p);
-    requires atomic_mask(?m0) &*& mask_le(m, m0) == true &*& p();
+    requires atomic_mask(?m0) &*& mask_le(m, m0) == true &*& p() &*& !mask_is_empty(m);
     ensures atomic_mask(m0) &*& [_]na_inv(t, m, p);
 
 lemma void open_na_inv_m(thread_id_t t, mask_t m, predicate() p);
