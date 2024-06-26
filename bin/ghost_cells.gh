@@ -1,6 +1,8 @@
 #ifndef GHOST_CELLS_H
 #define GHOST_CELLS_H
 
+#include "list.gh"
+
 predicate ghost_cell<t>(int id; t value);
 
 lemma int create_ghost_cell<t>(t value);
