@@ -163,8 +163,8 @@ impl std::ops::Deref for RcU32 {
             let r = &self.ptr.as_ref().value;
             //@ close [qp]Rc_frac_bc(self, nnp)();
             //@ close_frac_borrow(qp, Rc_frac_bc(self, nnp));
-            //@ assert [_]exists::<lifetime_t>(?dk);
-            //@ frac_borrow_lft_incl(a, dk);
+            //@ assert [_]exists::<real>(?frac) &*& [_]exists::<lifetime_t>(?dk);
+            //@ frac_borrow_lft_incl(a, frac, dk);
             //@ frac_borrow_mono(dk, a, u32_full_borrow_content(_t, r));
             r
         }
@@ -189,7 +189,7 @@ impl Clone for RcU32 {
             //@ assert [_]exists::<std::ptr::NonNull<RcBoxU32>>(?nnp);
             //@ open_frac_borrow(a, Rc_frac_bc(self, nnp), _q_a/2);
             //@ open [?qp]Rc_frac_bc(self, nnp)();
-            let strong = self.ptr.as_ref().strong.get(); //TODO: Why do not we get pointer_within_limits req here?
+            let strong = self.ptr.as_ref().strong.get(); //TODO: Why do we not get pointer_within_limits req here?
             //@ assert [_]exists::<lifetime_t>(?dk) &*& [_]exists::<usize>(?gid) &*& [?df]exists::<real>(?frac);
             //@ open_frac_borrow(a, ticket_(dk, gid, frac), _q_a/4);
             //@ open [?qp_t]ticket_(dk, gid, frac)();

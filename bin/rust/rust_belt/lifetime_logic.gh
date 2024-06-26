@@ -282,8 +282,8 @@ lemma void frac_borrow_implies(lifetime_t k, predicate(;) P, predicate(;) P1);
     ensures [_]frac_borrow(k, P1) &*& is_implies(f, P, P1) &*& is_implies(f1, P1, P);
 
 // LftL-incl-fract
-lemma void frac_borrow_lft_incl(lifetime_t k, lifetime_t k1);
-    requires [_]exists(?q) &*& [_]frac_borrow(k, lifetime_token_(q, k1));
+lemma void frac_borrow_lft_incl(lifetime_t k, real q, lifetime_t k1);
+    requires [_]frac_borrow(k, lifetime_token_(q, k1));
     ensures lifetime_inclusion(k, k1) == true;
 
 // Mask preserving view shifts - mask aware versions. See the documentation about Iris view shifts in general.h
