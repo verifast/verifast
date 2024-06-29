@@ -38,14 +38,14 @@ void socket_close(struct socket *socket);
     //@ ensures emp;
     
 bool reader_read_line(struct reader *reader, struct string_buffer *buffer);
-    //@ requires reader(reader) &*& string_buffer(buffer);
-    //@ ensures reader(reader) &*& string_buffer(buffer);
+    //@ requires reader(reader) &*& string_buffer(buffer, ?cs);
+    //@ ensures reader(reader) &*& string_buffer(buffer, cs);
 void writer_write_string(struct writer *writer, char *string);
     //@ requires writer(writer) &*& [?f]string(string, ?cs);
     //@ ensures writer(writer) &*& [f]string(string, cs);
 void writer_write_string_buffer(struct writer *writer, struct string_buffer *buffer);
-    //@ requires writer(writer) &*& [?f]string_buffer(buffer);
-    //@ ensures writer(writer) &*& [f]string_buffer(buffer);
+    //@ requires writer(writer) &*& [?f]string_buffer(buffer, ?cs);
+    //@ ensures writer(writer) &*& [f]string_buffer(buffer, cs);
 
 int reader_read_nonnegative_integer(struct reader *reader);
     //@ requires reader(reader);
