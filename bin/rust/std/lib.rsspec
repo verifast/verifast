@@ -47,8 +47,8 @@ mod ptr {
         //@ ens [q](*self) |-> v &*& result == NonNull_ptr(v);
 
         fn as_ptr(self: NonNull<T>) -> *mut T;
-        //@ req partial_thread_token(?t, ?m) &*& NonNull_own::<T>(t, self);
-        //@ ens partial_thread_token(t, m) &*& result == NonNull_ptr(self);
+        //@ req NonNull_own::<T>(?t, self);
+        //@ ens result == NonNull_ptr(self);
     }
 }
 

@@ -3,6 +3,10 @@
 
 #include "stdint.h"
 //@ #include "lifetime_logic.gh"
+/* TODO: The following ghost inclusions are required for rc_u32.rs verification.
+    But since ghost inclusion is not supported in `rs` files yet they are here.
+    Remove them and support ghost inclusion in the `rs` files.
+*/
 //@ #include "counting.gh"
 //@ #include "ghost_cells.gh"
 
@@ -75,6 +79,7 @@ lemma void na_inv_new(thread_id_t t, mask_t m, predicate() p);
     ensures [_]na_inv(t, m, p);
 //NAInv-acc
 predicate close_na_inv_token(thread_id_t t, mask_t m, predicate() p);
+
 lemma void open_na_inv(thread_id_t t, mask_t m, predicate() p);
     nonghost_callers_only
     requires [_]na_inv(t, m, p) &*& partial_thread_token(t, ?m0) &*& mask_le(m, m0) == true;
@@ -90,7 +95,7 @@ lemma void close_na_inv(thread_id_t t, mask_t m);
 lemma void na_inv_new_m(thread_id_t t, mask_t m, predicate() p);
     requires atomic_mask(?m0) &*& mask_le(m, m0) == true &*& p() &*& !mask_is_empty(m);
     ensures atomic_mask(m0) &*& [_]na_inv(t, m, p);
-
+//NAInv-acc
 lemma void open_na_inv_m(thread_id_t t, mask_t m, predicate() p);
     requires atomic_mask(?am0) &*& mask_le(m, am0) == true &*& [_]na_inv(t, m, p) &*& partial_thread_token(t, ?m0) &*& mask_le(m, m0) == true;
     ensures atomic_mask(am0) &*& partial_thread_token(t, mask_diff(m0, m)) &*& p() &*& close_na_inv_token(t, m, p);

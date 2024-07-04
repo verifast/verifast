@@ -445,7 +445,7 @@ let rec parse_stmt = function%parser
   ProduceFunctionPointerChunkStmt (l, ftn, fpe, targs, args, params, openBraceLoc, ss, closeBraceLoc)
 | [ parse_block_stmt as s ] -> s
 | [ parse_expr as e; (_, Kwd ";") ] -> ExprStmt e
-| [ (_, Kwd "return"); parse_expr as e; (_, Kwd ";") ] -> ReturnStmt (expr_loc e, Some e)
+| [ (Lexed(spos, _), Kwd "return"); [%let e = opt parse_expr]; (Lexed(_, epos), Kwd ";") ] -> ReturnStmt (Lexed(spos, epos), e)
 and parse_match_stmt_arm = function%parser
   [ parse_expr as pat; (l, Kwd "=>"); parse_block_stmt as s ] -> SwitchStmtClause (l, pat, [s])
 and parse_produce_lemma_function_pointer_chunk_stmt_function_type_clause = function%parser
@@ -578,18 +578,17 @@ let parse_ghost_decl = function%parser
 | [ (_, Kwd "fix");
     [%let (l, g, tparams, ps, rt) = parse_func_header Fixpoint];
     [%let body = (function%parser
-        [ (_, Kwd ";") ] -> None
-      | [ (_, Kwd "{"); parse_expr as e; (closeBraceLoc, Kwd "}") ] ->
-          let ss =
-            match e with
-              SwitchExpr (l, e, cs, None) ->
-                let cs = cs |> List.map begin function
-                  SwitchExprClause (l, cn, xs, e) ->
-                    SwitchStmtClause (l, CallExpr (l, cn, [], [], List.map (fun x -> LitPat (Var (l, x))) xs, Static), [ReturnStmt (expr_loc e, Some e)])
-                end in
-                [SwitchStmt (l, e, cs)]
-              | _ -> [ReturnStmt (expr_loc e, Some e)]
-          in Some (ss, closeBraceLoc))]
+      [ (_, Kwd ";") ] -> None
+    | [ (_, Kwd "{"); parse_expr as e; (closeBraceLoc, Kwd "}") ] ->
+        let ss =
+          match e with
+            SwitchExpr (l, e, cs, None) ->
+              let cs = cs |> List.map begin function SwitchExprClause (l, cn, xs, e) ->
+                SwitchStmtClause (l, CallExpr (l, cn, [], [], List.map (fun x -> LitPat (Var (l, x))) xs, Static), [ReturnStmt (expr_loc e, Some e)])
+              end in
+              [SwitchStmt (l, e, cs)]
+            | _ -> [ReturnStmt (expr_loc e, Some e)]
+        in Some (ss, closeBraceLoc))]
   ] -> [Func (l, Fixpoint, tparams, rt, g, ps, false, None, None, false, body, false, [])]
 | [ (l, Kwd "fn_type"); (lftn, Ident ftn); (_, Kwd "("); [%let ftps = rep_comma parse_param]; (_, Kwd ")"); (_, Kwd "=");
     [%let unsafe = function%parser

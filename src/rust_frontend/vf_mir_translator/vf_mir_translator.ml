@@ -303,9 +303,6 @@ module Mir = struct
   let raw_type_of (ti : ty_info) =
     match ti with TyInfoBasic { vf_ty } | TyInfoGeneric { vf_ty } -> vf_ty
 
-  let generics_of (ti : ty_info) =
-    match ti with TyInfoBasic _ -> [] | TyInfoGeneric { substs } -> substs
-
   type annot = { span : Ast.loc; raw : string }
 
   type local_decl = {
@@ -490,7 +487,6 @@ module TrName = struct
   let is_from_std_lib path = String.starts_with ~prefix:"std::" path
 
   let split_def_path mod_path def_path =
-    print_endline ("Mod:" ^ mod_path ^ "--- Def:" ^ def_path);
     let open String in
     let rel_def_path =
       (* e.g. mod_path = "ptr" && def_path = "ptr::NonNull::<T>::as_ptr" *)
@@ -1283,40 +1279,15 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | Const _ -> `Const
     | Undefined _ -> `Undefined
 
-  and translate_fn_name (name : string) (substs_cpn : GenArgRd.t list)
-      (loc : Ast.loc) =
-    let pp ss =
-      List.map
-        (fun s ->
-          match s with
-          | `Type (`Adt (name, _, _)) -> name
-          | `Type (`Ref (_, mut, ty)) -> (
-              match ty with
-              | `Adt (name, _, _) ->
-                  "Ref:" ^ (if mut then "mut " else "") ^ name
-              | _ -> "Ref\\NA")
-          | _ -> "\\NA")
-        ss
-    in
-    List.iter print_endline
-      (("Name:" ^ name) :: "Generics:"
-      :: pp (List.map decode_generic_arg substs_cpn));
+  and translate_fn_name (name : string) (substs_cpn : GenArgRd.t list) =
     match (name, lazy (List.map decode_generic_arg substs_cpn)) with
     | ( "std::ops::Deref::deref",
         (lazy [ `Type (`Adt ("std::mem::ManuallyDrop", _, _)) ]) ) ->
-        Ok ("std::mem::ManuallyDrop::deref", [])
+        "std::mem::ManuallyDrop::deref"
     | ( "std::ops::DerefMut::deref_mut",
         (lazy [ `Type (`Adt ("std::mem::ManuallyDrop", _, _)) ]) ) ->
-        Ok ("std::mem::ManuallyDrop::deref_mut", [])
-    | ( "std::convert::From::from",
-        (lazy [ `Type (`Adt ("std::ptr::NonNull", _, gen_args)); _ ]) ) ->
-        List.iter print_endline (("***" :: pp gen_args) @ [ "***" ]);
-        let* (Mir.GenArgType ty_info) =
-          translate_generic_arg (List.hd substs_cpn) loc
-        in
-        let substs_new = Mir.generics_of ty_info in
-        Ok ("std::ptr::NonNull::<T>::from", substs_new)
-    | _ -> Ok (name, [])
+        "std::mem::ManuallyDrop::deref_mut"
+    | _ -> name
 
   and translate_fn_def_ty (fn_def_ty_cpn : FnDefTyRd.t) (loc : Ast.loc) =
     let open FnDefTyRd in
@@ -1324,30 +1295,28 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let id = FnDefIdRd.name_get id_cpn in
     let name = TrName.translate_def_path id in
     let substs_cpn = substs_get_list fn_def_ty_cpn in
+    let vf_ty =
+      Ast.ManifestTypeExpr
+        (loc, Ast.FuncType (translate_fn_name name substs_cpn))
+    in
     let id_mono_cpn = id_mono_get fn_def_ty_cpn in
     match OptionRd.get id_mono_cpn with
     | Nothing ->
         if not (ListAux.is_empty substs_cpn) then
           Error (`TrFnDefTy "Simple function type with generic arg(s)")
-        else
-          let vf_ty = Ast.ManifestTypeExpr (loc, Ast.FuncType name) in
-          Ok (Mir.TyInfoBasic { vf_ty; interp = RustBelt.emp_ty_interp loc })
+        else Ok (Mir.TyInfoBasic { vf_ty; interp = RustBelt.emp_ty_interp loc })
     | Something ptr_cpn ->
         if ListAux.is_empty substs_cpn then
           Error (`TrFnDefTy "Generic function type without generic arg(s)")
         else
-          let* name, substs_new = translate_fn_name name substs_cpn loc in
-          let vf_ty = Ast.ManifestTypeExpr (loc, Ast.FuncType name) in
           let id_mono_cpn = VfMirStub.Reader.of_pointer ptr_cpn in
           let id_mono = FnDefIdRd.name_get id_mono_cpn in
           let name_mono = TrName.translate_def_path id_mono in
           let vf_ty_mono = Ast.ManifestTypeExpr (loc, Ast.FuncType name_mono) in
           let* substs =
-            if not (ListAux.is_empty substs_new) then Ok substs_new
-            else
-              ListAux.try_map
-                (fun subst_cpn -> translate_generic_arg subst_cpn loc)
-                substs_cpn
+            ListAux.try_map
+              (fun subst_cpn -> translate_generic_arg subst_cpn loc)
+              substs_cpn
           in
           Ok
             (Mir.TyInfoGeneric

@@ -247,6 +247,7 @@ impl Drop for RcU32 {
                 //@ open u32_full_borrow_content(_t, &(*ptr).value)();
                 //@ open_struct(ptr);
                 // No need to drop a u32
+                //@ close std::ptr::NonNull_own::<RcBoxU32>(_t, nnp);
                 std::alloc::dealloc(
                     self.ptr.as_ptr() as *mut u8,
                     std::alloc::Layout::new::<RcBoxU32>(),
