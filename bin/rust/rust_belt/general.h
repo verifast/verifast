@@ -3,6 +3,12 @@
 
 #include "stdint.h"
 //@ #include "lifetime_logic.gh"
+/* TODO: The following ghost inclusions are required for rc_u32.rs verification.
+    But since ghost inclusion is not supported in `rs` files yet they are here.
+    Remove them and support ghost inclusion in the `rs` files.
+*/
+//@ #include "counting.gh"
+//@ #include "ghost_cells.gh"
 
 /*
 Iris View Shifts
@@ -64,6 +70,39 @@ lemma void perform_atomically();
 predicate_ctor simple_share(fixpoint(thread_id_t, void *, predicate(;)) frac_borrow_content)(lifetime_t k, thread_id_t t, void *l) =
     frac_borrow(k, frac_borrow_content(t, l));
 predicate_ctor shared_ref_own(predicate(lifetime_t, thread_id_t, void *) pointee_shr, lifetime_t k)(thread_id_t t, void *l) = [_]pointee_shr(k, t, l);
+
+predicate na_inv(thread_id_t t, mask_t m, predicate() p);
+//NAInv-new-inv
+lemma void na_inv_new(thread_id_t t, mask_t m, predicate() p);
+    nonghost_callers_only
+    requires p() &*& !mask_is_empty(m);
+    ensures [_]na_inv(t, m, p);
+//NAInv-acc
+predicate close_na_inv_token(thread_id_t t, mask_t m, predicate() p);
+
+lemma void open_na_inv(thread_id_t t, mask_t m, predicate() p);
+    nonghost_callers_only
+    requires [_]na_inv(t, m, p) &*& partial_thread_token(t, ?m0) &*& mask_le(m, m0) == true;
+    ensures partial_thread_token(t, mask_diff(m0, m)) &*& p() &*& close_na_inv_token(t, m, p);
+
+lemma void close_na_inv(thread_id_t t, mask_t m);
+    nonghost_callers_only
+    requires close_na_inv_token(t, m, ?p) &*& p();
+    ensures partial_thread_token(t, m);
+
+//Mask preserving view-shifts. Mask aware versions
+//NAInv-new-inv
+lemma void na_inv_new_m(thread_id_t t, mask_t m, predicate() p);
+    requires atomic_mask(?m0) &*& mask_le(m, m0) == true &*& p() &*& !mask_is_empty(m);
+    ensures atomic_mask(m0) &*& [_]na_inv(t, m, p);
+//NAInv-acc
+lemma void open_na_inv_m(thread_id_t t, mask_t m, predicate() p);
+    requires atomic_mask(?am0) &*& mask_le(m, am0) == true &*& [_]na_inv(t, m, p) &*& partial_thread_token(t, ?m0) &*& mask_le(m, m0) == true;
+    ensures atomic_mask(am0) &*& partial_thread_token(t, mask_diff(m0, m)) &*& p() &*& close_na_inv_token(t, m, p);
+
+lemma void close_na_inv_m(thread_id_t t, mask_t m);
+    requires atomic_mask(?am0) &*& mask_le(m, am0) == true &*& close_na_inv_token(t, m, ?p) &*& p();
+    ensures atomic_mask(am0) &*& partial_thread_token(t, m);
 
 predicate bool_own(thread_id_t t, bool v;) = true;
 predicate char_own(thread_id_t t, uint32_t v;) = 0 <= v && v <= 0xD7FF || 0xE000 <= v && v <= 0x10FFFF;

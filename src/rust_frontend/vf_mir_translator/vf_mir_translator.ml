@@ -4402,6 +4402,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
            if of_trait = "std::ops::Drop" then (
              assert (items = [ "drop" ]);
              [] (* drop is safe *))
+           else if of_trait = "std::ops::Deref" then (
+             assert (items = [ "Target"; "deref" ]);
+             [] (* Deref is safe *))
            else if of_trait = "std::clone::Clone" then (
              assert (items = [ "clone" ]);
              []
