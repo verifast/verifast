@@ -182,8 +182,8 @@ lemma void share_mono<T>(lifetime_t k, lifetime_t k1, thread_id_t t, T *l);
 
 lemma void share_full_borrow<T>(lifetime_t k, thread_id_t t, void *l);
     nonghost_callers_only
-    requires type_interp<T>() &*& full_borrow(k, (<T>.full_borrow_content)(t, l)) &*& [?q]lifetime_token(k);
-    ensures type_interp<T>() &*& [_](<T>.share)(k, t, l) &*& [q]lifetime_token(k);
+    requires full_borrow(k, (<T>.full_borrow_content)(t, l)) &*& [?q]lifetime_token(k);
+    ensures [_](<T>.share)(k, t, l) &*& [q]lifetime_token(k);
 
 lemma void share_full_borrow_m<T>(lifetime_t k, thread_id_t t, void *l);
     requires type_interp<T>() &*& atomic_mask(?mask) &*& mask_le(Nlft, mask) == true &*& full_borrow(k, (<T>.full_borrow_content)(t, l)) &*& [?q]lifetime_token(k);

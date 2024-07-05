@@ -2101,7 +2101,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         Some pointee_pred_symb ->
         let pointee_chunk_to_field_chunk__rule l h typeid_env wanted_targs terms_are_well_typed wanted_coef wanted_coefpat wanted_indices_and_input_ts cont =
           let [tp] = wanted_indices_and_input_ts in
-          let targ_typeids = List.map (typeid_of l) wanted_targs in
+          let targ_typeids = List.map (typeid_of_core l typeid_env) wanted_targs in
           let structTypeid = ctxt#mk_app structTypeidFunc targ_typeids in
           let offset = ctxt#mk_app offsetFunc targ_typeids in
           let field_address = mk_field_ptr tp structTypeid offset in

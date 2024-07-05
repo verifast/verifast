@@ -48,7 +48,7 @@ mod ptr {
         //@ ens [q](*self) |-> v &*& result == NonNull_ptr(v);
 
         fn as_ptr(self: NonNull<T>) -> *mut T;
-        //@ req NonNull_own::<T>(?t, self);
+        //@ req true;
         //@ ens result == NonNull_ptr(self);
     }
 }
