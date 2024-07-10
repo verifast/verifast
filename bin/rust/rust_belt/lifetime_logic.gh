@@ -276,11 +276,6 @@ lemma void close_frac_borrow_atomic(predicate(;) P, lifetime_t k);
     requires atomic_mask(?mask) &*& close_frac_borrow_token_atomic(?b, ?q, P, k) &*& (b ? [q]P() : true);
     ensures atomic_mask(mask_union(mask, Nlft));
 
-// frac_bor_iff in RustBelt repo
-lemma void frac_borrow_implies(lifetime_t k, predicate(;) P, predicate(;) P1);
-    requires [_]frac_borrow(k, P) &*& is_implies(?f, P, P1) &*& is_implies(?f1, P1, P);
-    ensures [_]frac_borrow(k, P1) &*& is_implies(f, P, P1) &*& is_implies(f1, P1, P);
-
 // LftL-incl-fract
 lemma void frac_borrow_lft_incl(lifetime_t k, real q, lifetime_t k1);
     requires [_]frac_borrow(k, lifetime_token_(q, k1));
