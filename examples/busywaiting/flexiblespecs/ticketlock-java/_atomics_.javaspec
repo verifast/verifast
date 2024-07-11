@@ -77,8 +77,8 @@ typedef lemma void AtomicLong_compareAndSet_ghost_op(AtomicLong l, long expected
   ensures atomic_spaces({}) &*& is_AtomicLong_compareAndSet_op(op, l, expected, desired, P, Q) &*& Q(?result) &*& post(result);
 
 typedef lemma void AtomicLong_set_op(AtomicLong l, long newValue, predicate() P, predicate() Q)();
-  requires l.state(_) &*& P();
-  ensures l.state(newValue) &*& Q();
+  requires [?f]l.state(?oldValue) &*& f == 1 || newValue == oldValue &*& P();
+  ensures [f]l.state(newValue) &*& Q();
 
 typedef lemma void AtomicLong_set_ghost_op(AtomicLong l, long newValue, predicate() pre, predicate() post)(AtomicLong_set_op *op);
   requires atomic_spaces({}) &*& is_AtomicLong_set_op(op, l, newValue, ?P, ?Q) &*& P() &*& pre();
