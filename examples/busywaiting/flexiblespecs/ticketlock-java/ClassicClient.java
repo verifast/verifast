@@ -8,15 +8,23 @@ final class Flag {
 
 //@ predicate_ctor Flag_valid(Flag flag)() = flag.value |-> ?v &*& v == 0 || v == 1;
 
+/*@
+
+predicate_family_instance Runnable_pre(Flipper.class)(Flipper flipper, int threadId) =
+    obs(threadId, _, {}) &*&
+    [_]flipper.flag |-> ?flag_ &*& [_]flipper.lock |-> ?lock_ &*& [_]lock_.valid(L, Flag_valid(flag_));
+
+@*/
+
 final class Flipper implements Runnable {
   Flag flag;
   TicketlockClassic lock;
-  //@ predicate valid() = [_]flag |-> ?flag_ &*& [_]lock |-> ?lock_ &*& [_]lock_.valid(L, Flag_valid(flag_));
   public void run()
-  //@ requires obs(currentThread, ?p, {}) &*& valid();
-  //@ ensures obs(currentThread, p, {});
+  //@ requires Runnable_pre(Flipper.class)(this, currentThread);
+  //@ ensures obs(currentThread, _, {});
   //@ terminates;
   {
+    //@ open Runnable_pre(Flipper.class)(this, currentThread);
     lock.acquire();
     //@ open Flag_valid(flag)();
     flag.value = 1 - flag.value;
@@ -28,7 +36,7 @@ final class Flipper implements Runnable {
 final class ClassicClient {
   public static void main(String[] args)
   //@ requires obs(currentThread, {}, {});
-  //@ ensures obs(currentThread, {}, {});
+  //@ ensures obs(currentThread, _, {});
   //@ terminates;
   {
     Flag flag = new Flag();
@@ -41,9 +49,43 @@ final class ClassicClient {
     //@ leak flipper.flag |-> _ &*& flipper.lock |-> _;
     //@ produce_call_below_perm_();
     //@ call_below_perm__to_call_perm_(Flipper.class);
-    new Thread(flipper).start();
+    {
+      /*@
+      predicate pre() =
+        [_]flipper.flag |-> ?flag_ &*& [_]flipper.lock |-> ?lock_ &*& [_]lock_.valid(L, Flag_valid(flag_));
+      predicate post() =
+        obs(currentThread, {Forker}, {});
+      @*/
+      /*@
+      produce_lemma_function_pointer_chunk Thread_start_ghost_op(currentThread, {}, {}, {}, flipper, pre, post)(forkeeId) {
+        open pre();
+        close post();
+        close Runnable_pre(Flipper.class)(flipper, forkeeId);
+      };
+      @*/
+      //@ close pre();
+      new Thread(flipper).start();
+      //@ open post();
+    }
     //@ produce_call_below_perm_();
     //@ call_below_perm__to_call_perm_(Flipper.class);
-    new Thread(flipper).start();
+    {
+      /*@
+      predicate pre() =
+        [_]flipper.flag |-> ?flag_ &*& [_]flipper.lock |-> ?lock_ &*& [_]lock_.valid(L, Flag_valid(flag_));
+      predicate post() =
+        obs(currentThread, {Forker, Forker}, {});
+      @*/
+      /*@
+      produce_lemma_function_pointer_chunk Thread_start_ghost_op(currentThread, {Forker}, {}, {}, flipper, pre, post)(forkeeId) {
+        open pre();
+        close post();
+        close Runnable_pre(Flipper.class)(flipper, forkeeId);
+      };
+      @*/
+      //@ close pre();
+      new Thread(flipper).start();
+      //@ open post();
+    }
   }
 }

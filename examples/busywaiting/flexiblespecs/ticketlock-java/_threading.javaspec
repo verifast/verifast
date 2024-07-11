@@ -1,10 +1,23 @@
+/*@
+
+predicate_family Runnable_pre(Class c)(Runnable runnable, int threadId);
+
+@*/
+
 interface Runnable {
-  //@ predicate valid();
   public void run();
-  //@ requires obs(currentThread, ?p, {}) &*& valid();
-  //@ ensures obs(currentThread, p, {});
+  //@ requires Runnable_pre(this.getClass())(this, currentThread);
+  //@ ensures obs(currentThread, _, {});
   //@ terminates;
 }
+
+/*@
+
+typedef lemma void Thread_start_ghost_op(int forkerId, list<pathcomp> forkerPhase, list<pair<void *, level> > obs0, list<pair<void *, level> > forkerObs, Runnable runnable, predicate() pre, predicate() post)(int forkeeId);
+  requires obs(forkerId, cons(Forker, forkerPhase), forkerObs) &*& obs(forkeeId, cons(Forkee, forkerPhase), remove_all(obs0, forkerObs)) &*& pre();
+  ensures post() &*& Runnable_pre(runnable.getClass())(runnable, forkeeId);
+
+@*/
 
 final class Thread {
 
@@ -16,8 +29,14 @@ final class Thread {
   //@ terminates;
 
   public void start();
-  //@ requires valid(?runnable) &*& runnable.valid() &*& call_perm_(currentThread, runnable.getClass());
-  //@ ensures true;
+  /*@
+  requires
+    obs(currentThread, ?phase, ?obs) &*&
+    valid(?runnable) &*& is_Thread_start_ghost_op(_, currentThread, phase, obs, ?forkerObs, runnable, ?pre, ?post) &*&
+    length(remove_all(forkerObs, obs)) == length(obs) - length(forkerObs) &*&
+    pre() &*& call_perm_(currentThread, runnable.getClass());
+  @*/
+  //@ ensures post();
   //@ terminates;
 
 }
