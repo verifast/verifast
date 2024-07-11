@@ -1,0 +1,74 @@
+// tab_size:2
+
+// Justus Fasse and Bart Jacobs. Expressive modular verification of termination for busy-waiting programs. 2023.
+
+/*@
+
+fixpoint int Spinlock_level_nb_dims() { return 0; } // TODO: Hide this definition. VeriFast does not yet support hiding fixpoint bodies.
+
+typedef lemma void Spinlock_sep(Spinlock l, list<int> ns, predicate() pre, predicate(list<pair<list<int>, predicate()> > spaces, boolean held) R)();
+  requires atomic_spaces(?spaces) &*& forall(map(fst, spaces), (is_prefix_of)(ns)) == true &*& pre();
+  ensures l.state(?held) &*& R(spaces, held);
+
+typedef lemma void Spinlock_wait_ghost_op(Spinlock l, predicate(list<pair<list<int>, predicate()> > spaces, boolean held) R, int callerThread, list<pathcomp> p, level level, predicate() waitInv)();
+  requires
+    l.state(true) &*& R(?spaces, true) &*&
+    obs(callerThread, p, ?obs) &*& forall(map(snd, obs), (level_lt)(level)) == true;
+  ensures
+    obs(callerThread, p, obs) &*&
+    atomic_spaces(spaces) &*&
+    call_perm_(callerThread, Spinlock.class) &*& waitInv();
+
+typedef lemma void Spinlock_acquire_ghost_op(Spinlock l, predicate(list<pair<list<int>, predicate()> > spaces, boolean held) R, list<pathcomp> p, list<pair<void *, level> > obs, predicate() post, int callerThread)();
+  requires
+    l.state(true) &*& R(?spaces, false) &*&
+    obs(callerThread, p, obs);
+  ensures
+    atomic_spaces(spaces) &*& post();
+
+typedef lemma void Spinlock_release_ghost_op(Spinlock l, predicate(list<pair<list<int>, predicate()> > spaces, boolean held) R, predicate(list<pathcomp> phase, list<pair<void *, level> > obs) post, int callerThread)();
+  requires
+    l.state(false) &*& R(?spaces, true);
+  ensures
+    atomic_spaces(spaces) &*& obs(callerThread, ?p, ?obs) &*& post(p, obs);
+
+@*/
+
+public final class Spinlock {
+
+  //@ predicate valid(list<int> ns, level level);  
+
+  //@ predicate held();
+  
+  //@ predicate state(boolean held);
+
+  public Spinlock();
+  //@ requires exists<pair<list<int>, level> >(pair(?ns, ?level)) &*& Spinlock_level_nb_dims <= level_subspace_nb_dims(level);
+  //@ ensures [_]valid(ns, level) &*& state(false);
+  //@ terminates;
+
+  public void acquire();
+  /*@
+  requires
+    [_]valid(?ns, ?level) &*&
+    obs(currentThread, ?p, ?obs) &*& forall(map(snd, obs), (level_subspace_lt)(level)) == true &*&
+    is_Spinlock_sep(?sep, this, ns, ?waitInv, ?R) &*&
+    is_Spinlock_wait_ghost_op(?wop, this, R, currentThread, p, level, waitInv) &*&
+    is_Spinlock_acquire_ghost_op(?aop, this, R, p, obs, ?post, currentThread) &*&
+    waitInv();
+  @*/
+  //@ ensures held() &*& post();
+  //@ terminates;
+
+  public void release();
+  /*@
+  requires
+    [_]valid(?ns, ?level) &*&
+    held() &*&
+    is_Spinlock_sep(?sep, this, ns, ?pre, ?R) &*&
+    is_Spinlock_release_ghost_op(?ghop, this, R, ?post, currentThread) &*& pre();
+  @*/
+  //@ ensures post(?p, ?obs) &*& obs(currentThread, p, obs);
+  //@ terminates;
+
+}

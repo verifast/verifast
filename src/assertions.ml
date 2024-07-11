@@ -222,7 +222,46 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     end $. fun () ->
     iter h0
 
-  let produce_chunk h g_symb targs coef inputParamCount ts size cont =
+    (** [produce_static_field h0 fghost frange symb tcoef tv cont] *)
+    let produce_static_field h0 fghost frange symb tcoef tv cont =
+      if fghost = Real then begin
+        assume_bounds tv frange
+      end;
+      (* automatic generation of t1 != t2 if t1.f |-> _ &*& t2.f |-> _ *)
+      begin fun cont ->
+        if tcoef != real_unit && tcoef != real_half then
+          assume (ctxt#mk_real_lt real_zero tcoef) cont
+        else
+          cont()
+      end $. fun () ->
+      let pred_symb = (symb, true) in
+      let rec iter h =
+        match h with
+          [] ->
+          let chunk = Chunk ((symb, true), [], tcoef, [tv], None) in
+          cont (chunk::h0)
+        | Chunk (g, [], tcoef', [tv'], _) as chunk::h when predname_eq g pred_symb ->
+          if tcoef == real_unit || tcoef' == real_unit then
+            SymExecSuccess
+          else begin
+            let cont coef = 
+              let cont new_chunk = cont (new_chunk::List.filter (fun ch -> ch != chunk) h0) in
+              assume (ctxt#mk_eq tv tv') $. fun () ->
+              cont (Chunk ((symb, true), [], coef, [tv'], None))
+            in
+            if tcoef == real_half && tcoef' == real_half then cont real_unit else
+            if is_dummy_frac_term tcoef then
+              cont tcoef'
+            else if is_dummy_frac_term tcoef' then
+              cont tcoef
+            else
+              let newcoef = (ctxt#mk_real_add tcoef tcoef') in (assume (ctxt#mk_real_le newcoef real_unit) $. fun () -> cont newcoef)
+          end
+        | _::h -> iter h
+      in
+      iter h0
+  
+    let produce_chunk h g_symb targs coef inputParamCount ts size cont =
     if inputParamCount = None || coef == real_unit then
       cont (Chunk (g_symb, targs, coef, ts, size)::h)
     else
@@ -336,7 +375,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       if fstatic then
         let (_, (_, _, _, _, symb, _, _)), p__opt = List.assoc (fparent, fname) field_pred_map in
         evalpat (fghost = Ghost) ghostenv env rhs tp tp $. fun ghostenv env t ->
-        produce_chunk h (symb, true) [] coef (Some 0) [t] None $. fun h ->
+        produce_static_field h fghost frange symb coef t $. fun h ->
         cont h ghostenv env
       else
         let te = ev e in

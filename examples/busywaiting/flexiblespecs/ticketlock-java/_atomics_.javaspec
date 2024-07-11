@@ -68,6 +68,22 @@ typedef lemma void AtomicLong_getAndIncrement_ghost_op(AtomicLong l, predicate()
   requires atomic_spaces({}) &*& is_AtomicLong_getAndIncrement_op(op, l, ?P, ?Q) &*& P() &*& pre();
   ensures atomic_spaces({}) &*& is_AtomicLong_getAndIncrement_op(op, l, P, Q) &*& Q(?value) &*& post(value);
 
+typedef lemma void AtomicLong_compareAndSet_op(AtomicLong l, long expected, long desired, predicate() P, predicate(boolean) Q)();
+  requires [?f]l.state(?value) &*& P() &*& value != expected || f == 1;
+  ensures [f]l.state(value == expected ? desired : value) &*& Q(value == expected);
+
+typedef lemma void AtomicLong_compareAndSet_ghost_op(AtomicLong l, long expected, long desired, predicate() pre, predicate(boolean) post)(AtomicLong_compareAndSet_op *op);
+  requires atomic_spaces({}) &*& is_AtomicLong_compareAndSet_op(op, l, expected, desired, ?P, ?Q) &*& P() &*& pre();
+  ensures atomic_spaces({}) &*& is_AtomicLong_compareAndSet_op(op, l, expected, desired, P, Q) &*& Q(?result) &*& post(result);
+
+typedef lemma void AtomicLong_set_op(AtomicLong l, long newValue, predicate() P, predicate() Q)();
+  requires l.state(_) &*& P();
+  ensures l.state(newValue) &*& Q();
+
+typedef lemma void AtomicLong_set_ghost_op(AtomicLong l, long newValue, predicate() pre, predicate() post)(AtomicLong_set_op *op);
+  requires atomic_spaces({}) &*& is_AtomicLong_set_op(op, l, newValue, ?P, ?Q) &*& P() &*& pre();
+  ensures atomic_spaces({}) &*& is_AtomicLong_set_op(op, l, newValue, P, Q) &*& Q() &*& post();
+
 @*/
 
 final class AtomicLong {
@@ -77,6 +93,11 @@ final class AtomicLong {
   public AtomicLong();
   //@ requires true;
   //@ ensures state(0);
+  //@ terminates;
+
+  public AtomicLong(long value);
+  //@ requires true;
+  //@ ensures state(value);
   //@ terminates;
 
   public long get();
@@ -92,6 +113,16 @@ final class AtomicLong {
   public long getAndIncrement();
   //@ requires is_AtomicLong_getAndIncrement_ghost_op(?ghop, this, ?pre, ?post) &*& pre();
   //@ ensures post(result);
+  //@ terminates;
+  
+  public boolean compareAndSet(long expected, long desired);
+  //@ requires is_AtomicLong_compareAndSet_ghost_op(?ghop, this, expected, desired, ?pre, ?post) &*& pre();
+  //@ ensures post(result);
+  //@ terminates;
+  
+  public void set(long newValue);
+  //@ requires is_AtomicLong_set_ghost_op(?ghop, this, newValue, ?pre, ?post) &*& pre();
+  //@ ensures post();
   //@ terminates;
 
 }

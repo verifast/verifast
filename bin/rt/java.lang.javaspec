@@ -363,6 +363,11 @@ public class System {
         //@ requires arraycopy_pre(?type, ?overlap, ?frac, src, srcPos, length, ?elems, dest, destPos);
         //@ ensures arraycopy_post(type, overlap, frac, src, srcPos, length, elems, dest, destPos);
     
+    public static void exit(int exitCode); // We assume it is always safe to exit with a nonzero exit code.
+        //@ requires exitCode != 0;
+        //@ ensures false;
+        //@ terminates;
+    
 }
 
 //@ fixpoint list<char> charsOfString(String s);
