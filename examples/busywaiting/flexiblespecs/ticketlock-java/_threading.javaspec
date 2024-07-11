@@ -14,7 +14,7 @@ interface Runnable {
 /*@
 
 typedef lemma void Thread_start_ghost_op(int forkerId, list<pathcomp> forkerPhase, list<pair<void *, level> > obs0, list<pair<void *, level> > forkerObs, Runnable runnable, predicate() pre, predicate() post)(int forkeeId);
-  requires obs(forkerId, cons(Forker, forkerPhase), forkerObs) &*& obs(forkeeId, cons(Forkee, forkerPhase), remove_all(obs0, forkerObs)) &*& pre();
+  requires obs(forkerId, cons(Forker, forkerPhase), forkerObs) &*& obs(forkeeId, cons(Forkee, forkerPhase), remove_all(forkerObs, obs0)) &*& pre();
   ensures post() &*& Runnable_pre(runnable.getClass())(runnable, forkeeId);
 
 @*/

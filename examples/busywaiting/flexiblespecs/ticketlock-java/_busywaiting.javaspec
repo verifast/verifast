@@ -33,6 +33,17 @@ lemma void is_ancestor_of_trans(list<pathcomp> p1, list<pathcomp> p2, list<pathc
     }
 }
 
+lemma void is_ancestor_of_nil(list<pathcomp> p)
+    requires true;
+    ensures is_ancestor_of({}, p) == true;
+{
+    switch (p) {
+        case nil:
+        case cons(pc, p0):
+            is_ancestor_of_nil(p0);
+    }
+}
+
 fixpoint boolean lex0_lt(int max_length, list<int> l1, list<int> l2) {
   switch (l1) {
     case nil: return max_length > 0 && l2 != nil;
