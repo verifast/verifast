@@ -1,192 +1,124 @@
-#![feature(strict_provenance)]
+/* TODO: To spec-out `AtomicUsize` we need its methods to have an `Ordering` parameter. That leads to appearance of Aggregates of `Ordering`
+constructors to MIR of this file. This means we might need to include the definitions of external ADTs to our data generated from the exporter.
+For now the exporter only encodes localy defined ADTs. */
 
 use std::process::abort;
+use std::ptr::NonNull;
 
-pub mod ptr {
-    pub struct NonNull<T> {
-        pointer: *const T,
-    }
-
-    impl<T> NonNull<T> {
-        pub fn from<'a>(reference: &'a mut T) -> Self {
-            NonNull {
-                pointer: reference as *mut T,
-            }
-        }
-
-        pub unsafe fn new_unchecked(ptr: *mut T) -> Self {
-            NonNull { pointer: ptr }
-        }
-
-        pub unsafe fn as_ref<'a>(&'a self) -> &'a T {
-            &*self.pointer
-        }
-
-        pub fn as_ptr(self) -> *mut T {
-            self.pointer as *mut T
-        }
-    }
-
-    impl<T> Copy for NonNull<T> {}
-    impl<T> Clone for NonNull<T> {
-        fn clone<'a>(&'a self) -> Self {
-            *self
-        }
-    }
-}
-
-pub mod boxed {
-    use abort;
-    pub struct Box<T> {
-        ptr: *mut T,
-    }
-
-    impl<T> Box<T> {
-        pub fn new(x: T) -> Self {
-            abort();
-        }
-
-        pub fn leak<'a>(x: Self) -> &'a mut T {
-            abort();
-        }
-    }
-}
 pub mod sync {
     pub mod atomic {
         use abort;
         pub struct AtomicUsize {
             v: usize,
         }
-
+        /*@
+        pred AtomicUsize(p: *AtomicUsize; v: usize);
+        pred AtomicUsize_own(t: thread_id_t, v: usize);
+        pred AtomicUsize_share(k: lifetime_t, t: thread_id_t, l: *AtomicUsize);
+        @*/
         impl AtomicUsize {
-            pub fn new(v: usize) -> AtomicUsize {
+            pub fn new(v: usize) -> AtomicUsize
+            //@ req thread_token(?t);
+            //@ ens thread_token(t) &*& AtomicUsize_own(t, result.v) &*& result.v == v;
+            {
                 abort();
             }
 
-            pub fn load_seq_cst<'a>(&'a self) -> usize {
+            /*@
+            lem_type AUs_load_seq_cst(self: *AtomicUsize, Pre_op_token: pred(), Post_op_token: pred(usize)) = lem();
+                req AtomicUsize(self, ?v) &*& Pre_op_token();
+                ens AtomicUsize(self, v) &*& Post_op_token(v);
+            lem_type AUs_load_seq_cst_ghost(self: *AtomicUsize, Pre: pred(), Post: pred(usize)) = lem();
+                req atomic_mask(MaskTop) &*& is_AUs_load_seq_cst(?op, self, ?Pre_op_token, ?Post_op_token) &*& Pre_op_token() &*& Pre() &*& AtomicUsize(self, ?v);
+                ens atomic_mask(MaskTop) &*& is_AUs_load_seq_cst(op, self, Pre_op_token, Post_op_token) &*& Post_op_token(?res) &*& Post(res) &*& AtomicUsize(self, v);
+            @*/
+            // TODO: The `unsafe` keyword should be removed from following methods
+            pub unsafe fn load_seq_cst<'a>(&'a self) -> usize
+            //@ req thread_token(?t) &*& [?qa]lifetime_token(?a) &*& [_]AtomicUsize_share(a, t, self) &*& is_AUs_load_seq_cst_ghost(?ghop, self, ?Pre, ?Post) &*& Pre();
+            //@ ens thread_token(t) &*& [qa]lifetime_token(a) &*& Post(result);
+            {
                 abort();
             }
 
-            pub fn fetch_add_seq_cst<'a>(&'a self, val: usize) -> usize {
+            /*@
+            // TODO: What about OVF
+            lem_type AUs_fetch_add_seq_cst(self: *AtomicUsize, Pre_op_token: pred(), Post_op_token: pred(usize)) = lem();
+                req AtomicUsize(self, ?old) &*& Pre_op_token();
+                ens AtomicUsize(self, old + 1) &*& Post_op_token(old);
+            lem_type AUs_fetch_add_seq_cst_ghost(self: *AtomicUsize, Pre: pred(), Post: pred(usize)) = lem();
+                req atomic_mask(MaskTop) &*& is_AUs_fetch_add_seq_cst(?op, self, ?Pre_op_token, ?Post_op_token) &*& Pre_op_token() &*& Pre() &*& AtomicUsize(self, ?old);
+                ens atomic_mask(MaskTop) &*& is_AUs_fetch_add_seq_cst(op, self, Pre_op_token, Post_op_token) &*& Post_op_token(old) &*& Post(old) &*& AtomicUsize(self, old + 1);
+            @*/
+            pub unsafe fn fetch_add_seq_cst<'a>(&'a self, val: usize) -> usize
+            //@ req thread_token(?t) &*& [?qa]lifetime_token(?a) &*& [_]AtomicUsize_share(a, t, self) &*& is_AUs_fetch_add_seq_cst_ghost(?ghop, self, ?Pre, ?Post) &*& Pre();
+            //@ ens thread_token(t) &*& [qa]lifetime_token(a) &*& Post(result);
+            {
                 abort();
             }
 
-            pub fn fetch_sub_seq_cst<'a>(&'a self, val: usize) -> usize {
-                abort();
-            }
-
-            pub fn compare_exchange_seq_cst<'a>(
-                &'a self,
-                current: usize,
-                new: usize,
-            ) -> Result<usize, usize> {
-                abort();
-            }
-
-            pub fn fetch_update_seq_cst<'a, F>(&'a self, mut f: F) -> Result<usize, usize>
-            where
-                F: FnMut(usize) -> Option<usize>,
+            /*@
+            // TODO: What about UNF
+            lem_type AUs_fetch_sub_seq_cst(self: *AtomicUsize, Pre_op_token: pred(), Post_op_token: pred(usize)) = lem();
+                req AtomicUsize(self, ?old) &*& Pre_op_token();
+                ens AtomicUsize(self, old - 1) &*& Post_op_token(old);
+            lem_type AUs_fetch_sub_seq_cst_ghost(self: *AtomicUsize, Pre: pred(), Post: pred(usize)) = lem();
+                req atomic_mask(MaskTop) &*& is_AUs_fetch_sub_seq_cst(?op, self, ?Pre_op_token, ?Post_op_token) &*& Pre_op_token() &*& Pre() &*& AtomicUsize(self, ?old);
+                ens atomic_mask(MaskTop) &*& is_AUs_fetch_sub_seq_cst(op, self, Pre_op_token, Post_op_token) &*& Post_op_token(old) &*& Post(old) &*& AtomicUsize(self, old - 1);
+            @*/
+            pub unsafe fn fetch_sub_seq_cst<'a>(&'a self, val: usize) -> usize
+            //@ req thread_token(?t) &*& [?qa]lifetime_token(?a) &*& [_]AtomicUsize_share(a, t, self) &*& is_AUs_fetch_sub_seq_cst_ghost(?ghop, self, ?Pre, ?Post) &*& Pre();
+            //@ ens thread_token(t) &*& [qa]lifetime_token(a) &*& Post(result);
             {
                 abort();
             }
         }
     }
 }
-
-use ptr::NonNull;
-use sync::atomic::AtomicUsize;
+/*
+use atomic::AtomicUsize;
 
 //TODO: This will not be necessary in an approximation which ignores counter ovf possibility
 const MAX_REFCOUNT: usize = (isize::MAX) as usize;
-
-fn is_dangling<T>(ptr: *mut T) -> bool {
-    //TODO: I am not sure why is the cast. Might be related to alignment
-    (ptr as *mut ()).addr() == usize::MAX
-}
 
 pub struct ArcU32 {
     ptr: NonNull<ArcInnerU32>,
 }
 
+//TODO: check if `unsafe` is indeed necessary for `Send` and `Sync` marker traits
 unsafe impl Send for ArcU32 {}
 unsafe impl Sync for ArcU32 {}
 
-pub struct WeakU32 {
-    ptr: NonNull<ArcInnerU32>,
-}
-
-unsafe impl Send for WeakU32 {}
-unsafe impl Sync for WeakU32 {}
-
 struct ArcInnerU32 {
     strong: AtomicUsize,
-    weak: AtomicUsize,
+    // weak: AtomicUsize,
     data: u32,
 }
 
+//TODO: Make sure we do need these markers
 unsafe impl Send for ArcInnerU32 {}
 unsafe impl Sync for ArcInnerU32 {}
 
-struct WeakInner<'a> {
-    weak: &'a AtomicUsize,
-    strong: &'a AtomicUsize,
-}
-
 impl ArcU32 {
     pub fn new(data: u32) -> ArcU32 {
-        let x: Box<_> = Box::new(ArcInnerU32 {
-            strong: AtomicUsize::new(1),
-            weak: AtomicUsize::new(1),
-            data,
-        });
-        unsafe { Self::from_inner(NonNull::from(Box::leak(x))) }
-    }
+        unsafe {
+            let l = std::alloc::Layout::new::<ArcInnerU32>();
+            let p = std::alloc::alloc(l) as *mut ArcInnerU32;
+            if p.is_null() {
+                std::alloc::handle_alloc_error(l);
+            }
 
-    unsafe fn from_inner(ptr: NonNull<ArcInnerU32>) -> Self {
-        Self { ptr }
-    }
-
-    fn inner<'a>(&'a self) -> &'a ArcInnerU32 {
-        unsafe { self.ptr.as_ref() }
+            *p = ArcInnerU32 {
+                strong: AtomicUsize::new(1),
+                data,
+            };
+            Self {
+                ptr: NonNull::new_unchecked(p),
+            }
+        }
     }
 
     pub fn strong_count<'a>(this: &'a Self) -> usize {
-        this.inner().strong.load_seq_cst()
-    }
-
-    pub fn weak_count<'a>(this: &'a Self) -> usize {
-        let cnt = this.inner().weak.load_seq_cst();
-        // If the weak count is currently locked, the value of the
-        // count was 0 just before taking the lock.
-        if cnt == usize::MAX {
-            0
-        } else {
-            cnt - 1
-        }
-    }
-
-    pub fn downgrade<'a>(this: &'a Self) -> WeakU32 {
-        let mut cur = this.inner().weak.load_seq_cst();
-        loop {
-            // check if the weak counter is currently "locked"; if so, spin.
-            if cur == usize::MAX {
-                cur = this.inner().weak.load_seq_cst();
-                continue;
-            }
-            if cur > MAX_REFCOUNT {
-                abort();
-            }
-            match this.inner().weak.compare_exchange_seq_cst(cur, cur + 1) {
-                Ok(_) => {
-                    return WeakU32 { ptr: this.ptr };
-                }
-                Err(old) => cur = old,
-            }
-        }
-    }
-
-    unsafe fn get_mut_unchecked<'a>(this: &'a mut Self) -> &'a mut u32 {
-        &mut (*this.ptr.as_ptr()).data
+        unsafe { this.ptr.as_ref().strong.load_seq_cst() }
     }
 }
 
@@ -194,108 +126,31 @@ impl std::ops::Deref for ArcU32 {
     type Target = u32;
 
     fn deref<'a>(&'a self) -> &u32 {
-        &self.inner().data
+        unsafe { &self.ptr.as_ref().data }
     }
 }
 
 impl Clone for ArcU32 {
     fn clone<'a>(&'a self) -> ArcU32 {
-        let old_size = self.inner().strong.fetch_add_seq_cst(1);
+        let old_size = unsafe { self.ptr.as_ref().strong.fetch_add_seq_cst(1) };
         if old_size > MAX_REFCOUNT {
+            //TODO: Why does not std library check for `old_size >= MAX_REFCOUNT`
             abort();
         }
-        unsafe { Self::from_inner(self.ptr) }
+        Self { ptr: self.ptr }
     }
 }
 
 impl Drop for ArcU32 {
     fn drop<'a>(&'a mut self) {
-        if self.inner().strong.fetch_sub_seq_cst(1) != 1 {
-            return;
-        }
-        // acquire!(self.inner().strong);
-        unsafe { std::ptr::drop_in_place(Self::get_mut_unchecked(self)) };
-        // Drop the weak ref collectively held by all strong references
-        drop(WeakU32 { ptr: self.ptr });
-    }
-}
-
-impl WeakU32 {
-    pub fn new() -> WeakU32 {
-        WeakU32 {
-            ptr: unsafe {
-                NonNull::new_unchecked(std::ptr::invalid_mut::<ArcInnerU32>(usize::MAX))
-            },
-        }
-    }
-
-    fn inner<'a>(&'a self) -> Option<WeakInner<'_>> {
-        let ptr = self.ptr.as_ptr();
-        if is_dangling(ptr) {
-            None
-        } else {
-            Some(unsafe {
-                WeakInner {
-                    strong: &(*ptr).strong,
-                    weak: &(*ptr).weak,
-                }
-            })
-        }
-    }
-
-    fn checked_increment(n: usize) -> Option<usize> {
-        // Any write of 0 we can observe leaves the field in permanently zero state.
-        if n == 0 {
-            return None;
-        }
-        if n > MAX_REFCOUNT {
-            abort();
-        }
-        Some(n + 1)
-    }
-
-    pub fn upgrade<'a>(&'a self) -> Option<ArcU32> {
-        if self
-            .inner()?
-            .strong
-            .fetch_update_seq_cst(Self::checked_increment)
-            .is_ok()
-        {
-            unsafe { Some(ArcU32::from_inner(self.ptr)) }
-        } else {
-            None
-        }
-    }
-}
-
-impl Clone for WeakU32 {
-    fn clone<'a>(&'a self) -> WeakU32 {
-        if let Some(inner) = self.inner() {
-            let old_size = inner.weak.fetch_add_seq_cst(1);
-            if old_size > MAX_REFCOUNT {
-                abort();
+        unsafe {
+            if self.ptr.as_ref().strong.fetch_sub_seq_cst(1) != 1 {
+                return;
             }
-        }
-        WeakU32 { ptr: self.ptr }
-    }
-}
+            // acquire!(self.inner().strong);
 
-impl Drop for WeakU32 {
-    fn drop<'a>(&'a mut self) {
-        let inner = if let Some(inner) = self.inner() {
-            inner
-        } else {
-            return;
-        };
-
-        if inner.weak.fetch_sub_seq_cst(1) == 1 {
-            // acquire!(inner.weak);
-            unsafe {
-                std::alloc::dealloc(
-                    self.ptr.as_ptr() as *mut u8,
-                    std::alloc::Layout::new::<ArcInnerU32>(),
-                )
-            }
+            std::ptr::drop_in_place(&mut (*self.ptr.as_ptr()).data)
         }
     }
 }
+*/
