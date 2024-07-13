@@ -490,6 +490,8 @@ struct Body {
                         substs @2: List(Ty.GenArg);
                         userTypeAnnotationIndex @3: Void;
                         unionActiveField @4: Void;
+                        fieldNames @6: List(Text);
+                        adtKind @7: Ty.AdtKind;
                     }
                     union {
                         array @0: Ty; #Elements type

@@ -643,17 +643,17 @@ let decl_add_type_params l tparams = function
   Func (l, k, tparams @ tparams', rt, g, ps, nonghost_callers_only, ft, co, terminates, body, isVirtual, overrides)
 | _ -> static_error l "Some of these kinds of items are not yet supported here" None
 
-let parse_enum_ctor = function%parser
+let parse_enum_ctor enum_name = function%parser
   [ (lc, Ident c);
-    [%let ctor = function%parser
+    [%let params = function%parser
        [ (_, Kwd "("); [%let params = rep_comma parse_type]; (_, Kwd ")") ] ->
-       Ast.Ctor (lc, c, List.mapi (fun i tp -> Printf.sprintf "%d" i, tp) params)
+       List.mapi (fun i tp -> Printf.sprintf "%d" i, tp) params
      | [ (_, Kwd "{"); [%let params = rep_comma parse_param]; (_, Kwd "}") ] ->
-       Ast.Ctor (lc, c, List.map (fun (tp, x) -> (x, tp)) params)
+       List.map (fun (tp, x) -> (x, tp)) params
      | [ ] ->
-       Ast.Ctor (lc, c, [])
+       []
     ]
-  ] -> ctor
+  ] -> Ast.Ctor (lc, enum_name ^ "::" ^ c, params)
 
 let rec parse_decl = function%parser
   [ (l, Kwd "impl"); parse_type_params as tparams; parse_type as tp; (_, Kwd "{");
@@ -698,7 +698,7 @@ let rec parse_decl = function%parser
   ]
 | [ (_, Kwd "enum"); (l, Ident en); parse_type_params as tparams; (_, Kwd "{");
     [%let ctors = rep (function%parser
-       [ parse_enum_ctor as ctor;
+       [ [%let ctor = parse_enum_ctor en];
          [%let dummy = function%parser [ (_, Kwd ",") ] -> () | [ ] -> ()]
        ] -> ctor)];
     (_, Kwd "}")

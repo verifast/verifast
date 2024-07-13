@@ -52,7 +52,7 @@ end
 module LineHashtbl = Hashtbl.Make(HashedLine)
 
 let _ =
-  let verify ?(emitter_callback = fun _ -> ()) (print_stats : bool) (options : options) (prover : string) (path : string) (emitHighlightedSourceFiles : bool) (dumpPerLineStmtExecCounts : bool) allowDeadCode json mergeOptionsFromSourceFile breakpoint focus targetPath =
+  let verify ?(emitter_callback = fun _ _ _ -> ()) (print_stats : bool) (options : options) (prover : string) (path : string) (emitHighlightedSourceFiles : bool) (dumpPerLineStmtExecCounts : bool) allowDeadCode json mergeOptionsFromSourceFile breakpoint focus targetPath =
     let exit l =
       Java_frontend_bridge.unload();
       exit l
@@ -400,7 +400,7 @@ let _ =
   let readOptionsFromSourceFile = ref false in
   let exports: string list ref = ref [] in
   let outputSExpressions : string option ref = ref None in
-  let dumpAST: (bool * string) option ref = ref None in
+  let dumpAST: (bool * bool * string) option ref = ref None in
   let breakpoint: (string * int) option ref = ref None in
   let focus: (string * int) option ref  = ref None in
   let targetPath: int list option ref = ref None in
@@ -477,8 +477,10 @@ let _ =
                 SExpressionEmitter.unsupported_exception := true
               end,
               "Emits the AST as an s-expression to the specified file; raises exception on unsupported constructs."
-            ; "-dump_ast", String (fun str -> dumpAST := Some (true, str)), "Dumps the AST to the specified file."
-            ; "-dump_ast_with_locs", String (fun str -> dumpAST := Some (false, str)), "Dumps the AST, including source locations, to the specified file."
+            ; "-dump_ast", String (fun str -> dumpAST := Some (false, true, str)), "Dumps the verified module's AST to the specified file."
+            ; "-dump_ast_with_locs", String (fun str -> dumpAST := Some (false, false, str)), "Dumps the verified module's AST, including source locations, to the specified file."
+            ; "-dump_asts", String (fun str -> dumpAST := Some (true, true, str)), "Dumps the the verified module's AST as well as all header files' ASTs to the specified directory."
+            ; "-dump_asts_with_locs", String (fun str -> dumpAST := Some (true, false, str)), "Dumps the the verified module's AST as well as all header files' ASTs, including source locations, to the specified directory."
             ; "-export", String (fun str -> exports := str :: !exports), " "
             ; "-L", String (fun str -> library_paths := str :: !library_paths), "Add a directory to the list of directories to be searched for manifest files during linking."
             ; "-safe_mode", Set safe_mode, "Safe mode (for use in CGI scripts)."
@@ -514,17 +516,23 @@ let _ =
           option_report_skipped_stmts = false;
         } in
         if not !json then print_endline filename;
-        let emitter_callback (packages : package list) =
+        let emitter_callback (path : string) (dir : string) (packages : package list) =
           begin match !dumpAST with
-            | Some (noLocs, target_file) ->
-              Ocaml_expr_formatter.print_ocaml_expr_to_file noLocs target_file (Ocaml_expr_of_ast.of_list Ocaml_expr_of_ast.of_package packages)
+            | Some (allASTs, noLocs, target_file) ->
+              if allASTs then begin
+                if not (Sys.file_exists target_file) then Sys.mkdir target_file 0o700;
+                let target_file = Filename.concat target_file (String.map (function '/'|'\\' -> '-' | c -> c) (smart_compose dir path)) ^ ".ast.ml" in
+                Ocaml_expr_formatter.print_ocaml_expr_to_file noLocs target_file (Ocaml_expr_of_ast.of_list Ocaml_expr_of_ast.of_package packages)
+              end else if path = filename && dir = Filename.dirname filename then
+                Ocaml_expr_formatter.print_ocaml_expr_to_file noLocs target_file (Ocaml_expr_of_ast.of_list Ocaml_expr_of_ast.of_package packages)
             | None -> ()
           end;
-          match !outputSExpressions with
-            | Some target_file ->
-              Printf.printf "Emitting s-expressions to %s\n" target_file;
-              SExpressionEmitter.emit target_file packages          
-            | None             -> ()
+          if path = filename then
+            match !outputSExpressions with
+              | Some target_file ->
+                Printf.printf "Emitting s-expressions to %s\n" target_file;
+                SExpressionEmitter.emit target_file packages
+              | None             -> ()
         in
         verify ~emitter_callback:emitter_callback !stats options !prover filename !emitHighlightedSourceFiles !dumpPerLineStmtExecCounts !allowDeadCode !json !readOptionsFromSourceFile !breakpoint !focus !targetPath;
         allModules := ((Filename.chop_extension filename) ^ ".vfmanifest")::!allModules

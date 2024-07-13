@@ -32,6 +32,7 @@ cd purely_unsafe
   verifast -prover z3v4.5 -target LP64 -c -extern ../unverified/platform httpd_mt.rs
   verifast -c my_option.rs
   verifast -c vec_test.rs
+  verifast -target LP64 -c -extern ../unverified/platform atomics_example.rs
 cd ..
 cd safe_abstraction
   verifast -c full_bor_primitive_types.rs

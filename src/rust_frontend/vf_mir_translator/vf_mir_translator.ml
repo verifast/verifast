@@ -398,7 +398,7 @@ module Mir = struct
         adt_kind : adt_kind;
         adt_name : string;
         variant_name : string;
-        def : Ast.decl;
+        field_names : string list;
       }
 
   type field_def_tr = {
@@ -2448,20 +2448,17 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           let adt_id_cpn = adt_id_get adt_data_cpn in
           let adt_def_path = translate_adt_def_id adt_id_cpn in
           let adt_name = TrName.translate_def_path adt_def_path in
-          let* adt_def_opt = State.get_adt_def adt_name in
-          let* adt_def =
-            Option.to_result
-              ~none:(`TrAggregateKind ("No decl found for " ^ adt_name))
-              adt_def_opt
+          let adt_kind =
+            match AdtKindRd.get (adt_kind_get adt_data_cpn) with
+            | StructKind -> Mir.Struct
+            | EnumKind -> Mir.Enum
+            | UnionKind -> Mir.Union
           in
-          (*check it is an adt*)
-          let* adt_kind = Mir.decl_mir_adt_kind adt_def.def in
           let variant_idx_cpn = variant_idx_get adt_data_cpn in
           let variant_name = variant_id_get adt_data_cpn in
           let substs_cpn = substs_get_list adt_data_cpn in
-          Ok
-            Mir.(
-              AggKindAdt { adt_kind; adt_name; variant_name; def = adt_def.def })
+          let field_names = field_names_get_list adt_data_cpn in
+          Ok Mir.(AggKindAdt { adt_kind; adt_name; variant_name; field_names })
       | Closure -> failwith "Todo: AggregateKind::Closure"
       | Generator -> failwith "Todo: AggregateKind::Generator"
       | Undefined _ -> Error (`TrAggregateKind "Unknown AggregateKind")
@@ -2476,7 +2473,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let agg_kind_cpn = aggregate_kind_get agg_data_cpn in
       let* agg_kind = translate_aggregate_kind agg_kind_cpn in
       match agg_kind with
-      | AggKindAdt { adt_kind; adt_name; variant_name; def = adt_def } -> (
+      | AggKindAdt { adt_kind; adt_name; variant_name; field_names } -> (
           match adt_kind with
           | Enum ->
               let init_stmts_builder lhs_place =
@@ -2486,27 +2483,25 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                     (AssignExpr
                        ( loc,
                          lhs_place,
-                         CallExpr (loc, variant_name, [], [], arg_pats, Static)
-                       ))
+                         CallExpr
+                           ( loc,
+                             adt_name ^ "::" ^ variant_name,
+                             [],
+                             [],
+                             arg_pats,
+                             Static ) ))
                 in
                 tmp_rvalue_binders @ [ assignment ]
               in
               Ok (`TrRvalueAggregate init_stmts_builder)
           | Union -> failwith "Todo: Unsupported Adt kind for aggregate"
           | Struct ->
-              let* fields_opt = AstAux.decl_fields adt_def in
-              let* fields =
-                Option.to_result
-                  ~none:(`TrAggregate "Struct without fields definition")
-                  fields_opt
-              in
-              if List.length operands_cpn <> List.length fields then
+              if List.length operands_cpn <> List.length field_names then
                 Error
                   (`TrAggregate
                     "The number of struct fields and initializing operands are \
                      different")
               else
-                let field_names = List.map AstAux.field_name fields in
                 let init_stmts_builder lhs_place =
                   let field_init_stmts =
                     List.map
@@ -4274,13 +4269,13 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         | EnumKind ->
             let ctors =
               variants
-              |> List.map @@ fun Mir.{ loc; name; fields } ->
+              |> List.map @@ fun Mir.{ loc; name = variant_name; fields } ->
                  let ps =
                    fields
                    |> List.map @@ fun Mir.{ name; ty } ->
                       (name, Mir.basic_type_of ty)
                  in
-                 Ast.Ctor (loc, name, ps)
+                 Ast.Ctor (loc, name ^ "::" ^ variant_name, ps)
             in
             let decl = Ast.Inductive (def_loc, name, tparams, ctors) in
             Ok (Mir.Enum, [], decl, [])

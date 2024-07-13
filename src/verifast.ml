@@ -3843,7 +3843,6 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | RustFe.RustFrontend msg -> raise (CompilationErrorWithDetails ("Rust frontend failed", msg))
       end
     in
-    emitter_callback ds;
     check_should_fail ([], [], [], [], [], []) $. fun () ->
     let (linker_info, _) = check_file path false true programDir headers ds dbg_info in
     linker_info
@@ -4004,7 +4003,7 @@ end
     This function is generic in the types of SMT solver types, symbols, and terms.
     *)
 let verify_program_core (* ?verify_program_core *)
-    ?(emitter_callback : package list -> unit = fun _ -> ())
+    ?(emitter_callback : string -> string -> package list -> unit = fun _ _ _ -> ())
     (type typenode') (type symbol') (type termnode')  (* Explicit type parameters; new in OCaml 3.12 *)
     (ctxt: (typenode', symbol', termnode') Proverapi.context)
     (options : options)
@@ -4083,7 +4082,7 @@ let lookup_prover prover =
   | Some (banner, f) -> f
 
 let verify_program (* ?verify_program *)
-    ?(emitter_callback : package list -> unit = fun _ -> ())
+    ?(emitter_callback : string -> string -> package list -> unit = fun _ _ _ -> ())
     (prover : string)
     (options : options)
     (path : string)

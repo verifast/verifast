@@ -381,13 +381,13 @@ mod vf_mir_builder {
     use crate::vf_mir_capnp::hir as hir_cpn;
     use crate::vf_mir_capnp::ident as ident_cpn;
     use crate::vf_mir_capnp::mutability as mutability_cpn;
+    use crate::vf_mir_capnp::predicate as predicate_cpn;
     use crate::vf_mir_capnp::span_data as span_data_cpn;
     use crate::vf_mir_capnp::symbol as symbol_cpn;
     use crate::vf_mir_capnp::ty as ty_cpn;
     use crate::vf_mir_capnp::unsafety as unsafety_cpn;
     use crate::vf_mir_capnp::vf_mir as vf_mir_cpn;
     use crate::vf_mir_capnp::visibility as visibility_cpn;
-    use crate::vf_mir_capnp::predicate as predicate_cpn;
     use adt_def_cpn::variant_def as variant_def_cpn;
     use basic_block_cpn::operand as operand_cpn;
     use basic_block_cpn::rvalue as rvalue_cpn;
@@ -956,7 +956,11 @@ mod vf_mir_builder {
             }
         }
 
-        fn encode_predicate(enc_ctx: &mut EncCtx<'tcx, 'a>, pred: &(ty::Clause<'tcx>, rustc_span::Span), mut pred_cpn: predicate_cpn::Builder<'_>) {
+        fn encode_predicate(
+            enc_ctx: &mut EncCtx<'tcx, 'a>,
+            pred: &(ty::Clause<'tcx>, rustc_span::Span),
+            mut pred_cpn: predicate_cpn::Builder<'_>,
+        ) {
             match pred.0.kind().skip_binder() {
                 ty::ClauseKind::RegionOutlives(outlives_pred) => {
                     let mut outlives_cpn = pred_cpn.init_outlives();
@@ -1045,9 +1049,11 @@ mod vf_mir_builder {
             Self::encode_hir_generics(enc_ctx, hir_gens, hir_gens_cpn);
 
             let predicates = tcx.predicates_of(def_id).predicates;
-            body_cpn.reborrow().fill_predicates(predicates, |pred_cpn, pred| {
-                Self::encode_predicate(enc_ctx, pred, pred_cpn);
-            });
+            body_cpn
+                .reborrow()
+                .fill_predicates(predicates, |pred_cpn, pred| {
+                    Self::encode_predicate(enc_ctx, pred, pred_cpn);
+                });
 
             let contract_cpn = body_cpn.reborrow().init_contract();
             let body_contract_span = crate::span_utils::body_contract_span(tcx, body);
@@ -1068,17 +1074,9 @@ mod vf_mir_builder {
                 sig.output(),
                 body_cpn.reborrow().init_output(),
             );
-            body_cpn.fill_inputs(
-                sig.inputs(),
-                |input_cpn, input| {
-                    Self::encode_ty(
-                        tcx,
-                        enc_ctx,
-                        *input,
-                        input_cpn,
-                    );
-                },
-            );
+            body_cpn.fill_inputs(sig.inputs(), |input_cpn, input| {
+                Self::encode_ty(tcx, enc_ctx, *input, input_cpn);
+            });
 
             let local_decls_count = body.local_decls().len();
             assert!(
@@ -1136,17 +1134,28 @@ mod vf_mir_builder {
                 def_path
             );
 
-            let ghost_decl_blocks = ghost_stmts.extract_if(|annot| {
-                annot.is_block_decls
-            }).collect::<LinkedList<_>>();
+            let ghost_decl_blocks = ghost_stmts
+                .extract_if(|annot| annot.is_block_decls)
+                .collect::<LinkedList<_>>();
 
             body_cpn.fill_ghost_stmts(&ghost_stmts, |ghost_stmt_cpn, ghost_stmt| {
                 Self::encode_annotation(tcx, &ghost_stmt, ghost_stmt_cpn);
             });
-            body_cpn.fill_ghost_decl_blocks(&ghost_decl_blocks, |mut ghost_decl_block_cpn, ghost_decl_block| {
-                Self::encode_annotation(tcx, &ghost_decl_block, ghost_decl_block_cpn.reborrow().init_start());
-                Self::encode_span_data(tcx, &ghost_decl_block.block_end_span().data(), ghost_decl_block_cpn.init_close_brace_span());
-            });
+            body_cpn.fill_ghost_decl_blocks(
+                &ghost_decl_blocks,
+                |mut ghost_decl_block_cpn, ghost_decl_block| {
+                    Self::encode_annotation(
+                        tcx,
+                        &ghost_decl_block,
+                        ghost_decl_block_cpn.reborrow().init_start(),
+                    );
+                    Self::encode_span_data(
+                        tcx,
+                        &ghost_decl_block.block_end_span().data(),
+                        ghost_decl_block_cpn.init_close_brace_span(),
+                    );
+                },
+            );
         }
 
         fn encode_unsafety(us: hir::Unsafety, mut us_cpn: unsafety_cpn::Builder<'_>) {
@@ -1585,7 +1594,9 @@ mod vf_mir_builder {
         fn encode_region(region: ty::Region<'tcx>, mut region_cpn: region_cpn::Builder<'_>) {
             debug!("Encoding region {:?}", region);
             match region.kind() {
-                ty::RegionKind::ReEarlyParam(_early_bound_region) => region_cpn.set_id(_early_bound_region.name.as_str()),
+                ty::RegionKind::ReEarlyParam(_early_bound_region) => {
+                    region_cpn.set_id(_early_bound_region.name.as_str())
+                }
                 ty::RegionKind::ReBound(de_bruijn_index, bound_region) => match bound_region.kind {
                     ty::BoundRegionKind::BrAnon => todo!(),
                     ty::BoundRegionKind::BrNamed(def_id, symbol) => {
@@ -1836,7 +1847,15 @@ mod vf_mir_builder {
                     );
 
                     let adt_def = enc_ctx.tcx.adt_def(def_id);
-                    adt_data_cpn.set_variant_id(adt_def.variant(*variant_idx).name.as_str());
+                    let variant = adt_def.variant(*variant_idx);
+                    adt_data_cpn.set_variant_id(variant.name.as_str());
+                    Self::encode_adt_kind(
+                        adt_def.adt_kind(),
+                        adt_data_cpn.reborrow().init_adt_kind(),
+                    );
+                    adt_data_cpn
+                        .reborrow()
+                        .fill_field_names(variant.fields.iter().map(|f| f.name.as_str()));
 
                     let substs_cpn = adt_data_cpn.reborrow().init_substs(substs.len());
                     Self::encode_ty_args(enc_ctx, substs, substs_cpn);

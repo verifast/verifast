@@ -267,7 +267,7 @@ pub fn preprocess(
                                         if is_block_decls {
                                             open_blocks.push(OpenBlock {
                                                 start_ghost_range_index: ghost_ranges.len(),
-                                                brace_depth: brace_depth - 1,
+                                                brace_depth: brace_depth,
                                             });
                                         }
                                         ghost_ranges.push(Box::new(GhostRange {
@@ -475,7 +475,7 @@ pub fn preprocess(
                                     if ghost_range.is_block_decls {
                                         open_blocks.push(OpenBlock {
                                             start_ghost_range_index: ghost_ranges.len(),
-                                            brace_depth: brace_depth - 1,
+                                            brace_depth: brace_depth,
                                         });
                                     }
                                     ghost_ranges.push(ghost_range);

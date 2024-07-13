@@ -14,7 +14,7 @@ enum MyOptionI32 {
 
 unsafe fn eval_i32(o: MyOptionI32) -> i32
 //@ req true;
-//@ ens result == match o { MyNoneI32 => 0, MySomeI32(v) => v };
+//@ ens result == match o { MyOptionI32::MyNoneI32 => 0, MyOptionI32::MySomeI32(v) => v };
 {
     match o {
         MyOptionI32::MyNoneI32 => 0,
@@ -29,7 +29,7 @@ enum MyOption<T> {
 
 unsafe fn eval(o: MyOption<i32>) -> i32
 //@ req true;
-//@ ens result == match o { MyNone => 0, MySome(v) => v };
+//@ ens result == match o { MyOption::MyNone => 0, MyOption::MySome(v) => v };
 {
     match o {
         MyOption::MyNone => 0,

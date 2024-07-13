@@ -416,6 +416,8 @@ let cwd = Sys.getcwd()
 
 let compose base path = if Filename.is_relative path then base ^ "/" ^ path else path
 
+let smart_compose base path = if Filename.is_relative path && base <> "." then base ^ "/" ^ path else path
+
 (** Reduces './foo' to 'foo', 'foo/.' to 'foo', 'foo//' to 'foo/', and 'foo/../bar' to 'bar'. *)
 let reduce_path path =
   let path = split (fun c -> c = '/' || c = '\\') path in

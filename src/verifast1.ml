@@ -37,7 +37,7 @@ type callbacks = {
 let noop_callbacks = {reportRange = (fun _ _ -> ()); reportUseSite = (fun _ _ _ -> ()); reportExecutionForest = (fun _ -> ()); reportStmt = (fun _ -> ()); reportStmtExec = (fun _ -> ()); reportDirective = (fun _ _ -> false)}
 
 module type VERIFY_PROGRAM_ARGS = sig
-  val emitter_callback: package list -> unit
+  val emitter_callback: string -> string -> package list -> unit
   type typenode
   type symbol
   type termnode
@@ -74,7 +74,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 
   let disable_overflow_check = Vfbindings.get Vfparam_disable_overflow_check vfbindings
   let fwrapv = Vfbindings.get Vfparam_fwrapv vfbindings
-  let fno_strict_aliasing = Vfbindings.get Vfparam_fno_strict_aliasing vfbindings
+  let fno_strict_aliasing = Vfbindings.get Vfparam_fno_strict_aliasing vfbindings || dialect = Some Rust
   let assume_left_to_right_evaluation = Vfbindings.get Vfparam_assume_left_to_right_evaluation vfbindings
   let assume_no_provenance = Vfbindings.get Vfparam_assume_no_provenance vfbindings
   let assume_no_subobject_provenance = Vfbindings.get Vfparam_assume_no_subobject_provenance vfbindings
@@ -1135,6 +1135,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   module CheckFile1(CheckFileArgs: CHECK_FILE_ARGS) = struct
   
   include CheckFileArgs
+
+  let () = emitter_callback filepath dir ps
 
   let assert_false h env l msg url =
     Util.push (Node (ErrorNode, ref [])) !currentForest;
