@@ -74,17 +74,42 @@ pub mod sync {
         }
     }
 }
-/*
-use atomic::AtomicUsize;
 
-//TODO: This will not be necessary in an approximation which ignores counter ovf possibility
+use sync::atomic::AtomicUsize;
+
+// TODO: This will not be necessary in an approximation which ignores counter ovf
 const MAX_REFCOUNT: usize = (isize::MAX) as usize;
 
 pub struct ArcU32 {
     ptr: NonNull<ArcInnerU32>,
 }
 
-//TODO: check if `unsafe` is indeed necessary for `Send` and `Sync` marker traits
+/*@
+pred_ctor dlft_pred(dk: lifetime_t)(gid: isize; destroyed: bool) = ghost_cell(gid, destroyed) &*& if destroyed { true } else { lifetime_token(dk) };
+pred_ctor Arc_inv()() = true;
+pred ArcU32_own(t: thread_id_t, nnp: std::ptr::NonNull<ArcInnerU32>) = exists(?ptr) &*& std::ptr::NonNull_ptr::<ArcInnerU32>(nnp) == ptr &*&
+    exists(?dk) &*& [_]sync::atomic::AtomicUsize_share(dk, ?t1, &(*ptr).strong);
+
+pred_ctor Arc_frac_bc(l: *ArcU32, nnp: std::ptr::NonNull<ArcInnerU32>)(;) = (*l).ptr |-> nnp;
+pred ArcU32_share(k: lifetime_t, t: thread_id_t, l: *ArcU32) = [_]exists(?nnp) &*& [_]frac_borrow(k, Arc_frac_bc(l, nnp)) &*&
+    exists(?ptr) &*& std::ptr::NonNull_ptr::<ArcInnerU32>(nnp) == ptr &*&
+    exists(?dk) &*& [_]sync::atomic::AtomicUsize_share(dk, ?t1, &(*ptr).strong);
+
+lem ArcU32_share_mono(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *ArcU32)
+    req lifetime_inclusion(k1, k) == true &*& [_]ArcU32_share(k, t, l);
+    ens [_]ArcU32_share(k1, t, l);
+{
+    assume(false);
+}
+lem ArcU32_share_full(k: lifetime_t, t: thread_id_t, l: *ArcU32)
+    req atomic_mask(Nlft) &*& [?q]lifetime_token(k) &*& full_borrow(k, ArcU32_full_borrow_content(t, l));
+    ens atomic_mask(Nlft) &*& [q]lifetime_token(k) &*& [_]ArcU32_share(k, t, l);
+{
+    assume(false);
+}
+@*/
+
+// TODO: check if `unsafe` is indeed necessary for `Send` and `Sync` marker traits
 unsafe impl Send for ArcU32 {}
 unsafe impl Sync for ArcU32 {}
 
@@ -94,7 +119,7 @@ struct ArcInnerU32 {
     data: u32,
 }
 
-//TODO: Make sure we do need these markers
+// TODO: Make sure we do need these markers
 unsafe impl Send for ArcInnerU32 {}
 unsafe impl Sync for ArcInnerU32 {}
 
@@ -153,4 +178,3 @@ impl Drop for ArcU32 {
         }
     }
 }
-*/
