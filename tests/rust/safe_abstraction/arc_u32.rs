@@ -1,83 +1,7 @@
-/* TODO: To spec-out `AtomicUsize` we need its methods to have an `Ordering` parameter. That leads to appearance of Aggregates of `Ordering`
-constructors to MIR of this file. This means we might need to include the definitions of external ADTs to our data generated from the exporter.
-For now the exporter only encodes localy defined ADTs. */
-
 use std::process::abort;
 use std::ptr::NonNull;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
-pub mod sync {
-    pub mod atomic {
-        use abort;
-        pub struct AtomicUsize {
-            v: usize,
-        }
-        /*@
-        pred AtomicUsize(p: *AtomicUsize; v: usize);
-        pred AtomicUsize_own(t: thread_id_t, v: usize);
-        pred AtomicUsize_share(k: lifetime_t, t: thread_id_t, l: *AtomicUsize);
-        @*/
-        impl AtomicUsize {
-            pub fn new(v: usize) -> AtomicUsize
-            //@ req thread_token(?t);
-            //@ ens thread_token(t) &*& AtomicUsize_own(t, result.v) &*& result.v == v;
-            {
-                abort();
-            }
-
-            /*@
-            lem_type AUs_load_seq_cst(self: *AtomicUsize, Pre_op_token: pred(), Post_op_token: pred(usize)) = lem();
-                req AtomicUsize(self, ?v) &*& Pre_op_token();
-                ens AtomicUsize(self, v) &*& Post_op_token(v);
-            lem_type AUs_load_seq_cst_ghost(self: *AtomicUsize, Pre: pred(), Post: pred(usize)) = lem();
-                req atomic_mask(MaskTop) &*& is_AUs_load_seq_cst(?op, self, ?Pre_op_token, ?Post_op_token) &*& Pre_op_token() &*& Pre() &*& AtomicUsize(self, ?v);
-                ens atomic_mask(MaskTop) &*& is_AUs_load_seq_cst(op, self, Pre_op_token, Post_op_token) &*& Post_op_token(?res) &*& Post(res) &*& AtomicUsize(self, v);
-            @*/
-            // TODO: The `unsafe` keyword should be removed from following methods
-            pub unsafe fn load_seq_cst<'a>(&'a self) -> usize
-            //@ req thread_token(?t) &*& [?qa]lifetime_token(?a) &*& [_]AtomicUsize_share(a, t, self) &*& is_AUs_load_seq_cst_ghost(?ghop, self, ?Pre, ?Post) &*& Pre();
-            //@ ens thread_token(t) &*& [qa]lifetime_token(a) &*& Post(result);
-            {
-                abort();
-            }
-
-            /*@
-            // TODO: What about OVF
-            lem_type AUs_fetch_add_seq_cst(self: *AtomicUsize, Pre_op_token: pred(), Post_op_token: pred(usize)) = lem();
-                req AtomicUsize(self, ?old) &*& Pre_op_token();
-                ens AtomicUsize(self, old + 1) &*& Post_op_token(old);
-            lem_type AUs_fetch_add_seq_cst_ghost(self: *AtomicUsize, Pre: pred(), Post: pred(usize)) = lem();
-                req atomic_mask(MaskTop) &*& is_AUs_fetch_add_seq_cst(?op, self, ?Pre_op_token, ?Post_op_token) &*& Pre_op_token() &*& Pre() &*& AtomicUsize(self, ?old);
-                ens atomic_mask(MaskTop) &*& is_AUs_fetch_add_seq_cst(op, self, Pre_op_token, Post_op_token) &*& Post_op_token(old) &*& Post(old) &*& AtomicUsize(self, old + 1);
-            @*/
-            pub unsafe fn fetch_add_seq_cst<'a>(&'a self, val: usize) -> usize
-            //@ req thread_token(?t) &*& [?qa]lifetime_token(?a) &*& [_]AtomicUsize_share(a, t, self) &*& is_AUs_fetch_add_seq_cst_ghost(?ghop, self, ?Pre, ?Post) &*& Pre();
-            //@ ens thread_token(t) &*& [qa]lifetime_token(a) &*& Post(result);
-            {
-                abort();
-            }
-
-            /*@
-            // TODO: What about UNF
-            lem_type AUs_fetch_sub_seq_cst(self: *AtomicUsize, Pre_op_token: pred(), Post_op_token: pred(usize)) = lem();
-                req AtomicUsize(self, ?old) &*& Pre_op_token();
-                ens AtomicUsize(self, old - 1) &*& Post_op_token(old);
-            lem_type AUs_fetch_sub_seq_cst_ghost(self: *AtomicUsize, Pre: pred(), Post: pred(usize)) = lem();
-                req atomic_mask(MaskTop) &*& is_AUs_fetch_sub_seq_cst(?op, self, ?Pre_op_token, ?Post_op_token) &*& Pre_op_token() &*& Pre() &*& AtomicUsize(self, ?old);
-                ens atomic_mask(MaskTop) &*& is_AUs_fetch_sub_seq_cst(op, self, Pre_op_token, Post_op_token) &*& Post_op_token(old) &*& Post(old) &*& AtomicUsize(self, old - 1);
-            @*/
-            pub unsafe fn fetch_sub_seq_cst<'a>(&'a self, val: usize) -> usize
-            //@ req thread_token(?t) &*& [?qa]lifetime_token(?a) &*& [_]AtomicUsize_share(a, t, self) &*& is_AUs_fetch_sub_seq_cst_ghost(?ghop, self, ?Pre, ?Post) &*& Pre();
-            //@ ens thread_token(t) &*& [qa]lifetime_token(a) &*& Post(result);
-            {
-                abort();
-            }
-        }
-    }
-}
-
-use sync::atomic::AtomicUsize;
-
-// TODO: This will not be necessary in an approximation which ignores counter ovf
 const MAX_REFCOUNT: usize = (isize::MAX) as usize;
 
 pub struct ArcU32 {
@@ -143,7 +67,7 @@ impl ArcU32 {
     }
 
     pub fn strong_count<'a>(this: &'a Self) -> usize {
-        unsafe { this.ptr.as_ref().strong.load_seq_cst() }
+        unsafe { this.ptr.as_ref().strong.load(Ordering::SeqCst) }
     }
 }
 
@@ -157,7 +81,7 @@ impl std::ops::Deref for ArcU32 {
 
 impl Clone for ArcU32 {
     fn clone<'a>(&'a self) -> ArcU32 {
-        let old_size = unsafe { self.ptr.as_ref().strong.fetch_add_seq_cst(1) };
+        let old_size = unsafe { self.ptr.as_ref().strong.fetch_add(1, Ordering::SeqCst) };
         if old_size > MAX_REFCOUNT {
             //TODO: Why does not std library check for `old_size >= MAX_REFCOUNT`
             abort();
@@ -169,7 +93,7 @@ impl Clone for ArcU32 {
 impl Drop for ArcU32 {
     fn drop<'a>(&'a mut self) {
         unsafe {
-            if self.ptr.as_ref().strong.fetch_sub_seq_cst(1) != 1 {
+            if self.ptr.as_ref().strong.fetch_sub(1, Ordering::SeqCst) != 1 {
                 return;
             }
             // acquire!(self.inner().strong);
