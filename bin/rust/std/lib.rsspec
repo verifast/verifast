@@ -244,18 +244,22 @@ mod sync {
         struct AtomicUsize;
         
         /*@
-        
+        pred AtomicUsize_own(t: thread_id_t, v: AtomicUsize);
+        lem AtomicUsize_send(t: thread_id_t, t1: thread_id_t, v: AtomicUsize);
+            req AtomicUsize_own(t, v);
+            ens AtomicUsize_own(t1, v);
+        fix value(v: AtomicUsize) -> usize;
         lem_type AtomicUsize_fetch_add_op(self: *AtomicUsize, val: usize, P: pred(), Q: pred(usize)) = lem();
-            req *(self as *usize) |-> ?value0 &*& P();
-            ens *(self as *usize) |-> (value0 + val) % (usize::MAX + 1) &*& Q(value0);
+            req *self |-> ?v0 &*& P();
+            ens *self |-> ?v1 &*& value(v1) == (value(v0) + val) % (usize::MAX + 1) &*& Q(value(v0));
         
         lem_type AtomicUsize_fetch_add_ghop(self: *AtomicUsize, val: usize, pre: pred(), post: pred(usize)) = lem();
             req atomic_mask(MaskTop) &*& is_AtomicUsize_fetch_add_op(?op, self, val, ?P, ?Q) &*& P() &*& pre();
             ens atomic_mask(MaskTop) &*& is_AtomicUsize_fetch_add_op(op, self, val, P, Q) &*& Q(?result) &*& post(result);
         
         lem_type AtomicUsize_load_op(self: *AtomicUsize, P: pred(), Q: pred(usize)) = lem();
-            req [?f](*(self as *usize) |-> ?value) &*& P();
-            ens [f](*(self as *usize) |-> value) &*& Q(value);
+            req [?f](*self |-> ?v) &*& P();
+            ens [f](*self |-> v) &*& Q(value(v));
         
         lem_type AtomicUsize_load_ghop(self: *AtomicUsize, pre: pred(), post: pred(usize)) = lem();
             req atomic_mask(MaskTop) &*& is_AtomicUsize_load_op(?op, self, ?P, ?Q) &*& P() &*& pre();
@@ -264,6 +268,9 @@ mod sync {
         @*/
         
         impl AtomicUsize {
+            fn new(v: usize) -> AtomicUsize;
+            //@ req thread_token(?t) &*& true;
+            //@ ens thread_token(t) &*& AtomicUsize_own(t, result) &*& value(result) == v;
         
             fn from_ptr(ptr: *mut usize) -> &AtomicUsize;
             //@ req true;

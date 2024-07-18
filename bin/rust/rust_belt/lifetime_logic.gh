@@ -16,6 +16,7 @@ predicate atomic_mask(mask_t mask);
 
 inductive lifetime_t = lifetime_ctor(int id); // Type of lifetimes
 abstract_type thread_id_t; // Type of thread IDs
+fixpoint thread_id_t default_tid();
 
 fixpoint lifetime_t lifetime_intersection(lifetime_t k, lifetime_t k1);
 fixpoint bool lifetime_inclusion(lifetime_t k, lifetime_t k1);
@@ -194,6 +195,11 @@ lemma void full_borrow_implies(lifetime_t k, predicate() P, predicate() P1);
     requires full_borrow(k, P) &*& is_implies(?f, P, P1) &*& is_implies(?f1, P1, P);
     ensures full_borrow(k, P1) &*& is_implies(f, P, P1) &*& is_implies(f1, P1, P);
 
+// borrow_end_token is in fact: lifetime_dead_token(k) ={Nlft}=* P()
+lemma void borrow_end_token_implies(lifetime_t k, predicate() P, predicate() Q);
+    requires borrow_end_token(k, P) &*& is_implies(?f, P, Q) &*& is_implies(?f1, Q, P);
+    ensures borrow_end_token(k, Q) &*& is_implies(f, P, Q) &*& is_implies(f1, Q, P);
+
 // LftL-bor-split
 predicate_ctor sep(predicate() P, predicate() Q)() = P() &*& Q();
 
@@ -264,6 +270,14 @@ lemma void close_frac_borrow(real q_p, predicate(;) P);
     nonghost_callers_only
     requires [q_p]P() &*& close_frac_borrow_token(q_p, P, ?q_lft, ?k);
     ensures [q_lft]lifetime_token(k);
+
+typedef lemma void implies_frac(predicate() P, predicate() Q)();
+    requires ghost_rec_perm_top() &*& [?f]P();
+    ensures ghost_rec_perm_top() &*& [f]Q();
+
+lemma void frac_borrow_implies(lifetime_t k, predicate(;) P, predicate(;) Q);
+    requires [_]frac_borrow(k, P) &*& is_implies_frac(?f, P, Q) &*& is_implies_frac(?f1, Q, P);
+    ensures [_]frac_borrow(k, Q) &*& is_implies_frac(f, P, Q) &*& is_implies_frac(f1, Q, P);
 
 // LftL-fract-acc-atomic
 predicate close_frac_borrow_token_atomic(bool b, real q, predicate(;) P, lifetime_t k);

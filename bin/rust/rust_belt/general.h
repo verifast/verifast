@@ -41,13 +41,19 @@ b- Mask-changing view shifts will only have the second form naturally.
 
 /*@
 predicate atomic_space(mask_t mask, predicate() inv;);
+
+// Iris lemma `inv_iff`
+lemma void atomic_space_implies(mask_t m, predicate() inv, predicate() inv1);
+    requires [_]atomic_space(m, inv) &*& is_implies(?f, inv, inv1) &*& is_implies(?f1, inv1, inv);
+    ensures [_]atomic_space(m, inv1) &*& is_implies(f, inv, inv1) &*& is_implies(f1, inv1, inv);
+
 /* This would be the existentially quantified `R` in the derived rule on Ralf Jung's thesis in the middle of page 67.
 See https://research.ralfj.de/phd/thesis-screen.pdf */
 predicate close_atomic_space_token(mask_t spaceMask, predicate() inv);
 
 lemma void create_atomic_space(mask_t mask, predicate() inv);
     requires !mask_is_empty(mask) &*& inv();
-    ensures atomic_space(mask, inv);
+    ensures [_]atomic_space(mask, inv);
 
 lemma void open_atomic_space(mask_t spaceMask, predicate() inv);
     requires [?f]atomic_space(spaceMask, inv) &*& atomic_mask(?currentMask) &*& mask_le(spaceMask, currentMask) == true;
