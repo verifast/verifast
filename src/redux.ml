@@ -1122,6 +1122,7 @@ and context () =
         assumes_with_more_pending_splits <- assumes_with_more_pending_splits + 1;
     
     method assert_term t =
+      if formal_depth = 0 then
       let time0 = if verbosity > 0 then begin trace_entering "Redux.assert_term(%s)" (self#pprint t); Perf.time() end else 0.0 in
       Stopwatch.start stopwatch;
       self#register_pending_splits_count;
