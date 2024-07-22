@@ -279,8 +279,8 @@ let rec parse_expr_funcs allowStructExprs =
         | _ -> raise (ParseException (lc, "Match arm pattern arguments must be variable names"))
         end
       in
-      SwitchExprClause (l, x, pats, rhs)
-    | Var (lv, x) -> SwitchExprClause (l, x, [], rhs)
+      SwitchExprClause (lc, x, pats, rhs)
+    | Var (lv, x) -> SwitchExprClause (lv, x, [], rhs)
     | _ -> raise (ParseException (expr_loc pat, "Match arm pattern must be constructor application"))
     end
   and parse_match_expr_rest = function%parser
