@@ -42,11 +42,11 @@ fixpoint pointer ptr_add(pointer p, int offset) {
 }
 
 fixpoint pointer_provenance field_ptr_provenance(pointer p, void *structTypeid, int fieldOffset);
-fixpoint pointer field_ptr_provenance_parent(pointer_provenance pr, int fieldOffset);
+fixpoint pointer_provenance field_ptr_provenance_parent(pointer_provenance pr);
 
 lemma_auto(field_ptr_provenance(p, structTypeid, fieldOffset)) void field_ptr_provenance_injective(pointer p, void *structTypeid, int fieldOffset);
     requires true;
-    ensures field_ptr_provenance_parent(field_ptr_provenance(p, structTypeid, fieldOffset), fieldOffset) == p;
+    ensures field_ptr_provenance_parent(field_ptr_provenance(p, structTypeid, fieldOffset)) == p.provenance;
 
 fixpoint pointer field_ptr(pointer p, void *structTypeid, int fieldOffset) {
     return pointer_ctor(field_ptr_provenance(p, structTypeid, fieldOffset), p.address + fieldOffset);
@@ -54,7 +54,7 @@ fixpoint pointer field_ptr(pointer p, void *structTypeid, int fieldOffset) {
 
 fixpoint pointer field_ptr_parent(pointer p, int fieldOffset) {
     return pointer_ctor(
-        field_ptr_provenance_parent(p.provenance, fieldOffset).provenance, 
+        field_ptr_provenance_parent(p.provenance), 
         p.address - fieldOffset
     );
 }
