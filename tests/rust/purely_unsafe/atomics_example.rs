@@ -67,7 +67,6 @@ fn main() {
         //@ produce_fn_ptr_chunk platform::threading::thread_run(incrementor)(incrementor_pre)(data) { call(); }
         //@ close space_inv(x)();
         //@ create_atomic_space(MaskTop, space_inv(x));
-        //@ leak atomic_space(MaskTop, space_inv(x));
         //@ close incrementor_pre(x as *u8);
         platform::threading::fork(incrementor as unsafe fn(*mut u8), x as *mut u8);
         let mut x1 = 0;

@@ -2,47 +2,13 @@ use std::process::abort;
 use std::ptr::NonNull;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-const MAX_REFCOUNT: usize = (isize::MAX) as usize;
-
 pub struct ArcU32 {
     ptr: NonNull<ArcInnerU32>,
 }
 
 /*@
-//TODO: Extract constant definitions out of the compiler
-fix MAX_REFCOUNT() -> usize { isize::MAX }
-
 fix Narc() -> *u8 { 42 as *u8 }
 fix Marc() -> mask_t { MaskSingle(Narc) }
-
-pred u32_share(k: lifetime_t, t: thread_id_t, l: *u32) = [_]frac_borrow(k, u32_full_borrow_content(t, l));
-lem u32_sync(k: lifetime_t, t: thread_id_t, t1: thread_id_t, l: *u32)
-    req [_]u32_share(k, t, l);
-    ens [_]u32_share(k, t1, l);
-{
-    open u32_share(k, t, l);
-    produce_lem_ptr_chunk implies_frac(u32_full_borrow_content(t, l), u32_full_borrow_content(t1, l))(){
-        open u32_full_borrow_content(t, l)(); assert [?f](*l) |-> _; close [f]u32_full_borrow_content(t1, l)();
-    }{
-        produce_lem_ptr_chunk implies_frac(u32_full_borrow_content(t1, l), u32_full_borrow_content(t, l))(){
-            open u32_full_borrow_content(t1, l)(); assert [?f](*l) |-> _; close [f]u32_full_borrow_content(t, l)();
-        }{
-            frac_borrow_implies(k, u32_full_borrow_content(t, l), u32_full_borrow_content(t1, l));
-        }
-    }
-    close u32_share(k, t1, l);
-    leak u32_share(k,t1, l);
-}
-
-lem u32_share_mono(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *u32)
-    req [_]u32_share(k, t, l) &*& lifetime_inclusion(k1, k) == true;
-    ens [_]u32_share(k1, t, l);
-{
-    open u32_share(k, t, l);
-    frac_borrow_mono(k, k1, u32_full_borrow_content(t, l));
-    close u32_share(k1, t, l);
-    leak u32_share(k1, t, l);
-}
 
 pred_ctor dlft_pred(dk: lifetime_t)(gid: isize; destroyed: bool) = ghost_cell(gid, destroyed) &*& if destroyed { true } else { lifetime_token(dk) };
 
@@ -50,8 +16,7 @@ pred_ctor dlft_pred(dk: lifetime_t)(gid: isize; destroyed: bool) = ghost_cell(gi
 `borrow_end_token(dk, <T>.full_borrow_content(t, &(*ptr).data));` we kept the invariant close to the generic form.
 */
 pred_ctor Arc_inv(dk: lifetime_t, gid: isize, ptr: *ArcInnerU32)() = counting(dlft_pred(dk), gid, ?n, ?destroyed) &*&
-    if destroyed { true } else { (*ptr).strong |-> ?arc_s &*& std::sync::atomic::AtomicUsize_own(default_tid, arc_s) &*&
-    std::sync::atomic::value(arc_s) == n &*& n >= 1 &*&
+    if destroyed { true } else { *((&(*ptr).strong) as *usize) |-> n &*& n >= 1 && n <= usize::MAX &*&
     alloc_block(ptr, std::mem::size_of::<ArcInnerU32>()) &*& struct_ArcInnerU32_padding(ptr) &*&
     borrow_end_token(dk, u32_full_borrow_content(default_tid, &(*ptr).data))
     };
@@ -143,47 +108,11 @@ lem ArcU32_share_full(k: lifetime_t, t: thread_id_t, l: *ArcU32)
 unsafe impl Send for ArcU32 {}
 unsafe impl Sync for ArcU32 {}
 /*@
-/*
-lem bor_end_token_t_indep(k: lifetime_t, t: thread_id_t, t1: thread_id_t, l: *u32)
-    req borrow_end_token(k, u32_full_borrow_content(t, l));
-    ens borrow_end_token(k, u32_full_borrow_content(t1, l));
-{
-    produce_lem_ptr_chunk implies(u32_full_borrow_content(t, l), u32_full_borrow_content(t1, l))() {
-        open u32_full_borrow_content(t, l)();
-        close u32_full_borrow_content(t1, l)();
-    }{
-        produce_lem_ptr_chunk implies(u32_full_borrow_content(t1, l), u32_full_borrow_content(t, l))(){
-            open u32_full_borrow_content(t1, l)();
-            close u32_full_borrow_content(t, l)();
-        }{
-            borrow_end_token_implies(k, u32_full_borrow_content(t, l), u32_full_borrow_content(t1, l));
-        }
-    }
-}
-*/
 lem ArcU32_send(t: thread_id_t, t1: thread_id_t)
     req ArcU32_own(t, ?nnp);
     ens ArcU32_own(t1, nnp);
 {
     open ArcU32_own(t, nnp);
-/*    assert [_]exists::<lifetime_t>(?dk) &*& [_]exists::<isize>(?gid) &*& [_]exists::<*ArcInnerU32>(?ptr);
-    produce_lem_ptr_chunk implies(Arc_inv(dk, gid, ptr, t), Arc_inv(dk, gid, ptr, t1))(){
-        open Arc_inv(dk, gid, ptr, t)();
-        assert counting(dlft_pred(dk), gid, _, ?destroyed);
-        if destroyed {} else { bor_end_token_t_indep(dk, t, t1, &(*ptr).data); }
-        close Arc_inv(dk, gid, ptr, t1)();
-    }{
-        produce_lem_ptr_chunk implies(Arc_inv(dk, gid, ptr, t1), Arc_inv(dk, gid, ptr, t))(){
-            open Arc_inv(dk, gid, ptr, t1)();
-            assert counting(_, _, _, ?destroyed);
-            if destroyed {} else { bor_end_token_t_indep(dk, t1, t, &(*ptr).data); }
-            close Arc_inv(dk, gid, ptr, t)();
-        }{
-            atomic_space_implies(Marc, Arc_inv(dk, gid, ptr, t), Arc_inv(dk, gid, ptr, t1));
-        }
-    }
-    u32_sync(dk, t, t1, &(*ptr).data);
-*/
     close ArcU32_own(t1, nnp);
 }
 
@@ -232,10 +161,9 @@ impl ArcU32 {
             //@ close dlft_pred(dk)(gid, false);
             //@ start_counting(dlft_pred(dk), gid);
             //@ let frac = create_ticket(dlft_pred(dk), gid);
+            //@ std::sync::atomic::atomic_to_usize_chunk_vs(&(*p).strong);
             //@ close u32_full_borrow_content(default_tid, &(*p).data)();
             //@ borrow(dk, u32_full_borrow_content(default_tid, &(*p).data));
-            //@ assert std::sync::atomic::AtomicUsize_own(_t, ?s);
-            //@ std::sync::atomic::AtomicUsize_send(_t, default_tid, s);
             //@ close Arc_inv(dk, gid, p)();
             //@ create_atomic_space(Marc, Arc_inv(dk, gid, p));
             //@ full_borrow_into_frac(dk, u32_full_borrow_content(default_tid, &(*p).data));
@@ -411,6 +339,23 @@ impl Clone for ArcU32 {
     }
 }
 
+/*@
+lem mod_eq_minus_one(x: i32, m: i32)
+    req 1 <= x &*& x <= m;
+    ens (x + m) % (m + 1) == x - 1;
+{
+    div_rem_nonneg(x + m, m + 1);
+    assert x + m == (x + m) / (m + 1) * (m + 1) + (x + m) % (m + 1);
+    if ((x + m) / (m + 1) < 1) {} else {
+        if ((x + m) / (m + 1) > 1) {
+            assert 2 <= (x + m) / (m + 1);
+            mul_mono_l(2, (x + m) / (m + 1), m + 1);
+        } else {}
+    }
+    assert (x + m) / (m + 1) == 1;
+}
+@*/
+
 impl Drop for ArcU32 {
     fn drop<'a>(&'a mut self) {
         //@ open ArcU32_full_borrow_content(_t, self)();
@@ -425,8 +370,7 @@ impl Drop for ArcU32 {
                 ticket(dlft_pred(dk), gid, ?frac) &*& [frac]dlft_pred(dk)(gid, false) &*&
                 [_]u32_share(dk, default_tid, &(*ptr).data) &*& pointer_within_limits(&(*ptr).data) == true;
             pred Post(result: usize) = if result == 1 {
-                *sp |-> _ &*& std::sync::atomic::AtomicUsize_own(default_tid, _) &*&
-                (*ptr).data |-> _ &*& struct_ArcInnerU32_padding(ptr) &*& alloc_block(ptr, std::mem::size_of::<ArcInnerU32>())
+                *(sp as *usize) |-> ?_x0 &*& (*ptr).data |-> ?_x1 &*& struct_ArcInnerU32_padding(ptr) &*& alloc_block(ptr, std::mem::size_of::<ArcInnerU32>())
             } else { true };
             @*/
             /*@
@@ -436,14 +380,10 @@ impl Drop for ArcU32 {
                 open Arc_inv(dk, gid, ptr)();
                 counting_match_fraction(dlft_pred(dk), gid);
                 assert std::sync::atomic::is_AtomicUsize_fetch_sub_op(?op, sp, 1, _, ?Q);
-                assert *sp |-> ?v0;
-                let vo = std::sync::atomic::value(v0);
+                assert *(sp as *usize) |-> ?v0;
                 op();
                 destroy_ticket(dlft_pred(dk), gid);
-                assert *sp |-> ?v1;
-                let vn = std::sync::atomic::value(v1);
-                assume(vn == vo -1); //TODO: Fix it!
-                if vo == 1 {
+                if v0 == 1 {
                     stop_counting(dlft_pred(dk), gid);
                     open dlft_pred(dk)(gid, false);
                     ghost_cell_mutate(gid, true);
@@ -453,21 +393,20 @@ impl Drop for ArcU32 {
                     borrow_end_m(dk, u32_full_borrow_content(default_tid, &(*ptr).data));
                     open u32_full_borrow_content(default_tid, &(*ptr).data)();
                 } else {}
+                mod_eq_minus_one(v0, usize::MAX);
                 close Arc_inv(dk, gid, ptr)();
                 close_atomic_space(Marc);
-                close Post(vo);
-                //assert false;
+                close Post(v0);
             };
             @*/
             //@ close Pre();
-            
             let sco = self.ptr.as_ref().strong.fetch_sub(1, Ordering::SeqCst);
             //@ open Post(sco);
             if sco != 1 {
                 return;
             }
             }
-            //@ leak std::sync::atomic::AtomicUsize_own(_, _); //TODO: Fix it!
+            //@ std::sync::atomic::usize_to_atomic_chunk_vs(sp as *usize);
             //@ open_struct(ptr);
             std::alloc::dealloc(
                     self.ptr.as_ptr() as *mut u8,

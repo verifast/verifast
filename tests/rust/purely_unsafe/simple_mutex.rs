@@ -9,7 +9,7 @@ pred_ctor SimpleMutex_inv(mutex: platform::threading::Mutex, inv_: pred())() =
 
 pred SimpleMutex(mutex: platform::threading::Mutex, inv_: pred();) =
     platform::threading::Mutex(mutex) &*&
-    atomic_space(MaskTop, SimpleMutex_inv(mutex, inv_));
+    [_]atomic_space(MaskTop, SimpleMutex_inv(mutex, inv_));
 
 pred SimpleMutex_held(mutex: platform::threading::Mutex, inv_: pred(), owner: usize) =
     [_]platform::threading::Mutex(mutex) &*&

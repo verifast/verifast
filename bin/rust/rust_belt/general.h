@@ -41,12 +41,6 @@ b- Mask-changing view shifts will only have the second form naturally.
 
 /*@
 predicate atomic_space(mask_t mask, predicate() inv;);
-
-// Iris lemma `inv_iff`
-lemma void atomic_space_implies(mask_t m, predicate() inv, predicate() inv1);
-    requires [_]atomic_space(m, inv) &*& is_implies(?f, inv, inv1) &*& is_implies(?f1, inv1, inv);
-    ensures [_]atomic_space(m, inv1) &*& is_implies(f, inv, inv1) &*& is_implies(f1, inv1, inv);
-
 /* This would be the existentially quantified `R` in the derived rule on Ralf Jung's thesis in the middle of page 67.
 See https://research.ralfj.de/phd/thesis-screen.pdf */
 predicate close_atomic_space_token(mask_t spaceMask, predicate() inv);
@@ -145,6 +139,35 @@ predicate_ctor u32_full_borrow_content(thread_id_t t, uint32_t *l)(;) = *l |-> ?
 predicate_ctor u64_full_borrow_content(thread_id_t t, uint64_t *l)(;) = *l |-> ?_;
 predicate_ctor u128_full_borrow_content(thread_id_t t, uint128_t *l)(;) = *l |-> ?_;
 predicate_ctor usize_full_borrow_content(thread_id_t t, uintptr_t *l)(;) = *l |-> ?_;
+
+predicate u32_share(lifetime_t k,thread_id_t t, uint32_t *l) = [_]frac_borrow(k, u32_full_borrow_content(t, l));
+lemma void u32_sync(lifetime_t k, thread_id_t t, thread_id_t t1, uint32_t *l)
+    requires [_]u32_share(k, t, l);
+    ensures [_]u32_share(k, t1, l);
+{
+    open u32_share(k, t, l);
+    produce_lemma_function_pointer_chunk implies_frac(u32_full_borrow_content(t, l), u32_full_borrow_content(t1, l))() {
+        open u32_full_borrow_content(t, l)(); assert [?f](*l) |-> _; close [f]u32_full_borrow_content(t1, l)();
+    }{
+        produce_lemma_function_pointer_chunk implies_frac(u32_full_borrow_content(t1, l), u32_full_borrow_content(t, l))(){
+            open u32_full_borrow_content(t1, l)(); assert [?f](*l) |-> _; close [f]u32_full_borrow_content(t, l)();
+        }{
+            frac_borrow_implies(k, u32_full_borrow_content(t, l), u32_full_borrow_content(t1, l));
+        }
+    }
+    close u32_share(k, t1, l);
+    leak u32_share(k,t1, l);
+}
+
+lemma void u32_share_mono(lifetime_t k, lifetime_t k1, thread_id_t t, uint32_t *l)
+    requires [_]u32_share(k, t, l) &*& lifetime_inclusion(k1, k) == true;
+    ensures [_]u32_share(k1, t, l);
+{
+    open u32_share(k, t, l);
+    frac_borrow_mono(k, k1, u32_full_borrow_content(t, l));
+    close u32_share(k1, t, l);
+    leak u32_share(k1, t, l);
+}
 
 type_pred_decl predicate(thread_id_t, Self) <Self>.own;
 type_pred_decl fixpoint(thread_id_t, void *, predicate()) <Self>.full_borrow_content;
