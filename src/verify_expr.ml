@@ -1603,6 +1603,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           Some (k, signedness) ->
           let length = ctxt#mk_intlit elemCount in
           assume_eq (mk_length elems) length $. fun () ->
+          assume_has_type l env addr elemTp $. fun () ->
           cont (Chunk (((if produceUninitChunk then integers___symb () else integers__symb ()), true), [], coef, [addr; rank_size_term k; mk_bool (signedness = Signed); length; elems], None)::h) env
         | None ->
           (* Produce a character array of the correct size *)
@@ -2460,6 +2461,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let write_integer__array_element () =
           match int_rank_and_signedness elem_tp with
             Some (k, signedness) ->
+            assert_has_type env arr elem_tp h env l "This write might violate C's effective types rules" None;
             let integers__symb = (integers__symb (), true) in
             let size = rank_size_term k in
             let signed = mk_bool (signedness = Signed) in
@@ -2577,16 +2579,17 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         end
         begin fun () ->
           assume_neq (mk_ptr_address result) int_zero_term $. fun () ->
-          let n, elemTp, arrayPredSymb, mallocBlockSymb, extra_args =
+          let elemTp0 = elemTp in
+          let n, elemTp, arrayPredSymb, mallocBlockSymb, extra_args, produce_has_type =
             match try_pointee_pred_symb0 elemTp with
               Some (_, _, _, asym, _, mbsym, _, _, _, _, _, uasym) ->
-              n, (if g = "calloc" then elemTp else option_type elemTp), (if g = "calloc" then asym else uasym), mbsym, []
+              n, (if g = "calloc" then elemTp else option_type elemTp), (if g = "calloc" then asym else uasym), mbsym, [], false
             | None ->
             match int_rank_and_signedness elemTp with
               Some (r, s) ->
-                n, (if g = "calloc" then intType else option_type intType), (if g = "calloc" then integers__symb () else integers___symb ()), malloc_block_integers__symb (), [rank_size_term r; if s = Signed then true_term else false_term]
+              n, (if g = "calloc" then intType else option_type intType), (if g = "calloc" then integers__symb () else integers___symb ()), malloc_block_integers__symb (), [rank_size_term r; if s = Signed then true_term else false_term], true
             | _ ->
-              arraySize, (if g = "calloc" then charType else option_type charType), (if g = "calloc" then chars_pred_symb () else chars__pred_symb ()), malloc_block_chars_pred_symb(), []
+              arraySize, (if g = "calloc" then charType else option_type charType), (if g = "calloc" then chars_pred_symb () else chars__pred_symb ()), malloc_block_chars_pred_symb(), [], false
           in
           assume (mk_object_pointer_within_limits result arraySize) $. fun () ->
           let values = get_unique_var_symb "values" (list_type elemTp) in
@@ -2594,6 +2597,12 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           begin fun cont ->
             if g = "calloc" then
               assume (mk_all_eq elemTp values (ctxt#mk_intlit 0)) cont
+            else
+              cont ()
+          end $. fun () ->
+          begin fun cont ->
+            if produce_has_type then
+              assume_has_type l env result elemTp0 cont
             else
               cont ()
           end $. fun () ->

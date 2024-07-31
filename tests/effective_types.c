@@ -1,3 +1,5 @@
+#include <stdint.h>
+
 struct point {
   int x;
   int y;
@@ -7,6 +9,13 @@ union u {
   short x;
   int y;
 };
+
+uint32_t read_and_inc_uint32(uint32_t *p)
+//@ requires *p |-> ?value &*& value < 2000000000;
+//@ ensures *p |-> value + 1 &*& result == value;
+{
+    return (*p)++;
+}
 
 /*@
 

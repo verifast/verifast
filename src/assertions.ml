@@ -317,6 +317,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | None ->
     match int_rank_and_signedness type_ with
       Some (k, signedness) ->
+      assume_has_type l [] addr type_ @@ fun () ->
       produce_chunk h (integer__symb (), true) [] coef (Some 3) [addr; rank_size_term k; mk_bool (signedness = Signed); value] None cont
     | None ->
       produce_chunk h (generic_points_to_symb (), true) [type_] coef (Some 1) [addr; value] None cont
@@ -334,6 +335,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | None ->
     match int_rank_and_signedness type_ with
       Some (k, signedness) ->
+        assume_has_type l [] addr type_ @@ fun () ->
         produce_chunk h (integer___symb (), true) [] coef (Some 3) [addr; rank_size_term k; mk_bool (signedness = Signed); get_unique_var_symb_ "dummy" (option_type type_) true] None cont
     | None ->
       produce_chunk h (generic_points_to__symb (), true) [type_] coef (Some 1) [addr; get_unique_var_symb_ "dummy" (option_type type_) true] None cont
@@ -796,7 +798,9 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     match lookup_integer__chunk_core h0 t k signedness with
       None -> assert_false h0 env l ("No matching points-to chunk: integer_(" ^ ctxt#pprint t ^ ", " ^ ctxt#pprint (rank_size_term k) ^ ", " ^ (if signedness = Signed then "true" else "false") ^ ", _)") None
-    | Some v -> v
+    | Some v ->
+      assert_has_type env t tp h0 env l "This read might violate C's effective types rules" None;
+      v
 
   let read_field h env l t fparent targs fname =
     let (_, (_, _, _, _, f_symb, _, _)), _ = List.assoc (fparent, fname) field_pred_map in
@@ -860,6 +864,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         Some (k, signedness) -> k, signedness
       | None -> static_error l ("Dereferencing array elements of type " ^ string_of_type tp ^ " is not yet supported.") None
     in
+    assert_has_type env a tp h env l "This read might violate C's effective types rules" None;
     let integers__symb = integers__symb () in
     let size = rank_size_term k in
     let signed = mk_bool (signedness = Signed) in
@@ -1140,7 +1145,9 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       Some (k, signedness) ->
       consume_chunk_core rules h typeid_env ghostenv env env' l ((if consumeUninitChunk && rhs = dummypat then integer___symb () else integer__symb ()), true) [] coef coefpat (Some 3)
         [TermPat addr; TermPat (rank_size_term k); TermPat (mk_bool (signedness = Signed)); rhs] [voidPtrType; intType; Bool; tp0] [voidPtrType; intType; Bool; tp]
-        (fun chunk h coef [_; _; _; value] size ghostenv env env' -> cont chunk h coef value ghostenv env env')
+        @@ fun chunk h coef [_; _; _; value] size ghostenv env env' ->
+      assert_has_type env addr type_ h env l "Cannot prove compliance with C's effective types rules" None;
+      cont chunk h coef value ghostenv env env'
     | None ->
       consume_chunk_core rules h typeid_env ghostenv env env' l ((if consumeUninitChunk && rhs = dummypat then generic_points_to__symb () else generic_points_to_symb ()), true) [type_] coef coefpat (Some 1)
         [TermPat addr; rhs] [voidPtrType; tp0] [voidPtrType; tp]
@@ -2179,6 +2186,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           with
             None -> cont None
           | Some ((coef, tv), h) ->
+            assert_has_type [] field_address ft h [] l "This memory location might not have the required effective type" None;
             cont (Some (Chunk ((symb_, true), [], coef, [tp; mk_some ft tv], None)::h))
         in
         add_rule symb_ pointee_chunk_to_field_chunk__rule

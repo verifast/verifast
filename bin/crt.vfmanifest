@@ -154,6 +154,7 @@
 .provides ./prelude.h#bools_to_chars
 .provides ./prelude.h#chars_to_integers_
 .provides ./prelude.h#integers__to_chars
+.provides ./prelude.h#integers___to_chars_
 .provides ./prelude.h#uchars_to_integers_
 .provides ./prelude.h#integers__to_uchars
 .provides ./prelude.h#integers__to_integers__

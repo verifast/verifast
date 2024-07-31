@@ -472,7 +472,7 @@ lemma_auto void chars_to_boolean(void *p);
     ensures [f]boolean(p, _);
 
 lemma_auto void chars_to_integer_(void *p, int size, bool signed_);
-    requires [?f]chars(p, size, ?cs) &*& has_type(p, &typeid(int)) == true;
+    requires [?f]chars(p, size, ?cs);
     ensures [f]integer_(p, size, signed_, _);
 
 // ... to chars
@@ -863,6 +863,10 @@ lemma_auto void integers__to_chars(void *p);
     ensures
         [f]chars(p, n * size, chars_of_integers(size, signed_, vs)) &*&
         integers_of_chars(size, signed_, chars_of_integers(size, signed_, vs)) == vs;
+
+lemma_auto void integers___to_chars_(void *p);
+    requires [?f]integers__(p, ?size, ?signed_, ?n, _);
+    ensures [f]chars_(p, n * size, _);
 
 lemma_auto void uchars_to_integers_(void *p, int size, bool signed_, int n);
     requires [?f]uchars(p, n * size, _);

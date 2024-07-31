@@ -1,3 +1,4 @@
+#include <stdlib.h>
 #include <stdint.h>
 
 #if UINT_MAX != UINT16_MAX || UINTPTR_MAX != UINT16_MAX
@@ -50,6 +51,10 @@ void quux()
 {
     uint32_t xs[3] = {444, 333, 222};
     //@ assert xs[..3] |-> {444, 333, 222};
+    uint32_t *ys = malloc(3 * sizeof(uint32_t));
+    if (ys == 0) abort();
+    //@ assert ys[..3] |-> _;
+    free((void *)ys);
 }
 
 void foo3(int32_t *p1, int128_t *p2)

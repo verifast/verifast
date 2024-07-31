@@ -5808,10 +5808,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let structTypeid = ctxt#mk_app structTypeidFunc targs in
         let offset = ctxt#mk_app offsetFunc targs in
         let field_has_type = mk_has_type (mk_field_ptr p structTypeid offset) (typeid_of_core l targs_env t) in
-        let struct_has_type = mk_has_type p structTypeid in
-        let eq = ctxt#mk_eq field_has_type struct_has_type in
         ctxt#end_formal;
-        ctxt#assume_forall ("has_type_field_ptr_" ^ sn ^ "_" ^ f) [field_has_type] (ctxt#type_inductive::List.map (fun x -> ctxt#type_inductive) tparams) eq
+        ctxt#assume_forall ("has_type_field_ptr_" ^ sn ^ "_" ^ f) [field_has_type] (ctxt#type_inductive::List.map (fun x -> ctxt#type_inductive) tparams) field_has_type
       | _ -> ()
       end
     | _ -> ()
@@ -6076,7 +6074,14 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             Some (k, signedness) ->
             let predname, pred_elemtype = if wrhs = DummyPat then "integers__", option_type elemtype else "integers_", elemtype in
             let p = new predref predname [PtrType Void; intType; Bool; intType; list_type pred_elemtype] (Some 4) in
-            (WPredAsn (l, p, true, [], [], [LitPat wfirst; LitPat (SizeofExpr (l, TypeExpr (ManifestTypeExpr (l, elemtype)))); LitPat (if signedness = Signed then True l else False l); wlength; wrhs]), tenv, [])
+            let predAsn = WPredAsn (l, p, true, [], [], [LitPat wfirst; LitPat (SizeofExpr (l, TypeExpr (ManifestTypeExpr (l, elemtype)))); LitPat (if signedness = Signed then True l else False l); wlength; wrhs]) in
+            let asn =
+              if fno_strict_aliasing then
+                predAsn
+              else
+                Sep (l, predAsn, ExprAsn (l, WPureFunCall (l, "has_type", [], [wfirst; TypeInfo (l, elemtype)])))
+            in
+            (asn, tenv, [])
           | None ->
             let array_pred_name, elemtype' = if wrhs = DummyPat then "array_", option_type elemtype else "array", elemtype in
             let p = new predref array_pred_name [PtrType elemtype; intType; list_type elemtype'] (Some 2) in
@@ -7426,6 +7431,16 @@ let check_if_list_is_defined () =
     !stats#proverOtherQuery;
     if not (ctxt#query t) then
       assert_false h env l (Printf.sprintf "%s (Cannot prove %s.)" msg (ctxt#pprint t)) url
+
+  let assume_has_type l typeid_env addr tp cont =
+    if fno_strict_aliasing then
+      cont ()
+    else
+      assume (mk_has_type addr (typeid_of_core l typeid_env tp)) cont
+
+  let assert_has_type typeid_env addr tp h env l msg url =
+    if not fno_strict_aliasing then
+      assert_term (mk_has_type addr (typeid_of_core l typeid_env tp)) h env l msg url
 
   let rec prover_type_term l tp = 
     match tp with

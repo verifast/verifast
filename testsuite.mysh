@@ -478,6 +478,7 @@ cd tests
   verifast -c inductive_field_access.c
   verifast -c -prover z3v4.5 inductive_field_access.c
   verifast -c -target lp64 issue516.c
+  verifast -c -target lp64 -allow_should_fail issue504.c
   verifast -c issue513.c
   verifast -c issue511.c
   verifast -c issue507.c

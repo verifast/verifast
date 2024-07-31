@@ -95,6 +95,7 @@
 .requires CRT/prelude.h#int_of_chars_size
 .requires CRT/prelude.h#integer__to_chars
 .requires CRT/prelude.h#integer_to_chars
+.requires CRT/prelude.h#integers___to_chars_
 .requires CRT/prelude.h#integers__inv
 .requires CRT/prelude.h#integers__to_chars
 .requires CRT/prelude.h#integers__to_integers__
