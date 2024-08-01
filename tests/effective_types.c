@@ -37,3 +37,17 @@ lemma int *effective_types(void *p)
 }
 
 @*/
+
+struct foo {
+  short x;
+  short y;
+};
+
+void close_struct_test()
+//@ requires sizeof(struct foo) == sizeof(int);
+//@ ensures false;
+{
+    int i;
+    //@ int__to_chars_(&i);
+    //@ close_struct((struct foo *)&i); //~should_fail // See https://github.com/verifast/verifast/issues/540
+}

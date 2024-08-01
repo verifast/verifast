@@ -611,6 +611,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let (w, tp) = check_expr (pn,ilist) tparams tenv e in
       let sn, targs = match tp with PtrType (StructType (sn, targs)) -> sn, targs | _ -> static_error l "The argument of close_struct must be of type pointer-to-struct." None in
       eval_h h env w $. fun h env pointerTerm ->
+      assert_has_type env pointerTerm (StructType (sn, targs)) h env l "Cannot prove consistency with C's effective types rules" None;
       begin fun cont ->
       match dialect with
         Some Rust ->
@@ -641,6 +642,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let sn, targs = match tp with PtrType (StructType (sn, targs)) -> sn, targs | _ -> static_error l "The argument of open_struct must be of type pointer-to-struct." None in
       eval_h h env w $. fun h env pointerTerm ->
       consume_c_object_core_core l real_unit_pat pointerTerm (StructType (sn, targs)) h env true true $. fun _ h _ ->
+      assume_has_type l env pointerTerm (StructType (sn, targs)) $. fun () ->
       let cs = get_unique_var_symb "cs" (list_type (option_type charType)) in
       let Some (_, _, _, _, length_symb) = try_assoc' Ghost (pn,ilist) "length" purefuncmap in
       let size = struct_size l env sn targs in

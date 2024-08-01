@@ -2589,7 +2589,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               Some (r, s) ->
               n, (if g = "calloc" then intType else option_type intType), (if g = "calloc" then integers__symb () else integers___symb ()), malloc_block_integers__symb (), [rank_size_term r; if s = Signed then true_term else false_term], true
             | _ ->
-              arraySize, (if g = "calloc" then charType else option_type charType), (if g = "calloc" then chars_pred_symb () else chars__pred_symb ()), malloc_block_chars_pred_symb(), [], false
+              arraySize, (if g = "calloc" then charType else option_type charType), (if g = "calloc" then chars_pred_symb () else chars__pred_symb ()), malloc_block_chars_pred_symb(), [], true
           in
           assume (mk_object_pointer_within_limits result arraySize) $. fun () ->
           let values = get_unique_var_symb "values" (list_type elemTp) in

@@ -13,6 +13,7 @@ int main(void)
     //@ assume(sizeof(Point) < UINT_MAX);
     Point *p = malloc(sizeof(Point) + 0);
     if (p == 0) abort();
+    //@ assume(has_type(p, &typeid(struct Point)));
 
     memset(p, 0, sizeof(Point));
     //@ close_struct_zero(p);
