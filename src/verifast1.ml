@@ -474,7 +474,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | PackageName n -> ProverInt
   
   let typenode_of_type t = typenode_of_provertype (provertype_of_type t)
-   
+  let type_info_type_node = typenode_of_type type_info_ref_type
+
   (* Generate some global symbols. *)
 
   let ancestry_symbol = mk_symbol "ancestry" [ctxt#type_int] ctxt#type_inductive Uninterp
@@ -544,7 +545,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     mk_typeid_term ("int" ^ string_of_int ((1 lsl k) * 8) ^ "_t")
   end
 
-  let pointer_typeid_term = mk_typeid_term "pointer"
+  let pointer_typeid_func_symb = mk_symbol "pointer_typeid" [type_info_type_node] type_info_type_node Uninterp
+  let mk_pointer_typeid pointee_typeid = ctxt#mk_app pointer_typeid_func_symb [pointee_typeid]
+  let void_pointer_typeid_term = mk_typeid_term "void_ptr"
+  let array_typeid_func_symb = mk_symbol "array_typeid" [type_info_type_node; ctxt#type_int] type_info_type_node Uninterp
+  let mk_array_typeid elem_typeid size = ctxt#mk_app array_typeid_func_symb [elem_typeid; size]
   let bool_typeid_term = mk_typeid_term "bool"
   let float_typeid_term = mk_typeid_term "float"
   let double_typeid_term = mk_typeid_term "double"
@@ -604,7 +609,13 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     done;
     assert_sizeof float_typeid_term (width_size_term_ 2);
     assert_sizeof double_typeid_term (width_size_term_ 3);
-    assert_sizeof pointer_typeid_term (width_size_term ptr_width)
+    assert_sizeof void_pointer_typeid_term (width_size_term ptr_width);
+    ctxt#begin_formal;
+    let t = ctxt#mk_bound 0 type_info_type_node in
+    let app = mk_sizeof (mk_pointer_typeid t) in
+    let eq = ctxt#mk_eq app (width_size_term ptr_width) in
+    ctxt#end_formal;
+    ctxt#assume_forall "sizeof_pointer" [app] [type_info_type_node] eq
 
   let union_size_partial umap l un =
     match try_assoc un umap with
@@ -913,6 +924,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       * asn (* postcondition *)
       * bool (* terminates *)
       * pred_fam_info map (* the is_xyz predicate, if any *)
+      * termnode (* typeid *)
     type signature = string * type_ list
     type method_info =
       MethodInfo of
@@ -1952,7 +1964,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         FuncType id
       | None ->
       match resolve Real (pn,ilist) l id functypemap0 with
-        Some (id, (ld, _, _, _, _, _, _, _, _, _)) ->
+        Some (id, (ld, _, _, _, _, _, _, _, _, _, _)) ->
         reportUseSite DeclKind_FuncType ld l;
         FuncType id
       | None ->
@@ -2202,7 +2214,6 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       match remaining with
       | [] -> smap
       | (sn, (l, tparams, body_opt, attrs)) :: remaining ->
-        let type_info_type_node = typenode_of_type type_info_ref_type in
         let type_info_func = mk_symbol (sn ^ "_type_info") (List.map (fun x -> type_info_type_node) tparams) type_info_type_node Uninterp in
         let packed = List.mem Packed attrs in
         let rec iter1 fmap fds has_ghost_fields bases is_polymorphic =
@@ -3064,11 +3075,12 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           else
             []
         in
-        (g, (l, gh, tparams, rt, ftxmap, xmap, pn, ilist, pre, post, terminates, predfammaps))
+        let typeid = mk_typeid_term g in
+        (g, (l, gh, tparams, rt, ftxmap, xmap, pn, ilist, pre, post, terminates, predfammaps, typeid))
       end
       functypedeclmap1
   
-  let isparamizedfunctypepreds1 = flatmap (fun (g, (l, gh, tparams, rt, ftxmap, xmap, pn, ilist, pre, post, terminates, predfammaps)) -> predfammaps) functypedeclmap1
+  let isparamizedfunctypepreds1 = flatmap (fun (g, (l, gh, tparams, rt, ftxmap, xmap, pn, ilist, pre, post, terminates, predfammaps, typeid)) -> predfammaps) functypedeclmap1
 
   let struct_accessor_map1: struct_accessor_info map =
     structmap1 |> flatmap (fun (sn, (l, tparams, body_opt, _, _)) ->
@@ -4496,7 +4508,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         (PureFuncType (_, _), _) -> check_pure_fun_value_call l w t es
       | (ClassOrInterfaceName(cn), [e2]) -> check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv inAnnotation (CastExpr(l, IdentTypeExpr(expr_loc e, None, cn), e2))
       | PtrType (FuncType ftn), _ ->
-        let (_, gh, tparams, rt, ftxmap, xmap, pre, post, terminates, ft_predfammap) =
+        let (_, gh, tparams, rt, ftxmap, xmap, pre, post, terminates, ft_predfammap, ft_typeid) =
           match try_assoc ftn functypemap with
             None -> static_error l "Function pointer calls are not allowed here." None
           | Some info -> info
@@ -4524,7 +4536,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let func_call () =
         match try_assoc g tenv |> Option.map unfold_inferred_type with
           Some (PtrType (FuncType ftn)) ->
-          let (_, gh, tparams, rt, ftxmap, xmap, pre, post, terminates, ft_predfammap) =
+          let (_, gh, tparams, rt, ftxmap, xmap, pre, post, terminates, ft_predfammap, ft_typeid) =
             match try_assoc ftn functypemap with
               None -> static_error l "Function pointer calls are not allowed here." None
             | Some info -> info
@@ -5676,7 +5688,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   | Int (Unsigned, LongLongRank) -> ullong_typeid_term
   | Int (Unsigned, PtrRank) -> uintptr_typeid_term
   | Int (Unsigned, FixedWidthRank k) -> fst exact_width_integer_typeid_terms.(k)
-  | PtrType _ | StaticArrayType (_, _) -> pointer_typeid_term
+  | PtrType Void -> void_pointer_typeid_term
+  | PtrType t0 -> mk_pointer_typeid (typeid_of_core_core l msg env t0)
+  | StaticArrayType (elemTp, n) -> mk_array_typeid (typeid_of_core_core l msg env elemTp) (ctxt#mk_intlit n)
   | Bool -> bool_typeid_term
   | Float -> float_typeid_term
   | Double -> double_typeid_term
@@ -5687,6 +5701,14 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   | UnionType un ->
     let _, _, s = List.assoc un unionmap in
     s
+  | FuncType ftn ->
+    begin match try_assoc ftn functypedeclmap1 with
+      Some (l, gh, tparams, rt, ftxmap, xmap, pn, ilist, pre, post, terminates, predfammaps, ft_typeid) ->
+      ft_typeid
+    | None ->
+      let (_, _, _, _, _, _, _, _, _, _, ft_typeid) = List.assoc ftn functypemap0 in
+      ft_typeid
+    end
   | GhostTypeParam tn | RealTypeParam tn  ->
     let x = tparam_typeid_varname tn in
     begin try

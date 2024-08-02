@@ -13,4 +13,5 @@ int main()
     //@ t = &typeid(float);
     //@ t = &typeid(double);
     //@ t = &typeid(long double);
+    //@ assert(&typeid(short*) == &typeid(float*)); //~should_fail
 }

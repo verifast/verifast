@@ -262,7 +262,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | Some (ftn, fttargs, args, params, openBraceLoc, ss, closeBraceLoc) ->
           begin match resolve Real (pn,ilist) l ftn functypemap with
             None -> static_error l "No such function type" None
-          | Some (ftn, (lft, gh, fttparams, rt, ftxmap, xmap, pre, post, terminates, ft_predfammaps)) ->
+          | Some (ftn, (lft, gh, fttparams, rt, ftxmap, xmap, pre, post, terminates, ft_predfammaps, ft_typeid)) ->
             begin match stmt_ghostness with
               Real -> if gh <> Real || (ftxmap = [] && fttparams = []) then static_error l "A produce_function_pointer_chunk statement may be used only for parameterized and type-parameterized function types." None
             | Ghost -> if gh <> Ghost then static_error l "Lemma function pointer type expected." None
@@ -579,7 +579,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       begin
         match resolve Real (pn,ilist) l ftn functypemap with
           None -> static_error lftn "No such function type." None
-        | Some (ftn, (lft, gh, fttparams, rt, ftxmap, xmap, pre, post, terminates, ft_predfammaps)) ->
+        | Some (ftn, (lft, gh, fttparams, rt, ftxmap, xmap, pre, post, terminates, ft_predfammaps, ft_typeid)) ->
           let p_symb = 
             if gh <> Ghost then static_error lftn "Only lemma function types allowed here." None;
             let [(_, (_, _, _, _, p_tn, _, _))] = ft_predfammaps in p_tn
