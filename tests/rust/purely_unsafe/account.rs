@@ -10,7 +10,7 @@ struct Account {
 /*@
 
 pred Account(account: *Account; balance: i32) =
-    alloc_block(account, std::mem::size_of::<Account>()) &*& struct_Account_padding(account) &*&
+    std::alloc::alloc_block(account as *u8, std::alloc::Layout::new_::<Account>()) &*& struct_Account_padding(account) &*&
     (*account).balance |-> balance;
 
 @*/

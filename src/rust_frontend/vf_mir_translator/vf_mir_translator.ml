@@ -882,17 +882,6 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     match kind with
     | StructKind -> (
         match def_path with
-        | "std::alloc::Layout" ->
-            (* Todo: To handle the ADTs from std lib we should use the original definition and search for their external-specs in VeriFast headers
-               e.g. `external struct std::alloc::Layout; //@ ordinary_type` *)
-            if not @@ ListAux.is_empty @@ substs_cpn then
-              Error
-                (`TrAdtTy (def_path ^ " should not have any generic parameter"))
-            else
-              let open TyBd.UIntTy in
-              let usz_ty_cpn = init_root () in
-              u_size_set usz_ty_cpn;
-              translate_u_int_ty (to_reader usz_ty_cpn) loc
         | "std::cell::UnsafeCell" | "std::mem::ManuallyDrop" ->
             let [ arg_cpn ] = substs_cpn in
             let* (Mir.GenArgType arg_ty) = translate_generic_arg arg_cpn loc in
@@ -1997,24 +1986,6 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               match fn_name with
               (* Todo @Nima: For cases where we inline an expression instead of a function call,
                  there is a problem with extending the implementation for clean-up paths *)
-              | "std::alloc::Layout::new" -> (
-                  if not (ListAux.is_empty args_cpn) then
-                    Error
-                      (`TrFnCallRExpr
-                        "Invalid number of arguments for \
-                         std::alloc::Layout::new")
-                  else
-                    match substs with
-                    | [ Mir.GenArgType ty_info; Mir.GenArgConst ] ->
-                        let ty_expr = Mir.basic_type_of ty_info in
-                        Ok
-                          ( (*tmp_rvalue_binders*) [],
-                            Ast.SizeofExpr (call_loc, Ast.TypeExpr ty_expr) )
-                    | _ ->
-                        Error
-                          (`TrFnCallRExpr
-                            "Invalid generic argument(s) for \
-                             std::alloc::Layout::new"))
               | "std::ptr::mut_ptr::<impl *mut T>::is_null" -> (
                   match (substs, args_cpn) with
                   | ( [ Mir.GenArgType gen_arg_ty_info; Mir.GenArgConst ],

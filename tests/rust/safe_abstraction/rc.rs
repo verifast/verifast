@@ -24,7 +24,7 @@ pred_ctor dlft_pred(dk: lifetime_t)(gid: usize; destroyed: bool) = ghost_cell(gi
 pred_ctor rc_na_inv<T>(dk: lifetime_t, gid: usize, ptr: *RcBox<T>, t: thread_id_t)() =
     counting(dlft_pred(dk), gid, ?sn, ?destroyed) &*& if destroyed { true } else {
         (*ptr).strong |-> sn &*& sn >= 1 &*&
-        alloc_block(ptr, std::mem::size_of::<RcBox<T>>()) &*& struct_RcBox_padding::<T>(ptr) &*&
+        std::alloc::alloc_block(ptr as *u8, std::alloc::Layout::new_::<RcBox<T>>()) &*& struct_RcBox_padding::<T>(ptr) &*&
         borrow_end_token(dk, <T>.full_borrow_content(t, &(*ptr).value))
     };
 

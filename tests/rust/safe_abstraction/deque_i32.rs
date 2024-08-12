@@ -10,7 +10,7 @@ pred Nodes(n: *Node, prev: *Node, last: *Node, next: *Node; elems: list<i32>) =
     if n == next {
         elems == [] &*& last == prev
     } else {
-        alloc_block(n, std::mem::size_of::<Node>()) &*& struct_Node_padding(n) &*&
+        std::alloc::alloc_block(n as *u8, std::alloc::Layout::new_::<Node>()) &*& struct_Node_padding(n) &*&
         (*n).prev |-> prev &*&
         (*n).value |-> ?value &*&
         (*n).next |-> ?next0 &*&
@@ -22,7 +22,7 @@ lem Nodes_split_last(n: *Node)
     req Nodes(n, ?prev, ?last, ?next, ?elems) &*& 1 <= length(elems);
     ens
         Nodes(n, prev, ?last1, last, take(length(elems) - 1, elems)) &*&
-        alloc_block(last, std::mem::size_of::<Node>()) &*& struct_Node_padding(last) &*&
+        std::alloc::alloc_block(last as *u8, std::alloc::Layout::new_::<Node>()) &*& struct_Node_padding(last) &*&
         (*last).prev |-> last1 &*&
         (*last).value |-> nth(length(elems) - 1, elems) &*&
         (*last).next |-> next;
@@ -42,7 +42,7 @@ lem Nodes_split_last(n: *Node)
 lem Nodes_join_last(n: *Node)
     req
         Nodes(n, ?prev, ?last1, ?last, ?elems1) &*&
-        alloc_block(last, std::mem::size_of::<Node>()) &*& struct_Node_padding(last) &*&
+        std::alloc::alloc_block(last as *u8, std::alloc::Layout::new_::<Node>()) &*& struct_Node_padding(last) &*&
         (*last).prev |-> last1 &*&
         (*last).value |-> ?value &*&
         (*last).next |-> ?next &*& (*next).next |-> ?nextNext;
@@ -70,7 +70,7 @@ pred Deque_full_borrow_content(t: thread_id_t, deque: *Deque) =
 
 /*@
 pred Deque_(sentinel: *Node; elems: list<i32> ) =
-    alloc_block(sentinel, std::mem::size_of::<Node>()) &*& struct_Node_padding(sentinel) &*&
+    std::alloc::alloc_block(sentinel as *u8, std::alloc::Layout::new_::<Node>()) &*& struct_Node_padding(sentinel) &*&
     (*sentinel).prev |-> ?last &*&
     (*sentinel).value |-> _ &*&
     (*sentinel).next |-> ?first &*&

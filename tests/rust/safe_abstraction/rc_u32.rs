@@ -12,7 +12,7 @@ pred_ctor dlft_pred(dk: lifetime_t)(gid: usize; destroyed: bool) = ghost_cell(gi
 pred_ctor rc_na_inv(dk: lifetime_t, gid: usize, ptr: *RcBoxU32, t: thread_id_t)() =
     counting(dlft_pred(dk), gid, ?sn, ?destroyed) &*& if destroyed { true } else {
         (*ptr).strong |-> sn &*& sn >= 1 &*&
-        alloc_block(ptr, std::mem::size_of::<RcBoxU32>()) &*& struct_RcBoxU32_padding(ptr) &*&
+        std::alloc::alloc_block(ptr as *u8, std::alloc::Layout::new_::<RcBoxU32>()) &*& struct_RcBoxU32_padding(ptr) &*&
         borrow_end_token(dk, u32_full_borrow_content(t, &(*ptr).value))
     };
 

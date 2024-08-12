@@ -14,7 +14,7 @@ struct Buffer {
 pred Buffer_(buffer: Buffer; size: usize, length: usize) =
     size == buffer.size &*& size <= isize::MAX &*&
     length == buffer.length &*&
-    alloc_block(buffer.buffer, size) &*&
+    std::alloc::alloc_block(buffer.buffer, std::alloc::Layout::from_size_align_(size, 1)) &*&
     integers_(buffer.buffer, 1, false, length, _) &*&
     integers__(buffer.buffer + length, 1, false, size - length, _);
 
@@ -191,7 +191,7 @@ struct Connection {
 pred_ctor mutex_inv(buffer: *mut Buffer)() = Buffer(buffer, _, _);
 
 pred Connection(connection: *mut Connection;) =
-    alloc_block(connection as *mut u8, std::mem::size_of::<Connection>()) &*&
+    std::alloc::alloc_block(connection as *mut u8, std::alloc::Layout::new_::<Connection>()) &*&
     struct_Connection_padding(connection) &*&
     (*connection).socket |-> ?socket &*& platform::sockets::Socket(socket) &*&
     (*connection).buffer |-> ?buffer &*&

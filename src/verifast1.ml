@@ -1716,7 +1716,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     match try_assoc0 name map with
       Some xy as result -> result
     | None ->
-      if String.contains name item_path_separator.[0] then
+      if dialect <> Some Rust && String.contains name item_path_separator.[0] then
         None
       else
         match if pn = "" then None else try_assoc0 (pn ^ item_path_separator ^ name) map with
@@ -2495,8 +2495,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         [] -> (imap, pfm, fpm)
       | Inductive (l, i, tparams, ctors)::ds -> let i=full_name pn i in
         check_tparams l [] tparams;
+        (* Type parameters of inductive types never carry typeids. Rename any uppercase type parameters X to _X. *)
+        let tparams' = tparams |> List.map @@ fun x -> if tparam_carries_typeid x then "_" ^ x else x in
+        let tpenv = List.map2 (fun x x' -> (x, GhostTypeParam x')) tparams tparams' in
         let (_, _, _, subtype) = List.assoc i inductivedeclmap in
-        let tt = InductiveType (i, List.map (fun x -> GhostTypeParam x) tparams) in
+        let tt = InductiveType (i, List.map (fun x -> GhostTypeParam x) tparams') in
         let rec citer j ctormap pfm ctors =
           match ctors with
             [] -> ((pn,ilist), ctormap, pfm)
@@ -2506,11 +2509,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             if List.mem_assoc full_cn pfm || List.mem_assoc full_cn purefuncmap0 then
               static_error lc ("Duplicate pure function name: " ^ full_cn) None
             else begin
-              let ts = List.map (check_pure_type (pn,ilist) tparams Ghost) argument_type_expressions in
+              let ts = List.map (fun tp -> instantiate_type tpenv (check_pure_type (pn,ilist) tparams Ghost tp)) argument_type_expressions in
               let csym =
                 mk_func_symbol full_cn (List.map provertype_of_type ts) ProverInductive (Proverapi.Ctor (CtorByOrdinal (subtype, j)))
               in
-              let purefunc = (full_cn, (lc, tparams, tt, (List.combine argument_names ts), csym)) in
+              let purefunc = (full_cn, (lc, tparams', tt, (List.combine argument_names ts), csym)) in
               citer (j + 1) ((cn, purefunc)::ctormap) (purefunc::pfm) ctors
             end
         in
@@ -2535,7 +2538,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             (f, make_setter i tt csym subtype getters fieldnames f tp))
         | _ -> []
         in
-        iter pni ((i, (l, tparams, List.rev ctormap, getters, setters, subtype))::imap) pfm fpm ds
+        iter pni ((i, (l, tparams', List.rev ctormap, getters, setters, subtype))::imap) pfm fpm ds
       | Func (l, Fixpoint, tparams, rto, g, ps, nonghost_callers_only, functype, contract, terminates, body_opt, _, _)::ds ->
         let g = full_name pn g in
         if List.mem_assoc g pfm || List.mem_assoc g purefuncmap0 then static_error l ("Duplicate pure function name: "^g) None;
@@ -2560,6 +2563,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           in
           iter [] ps
         in
+        let typeid_paramtypes = tparams |> flatmap @@ fun x -> if tparam_carries_typeid x then [ProverInductive] else [] in
+        let fsym_paramtypes = typeid_paramtypes @ List.map (fun (p, t) -> provertype_of_type t) pmap in
         begin match body_opt with
           Some ([SwitchStmt (ls, e, cs) as body], _) ->
           let index, subtype = 
@@ -2576,13 +2581,13 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               end
             | _ -> static_error l "Fixpoint function must switch on a parameter." None
           in
-          let fsym = mk_func_symbol g (List.map (fun (p, t) -> provertype_of_type t) pmap) (provertype_of_type rt) (Proverapi.Fixpoint (subtype, index)) in
+          let fsym = mk_func_symbol g fsym_paramtypes (provertype_of_type rt) (Proverapi.Fixpoint (subtype, index)) in
           iter (pn,ilist) imap ((g, (l, tparams, rt, List.map (fun (p, t) -> p, t) pmap, fsym))::pfm) ((g, (l, tparams, rt, pmap, Some index, body, pn, ilist, fst fsym))::fpm) ds
         | Some ([ReturnStmt (lr, Some e) as body], _) ->
-          let fsym = mk_func_symbol g (List.map (fun (p, t) -> provertype_of_type t) pmap) (provertype_of_type rt) Proverapi.Uninterp in
+          let fsym = mk_func_symbol g fsym_paramtypes (provertype_of_type rt) Proverapi.Uninterp in
           iter (pn,ilist) imap ((g, (l, tparams, rt, List.map (fun (p, t) -> p, t) pmap, fsym))::pfm) ((g, (l, tparams, rt, pmap, None, body, pn, ilist, fst fsym))::fpm) ds
         | None ->
-          let fsym = mk_func_symbol g (List.map (fun (p, t) -> provertype_of_type t) pmap) (provertype_of_type rt) Proverapi.Uninterp in
+          let fsym = mk_func_symbol g fsym_paramtypes (provertype_of_type rt) Proverapi.Uninterp in
           iter (pn,ilist) imap ((g, (l, tparams, rt, List.map (fun (p, t) -> p, t) pmap, fsym))::pfm) fpm ds
         | _ -> static_error l "Body of fixpoint function must be switch statement or return statement." None
         end
@@ -5221,7 +5226,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             clauses @ wcs
         in
         let wcs = check_cs ctormap [] cs in
-        iter ((g, (l, rt, pmap, Some index, SwitchExpr (ls, Var (lx, x), wcs, None), pn, ilist, fsym))::fpm_done) fpm_todo
+        iter ((g, (l, tparams, rt, pmap, Some index, SwitchExpr (ls, Var (lx, x), wcs, None), pn, ilist, fsym))::fpm_done) fpm_todo
       | (None, ReturnStmt (lr, Some e)) ->
         let tenv = pmap in
         let w = check_expr_t (pn,ilist) tparams tenv (Some true) e rt in
@@ -5241,7 +5246,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           iter () e
         in
         iter0 w;
-        iter ((g, (l, rt, pmap, None, w, pn, ilist, fsym))::fpm_done) fpm_todo
+        iter ((g, (l, tparams, rt, pmap, None, w, pn, ilist, fsym))::fpm_done) fpm_todo
     in
     iter [] fixpointmap1
   
@@ -7766,7 +7771,9 @@ let check_if_list_is_defined () =
           None -> static_error l ("No such pure function: "^g) None
         | Some (lg, tparams, t, pts, s) ->
           evs state args $. fun state vs ->
-          cont state (mk_app s vs)
+          let Some tpenv = zip tparams targs in
+          let targs_typeids = tpenv |> flatmap @@ fun (x, tp) -> if tparam_carries_typeid x then [typeid_of_core l env tp] else [] in
+          cont state (mk_app s (targs_typeids @ vs))
         end
       end
     | WPureFunValueCall (l, e, es) ->
@@ -8051,7 +8058,8 @@ let check_if_list_is_defined () =
   let _ =
     List.iter
     begin function
-       (g, (l, t, pmap, Some index, SwitchExpr (_, Var (_, x), cs, _), pn, ilist, fsym)) ->
+       (g, (l, tparams, t, pmap, Some index, SwitchExpr (_, Var (_, x), cs, _), pn, ilist, fsym)) ->
+       let typeid_pmap = tparams |> flatmap @@ fun x -> if tparam_carries_typeid x then [x ^ "_typeid", voidPtrType] else [] in
        let rec index_of_param i x0 ps =
          match ps with
            [] -> assert false
@@ -8063,7 +8071,7 @@ let check_if_list_is_defined () =
            (function SwitchExprClause (_, cn, pats, e) ->
               let (_, tparams, _, ts, (ctorsym, _)) = match try_assoc' Ghost (pn,ilist) cn purefuncmap with Some x -> x in
               let eval_body gts cts =
-                let Some pts = zip pmap gts in
+                let Some pts = zip (typeid_pmap @ pmap) gts in
                 let penv = List.map (fun ((p, tp), t) -> (p, t)) pts in
                 let Some patenv = zip pats cts in
                 let patenv = List.filter (fun (x, t) -> x <> "_") patenv in
@@ -8088,10 +8096,11 @@ let check_if_list_is_defined () =
            )
            cs
        in
-       ctxt#set_fpclauses fsym i clauses
-     | (g, (l, t, pmap, None, w, pn, ilist, fsym)) ->
+       ctxt#set_fpclauses fsym (List.length typeid_pmap + i) clauses
+     | (g, (l, tparams, t, pmap, None, w, pn, ilist, fsym)) ->
+       let typeid_pmap = tparams |> flatmap @@ fun x -> if tparam_carries_typeid x then [x ^ "_typeid", voidPtrType] else [] in
        ctxt#begin_formal;
-       let env = imap (fun i (x, tp) -> let pt = typenode_of_type tp in (pt, (x, ctxt#mk_bound i pt))) pmap in
+       let env = imap (fun i (x, tp) -> let pt = typenode_of_type tp in (pt, (x, ctxt#mk_bound i pt))) (typeid_pmap @ pmap) in
        let tps = List.map fst env in
        let env = List.map snd env in
        let rhs = eval None env w in
