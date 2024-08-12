@@ -8,7 +8,7 @@ jobs:
     permissions: {}
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -26,7 +26,7 @@ jobs:
           mv verifast-nightly.tar.gz $ARTIFACT_NAME
           echo "artifact_name=$ARTIFACT_NAME" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: binary-package-ubuntu
           path: upload
@@ -45,7 +45,7 @@ jobs:
       attestations: write
 
     steps:
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
           name: binary-package-ubuntu
 
@@ -63,7 +63,7 @@ jobs:
           cosign sign-blob -y ${{ needs.build_ubuntu.outputs.artifact_name }} --bundle upload/${{ needs.build_ubuntu.outputs.artifact_name }}.signature
 
       - name: Upload signature as artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: cosign-signature-ubuntu
           path: upload
@@ -79,7 +79,7 @@ jobs:
       contents: write
     
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -87,7 +87,7 @@ jobs:
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
         run: git tag -f nightly && git push -f origin nightly:refs/tags/nightly
 
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
           name: binary-package-ubuntu
       
@@ -107,7 +107,7 @@ jobs:
               tag: 'nightly'
             });
     
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
           name: cosign-signature-ubuntu
       
@@ -132,7 +132,7 @@ jobs:
     permissions: {}
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -153,12 +153,12 @@ jobs:
           mv verifast-nightly-osx.tar.gz $ARTIFACT_NAME
           echo "artifact_name=$ARTIFACT_NAME" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: binary-package-macos
           path: upload
 
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         if: ${{ always() }}
         with:
           name: vfide_libraries
@@ -178,7 +178,7 @@ jobs:
       attestations: write
 
     steps:
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
           name: binary-package-macos
 
@@ -196,7 +196,7 @@ jobs:
           cosign sign-blob -y ${{ needs.build_macos.outputs.artifact_name }} --bundle upload/${{ needs.build_macos.outputs.artifact_name }}.signature
 
       - name: Upload signature as artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: cosign-signature-macos
           path: upload
@@ -212,7 +212,7 @@ jobs:
       contents: write
     
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -220,7 +220,7 @@ jobs:
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
         run: git tag -f nightly && git push -f origin nightly:refs/tags/nightly
 
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
           name: binary-package-macos
       
@@ -240,7 +240,7 @@ jobs:
               tag: 'nightly'
             });
     
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
           name: cosign-signature-macos
       
@@ -265,7 +265,7 @@ jobs:
     permissions: {}
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -284,7 +284,7 @@ jobs:
           mv verifast-nightly.zip $ARTIFACT_NAME
           echo "artifact_name=$ARTIFACT_NAME" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: binary-package-windows
           path: src/${{ steps.rename_artifact.outputs.artifact_name }}
@@ -303,7 +303,7 @@ jobs:
       attestations: write
 
     steps:
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
           name: binary-package-windows
 
@@ -321,7 +321,7 @@ jobs:
           cosign sign-blob -y ${{ needs.build_windows.outputs.artifact_name }} --bundle upload/${{ needs.build_windows.outputs.artifact_name }}.signature
 
       - name: Upload signature as artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: cosign-signature-windows
           path: upload
@@ -337,7 +337,7 @@ jobs:
       contents: write
     
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -345,7 +345,7 @@ jobs:
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
         run: git tag -f nightly && git push -f origin nightly:refs/tags/nightly
 
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
           name: binary-package-windows
       
@@ -365,7 +365,7 @@ jobs:
               tag: 'nightly'
             });
     
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
           name: cosign-signature-windows
       
