@@ -64,4 +64,7 @@ type_pred_decl <Self>.share : pred(lifetime_t, thread_id_t, *_);
 
 pred_ctor own<T>(t: thread_id_t)(v: T) = (<T>.own)(t, v);
 
+pred u8_own(t: thread_id_t, v: u8) = true;
+type_pred_def <u8>.own = u8_own;
+
 @*/

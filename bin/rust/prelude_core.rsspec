@@ -216,9 +216,17 @@ lem u8s__to_integer__(p: *_, size: i32, signed: bool);
     req [?f]integers__(p, 1, false, size, _);
     ens [f]integer__(p, size, signed, _);
 
+lem_auto u8s__to_pointer_(p: *_);
+    req [?f]integers__(p, 1, false, std::mem::size_of::<*_>(), _);
+    ens [f]pointer_(p, _); 
+
 lem integer__to_u8s(p: *_, size: i32, signed: bool);
     req [?f]integer_(p, size, signed, _);
     ens [f]integers_(p, 1, false, size, _);
+
+lem_auto pointer_to_u8s(p: *_);
+    req [?f]pointer(p, _);
+    ens [f]integers_(p, 1, false, std::mem::size_of::<*_>(), _);
 
 pred array_<T>(p: *T, count: i32; values: list<option<T>>) =
     pointer_within_limits(p) == true &*&
