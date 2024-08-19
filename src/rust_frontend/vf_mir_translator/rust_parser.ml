@@ -47,6 +47,8 @@ let rec parse_type = function%parser
     | [ ] -> IdentTypeExpr (l, None, x)
     ]
   ] -> t
+| [ (l, Kwd "fix"); (_, Kwd "("); [%let ts = rep_comma parse_type_with_opt_name]; (_, Kwd ")") ] ->
+  PureFuncTypeExpr (l, List.map snd ts)
 | [ (l, Kwd "pred"); (_, Kwd "(");
     [%let ts = rep_comma parse_type_with_opt_name];
     [%let (ts, inputParamCount) = function%parser
@@ -57,7 +59,10 @@ let rec parse_type = function%parser
   ] -> PredTypeExpr (l, List.map snd ts, inputParamCount)
 | [ (l, Kwd "*");
     [%let mutability = opt (function%parser [ (_, Kwd "const") ] -> () | [ (_, Kwd "mut") ] -> ()) ];
-    parse_type as t
+    [%let t = function%parser
+       [ (lv, Kwd "_") ] -> ManifestTypeExpr (lv, Void)
+     | [ parse_type as t ] -> t
+    ]
   ] -> ignore mutability; PtrTypeExpr (l, t)
 | [ (l, Kwd "&");
     [%let lft = opt (function%parser [ (_, PrimePrefixedIdent lft) ] -> lft)];
@@ -203,19 +208,9 @@ let rec parse_expr_funcs allowStructExprs =
     ] -> e
   and parse_suffix e = function%parser
     [ (l, Kwd "."); (_, Ident f); [%let e = parse_suffix (Select (l, e, f)) ] ] -> e
-  | [ (l, Kwd "("); [%let args0 = rep_comma parse_pat ]; (_, Kwd ")");
-      [%let (indices, args) = function%parser
-        [ (_, Kwd "("); [%let args = rep_comma parse_pat]; (_, Kwd ")") ] -> (args0, args)
-      | [ ] -> ([], args0)
-      ]
-    ] ->
-    begin match e with
-      Var (_, x) -> CallExpr (l, x, [], indices, args, Static)
-    | _ ->
-      if indices <> [] then static_error l "This expression form is not supported here" None;
-      let args = args |> List.map @@ function LitPat e -> e | _ -> static_error l "Patterns are not supported as arguments here" None in
-      ExprCallExpr (l, e, args)
-    end
+  | [ (l, Kwd "("); [%let args = rep_comma parse_pat ]; (_, Kwd ")") ] ->
+    let args = args |> List.map @@ function LitPat e -> e | _ -> static_error l "Patterns are not supported as arguments here" None in
+    ExprCallExpr (l, e, args)
   | [ (l, Kwd "[");
       [%let p1 = opt parse_pat];
       [%let index = function%parser
@@ -314,6 +309,16 @@ let rec parse_expr_funcs allowStructExprs =
       | [ (_, Ident x1); [%let e = parse_path_rest l (x ^ "::" ^ x1) ] ] -> e
       ]
     ] -> e
+  | [ (l, Kwd "("); [%let args0 = rep_comma parse_pat ]; (_, Kwd ")");
+      [%let (indices, args) = function%parser
+         [ (_, Kwd "("); [%let args = rep_comma parse_pat]; (_, Kwd ")") ] -> (args0, args)
+       | [ ] -> ([], args0)
+      ]
+    ] ->
+      begin match x, indices, args with
+        "std::mem::size_of", [], [LitPat e] -> SizeofExpr (l, CastExpr (l, IdentTypeExpr (l, None, "pointer"), e))
+      | _, _, _ -> CallExpr (l, x, [], indices, args, Static)
+      end
   | [ ] ->
     match x with
       "isize::MIN" -> Operation (l, MinValue (Int (Signed, PtrRank)), [])
@@ -324,7 +329,7 @@ let rec parse_expr_funcs allowStructExprs =
     [ (_, Kwd "{"); parse_expr as e; (_, Kwd "}") ] -> e
   and parse_pat0 = function%parser
     [ (_, Kwd "_") ] -> DummyPat
-  | [ (_, Kwd "?"); (lx, Ident x) ] -> VarPat (lx, x)
+  | [ (_, Kwd "?"); [%let pat = function%parser [ (lx, Ident x) ] -> VarPat (lx, x) | [ (_, Kwd "_") ] -> DummyVarPat] ] -> pat
   | [ (_, Kwd "^"); parse_primary_expr as e ] -> LitPat (WidenedParameterArgument e)
   | [ parse_disj_expr as e ] -> pat_of_expr e
   in
@@ -466,6 +471,10 @@ and parse_stmts stream = rep parse_stmt stream
 let parse_param = function%parser
   [ (_, Ident x); (_, Kwd ":"); parse_type as t ] -> t, x
 | [ (_, Kwd "self"); (_, Kwd ":"); parse_type as t ] -> t, "self"
+
+let parse_struct_field = function%parser
+  [ (l, Ident x); (_, Kwd ":"); parse_type as t ] ->
+  Field (l, Real, t, x, Instance, Public, false, None)
 
 let parse_pred_paramlist = function%parser
   [ (_, Kwd "(");
@@ -619,6 +628,20 @@ let parse_ghost_decl = function%parser
   (_, Kwd "ens"); parse_asn as post; (_, Kwd ";")
 ] -> [FuncTypeDecl (l, Ghost, rt, ftn, [], ftps, ps, (pre, post, false))]
 | [ (l, Kwd "abstract_type"); (_, Ident tn); (_, Kwd ";") ] -> [AbstractTypeDecl (l, tn)]
+| [ (l, Kwd "type_pred_decl"); (_, Kwd "<"); (_, Kwd "Self"); (_, Kwd ">"); (_, Kwd "."); (_, Ident predName); (_, Kwd ":"); parse_type as te; (_, Kwd ";") ] ->
+  [TypePredDecl (l, te, "Self", predName)]
+| [ (l, Kwd "type_pred_def"); (* TODO: Support for<t1, t2> clause [%let tparams = parse_type_params]; *)
+    (_, Kwd "<"); parse_type as tp; (_, Kwd ">"); (_, Kwd "."); (_, Ident predName); (_, Kwd "=");
+    (lrhs, Ident rhs); (* TODO: Support x::<t1, t2> syntax [%let targs = parse_type_args lrhs]; *) (_, Kwd ";")
+  ] ->
+  let tparams = [] in
+  let targs = [] in
+  let targ_names = targs |> List.map @@ function
+    IdentTypeExpr (_, None, targ_name) -> targ_name
+  | te -> raise (ParseException (type_expr_loc te, "Type parameter name expected"))
+  in
+  if targ_names <> tparams then raise (ParseException (lrhs, "Right-hand side type arguments must match definition type parameters"));
+  [TypePredDef (l, tparams, tp, predName, lrhs, rhs)]
 
 let parse_ghost_decls stream = List.flatten (rep parse_ghost_decl stream)
 
@@ -655,6 +678,7 @@ let parse_enum_ctor enum_name = function%parser
     ]
   ] -> Ast.Ctor (lc, enum_name ^ "::" ^ c, params)
 
+let parse_decls parse_rsspec_file =
 let rec parse_decl = function%parser
   [ (l, Kwd "impl"); parse_type_params as tparams; parse_type as tp; (_, Kwd "{");
     [%let ds = rep parse_decl];
@@ -686,16 +710,25 @@ let rec parse_decl = function%parser
     [%let ds = rep parse_decl];
     (_, Kwd "}")
   ] -> [ModuleDecl (l, x, [], List.flatten ds)]
+| [ (l, Ident "include"); (_, Kwd "!"); (_, Kwd "{"); (ls, String path); (_, Kwd "}") ] ->
+  parse_rsspec_file ls path
 | [ (l, Kwd "type"); (lx, Ident x); parse_type_params as tparams; (_, Kwd "="); parse_type as tp; (_, Kwd ";") ] ->
   [TypedefDecl (l, tp, x, tparams)]
 | [ (l, Kwd "fn"); [%let d = parse_func_rest Regular] ] -> [d]
 | [ (_, Kwd "unsafe"); (l, Kwd "fn"); [%let d = parse_func_rest Regular] ] -> [d]
-| [ (_, Kwd "struct"); (l, Ident sn); parse_type_params as tparams; (_, Kwd ";") ] ->
+| [ (_, Kwd "struct"); (l, Ident sn); parse_type_params as tparams;
+    [%let body = function%parser
+       [ (_, Kwd ";") ] -> None
+     | [ (_, Kwd "{"); [%let fds = rep_comma_ parse_struct_field]; (_, Kwd "}") ] ->
+       Some ([], fds, [], false)
+    ]
+  ] ->
   [
-    Struct (l, sn, tparams, None, []);
+    Struct (l, sn, tparams, body, []);
     let targs = List.map (fun x -> IdentTypeExpr (l, None, x)) tparams in
     TypedefDecl (l, StructTypeExpr (l, Some sn, None, [], targs), sn, tparams)
   ]
+| [ (_, Ident "union"); (l, Ident un); (_, Kwd "{"); (_, Kwd "}") ] -> [ Union (l, un, Some []) ]
 | [ (_, Kwd "enum"); (l, Ident en); parse_type_params as tparams; (_, Kwd "{");
     [%let ctors = rep (function%parser
        [ [%let ctor = parse_enum_ctor en];
@@ -704,8 +737,8 @@ let rec parse_decl = function%parser
     (_, Kwd "}")
   ] -> [Inductive (l, en, tparams, ctors)]
 | [ parse_ghost_decl_block as ds ] -> ds
-
-let parse_decls = function%parser
+in
+function%parser
   [ [%let ds = rep parse_decl] ] -> List.flatten ds
 
 let flatten_module_decls ltop ds =

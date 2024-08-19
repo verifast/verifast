@@ -1,0 +1,21 @@
+/*@
+
+pred ghost_cell<t>(id: i32; value: t);
+
+lem create_ghost_cell<t>(value: t) -> i32;
+    req true;
+    ens ghost_cell::<t>(result, value);
+
+lem ghost_cell_mutate<t>(id: i32, value: t);
+    req ghost_cell::<t>(id, _);
+    ens ghost_cell::<t>(id, value);
+
+lem ghost_cell_fraction_info<t>(id: i32);
+    req [?f]ghost_cell::<t>(id, ?value);
+    ens [f]ghost_cell::<t>(id, value) &*& 0 < f &*& f <= 1;
+
+lem ghost_cell_leak<t>(id: i32); // For people who prefer to avoid "leak" statements.
+    req [?f]ghost_cell::<t>(id, ?value);
+    ens [_]ghost_cell::<t>(id, value);
+
+@*/

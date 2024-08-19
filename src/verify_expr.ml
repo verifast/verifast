@@ -2583,7 +2583,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let n, elemTp, arrayPredSymb, mallocBlockSymb, extra_args, produce_has_type =
             match try_pointee_pred_symb0 elemTp with
               Some (_, _, _, asym, _, mbsym, _, _, _, _, _, uasym) ->
-              n, (if g = "calloc" then elemTp else option_type elemTp), (if g = "calloc" then asym else uasym), mbsym, [], false
+              n, (if g = "calloc" then elemTp else option_type elemTp), (if g = "calloc" then asym else uasym), mbsym (), [], false
             | None ->
             match int_rank_and_signedness elemTp with
               Some (r, s) ->
@@ -2632,7 +2632,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           | _ ->
             match try_pointee_pred_symb0 t with
               Some (_, _, _, _, _, arrayMallocBlockSymb, _, _, _, _, _, _) ->
-              cont (Chunk ((arrayMallocBlockSymb, true), [], real_unit, [result; ctxt#mk_intlit 1], None)::h)
+              cont (Chunk ((arrayMallocBlockSymb (), true), [], real_unit, [result; ctxt#mk_intlit 1], None)::h)
             | _ ->
               cont (Chunk ((get_pred_symb "malloc_block", true), [], real_unit, [result; sizeof_core l env t], None)::h)
         end
@@ -2798,7 +2798,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           begin 
             match try_pointee_pred_symb0 ty with
             | Some (_, _, _, _, _, _, _, array_new_block_symb, _, _, _, _) ->
-              produce_chunk h (array_new_block_symb, true) [] real_unit None [result; int_unit_term] None cont
+              produce_chunk h (array_new_block_symb (), true) [] real_unit None [result; int_unit_term] None cont
             | _ ->
               produce_chunk h (get_pred_symb "new_block", true) [] real_unit None [result; sizeof_core l env ty] None cont
           end

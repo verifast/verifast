@@ -1377,7 +1377,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let maps0 = ([], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], []) in
     
     let (maps0, headers_included) =
-      if include_prelude then
+      if include_prelude && dialect <> Some Rust then
         match file_type path with
           | Java -> begin
             if rtpath = "nort" then (maps0, []) else
@@ -5625,7 +5625,14 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | [(family, pmap)] -> check_call family pmap
     | _ -> static_error l (Printf.sprintf "Ambiguous instance predicate assertion: multiple predicates named '%s' in scope" g) None
   
-  let get_pred_symb p = let (_, _, _, _, symb, _, _) = List.assoc p predfammap in symb
+  let get_pred_symb p =
+    let (_, _, _, _, symb, _, _) =
+      try
+        List.assoc p predfammap
+      with
+        Not_found -> failwith (Printf.sprintf "A declaration for predicate %s is missing from the prelude" p)
+    in
+    symb
   let get_pure_func_symb g =
     let (_, _, _, _, symb) =
       try
@@ -5942,8 +5949,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     chunk_pred_name, lazy_predfamsymb chunk_pred_name, array_pred_name, lazy_predfamsymb array_pred_name, ambpn, ambsymb, anbpn, anbsymb, uninit_chunk_pred_name, lazy_predfamsymb uninit_chunk_pred_name, uninit_array_pred_name, lazy_predfamsymb uninit_array_pred_name
   
   let _, pointer_pred_symb, _, pointers_pred_symb, _, malloc_block_pointers_pred_symb, _, new_block_pointers_pred_symb, _, pointer__pred_symb, _, pointers__pred_symb as pointer_pointee_tuple = pointee_tuple "pointer" "pointers" "pointer_" "pointers_"
-  let _, intptr_pred_symb, _, intptrs_pred_symb, _, malloc_block_intptrs_pred_symb, _, new_block_intptrs_pred_symb, _, intptr__pred_symb, _, intptrs__pred_symb as intptr_pointee_tuple = pointee_tuple "intptr" "intptrs" "intptr_" "intptrs_"
-  let _, uintptr_pred_symb, _, uintptrs_pred_symb, _, malloc_block_uintptrs_pred_symb, _, new_block_uintptrs_pred_symb, _, uintptr__pred_symb, _, uintptrs__pred_symb as uintptr_pointee_tuple = pointee_tuple "uintptr" "uintptrs" "uintptr_" "uintptrs_"
+  let _, intptr_pred_symb, _, intptrs_pred_symb, _, malloc_block_intptrs_pred_symb, _, new_block_intptrs_pred_symb, _, intptr__pred_symb, _, intptrs__pred_symb as intptr_pointee_tuple = if dialect <> Some Rust then pointee_tuple "intptr" "intptrs" "intptr_" "intptrs_" else pointee_tuple "isize" "isizes" "isize_" "isizes_"
+  let _, uintptr_pred_symb, _, uintptrs_pred_symb, _, malloc_block_uintptrs_pred_symb, _, new_block_uintptrs_pred_symb, _, uintptr__pred_symb, _, uintptrs__pred_symb as uintptr_pointee_tuple = if dialect <> Some Rust then pointee_tuple "uintptr" "uintptrs" "uintptr_" "uintptrs_" else pointee_tuple "usize" "usizes" "usize_" "usizes_"
   let _, llong_pred_symb, _, llongs_pred_symb, _, malloc_block_llongs_pred_symb, _, new_block_llongs_pred_symb, _, llong__pred_symb, _, llongs__pred_symb as llong_pointee_tuple = pointee_tuple "llong_integer" "llongs" "llong_" "llongs_"
   let _, ullong_pred_symb, _, ullongs_pred_symb, _, malloc_block_ullongs_pred_symb, _, new_block_ullongs_pred_symb, _, ullong__pred_symb, _, ullongs__pred_symb as ullong_pointee_tuple = pointee_tuple "u_llong_integer" "ullongs" "ullong_" "ullongs_"
   let _, long_pred_symb, _, longs_pred_symb, _, malloc_block_longs_pred_symb, _, new_block_longs_pred_symb, _, long__pred_symb, _, longs__pred_symb as long_pointee_tuple = pointee_tuple "long_integer" "longs" "long_" "longs_"
@@ -5959,7 +5966,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let _, double__pred_symb, _, doubles_pred_symb, _, malloc_block_doubles_pred_symb, _, new_block_doubles_pred_symb, _, double___pred_symb, _, doubles__pred_symb as double_pointee_tuple = pointee_tuple "double_" "doubles" "double__" "doubles_"
   let _, long_double_pred_symb, _, long_doubles_pred_symb, _, malloc_block_long_doubles_pred_symb, _, new_block_long_doubles_pred_symb, _, long_double__pred_symb, _, long_doubles__pred_symb as long_double_pointee_tuple = pointee_tuple "long_double" "long_doubles" "long_double_" "long_doubles_"
   
-  let deref_pointee_tuple (cn, csym, an, asym, mban, mbasym, nban, nbasym, ucn, ucsym, uan, uasym) = (cn, csym(), an, asym(), mban, mbasym(), nban, nbasym(), ucn, ucsym(), uan, uasym())
+  let deref_pointee_tuple (cn, csym, an, asym, mban, mbasym, nban, nbasym, ucn, ucsym, uan, uasym) = (cn, csym(), an, asym(), mban, mbasym, nban, nbasym, ucn, ucsym(), uan, uasym())
   
   let try_pointee_pred_symb0 pointeeType =
     option_map deref_pointee_tuple
@@ -6661,8 +6668,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 let predinst p p_ = predinst_ p p_ t in
                 match t with
                   PtrType _ -> predinst_ "pointer" "pointer_" (PtrType Void)
-                | Int (Signed, PtrRank) -> predinst "intptr" "intptr_"
-                | Int (Unsigned, PtrRank) -> predinst "uintptr" "uintptr_"
+                | Int (Signed, PtrRank) -> if dialect <> Some Rust then predinst "intptr" "intptr_" else predinst "isize" "isize_"
+                | Int (Unsigned, PtrRank) -> if dialect <> Some Rust then predinst "uintptr" "uintptr_" else predinst "usize" "usize_"
                 | Int (Signed, CharRank) -> predinst "character" "char_"
                 | Int (Unsigned, CharRank) -> predinst "u_character" "uchar_"
                 | Int (Signed, ShortRank) -> predinst "short_integer" "short_"

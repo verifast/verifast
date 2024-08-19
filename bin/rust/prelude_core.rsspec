@@ -1,0 +1,339 @@
+include!{"prelude_core_core.rsspec"}
+include!{"list.rsspec"}
+include!{"listex.rsspec"}
+
+/*@
+
+lem assume(b: bool);
+    req true;
+    ens b;
+
+pred exists<t>(x: t;) = true;
+pred exists_np<t>(x: t) = true;
+
+fix truncate_unsigned(x: i32, nbBits: i32) -> i32;
+fix truncate_signed(x: i32, nbBits: i32) -> i32; // nbBits does not include the sign bit
+
+fix abs(x: i32) -> i32 { if x < 0 { -x } else { x } }
+
+lem mul_mono_l(x: i32, y: i32, z: i32);
+    req x <= y &*& 0 <= z;
+    ens x * z <= y * z;
+
+lem div_rem(D: i32, d: i32);
+    req d != 0;
+    ens D == D / d * d + D % d &*& abs(D % d) < abs(d) &*& abs(D / d * d) <= abs(D);
+
+lem div_rem_nonneg(D: i32, d: i32);
+    req 0 <= D &*& 0 < d;
+    ens D == D / d * d + D % d &*& 0 <= D / d &*& D / d <= D &*& 0 <= D % d &*& D % d < d;
+
+lem div_rem_nonneg_unique(D: i32, d: i32, q: i32, r: i32);
+    req 0 <= D &*& 0 <= r &*& r < d &*& D == d * q + r;
+    ens D / d == q &*& D % d == r;
+
+inductive pointer_provenance =
+    pointer_provenance_ctor(i32); // Do not rely on this definition; it is subject to change.
+inductive pointer = pointer_ctor(provenance: pointer_provenance, address: usize);
+
+fix null_pointer_provenance() -> pointer_provenance;
+fix null_pointer() -> pointer { pointer_ctor(null_pointer_provenance, 0) }
+
+fix ptr_add(p: pointer, offset: i32) -> pointer {
+    pointer_ctor(p.provenance, p.address + offset)
+}
+
+fix field_ptr_provenance(p: pointer, structTypeid: *_, fieldOffset: i32) -> pointer_provenance;
+fix field_ptr_provenance_parent(pr: pointer_provenance, fieldOffset: i32) -> pointer;
+
+lem_auto(field_ptr_provenance(p, structTypeid, fieldOffset)) field_ptr_provenance_injective(p: pointer, structTypeid: *_, fieldOffset: i32);
+    req true;
+    ens field_ptr_provenance_parent(field_ptr_provenance(p, structTypeid, fieldOffset), fieldOffset) == p;
+    
+fix field_ptr(p: pointer, structTypeid: *_, fieldOffset: i32) -> pointer {
+    pointer_ctor(field_ptr_provenance(p, structTypeid, fieldOffset), p.address + fieldOffset)
+}   
+
+fix ptr_provenance_min_addr(pr: pointer_provenance) -> usize;
+fix ptr_provenance_max_addr(pr: pointer_provenance) -> usize;
+
+lem_auto ptr_provenance_min_addr_limits(pr: pointer_provenance);
+    req true;
+    ens 0 <= ptr_provenance_min_addr(pr);
+
+lem_auto ptr_provenance_max_addr_limits(pr: pointer_provenance);
+    req true;
+    ens ptr_provenance_max_addr(pr) <= usize::MAX;
+
+lem_auto null_pointer_provenance_min_addr();
+    req true;
+    ens ptr_provenance_min_addr(null_pointer_provenance) == 0;
+
+lem_auto null_pointer_provenance_max_addr();
+    req true;
+    ens ptr_provenance_max_addr(null_pointer_provenance) == usize::MAX;
+
+lem_auto field_ptr_provenance_min_addr(p: pointer, structTypeid: *_, fieldOffset: i32);
+    req true;
+    ens ptr_provenance_min_addr(p.provenance) <= ptr_provenance_min_addr(field_ptr_provenance(p, structTypeid, fieldOffset));
+
+lem_auto field_ptr_provenance_max_addr(p: pointer, structTypeid: *_, fieldOffset: i32);
+    req true;
+    ens ptr_provenance_max_addr(field_ptr_provenance(p, structTypeid, fieldOffset)) <= ptr_provenance_max_addr(p.provenance);
+
+lem ptr_provenance_min_addr_zero(pr: pointer_provenance);
+    req ptr_provenance_min_addr(pr) <= 0;
+    ens pr == null_pointer_provenance;
+
+fix ptr_within_limits(p: pointer) -> bool { ptr_provenance_min_addr(p.provenance) <= p.address && p.address <= ptr_provenance_max_addr(p.provenance) }
+
+fix pointer_within_limits(p: *_) -> bool { ptr_within_limits(p as pointer) }
+
+fix object_pointer_within_limits(p: *_, size: i32) -> bool {
+    pointer_within_limits(p) && pointer_within_limits(p + size) && p as usize != 0 && size >= 0
+}
+
+// When producing a field chunk, VeriFast produces a field_pointer_within_limits fact
+// instead of a pointer_within_limits fact to avoid producing too many linear inequalities.
+fix field_pointer_within_limits(p: *_, fieldOffset: i32) -> bool;
+
+lem_auto(pointer_within_limits(field_ptr(p as pointer, structTypeid, fieldOffset) as *_)) field_pointer_within_limits_def(p: *_, structTypeid: *_, fieldOffset: i32);
+    req true;
+    ens field_pointer_within_limits(p, fieldOffset) == pointer_within_limits(field_ptr(p as pointer, structTypeid, fieldOffset) as *_);
+
+lem_auto(field_pointer_within_limits(field_ptr(p as pointer, structTypeid, fieldOffset) as *_, 0)) first_field_pointer_within_limits_elim(p: *_, structTypeid: *_, fieldOffset: i32);
+    req true;
+    ens field_pointer_within_limits(field_ptr(p as pointer, structTypeid, fieldOffset) as *_, 0) == field_pointer_within_limits(p, fieldOffset);
+
+lem_auto(ptr_within_limits(field_ptr(p, structTypeid, 0))) ptr_within_limits_field_ptr_0(p: pointer, structTypeid: *_);
+    req true;
+    ens ptr_within_limits(field_ptr(p, structTypeid, 0)) == ptr_within_limits(p);
+
+fix has_type(p: *_, typeid_: *_) -> bool;
+
+fix ptr_add_(p: pointer, offset: i32, elemTypeid: *_) -> pointer {
+    ptr_add(p, offset * std::mem::size_of(elemTypeid))
+}   
+
+pred generic_points_to_<t>(p: *t; v: option<t>);
+pred generic_points_to<t>(p: *t; v: t) = generic_points_to_::<t>(p, some(v));
+
+pred integer__(p: *_, size: i32, signed: bool; v: option<i32>);
+pred integer_(p: *_, size: i32, signed: bool; v: i32) = integer__(p, size, signed, some(v));
+
+pred pointer_(pp: **_; p: option<*_>);
+pred pointer(pp: **_; p: *_) = pointer_(pp, some(p));
+
+pred bool_(p: *bool; v: option<bool>);
+pred boolean(p: *bool; v: bool) = bool_(p, some(v));
+
+pred isize_(p: *isize; v: option<isize>) = integer__(p, std::mem::size_of::<isize>(), true, v) &*& has_type(p, typeid(isize)) == true;
+pred usize_(p: *usize; v: option<usize>) = integer__(p, std::mem::size_of::<usize>(), false, v) &*& has_type(p, typeid(usize)) == true;
+
+pred isize(p: *isize; v: isize) = isize_(p, some(v));
+pred usize(p: *usize; v: usize) = usize_(p, some(v));
+
+lem generic_points_to_limits<T>(p: *T);
+    req [?f]generic_points_to(p, ?v);
+    ens [f]generic_points_to(p, v) &*& object_pointer_within_limits(p, std::mem::size_of::<T>()) == true;
+
+lem integer__distinct(i: *_, j: *_);
+    req integer_(i, ?size1, ?signed1, ?v1) &*& integer_(j, ?size2, ?signed2, ?v2);
+    ens integer_(i, size1, signed1, v1) &*& integer_(j, size2, signed2, v2) &*& i as usize != j as usize;
+
+lem integer___unique(p: *_);
+    req [?f]integer__(p, ?size, ?signed, ?v);
+    ens [f]integer__(p, size, signed, v) &*& f <= 1;
+
+lem integer__unique(p: *_);
+    req [?f]integer_(p, ?size, ?signed, ?v);
+    ens [f]integer_(p, size, signed, v) &*& f <= 1;
+
+lem integer__limits(p: *_);
+    req [?f]integer_(p, ?size, ?signed, ?v);
+    ens [f]integer_(p, size, signed, v) &*& object_pointer_within_limits(p, size) == true &*& size > 0 &*& if signed { -(1<<(8*size-1)) <= v &*& v < (1<<(8*size-1)) } else { 0 <= v &*& v < (1<<(8*size)) };
+
+lem integer___limits(p: *_);
+    req [?f]integer__(p, ?size, ?signed, ?v);
+    ens [f]integer__(p, size, signed, v) &*& object_pointer_within_limits(p, size) == true &*& size > 0;
+
+pred bools_(p: *bool, count: i32; vs: list<option<bool>>) =
+    if count == 0 {
+        vs == nil 
+    } else {
+        bool_(p, ?v) &*& bools_(p + 1, count - 1, ?vs0) &*& vs == cons(v, vs0)
+    };
+    
+pred bools(p: *bool, count: i32; vs: list<bool>) =
+    if count == 0 {
+        vs == nil
+    } else {
+        boolean(p, ?v) &*& bools(p + 1, count - 1, ?vs0) &*& vs == cons(v, vs0)
+    };
+
+lem_auto bools_inv();
+    req [?f]bools(?p, ?count, ?vs); 
+    ens [f]bools(p, count, vs) &*& count == length(vs);
+
+pred integers__(p: *_, size: i32, signed: bool, count: i32; vs: list<option<i32> >) =
+    pointer_within_limits(p) == true &*&
+    if count == 0 {
+        vs == nil
+    } else {
+        integer__(p, size, signed, ?v0) &*& integers__(p + size, size, signed, count - 1, ?vs0) &*& vs == cons(v0, vs0)
+    };
+
+pred integers_(p: *_, size: i32, signed: bool, count: i32; vs: list<i32>) =
+    pointer_within_limits(p) == true &*&
+    if count == 0 {
+        vs == nil
+    } else {
+        integer_(p, size, signed, ?v0) &*& integers_(p + size, size, signed, count - 1, ?vs0) &*& vs == cons(v0, vs0)
+    };
+
+lem_auto integers__inv();
+    req [?f]integers_(?p, ?size, ?signed, ?count, ?vs);
+    ens [f]integers_(p, size, signed, count, vs) &*& length(vs) == count &*& pointer_within_limits(p + size * count) == true;
+
+lem_auto integers___inv();
+    req [?f]integers__(?p, ?size, ?signed, ?count, ?vs);
+    ens [f]integers__(p, size, signed, count, vs) &*& length(vs) == count &*& pointer_within_limits(p) && pointer_within_limits(p + size * count);
+
+lem integers__split(p: *_, offset: i32);
+    req [?f]integers_(p, ?size, ?signed, ?count, ?vs) &*& 0 <= offset &*& offset <= count;
+    ens
+        [f]integers_(p, size, signed, offset, take(offset, vs)) &*&
+        [f]integers_(p + size * offset, size, signed, count - offset, drop(offset, vs)) &*&
+        vs == append(take(offset, vs), drop(offset, vs)); 
+
+lem integers___split(p: *_, offset: i32);
+    req [?f]integers__(p, ?size, ?signed, ?count, ?vs) &*& 0 <= offset &*& offset <= count;
+    ens 
+        [f]integers__(p, size, signed, offset, take(offset, vs)) &*&
+        [f]integers__(p + size * offset, size, signed, count - offset, drop(offset, vs)) &*&
+        vs == append(take(offset, vs), drop(offset, vs));
+
+lem integers__join(p: *_);
+    req
+        [?f]integers_(p, ?size, ?signed, ?count1, ?vs1) &*&
+        [f]integers_(p + size * count1, size, signed, ?count2, ?vs2);
+    ens [f]integers_(p, size, signed, count1 + count2, append(vs1, vs2));
+
+lem integers___join(p: *_);
+    req
+        [?f]integers__(p, ?size, ?signed, ?count1, ?vs1) &*&
+        [f]integers__(p + size * count1, size, signed, ?count2, ?vs2);
+    ens [f]integers__(p, size, signed, count1 + count2, append(vs1, vs2));
+
+lem_auto integers__to_integers__(p: *_);
+    req [?f]integers_(p, ?size, ?signed, ?count, ?vs);
+    ens [f]integers__(p, size, signed, count, map(some, vs));
+
+pred pointers(pp: **_, count: i32; ps: list<*_>) =
+    if count == 0 {
+        ps == nil
+    } else {
+        pointer(pp, ?p) &*& pointers(pp + 1, count - 1, ?ps0) &*& ps == cons(p, ps0)
+    };
+
+pred pointers_(pp: **_, count: i32; ps: list<option<*_>>) =
+    if count == 0 {
+        ps == nil
+    } else {
+        pointer_(pp, ?p) &*& pointers_(pp + 1, count - 1, ?ps0) &*& ps == cons(p, ps0)
+    };
+
+pred isizes(p: *isize, count: i32; vs: list<isize>) =
+    if count == 0 {
+        vs == nil
+    } else {
+        isize(p, ?v) &*& isizes(p + 1, count - 1, ?vs0) &*& vs == cons(v, vs0)
+    };
+
+pred isizes_(p: *isize, count: i32; vs: list<option<isize>>) =
+    if count == 0 {
+        vs == nil
+    } else {
+        isize_(p, ?v) &*& isizes_(p + 1, count - 1, ?vs0) &*& vs == cons(v, vs0)
+    };
+
+pred usizes(p: *usize, count: i32; vs: list<usize>) =
+    if count == 0 {
+        vs == nil
+    } else {
+        usize(p, ?v) &*& usizes(p + 1, count - 1, ?vs0) &*& vs == cons(v, vs0)
+    };
+
+pred usizes_(p: *usize, count: i32; vs: list<option<usize>>) =
+    if count == 0 {
+        vs == nil
+    } else {
+        usize_(p, ?v) &*& usizes_(p + 1, count - 1, ?vs0) &*& vs == cons(v, vs0)
+    };
+
+lem u8s__to_integer__(p: *_, size: i32, signed: bool);
+    req [?f]integers__(p, 1, false, size, _);
+    ens [f]integer__(p, size, signed, _);
+
+lem_auto u8s__to_pointer_(p: *_);
+    req [?f]integers__(p, 1, false, std::mem::size_of::<*_>(), _);
+    ens [f]pointer_(p, _); 
+
+lem integer__to_u8s(p: *_, size: i32, signed: bool);
+    req [?f]integer_(p, size, signed, _);
+    ens [f]integers_(p, 1, false, size, _);
+
+lem_auto pointer_to_u8s(p: *_);
+    req [?f]pointer(p, _);
+    ens [f]integers_(p, 1, false, std::mem::size_of::<*_>(), _);
+
+pred array_<T>(p: *T, count: i32; values: list<option<T>>) =
+    pointer_within_limits(p) == true &*&
+    if count == 0 {
+        values == nil
+    } else {
+        generic_points_to_(p, ?value) &*& array_(p + 1, count - 1, ?values0) &*& values == cons(value, values0)
+    };
+
+pred array<T>(p: *T, count: i32; values: list<T>) =
+    pointer_within_limits(p) == true &*&
+    if count == 0 {
+        values == nil
+    } else {
+        *p |-> ?value &*& array(p + 1, count - 1, ?values0) &*& values == cons(value, values0)
+    };
+    
+lem_auto array_inv<T>();
+    req [?f]array::<T>(?p, ?count, ?elems);
+    ens [f]array::<T>(p, count, elems) &*& count == length(elems) &*& pointer_within_limits(p) == true &*& pointer_within_limits(p + count) == true;
+    
+lem u8_array__to_integers__(p: *u8);
+    req [?f]array_::<u8>(p, ?count, ?elems);
+    ens [f]integers__(p, 1, false, count, elems);
+
+lem u8_array_to_integers_(p: *u8);
+    req [?f]array::<u8>(p, ?count, ?elems);
+    ens [f]integers_(p, 1, false, count, elems);
+
+lem integers___to_u8_array_(p: *u8);
+    req [?f]integers__(p, 1, false, ?count, ?elems);
+    ens [f]array_(p, count, elems);
+
+lem integers__to_u8_array(p: *u8);
+    req [?f]integers_(p, 1, false, ?count, ?elems);
+    ens [f]array(p, count, elems);
+
+pred ghost_rec_perm(depth: i32;); // Permission to perform `depth` nested lemma function pointer calls.
+
+pred ghost_rec_perm_top();
+pred ghost_rec_perm_top_unweaken_token(depth: i32);
+    
+lem ghost_rec_perm_top_weaken(depth: i32);
+    req ghost_rec_perm_top();
+    ens ghost_rec_perm(depth) &*& ghost_rec_perm_top_unweaken_token(depth);
+    
+lem ghost_rec_perm_top_unweaken();
+    req ghost_rec_perm_top_unweaken_token(?depth) &*& ghost_rec_perm(depth);
+    ens ghost_rec_perm_top();
+
+@*/

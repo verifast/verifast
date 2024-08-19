@@ -1,0 +1,17 @@
+/*@
+
+fix ptr_lt(l: *_, r: *_) -> bool;
+
+lem ptr_lt_arefl(a: *_);
+  req true;
+  ens ptr_lt(a, a) == false;
+
+lem ptr_lt_trans(a: *_, b: *_, c: *_);
+  req ptr_lt(a, b) && ptr_lt(b, c);
+  ens ptr_lt(a, c) == true;
+
+lem ptr_lt_asym(a: *_, b: *_);
+  req ptr_lt(a, b) == true;
+  ens ptr_lt(b, a) == false;
+
+@*/

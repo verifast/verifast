@@ -1,0 +1,14 @@
+/*@
+
+lem nth_drop<t>(n: i32, k: i32, xs: list<t>);
+    req 0 <= n &*& 0 <= k &*& n + k < length(xs);
+    ens nth(n, drop(k, xs)) == nth(n + k, xs);
+
+fix fold_left<a, b>(x0: a, f: fix(a, b, a), xs: list<b>) -> a {
+    match xs { 
+        nil => x0,
+        cons(x, xs0) => fold_left(f(x0, x), f, xs0)
+    }
+}
+
+@*/

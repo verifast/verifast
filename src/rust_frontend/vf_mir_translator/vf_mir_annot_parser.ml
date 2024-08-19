@@ -73,12 +73,18 @@ module Make (Args : VF_MIR_ANNOT_PARSER_ARGS) = struct
       Lexer.Stream.Error msg -> raise (Lexer.ParseException (Lexed (loc()), msg))
     | Lexer.Stream.Failure -> raise (Lexer.ParseException (Lexed (loc()), "Parse error"))
       
-  let parse_rsspec_file path =
+  let rec parse_rsspec_file path =
     let pos = (path, 1, 1) in
     let text = Lexer.readFile path in
     let loc, ts = token_stream_from_annot (pos, text) in
+    let parse_rsspec_file l relpath =
+      let abs_path = Util.concat (Filename.dirname path) relpath in
+      if not (Sys.file_exists abs_path) then
+        raise (Lexer.ParseException (l, "No such file"));
+      parse_rsspec_file abs_path
+    in
     try
-      ts |> Parser.noop_preprocessor |> parse_fully Rust_parser.parse_decls
+      ts |> Parser.noop_preprocessor |> parse_fully (Rust_parser.parse_decls parse_rsspec_file)
     with
       Lexer.Stream.Error msg -> raise (Lexer.ParseException (Lexed (loc()), msg))
     | Lexer.Stream.Failure -> raise (Lexer.ParseException (Lexed (loc()), "Parse error"))

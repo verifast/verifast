@@ -1,0 +1,26 @@
+/*@
+
+pred counting<a, b>(p: pred(a; b), a: a, count: i32; b: b);
+pred ticket<a, b>(p: pred(a; b), a: a, frac: real;);
+
+lem start_counting<a, b>(p: pred(a; b), a: a);
+    req p(a, ?b);
+    ens counting(p, a, 0, b);
+
+lem counting_match_fraction<a, b>(p: pred(a; b), a: a);
+    req counting(p, a, ?count, ?b1) &*& [?f]p(a, ?b2);
+    ens counting(p, a, count, b1) &*& [f]p(a, b2) &*& b2 == b1;
+
+lem create_ticket<a, b>(p: pred(a; b), a: a) -> real;
+    req counting(p, a, ?count, ?b);
+    ens counting(p, a, count + 1, b) &*& ticket(p, a, result) &*& [result]p(a, b) &*& 0 < result;
+
+lem destroy_ticket<a, b>(p: pred(a; b), a: a);
+    req counting(p, a, ?count, ?b1) &*& ticket(p, a, ?f) &*& [f]p(a, ?b2) &*& 0 != count;
+    ens counting(p, a, count - 1, b1) &*& b2 == b1;
+
+lem stop_counting<a, b>(p: pred(a; b), a: a);
+    req counting(p, a, 0, ?b);
+    ens p(a, b);
+
+@*/

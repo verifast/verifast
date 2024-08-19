@@ -1,0 +1,19 @@
+/*@
+
+fix default_value<t>() -> t;
+
+inductive option<t> = none | some(t);
+
+inductive pair<a, b> = pair(a, b);
+
+fix fst<a, b>(p: pair<a, b>) -> a { match p { pair(x, y) => x } }
+fix snd<a, b>(p: pair<a, b>) -> b { match p { pair(x, y) => y } }
+
+fix bitand_uintN(x: i32, y: i32, N: i32) -> i32;
+fix bitor_uintN(x: i32, y: i32, N: i32) -> i32;
+fix bitxor_uintN(x: i32, y: i32, N: i32) -> i32;
+fix bitand_intN(x: i32, y: i32, N: i32) -> i32;
+fix bitor_intN(x: i32, y: i32, N: i32) -> i32;
+fix bitxor_intN(x: i32, y: i32, N: i32) -> i32;
+
+@*/
