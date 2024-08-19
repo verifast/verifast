@@ -220,4 +220,40 @@ lem integer__to_u8s(p: *_, size: i32, signed: bool);
     req [?f]integer_(p, size, signed, _);
     ens [f]integers_(p, 1, false, size, _);
 
+pred array_<T>(p: *T, count: i32; values: list<option<T>>) =
+    pointer_within_limits(p) == true &*&
+    if count == 0 {
+        values == nil
+    } else {
+        generic_points_to_(p, ?value) &*& array_(p + 1, count - 1, ?values0) &*& values == cons(value, values0)
+    };
+
+pred array<T>(p: *T, count: i32; values: list<T>) =
+    pointer_within_limits(p) == true &*&
+    if count == 0 {
+        values == nil
+    } else {
+        *p |-> ?value &*& array(p + 1, count - 1, ?values0) &*& values == cons(value, values0)
+    };
+    
+lem_auto array_inv<T>();
+    req [?f]array::<T>(?p, ?count, ?elems);
+    ens [f]array::<T>(p, count, elems) &*& count == length(elems) &*& pointer_within_limits(p) == true &*& pointer_within_limits(p + count) == true;
+    
+lem u8_array__to_integers__(p: *u8);
+    req [?f]array_::<u8>(p, ?count, ?elems);
+    ens [f]integers__(p, 1, false, count, elems);
+
+lem u8_array_to_integers_(p: *u8);
+    req [?f]array::<u8>(p, ?count, ?elems);
+    ens [f]integers_(p, 1, false, count, elems);
+
+lem integers___to_u8_array_(p: *u8);
+    req [?f]integers__(p, 1, false, ?count, ?elems);
+    ens [f]array_(p, count, elems);
+
+lem integers__to_u8_array(p: *u8);
+    req [?f]integers_(p, 1, false, ?count, ?elems);
+    ens [f]array(p, count, elems);
+
 @*/
