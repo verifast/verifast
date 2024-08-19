@@ -130,6 +130,30 @@ pred usize_(p: *usize; v: option<usize>) = integer__(p, std::mem::size_of::<usiz
 pred isize(p: *isize; v: isize) = isize_(p, some(v));
 pred usize(p: *usize; v: usize) = usize_(p, some(v));
 
+lem generic_points_to_limits<T>(p: *T);
+    req [?f]generic_points_to(p, ?v);
+    ens [f]generic_points_to(p, v) &*& object_pointer_within_limits(p, std::mem::size_of::<T>()) == true;
+
+lem integer__distinct(i: *_, j: *_);
+    req integer_(i, ?size1, ?signed1, ?v1) &*& integer_(j, ?size2, ?signed2, ?v2);
+    ens integer_(i, size1, signed1, v1) &*& integer_(j, size2, signed2, v2) &*& i as usize != j as usize;
+
+lem integer___unique(p: *_);
+    req [?f]integer__(p, ?size, ?signed, ?v);
+    ens [f]integer__(p, size, signed, v) &*& f <= 1;
+
+lem integer__unique(p: *_);
+    req [?f]integer_(p, ?size, ?signed, ?v);
+    ens [f]integer_(p, size, signed, v) &*& f <= 1;
+
+lem integer__limits(p: *_);
+    req [?f]integer_(p, ?size, ?signed, ?v);
+    ens [f]integer_(p, size, signed, v) &*& object_pointer_within_limits(p, size) == true &*& size > 0 &*& if signed { -(1<<(8*size-1)) <= v &*& v < (1<<(8*size-1)) } else { 0 <= v &*& v < (1<<(8*size)) };
+
+lem integer___limits(p: *_);
+    req [?f]integer__(p, ?size, ?signed, ?v);
+    ens [f]integer__(p, size, signed, v) &*& object_pointer_within_limits(p, size) == true &*& size > 0;
+
 pred integers__(p: *_, size: i32, signed: bool, count: i32; vs: list<option<i32> >) =
     pointer_within_limits(p) == true &*&
     if count == 0 {
