@@ -1,5 +1,7 @@
 include!{"rust_belt/general.rsspec"}
 include!{"prelude_core.rsspec"}
+include!{"ghost_cells.rsspec"}
+include!{"counting.rsspec"}
 include!{"mask.rsspec"}
 include!{"rust_belt/lifetime_logic.rsspec"}
 

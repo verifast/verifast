@@ -58,6 +58,47 @@ lem perform_atomically();
 
 /*@
 
+pred_ctor simple_share(frac_borrow_content: fix(thread_id_t, *_, pred(;)))(k: lifetime_t, t: thread_id_t, l: *_) =
+    frac_borrow(k, frac_borrow_content(t, l));
+pred_ctor shared_ref_own(pointee_shr: pred(lifetime_t, thread_id_t, *_), k: lifetime_t)(t: thread_id_t, l: *_) = [_]pointee_shr(k, t, l);
+
+pred na_inv(t: thread_id_t, m: mask_t, p: pred());
+//NAInv-new-inv
+lem na_inv_new(t: thread_id_t, m: mask_t, p: pred());
+    nonghost_callers_only
+    req p() &*& !mask_is_empty(m);
+    ens [_]na_inv(t, m, p);
+//NAInv-acc
+pred close_na_inv_token(t: thread_id_t, m: mask_t, p: pred());
+
+lem open_na_inv(t: thread_id_t, m: mask_t, p: pred());
+    nonghost_callers_only
+    req [_]na_inv(t, m, p) &*& partial_thread_token(t, ?m0) &*& mask_le(m, m0) == true;
+    ens partial_thread_token(t, mask_diff(m0, m)) &*& p() &*& close_na_inv_token(t, m, p);
+
+lem close_na_inv(t: thread_id_t, m: mask_t);
+    nonghost_callers_only
+    req close_na_inv_token(t, m, ?p) &*& p();
+    ens partial_thread_token(t, m);
+
+//Mask preserving view-shifts. Mask aware versions
+//NAInv-new-inv
+lem na_inv_new_m(t: thread_id_t, m: mask_t, p: pred());
+    req atomic_mask(?m0) &*& mask_le(m, m0) == true &*& p() &*& !mask_is_empty(m);
+    ens atomic_mask(m0) &*& [_]na_inv(t, m, p);
+//NAInv-acc
+lem open_na_inv_m(t: thread_id_t, m: mask_t, p: pred());
+    req atomic_mask(?am0) &*& mask_le(m, am0) == true &*& [_]na_inv(t, m, p) &*& partial_thread_token(t, ?m0) &*& mask_le(m, m0) == true;
+    ens atomic_mask(am0) &*& partial_thread_token(t, mask_diff(m0, m)) &*& p() &*& close_na_inv_token(t, m, p);
+
+lem close_na_inv_m(t: thread_id_t, m: mask_t);
+    req atomic_mask(?am0) &*& mask_le(m, am0) == true &*& close_na_inv_token(t, m, ?p) &*& p();
+    ens atomic_mask(am0) &*& partial_thread_token(t, m);
+
+@*/
+
+/*@
+
 pred bool_own(t: thread_id_t, v: bool;) = true;
 pred char_own(t: thread_id_t, v: u32;) = 0 <= v && v <= 0xD7FF || 0xE000 <= v && v <= 0x10FFFF;
 pred raw_ptr_own(t: thread_id_t, v: *_;) = true;
@@ -148,5 +189,8 @@ fix is_Send(type_id: *_) -> bool;
 lem Send::send<T>(t0: thread_id_t, t1: thread_id_t, v: T);
     req type_interp::<T>() &*& is_Send(typeid(T)) == true &*& (<T>.own)(t0, v);
     ens type_interp::<T>() &*& (<T>.own)(t1, v);
+
+pred lifetimes(lifetimes: list<lifetime_t>) = true; // Serves only to carry a function call's lifetime arguments.
+
 
 @*/
