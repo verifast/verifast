@@ -243,6 +243,20 @@ pred pointers_(pp: **_, count: i32; ps: list<option<*_>>) =
         pointer_(pp, ?p) &*& pointers_(pp + 1, count - 1, ?ps0) &*& ps == cons(p, ps0)
     };
 
+pred isizes(p: *isize, count: i32; vs: list<isize>) =
+    if count == 0 {
+        vs == nil
+    } else {
+        isize(p, ?v) &*& isizes(p + 1, count - 1, ?vs0) &*& vs == cons(v, vs0)
+    };
+
+pred isizes_(p: *isize, count: i32; vs: list<option<isize>>) =
+    if count == 0 {
+        vs == nil
+    } else {
+        isize_(p, ?v) &*& isizes_(p + 1, count - 1, ?vs0) &*& vs == cons(v, vs0)
+    };
+
 pred usizes(p: *usize, count: i32; vs: list<usize>) =
     if count == 0 {
         vs == nil

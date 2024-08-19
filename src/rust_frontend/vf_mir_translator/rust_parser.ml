@@ -329,7 +329,7 @@ let rec parse_expr_funcs allowStructExprs =
     [ (_, Kwd "{"); parse_expr as e; (_, Kwd "}") ] -> e
   and parse_pat0 = function%parser
     [ (_, Kwd "_") ] -> DummyPat
-  | [ (_, Kwd "?"); (lx, Ident x) ] -> VarPat (lx, x)
+  | [ (_, Kwd "?"); [%let pat = function%parser [ (lx, Ident x) ] -> VarPat (lx, x) | [ (_, Kwd "_") ] -> DummyVarPat] ] -> pat
   | [ (_, Kwd "^"); parse_primary_expr as e ] -> LitPat (WidenedParameterArgument e)
   | [ parse_disj_expr as e ] -> pat_of_expr e
   in

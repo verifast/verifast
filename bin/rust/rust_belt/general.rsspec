@@ -58,14 +58,65 @@ lem perform_atomically();
 
 /*@
 
+pred bool_own(t: thread_id_t, v: bool;) = true;
+pred char_own(t: thread_id_t, v: u32;) = 0 <= v && v <= 0xD7FF || 0xE000 <= v && v <= 0x10FFFF;
+pred raw_ptr_own(t: thread_id_t, v: *_;) = true;
+
+pred i8_own(t: thread_id_t, v: i8;) = true;
+pred i16_own(t: thread_id_t, v: i16;) = true;
+pred i32_own(t: thread_id_t, v: i32;) = true;
+pred i64_own(t: thread_id_t, v: i64;) = true;
+pred i128_own(t: thread_id_t, v: i128;) = true;
+pred isize_own(t: thread_id_t, v: isize;) = true;
+
+pred u8_own(t: thread_id_t, v: u8;) = true;
+pred u16_own(t: thread_id_t, v: u16;) = true;
+pred u32_own(t: thread_id_t, v: u32;) = true;
+pred u64_own(t: thread_id_t, v: u64;) = true;
+pred u128_own(t: thread_id_t, v: u128;) = true;
+pred usize_own(t: thread_id_t, v: usize;) = true;
+
+pred_ctor bool_full_borrow_content(t: thread_id_t, l: *bool)(;) = *l |-> ?_;
+pred_ctor char_full_borrow_content(t: thread_id_t, l: *u32)(;) = *l |-> ?c &*& char_own(t, c);
+pred_ctor raw_ptr_full_borrow_content(t: thread_id_t, l: **_)(;) = *l |-> ?_;
+
+pred_ctor i8_full_borrow_content(t: thread_id_t, l: *i8)(;) = *l |-> ?_;
+pred_ctor i16_full_borrow_content(t: thread_id_t, l: *i16)(;) = *l |-> ?_;
+pred_ctor i32_full_borrow_content(t: thread_id_t, l: *i32)(;) = *l |-> ?_;
+pred_ctor i64_full_borrow_content(t: thread_id_t, l: *i64)(;) = *l |-> ?_;
+pred_ctor i128_full_borrow_content(t: thread_id_t, l: *i128)(;) = *l |-> ?_;
+pred_ctor isize_full_borrow_content(t: thread_id_t, l: *isize)(;) = *l |-> ?_;
+
+pred_ctor u8_full_borrow_content(t: thread_id_t, l: *u8)(;) = *l |-> ?_;
+pred_ctor u16_full_borrow_content(t: thread_id_t, l: *u16)(;) = *l |-> ?_;
+pred_ctor u32_full_borrow_content(t: thread_id_t, l: *u32)(;) = *l |-> ?_;
+pred_ctor u64_full_borrow_content(t: thread_id_t, l: *u64)(;) = *l |-> ?_;
+pred_ctor u128_full_borrow_content(t: thread_id_t, l: *u128)(;) = *l |-> ?_;
+pred_ctor usize_full_borrow_content(t: thread_id_t, l: *usize)(;) = *l |-> ?_;
+
 type_pred_decl <Self>.own : pred(thread_id_t, Self);
 type_pred_decl <Self>.full_borrow_content : fix(thread_id_t, *_, pred());
 type_pred_decl <Self>.share : pred(lifetime_t, thread_id_t, *_);
 
 pred_ctor own<T>(t: thread_id_t)(v: T) = (<T>.own)(t, v);
 
-pred u8_own(t: thread_id_t, v: u8) = true;
+type_pred_def <bool>.own = bool_own;
+//TODO: How to deal with Rust type `char`? Distinct Rust types should be mapped to distinct VF types, with distinct typeids.
+type_pred_def <*_>.own = raw_ptr_own;
+
+type_pred_def <i8>.own = i8_own;
+type_pred_def <i16>.own = i16_own;
+type_pred_def <i32>.own = i32_own;
+type_pred_def <i64>.own = i64_own;
+type_pred_def <i128>.own = i128_own;
+type_pred_def <isize>.own = isize_own;
+
 type_pred_def <u8>.own = u8_own;
+type_pred_def <u16>.own = u16_own;
+type_pred_def <u32>.own = u32_own;
+type_pred_def <u64>.own = u64_own;
+type_pred_def <u128>.own = u128_own;
+type_pred_def <usize>.own = usize_own;
 
 lem open_full_borrow_content<T>(t: thread_id_t, l: *T);
     req ((<T>.full_borrow_content)(t, l))();

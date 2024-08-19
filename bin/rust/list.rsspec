@@ -173,4 +173,8 @@ pred foreach<t>(xs: list<t>, p: pred(t)) =
         cons(h, t) => p(h) &*& foreach(t, p)
     };
 
+lem foreach_append<t>(xs: list<t>, ys: list<t>);
+    req foreach(xs, ?p) &*& foreach(ys, p);
+    ens foreach(append(xs, ys), p);
+
 @*/
