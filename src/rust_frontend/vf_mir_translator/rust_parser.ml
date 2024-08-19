@@ -314,7 +314,11 @@ let rec parse_expr_funcs allowStructExprs =
          [ (_, Kwd "("); [%let args = rep_comma parse_pat]; (_, Kwd ")") ] -> (args0, args)
        | [ ] -> ([], args0)
       ]
-    ] -> CallExpr (l, x, [], indices, args, Static)
+    ] ->
+      begin match x, indices, args with
+        "std::mem::size_of", [], [LitPat e] -> SizeofExpr (l, CastExpr (l, IdentTypeExpr (l, None, "pointer"), e))
+      | _, _, _ -> CallExpr (l, x, [], indices, args, Static)
+      end
   | [ ] ->
     match x with
       "isize::MIN" -> Operation (l, MinValue (Int (Signed, PtrRank)), [])
