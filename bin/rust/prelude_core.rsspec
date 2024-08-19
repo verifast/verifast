@@ -124,6 +124,9 @@ pred integer_(p: *_, size: i32, signed: bool; v: i32) = integer__(p, size, signe
 pred pointer_(pp: **_; p: option<*_>);
 pred pointer(pp: **_; p: *_) = pointer_(pp, some(p));
 
+pred bool_(p: *bool; v: option<bool>);
+pred boolean(p: *bool; v: bool) = bool_(p, some(v));
+
 pred isize_(p: *isize; v: option<isize>) = integer__(p, std::mem::size_of::<isize>(), true, v) &*& has_type(p, typeid(isize)) == true;
 pred usize_(p: *usize; v: option<usize>) = integer__(p, std::mem::size_of::<usize>(), false, v) &*& has_type(p, typeid(usize)) == true;
 
@@ -153,6 +156,24 @@ lem integer__limits(p: *_);
 lem integer___limits(p: *_);
     req [?f]integer__(p, ?size, ?signed, ?v);
     ens [f]integer__(p, size, signed, v) &*& object_pointer_within_limits(p, size) == true &*& size > 0;
+
+pred bools_(p: *bool, count: i32; vs: list<option<bool>>) =
+    if count == 0 {
+        vs == nil 
+    } else {
+        bool_(p, ?v) &*& bools_(p + 1, count - 1, ?vs0) &*& vs == cons(v, vs0)
+    };
+    
+pred bools(p: *bool, count: i32; vs: list<bool>) =
+    if count == 0 {
+        vs == nil
+    } else {
+        boolean(p, ?v) &*& bools(p + 1, count - 1, ?vs0) &*& vs == cons(v, vs0)
+    };
+
+lem_auto bools_inv();
+    req [?f]bools(?p, ?count, ?vs); 
+    ens [f]bools(p, count, vs) &*& count == length(vs);
 
 pred integers__(p: *_, size: i32, signed: bool, count: i32; vs: list<option<i32> >) =
     pointer_within_limits(p) == true &*&
