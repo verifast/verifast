@@ -1,0 +1,157 @@
+include!{"prelude_core_core.rsspec"}
+include!{"list.rsspec"}
+include!{"listex.rsspec"}
+
+/*@
+
+lem assume(b: bool);
+    req true;
+    ens b;
+
+pred exists<t>(x: t;) = true;
+pred exists_np<t>(x: t) = true;
+
+fix truncate_unsigned(x: i32, nbBits: i32) -> i32;
+fix truncate_signed(x: i32, nbBits: i32) -> i32; // nbBits does not include the sign bit
+
+fix abs(x: i32) -> i32 { if x < 0 { -x } else { x } }
+
+lem mul_mono_l(x: i32, y: i32, z: i32);
+    req x <= y &*& 0 <= z;
+    ens x * z <= y * z;
+
+lem div_rem(D: i32, d: i32);
+    req d != 0;
+    ens D == D / d * d + D % d &*& abs(D % d) < abs(d) &*& abs(D / d * d) <= abs(D);
+
+lem div_rem_nonneg(D: i32, d: i32);
+    req 0 <= D &*& 0 < d;
+    ens D == D / d * d + D % d &*& 0 <= D / d &*& D / d <= D &*& 0 <= D % d &*& D % d < d;
+
+lem div_rem_nonneg_unique(D: i32, d: i32, q: i32, r: i32);
+    req 0 <= D &*& 0 <= r &*& r < d &*& D == d * q + r;
+    ens D / d == q &*& D % d == r;
+
+inductive pointer_provenance =
+    pointer_provenance_ctor(i32); // Do not rely on this definition; it is subject to change.
+inductive pointer = pointer_ctor(provenance: pointer_provenance, address: usize);
+
+fix null_pointer_provenance() -> pointer_provenance;
+fix null_pointer() -> pointer { pointer_ctor(null_pointer_provenance, 0) }
+
+fix ptr_add(p: pointer, offset: i32) -> pointer {
+    pointer_ctor(p.provenance, p.address + offset)
+}
+
+fix field_ptr_provenance(p: pointer, structTypeid: *_, fieldOffset: i32) -> pointer_provenance;
+fix field_ptr_provenance_parent(pr: pointer_provenance, fieldOffset: i32) -> pointer;
+
+lem_auto(field_ptr_provenance(p, structTypeid, fieldOffset)) field_ptr_provenance_injective(p: pointer, structTypeid: *_, fieldOffset: i32);
+    req true;
+    ens field_ptr_provenance_parent(field_ptr_provenance(p, structTypeid, fieldOffset), fieldOffset) == p;
+    
+fix field_ptr(p: pointer, structTypeid: *_, fieldOffset: i32) -> pointer {
+    pointer_ctor(field_ptr_provenance(p, structTypeid, fieldOffset), p.address + fieldOffset)
+}   
+
+fix ptr_provenance_min_addr(pr: pointer_provenance) -> usize;
+fix ptr_provenance_max_addr(pr: pointer_provenance) -> usize;
+
+fix ptr_within_limits(p: pointer) -> bool { ptr_provenance_min_addr(p.provenance) <= p.address && p.address <= ptr_provenance_max_addr(p.provenance) }
+
+fix pointer_within_limits(p: *_) -> bool { ptr_within_limits(p as pointer) }
+
+fix object_pointer_within_limits(p: *_, size: i32) -> bool {
+    pointer_within_limits(p) && pointer_within_limits(p + size) && p as usize != 0 && size >= 0
+}
+
+// When producing a field chunk, VeriFast produces a field_pointer_within_limits fact
+// instead of a pointer_within_limits fact to avoid producing too many linear inequalities.
+fix field_pointer_within_limits(p: *_, fieldOffset: i32) -> bool;
+
+lem_auto(pointer_within_limits(field_ptr(p as pointer, structTypeid, fieldOffset) as *_)) field_pointer_within_limits_def(p: *_, structTypeid: *_, fieldOffset: i32);
+    req true;
+    ens field_pointer_within_limits(p, fieldOffset) == pointer_within_limits(field_ptr(p as pointer, structTypeid, fieldOffset) as *_);
+
+lem_auto(field_pointer_within_limits(field_ptr(p as pointer, structTypeid, fieldOffset) as *_, 0)) first_field_pointer_within_limits_elim(p: *_, structTypeid: *_, fieldOffset: i32);
+    req true;
+    ens field_pointer_within_limits(field_ptr(p as pointer, structTypeid, fieldOffset) as *_, 0) == field_pointer_within_limits(p, fieldOffset);
+
+lem_auto(ptr_within_limits(field_ptr(p, structTypeid, 0))) ptr_within_limits_field_ptr_0(p: pointer, structTypeid: *_);
+    req true;
+    ens ptr_within_limits(field_ptr(p, structTypeid, 0)) == ptr_within_limits(p);
+
+fix has_type(p: *_, typeid_: *_) -> bool;
+
+pred generic_points_to_<t>(p: *t; v: option<t>);
+pred generic_points_to<t>(p: *t; v: t) = generic_points_to_::<t>(p, some(v));
+
+pred integer__(p: *_, size: i32, signed: bool; v: option<i32>);
+pred integer_(p: *_, size: i32, signed: bool; v: i32) = integer__(p, size, signed, some(v));
+
+pred pointer_(pp: **_; p: option<*_>);
+pred pointer(pp: **_; p: *_) = pointer_(pp, some(p));
+
+pred isize_(p: *isize; v: option<isize>) = integer__(p, std::mem::size_of::<isize>(), true, v) &*& has_type(p, typeid(isize)) == true;
+pred usize_(p: *usize; v: option<usize>) = integer__(p, std::mem::size_of::<usize>(), false, v) &*& has_type(p, typeid(usize)) == true;
+
+pred isize(p: *isize; v: isize) = isize_(p, some(v));
+pred usize(p: *usize; v: usize) = usize_(p, some(v));
+
+pred integers__(p: *_, size: i32, signed: bool, count: i32; vs: list<option<i32> >) =
+    pointer_within_limits(p) == true &*&
+    if count == 0 {
+        vs == nil
+    } else {
+        integer__(p, size, signed, ?v0) &*& integers__(p + size, size, signed, count - 1, ?vs0) &*& vs == cons(v0, vs0)
+    };
+
+pred integers_(p: *_, size: i32, signed: bool, count: i32; vs: list<i32>) =
+    pointer_within_limits(p) == true &*&
+    if count == 0 {
+        vs == nil
+    } else {
+        integer_(p, size, signed, ?v0) &*& integers_(p + size, size, signed, count - 1, ?vs0) &*& vs == cons(v0, vs0)
+    };
+
+pred pointers(pp: **_, count: i32; ps: list<*_>) =
+    if count == 0 {
+        ps == nil
+    } else {
+        pointer(pp, ?p) &*& pointers(pp + 1, count - 1, ?ps0) &*& ps == cons(p, ps0)
+    };
+
+pred pointers_(pp: **_, count: i32; ps: list<option<*_>>) =
+    if count == 0 {
+        ps == nil
+    } else {
+        pointer_(pp, ?p) &*& pointers_(pp + 1, count - 1, ?ps0) &*& ps == cons(p, ps0)
+    };
+
+pred usizes(p: *usize, count: i32; vs: list<usize>) =
+    if count == 0 {
+        vs == nil
+    } else {
+        usize(p, ?v) &*& usizes(p + 1, count - 1, ?vs0) &*& vs == cons(v, vs0)
+    };
+
+pred usizes_(p: *usize, count: i32; vs: list<option<usize>>) =
+    if count == 0 {
+        vs == nil
+    } else {
+        usize_(p, ?v) &*& usizes_(p + 1, count - 1, ?vs0) &*& vs == cons(v, vs0)
+    };
+
+lem u8s__to_integer__(p: *_, size: i32, signed: bool);
+    req [?f]integers__(p, 1, false, size, _);
+    ens [f]integer__(p, size, signed, _);
+
+lem integer__to_u8s(p: *_, size: i32, signed: bool);
+    req [?f]integer_(p, size, signed, _);
+    ens [f]integers_(p, 1, false, size, _);
+
+lem_auto integers__to_integers__(p: *_);
+    req [?f]integers_(p, ?size, ?signed, ?count, ?vs);
+    ens [f]integers__(p, size, signed, count, map(some, vs));
+
+@*/

@@ -1,0 +1,19 @@
+include!{"rust_belt/general.rsspec"}
+include!{"prelude_core.rsspec"}
+include!{"mask.rsspec"}
+include!{"rust_belt/lifetime_logic.rsspec"}
+
+union std_empty_ {}
+struct std_tuple_0_ {}
+
+struct slice_ref<T> { ptr: *T, len: usize }
+
+/*@
+
+pred junk();
+
+fn_type main_full(mainModule: i32) = fn();
+    req thread_token(?_t);
+    ens thread_token(_t) &*& junk();
+
+@*/

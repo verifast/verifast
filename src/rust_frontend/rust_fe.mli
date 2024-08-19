@@ -14,7 +14,7 @@ module Make :
         string list ->
         string list ->
         string ->
-        (Ast.loc * (Lexer.include_kind * string * string) * 'a list *
+        (Ast.loc * (Lexer.include_kind * string * string) * string list *
          Ast.package list)
         list * Ast.package list * Verifast0.debug_info option
     end

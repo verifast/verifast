@@ -1,0 +1,176 @@
+/*@
+
+/*
+
+Contents:
+- inductive list
+- fixpoints head, tail, length, append, reverse, mem, nth, distinct, take, drop, remove, index_of
+- predicate foreach
+- fixpoints map, forall, exists, update
+and various lemmas.
+
+See listex.rsspec for additional lemmas about these definitions, and for additional definitions.
+
+*/
+
+inductive list<t> = nil | cons(t, list<t>);
+
+fix head<t>(xs: list<t>) -> t {
+    match xs {
+        nil => default_value,
+        cons(x, xs0) => x
+    }
+}
+
+fix tail<t>(xs: list<t>) -> list<t> {
+    match xs {
+        nil => nil,
+        cons(x, xs0) => xs0
+    }
+}
+
+fix length<t>(xs: list<t>) -> i32 {
+    match xs {
+        nil => 0,
+        cons(x, xs0) => 1 + length(xs0)
+    }
+}
+
+lem_auto length_nonnegative<t>(xs: list<t>);
+    req true;
+    ens length(xs) >= 0;
+
+fix append<t>(xs: list<t>, ys: list<t>) -> list<t> {
+    match xs {
+        nil => ys,
+        cons(x, xs0) => cons(x, append(xs0, ys))
+    }
+}
+
+lem_auto append_nil<t>(xs: list<t>);
+    req true;
+    ens append(xs, nil) == xs;
+
+lem append_assoc<t>(xs: list<t>, ys: list<t>, zs: list<t>);
+    req true;
+    ens append(append(xs, ys), zs) == append(xs, append(ys, zs));
+
+lem_auto(length(append(xs, ys))) length_append<t>(xs: list<t>, ys: list<t>);
+    req true;
+    ens length(append(xs, ys)) == length(xs) + length(ys);
+
+fix reverse<t>(xs: list<t>) -> list<t> {
+    match xs {
+        nil => nil,
+        cons(x, xs0) => append(reverse(xs0), cons(x, nil))
+    }
+}
+
+lem_auto reverse_reverse<t>(xs: list<t>);
+    req true;
+    ens reverse(reverse(xs)) == xs;
+
+fix nth<t>(k: i32, xs: list<t>) -> t {
+    match xs {
+        nil => default_value,
+        cons(h, t) => if k == 0 { h } else { nth(k - 1, t) }
+    }
+}
+
+lem nth_append<t>(xs: list<t>, ys: list<t>, i: i32);
+    req 0 <= i &*& i < length(xs);
+    ens nth(i, xs) == nth(i, append(xs, ys));
+
+lem nth_append_r<t>(xs: list<t>, ys: list<t>, i: i32);
+    req 0 <= i && i < length(ys);
+    ens nth(i, ys) == nth(length(xs) + i, append(xs, ys));
+
+fix take<t>(n: i32, xs: list<t>) -> list<t> {
+    match xs {
+        nil => nil,
+        cons(h, t) => if n == 0 { nil } else { cons(h, take(n - 1, t)) }
+    }
+}
+
+lem_auto take_0<t>(xs: list<t>);
+    req true;
+    ens take(0, xs) == nil;
+
+lem_auto(take(length(xs), xs)) take_length<t>(xs: list<t>);
+    req true;
+    ens take(length(xs), xs) == xs;
+
+lem_auto(length(take(n, xs))) length_take<t>(n: i32, xs: list<t>);
+    req 0 <= n && n <= length(xs);
+    ens length(take(n, xs)) == n;
+
+lem_auto(nth(i, take(n, xs))) nth_take<t>(i: i32, n: i32, xs: list<t>);
+    req 0 <= i && i < n && n <= length(xs);
+    ens nth(i, take(n, xs)) == nth(i, xs);
+
+fix drop<t>(n: i32, xs: list<t>) -> list<t> {
+    match xs {
+        nil => nil,
+        cons(x, xs0) => if n == 0 { xs } else { drop(n - 1, xs0) }
+    }
+}
+
+lem_auto drop_0<t>(xs: list<t>);
+    req true;
+    ens drop(0, xs) == xs;
+
+lem drop_n_plus_one<t>(n: i32, xs: list<t>);
+    req 0 <= n &*& n < length(xs);
+    ens drop(n, xs) == cons(nth(n, xs), drop(n + 1, xs));
+
+lem_auto(drop(length(xs), xs)) drop_length<t>(xs: list<t>);
+    req true;
+    ens drop(length(xs), xs) == nil;
+
+lem_auto(length(drop(n, xs))) length_drop<t>(n: i32, xs: list<t>);
+    req 0 <= n && n <= length(xs);
+    ens length(drop(n, xs)) == length(xs) - n;
+
+lem_auto(drop(n, take(n, xs))) drop_n_take_n<t>(n: i32, xs: list<t>);
+    req true;
+    ens drop(n, take(n, xs)) == nil;
+
+lem_auto(append(take(n, xs), drop(n, xs))) append_take_drop_n<t>(xs: list<t>, n: i32);
+  req 0<=n && n <= length(xs);
+  ens append(take(n, xs), drop(n, xs)) == xs;
+
+fix map<a, b>(f: fix(a, b), xs: list<a>) -> list<b> {
+    match xs {
+        nil => nil,
+        cons(h, t) => cons(f(h), map(f, t))
+    }
+}
+
+fix filter<t>(f: fix(t, bool), xs: list<t>) -> list<t> {
+    match xs {
+        nil => nil,
+        cons(h, t) => if f(h) { cons(h, filter(f, t)) } else { filter(f, t) }
+    }
+}
+
+fix forall<t>(xs: list<t>, f: fix(t, bool)) -> bool {
+    match xs {
+        nil => true,
+        cons(h, t) => f(h) && forall(t, f)
+    }
+}
+
+fix exists<t>(xs: list<t>, f: fix(t, bool)) -> bool {
+    match xs {
+        nil => false,
+        cons(h, t) => f(h) || exists(t, f)
+    }
+}
+
+pred foreach<t>(xs: list<t>, p: pred(t)) =
+    match xs {
+        nil => true,
+        cons(h, t) => p(h) &*& foreach(t, p)
+    };
+
+@*/

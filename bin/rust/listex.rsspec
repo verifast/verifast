@@ -1,0 +1,10 @@
+/*@
+
+fix fold_left<a, b>(x0: a, f: fix(a, b, a), xs: list<b>) -> a {
+    match xs { 
+        nil => x0,
+        cons(x, xs0) => fold_left(f(x0, x), f, xs0)
+    }
+}
+
+@*/

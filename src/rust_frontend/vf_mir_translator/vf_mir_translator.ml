@@ -558,6 +558,24 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           Error (`CapnpIndListGetList "Unknown inductive list constructor")
   end
 
+  let prelude_path = Filename.concat (Filename.dirname Sys.executable_name) "rust/prelude.rsspec"
+
+  let parse_prelude () =
+    let prelude_name = Filename.basename prelude_path in
+    let decls =
+      let ds = VfMirAnnotParser.parse_rsspec_file prelude_path in
+      let pos = (prelude_path, 1, 1) in
+      let loc = Ast.Lexed (pos, pos) in
+      [Ast.PackageDecl (loc, "", [], ds)]
+    in
+    let header =
+      ( Ast.dummy_loc,
+        (Lexer.AngleBracketInclude, prelude_name, prelude_path),
+        [],
+        decls )
+    in
+    [ header ]
+
   let parse_header (crateName : string) (header_path : string) =
     let header_name = Filename.basename header_path in
     let decls =
@@ -574,7 +592,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let header =
       ( Ast.dummy_loc,
         (Lexer.AngleBracketInclude, header_name, header_path),
-        [],
+        [prelude_path],
         decls )
     in
     [ header ]
@@ -4610,7 +4628,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           header_names
       in
       Ok
-        ( headers,
+        ( parse_prelude () @ headers,
           Rust_parser.flatten_module_decls Ast.dummy_loc decls,
           Some debug_infos )
     in

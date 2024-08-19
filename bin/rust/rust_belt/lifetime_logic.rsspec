@@ -1,0 +1,10 @@
+/*@
+
+pred atomic_mask(mask: mask_t);
+
+inductive lifetime_t = lifetime_ctor(id: i32); // Type of lifetimes
+abstract_type thread_id_t;
+
+pred thread_token(t: thread_id_t);
+
+@*/

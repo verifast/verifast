@@ -682,7 +682,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let arg = ev arg in
           begin match try_pointee_pred_symb0 t with
             Some (_, _, _, _, _, arrayMallocBlockPredSymb, _, _, _, _, _, uninitArrayPredSymb) ->
-            consume_chunk rules h env [] [] [] l (arrayMallocBlockPredSymb, true) [] real_unit real_unit_pat (Some 1) [TermPat arg; dummypat] $. fun _ h _ [_; n] _ _ _ _ ->
+            consume_chunk rules h env [] [] [] l (arrayMallocBlockPredSymb (), true) [] real_unit real_unit_pat (Some 1) [TermPat arg; dummypat] $. fun _ h _ [_; n] _ _ _ _ ->
             consume_chunk rules h env [] [] [] l (uninitArrayPredSymb, true) [] real_unit real_unit_pat (Some 2) [TermPat arg; TermPat n; dummypat] $. fun _ h _ _ _ _ _ _ ->
             cont h env
           | None ->
@@ -709,7 +709,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let addr = ev arg in
         begin match try_pointee_pred_symb0 t with
         | Some (_, _, _, _, _, _, _, array_new_block_pred_symb, _, _, _, uninit_array_pred_symb) ->
-            consume_chunk rules h env [] [] [] l (array_new_block_pred_symb, true) [] real_unit real_unit_pat (Some 1) [TermPat addr; TermPat int_unit_term] @@ fun _ h _ [_; n] _ _ _ _ ->
+            consume_chunk rules h env [] [] [] l (array_new_block_pred_symb (), true) [] real_unit real_unit_pat (Some 1) [TermPat addr; TermPat int_unit_term] @@ fun _ h _ [_; n] _ _ _ _ ->
             consume_chunk rules h env [] [] [] l (uninit_array_pred_symb, true) [] real_unit real_unit_pat (Some 2) [TermPat addr; TermPat n; dummypat] @@ fun _ h _ _ _ _ _ _ ->
             cont h env
         | None -> 
