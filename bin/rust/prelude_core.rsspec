@@ -309,4 +309,17 @@ lem integers__to_u8_array(p: *u8);
     req [?f]integers_(p, 1, false, ?count, ?elems);
     ens [f]array(p, count, elems);
 
+pred ghost_rec_perm(depth: i32;); // Permission to perform `depth` nested lemma function pointer calls.
+
+pred ghost_rec_perm_top();
+pred ghost_rec_perm_top_unweaken_token(depth: i32);
+    
+lem ghost_rec_perm_top_weaken(depth: i32);
+    req ghost_rec_perm_top();
+    ens ghost_rec_perm(depth) &*& ghost_rec_perm_top_unweaken_token(depth);
+    
+lem ghost_rec_perm_top_unweaken();
+    req ghost_rec_perm_top_unweaken_token(?depth) &*& ghost_rec_perm(depth);
+    ens ghost_rec_perm_top();
+
 @*/

@@ -67,4 +67,35 @@ pred_ctor own<T>(t: thread_id_t)(v: T) = (<T>.own)(t, v);
 pred u8_own(t: thread_id_t, v: u8) = true;
 type_pred_def <u8>.own = u8_own;
 
+lem open_full_borrow_content<T>(t: thread_id_t, l: *T);
+    req ((<T>.full_borrow_content)(t, l))();
+    ens *l |-> ?v &*& (<T>.own)(t, v);
+
+lem close_full_borrow_content<T>(t: thread_id_t, l: *T);
+    req *l |-> ?v &*& (<T>.own)(t, v);
+    ens ((<T>.full_borrow_content)(t, l))();
+
+fix type_depth(typeId: *_) -> i32;
+
+pred type_interp<T>(;) = ghost_rec_perm(type_depth(typeid(T)));
+
+lem share_mono<T>(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *T);
+    req type_interp::<T>() &*& lifetime_inclusion(k1, k) == true &*& [_](<T>.share)(k, t, l);
+    ens type_interp::<T>() &*& [_](<T>.share)(k1, t, l);
+
+lem share_full_borrow<T>(k: lifetime_t, t: thread_id_t, l: *_);
+    nonghost_callers_only
+    req full_borrow(k, (<T>.full_borrow_content)(t, l)) &*& [?q]lifetime_token(k);
+    ens [_](<T>.share)(k, t, l) &*& [q]lifetime_token(k);
+
+lem share_full_borrow_m<T>(k: lifetime_t, t: thread_id_t, l: *_);
+    req type_interp::<T>() &*& atomic_mask(?mask) &*& mask_le(Nlft, mask) == true &*& full_borrow(k, (<T>.full_borrow_content)(t, l)) &*& [?q]lifetime_token(k);
+    ens type_interp::<T>() &*& atomic_mask(mask) &*& [_](<T>.share)(k, t, l) &*& [q]lifetime_token(k);
+
+fix is_Send(type_id: *_) -> bool;
+
+lem Send::send<T>(t0: thread_id_t, t1: thread_id_t, v: T);
+    req type_interp::<T>() &*& is_Send(typeid(T)) == true &*& (<T>.own)(t0, v);
+    ens type_interp::<T>() &*& (<T>.own)(t1, v);
+
 @*/
