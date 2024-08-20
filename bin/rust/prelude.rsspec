@@ -4,6 +4,7 @@ include!{"ghost_cells.rsspec"}
 include!{"counting.rsspec"}
 include!{"mask.rsspec"}
 include!{"rust_belt/lifetime_logic.rsspec"}
+include!{"rust_belt/lem_aux.rsspec"}
 
 union std_empty_ {}
 struct std_tuple_0_ {}

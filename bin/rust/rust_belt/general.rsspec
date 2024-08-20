@@ -135,6 +135,8 @@ pred_ctor u64_full_borrow_content(t: thread_id_t, l: *u64)(;) = *l |-> ?_;
 pred_ctor u128_full_borrow_content(t: thread_id_t, l: *u128)(;) = *l |-> ?_;
 pred_ctor usize_full_borrow_content(t: thread_id_t, l: *usize)(;) = *l |-> ?_;
 
+pred u32_share(k: lifetime_t, t: thread_id_t, l: *u32) = [_]frac_borrow(k, u32_full_borrow_content(t, l));
+
 type_pred_decl <Self>.own : pred(thread_id_t, Self);
 type_pred_decl <Self>.full_borrow_content : fix(thread_id_t, *_, pred());
 type_pred_decl <Self>.share : pred(lifetime_t, thread_id_t, *_);

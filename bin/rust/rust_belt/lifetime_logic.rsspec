@@ -12,6 +12,7 @@ pred atomic_mask(mask: mask_t);
 
 inductive lifetime_t = lifetime_ctor(id: i32); // Type of lifetimes
 abstract_type thread_id_t; // Type of thread IDs
+fix default_tid() -> thread_id_t;
 
 fix lifetime_intersection(k: lifetime_t, k1: lifetime_t) -> lifetime_t;
 fix lifetime_inclusion(k: lifetime_t, k1: lifetime_t) -> bool;
@@ -260,6 +261,15 @@ lem close_frac_borrow(q_p: real, P: pred(;));
     nonghost_callers_only
     req [q_p]P() &*& close_frac_borrow_token(q_p, P, ?q_lft, ?k);
     ens [q_lft]lifetime_token(k);
+
+lem_type implies_frac(P: pred(), Q: pred()) = lem();
+    req ghost_rec_perm_top() &*& [?f]P();
+    ens ghost_rec_perm_top() &*& [f]Q();
+
+// frac_bor_iff
+lem frac_borrow_implies(k: lifetime_t, P: pred(;), Q: pred(;));
+    req [_]frac_borrow(k, P) &*& is_implies_frac(?f, P, Q) &*& is_implies_frac(?f1, Q, P);
+    ens [_]frac_borrow(k, Q) &*& is_implies_frac(f, P, Q) &*& is_implies_frac(f1, Q, P);
 
 // LftL-fract-acc-atomic
 pred close_frac_borrow_token_atomic(b: bool, q: real, P: pred(;), k: lifetime_t);
