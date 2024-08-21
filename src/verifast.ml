@@ -2438,6 +2438,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | Some cont -> cont blocks_done sizemap tenv ghostenv h env
       end
     | SuperConstructorCall(l, es) -> static_error l "super must be first statement of constructor." None
+    | SpecStmt (l, _, _) -> static_error l "Loop specification statements cannot appear in this position." None
   and
     verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss cont return_cont econt =
     match ss with

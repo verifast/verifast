@@ -77,26 +77,33 @@ impl Buffer {
 }
 
 unsafe fn memchr(mut haystack: *const u8, mut size: usize, needle: u8) -> *const u8
-//@ req [?f]integers_(haystack, 1, false, size, ?cs) &*& size <= isize::MAX;
-//@ ens [f]integers_(haystack, 1, false, size, cs) &*& 0 <= result as usize - haystack as usize &*& result as usize - haystack as usize <= size &*& result == haystack + (result as usize - haystack as usize);
+//@ req [?f]haystack[..size] |-> ?cs &*& size <= isize::MAX;
+/*@
+ens
+    [f]haystack[..size] |-> cs &*&
+    0 <= result as usize - haystack as usize &*&
+    result as usize - haystack as usize <= size &*&
+    result == haystack + (result as usize - haystack as usize);
+@*/
 {
     //@ let haystack0 = haystack;
     //@ let size0 = size;
-    //@ close [f]integers_(haystack, 1, false, 0, []);
     loop {
-        //@ inv [f]integers_(haystack0, 1, false, haystack as usize - haystack0 as usize, ?cs0) &*& [f]integers_(haystack, 1, false, size, ?cs1) &*& append(cs0, cs1) == cs &*& haystack == haystack0 + (haystack as usize - haystack0 as usize);
-        if size == 0 || *haystack == needle {
-            //@ if size != 0 { close [f]integers_(haystack, 1, false, size, _); }
-            //@ integers__join(haystack0);
-            return haystack;
-        }
+        /*@
+        req [f]haystack[..size] |-> ?cs1;
+        ens
+            [f]old_haystack[..old_size] |-> cs1 &*&
+            haystack == old_haystack + (haystack as usize - old_haystack as usize) &*&
+            0 <= haystack as usize - old_haystack as usize &*&
+            haystack as usize - old_haystack as usize <= old_size;
+        @*/
+        let done = size == 0 || *haystack == needle;
+        //@ if done && size != 0 { close [f]integers_(haystack, 1, false, size, _); }
+        if done { break }
         haystack = haystack.offset(1);
         size -= 1;
-        //@ close [f]integers_(haystack, 1, false, 0, []);
-        //@ close [f]integers_(haystack - 1, 1, false, 1, _);
-        //@ integers__join(haystack0);
-        //@ append_assoc(cs0, [head(cs1)], tail(cs1));
     }
+    haystack
 }
 
 unsafe fn read_line(socket: platform::sockets::Socket, buffer: *mut Buffer)

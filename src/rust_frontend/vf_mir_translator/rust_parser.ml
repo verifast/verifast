@@ -386,6 +386,7 @@ let rec parse_stmt = function%parser
   [ (Lexed (sp1, _), Kwd "/*@"); parse_stmt as s; (Lexed (_, sp2), Kwd "@*/") ] ->
   PureStmt (Lexed (sp1, sp2), s)
 | [ (l, Kwd "inv"); parse_asn as p; (_, Kwd ";") ] -> InvariantStmt (l, p)
+| [ (l, Kwd "req"); parse_asn as req; (_, Kwd ";"); (_, Kwd "ens"); parse_asn as ens; (_, Kwd ";") ] -> SpecStmt (l, req, ens)
 | [ (l, Kwd "open");
     [%let coef = opt parse_coef];
     parse_expr as e;

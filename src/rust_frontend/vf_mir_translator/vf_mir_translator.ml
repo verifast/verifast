@@ -2966,6 +2966,14 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                         None,
                         stmts @ children_stmts @ [ Ast.LabelStmt (loc, id) ],
                         [] )
+                | Ast.PureStmt (lp, Ast.SpecStmt (lspec, req, ens)) :: stmts ->
+                    Ast.WhileStmt
+                      ( loc,
+                        True loc,
+                        Some (LoopSpec (req, ens)),
+                        None,
+                        stmts @ children_stmts @ [ Ast.LabelStmt (loc, id) ],
+                        [] )
                 | _ ->
                     Ast.BlockStmt
                       ( loc,

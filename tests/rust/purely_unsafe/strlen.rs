@@ -46,7 +46,7 @@ unsafe fn strlen_rec(mut p: *const u8) -> i32
     }
 }
 
-unsafe fn strlen(mut p: *const u8) -> isize
+unsafe fn strlen_inv(mut p: *const u8) -> isize
 //@ req [?f]zstr(p, ?cs);
 //@ ens [f]zstr(p, cs) &*& result == length(cs);
 {
@@ -77,6 +77,40 @@ unsafe fn strlen(mut p: *const u8) -> isize
     }
     //@ div_rem_nonneg(p1 as usize - p as usize, 1);
     //@ u8s_zstr_join(p);
+    p1.offset_from(p)
+}
+
+unsafe fn strlen(mut p: *const u8) -> isize
+//@ req [?f]zstr(p, ?cs);
+//@ ens [f]zstr(p, cs) &*& result == length(cs);
+{
+    let mut p1 = p;
+    //@ assume(length(cs) <= isize::MAX);
+    loop {
+        /*@
+        req [f]zstr(p1, ?cs1) &*& (p1 as pointer).provenance == (p as pointer).provenance;
+        ens [f]zstr(old_p1, cs1) &*& p1 == old_p1 + length(cs1);
+        @*/
+        
+        //@ open zstr(p1, cs1);
+        let done = *p1 == 0;
+        /*@
+        if done {
+            close [f]zstr(p1, cs1);
+        }
+        @*/
+        if done {
+            // FIXME: Currently, ghost commands on exit paths are executed *after checking the loop's postcondition* :-(
+            // As a workaround, duplicate the conditional in ghost code.
+            break;
+        } else {
+            //@ open zstr(p1 + 1, ?cs11);
+            //@ integer__limits(p1 + 1);
+            //@ close [f]zstr(p1 + 1, cs11);
+            p1 = p1.offset(1);
+        }
+    }
+    //@ div_rem_nonneg(p1 as usize - p as usize, 1);
     p1.offset_from(p)
 }
 

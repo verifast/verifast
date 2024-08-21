@@ -99,6 +99,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | NoopStmt _ -> []
     | LabelStmt _ -> []
     | InvariantStmt _ -> []
+    | SpecStmt _ -> []
     | Break _ -> []
     | Continue _ -> []
     | SuperConstructorCall(_, es) -> flatmap (fun e -> expr_assigned_variables e) es

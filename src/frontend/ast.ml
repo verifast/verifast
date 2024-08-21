@@ -703,6 +703,10 @@ and
   | InvariantStmt of
       loc *
       asn (* join point *)
+  | SpecStmt of
+      loc *
+      asn * (* requires clause*)
+      asn (* ensures clause *)
   | ProduceLemmaFunctionPointerChunkStmt of
       loc *
       expr option *
@@ -1089,6 +1093,7 @@ let stmt_loc s =
   | GotoStmt (l, _) -> l
   | NoopStmt l -> l
   | InvariantStmt (l, _) -> l
+  | SpecStmt (l, _, _) -> l
   | ProduceLemmaFunctionPointerChunkStmt (l, _, _, _) -> l
   | DuplicateLemmaFunctionPointerChunkStmt (l, _) -> l
   | ProduceFunctionPointerChunkStmt (l, ftn, fpe, targs, args, params, openBraceLoc, ss, closeBraceLoc) -> l
