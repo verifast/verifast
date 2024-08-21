@@ -2998,9 +2998,24 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             ],
             Static ) )
 
+  let mk_sync_asn loc tparam =
+    let open Ast in
+    ExprAsn
+      ( loc,
+        CallExpr
+          ( loc,
+            "is_Sync",
+            [],
+            [],
+            [
+              LitPat
+                (Typeid (loc, TypeExpr (IdentTypeExpr (loc, None, tparam))));
+            ],
+            Static ) )
+
   let gen_contract (adt_defs : Mir.adt_def_tr list) (contract_loc : Ast.loc)
       (lft_vars : string list) (outlives_preds : (string * string) list)
-      (send_tparams : string list) (params : Mir.local_decl list)
+      (send_tparams : string list) (sync_tparams : string list) (params : Mir.local_decl list)
       (ret : Mir.local_decl) =
     let open Ast in
     let bind_pat_b n = VarPat (contract_loc, n) in
@@ -3081,7 +3096,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
              ] )
     in
     let send_asns = send_tparams |> List.map (mk_send_asn contract_loc) in
-    let pre_lft_tks = pre_lft_tks @ outlives_asns @ send_asns in
+    let sync_asns = sync_tparams |> List.map (mk_sync_asn contract_loc) in
+    let pre_lft_tks = pre_lft_tks @ outlives_asns @ send_asns @ sync_asns in
     let post_lft_tks =
       List.map (fun lft_var -> lft_token_b lit_pat_b lit_pat_b lft_var) lft_vars
     in
@@ -3500,7 +3516,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           gen_contract adt_defs loc
             (List.map TrName.lft_name_without_apostrophe
                (lifetime_params_get_list required_fn_cpn))
-            [] [] params result
+            [] [] [] params result
         in
         Ok (false, None, Some (pre, post), false))
     in
@@ -3557,6 +3573,15 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
              | ManifestTypeExpr (_, GhostTypeParam tparam) -> [ tparam ]
              | _ -> [])
          | _ -> [])
+
+  let compute_sync_tparams preds =
+    preds
+    |> Util.flatmap (function
+          | `Trait ("std::marker::Sync", [ Mir.GenArgType selfTy ]) -> (
+              match Mir.basic_type_of selfTy with
+              | ManifestTypeExpr (_, GhostTypeParam tparam) -> [ tparam ]
+              | _ -> [])
+          | _ -> [])
 
   let translate_body (body_tr_defs_ctx : body_tr_defs_ctx) (body_cpn : BodyRd.t)
       =
@@ -3663,6 +3688,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                | _ -> [])
         in
         let send_tparams = compute_send_tparams preds in
+        let sync_tparams = compute_sync_tparams preds in
         let* ret_ty_info = translate_ty (output_get body_cpn) imp_loc in
         let* param_tys =
           ListAux.try_map
@@ -3747,7 +3773,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   self_ty_targs self_lft_args contract_loc
               else
                 gen_contract body_tr_defs_ctx.adt_defs contract_loc
-                  lft_param_names outlives_preds send_tparams param_decls
+                  lft_param_names outlives_preds send_tparams sync_tparams param_decls
                   ret_place_decl
             in
             let contract_template =

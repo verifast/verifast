@@ -192,6 +192,12 @@ lem Send::send<T>(t0: thread_id_t, t1: thread_id_t, v: T);
     req type_interp::<T>() &*& is_Send(typeid(T)) == true &*& (<T>.own)(t0, v);
     ens type_interp::<T>() &*& (<T>.own)(t1, v);
 
+fix is_Sync(type_id: *_) -> bool;
+
+lem Sync::sync<T>(k: lifetime_t, t0: thread_id_t, t1: thread_id_t, l: *T);
+    req type_interp::<T>() &*& is_Sync(typeid(T)) == true &*& [_](<T>.share)(k, t0, l);
+    ens type_interp::<T>() &*& [_](<T>.share)(k, t1, l);
+
 pred lifetimes(lifetimes: list<lifetime_t>) = true; // Serves only to carry a function call's lifetime arguments.
 
 

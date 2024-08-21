@@ -70,11 +70,11 @@ mod alloc {
     
     /*@
     
-    lem_auto Layout_size_Layout_from_size_align(size: usize, align: usize);
+    lem_auto Layout_size__Layout_from_size_align_(size: usize, align: usize);
         req true;
         ens Layout::size_(Layout::from_size_align_(size, align)) == size;
     
-    lem_auto Layout_align_Layout_from_size_align(size: usize, align: usize);
+    lem_auto Layout_align__Layout_from_size_align_(size: usize, align: usize);
         req true;
         ens Layout::align_(Layout::from_size_align_(size, align)) == align;
     
@@ -93,10 +93,13 @@ mod alloc {
     }
     
     //@ pred alloc_block(ptr: *u8; layout: Layout);
+    
     /*@
-        lem alloc_aligned(ptr: *mut u8);
-            req alloc_block(ptr, ?layout);
-            ens (ptr as usize) % Layout::align_(layout) == 0;
+    
+    lem alloc_aligned(ptr: *mut u8);
+        req [?f]alloc_block(ptr, ?layout);
+        ens [f]alloc_block(ptr, layout) &*& (ptr as usize) % Layout::align_(layout) == 0;
+    
     @*/
 
     fn alloc(layout: Layout) -> *u8;
