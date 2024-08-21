@@ -1,0 +1,31 @@
+/*@
+
+lem u32_sync(k: lifetime_t, t: thread_id_t, t1: thread_id_t, l: *u32)
+    req [_]u32_share(k, t, l);
+    ens [_]u32_share(k, t1, l);
+{
+    open u32_share(k, t, l);
+    produce_lem_ptr_chunk implies_frac(u32_full_borrow_content(t, l), u32_full_borrow_content(t1, l))() {
+        open [?f]u32_full_borrow_content(t, l)(); close [f]u32_full_borrow_content(t1, l)();
+    }{
+        produce_lem_ptr_chunk implies_frac(u32_full_borrow_content(t1, l), u32_full_borrow_content(t, l))() {
+            open [?f]u32_full_borrow_content(t1, l)(); close [f]u32_full_borrow_content(t, l)();
+        }{
+            frac_borrow_implies(k, u32_full_borrow_content(t, l), u32_full_borrow_content(t1, l));
+        }
+    }
+    close u32_share(k, t1, l);
+    leak u32_share(k, t1, l);
+}
+
+lem u32_share_mono(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *u32)
+    req [_]u32_share(k, t, l) &*& lifetime_inclusion(k1, k) == true;
+    ens [_]u32_share(k1, t, l);
+{
+    open u32_share(k, t, l);
+    frac_borrow_mono(k, k1, u32_full_borrow_content(t, l));
+    close u32_share(k1, t, l);
+    leak u32_share(k1, t, l);
+}
+
+@*/

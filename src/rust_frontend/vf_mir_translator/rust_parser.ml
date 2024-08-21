@@ -265,18 +265,21 @@ let rec parse_expr_funcs allowStructExprs =
   | [ (_, Kwd "<"); parse_type as t; (_, Kwd ">"); (l, Kwd "."); (_, Ident x) ] -> TypePredExpr (l, t, x)
   and parse_match_arm = function%parser
     [ parse_expr as pat; (l, Kwd "=>"); parse_expr as rhs ] ->
+    let lpat, lrhs = expr_loc pat, expr_loc rhs in
+    let lpat0, lrhs0 = lexed_loc lpat, lexed_loc lrhs in
+    let lsc = Ast.Lexed (Result.get_ok @@ LocAux.cover_loc0 lpat0 lrhs0) in
     begin match pat with
-      CallExpr (lc, x, [], [], pats, Static) ->
+      CallExpr (_, x, [], [], pats, Static) ->
       let pats =
         pats |>
         List.map begin function
           LitPat (Var (_, x)) -> x
-        | _ -> raise (ParseException (lc, "Match arm pattern arguments must be variable names"))
+        | _ -> raise (ParseException (lpat, "Match arm pattern arguments must be variable names"))
         end
       in
-      SwitchExprClause (l, x, pats, rhs)
-    | Var (lv, x) -> SwitchExprClause (l, x, [], rhs)
-    | _ -> raise (ParseException (expr_loc pat, "Match arm pattern must be constructor application"))
+      SwitchExprClause (lsc, x, pats, rhs)
+    | Var (_, x) -> SwitchExprClause (lsc, x, [], rhs)
+    | _ -> raise (ParseException (lpat, "Match arm pattern must be constructor application"))
     end
   and parse_match_expr_rest = function%parser
     [ (_, Kwd "}") ] -> []

@@ -11,9 +11,10 @@ unsafe fn assert(b: bool)
 
 /*@
 
-pred_ctor space_inv(x: *mut usize)() = [1/2](*x |-> ?value) &*& value == 0 || value == 1;
+pred_ctor space_inv(x: *std::sync::atomic::AtomicUsize)() = [1/2]std::sync::atomic::AtomicUsize(x, ?value) &*& value == 0 || value == 1;
 
-pred incrementor_pre(x: *mut u8) = [_]atomic_space(MaskTop, space_inv(x as *usize)) &*& [1/2](*(x as *usize) |-> 0);
+pred incrementor_pre(x: *mut u8) = [_]atomic_space(MaskTop, space_inv(x as *std::sync::atomic::AtomicUsize)) &*&
+    [1/2]std::sync::atomic::AtomicUsize(x as *std::sync::atomic::AtomicUsize, 0);
 
 @*/
 
@@ -21,20 +22,20 @@ unsafe fn incrementor(x_: *mut u8)
 //@ req incrementor_pre(x_);
 //@ ens true;
 {
-    let x = x_ as *mut usize;
+    let x = AtomicUsize::from_ptr(x_ as *mut usize);
     //@ open incrementor_pre(x_);
     {
         /*@
-        pred pre() = [_]atomic_space(MaskTop, space_inv(x)) &*& [1/2](*x |-> 0);
+        pred pre() = [_]atomic_space(MaskTop, space_inv(x)) &*& [1/2]std::sync::atomic::AtomicUsize(x, 0);
         pred post(result: usize) = true;
         @*/
         /*@
-        produce_lem_ptr_chunk std::sync::atomic::AtomicUsize_fetch_add_ghop(x as *std::sync::atomic::AtomicUsize, 1, pre, post)() {
+        produce_lem_ptr_chunk std::sync::atomic::AtomicUsize_fetch_add_ghop(x, 1, pre, post)() {
             open pre();
             open_atomic_space(MaskTop, space_inv(x));
             open space_inv(x)();
             assert std::sync::atomic::is_AtomicUsize_fetch_add_op(?op, _, _, _, _);
-            assert *x |-> ?value &*& value == 0;
+            assert std::sync::atomic::AtomicUsize(x, ?value);
             div_rem_nonneg(value + 1, usize::MAX + 1);
             if (value + 1) / (usize::MAX + 1) > 0 {
             } else {
@@ -46,11 +47,11 @@ unsafe fn incrementor(x_: *mut u8)
             close space_inv(x)();
             close_atomic_space(MaskTop);
             close post(0);
-            leak [_](*x |-> _);
+            leak [_]std::sync::atomic::AtomicUsize(x, _);
         };
         @*/
         //@ close pre();
-        AtomicUsize::from_ptr(x as *mut usize).fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        x.fetch_add(1, SeqCst);
         //@ open post(_);
     }
 }
@@ -58,18 +59,21 @@ unsafe fn incrementor(x_: *mut u8)
 fn main() {
     unsafe {
         let layout = std::alloc::Layout::from_size_align_unchecked(std::mem::size_of::<usize>(), std::mem::size_of::<usize>());
-        let x = std::alloc::alloc(layout) as *mut usize;
-        if x.is_null() {
+        let x_ = std::alloc::alloc(layout) as *mut usize;
+        if x_.is_null() {
             std::alloc::handle_alloc_error(layout);
         }
-        //@ u8s__to_integer__(x, std::mem::size_of::<usize>(), false);
-        std::ptr::write(x, 0);
+        //@ std::alloc::alloc_aligned(x_ as *u8);
+        //@ u8s__to_integer__(x_, std::mem::size_of::<usize>(), false);
+        std::ptr::write(x_, 0);
+        let x = AtomicUsize::from_ptr(x_);
+        //@ std::sync::atomic::usize_to_AtomicUsize(x_);
         //@ produce_fn_ptr_chunk platform::threading::thread_run(incrementor)(incrementor_pre)(data) { call(); }
         //@ close space_inv(x)();
         //@ create_atomic_space(MaskTop, space_inv(x));
         //@ leak atomic_space(MaskTop, space_inv(x));
-        //@ close incrementor_pre(x as *u8);
-        platform::threading::fork(incrementor as unsafe fn(*mut u8), x as *mut u8);
+        //@ close incrementor_pre(x_ as *u8);
+        platform::threading::fork(incrementor as unsafe fn(*mut u8), x_ as *mut u8);
         let mut x1 = 0;
         {
             /*@
@@ -77,11 +81,11 @@ fn main() {
             pred post(result: usize) = result == 0 || result == 1;
             @*/
             /*@
-            produce_lem_ptr_chunk std::sync::atomic::AtomicUsize_load_ghop(x as *std::sync::atomic::AtomicUsize, pre, post)() {
+            produce_lem_ptr_chunk std::sync::atomic::AtomicUsize_load_ghop(x, pre, post)() {
                 open pre();
                 open_atomic_space(MaskTop, space_inv(x));
                 open space_inv(x)();
-                assert [_](*x |-> ?value);
+                assert [_]std::sync::atomic::AtomicUsize(x, ?value);
                 assert std::sync::atomic::is_AtomicUsize_load_op(?op, _, _, _);
                 op();
                 close space_inv(x)();
@@ -90,7 +94,7 @@ fn main() {
             };
             @*/
             //@ close pre();
-            x1 = AtomicUsize::from_ptr(x).load(SeqCst);
+            x1 = x.load(SeqCst);
             //@ open post(_);
         }
         assert(x1 == 0 || x1 == 1);

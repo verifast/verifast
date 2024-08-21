@@ -93,6 +93,11 @@ mod alloc {
     }
     
     //@ pred alloc_block(ptr: *u8; layout: Layout);
+    /*@
+        lem alloc_aligned(ptr: *mut u8);
+            req alloc_block(ptr, ?layout);
+            ens (ptr as usize) % Layout::align_(layout) == 0;
+    @*/
 
     fn alloc(layout: Layout) -> *u8;
     //@ req 1 <= Layout::size_(layout);
@@ -261,51 +266,86 @@ mod io {
 }
 
 mod sync {
-
     mod atomic {
-    
+
         enum Ordering {
             SeqCst
         }
-    
+
         struct AtomicUsize;
-        
+
         /*@
-        
+        fix AtomicUsize_inner(v: AtomicUsize) -> usize;
+        pred AtomicUsize(p: *AtomicUsize; v: usize) = *p |-> ?v_ &*& v == AtomicUsize_inner(v_);
+
+        lem AtomicUsize_to_usize(p: *AtomicUsize);
+            req *p |-> ?v;
+            ens *(p as *usize) |-> AtomicUsize_inner(v) &*& (p as usize) % std::mem::size_of::<usize>() == 0;
+
+        lem usize_to_AtomicUsize(p: *usize);
+            nonghost_callers_only
+            req *p |-> ?v0 &*& (p as usize) % std::mem::size_of::<usize>() == 0;
+            ens AtomicUsize(p as *AtomicUsize, v0);
+
         lem_type AtomicUsize_fetch_add_op(self: *AtomicUsize, val: usize, P: pred(), Q: pred(usize)) = lem();
-            req *(self as *usize) |-> ?value0 &*& P();
-            ens *(self as *usize) |-> (value0 + val) % (usize::MAX + 1) &*& Q(value0);
-        
+            req AtomicUsize(self, ?v0) &*& P();
+            ens AtomicUsize(self, (v0 + val) % (usize::MAX + 1)) &*& Q(v0);
+
         lem_type AtomicUsize_fetch_add_ghop(self: *AtomicUsize, val: usize, pre: pred(), post: pred(usize)) = lem();
             req atomic_mask(MaskTop) &*& is_AtomicUsize_fetch_add_op(?op, self, val, ?P, ?Q) &*& P() &*& pre();
             ens atomic_mask(MaskTop) &*& is_AtomicUsize_fetch_add_op(op, self, val, P, Q) &*& Q(?result) &*& post(result);
-        
+
+        lem_type AtomicUsize_fetch_sub_op(self: *AtomicUsize, val: usize, P: pred(), Q: pred(usize)) = lem();
+            req AtomicUsize(self, ?v0) &*& P();
+            ens AtomicUsize(self, (v0 - val + usize::MAX + 1) % (usize::MAX + 1)) &*& Q(v0);
+
+        lem_type AtomicUsize_fetch_sub_ghop(self: *AtomicUsize, val: usize, pre: pred(), post: pred(usize)) = lem();
+            req atomic_mask(MaskTop) &*& is_AtomicUsize_fetch_sub_op(?op, self, val, ?P, ?Q) &*& P() &*& pre();
+            ens atomic_mask(MaskTop) &*& is_AtomicUsize_fetch_sub_op(op, self, val, P, Q) &*& Q(?result) &*& post(result);
+
         lem_type AtomicUsize_load_op(self: *AtomicUsize, P: pred(), Q: pred(usize)) = lem();
-            req [?f](*(self as *usize) |-> ?value) &*& P();
-            ens [f](*(self as *usize) |-> value) &*& Q(value);
-        
+            req [?f]AtomicUsize(self, ?v) &*& P();
+            ens [f]AtomicUsize(self, v) &*& Q(v);
+
         lem_type AtomicUsize_load_ghop(self: *AtomicUsize, pre: pred(), post: pred(usize)) = lem();
             req atomic_mask(MaskTop) &*& is_AtomicUsize_load_op(?op, self, ?P, ?Q) &*& P() &*& pre();
             ens atomic_mask(MaskTop) &*& is_AtomicUsize_load_op(op, self, P, Q) &*& Q(?result) &*& post(result);
-        
+
+        lem_type AtomicUsize_compare_exchange_op(self: *AtomicUsize, current: usize, new: usize, P: pred(), Q: pred(std::result::Result<usize, usize>)) = lem();
+            req AtomicUsize(self, ?v0) &*& P();
+            ens if v0 == current { AtomicUsize(self, new) &*& Q(std::result::Result::Ok(v0)) } else
+                { AtomicUsize(self, v0) &*& Q(std::result::Result::Err(v0)) };
+
+        lem_type AtomicUsize_compare_exchange_ghop(self: *AtomicUsize, current: usize, new: usize, pre: pred(), post: pred(std::result::Result<usize, usize>)) = lem();
+            req atomic_mask(MaskTop) &*& is_AtomicUsize_compare_exchange_op(?op, self, current, new, ?P, ?Q) &*& P() &*& pre();
+            ens atomic_mask(MaskTop) &*& is_AtomicUsize_compare_exchange_op(op, self, current, new, P, Q) &*& Q(?result) &*& post(result);
         @*/
-        
+
         impl AtomicUsize {
-        
-            fn from_ptr(ptr: *mut usize) -> &AtomicUsize;
+            fn new(v: usize) -> AtomicUsize;
+            //@ req true;
+            //@ ens AtomicUsize_inner(result) == v;
+
+            fn from_ptr<'a>(ptr: *mut usize) -> &'a AtomicUsize;
             //@ req true;
             //@ ens result as *mut usize == ptr;
-            
+
             fn fetch_add(self: &AtomicUsize, val: usize, order: Ordering) -> usize;
             //@ req order == std::sync::atomic::Ordering::SeqCst &*& is_AtomicUsize_fetch_add_ghop(?ghop, self, val, ?pre, ?post) &*& pre();
             //@ ens post(result);
-        
+
+            fn fetch_sub(self: &AtomicUsize, val: usize, order: Ordering) -> usize;
+            //@ req order == std::sync::atomic::Ordering::SeqCst &*& is_AtomicUsize_fetch_sub_ghop(?ghop, self, val, ?pre, ?post) &*& pre();
+            //@ ens post(result);
+
             fn load(self: &AtomicUsize, order: Ordering) -> usize;
             //@ req order == std::sync::atomic::Ordering::SeqCst &*& is_AtomicUsize_load_ghop(?ghop, self, ?pre, ?post) &*& pre();
             //@ ens post(result);
-            
-        }
-    
-    }
 
+            fn compare_exchange(self: &AtomicUsize, current: usize, new: usize, success: Ordering, failure: Ordering) -> std::result::Result<usize, usize>;
+            /*@ req success == std::sync::atomic::Ordering::SeqCst &*& failure == std::sync::atomic::Ordering::SeqCst &*&
+                is_AtomicUsize_compare_exchange_ghop(?ghop, self, current, new, ?pre, ?post) &*& pre(); @*/
+            //@ ens post(result);
+        }
+    }
 }
