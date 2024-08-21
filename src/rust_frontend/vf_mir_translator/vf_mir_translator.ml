@@ -558,7 +558,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           Error (`CapnpIndListGetList "Unknown inductive list constructor")
   end
 
-  let prelude_path = Filename.concat (Filename.dirname Sys.executable_name) "rust/prelude.rsspec"
+  let prelude_path =
+    Filename.concat (Filename.dirname Sys.executable_name) "rust/prelude.rsspec"
 
   let parse_prelude () =
     let prelude_name = Filename.basename prelude_path in
@@ -566,7 +567,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let ds = VfMirAnnotParser.parse_rsspec_file prelude_path in
       let pos = (prelude_path, 1, 1) in
       let loc = Ast.Lexed (pos, pos) in
-      [Ast.PackageDecl (loc, "", [], ds)]
+      [ Ast.PackageDecl (loc, "", [], ds) ]
     in
     let header =
       ( Ast.dummy_loc,
@@ -592,7 +593,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let header =
       ( Ast.dummy_loc,
         (Lexer.AngleBracketInclude, header_name, header_path),
-        [prelude_path],
+        [ prelude_path ],
         decls )
     in
     [ header ]
@@ -2047,6 +2048,29 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                         (`TrFnCallRExpr
                           (Printf.sprintf "Invalid (generic) arg(s) for %s"
                              fn_name)))
+              | "std::ptr::const_ptr::<impl *const T>::offset_from"
+              | "std::ptr::mut_ptr::<impl *mut T>::offset_from" -> (
+                  match (substs, args_cpn) with
+                  | ( [ Mir.GenArgType gen_arg_ty_info; Mir.GenArgConst ],
+                      [ arg1_cpn; arg2_cpn ] ) ->
+                      let* tmp_rvalue_binders, [ arg1; arg2 ] =
+                        translate_operands
+                          [ (arg1_cpn, fn_loc); (arg2_cpn, fn_loc) ]
+                      in
+                      Ok
+                        ( tmp_rvalue_binders,
+                          Ast.CallExpr
+                            ( fn_loc,
+                              "std::intrinsics::ptr_offset_from",
+                              [ Mir.basic_type_of gen_arg_ty_info ],
+                              [],
+                              [ LitPat arg1; LitPat arg2 ],
+                              Static ) )
+                  | _ ->
+                      Error
+                        (`TrFnCallRExpr
+                          (Printf.sprintf "Invalid (generic) arg(s) for %s"
+                             fn_name)))
               | "std::ptr::const_ptr::<impl *const T>::add"
               | "std::ptr::mut_ptr::<impl *mut T>::add" -> (
                   match (substs, args_cpn) with
@@ -3015,8 +3039,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
 
   let gen_contract (adt_defs : Mir.adt_def_tr list) (contract_loc : Ast.loc)
       (lft_vars : string list) (outlives_preds : (string * string) list)
-      (send_tparams : string list) (sync_tparams : string list) (params : Mir.local_decl list)
-      (ret : Mir.local_decl) =
+      (send_tparams : string list) (sync_tparams : string list)
+      (params : Mir.local_decl list) (ret : Mir.local_decl) =
     let open Ast in
     let bind_pat_b n = VarPat (contract_loc, n) in
     let lit_pat_b n = LitPat (Var (contract_loc, n)) in
@@ -3577,11 +3601,11 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
   let compute_sync_tparams preds =
     preds
     |> Util.flatmap (function
-          | `Trait ("std::marker::Sync", [ Mir.GenArgType selfTy ]) -> (
-              match Mir.basic_type_of selfTy with
-              | ManifestTypeExpr (_, GhostTypeParam tparam) -> [ tparam ]
-              | _ -> [])
-          | _ -> [])
+         | `Trait ("std::marker::Sync", [ Mir.GenArgType selfTy ]) -> (
+             match Mir.basic_type_of selfTy with
+             | ManifestTypeExpr (_, GhostTypeParam tparam) -> [ tparam ]
+             | _ -> [])
+         | _ -> [])
 
   let translate_body (body_tr_defs_ctx : body_tr_defs_ctx) (body_cpn : BodyRd.t)
       =
@@ -3773,8 +3797,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   self_ty_targs self_lft_args contract_loc
               else
                 gen_contract body_tr_defs_ctx.adt_defs contract_loc
-                  lft_param_names outlives_preds send_tparams sync_tparams param_decls
-                  ret_place_decl
+                  lft_param_names outlives_preds send_tparams sync_tparams
+                  param_decls ret_place_decl
             in
             let contract_template =
               (false, None, Some pre_post_template, false)

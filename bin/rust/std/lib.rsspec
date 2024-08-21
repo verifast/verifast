@@ -10,6 +10,14 @@ mod intrinsics {
     //@ req [?f]integers_(src as *mut u8, 1, false, count * std::mem::size_of::<T>(), ?vs) &*& integers__(dst as *mut u8, 1, false, count * std::mem::size_of::<T>(), _);
     //@ ens [f]integers_(src as *mut u8, 1, false, count * std::mem::size_of::<T>(), vs) &*& integers_(dst as *mut u8, 1, false, count * std::mem::size_of::<T>(), vs);
 
+    unsafe fn ptr_offset_from<T>(ptr: *const T, base: *const T) -> isize;
+    /*@
+    req
+        (ptr as pointer).provenance == (base as pointer).provenance &*&
+        (ptr as usize - base as usize) % std::mem::size_of::<T>() == 0 &*&
+        isize::MIN <= ptr as usize - base as usize &*& ptr as usize - base as usize <= isize::MAX;
+    @*/
+    //@ ens result == ptr as usize - base as usize;
 }
 
 mod mem {

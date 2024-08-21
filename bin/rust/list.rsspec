@@ -160,6 +160,10 @@ fix forall<t>(xs: list<t>, f: fix(t, bool)) -> bool {
     }
 }
 
+lem forall_append<t>(xs: list<t>, ys: list<t>, f: fix(t, bool));
+    req forall(xs, f) && forall(ys, f);
+    ens forall(append(xs, ys), f) == true;
+
 fix exists<t>(xs: list<t>, f: fix(t, bool)) -> bool {
     match xs {
         nil => false,

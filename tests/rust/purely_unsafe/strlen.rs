@@ -14,9 +14,22 @@ pred zstr(p: *u8; cs: list<u8>) =
         cs == cons(c, cs0)
     };
 
+fix neq<t>(x: t, y: t) -> bool { x != y }
+
+lem u8s_zstr_join(p: *u8)
+    req [?f]integers_(p, 1, false, ?n, ?cs0) &*& [f]zstr(p + n, ?cs1) &*& forall(cs0, (neq)(0)) == true;
+    ens [f]zstr(p, append(cs0, cs1));
+{
+    open integers_(p, 1, false, n, cs0);
+    if n == 0 {
+    } else {
+        u8s_zstr_join(p + 1);
+    }
+}
+
 @*/
 
-unsafe fn strlen(mut p: *const u8) -> i32
+unsafe fn strlen_rec(mut p: *const u8) -> i32
 //@ req [?f]zstr(p, ?cs);
 //@ ens [f]zstr(p, cs) &*& result == length(cs);
 {
@@ -29,8 +42,42 @@ unsafe fn strlen(mut p: *const u8) -> i32
         //@ integer__limits(p + 1);
         //@ close [f]zstr(p + 1, cs1);
         //@ assume(length(cs1) < 0x7fffffff);
-        return 1 + strlen(p.offset(1));
+        return 1 + strlen_rec(p.offset(1));
     }
+}
+
+unsafe fn strlen(mut p: *const u8) -> isize
+//@ req [?f]zstr(p, ?cs);
+//@ ens [f]zstr(p, cs) &*& result == length(cs);
+{
+    let mut p1 = p;
+    //@ assume(length(cs) <= isize::MAX);
+    loop {
+        /*@
+        inv
+            [f]p[..(p1 as usize - p as usize)] |-> ?cs0 &*& forall(cs0, (neq)(0)) == true &*&
+            [f]zstr(p1, ?cs1) &*& cs == append(cs0, cs1) &*&
+            (p1 as pointer).provenance == (p as pointer).provenance;
+        @*/
+        //@ open zstr(p1, cs1);
+        if *p1 == 0 {
+            //@ close [f]zstr(p1, cs1);
+            break;
+        } else {
+            //@ open zstr(p1 + 1, ?cs11);
+            //@ integer__limits(p1 + 1);
+            //@ close [f]zstr(p1 + 1, cs11);
+            //@ close [f]integers_(p1 + 1, 1, false, 0, []);
+            //@ close [f]integers_(p1, 1, false, 1, _);
+            //@ integers__join(p);
+            //@ forall_append(cs0, [head(cs1)], (neq)(0));
+            //@ append_assoc(cs0, [head(cs1)], tail(cs1));
+            p1 = p1.offset(1);
+        }
+    }
+    //@ div_rem_nonneg(p1 as usize - p as usize, 1);
+    //@ u8s_zstr_join(p);
+    p1.offset_from(p)
 }
 
 fn main() {
