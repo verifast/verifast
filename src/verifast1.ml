@@ -6884,7 +6884,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let ctor_pts' = instantiate_types tpenv (List.map snd ctor_ps') in
             let pred_type = PredType ([], ctor_pts', inputParamCount, Inductiveness_Inductive) in
             let rhs_type = List.fold_right (fun pt ctp -> PureFuncType (pt, ctp)) ctor_pts pred_type in
-            expect_type l (Some true) rhs_type predType';
+            expect_type lrhs (Some true) rhs_type predType';
             ctxt#begin_formal;
             let targs_env = List.mapi (fun i x -> (x ^ "_typeid", ctxt#mk_bound i ctxt#type_inductive)) tparams in
             let targs = List.map snd targs_env in
@@ -6896,7 +6896,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             ctxt#assume_forall (Printf.sprintf "type_pred_def_%s_%s" predName rhs) [typePredTerm] (List.map (fun x -> ctxt#type_inductive) tparams) eq;
             iter ds
           | None ->
-            static_error l "No such predicate constructor" None
+            static_error lrhs "No such predicate constructor" None
           end
       | _::ds ->
         iter ds

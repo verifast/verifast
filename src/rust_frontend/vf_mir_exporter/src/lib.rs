@@ -855,7 +855,7 @@ mod vf_mir_builder {
         fn encode_adt_def(
             tcx: TyCtxt<'tcx>,
             enc_ctx: &mut EncCtx<'tcx, 'a>,
-            adt_def: &ty::AdtDef,
+            adt_def: &ty::AdtDef<'tcx>,
             mut adt_def_cpn: adt_def_cpn::Builder<'_>,
         ) {
             debug!("Encoding ADT definition {:?}", adt_def);
@@ -891,6 +891,7 @@ mod vf_mir_builder {
             adt_def_cpn.fill_predicates(predicates, |pred_cpn, pred| {
                 Self::encode_predicate(enc_ctx, pred, pred_cpn);
             });
+            adt_def_cpn.set_implements_drop(adt_def.has_dtor(tcx));
         }
 
         fn encode_adt_kind(adt_kind: ty::AdtKind, mut adt_kind_cpn: adt_kind_cpn::Builder<'_>) {
