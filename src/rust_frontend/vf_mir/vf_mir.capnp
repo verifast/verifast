@@ -234,6 +234,7 @@ struct Ty {
         isLocal @5: Bool;
         hirGenerics @6: Hir.Generics;
         predicates @7: List(Predicate);
+        implementsDrop @8: Bool;
     }
 
     struct AdtTy {

@@ -149,6 +149,42 @@ mod alloc {
     
 }
 
+mod boxed {
+
+    struct Box<T, A>;
+    
+    /*@
+    
+    pred Box<T, A>(self: Box<T, A>, value: T);
+    
+    lem Box_to_own<T, A>(self: Box<T, A>);
+        req thread_token(?t) &*& Box::<T, A>(self, ?value) &*& <T>.own(t, value);
+        ens thread_token(t) &*& <Box<T, A>>.own(t, self);
+    
+    @*/
+
+    impl<T> Box<T> {
+    
+        fn new(x: T) -> Box<T, std::alloc::Global>;
+        //@ req true;
+        //@ ens Box(result, x);
+        
+        fn from_raw(x: *T) -> Box<T, std::alloc::Global>;
+        //@ req *x |-> ?value &*& std::alloc::alloc_block(x as *u8, std::alloc::Layout::new_::<T>());
+        //@ ens Box(result, value);
+        
+    }
+    
+    impl<T, A> Box<T, A> {
+    
+        fn into_raw(b: Box<T, std::alloc::Global>) -> *T;
+        //@ req Box(b, ?value);
+        //@ ens *result |-> value &*& std::alloc::alloc_block(result as *u8, std::alloc::Layout::new_::<T>()) &*& result as usize != 0;
+    
+    }
+
+}
+
 mod process {
     fn abort();
     //@ req true;

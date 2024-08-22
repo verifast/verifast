@@ -127,3 +127,12 @@ impl<T> Cell<T> {
         //@ close thread_token(_t);
     }
 }
+
+impl<T> Drop for Cell<T> {
+
+    fn drop<'a>(self: &'a mut Cell<T>) {
+        //@ open Cell_full_borrow_content::<T>(_t, self)();
+        //@ open Cell_own::<T>(_t, ?v);
+    }
+
+}

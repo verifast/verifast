@@ -59,36 +59,45 @@ module AstAux = struct
   let decl_loc_name_and_name_setter (d : decl) =
     match d with
     | Inductive (loc, name, tparams, ctors) ->
-        (loc, name, fun name -> Inductive (loc, name, tparams, ctors))
+        Some (loc, name, fun name -> Inductive (loc, name, tparams, ctors))
     | Struct (loc, name, tparams, definition_opt, attrs) ->
-        ( loc,
-          name,
-          fun new_name -> Struct (loc, new_name, tparams, definition_opt, attrs)
-        )
-    | AbstractTypeDecl (l, x) -> (l, x, fun x -> AbstractTypeDecl (l, x))
+        Some
+          ( loc,
+            name,
+            fun new_name ->
+              Struct (loc, new_name, tparams, definition_opt, attrs) )
+    | AbstractTypeDecl (l, x) -> Some (l, x, fun x -> AbstractTypeDecl (l, x))
     | TypedefDecl (l, te, x, tparams) ->
-        (l, x, fun x -> TypedefDecl (l, te, x, tparams))
+        Some (l, x, fun x -> TypedefDecl (l, te, x, tparams))
     | PredFamilyDecl
         (l, g, tparams, nbIndices, pts, inputParamCount, inductiveness) ->
-        ( l,
-          g,
-          fun g ->
-            PredFamilyDecl
-              (l, g, tparams, nbIndices, pts, inputParamCount, inductiveness) )
+        Some
+          ( l,
+            g,
+            fun g ->
+              PredFamilyDecl
+                (l, g, tparams, nbIndices, pts, inputParamCount, inductiveness)
+          )
     | PredFamilyInstanceDecl (l, g, tparams, indices, ps, body) ->
-        ( l,
-          g,
-          fun g -> PredFamilyInstanceDecl (l, g, tparams, indices, ps, body) )
+        Some
+          ( l,
+            g,
+            fun g -> PredFamilyInstanceDecl (l, g, tparams, indices, ps, body)
+          )
     | PredCtorDecl (l, g, tparams, ctor_ps, ps, inputParamCount, body) ->
-        ( l,
-          g,
-          fun g ->
-            PredCtorDecl (l, g, tparams, ctor_ps, ps, inputParamCount, body) )
+        Some
+          ( l,
+            g,
+            fun g ->
+              PredCtorDecl (l, g, tparams, ctor_ps, ps, inputParamCount, body)
+          )
     | FuncTypeDecl (l, gh, rt, ftn, tparams, ftxs, xs, contract) ->
-        ( l,
-          ftn,
-          fun ftn -> FuncTypeDecl (l, gh, rt, ftn, tparams, ftxs, xs, contract)
-        )
+        Some
+          ( l,
+            ftn,
+            fun ftn -> FuncTypeDecl (l, gh, rt, ftn, tparams, ftxs, xs, contract)
+          )
+    | TypePredDef (l, tparams, tp, predName, rhsLoc, rhsName) -> None
     | Func
         ( l,
           k,
@@ -103,23 +112,24 @@ module AstAux = struct
           body_opt,
           is_virtual,
           overrides ) ->
-        ( l,
-          g,
-          fun new_name ->
-            Func
-              ( l,
-                k,
-                tparams,
-                rt,
-                new_name,
-                ps,
-                nonghost_callers_only,
-                ftclause,
-                pre_post,
-                terminates,
-                body_opt,
-                is_virtual,
-                overrides ) )
+        Some
+          ( l,
+            g,
+            fun new_name ->
+              Func
+                ( l,
+                  k,
+                  tparams,
+                  rt,
+                  new_name,
+                  ps,
+                  nonghost_callers_only,
+                  ftclause,
+                  pre_post,
+                  terminates,
+                  body_opt,
+                  is_virtual,
+                  overrides ) )
 
   let decl_map_of (ds : decl list) =
     let rec iter mn ds cont =
@@ -128,9 +138,12 @@ module AstAux = struct
       | ModuleDecl (l, mn1, ilist, mds) :: ds ->
           iter (if mn = "" then mn1 else mn ^ "::" ^ mn1) mds @@ fun () ->
           iter mn ds cont
-      | d :: ds ->
-          let _, dname, _ = decl_loc_name_and_name_setter d in
-          ((if mn = "" then dname else mn ^ "::" ^ dname), d) :: iter mn ds cont
+      | d :: ds -> (
+          match decl_loc_name_and_name_setter d with
+          | None -> iter mn ds cont
+          | Some (_, dname, _) ->
+              ((if mn = "" then dname else mn ^ "::" ^ dname), d)
+              :: iter mn ds cont)
     in
     iter "" ds (fun () -> [])
 
@@ -424,6 +437,7 @@ module Mir = struct
     aux_decls : Ast.decl list;
     full_bor_content : Ast.decl option;
     proof_obligs : Ast.decl list;
+    delayed_proof_obligs : (adt_def_tr list -> Ast.decl) list;
   }
 end
 
@@ -3045,6 +3059,106 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             ],
             Static ) )
 
+  let gen_own_asn (adt_defs : Mir.adt_def_tr list) (thread_id : Ast.expr)
+      (loc : Ast.loc) (v : Ast.expr) (ty_info : Mir.ty_info) =
+    let raw_ty = Mir.raw_type_of ty_info in
+    let* vs =
+      if not (AstAux.is_adt_ty raw_ty) then Ok [ v ]
+      else
+        let* adt_name = AstAux.adt_ty_name raw_ty in
+        match adt_name with
+        (*Todo: We need to have these built-in types defined during translation and not through headers*)
+        | "std_tuple_0_" | "std_empty_" -> Ok [ v ]
+        | _ -> (
+            match
+              List.find_opt
+                (fun ({ name } : Mir.adt_def_tr) -> name = adt_name)
+                adt_defs
+            with
+            | None -> Ok [ v ]
+            | Some adt_def -> (
+                let* adt_kind = Mir.decl_mir_adt_kind adt_def.def in
+                match adt_kind with
+                | Mir.Enum | Mir.Union ->
+                    failwith "Todo: Generate owner assertion for local ADT"
+                | Mir.Struct ->
+                    let* fields_opt = AstAux.decl_fields adt_def.def in
+                    let* fields =
+                      Option.to_result
+                        ~none:(`GenLocalTyAsn "ADT without fields definition")
+                        fields_opt
+                    in
+                    let vs =
+                      List.map
+                        (fun field ->
+                          Ast.Select (loc, v, AstAux.field_name field))
+                        fields
+                    in
+                    Ok vs))
+    in
+    let RustBelt.{ size; own; shr } = Mir.interp_of ty_info in
+    match own thread_id vs with
+    | Ok asn -> Ok asn
+    | Error estr ->
+        Error (`GenLocalTyAsn ("Owner assertion function error: " ^ estr))
+
+  let gen_own_asns (adt_defs : Mir.adt_def_tr list) (loc : Ast.loc)
+      (thread_id : Ast.expr) (vs : (Ast.loc * Ast.expr * Mir.ty_info) list) =
+    let* ty_asns =
+      ListAux.try_map
+        (fun (v_loc, v, v_ty) -> gen_own_asn adt_defs thread_id v_loc v v_ty)
+        vs
+    in
+    let ty_asns =
+      List.filter
+        (fun asn -> match asn with Ast.True _ -> false | _ -> true)
+        ty_asns
+    in
+    Ok (AstAux.list_to_sep_conj (List.map (fun asn -> (loc, asn)) ty_asns) None)
+
+  let gen_adt_drop_proof_oblig (adt_defs : Mir.adt_def_tr list)
+      (adt_def_loc : Ast.loc) (adt_name : string) (tparams : string list)
+      (adt_fields : (Ast.loc * string * Mir.ty_info) list) =
+    let open Ast in
+    let targs =
+      List.map (fun x -> IdentTypeExpr (adt_def_loc, None, x)) tparams
+    in
+    let pre =
+      CallExpr
+        ( adt_def_loc,
+          adt_name ^ "_own",
+          targs,
+          [],
+          VarPat (adt_def_loc, "_t")
+          :: List.map (fun (loc, id, _) -> VarPat (loc, id)) adt_fields,
+          Static )
+    in
+    let post =
+      Result.get_ok
+      @@ gen_own_asns adt_defs adt_def_loc
+           (Var (adt_def_loc, "_t"))
+           (List.map (fun (loc, id, ty) -> (loc, Var (loc, id), ty)) adt_fields)
+    in
+    let post = match post with None -> True adt_def_loc | Some post -> post in
+    Func
+      ( adt_def_loc,
+        Lemma
+          ( false
+            (*indicates whether an axiom should be generated for this lemma*),
+            None (*trigger*) ),
+        tparams (*type parameters*),
+        None (*return type*),
+        adt_name ^ "_drop",
+        [],
+        false (*nonghost_callers_only*),
+        None
+        (*implemented function type, with function type type arguments and function type arguments*),
+        Some (pre, post) (*contract*),
+        false (*terminates*),
+        None (*body*),
+        false (*virtual*),
+        [] (*overrides*) )
+
   let gen_contract (adt_defs : Mir.adt_def_tr list) (contract_loc : Ast.loc)
       (lft_vars : string list) (outlives_preds : (string * string) list)
       (send_tparams : string list) (sync_tparams : string list)
@@ -3133,58 +3247,12 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let post_lft_tks =
       List.map (fun lft_var -> lft_token_b lit_pat_b lit_pat_b lft_var) lft_vars
     in
-    let gen_local_ty_asn (local : Mir.local_decl) =
-      let Mir.{ mutability; id; ty = ty_info; loc } = local in
-      let raw_ty = Mir.raw_type_of ty_info in
-      let* vs =
-        if not (AstAux.is_adt_ty raw_ty) then Ok [ Ast.Var (loc, id) ]
-        else
-          let* adt_name = AstAux.adt_ty_name raw_ty in
-          match adt_name with
-          (*Todo: We need to have these built-in types defined during translation and not through headers*)
-          | "std_tuple_0_" | "std_empty_" -> Ok [ Ast.Var (loc, id) ]
-          | _ -> (
-              let adt_def =
-                List.find
-                  (fun ({ name } : Mir.adt_def_tr) -> name = adt_name)
-                  adt_defs
-              in
-              let* adt_kind = Mir.decl_mir_adt_kind adt_def.def in
-              match adt_kind with
-              | Mir.Enum | Mir.Union ->
-                  failwith "Todo: Generate owner assertion for local ADT"
-              | Mir.Struct ->
-                  let* fields_opt = AstAux.decl_fields adt_def.def in
-                  let* fields =
-                    Option.to_result
-                      ~none:(`GenLocalTyAsn "ADT without fields definition")
-                      fields_opt
-                  in
-                  let vs =
-                    List.map
-                      (fun field ->
-                        Ast.Select
-                          (loc, Ast.Var (loc, id), AstAux.field_name field))
-                      fields
-                  in
-                  Ok vs)
-      in
-      let RustBelt.{ size; own; shr } = Mir.interp_of ty_info in
-      match own (Ast.Var (loc, thread_id_name)) vs with
-      | Ok asn -> Ok asn
-      | Error estr ->
-          Error (`GenLocalTyAsn ("Owner assertion function error: " ^ estr))
-    in
-    let* params_ty_asns = ListAux.try_map gen_local_ty_asn params in
-    let params_ty_asns =
-      List.filter
-        (fun asn -> match asn with True _ -> false | _ -> true)
-        params_ty_asns
-    in
-    let params_ty_asns =
-      AstAux.list_to_sep_conj
-        (List.map (fun asn -> (contract_loc, asn)) params_ty_asns)
-        None
+    let* params_ty_asns =
+      gen_own_asns adt_defs contract_loc
+        (Var (contract_loc, thread_id_name))
+        (List.map
+           (fun ({ loc; id; ty } : Mir.local_decl) -> (loc, Var (loc, id), ty))
+           params)
     in
     let pre_asn =
       AstAux.list_to_sep_conj
@@ -3197,13 +3265,11 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       | Some pre_asn -> Sep (contract_loc, pre_na_token, pre_asn)
     in
     let* ret_ty_asn =
-      gen_local_ty_asn
-        {
-          mutability = ret.mutability;
-          id = "result";
-          ty = ret.ty;
-          loc = ret.loc;
-        }
+      gen_own_asn adt_defs
+        (Var (contract_loc, thread_id_name))
+        ret.loc
+        (Var (ret.loc, "result"))
+        ret.ty
     in
     let (Some post_asn) =
       AstAux.list_to_sep_conj
@@ -4329,7 +4395,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         | UnionKind -> failwith "Todo: AdtDef::Union"
         | Undefined _ -> Error (`TrAdtDef "Unknown ADT kind")
       in
-      let* full_bor_content, proof_obligs, aux_decls' =
+      let* full_bor_content, proof_obligs, delayed_proof_obligs, aux_decls' =
         if
           is_local
           && (AstAux.decl_map_contains_pred_fam_inst ghost_decl_map
@@ -4385,8 +4451,65 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                         Static ) );
               ]
           in
-          Ok (Some full_bor_content, proof_obligs, own__pred_decls)
-        else Ok (None, [], [])
+          let type_pred_defs, delayed_proof_obligs =
+            if tparams <> [] || lft_params <> [] then ([], [])
+            else
+              ( [
+                  Ast.TypePredDef
+                    ( def_loc,
+                      tparams,
+                      StructTypeExpr
+                        (def_loc, Some name, None, [], tparams_targs),
+                      "own",
+                      def_loc,
+                      name ^ "_own_" );
+                  Ast.TypePredDef
+                    ( def_loc,
+                      tparams,
+                      StructTypeExpr
+                        (def_loc, Some name, None, [], tparams_targs),
+                      "full_borrow_content",
+                      def_loc,
+                      name ^ "_full_borrow_content" );
+                  Ast.TypePredDef
+                    ( def_loc,
+                      tparams,
+                      StructTypeExpr
+                        (def_loc, Some name, None, [], tparams_targs),
+                      "share",
+                      def_loc,
+                      name ^ "_share" );
+                ],
+                let is_trivially_droppable =
+                  fds
+                  |> List.for_all @@ fun (fd : Mir.field_def_tr) ->
+                     match Mir.basic_type_of fd.ty with
+                     | Ast.ManifestTypeExpr
+                         ( _,
+                           ( Int (_, _)
+                           | PtrType _ | Bool | Float | Double | LongDouble ) )
+                     | Ast.PtrTypeExpr (_, _) ->
+                         true
+                     | _ -> false
+                in
+                if is_trivially_droppable || implements_drop_get adt_def_cpn
+                then []
+                else
+                  [
+                    (fun adt_defs ->
+                      gen_adt_drop_proof_oblig adt_defs def_loc name tparams
+                        (List.map
+                           (fun (fd : Mir.field_def_tr) ->
+                             (fd.loc, fd.name, fd.ty))
+                           fds));
+                  ] )
+          in
+          Ok
+            ( Some full_bor_content,
+              proof_obligs,
+              delayed_proof_obligs,
+              own__pred_decls @ type_pred_defs )
+        else Ok (None, [], [], [])
       in
       Ok
         (Some
@@ -4401,6 +4524,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                aux_decls = aux_decls @ aux_decls';
                full_bor_content;
                proof_obligs;
+               delayed_proof_obligs;
              })
 
   (** Checks for the existence of a lemma for proof obligation in ghost code.
@@ -4536,23 +4660,28 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
          (loc, name, [], submodules @ List.flatten ghost_decl_batches))
 
   let modularize_decl (d : Ast.decl) : Ast.decl =
-    let l, name, name_setter = AstAux.decl_loc_name_and_name_setter d in
-    if String.contains name ':' then
-      let segments = String.split_on_char ':' name in
-      let rec iter = function
-        | segment :: "" :: segments ->
-            Ast.ModuleDecl (l, segment, [], [ iter segments ])
-        | [ segment ] -> name_setter segment
-        | _ ->
-            failwith
-              (Printf.sprintf "Unexpected shape of Rust item name: '%s'" name)
-      in
-      iter segments
-    else d
+    match AstAux.decl_loc_name_and_name_setter d with
+    | None -> d
+    | Some (l, name, name_setter) ->
+        if String.contains name ':' then
+          let segments = String.split_on_char ':' name in
+          let rec iter = function
+            | segment :: "" :: segments ->
+                Ast.ModuleDecl (l, segment, [], [ iter segments ])
+            | [ segment ] -> name_setter segment
+            | _ ->
+                failwith
+                  (Printf.sprintf "Unexpected shape of Rust item name: '%s'"
+                     name)
+          in
+          iter segments
+        else d
 
   let modularize_fn_decl
       (((moduleName : string), (fnName : string)), (d : Ast.decl)) : Ast.decl =
-    let l, name, name_setter = AstAux.decl_loc_name_and_name_setter d in
+    let (Some (l, name, name_setter)) =
+      AstAux.decl_loc_name_and_name_setter d
+    in
     if moduleName <> "" then
       let d = name_setter fnName in
       let segments = String.split_on_char ':' moduleName in
@@ -4609,6 +4738,13 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               full_bor_content :: fbors,
               proof_obligs @ pos ))
           ([], [], [], []) adt_defs
+      in
+      let adts_proof_obligs =
+        Util.flatmap
+          (fun (adt_def : Mir.adt_def_tr) ->
+            List.map (fun ob -> ob adt_defs) adt_def.delayed_proof_obligs)
+          adt_defs
+        @ adts_proof_obligs
       in
       let adts_full_bor_content_preds =
         List.filter_map Fun.id adts_full_bor_content_preds

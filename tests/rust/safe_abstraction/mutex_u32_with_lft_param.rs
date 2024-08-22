@@ -15,6 +15,12 @@ About the definitions:
 
 pred SysMutex(m: sys::locks::Mutex; P: pred());
 pred SysMutex_share(l: *sys::locks::Mutex; P: pred());
+pred sys::locks::Mutex_own(t: thread_id_t, m: *u32);
+
+lem SysMutex_to_own(t: thread_id_t, m: sys::locks::Mutex);
+    req SysMutex(m, _);
+    ens sys::locks::Mutex_own(t, m.m);
+
 lem SysMutex_share_full(l: *sys::locks::Mutex);
     req *l |-> ?m &*& SysMutex(m, ?P);
     ens SysMutex_share(l, P);
@@ -107,6 +113,14 @@ pub struct MutexU32 {
 
 pred True(;) = true;
 pred MutexU32_own(t: thread_id_t, inner: sys::locks::Mutex, data: u32) = SysMutex(inner, True);
+
+lem MutexU32_drop()
+    req MutexU32_own(?t, ?inner, ?data);
+    ens sys::locks::Mutex_own(t, inner.m);
+{
+    open MutexU32_own(t, inner, data);
+    SysMutex_to_own(t, inner);
+}
 
 pred_ctor MutexU32_fbc_inner(l: *MutexU32)(;) = (*l).inner |-> ?inner &*& SysMutex(inner, True) &*& struct_MutexU32_padding(l);
 

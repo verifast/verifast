@@ -634,12 +634,19 @@ let parse_ghost_decl = function%parser
 | [ (l, Kwd "abstract_type"); (_, Ident tn); (_, Kwd ";") ] -> [AbstractTypeDecl (l, tn)]
 | [ (l, Kwd "type_pred_decl"); (_, Kwd "<"); (_, Kwd "Self"); (_, Kwd ">"); (_, Kwd "."); (_, Ident predName); (_, Kwd ":"); parse_type as te; (_, Kwd ";") ] ->
   [TypePredDecl (l, te, "Self", predName)]
-| [ (l, Kwd "type_pred_def"); (* TODO: Support for<t1, t2> clause [%let tparams = parse_type_params]; *)
+| [ (l, Kwd "type_pred_def");
+    [%let tparams = function%parser
+       [ (_, Kwd "for"); parse_type_params as tparams ] -> tparams
+     | [ ] -> []
+    ];
     (_, Kwd "<"); parse_type as tp; (_, Kwd ">"); (_, Kwd "."); (_, Ident predName); (_, Kwd "=");
-    (lrhs, Ident rhs); (* TODO: Support x::<t1, t2> syntax [%let targs = parse_type_args lrhs]; *) (_, Kwd ";")
+    (lrhs, Ident rhs);
+    [%let targs = function%parser
+       [ (_, Kwd "::"); (_, Kwd "<"); [%let targs = rep_comma parse_type]; (_, Kwd ">") ] -> targs
+     | [ ] -> []
+    ];
+    (_, Kwd ";")
   ] ->
-  let tparams = [] in
-  let targs = [] in
   let targ_names = targs |> List.map @@ function
     IdentTypeExpr (_, None, targ_name) -> targ_name
   | te -> raise (ParseException (type_expr_loc te, "Type parameter name expected"))
