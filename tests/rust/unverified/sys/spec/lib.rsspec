@@ -1,0 +1,48 @@
+mod locks {
+
+    struct Mutex;
+
+    /*@
+
+    pred SysMutex(m: sys::locks::Mutex; P: pred());
+
+    pred SysMutex_share(l: *sys::locks::Mutex; P: pred());
+
+    lem SysMutex_share_full(l: *sys::locks::Mutex);
+        req *l |-> ?m &*& SysMutex(m, ?P);
+        ens SysMutex_share(l, P);
+    
+    lem SysMutex_end_share(l: *sys::locks::Mutex);
+        req SysMutex_share(l, ?P);
+        ens *l |-> ?m &*& SysMutex(m, P);
+
+    pred SysMutex_locked(l: *sys::locks::Mutex, P: pred(); t: thread_id_t);
+
+    lem SysMutex_renew(m: sys::locks::Mutex, Q: pred());
+        req SysMutex(m, ?P) &*& Q();
+        ens SysMutex(m, Q);
+
+    lem SysMutex_share_implies(l: *sys::locks::Mutex, P: pred(), P1: pred());
+        req SysMutex_share(l, P) &*& is_implies(?f, P, P1) &*& is_implies(?f1, P1, P);
+        ens SysMutex_share(l, P1) &*& is_implies(f, P, P1) &*& is_implies(f1, P1, P);
+
+    @*/
+
+    impl Mutex {
+    
+        unsafe fn new() -> Mutex;
+        //@ req exists::<pred()>(?P) &*& P();
+        //@ ens SysMutex(result, P);
+
+        // TODO: Use `current_thread` var in `SysMutex_locked` like in the `threading.h`. The `SysMutex` interface does not need `thread_token` in the contracts.
+        unsafe fn lock<'a>(self: &'a Mutex);
+        //@ req thread_token(?t) &*& [?q]SysMutex_share(self, ?P);
+        //@ ens thread_token(t) &*& [q]SysMutex_share(self, P) &*& SysMutex_locked(self, P, t) &*& P();
+
+        unsafe fn unlock<'a>(self: &'a Mutex);
+        //@ req thread_token(?t) &*& SysMutex_locked(self, ?P, t) &*& P() &*& [?q]SysMutex_share(self, P);
+        //@ ens thread_token(t) &*& [q]SysMutex_share(self, P);
+        
+    }
+    
+}

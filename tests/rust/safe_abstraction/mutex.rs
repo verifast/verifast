@@ -1,98 +1,6 @@
 #![feature(negative_impls)]
 #![allow(dead_code)]
 
-/*
-About the definitions:
-    Since to have `Mutex::lock` verified we need to return the `[qa]lifetime_token(a)` back, we need to close the `frac_borrow` before the method ends.
-    To close that `frac_borrow` we need the `SysMutex_share` fraction used to lock the `sys::locks::Mutex` back.
-    That means the spec of `sys::locks::Mutex::lock` must return the `SysMutex_share` fraction it receives.
-    The latter means neither to have a full chunk of `SysMutex_share` nor a full chunk of `SysMutex` means the mutex is unlocked.
-    However, it does not make any problem, because if destroying a locked mutex is an undefined behaviour the implementation of `sys::locks::Mutex::drop`
-    just forgets about the mutex.
-*/
-
-/*@
-
-pred SysMutex(m: sys::locks::Mutex; P: pred());
-pred SysMutex_share(l: *sys::locks::Mutex; P: pred());
-lem SysMutex_share_full(l: *sys::locks::Mutex);
-    req *l |-> ?m &*& SysMutex(m, ?P);
-    ens SysMutex_share(l, P);
-lem SysMutex_end_share(l: *sys::locks::Mutex);
-   req SysMutex_share(l, ?P);
-   ens *l |-> ?m &*& SysMutex(m, P);
-
-pred SysMutex_locked(l: *sys::locks::Mutex, P: pred(); t: thread_id_t);
-
-lem SysMutex_renew(m: sys::locks::Mutex, Q: pred());
-    req SysMutex(m, ?P) &*& Q();
-    ens SysMutex(m, Q);
-
-/* Justifying the soundness of `SysMutex_renew`:
-As mentioned above, with this specification for `sys::locks::Mutex` interface having a full chunk of `SysMutex` or `SysMutex_share`
-does not necessarily mean the mutex is not locked. If it was the case the lemma's soundness was easier to justify.
-We get `SysMutex(m, ?P)` in the `req` clause so there is not any fraction of `SysMutex(m, P)` or `SysMutex_share(lm, P)` anywhere else.
-After applying the lemma the soundness of `sys::locks::Mutex` interface is justified since if:
-- The mutex is unlocked and the resource `P()` is protected by mutex; It is in the mutex so to speak. We substitute `P` with `Q`
-    and from this point, there will be no `SysMutex`, `SysMutex_share` or `SysMutex_locked` chunk that mentions `P` anywhere.
-    It means we leak `P()` and the state is just like after a call to `sys::locks::Mutex::new` to protect `Q()`.
-
-- The mutex is locked, it means there should be a `SysMutex_locked(lm, P, ?t)` and `P()` in resources of some thread(s).
-    - `lock` gets verified which is fine because this call never returns. No other thread has `[?q]SysMutex_share(lm, P)`
-        to release the mutex.
-    - `unlock` cannot get verified with chunks mentioning `P` as there is no `[?q]SysMutex_share(lm, P)` anywhere and verification with
-        `SysMutex_locked(lm, Q, ?t)` does not represent a real execution as `lock` never returns.
-    - `drop` will get verified and it is sound because `sys::locks::Mutex` implementation of `Drop` does not destroy a locked mutex, but
-        simply leaks it. Here `Q()` gets leaked too.
-*/
-
-lem SysMutex_share_implies(l: *sys::locks::Mutex, P: pred(), P1: pred());
-    req SysMutex_share(l, P) &*& is_implies(?f, P, P1) &*& is_implies(?f1, P1, P);
-    ens SysMutex_share(l, P1) &*& is_implies(f, P, P1) &*& is_implies(f1, P1, P);
-
-@*/
-
-mod sys {
-    pub mod locks {
-        use std::process::abort;
-        pub struct Mutex {
-            m: *mut u32,
-        }
-
-        impl Mutex {
-            pub unsafe fn new() -> Mutex
-            //@ req exists::<pred()>(?P) &*& P();
-            //@ ens SysMutex(result, P);
-            {
-                abort();
-            }
-
-            // TODO: Use `current_thread` var in `SysMutex_locked` like in the `threading.h`. The `SysMutex` interface does not need `thread_token` in the contracts.
-            pub unsafe fn lock<'a>(&'a self)
-            //@ req thread_token(?t) &*& [?q]SysMutex_share(self, ?P);
-            //@ ens thread_token(t) &*& [q]SysMutex_share(self, P) &*& SysMutex_locked(self, P, t) &*& P();
-            {
-                abort();
-            }
-
-            pub unsafe fn unlock<'a>(&'a self)
-            //@ req thread_token(?t) &*& SysMutex_locked(self, ?P, t) &*& P() &*& [?q]SysMutex_share(self, P);
-            //@ ens thread_token(t) &*& [q]SysMutex_share(self, P);
-            {
-                abort();
-            }
-
-            // TODO: impl Drop for Mutex
-            unsafe fn drop<'a>(&'a mut self)
-            //@ req (*self) |-> ?m &*& SysMutex(m, _);
-            //@ ens (*self) |-> m;
-            {
-                abort();
-            }
-        }
-    }
-}
-
 use std::{
     cell::UnsafeCell,
     ops::{Deref, DerefMut},
@@ -107,14 +15,14 @@ pub struct Mutex<T: Send> {
 
 pred True(;) = true;
 pred Mutex_own<T>(t: thread_id_t, inner: sys::locks::Mutex, data: T) =
-    SysMutex(inner, True) &*& <T>.own(t, data);
+    sys::locks::SysMutex(inner, True) &*& <T>.own(t, data);
 
-pred_ctor Mutex_fbc_inner<T>(l: *Mutex<T>)(;) = (*l).inner |-> ?inner &*& SysMutex(inner, True) &*& struct_Mutex_padding(l);
+pred_ctor Mutex_fbc_inner<T>(l: *Mutex<T>)(;) = (*l).inner |-> ?inner &*& sys::locks::SysMutex(inner, True) &*& struct_Mutex_padding(l);
 
 fix t0() -> thread_id_t { default_value }
 
 pred_ctor Mutex_frac_borrow_content<T>(kfcc: lifetime_t, l: *Mutex<T>)(;) =
-    SysMutex_share(&(*l).inner, full_borrow_(kfcc, <T>.full_borrow_content(t0, &(*l).data))) &*& struct_Mutex_padding(l);
+    sys::locks::SysMutex_share(&(*l).inner, full_borrow_(kfcc, <T>.full_borrow_content(t0, &(*l).data))) &*& struct_Mutex_padding(l);
 
 pred Mutex_share<T>(k: lifetime_t, t: thread_id_t, l: *Mutex<T>) =
     exists_np(?kfcc) &*& lifetime_inclusion(k, kfcc) == true &*& frac_borrow(k, Mutex_frac_borrow_content::<T>(kfcc, l));
@@ -167,16 +75,16 @@ lem Mutex_share_full<T>(k: lifetime_t, t: thread_id_t, l: *Mutex<T>)
         let kstrong = open_full_borrow_strong_m(k, Mutex_fbc_inner(l), q);
         produce_lem_ptr_chunk full_borrow_convert_strong(True, Mutex_frac_borrow_content(k, l), kstrong, Mutex_fbc_inner(l))() {
             open Mutex_frac_borrow_content::<T>(k, l)();
-            SysMutex_end_share(&(*l).inner);
+            sys::locks::SysMutex_end_share(&(*l).inner);
             assert (*l).inner |-> ?inner;
-            SysMutex_renew(inner, True);
+            sys::locks::SysMutex_renew(inner, True);
             close Mutex_fbc_inner::<T>(l)();
         }{
             open Mutex_fbc_inner::<T>(l)();
             assert (*l).inner |-> ?inner;
             close full_borrow_(k, <T>.full_borrow_content(t0, &(*l).data))();
-            SysMutex_renew(inner, full_borrow_(k, <T>.full_borrow_content(t0, &(*l).data)));
-            SysMutex_share_full(&(*l).inner);
+            sys::locks::SysMutex_renew(inner, full_borrow_(k, <T>.full_borrow_content(t0, &(*l).data)));
+            sys::locks::SysMutex_share_full(&(*l).inner);
             close Mutex_frac_borrow_content::<T>(k, l)();
             close_full_borrow_strong_m(kstrong, Mutex_fbc_inner(l), Mutex_frac_borrow_content(k, l));
             full_borrow_into_frac_m(kstrong, Mutex_frac_borrow_content(k, l));
@@ -230,13 +138,13 @@ pub struct MutexGuard<'a, T: Send> {
 // TODO: Is this extra lifetime `klong` necessary here?
 pred MutexGuard_own<T>(km: lifetime_t, t: thread_id_t, lock: *Mutex<T>) =
     [_]exists_np(?klong) &*& lifetime_inclusion(km, klong) == true &*& [_]frac_borrow(km, Mutex_frac_borrow_content(klong, lock))
-    &*& SysMutex_locked(&(*lock).inner, full_borrow_(klong, <T>.full_borrow_content(t0, &(*lock).data)), t)
+    &*& sys::locks::SysMutex_locked(&(*lock).inner, full_borrow_(klong, <T>.full_borrow_content(t0, &(*lock).data)), t)
     &*& full_borrow(klong, <T>.full_borrow_content(t0, &(*lock).data));
 
 pred_ctor MutexGuard_fbc_rest<T>(km: lifetime_t, klong: lifetime_t, t: thread_id_t, l: *MutexGuard<T>, lock: *Mutex<T>)() =
     (*l).lock |-> lock &*& lifetime_inclusion(km, klong) == true &*& struct_MutexGuard_padding(l)
     &*& [_]frac_borrow(km, Mutex_frac_borrow_content(klong, lock))
-    &*& SysMutex_locked(&(*lock).inner, full_borrow_(klong, <T>.full_borrow_content(t0, &(*lock).data)), t);
+    &*& sys::locks::SysMutex_locked(&(*lock).inner, full_borrow_(klong, <T>.full_borrow_content(t0, &(*lock).data)), t);
 
 pred MutexGuard_share<T>(km: lifetime_t, k: lifetime_t, t: thread_id_t, l: *MutexGuard<T>) = true;
 
@@ -281,9 +189,7 @@ impl<T: Send> Mutex<T> {
         let inner = unsafe { sys::locks::Mutex::new() };
         let data = UnsafeCell::new(v);
         let r = Mutex { inner, data };
-        // TODO: Dereferencing a pointer of type struct sys::locks::Mutex is not yet supported.
-        // close Mutex_own(_t, inner, data); Next line is a workaround
-        //@ close Mutex_own(_t, sys::locks::Mutex { m: inner.m }, data);
+        //@ close Mutex_own(_t, inner, data);
         r
     }
 
@@ -303,7 +209,7 @@ impl<T: Send> Mutex<T> {
             //@ open_frac_borrow(a, Mutex_frac_borrow_content(klong, self), qa);
             //@ open Mutex_frac_borrow_content::<T>(klong, self)();
             self.inner.lock();
-            //@ assert [?qp]SysMutex_share(&(*self).inner, _);
+            //@ assert [?qp]sys::locks::SysMutex_share(&(*self).inner, _);
             //@ close [qp]Mutex_frac_borrow_content::<T>(klong, self)();
             //@ close_frac_borrow(qp, Mutex_frac_borrow_content(klong, self));
             //@ close MutexGuard_own(a, t, self);
@@ -418,7 +324,7 @@ impl<'a, T: Send> Drop for MutexGuard<'a, T> {
         unsafe {
             (*self.lock).inner.unlock();
         }
-        //@ assert [?qp]SysMutex_share(&(*lock).inner, _);
+        //@ assert [?qp]sys::locks::SysMutex_share(&(*lock).inner, _);
         //@ close [qp]Mutex_frac_borrow_content::<T>(kmlong, lock)();
         //@ close_frac_borrow(qp, Mutex_frac_borrow_content(kmlong, lock));
         //@ assert [?qfrac]frac_borrow(km, _);
