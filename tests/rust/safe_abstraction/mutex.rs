@@ -312,11 +312,22 @@ impl<T: Send> Mutex<T> {
     }
 }
 
-impl<'b, T: Send> MutexGuard<'b, T> {
+impl<'b, T: Send> Deref for MutexGuard<'b, T> {
 
-    // TODO: deref_mut should be in the implementation of the trait `DerefMut`. Support for the implementation for standard library traits is
-    // needed for that.
-    pub fn deref_mut<'a>(self: &'a mut MutexGuard<'b, T>) -> &'a mut T where 'b: 'a
+    type Target = T;
+    
+    fn deref<'a>(&'a self) -> &'a T
+    {
+        //@ assert lifetime_inclusion(a, b) == true;
+        //@ assume(false); //~allow_dead_code
+        unsafe { &*(*self.lock).data.get() } //~allow_dead_code
+    } //~allow_dead_code
+
+}
+    
+impl<'b, T: Send> DerefMut for MutexGuard<'b, T> {
+
+    fn deref_mut<'a>(&'a mut self) -> &'a mut T
     /*@
     req
         is_Send(typeid(T)) == true &*&
@@ -324,8 +335,6 @@ impl<'b, T: Send> MutexGuard<'b, T> {
         &*& full_borrow(a, MutexGuard_full_borrow_content(km, t, self))
         &*& lifetime_inclusion(a, km) == true;
     @*/
-    // TODO: This inclusion must be generated automatically by translator based on reference and its target lifetimes.
-    // The target lifetimes always outlive reference lifetime out of compiler guarantees of wellformedness of types.
     //@ ens thread_token(t) &*& [qa]lifetime_token(a) &*& [qkm]lifetime_token(km) &*& full_borrow(a, <T>.full_borrow_content(t, result));
     {
         //@ open lifetimes(_);

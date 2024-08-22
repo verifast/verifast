@@ -1301,6 +1301,12 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | Const _ -> `Const
     | Undefined _ -> `Undefined
 
+  and extract_implicit_outlives_preds_from_generic_arg regions arg =
+    match arg with
+    | `Lifetime region -> List.map (fun r -> (region, r)) regions
+    | `Type ty -> extract_implicit_outlives_preds regions ty
+    | _ -> []
+
   and translate_fn_name (name : string) (substs_cpn : GenArgRd.t list) =
     match (name, lazy (List.map decode_generic_arg substs_cpn)) with
     | ( "std::ops::Deref::deref",
@@ -1567,7 +1573,20 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | Never -> `Never
     | Tuple substs_cpn -> `Tuple
     | Param name -> `Param
+    | Str -> `Str
+    | Slice elem_ty_cpn -> `Slice (decode_ty elem_ty_cpn)
     | Undefined _ -> `Undefined
+
+  and extract_implicit_outlives_preds regions ty =
+    match ty with
+    | `Ref (r, mut, ty) ->
+        List.map (fun r' -> (r, r')) regions
+        @ extract_implicit_outlives_preds (r :: regions) ty
+    | `Adt (name, kind, args) ->
+        args
+        |> Util.flatmap
+             (extract_implicit_outlives_preds_from_generic_arg regions)
+    | _ -> []
 
   and translate_ty (ty_cpn : TyRd.t) (loc : Ast.loc) =
     let open Ast in
@@ -3785,6 +3804,18 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                    ]
                | _ -> [])
         in
+        let implicit_outlives_preds =
+          output_get body_cpn :: inputs_get_list body_cpn
+          |> Util.flatmap @@ fun ty_cpn ->
+             ty_cpn |> decode_ty |> extract_implicit_outlives_preds []
+        in
+        let implicit_outlives_preds =
+          implicit_outlives_preds
+          |> List.map @@ fun (r1, r2) ->
+             ( TrName.lft_name_without_apostrophe r1,
+               TrName.lft_name_without_apostrophe r2 )
+        in
+        let outlives_preds = implicit_outlives_preds @ outlives_preds in
         let send_tparams = compute_send_tparams preds in
         let sync_tparams = compute_sync_tparams preds in
         let* ret_ty_info = translate_ty (output_get body_cpn) imp_loc in
@@ -4571,6 +4602,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
            else if of_trait = "std::ops::Deref" then (
              assert (items = [ "Target"; "deref" ]);
              [] (* Deref is safe *))
+           else if of_trait = "std::ops::DerefMut" then (
+             assert (items = [ "deref_mut" ]);
+             [] (* DerefMut is safe *))
            else if of_trait = "std::clone::Clone" then (
              assert (items = [ "clone" ]);
              []
