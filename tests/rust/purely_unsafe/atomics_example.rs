@@ -64,7 +64,7 @@ fn main() {
             std::alloc::handle_alloc_error(layout);
         }
         //@ std::alloc::alloc_aligned(x_ as *u8);
-        //@ u8s__to_integer__(x_, std::mem::size_of::<usize>(), false);
+        //@ from_u8s_(x_);
         std::ptr::write(x_, 0);
         let x = AtomicUsize::from_ptr(x_);
         //@ std::sync::atomic::usize_to_AtomicUsize(x_);

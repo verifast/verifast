@@ -41,7 +41,7 @@ impl Account {
     //@ ens Account(result, 0);
     {
         let result = Box::into_raw(Box::new(Account { balance: 0 }));
-        //@ open_generic_points_to(result);
+        //@ open_points_to(result);
         result
     }
 
@@ -63,7 +63,7 @@ impl Account {
     //@ req thread_token(?t) &*& Account(account, ?balance);
     //@ ens thread_token(t);
     {
-        //@ close_generic_points_to(account);
+        //@ close_points_to(account);
         //@ assert *account |-> ?value;
         let b = Box::from_raw(account);
         //@ close Account_own(t, value.balance);

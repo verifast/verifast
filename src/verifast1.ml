@@ -161,6 +161,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | FixedWidthRank k -> LitWidth k
 
   let charType = Int (Signed, CharRank)
+  let u8Type = Int (Unsigned, FixedWidthRank 0)
 
   let int_rank_and_signedness tp =
     match tp with
@@ -4342,7 +4343,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       else
         begin match language with
           Java-> (e, ObjType ("java.lang.String", []), None)
-        | _ -> (e, (PtrType charType), None)
+        | _ -> (e, PtrType (if dialect = Some Rust then u8Type else charType), None)
         end
     | CastExpr (l, (StructTypeExpr (_, _, _, _, _) as te), InitializerList (linit, es)) ->
       let t = check_pure_type (pn,ilist) tparams Ghost te in
@@ -5937,8 +5938,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let integers__symb = lazy_predfamsymb "integers_"
   let malloc_block_integers__symb = lazy_predfamsymb "malloc_block_integers_"
 
-  let generic_points_to__symb = lazy_predfamsymb "generic_points_to_"
-  let generic_points_to_symb = lazy_predfamsymb "generic_points_to"
+  let generic_points_to__symb = lazy_predfamsymb (if dialect = Some Rust then "points_to_" else "generic_points_to_")
+  let generic_points_to_symb = lazy_predfamsymb (if dialect = Some Rust then "points_to" else "generic_points_to")
+  let array__symb = lazy_predfamsymb "array_"
+  let array_symb = lazy_predfamsymb "array"
 
   let pointee_tuple chunk_pred_name array_pred_name uninit_chunk_pred_name uninit_array_pred_name =
     let ambpn = "malloc_block_" ^ array_pred_name in
@@ -5969,6 +5972,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let deref_pointee_tuple (cn, csym, an, asym, mban, mbasym, nban, nbasym, ucn, ucsym, uan, uasym) = (cn, csym(), an, asym(), mban, mbasym, nban, nbasym, ucn, ucsym(), uan, uasym())
   
   let try_pointee_pred_symb0 pointeeType =
+    if dialect = Some Rust then None else
     option_map deref_pointee_tuple
     begin match pointeeType with
       PtrType _ -> Some pointer_pointee_tuple
@@ -5997,6 +6001,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let list_type elemType = InductiveType ("list", [elemType])
   let option_type elemType = InductiveType ("option", [elemType])
+
+  let integer__chunk_args tp =
+    if dialect = Some Rust then None else int_rank_and_signedness tp
   
   let rec check_asn_core (pn,ilist) tparams tenv p =
     let pre_tenv = tenv in
@@ -6104,7 +6111,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let p = new predref array_pred_name [PtrType elemtype; intType; list_type elemtype] (Some 2) in
             (WPredAsn (l, p, true, [], [], [LitPat wfirst; wlength; wrhs]), tenv, [])
           | None ->
-          match int_rank_and_signedness elemtype with
+          match integer__chunk_args elemtype with
             Some (k, signedness) ->
             let predname, pred_elemtype = if wrhs = DummyPat then "integers__", option_type elemtype else "integers_", elemtype in
             let p = new predref predname [PtrType Void; intType; Bool; intType; list_type pred_elemtype] (Some 4) in
@@ -6655,7 +6662,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                     [
                       inst
                     ;
-                      let p_ = new predref "generic_points_to_" [PtrType t; option_type t] (Some 1) in
+                      let p_ = new predref (if dialect = Some Rust then "points_to_" else "generic_points_to_") [PtrType t; option_type t] (Some 1) in
                       let r = WRead (l, WVar (l, sn, LocalVar), sn, tparams, f, t, targs, false, ref (Some None), Real) in
                       let body = WPredAsn (l, p_, true, [t], [], [LitPat (AddressOf (l, r)); LitPat (WVar (l, "value", LocalVar))]) in
                       ((g_, []),
@@ -6667,9 +6674,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 let predinst_ p p_ t = predinst__ p p_ [PtrType t] t in
                 let predinst p p_ = predinst_ p p_ t in
                 match t with
-                  PtrType _ -> predinst_ "pointer" "pointer_" (PtrType Void)
-                | Int (Signed, PtrRank) -> if dialect <> Some Rust then predinst "intptr" "intptr_" else predinst "isize" "isize_"
-                | Int (Unsigned, PtrRank) -> if dialect <> Some Rust then predinst "uintptr" "uintptr_" else predinst "usize" "usize_"
+                  _ when dialect = Some Rust -> points_to_predinst ()
+                | PtrType _ -> predinst_ "pointer" "pointer_" (PtrType Void)
+                | Int (Signed, PtrRank) -> predinst "intptr" "intptr_"
+                | Int (Unsigned, PtrRank) -> predinst "uintptr" "uintptr_"
                 | Int (Signed, CharRank) -> predinst "character" "char_"
                 | Int (Unsigned, CharRank) -> predinst "u_character" "uchar_"
                 | Int (Signed, ShortRank) -> predinst "short_integer" "short_"

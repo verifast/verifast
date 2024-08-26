@@ -11,11 +11,11 @@ fn test_alloc_i8()
         if p.is_null() {
             std::alloc::handle_alloc_error(layout);
         }
-        //@ u8s__to_integer__(p, 1, true);
+        //@ from_u8s_(p);
         *p = -42;
         //@ assert *p |-> ?v &*& v == -42;
         assert(*p == -42);
-        //@ integer__to_u8s(p, 1, true);
+        //@ to_u8s_(p);
         std::alloc::dealloc(p as *mut u8, layout);
     }
 }
@@ -28,11 +28,11 @@ fn test_alloc_i16()
         if p.is_null() {
             std::alloc::handle_alloc_error(layout);
         }
-        //@ u8s__to_integer__(p, 2, true);
+        //@ from_u8s_(p);
         *p = -10000;
         //@ assert *p |-> ?v &*& v == -10000;
         assert(*p == -10000);
-        //@ integer__to_u8s(p, 2, true);
+        //@ to_u8s_(p);
         std::alloc::dealloc(p as *mut u8, layout);
     }
 }
@@ -45,11 +45,11 @@ fn test_alloc_i32()
         if p.is_null() {
             std::alloc::handle_alloc_error(layout);
         }
-        //@ u8s__to_integer__(p, 4, true);
+        //@ from_u8s_(p);
         *p = -1_000_000_000;
         //@ assert *p |-> ?v &*& v == -1000000000;
         assert(*p == -1_000_000_000);
-        //@ integer__to_u8s(p, 4, true);
+        //@ to_u8s_(p);
         std::alloc::dealloc(p as *mut u8, layout);
     }
 }
@@ -62,7 +62,7 @@ fn test_alloc_i64()
         if p.is_null() {
             std::alloc::handle_alloc_error(layout);
         }
-        //@ u8s__to_integer__(p, 8, true);
+        //@ from_u8s_(p);
         *p = -1_000_000_000_000_000_000;
         //@ assert *p |-> ?v1 &*& v1 == -1000000000000000000;
         assert(*p == -1_000_000_000_000_000_000);
@@ -72,7 +72,7 @@ fn test_alloc_i64()
         *p = -9223372036854775807;
         //@ assert *p |-> ?v3 &*& v3 == -9223372036854775807;
         assert(*p == -9223372036854775807);
-        //@ integer__to_u8s(p, 8, true);
+        //@ to_u8s_(p);
         std::alloc::dealloc(p as *mut u8, layout);
     }
 }
@@ -85,14 +85,14 @@ fn test_alloc_i128()
         if p.is_null() {
             std::alloc::handle_alloc_error(layout);
         }
-        //@ u8s__to_integer__(p, 16, true);
+        //@ from_u8s_(p);
         *p = -36893488147419103231i128;
         //@ assert *p |-> ?v1 &*& v1 == -36893488147419103231;
         assert(*p == -36893488147419103231i128);
         *p = -36893488147419103230i128;
         //@ assert *p |-> ?v2 &*& v2 == -36893488147419103230;
         assert(*p == -36893488147419103230i128);
-        //@ integer__to_u8s(p, 16, true);
+        //@ to_u8s_(p);
         std::alloc::dealloc(p as *mut u8, layout);
     }
 }
@@ -120,11 +120,11 @@ fn test_alloc_u16()
         if p.is_null() {
             std::alloc::handle_alloc_error(layout);
         }
-        //@ u8s__to_integer__(p, 2, false);
+        //@ from_u8s_(p);
         *p = 10000;
         //@ assert *p |-> ?v &*& v == 10000;
         assert(*p == 10000);
-        //@ integer__to_u8s(p, 2, false);
+        //@ to_u8s_(p);
         std::alloc::dealloc(p as *mut u8, layout);
     }
 }
@@ -137,11 +137,11 @@ fn test_alloc_u32()
         if p.is_null() {
             std::alloc::handle_alloc_error(layout);
         }
-        //@ u8s__to_integer__(p, 4, false);
+        //@ from_u8s_(p);
         *p = 1_000_000_000;
         //@ assert *p |-> ?v &*& v == 1000000000;
         assert(*p == 1_000_000_000);
-        //@ integer__to_u8s(p, 4, false);
+        //@ to_u8s_(p);
         std::alloc::dealloc(p as *mut u8, layout);
     }
 }
@@ -154,7 +154,7 @@ fn test_alloc_u64()
         if p.is_null() {
             std::alloc::handle_alloc_error(layout);
         }
-        //@ u8s__to_integer__(p, 8, false);
+        //@ from_u8s_(p);
         *p = 1_000_000_000_000_000_000;
         //@ assert *p |-> ?v1 &*& v1 == 1000000000000000000;
         assert(*p == 1_000_000_000_000_000_000);
@@ -167,7 +167,7 @@ fn test_alloc_u64()
         *p = 9223372036854775809;
         //@ assert *p |-> ?v4 &*& v4 == 9223372036854775809;
         assert(*p == 9223372036854775809);
-        //@ integer__to_u8s(p, 8, false);
+        //@ to_u8s_(p);
         std::alloc::dealloc(p as *mut u8, layout);
     }
 }
@@ -180,7 +180,7 @@ fn test_alloc_u128()
         if p.is_null() {
             std::alloc::handle_alloc_error(layout);
         }
-        //@ u8s__to_integer__(p, 16, false);
+        //@ from_u8s_(p);
         *p = 36893488147419103231u128;
         //@ assert *p |-> ?v1 &*& v1 == 36893488147419103231;
         assert(*p == 36893488147419103231u128);
@@ -190,7 +190,7 @@ fn test_alloc_u128()
         *p = 340282366920938463463374607431768211455u128;
         //@ assert *p |-> ?v3 &*& v3 == 340282366920938463463374607431768211455;
         assert(*p == 340282366920938463463374607431768211455u128);
-        //@ integer__to_u8s(p, 16, false);
+        //@ to_u8s_(p);
         std::alloc::dealloc(p as *mut u8, layout);
     }
 }

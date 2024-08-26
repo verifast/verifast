@@ -12,8 +12,8 @@ pred Buffer_(buffer: Buffer; size: usize, length: usize) =
     size == buffer.size &*& size <= isize::MAX &*&
     length == buffer.length &*&
     std::alloc::alloc_block(buffer.buffer, std::alloc::Layout::from_size_align_(size, 1)) &*&
-    integers_(buffer.buffer, 1, false, length, _) &*&
-    integers__(buffer.buffer + length, 1, false, size - length, _);
+    buffer.buffer[..length] |-> ?_ &*&
+    buffer.buffer[length..size] |-> _;
 
 lem_auto Buffer__inv()
     req Buffer_(?buffer, ?size, ?length);
@@ -52,7 +52,7 @@ impl Buffer {
     {
         //@ open Buffer(_, _, _);
         //@ open Buffer_(_, _, _);
-        //@ integers___inv();
+        //@ array__inv::<u8>();
         //@ let buf = (*buffer).buffer;
         if (*buffer).size - (*buffer).length < size {
             if size < (*buffer).size {
@@ -70,7 +70,7 @@ impl Buffer {
             }
             (*buffer).buffer = new_buffer;
             (*buffer).size = new_size;
-            //@ integers___join(new_buffer + length);
+            //@ array__join(new_buffer + length);
             //@ close Buffer_(Buffer { buffer: new_buffer, size: new_size, length }, _, _);
         }
     }
@@ -97,8 +97,9 @@ ens
             0 <= haystack as usize - old_haystack as usize &*&
             haystack as usize - old_haystack as usize <= old_size;
         @*/
+        //@ open array::<u8>(haystack, _, _);
         let done = size == 0 || *haystack == needle;
-        //@ if done && size != 0 { close [f]integers_(haystack, 1, false, size, _); }
+        //@ if done && size != 0 { close [f]array(haystack, size, _); }
         if done { break }
         haystack = haystack.offset(1);
         size -= 1;
@@ -117,41 +118,41 @@ unsafe fn read_line(socket: platform::sockets::Socket, buffer: *mut Buffer)
         Buffer::reserve(buffer, RECV_BUF_SIZE);
         //@ open Buffer(_, _, _);
         //@ open Buffer_(?buf, _, _);
-        //@ integers___split(buf.buffer + buf.length, 1000);
+        //@ array__split(buf.buffer + buf.length, 1000);
         let count = socket.receive((*buffer).buffer.offset((*buffer).length as isize), RECV_BUF_SIZE);
-        //@ integers__join(buf.buffer);
-        //@ integers___join(buf.buffer + buf.length + count);
+        //@ array_join(buf.buffer);
+        //@ array__join(buf.buffer + buf.length + count);
         if count == 0 {
             //@ close Buffer_(buf, _, _);
             break;
         }
         (*buffer).length = offset + count;
-        //@ integers__split(buf.buffer, offset);
+        //@ array_split(buf.buffer, offset);
         let nl_index = memchr((*buffer).buffer.offset(offset as isize), count, b'\n') as usize - ((*buffer).buffer as usize + offset);
         if nl_index == count {
             offset += count;
-            //@ integers__join(buf.buffer);
+            //@ array_join(buf.buffer);
         } else {
             (*buffer).length = offset + nl_index + 1;
-            //@ integers__split(buf.buffer + offset, nl_index + 1);
-            //@ integers__join(buf.buffer);
-            //@ integers__to_integers__(buf.buffer + offset + nl_index + 1);
-            //@ integers___join(buf.buffer + offset + nl_index + 1);
+            //@ array_split(buf.buffer + offset, nl_index + 1);
+            //@ array_join(buf.buffer);
+            //@ array_to_array_(buf.buffer + offset + nl_index + 1);
+            //@ array__join(buf.buffer + offset + nl_index + 1);
             return;
         }
     }
 }
 
 unsafe fn send_bytes<'a>(socket: platform::sockets::Socket, bytes: &'a [u8])
-//@ req [?fs]platform::sockets::Socket(socket) &*& [?ft]integers_(bytes.ptr, 1, false, bytes.len, _);
-//@ ens [fs]platform::sockets::Socket(socket) &*& [ft]integers_(bytes.ptr, 1, false, bytes.len, _);
+//@ req [?fs]platform::sockets::Socket(socket) &*& [?ft]bytes.ptr[..bytes.len] |-> ?cs;
+//@ ens [fs]platform::sockets::Socket(socket) &*& [ft]bytes.ptr[..bytes.len] |-> cs;
 {
     socket.send(bytes.as_ptr(), bytes.len());
 }
 
 unsafe fn send_str<'a>(socket: platform::sockets::Socket, text: &'a str)
-//@ req [?fs]platform::sockets::Socket(socket) &*& [?ft]integers_(text.ptr, 1, false, text.len, _);
-//@ ens [fs]platform::sockets::Socket(socket) &*& [ft]integers_(text.ptr, 1, false, text.len, _);
+//@ req [?fs]platform::sockets::Socket(socket) &*& [?ft]text.ptr[..text.len] |-> ?cs;
+//@ ens [fs]platform::sockets::Socket(socket) &*& [ft]text.ptr[..text.len] |-> cs;
 {
     send_bytes(socket, text.as_bytes());
 }
@@ -169,8 +170,8 @@ unsafe fn handle_connection(buffer: *mut Buffer, socket: platform::sockets::Sock
 }
 
 unsafe fn print<'a>(text: &'a str)
-//@ req thread_token(?t) &*& [?f]integers_(text.ptr, 1, false, text.len, ?cs);
-//@ ens thread_token(t) &*& [f]integers_(text.ptr, 1, false, text.len, cs);
+//@ req thread_token(?t) &*& [?f]text.ptr[..text.len] |-> ?cs;
+//@ ens thread_token(t) &*& [f]text.ptr[..text.len] |-> cs;
 {
     let mut stdout = std::io::stdout();
     stdout.write(text.as_bytes()).unwrap();

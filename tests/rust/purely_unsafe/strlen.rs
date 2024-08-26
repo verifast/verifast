@@ -17,10 +17,10 @@ pred zstr(p: *u8; cs: list<u8>) =
 fix neq<t>(x: t, y: t) -> bool { x != y }
 
 lem u8s_zstr_join(p: *u8)
-    req [?f]integers_(p, 1, false, ?n, ?cs0) &*& [f]zstr(p + n, ?cs1) &*& forall(cs0, (neq)(0)) == true;
+    req [?f]p[..?n] |-> ?cs0 &*& [f]zstr(p + n, ?cs1) &*& forall(cs0, (neq)(0)) == true;
     ens [f]zstr(p, append(cs0, cs1));
 {
-    open integers_(p, 1, false, n, cs0);
+    open array(p, n, cs0);
     if n == 0 {
     } else {
         u8s_zstr_join(p + 1);
@@ -39,7 +39,7 @@ unsafe fn strlen_rec(mut p: *const u8) -> i32
         return 0;
     } else {
         //@ open zstr(p + 1, ?cs1);
-        //@ integer__limits(p + 1);
+        //@ points_to_limits(p + 1);
         //@ close [f]zstr(p + 1, cs1);
         //@ assume(length(cs1) < 0x7fffffff);
         return 1 + strlen_rec(p.offset(1));
@@ -65,11 +65,11 @@ unsafe fn strlen_inv(mut p: *const u8) -> isize
             break;
         } else {
             //@ open zstr(p1 + 1, ?cs11);
-            //@ integer__limits(p1 + 1);
+            //@ points_to_limits(p1 + 1);
             //@ close [f]zstr(p1 + 1, cs11);
-            //@ close [f]integers_(p1 + 1, 1, false, 0, []);
-            //@ close [f]integers_(p1, 1, false, 1, _);
-            //@ integers__join(p);
+            //@ close [f]array(p1 + 1, 0, []);
+            //@ close [f]array(p1, 1, _);
+            //@ array_join(p);
             //@ forall_append(cs0, [head(cs1)], (neq)(0));
             //@ append_assoc(cs0, [head(cs1)], tail(cs1));
             p1 = p1.offset(1);
@@ -105,7 +105,7 @@ unsafe fn strlen(mut p: *const u8) -> isize
             break;
         } else {
             //@ open zstr(p1 + 1, ?cs11);
-            //@ integer__limits(p1 + 1);
+            //@ points_to_limits(p1 + 1);
             //@ close [f]zstr(p1 + 1, cs11);
             p1 = p1.offset(1);
         }
@@ -136,10 +136,10 @@ fn main() {
         //@ open zstr(p + 1, _);
         //@ open zstr(p + 2, _);
         //@ open zstr(p + 3, _);
-        //@ close integers_(p + 3, 1, false, 1, _);
-        //@ close integers_(p + 2, 1, false, 2, _);
-        //@ close integers_(p + 1, 1, false, 3, _);
-        //@ close integers_(p, 1, false, 4, _);
+        //@ close array_(p + 3, 1, _);
+        //@ close array_(p + 2, 2, _);
+        //@ close array_(p + 1, 3, _);
+        //@ close array_(p, 4, _);
 
         std::alloc::dealloc(p, layout);
     }

@@ -605,20 +605,20 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       consume_c_object_core_core l real_unit_pat vp memberType h env true true $. fun _ h _ ->
       let cs = get_unique_var_symb "cs" (list_type (option_type charType)) in
       cont (Chunk ((chars__pred_symb (), true), [], real_unit, [target; sizeof_core l env memberType; cs], None)::h) env
-    | ExprStmt (CallExpr (l, "open_generic_points_to", targs, [], args, Static)) when language = CLang ->
+    | ExprStmt (CallExpr (l, "open_points_to", targs, [], args, Static)) when language = CLang ->
       require_pure();
-      let e = match (targs, args) with ([], [LitPat e]) -> e | _ -> static_error l "open_generic_points_to expects no type argument and one argument." None in
+      let e = match (targs, args) with ([], [LitPat e]) -> e | _ -> static_error l "open_points_to expects no type argument and one argument." None in
       let (w, tp) = check_expr (pn,ilist) tparams tenv e in
-      let pointeeType = match tp with PtrType tp -> tp | _ -> static_error l "The argument of open_generic_points_to must be a pointer." None in
+      let pointeeType = match tp with PtrType tp -> tp | _ -> static_error l "The argument of open_points_to must be a pointer." None in
       eval_h h env w $. fun h env pointerTerm ->
-      with_context (Executing (h, env, l, "Consuming generic_points_to chunk")) $. fun () ->
+      with_context (Executing (h, env, l, "Consuming points_to chunk")) $. fun () ->
       consume_chunk rules h env ghostenv [] [] l (generic_points_to_symb (), true) [pointeeType] real_unit dummypat (Some 1) [TermPat pointerTerm; SrcPat DummyPat] $. fun _ h coef [_; value] _ _ _ _ ->
       produce_c_object l coef pointerTerm pointeeType eval_h (Term value) false true h env cont
-    | ExprStmt (CallExpr (l, "close_generic_points_to", targs, [], args, Static)) when language = CLang ->
+    | ExprStmt (CallExpr (l, "close_points_to", targs, [], args, Static)) when language = CLang ->
       require_pure();
-      let e = match (targs, args) with ([], [LitPat e]) -> e | _ -> static_error l "close_generic_points_to expects no type argument and one argument." None in
+      let e = match (targs, args) with ([], [LitPat e]) -> e | _ -> static_error l "close_points_to expects no type argument and one argument." None in
       let (w, tp) = check_expr (pn,ilist) tparams tenv e in
-      let pointeeType = match tp with PtrType tp -> tp | _ -> static_error l "The argument of close_generic_points_to must be a pointer." None in
+      let pointeeType = match tp with PtrType tp -> tp | _ -> static_error l "The argument of close_points_to must be a pointer." None in
       eval_h h env w $. fun h env pointerTerm ->
       with_context (Executing (h, env, l, "Consuming object")) $. fun () ->
       consume_c_object_core_core l real_unit_pat pointerTerm pointeeType h env true false $. fun _ h (Some value) ->
@@ -634,7 +634,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       match dialect with
         Some Rust ->
         with_context (Executing (h, env, l, "Consuming u8 array")) $. fun () ->
-        consume_chunk rules h env ghostenv [] [] l ((if name = "close_struct" then integers___symb () else integers__symb ()), true) [] real_unit dummypat (Some 4) [TermPat pointerTerm; TermPat (ctxt#mk_intlit 1); TermPat false_term; TermPat (struct_size l env sn targs); SrcPat DummyPat] $. fun _ h coef [_; _; _; _; elems] _ _ _ _ ->
+        consume_chunk rules h env ghostenv [] [] l ((if name = "close_struct" then array__symb () else array_symb ()), true) [u8Type] real_unit dummypat (Some 2) [TermPat pointerTerm; TermPat (struct_size l env sn targs); SrcPat DummyPat] $. fun _ h coef [_; _; elems] _ _ _ _ ->
         if not (definitely_equal coef real_unit) then assert_false h env l "Closing a struct requires full permission to the u8 array." None;
         cont h elems
       | _ ->
@@ -668,7 +668,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let chunk =
         match dialect with
           Some Rust ->
-          Chunk ((integers___symb (), true), [], real_unit, [pointerTerm; ctxt#mk_intlit 1; false_term; size; cs], None)
+          Chunk ((array__symb (), true), [u8Type], real_unit, [pointerTerm; size; cs], None)
         | _ ->
           Chunk ((chars__pred_symb (), true), [], real_unit, [pointerTerm; size; cs], None)
       in

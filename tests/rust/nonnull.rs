@@ -47,7 +47,7 @@ pub mod ptr {
             };
             //@ open_full_borrow(_q_a, a, <T>.full_borrow_content(_t, reference));
             //@ open_full_borrow_content::<T>(_t, reference);
-            //@ generic_points_to_limits(reference);
+            //@ points_to_limits(reference);
             //@ close_full_borrow_content::<T>(_t, reference);
             //@ close_full_borrow(<T>.full_borrow_content(_t, reference));
             //@ close ptr::NonNull_own::<T>(_t, reference);

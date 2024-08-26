@@ -269,7 +269,7 @@ fn main() {
         if count.is_null() {
             std::alloc::handle_alloc_error(std::alloc::Layout::new::<i32>());
         }
-        //@ u8s__to_integer__(count, 4, true);
+        //@ from_u8s_(count);
         *count = 0;
 
         /*@
@@ -285,7 +285,7 @@ fn main() {
         //@ open counting_tree_visitor_data(count as *mut u8, 0);
         assert(*count == 3);
         
-        //@ integer__to_u8s(count, 4, true);
+        //@ to_u8s_(count);
         std::alloc::dealloc(count as *mut u8, std::alloc::Layout::new::<i32>());
         
         Tree::dispose(root);

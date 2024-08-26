@@ -2,8 +2,8 @@
 use std::{cell::UnsafeCell, process::abort, ptr::NonNull};
 /*@
 // TODO: Move to general.h
-//pred_ctor generic_points_to__<T>(p: *T)(;) = *p |-> ?v;
-//pred u32_share(k: lifetime_t, t: thread_id_t, l: *u32) = [_]frac_borrow(k, generic_points_to__(l));
+//pred_ctor points_to__<T>(p: *T)(;) = *p |-> ?v;
+//pred u32_share(k: lifetime_t, t: thread_id_t, l: *u32) = [_]frac_borrow(k, points_to__(l));
 
 // dk: dynamic lifetime
 // gh: ghost location
@@ -245,6 +245,8 @@ impl Drop for RcU32 {
                 //@ end_lifetime(dk);
                 //@ borrow_end(dk, u32_full_borrow_content(_t, &(*ptr).value));
                 //@ open u32_full_borrow_content(_t, &(*ptr).value)();
+                //@ close RcBoxU32_strong_(ptr, _);
+                //@ close RcBoxU32_value_(ptr, _);
                 //@ open_struct(ptr);
                 // No need to drop a u32
                 //@ close std::ptr::NonNull_own::<RcBoxU32>(_t, nnp);

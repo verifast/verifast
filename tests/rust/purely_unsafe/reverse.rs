@@ -26,7 +26,7 @@ unsafe fn dispose_list(mut n: *mut *mut u8)
             break;
         } else {
             let next = *n as *mut *mut u8;
-            //@ pointer_to_u8s(n);
+            //@ to_u8s_(n);
             std::alloc::dealloc(n as *mut u8, std::alloc::Layout::new::<*mut u8>());
             n = next;
         }
@@ -63,14 +63,17 @@ fn main() {
         if node1.is_null() {
             std::alloc::handle_alloc_error(layout);
         }
+        //@ from_u8s_(node1);
         let node2 = std::alloc::alloc(layout) as *mut *mut u8;
         if node2.is_null() {
             std::alloc::handle_alloc_error(layout);
         }
+        //@ from_u8s_(node2);
         let node3 = std::alloc::alloc(layout) as *mut *mut u8;
         if node3.is_null() {
             std::alloc::handle_alloc_error(layout);
         }
+        //@ from_u8s_(node3);
         *node3 = std::ptr::null_mut();
         //@ close list(node3, [node3]);
         *node2 = node3 as *mut u8;
@@ -87,11 +90,11 @@ fn main() {
         assert(newNode1 == node3);
         assert(newNode2 == node2);
         assert(newNode3 == node1);
-        //@ pointer_to_u8s(node1);
+        //@ to_u8s_(node1);
         std::alloc::dealloc(node1 as *mut u8, layout);
-        //@ pointer_to_u8s(node2);
+        //@ to_u8s_(node2);
         std::alloc::dealloc(node2 as *mut u8, layout);
-        //@ pointer_to_u8s(node3);
+        //@ to_u8s_(node3);
         std::alloc::dealloc(node3 as *mut u8, layout);
     }
 }

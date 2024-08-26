@@ -15,8 +15,8 @@ pred Buffer_(buffer: Buffer; size: usize, length: usize) =
     size == buffer.size &*& size <= isize::MAX &*&
     length == buffer.length &*&
     std::alloc::alloc_block(buffer.buffer, std::alloc::Layout::from_size_align_(size, 1)) &*&
-    integers_(buffer.buffer, 1, false, length, _) &*&
-    integers__(buffer.buffer + length, 1, false, size - length, _);
+    buffer.buffer[..length] |-> ?_ &*&
+    buffer.buffer[length..size] |-> _;
 
 lem_auto Buffer__inv()
     req [?f]Buffer_(?buffer, ?size, ?length);
@@ -55,7 +55,7 @@ impl Buffer {
     {
         //@ open Buffer(_, _, _);
         //@ open Buffer_(_, _, _);
-        //@ integers___inv();
+        //@ array__inv::<u8>();
         //@ let buf = (*buffer).buffer;
         if (*buffer).size - (*buffer).length < size {
             if size < (*buffer).size {
@@ -73,7 +73,7 @@ impl Buffer {
             }
             (*buffer).buffer = new_buffer;
             (*buffer).size = new_size;
-            //@ integers___join(new_buffer + length);
+            //@ array__join(new_buffer + length);
             //@ close Buffer_(Buffer { buffer: new_buffer, size: new_size, length }, _, _);
         }
     }
@@ -86,9 +86,9 @@ impl Buffer {
         //@ open [1]Buffer(_, _, _);
         //@ open [1]Buffer_(_, _, _);
         //@ open [f]Buffer_(_, _, _);
-        //@ integers___split((*buffer).buffer + (*buffer).length, (*other).length);
+        //@ array__split((*buffer).buffer + (*buffer).length, (*other).length);
         std::ptr::copy_nonoverlapping((*other).buffer, (*buffer).buffer.add((*buffer).length), (*other).length);
-        //@ integers__join((*buffer).buffer);
+        //@ array_join((*buffer).buffer);
         (*buffer).length += (*other).length;
     }
 
@@ -107,33 +107,35 @@ impl Buffer {
     {
         //@ open Buffer(_, _, _);
         //@ open Buffer_(_, _, _);
-        //@ integers__to_integers__((*buffer).buffer);
-        //@ integers___join((*buffer).buffer);
+        //@ array_to_array_((*buffer).buffer);
+        //@ array__join((*buffer).buffer);
         std::alloc::dealloc((*buffer).buffer, std::alloc::Layout::from_size_align_unchecked((*buffer).size, 1));
     }
 
 }
 
 unsafe fn memchr(mut haystack: *const u8, mut size: usize, needle: u8) -> *const u8
-//@ req [?f]integers_(haystack, 1, false, size, ?cs) &*& size <= isize::MAX;
-//@ ens [f]integers_(haystack, 1, false, size, cs) &*& 0 <= result as usize - haystack as usize &*& result as usize - haystack as usize <= size &*& result == haystack + (result as usize - haystack as usize);
+//@ req [?f]haystack[..size] |-> ?cs &*& size <= isize::MAX;
+//@ ens [f]haystack[..size] |-> cs &*& 0 <= result as usize - haystack as usize &*& result as usize - haystack as usize <= size &*& result == haystack + (result as usize - haystack as usize);
 {
     //@ let haystack0 = haystack;
     //@ let size0 = size;
-    //@ close [f]integers_(haystack, 1, false, 0, []);
     loop {
-        //@ inv [f]integers_(haystack0, 1, false, haystack as usize - haystack0 as usize, ?cs0) &*& [f]integers_(haystack, 1, false, size, ?cs1) &*& append(cs0, cs1) == cs &*& haystack == haystack0 + (haystack as usize - haystack0 as usize);
+        /*@
+        req [f]haystack[..size] |-> ?cs1;
+        ens
+            [f]old_haystack[..old_size] |-> cs1 &*&
+            haystack == old_haystack + (haystack as usize - old_haystack as usize) &*&
+            0 <= haystack as usize - old_haystack as usize &*&
+            haystack as usize - old_haystack as usize <= old_size;
+        @*/
+        //@ open array(haystack, _, _);
         if size == 0 || *haystack == needle {
-            //@ if size != 0 { close [f]integers_(haystack, 1, false, size, _); }
-            //@ integers__join(haystack0);
+            // if size != 0 { close [f]integers_(haystack, 1, false, size, _); }
             return haystack;
         }
         haystack = haystack.offset(1);
         size -= 1;
-        //@ close [f]integers_(haystack, 1, false, 0, []);
-        //@ close [f]integers_(haystack - 1, 1, false, 1, _);
-        //@ integers__join(haystack0);
-        //@ append_assoc(cs0, [head(cs1)], tail(cs1));
     }
 }
 
@@ -148,34 +150,34 @@ unsafe fn read_line(socket: platform::sockets::Socket, buffer: *mut Buffer)
         Buffer::reserve(buffer, RECV_BUF_SIZE);
         //@ open Buffer(_, _, _);
         //@ open Buffer_(?buf, _, _);
-        //@ integers___split(buf.buffer + buf.length, 1000);
+        //@ array__split(buf.buffer + buf.length, 1000);
         let count = socket.receive((*buffer).buffer.offset((*buffer).length as isize), RECV_BUF_SIZE);
-        //@ integers__join(buf.buffer);
-        //@ integers___join(buf.buffer + buf.length + count);
+        //@ array_join(buf.buffer);
+        //@ array__join(buf.buffer + buf.length + count);
         if count == 0 {
             //@ close Buffer_(buf, _, _);
             break;
         }
         (*buffer).length = offset + count;
-        //@ integers__split(buf.buffer, offset);
+        //@ array_split(buf.buffer, offset);
         let nl_index = memchr((*buffer).buffer.offset(offset as isize), count, b'\n') as usize - ((*buffer).buffer as usize + offset);
         if nl_index == count {
             offset += count;
-            //@ integers__join(buf.buffer);
+            //@ array_join(buf.buffer);
         } else {
             (*buffer).length = offset + nl_index + 1;
-            //@ integers__split(buf.buffer + offset, nl_index + 1);
-            //@ integers__join(buf.buffer);
-            //@ integers__to_integers__(buf.buffer + offset + nl_index + 1);
-            //@ integers___join(buf.buffer + offset + nl_index + 1);
+            //@ array_split(buf.buffer + offset, nl_index + 1);
+            //@ array_join(buf.buffer);
+            //@ array_to_array_(buf.buffer + offset + nl_index + 1);
+            //@ array__join(buf.buffer + offset + nl_index + 1);
             return;
         }
     }
 }
 
 unsafe fn send_str<'a>(socket: platform::sockets::Socket, text: &'a str)
-//@ req [?fs]platform::sockets::Socket(socket) &*& [?ft]integers_(text.ptr, 1, false, text.len, _);
-//@ ens [fs]platform::sockets::Socket(socket) &*& [ft]integers_(text.ptr, 1, false, text.len, _);
+//@ req [?fs]platform::sockets::Socket(socket) &*& [?ft]text.ptr[..text.len] |-> ?cs;
+//@ ens [fs]platform::sockets::Socket(socket) &*& [ft]text.ptr[..text.len] |-> cs;
 {
     socket.send(text.as_ptr(), text.len());
 }
@@ -237,8 +239,8 @@ unsafe fn handle_connection(data: *mut u8)
 }
 
 unsafe fn print<'a>(text: &'a str)
-//@ req thread_token(?t) &*& [?f]integers_(text.ptr, 1, false, text.len, ?cs);
-//@ ens thread_token(t) &*& [f]integers_(text.ptr, 1, false, text.len, cs);
+//@ req thread_token(?t) &*& [?f]text.ptr[..text.len] |-> ?cs;
+//@ ens thread_token(t) &*& [f]text.ptr[..text.len] |-> cs;
 {
     let mut stdout = std::io::stdout();
     stdout.write(text.as_bytes()).unwrap();

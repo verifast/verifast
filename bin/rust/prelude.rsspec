@@ -11,7 +11,7 @@ struct std_tuple_0_ {}
 
 struct slice_ref<T> { ptr: *T, len: usize }
 
-struct str_ref { ptr: *_, len: usize }
+struct str_ref { ptr: *u8, len: usize }
 
 /*@
 

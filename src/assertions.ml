@@ -315,7 +315,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       Some symb ->
       produce_chunk h (symb, true) [] coef (Some 1) [addr; value] None cont
     | None ->
-    match int_rank_and_signedness type_ with
+    match integer__chunk_args type_ with
       Some (k, signedness) ->
       assume_has_type l [] addr type_ @@ fun () ->
       produce_chunk h (integer__symb (), true) [] coef (Some 3) [addr; rank_size_term k; mk_bool (signedness = Signed); value] None cont
@@ -333,7 +333,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       Some (_, _, _, _, _, _, _, _, _, uninit_predsym, _, _) ->
       produce_chunk h (uninit_predsym, true) [] coef (Some 1) [addr; get_unique_var_symb_ "dummy" (option_type type_) true] None cont
     | None ->
-    match int_rank_and_signedness type_ with
+    match integer__chunk_args type_ with
       Some (k, signedness) ->
         assume_has_type l [] addr type_ @@ fun () ->
         produce_chunk h (integer___symb (), true) [] coef (Some 3) [addr; rank_size_term k; mk_bool (signedness = Signed); get_unique_var_symb_ "dummy" (option_type type_) true] None cont
@@ -1141,7 +1141,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       consume_chunk_core rules h typeid_env ghostenv env env' l ((if consumeUninitChunk && rhs = dummypat then uninit_predsym else predsym), true) [] coef coefpat (Some 1) [TermPat addr; rhs] [voidPtrType; tp0] [voidPtrType; tp]
         (fun chunk h coef [_; value] size ghostenv env env' -> cont chunk h coef value ghostenv env env')
     | None ->
-    match int_rank_and_signedness type_ with
+    match integer__chunk_args type_ with
       Some (k, signedness) ->
       consume_chunk_core rules h typeid_env ghostenv env env' l ((if consumeUninitChunk && rhs = dummypat then integer___symb () else integer__symb ()), true) [] coef coefpat (Some 3)
         [TermPat addr; TermPat (rank_size_term k); TermPat (mk_bool (signedness = Signed)); rhs] [voidPtrType; intType; Bool; tp0] [voidPtrType; intType; Bool; tp]
@@ -1519,6 +1519,20 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           construct_edge qsymb_used coef None targs [] (if fstatic then [] else [voidPtrType]) (if fstatic then [] else [e]) conds
         else
           []
+      | WPointsTo (l, WDeref (_, e, _), tp, v) ->
+        begin match try_pointee_pred_symb0 tp with
+          Some (cn, csym, an, asym, mban, mbasym, nban, nbasym, ucn, ucsym, uan, uasym) ->
+          let qsymb_used = if v = DummyPat then ucsym else csym in
+          construct_edge qsymb_used coef None [] [] [voidPtrType] [e] conds
+        | None ->
+        match integer__chunk_args tp with
+          Some (rank, signedness) ->
+          let qsymb_used = if v = DummyPat then integer___symb () else integer__symb () in
+          construct_edge qsymb_used coef None [] [] [voidPtrType; intType; Bool] [e; SizeofExpr (l, TypeExpr (ManifestTypeExpr (l, tp))); if signedness = Signed then True l else False l] conds
+        | None ->
+          let qsymb_used = if v = DummyPat then generic_points_to__symb () else generic_points_to_symb () in
+          construct_edge qsymb_used coef None [tp] [] [voidPtrType] [e] conds
+        end
       | WPredAsn(_, q, true, qtargs, qfns, qpats) ->
           begin match try_assoc q#name predfammap with
             Some (_, qtparams, _, qtps, qsymb, _, _) ->
@@ -2164,7 +2178,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         in
         add_rule symb_ pointee_chunk_to_field_chunk__rule
       | None ->
-      match int_rank_and_signedness ft with
+      match integer__chunk_args ft with
         Some (rank, signedness) ->
         let integer__symb = integer__symb () in
         let tsize = rank_size_term rank in

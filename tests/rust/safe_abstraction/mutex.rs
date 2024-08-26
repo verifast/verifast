@@ -254,7 +254,7 @@ impl<'b, T: Send> DerefMut for MutexGuard<'b, T> {
         //@ assert [?qkml]lifetime_token(kmlong);
         //@ open_full_borrow(qkml, kmlong, <T>.full_borrow_content(t0, &(*lock).data));
         //@ open_full_borrow_content::<T>(t0, &(*lock).data);
-        //@ generic_points_to_limits(&(*lock).data);
+        //@ points_to_limits(&(*lock).data);
         //@ close_full_borrow_content::<T>(t0, &(*lock).data);
         //@ close_full_borrow(<T>.full_borrow_content(t0, &(*lock).data));
         //@ lifetime_token_trade_back(qkml, kmlong);

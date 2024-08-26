@@ -1,13 +1,13 @@
 unsafe fn is_hi<'a>(text: &'a str) -> bool
-//@ req [?f]integers_(text.ptr, 1, false, text.len, ?cs);
-//@ ens [f]integers_(text.ptr, 1, false, text.len, cs) &*& result == (cs == ['H', 'i']);
+//@ req [?f]text.ptr[..text.len] |-> ?cs;
+//@ ens [f]text.ptr[..text.len] |-> cs &*& result == (cs == ['H', 'i']);
 {
     if text.len() != 2 {
         false
     } else {
-        //@ open integers_(_, _, _, _, _);
-        //@ open integers_(_, _, _, _, _);
-        //@ open integers_(_, _, _, _, _);
+        //@ open array(_, _, _);
+        //@ open array(_, _, _);
+        //@ open array(_, _, _);
         *text.as_ptr() == b'H' && *text.as_ptr().offset(1) == b'i'
     }
 }

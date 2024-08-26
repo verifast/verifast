@@ -7,8 +7,8 @@ abstract_type type_info;
 mod intrinsics {
 
     unsafe fn copy_nonoverlapping<T>(src: *mut T, dst: *mut T, count: usize);
-    //@ req [?f]integers_(src as *mut u8, 1, false, count * std::mem::size_of::<T>(), ?vs) &*& integers__(dst as *mut u8, 1, false, count * std::mem::size_of::<T>(), _);
-    //@ ens [f]integers_(src as *mut u8, 1, false, count * std::mem::size_of::<T>(), vs) &*& integers_(dst as *mut u8, 1, false, count * std::mem::size_of::<T>(), vs);
+    //@ req [?f]src[..count] |-> ?vs &*& dst[..count] |-> _;
+    //@ ens [f]src[..count] |-> vs &*& dst[..count] |-> vs;
 
     unsafe fn ptr_offset_from<T>(ptr: *const T, base: *const T) -> isize;
     /*@
@@ -117,26 +117,26 @@ mod alloc {
         if result == 0 {
             true
         } else {
-            integers__(result, 1, false, Layout::size_(layout), _) &*& alloc_block(result, layout) &*&
+            result[..Layout::size_(layout)] |-> _ &*& alloc_block(result, layout) &*&
             object_pointer_within_limits(result, Layout::size_(layout)) == true
         };
     @*/
     //@ terminates;
     
     fn realloc(buffer: *u8, layout: Layout, new_size: usize) -> *u8;
-    //@ req integers_(buffer, 1, false, ?len, ?vs1) &*& integers__(buffer + len, 1, false, Layout::size_(layout) - len, ?vs2) &*& alloc_block(buffer, layout) &*& Layout::size_(layout) <= new_size;
+    //@ req buffer[..?len] |-> ?vs1 &*& array_::<u8>(buffer + len, Layout::size_(layout) - len, ?vs2) &*& alloc_block(buffer, layout) &*& Layout::size_(layout) <= new_size;
     /*@
     ens
         if result == 0 {
-            integers_(buffer, 1, false, len, vs1) &*& integers__(buffer + len, 1, false, Layout::size_(layout) - len, vs2) &*& alloc_block(buffer, layout)
+            buffer[..len] |-> vs1 &*& array_::<u8>(buffer + len, Layout::size_(layout) - len, vs2) &*& alloc_block(buffer, layout)
         } else {
-            integers_(result, 1, false, len, vs1) &*& integers__(result + len, 1, false, Layout::size_(layout) - len, vs2) &*&
-            integers__(result + Layout::size_(layout), 1, false, new_size - Layout::size_(layout), _) &*& alloc_block(result, Layout::from_size_align_(new_size, Layout::align_(layout)))
+            result[..len] |-> vs1 &*& array_::<u8>(result + len, Layout::size_(layout) - len, vs2) &*&
+            result[Layout::size_(layout)..new_size] |-> _ &*& alloc_block(result, Layout::from_size_align_(new_size, Layout::align_(layout)))
         };
     @*/
     
     fn dealloc(p: *u8, layout: Layout);
-    //@ req alloc_block(p, layout) &*& integers__(p, 1, false, Layout::size_(layout), _);
+    //@ req alloc_block(p, layout) &*& p[..Layout::size_(layout)] |-> _;
     //@ ens true;
     //@ terminates;
 
@@ -295,8 +295,8 @@ mod io {
     trait Write {
     
         fn write(self: *Self, buf: &[u8]) -> Result<usize>;
-        //@ req thread_token(?t) &*& *self |-> ?self0 &*& <Self>.own(t, self0) &*& [?f]integers_(buf.ptr, 1, false, buf.len, ?bs);
-        //@ ens thread_token(t) &*& *self |-> ?self1 &*& <Self>.own(t, self1) &*& [f]integers_(buf.ptr, 1, false, buf.len, bs) &*& std::result::Result_own::<usize, Error>(t, result);
+        //@ req thread_token(?t) &*& *self |-> ?self0 &*& <Self>.own(t, self0) &*& [?f]buf.ptr[..buf.len] |-> ?bs;
+        //@ ens thread_token(t) &*& *self |-> ?self1 &*& <Self>.own(t, self1) &*& [f]buf.ptr[..buf.len] |-> bs &*& std::result::Result_own::<usize, Error>(t, result);
         
         fn flush(self: *Self) -> Result<()>;
         //@ req thread_token(?t) &*& *self |-> ?self0 &*& <Self>.own(t, self0);

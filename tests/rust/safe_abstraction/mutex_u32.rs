@@ -355,7 +355,7 @@ impl MutexGuardU32 {
         //@ assert [?qkml]lifetime_token(kmlong);
         //@ open_full_borrow(qkml, kmlong, u32_full_borrow_content(t0, &(*lock).data));
         //@ open u32_full_borrow_content(t0, &(*lock).data)();
-        //@ integer__limits(&(*lock).data);
+        //@ points_to_limits(&(*lock).data);
         //@ close u32_full_borrow_content(t0, &(*lock).data)();
         //@ close_full_borrow(u32_full_borrow_content(t0, &(*lock).data));
         //@ lifetime_token_trade_back(qkml, kmlong);

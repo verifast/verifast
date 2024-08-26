@@ -1600,7 +1600,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           assume_eq (mk_length elems) length $. fun () ->
           cont (Chunk (((if produceUninitChunk then uninitArrayPredSymb else arrayPredSymb), true), [], coef, [addr; length; elems], None)::h) env
         | None ->
-        match int_rank_and_signedness elemTp with
+        match integer__chunk_args elemTp with
           Some (k, signedness) ->
           let length = ctxt#mk_intlit elemCount in
           assume_eq (mk_length elems) length $. fun () ->
@@ -1758,7 +1758,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         consume_chunk rules h typeid_env [] [] [] l ((if consumeUninitChunk then uninitArrayPredSymb else arrayPredSymb), true) [] real_unit coefpat (Some 2) pats $. fun chunk h _ [_; _; elems] _ _ _ _ ->
         cont [chunk] h (Some elems)
       | None ->
-      match int_rank_and_signedness elemTp with
+      match integer__chunk_args elemTp with
         Some (k, signedness) ->
         let pats = [TermPat addr; TermPat (rank_size_term k); TermPat (mk_bool (signedness = Signed)); TermPat (ctxt#mk_intlit elemCount); dummypat] in
         consume_chunk rules h typeid_env [] [] [] l ((if consumeUninitChunk then integers___symb () else integers__symb ()), true) [] real_unit coefpat (Some 4) pats $. fun chunk h _ [_; _; _; _; elems] _ _ _ _ ->
@@ -2460,7 +2460,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           cont h env
         in
         let write_integer__array_element () =
-          match int_rank_and_signedness elem_tp with
+          match integer__chunk_args elem_tp with
             Some (k, signedness) ->
             assert_has_type env arr elem_tp h env l "This write might violate C's effective types rules" None;
             let integers__symb = (integers__symb (), true) in
@@ -2586,7 +2586,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               Some (_, _, _, asym, _, mbsym, _, _, _, _, _, uasym) ->
               n, (if g = "calloc" then elemTp else option_type elemTp), (if g = "calloc" then asym else uasym), mbsym (), [], false
             | None ->
-            match int_rank_and_signedness elemTp with
+            match integer__chunk_args elemTp with
               Some (r, s) ->
               n, (if g = "calloc" then intType else option_type intType), (if g = "calloc" then integers__symb () else integers___symb ()), malloc_block_integers__symb (), [rank_size_term r; if s = Signed then true_term else false_term], true
             | _ ->
@@ -2927,12 +2927,12 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         assume_eq (mk_app chars_of_string_symb [value]) (mk_char_list_of_c_string (String.length s) s) $. fun () ->
         cont h env value
       | CLang, Some Rust ->
-        let cs = get_unique_var_symb "stringLiteralChars" (InductiveType ("list", [charType])) in
-        let value = get_unique_var_symb "stringLiteral" (PtrType charType) in
+        let cs = get_unique_var_symb "stringLiteralChars" (InductiveType ("list", [u8Type])) in
+        let value = get_unique_var_symb "stringLiteral" (PtrType u8Type) in
         let coef = get_dummy_frac_term () in
         assume (ctxt#mk_not (ctxt#mk_eq value (null_pointer_term ()))) $. fun () ->
         assume (ctxt#mk_eq (mk_u8_list_of_rust_string s) cs) $. fun () ->
-        cont (Chunk ((integers__symb (), true), [], coef, [value; ctxt#mk_intlit 1; ctxt#mk_false; ctxt#mk_intlit (String.length s); cs], None)::h) env value
+        cont (Chunk ((array_symb (), true), [u8Type], coef, [value; ctxt#mk_intlit (String.length s); cs], None)::h) env value
       | CLang, _ ->
         if unloadable then static_error l "The use of string literals as expressions in unloadable modules is not supported. Put the string literal in a named global array variable instead." None;
         let (_, _, _, _, string_symb, _, _) = List.assoc "string" predfammap in

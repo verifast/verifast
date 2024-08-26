@@ -16,18 +16,18 @@ mod sockets {
         //@ ens [q]ServerSocket(self) &*& Socket(result);
 
         unsafe fn receive(self: Socket, buffer: *mut u8, length: usize) -> usize;
-        //@ req [?q]Socket(self) &*& integers__(buffer, 1, false, length, _);
+        //@ req [?q]Socket(self) &*& buffer[..length] |-> _;
         /*@
         ens
             result <= length &*&
             [q]Socket(self) &*&
-            integers_(buffer, 1, false, result, _) &*&
-            integers__(buffer + result, 1, false, length - result, _);
+            buffer[..result] |-> ?_ &*&
+            buffer[result..length] |-> _;
         @*/
 
         unsafe fn send(self: Socket, buffer: *const u8, length: usize);
-        //@ req [?f]Socket(self) &*& [?fb]integers_(buffer, 1, false, length, ?vs);
-        //@ ens [f]Socket(self) &*& [fb]integers_(buffer, 1, false, length, vs);
+        //@ req [?f]Socket(self) &*& [?fb]buffer[..length] |-> ?vs;
+        //@ ens [f]Socket(self) &*& [fb]buffer[..length] |-> vs;
 
         unsafe fn close(self: Socket);
         //@ req Socket(self);
