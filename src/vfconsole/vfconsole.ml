@@ -20,22 +20,29 @@ let rec json_of_loc l =
   | MacroExpansion (l1, l2) -> A [S "MacroExpansion"; json_of_loc l1; json_of_loc l2]
   | MacroParamExpansion (l1, l2) -> A [S "MacroParamExpansion"; json_of_loc l1; json_of_loc l2]
 
-let json_of_chunk (Chunk ((p, _), typeArgs, coef, args, _)) =
-  let s =
-    p ^
-    (if typeArgs = [] then "" else "<" ^ String.concat ", " (List.map string_of_type typeArgs) ^ ">") ^
-    "(" ^ String.concat ", " args ^ ")"
-  in
-  A [S coef; S s]
-let json_of_heap heap = A (List.map json_of_chunk heap)
-let json_of_env env = O (List.map (fun (k, v) -> (k, S v)) env)
-let json_of_ctxt ctxt =
-  match ctxt with
-    Assuming cond -> A [S "Assuming"; S cond]
-  | Executing (h, env, l, msg) -> A [S "Executing"; json_of_heap h; json_of_env env; json_of_loc l; S msg]
-  | PushSubcontext -> A [S "PushSubcontext"]
-  | PopSubcontext -> A [S "PopSubcontext"]
-  | Branching b -> A [S "Branching"; S (match b with LeftBranch -> "LeftBranch" | RightBranch -> "RightBranch")]
+module JsonOf(ARGS: sig
+  val string_of_type: type_ -> string
+end) = struct
+  open ARGS
+
+  let json_of_chunk (Chunk ((p, _), typeArgs, coef, args, _)) =
+    let s =
+      p ^
+      (if typeArgs = [] then "" else "<" ^ String.concat ", " (List.map string_of_type typeArgs) ^ ">") ^
+      "(" ^ String.concat ", " args ^ ")"
+    in
+    A [S coef; S s]
+  let json_of_heap heap = A (List.map json_of_chunk heap)
+  let json_of_env env = O (List.map (fun (k, v) -> (k, S v)) env)
+  let json_of_ctxt ctxt =
+    match ctxt with
+      Assuming cond -> A [S "Assuming"; S cond]
+    | Executing (h, env, l, msg) -> A [S "Executing"; json_of_heap h; json_of_env env; json_of_loc l; S msg]
+    | PushSubcontext -> A [S "PushSubcontext"]
+    | PopSubcontext -> A [S "PopSubcontext"]
+    | Branching b -> A [S "Branching"; S (match b with LeftBranch -> "LeftBranch" | RightBranch -> "RightBranch")]
+
+end
 
 module HashedLoc = struct
   type t = loc0
@@ -269,6 +276,8 @@ let _ =
     | StaticError (l, msg, url) ->
       exit_with_msg l msg
     | SymbolicExecutionError (ctxts, l, msg, url) ->
+      let language, dialect = file_specs path in
+      let open JsonOf(struct let string_of_type = string_of_type language dialect end) in
       if json then begin
         exit_with_json_result (A [S "SymbolicExecutionError"; A (List.map json_of_ctxt ctxts); json_of_loc l; S msg; match url with None -> Null | Some s -> S s])
       end else

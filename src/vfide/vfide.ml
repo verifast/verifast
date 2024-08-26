@@ -1139,7 +1139,7 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
   let clearStepItems() =
     match !stepItems with
       None -> ()
-    | Some items ->
+    | Some (path, items) ->
       List.iter
         begin fun (ass, h, env, (tab, mark1, mark2), msg, locstack) ->
           tab#lineMarksTable#clear;
@@ -1152,7 +1152,8 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
   in
   let updateStepItems() =
     clearStepItems();
-    let ctxts_fifo = List.rev (get !ctxts_lifo) in
+    let Some (path, ctxts_lifo) = !ctxts_lifo in
+    let ctxts_fifo = List.rev ctxts_lifo in
     let rec iter lastItem itstack last_it ass locstack last_loc last_env ctxts =
       match ctxts with
         [] -> []
@@ -1185,7 +1186,7 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
         stepStore#set ~row:it ~column:stepCol (match branch with LeftBranch -> "Executing first branch" | RightBranch -> "Executing second branch");
         iter lastItem itstack (Some it) ass locstack last_loc last_env cs
     in
-    stepItems := Some (iter None [] None [] [] None None ctxts_fifo)
+    stepItems := Some (path, iter None [] None [] [] None None ctxts_fifo)
   in
   let append_items (store:GTree.list_store) kcol col foreground_col strikethrough_col items =
     let rec iter k items =
@@ -1268,7 +1269,9 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
   let stepSelected _ =
     match !stepItems with
       None -> ()
-    | Some stepItems ->
+    | Some (path, stepItems) ->
+      let language, dialect = file_specs path in
+      let open StringOf(struct let string_of_type = string_of_type language dialect end) in
       clearStepInfo();
       let selpath = List.hd stepList#selection#get_selected_rows in
       let (ass, h, env, l, msg, locstack) = get_step_of_path selpath in
@@ -1729,7 +1732,7 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
             | StaticError (l, emsg, eurl) ->
               handleStaticError l emsg eurl 
             | SymbolicExecutionError (ctxts, l, emsg, eurl) ->
-              ctxts_lifo := Some ctxts;
+              ctxts_lifo := Some (path, ctxts);
               updateStepItems();
               ignore $. updateStepListView();
               stepSelected();

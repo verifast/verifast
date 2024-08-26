@@ -2394,7 +2394,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             failwith
               (Printf.sprintf
                  "Todo: SwitchInt TerminatorKind for discriminant type %s"
-                 (Verifast0.string_of_type tp))
+                 (Verifast0.rust_string_of_type tp))
       in
       if ListAux.is_empty tmp_rvalue_binders then Ok (main_stmt, targets)
       else

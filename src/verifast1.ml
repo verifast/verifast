@@ -59,6 +59,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let path = program_path
   
   let language, dialect = file_specs path
+
+  let string_of_type = string_of_type language dialect
   
   let {
     option_verbose=initial_verbosity;

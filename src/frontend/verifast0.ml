@@ -58,7 +58,7 @@ let get_root_caller ctxts = match List.rev (get_callers ctxts) with Some l::_ ->
 let tparam_is_uppercase tparam =
   String.length tparam > 0 && match tparam.[0] with 'A'..'Z' -> true | _ -> false
 
-let rec string_of_type t =
+let rec c_string_of_type t =
   match t with
     Bool -> "bool"
   | Void -> "void"
@@ -81,18 +81,18 @@ let rec string_of_type t =
   | LongDouble -> "long double"
   | RealType -> "real"
   | InductiveType (i, []) -> i
-  | InductiveType (i, targs) -> i ^ "<" ^ String.concat ", " (List.map string_of_type targs) ^ ">"
+  | InductiveType (i, targs) -> i ^ "<" ^ String.concat ", " (List.map c_string_of_type targs) ^ ">"
   | ObjType (l, []) -> "class " ^ l
-  | ObjType (l, targs) -> "class " ^ l ^ "<" ^ String.concat ", " (List.map string_of_type targs) ^ ">"
-  | StructType (sn, targs) -> "struct " ^ sn ^ (match targs with [] -> "" | _ -> "<" ^ String.concat ", " (List.map string_of_type targs) ^ ">")
+  | ObjType (l, targs) -> "class " ^ l ^ "<" ^ String.concat ", " (List.map c_string_of_type targs) ^ ">"
+  | StructType (sn, targs) -> "struct " ^ sn ^ (match targs with [] -> "" | _ -> "<" ^ String.concat ", " (List.map c_string_of_type targs) ^ ">")
   | UnionType un -> "union " ^ un
-  | PtrType t -> string_of_type t ^ " *"
+  | PtrType t -> c_string_of_type t ^ " *"
   | FuncType ft -> ft
-  | InlineFuncType rt -> Printf.sprintf "fn(?) -> %s" (string_of_type rt)
+  | InlineFuncType rt -> Printf.sprintf "fn(?) -> %s" (c_string_of_type rt)
   | PredType (tparams, ts, inputParamCount, inductiveness) ->
     let tparamsText = if tparams = [] then "" else "<" ^ String.concat ", " tparams ^ ">" in
     let paramTypesText =
-      let typesText ts = String.concat ", " (List.map string_of_type ts) in
+      let typesText ts = String.concat ", " (List.map c_string_of_type ts) in
       match inputParamCount with
         None -> typesText ts
       | Some n ->
@@ -110,38 +110,187 @@ let rec string_of_type t =
       in
       iter [t1] t2
     in
-    Printf.sprintf "fixpoint(%s, %s)" (String.concat ", " (List.map string_of_type pts)) (string_of_type rt)
+    Printf.sprintf "fixpoint(%s, %s)" (String.concat ", " (List.map c_string_of_type pts)) (c_string_of_type rt)
+  | BoxIdType -> "box"
+  | HandleIdType -> "handle"
+  | AnyType -> "any"
+  | RealTypeParam x -> "<" ^ x ^ ">"
+  | GhostTypeParam x -> x
+  | InferredRealType x -> x ^ "?"
+  | InferredType (_, t) -> begin match !t with EqConstraint t -> c_string_of_type t | _ -> "?" end
+  | ArrayType(t) -> (c_string_of_type t) ^ "[]"
+  | StaticArrayType(t, s) -> (c_string_of_type t) ^ "[" ^ (string_of_int s) ^ "]" 
+  | ClassOrInterfaceName(n) -> n (* not a real type; used only during type checking *)
+  | PackageName(n) -> n (* not a real type; used only during type checking *)
+  | RefType(t) -> "ref " ^ (c_string_of_type t)
+  | AbstractType x -> x
+
+let rec java_string_of_type t =
+  match t with
+    Bool -> "boolean"
+  | Void -> "void"
+  | Int (Signed, CharRank) -> "byte"
+  | Int (Unsigned, CharRank) -> "unsigned char"
+  | Int (Signed, ShortRank) -> "short"
+  | Int (Unsigned, ShortRank) -> "unsigned short"
+  | Int (Signed, IntRank) -> "int"
+  | Int (Unsigned, IntRank) -> "unsigned int"
+  | Int (Signed, LongRank) -> "long"
+  | Int (Unsigned, LongRank) -> "unsigned long"
+  | Int (Signed, LongLongRank) -> "long long"
+  | Int (Unsigned, LongLongRank) -> "unsigned long long"
+  | Int (Signed, PtrRank) -> "intptr_t"
+  | Int (Unsigned, PtrRank) -> "uintptr_t"
+  | Int (Signed, FixedWidthRank k) -> "int" ^ string_of_int ((1 lsl k) * 8) ^ "_t"
+  | Int (Unsigned, FixedWidthRank k) -> "uint" ^ string_of_int ((1 lsl k) * 8) ^ "_t"
+  | Float -> "float"
+  | Double -> "double"
+  | LongDouble -> "long double"
+  | RealType -> "real"
+  | InductiveType (i, []) -> i
+  | InductiveType (i, targs) -> i ^ "<" ^ String.concat ", " (List.map java_string_of_type targs) ^ ">"
+  | ObjType (l, []) -> "class " ^ l
+  | ObjType (l, targs) -> "class " ^ l ^ "<" ^ String.concat ", " (List.map java_string_of_type targs) ^ ">"
+  | StructType (sn, targs) -> "struct " ^ sn ^ (match targs with [] -> "" | _ -> "<" ^ String.concat ", " (List.map java_string_of_type targs) ^ ">")
+  | UnionType un -> "union " ^ un
+  | PtrType t -> java_string_of_type t ^ " *"
+  | FuncType ft -> ft
+  | InlineFuncType rt -> Printf.sprintf "fn(?) -> %s" (java_string_of_type rt)
+  | PredType (tparams, ts, inputParamCount, inductiveness) ->
+    let tparamsText = if tparams = [] then "" else "<" ^ String.concat ", " tparams ^ ">" in
+    let paramTypesText =
+      let typesText ts = String.concat ", " (List.map java_string_of_type ts) in
+      match inputParamCount with
+        None -> typesText ts
+      | Some n ->
+        let (ts1, ts2) = take_drop n ts in
+        typesText ts1 ^ ";" ^ if ts2 = [] then "" else " " ^ typesText ts2
+    in
+    let inductivenessText = match inductiveness with Inductiveness_Inductive -> "" | Inductiveness_CoInductive -> "co" in
+    Printf.sprintf "%spredicate%s(%s)" inductivenessText tparamsText paramTypesText
+  | PureFuncType (t1, t2) ->
+    let (pts, rt) =  (* uncurry *)
+      let rec iter pts rt =
+        match rt with
+          PureFuncType (t1, t2) -> iter (t1::pts) t2
+        | _ -> (List.rev pts, rt)
+      in
+      iter [t1] t2
+    in
+    Printf.sprintf "fixpoint(%s, %s)" (String.concat ", " (List.map java_string_of_type pts)) (java_string_of_type rt)
   | BoxIdType -> "box"
   | HandleIdType -> "handle"
   | AnyType -> "any"
   | RealTypeParam x -> if (String.capitalize_ascii x) = x then x else "<" ^ x ^ ">"
   | GhostTypeParam x -> if (String.capitalize_ascii x) = x then "<" ^ x ^ ">" else x
   | InferredRealType x -> x ^ "?"
-  | InferredType (_, t) -> begin match !t with EqConstraint t -> string_of_type t | _ -> "?" end
-  | ArrayType(t) -> (string_of_type t) ^ "[]"
-  | StaticArrayType(t, s) -> (string_of_type t) ^ "[" ^ (string_of_int s) ^ "]" 
+  | InferredType (_, t) -> begin match !t with EqConstraint t -> java_string_of_type t | _ -> "?" end
+  | ArrayType(t) -> (java_string_of_type t) ^ "[]"
+  | StaticArrayType(t, s) -> (java_string_of_type t) ^ "[" ^ (string_of_int s) ^ "]" 
   | ClassOrInterfaceName(n) -> n (* not a real type; used only during type checking *)
   | PackageName(n) -> n (* not a real type; used only during type checking *)
-  | RefType(t) -> "ref " ^ (string_of_type t)
+  | RefType(t) -> "ref " ^ (java_string_of_type t)
   | AbstractType x -> x
 
-let string_of_targs targs =
-  if targs = [] then "" else "<" ^ String.concat ", " (List.map string_of_type targs) ^ ">"
+let rec rust_string_of_type t =
+  match t with
+    Bool -> "bool"
+  | Void -> "void"
+  | Int (Signed, CharRank) -> "std::ffi::c_char"
+  | Int (Unsigned, CharRank) -> "std::ffi::c_uchar"
+  | Int (Signed, ShortRank) -> "std::ffi::c_short"
+  | Int (Unsigned, ShortRank) -> "std::ffi::c_ushort"
+  | Int (Signed, IntRank) -> "std::ffi::c_int"
+  | Int (Unsigned, IntRank) -> "std::ffi::c_uint"
+  | Int (Signed, LongRank) -> "std::ffi::c_long"
+  | Int (Unsigned, LongRank) -> "std::ffi::c_ulong"
+  | Int (Signed, LongLongRank) -> "std::ffi::c_longlong"
+  | Int (Unsigned, LongLongRank) -> "std::ffi::c_ulonglong"
+  | Int (Signed, PtrRank) -> "isize"
+  | Int (Unsigned, PtrRank) -> "usize"
+  | Int (Signed, FixedWidthRank k) -> "i" ^ string_of_int ((1 lsl k) * 8)
+  | Int (Unsigned, FixedWidthRank k) -> "u" ^ string_of_int ((1 lsl k) * 8)
+  | Float -> "f32"
+  | Double -> "f64"
+  | LongDouble -> "std::ffi::c_longdouble"
+  | RealType -> "real"
+  | InductiveType (i, []) -> i
+  | InductiveType (i, targs) -> i ^ "<" ^ String.concat ", " (List.map rust_string_of_type targs) ^ ">"
+  | ObjType (l, []) -> "class " ^ l
+  | ObjType (l, targs) -> "class " ^ l ^ "<" ^ String.concat ", " (List.map rust_string_of_type targs) ^ ">"
+  | StructType (sn, targs) -> "struct " ^ sn ^ (match targs with [] -> "" | _ -> "<" ^ String.concat ", " (List.map rust_string_of_type targs) ^ ">")
+  | UnionType un -> "union " ^ un
+  | PtrType Void -> "*_"
+  | PtrType t -> "*" ^ rust_string_of_type t
+  | FuncType ft -> ft
+  | InlineFuncType rt -> Printf.sprintf "fn(?) -> %s" (rust_string_of_type rt)
+  | PredType (tparams, ts, inputParamCount, inductiveness) ->
+    let tparamsText = if tparams = [] then "" else "<" ^ String.concat ", " tparams ^ ">" in
+    let paramTypesText =
+      let typesText ts = String.concat ", " (List.map rust_string_of_type ts) in
+      match inputParamCount with
+        None -> typesText ts
+      | Some n ->
+        let (ts1, ts2) = take_drop n ts in
+        typesText ts1 ^ ";" ^ if ts2 = [] then "" else " " ^ typesText ts2
+    in
+    let inductivenessText = match inductiveness with Inductiveness_Inductive -> "" | Inductiveness_CoInductive -> "co" in
+    Printf.sprintf "%spred%s(%s)" inductivenessText tparamsText paramTypesText
+  | PureFuncType (t1, t2) ->
+    let (pts, rt) =  (* uncurry *)
+      let rec iter pts rt =
+        match rt with
+          PureFuncType (t1, t2) -> iter (t1::pts) t2
+        | _ -> (List.rev pts, rt)
+      in
+      iter [t1] t2
+    in
+    Printf.sprintf "fix(%s, %s)" (String.concat ", " (List.map rust_string_of_type pts)) (rust_string_of_type rt)
+  | BoxIdType -> "box"
+  | HandleIdType -> "handle"
+  | AnyType -> "any"
+  | RealTypeParam x -> "<" ^ x ^ ">"
+  | GhostTypeParam x -> x
+  | InferredRealType x -> x ^ "?"
+  | InferredType (_, t) -> begin match !t with EqConstraint t -> rust_string_of_type t | _ -> "?" end
+  | ArrayType(t) -> (rust_string_of_type t) ^ "[]"
+  | StaticArrayType(t, s) -> (rust_string_of_type t) ^ "[" ^ (string_of_int s) ^ "]" 
+  | ClassOrInterfaceName(n) -> n (* not a real type; used only during type checking *)
+  | PackageName(n) -> n (* not a real type; used only during type checking *)
+  | RefType(t) -> "ref " ^ (rust_string_of_type t)
+  | AbstractType x -> x
 
-(* This assumes the termnodes have already been converted to strings. *)
-let string_of_chunk (Chunk ((g, literal), targs, coef, ts, size): string chunk): string =
-  (if coef = "1" then "" else "[" ^ coef ^ "]") ^ g ^ string_of_targs targs ^ "(" ^ String.concat ", " ts ^ ")"
+let string_of_type lang dialect =
+  match lang, dialect with
+    CLang, Some Rust -> rust_string_of_type
+  | CLang, _ -> c_string_of_type
+  | Java, _ -> java_string_of_type
 
-let string_of_heap h = String.concat " * " (List.map string_of_chunk h)
+module StringOf(StringOfType: sig
+  val string_of_type: type_ -> string
+end) = struct
 
-let string_of_context c =
-  match c with
-    Assuming t -> "Assuming " ^ t
-  | Executing (h, env, l, s) -> "Heap: " ^ string_of_heap h ^ "\nEnv: " ^ string_of_env env ^ "\n" ^ string_of_loc l ^ ": " ^ s
-  | PushSubcontext -> "Entering subcontext"
-  | PopSubcontext -> "Leaving subcontext"
-  | Branching LeftBranch -> "Executing first branch"
-  | Branching RightBranch -> "Executing second branch"
+  open StringOfType
+
+  let string_of_targs targs =
+    if targs = [] then "" else "<" ^ String.concat ", " (List.map string_of_type targs) ^ ">"
+  
+  (* This assumes the termnodes have already been converted to strings. *)
+  let string_of_chunk (Chunk ((g, literal), targs, coef, ts, size): string chunk): string =
+    (if coef = "1" then "" else "[" ^ coef ^ "]") ^ g ^ string_of_targs targs ^ "(" ^ String.concat ", " ts ^ ")"
+  
+  let string_of_heap h = String.concat " * " (List.map string_of_chunk h)
+  
+  let string_of_context c =
+    match c with
+      Assuming t -> "Assuming " ^ t
+    | Executing (h, env, l, s) -> "Heap: " ^ string_of_heap h ^ "\nEnv: " ^ string_of_env env ^ "\n" ^ string_of_loc l ^ ": " ^ s
+    | PushSubcontext -> "Entering subcontext"
+    | PopSubcontext -> "Leaving subcontext"
+    | Branching LeftBranch -> "Executing first branch"
+    | Branching RightBranch -> "Executing second branch"
+  
+end
 
 exception SymbolicExecutionError of string context list * loc * string * string option
 
