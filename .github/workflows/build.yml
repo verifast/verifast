@@ -17,7 +17,11 @@ jobs:
         run: ./setup-build.sh
 
       - name: Build
-        run: ./build.sh
+        run: |
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            export VFVERSION=$GITHUB_REF_NAME
+          fi
+          ./build.sh
 
       - name: Rename artifact
         id: rename_artifact
@@ -98,7 +102,11 @@ jobs:
         run: ./setup-build.sh
 
       - name: Build
-        run: ./build.sh
+        run: |
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            export VFVERSION=$GITHUB_REF_NAME
+          fi
+          ./build.sh
 
       - name: Rename artifact
         id: rename_artifact
@@ -182,7 +190,7 @@ jobs:
         run: ./setup-windows.bat
 
       - name: Build
-        run: c:/cygwin64/bin/bash -lc 'cd $GITHUB_WORKSPACE/src && make nightly VERBOSE=yes GTK=/cygdrive/c/vfdeps'
+        run: c:/cygwin64/bin/bash -lc 'cd $GITHUB_WORKSPACE/src && if [ "$GITHUB_REF_TYPE" = "tag" ]; then export VFVERSION=$GITHUB_REF_NAME; fi && make nightly VERBOSE=yes GTK=/cygdrive/c/vfdeps'
 
       - name: Rename artifact
         id: rename_artifact
