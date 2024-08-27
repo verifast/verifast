@@ -101,7 +101,7 @@ let rust_keywords = [
 
 let rust_ghost_keywords = [
   "assert";
-  "pred"; "copred"; "req"; "|->"; "&*&"; "inductive"; "fix";
+  "pred"; "copred"; "req"; "|->"; "|-?->"; "&*&"; "inductive"; "fix";
   "ens"; "close"; "lem"; "open"; "emp"; "inv"; "lem_auto";
   "_"; "@*/"; "pred_fam"; "pred_fam_inst"; "pred_ctor"; "leak"; "@";
   "box_class"; "action"; "handle_pred"; "preserved_by"; "consuming_box_pred"; "consuming_handle_pred"; "perform_action"; "nonghost_callers_only";
@@ -139,7 +139,7 @@ let java_keywords = [
 ]
 
 let ghost_keywords = [
-  "predicate"; "copredicate"; "requires"; "|->"; "&*&"; "inductive"; "fixpoint";
+  "predicate"; "copredicate"; "requires"; "|->"; "|-?->"; "&*&"; "inductive"; "fixpoint";
   "ensures"; "close"; "lemma"; "open"; "emp"; "invariant"; "lemma_auto";
   "_"; "@*/"; "predicate_family"; "predicate_family_instance"; "predicate_ctor"; "leak"; "@";
   "box_class"; "action"; "handle_predicate"; "preserved_by"; "consuming_box_predicate"; "consuming_handle_predicate"; "perform_action"; "nonghost_callers_only";
@@ -2319,13 +2319,13 @@ and
 | [ parse_cond_expr as e; 
     [%l
     e = function%parser
-    | [ (l, Kwd "|->"); 
+    | [ [%let (l, pointsto_kind) = function%parser [ (l, Kwd "|->") ] -> l, RegularPointsTo | [ (l, Kwd "|-?->") ] -> l, MaybeUninit];
         parse_pointsto_rhs as rhs 
       ] -> 
         begin match e with
-          ReadArray (_, _, SliceExpr (_, _, _)) -> PointsTo (l, e, rhs)
-        | ReadArray (lr, e0, e1) when language = CLang -> PointsTo (l, Deref(lr, Operation(lr, Add, [e0; e1])), rhs) 
-        | _ -> PointsTo (l, e, rhs)
+          ReadArray (_, _, SliceExpr (_, _, _)) -> PointsTo (l, e, pointsto_kind, rhs)
+        | ReadArray (lr, e0, e1) when language = CLang -> PointsTo (l, Deref(lr, Operation(lr, Add, [e0; e1])), pointsto_kind, rhs) 
+        | _ -> PointsTo (l, e, pointsto_kind, rhs)
         end
     | [ ] -> e
     ]

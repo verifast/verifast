@@ -254,6 +254,8 @@ type int_literal_lsuffix = NoLSuffix | LSuffix | LLSuffix
 
 type float_literal_suffix = FloatFSuffix | FloatLSuffix
 
+type pointsto_kind = RegularPointsTo | MaybeUninit
+
 (** Types as they appear in source code, before validity checking and resolution. *)
 type type_expr = (* ?type_expr *)
     StructTypeExpr of loc * string option * (string list (* type parameters *) * field list) option * struct_attr list * type_expr list (* type arguments *)
@@ -454,11 +456,13 @@ and
   | PointsTo of
         loc *
         expr *
+        pointsto_kind *
         pat
   | WPointsTo of
       loc *
       expr *
       type_ *
+      pointsto_kind *
       pat
   | PredAsn of (* Predicate assertion, before type checking *)
       loc *
@@ -1033,8 +1037,8 @@ let rec expr_loc e =
   | SuperMethodCall(l, _, _) -> l
   | WSuperMethodCall(l, _, _, _, _) -> l
   | InitializerList (l, _) -> l
-  | PointsTo (l, e, rhs) -> l
-  | WPointsTo (l, e, tp, rhs) -> l
+  | PointsTo (l, e, kind, rhs) -> l
+  | WPointsTo (l, e, tp, kind, rhs) -> l
   | PredAsn (l, g, targs, ies, es) -> l
   | WPredAsn (l, g, _, targs, ies, es) -> l
   | PredExprAsn (l, e, pats) -> l

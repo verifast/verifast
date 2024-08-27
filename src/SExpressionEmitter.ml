@@ -553,19 +553,21 @@ let rec sexpr_of_expr (expr : expr) : sexpression =
         build_list
           [ Symbol "expr-init-list" ]
           [ "elems", sexpr_of_list sexpr_of_elem elems ]
-    | PointsTo (loc, expr, pat) ->
+    | PointsTo (loc, expr, kind, pat) ->
         build_list
           [ Symbol "expr-points-to" ]
           [
             "expr", sexpr_of_expr expr;
+            "kind", (match kind with RegularPointsTo -> Symbol "RegularPointsTo" | MaybeUninit -> Symbol "MaybeUninit");
             "pat", sexpr_of_pat pat
           ]
-    | WPointsTo (loc, expr, t, pat) ->
+    | WPointsTo (loc, expr, t, kind, pat) ->
         build_list
           [ Symbol "expr-w-points-to" ]
           [
             "expr", sexpr_of_expr expr;
             "type", sexpr_of_type_ t;
+            "kind", (match kind with RegularPointsTo -> Symbol "RegularPointsTo" | MaybeUninit -> Symbol "MaybeUninit");
             "pat", sexpr_of_pat pat
           ]
     | PredAsn (loc, name, typs, pats1, pats2) ->
@@ -750,9 +752,10 @@ let rec sexpr_of_pred (asn : asn) : sexpression =
                  [ "types", List (List.map sexpr_of_type_expr types)
                  ; "indices", List (List.map sexpr_of_pat indices)
                  ; "arguments", List (List.map sexpr_of_pat patterns) ]
-    | PointsTo (loc, expr, pat) ->
+    | PointsTo (loc, expr, kind, pat) ->
       List [ Symbol "pred-access"
            ; sexpr_of_expr expr
+           ; (match kind with RegularPointsTo -> Symbol "RegularPointsTo" | MaybeUninit -> Symbol "MaybeUninit")
            ; sexpr_of_pat pat ]
     | EmpAsn loc ->
       List [ Symbol "pred-empty" ]
@@ -763,10 +766,11 @@ let rec sexpr_of_pred (asn : asn) : sexpression =
     | ExprAsn (loc, expr) ->
       List [ Symbol "pred-expression"
            ; sexpr_of_expr expr ]
-    | WPointsTo (_, expr, typ, pat) ->
+    | WPointsTo (_, expr, typ, kind, pat) ->
       build_list [ Symbol "pred-w-points-to" ]
                  [ "expr", sexpr_of_expr expr
                  ; "typ", sexpr_of_type_ typ
+                 ; "kind", (match kind with RegularPointsTo -> Symbol "RegularPointsTo" | MaybeUninit -> Symbol "MaybeUninit")
                  ; "pat", sexpr_of_pat pat ]
     | WPredAsn (_, pred, glob, typs, pats1, pats2) ->
       build_list [ Symbol "pred-w-pred-asn"

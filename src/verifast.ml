@@ -1409,7 +1409,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             | Some n -> n
           in
           ((g_symb, true), inputParamCount, targs, pats, false)
-        | WPointsTo (_, WRead (_, e, fparent, tparams, fname, frange, targs, fstatic, fvalue, fghost), _, rhs) ->
+        | WPointsTo (_, WRead (_, e, fparent, tparams, fname, frange, targs, fstatic, fvalue, fghost), _, kind, rhs) ->
           let (p, (_, _, _, _, symb, _, _)), _ = List.assoc (fparent, fname) field_pred_map in
           let pats, inputParamCount =
             if fstatic then
@@ -2894,7 +2894,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     match ps with
       [] -> cont h
     | (_, x, t, addr) :: ps ->
-      consume_points_to_chunk rules h env [] [] [] l t real_unit real_unit_pat addr dummypat $. fun chunk h _ value _ _ _ ->
+      consume_points_to_chunk rules h env [] [] [] l t real_unit real_unit_pat addr RegularPointsTo dummypat $. fun chunk h _ value _ _ _ ->
       cleanup_heapy_locals_core (pn, ilist) l h env ps cont
     in
     match ps, varargsLastParam with
@@ -3139,7 +3139,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     let init_fields delegated h struct_addr this_type init_list env ghostenv leminfo sizemap current_thread cont =
       let init_field h field_name field_type value struct_addr gh cont =
-        assume_field h env struct_name [] field_name field_type [] gh struct_addr value real_unit cont
+        assume_field h env struct_name [] field_name field_type [] gh struct_addr RegularPointsTo value real_unit cont
       in
       (* when a delegated ctor was called, no initializeation is needed for the fields *)
       if delegated then cont h else
@@ -3459,12 +3459,12 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 if binding = Instance then begin
                   match init with 
                     None ->
-                    assume_field h [] cn [] f t [] Real this (Some (default_value t)) real_unit $. fun h ->
+                    assume_field h [] cn [] f t [] Real this RegularPointsTo (Some (default_value t)) real_unit $. fun h ->
                     iter h fds
                   | Some(e) -> 
                     with_context (Executing (h, [], expr_loc e, "Executing field initializer")) $. fun () ->
                     verify_expr false (pn,ilist) tparams false leminfo funcmap sizemap [(current_class, ClassOrInterfaceName cn); ("this", thisType); (current_thread_name, current_thread_type)] ghostenv h [("this", this); (current_thread_name, List.assoc current_thread_name env)] None e (fun h _ initial_value ->
-                      assume_field h [] cn [] f t [] Real this (Some initial_value) real_unit $. fun h ->
+                      assume_field h [] cn [] f t [] Real this RegularPointsTo (Some initial_value) real_unit $. fun h ->
                       iter h fds
                     ) (fun throwl h env2 exceptp excep -> assert_false h env2 throwl ("Field initializers throws exception.") None)
                 end else

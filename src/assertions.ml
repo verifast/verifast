@@ -135,7 +135,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     match (g1, g2) with
       ((g1, literal1), (g2, literal2)) -> if literal1 && literal2 then g1 == g2 else definitely_equal g1 g2
   
-  let assume_field h0 env fparent tparams fname frange targs fghost tp tv tcoef cont =
+  let assume_field h0 env fparent tparams fname frange targs fghost tp kind tv tcoef cont =
     let ((_, (_, _, _, _, symb, _, _)), p__opt) = List.assoc (fparent, fname) field_pred_map in
     let tpenv = List.combine tparams targs in
     let frange = instantiate_type tpenv frange in
@@ -163,15 +163,17 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       match h with
         [] ->
         let chunk =
-          match tv, p__opt with
-            Some tv, _ ->
+          match kind, tv, p__opt with
+            RegularPointsTo, Some tv, _ ->
             Chunk ((symb, true), targs, tcoef, [tp; tv], None)
-          | None, Some (_, (_, _, _, _, symb_, _, _)) ->
+          | _, None, Some (_, (_, _, _, _, symb_, _, _)) ->
             let tv = get_unique_var_symb_ "dummy" (option_type frange) (fghost = Ghost) in
             Chunk ((symb_, true), targs, tcoef, [tp; tv], None)
-          | None, None ->
+          | RegularPointsTo, None, None ->
             let tv = get_unique_var_symb_ "dummy" frange (fghost = Ghost) in
             Chunk ((symb, true), targs, tcoef, [tp; tv], None)
+          | MaybeUninit, Some tv, Some (_, (_, _, _, _, symb_, _, _)) ->
+            Chunk ((symb_, true), targs, tcoef, [tp; tv], None)
         in
         cont (chunk::h0)
       | Chunk (g, targs', tcoef', [tp'; tv'], _) as chunk::h when is_related_pred_symb g && List.for_all2 unify targs targs' ->
@@ -181,17 +183,21 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         begin
           let cont coef = 
             let cont new_chunk = cont (new_chunk::List.filter (fun ch -> ch != chunk) h0) in
-            match tv, predname_eq g pred_symb with
-              Some tv, true ->
+            match kind, tv, predname_eq g pred_symb with
+              RegularPointsTo, Some tv, true ->
               assume (ctxt#mk_eq tv tv') $. fun () ->
               cont (Chunk ((symb, true), targs, coef, [tp'; tv'], None))
-            | None, true ->
-              cont (Chunk ((symb, true), targs, coef, [tp'; tv'], None))
-            | Some tv, false ->
+            | _, None, _ ->
+              cont (Chunk (g, targs, coef, [tp'; tv'], None))
+            | RegularPointsTo, Some tv, false ->
               assume (ctxt#mk_eq (mk_some frange tv) tv') $. fun () ->
               cont (Chunk ((symb, true), targs, coef, [tp; tv], None))
-            | None, false ->
-              cont (Chunk (g, targs, coef, [tp'; tv'], None))
+            | MaybeUninit, Some tv, true ->
+              assume (ctxt#mk_eq tv (mk_some frange tv')) $. fun () ->
+              cont (Chunk (g, targs, coef, [tp; tv], None))
+            | MaybeUninit, Some tv, false ->
+              assume (ctxt#mk_eq tv tv') $. fun () ->
+              cont (Chunk (g, targs, coef, [tp; tv], None))
           in
           if tcoef == real_half && tcoef' == real_half then cont real_unit else
           if is_dummy_frac_term tcoef then
@@ -322,7 +328,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | None ->
       produce_chunk h (generic_points_to_symb (), true) [type_] coef (Some 1) [addr; value] None cont
 
-  let produce_uninit_points_to_chunk l h type_ coef addr cont =
+  let produce_uninit_points_to_chunk l h type_ coef addr value cont =
     begin fun cont ->
       if coef != real_unit && coef != real_half then
         assume (ctxt#mk_real_lt real_zero coef) cont
@@ -331,19 +337,20 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     end $. fun () ->
     match try_pointee_pred_symb0 type_ with
       Some (_, _, _, _, _, _, _, _, _, uninit_predsym, _, _) ->
-      produce_chunk h (uninit_predsym, true) [] coef (Some 1) [addr; get_unique_var_symb_ "dummy" (option_type type_) true] None cont
+      produce_chunk h (uninit_predsym, true) [] coef (Some 1) [addr; value] None cont
     | None ->
     match integer__chunk_args type_ with
       Some (k, signedness) ->
         assume_has_type l [] addr type_ @@ fun () ->
-        produce_chunk h (integer___symb (), true) [] coef (Some 3) [addr; rank_size_term k; mk_bool (signedness = Signed); get_unique_var_symb_ "dummy" (option_type type_) true] None cont
+        produce_chunk h (integer___symb (), true) [] coef (Some 3) [addr; rank_size_term k; mk_bool (signedness = Signed); value] None cont
     | None ->
-      produce_chunk h (generic_points_to__symb (), true) [type_] coef (Some 1) [addr; get_unique_var_symb_ "dummy" (option_type type_) true] None cont
+      produce_chunk h (generic_points_to__symb (), true) [type_] coef (Some 1) [addr; value] None cont
 
-  let produce_points_to_chunk_ l h type_ coef addr value cont =
-    match value with
-      None -> produce_uninit_points_to_chunk l h type_ coef addr cont
-    | Some v -> produce_points_to_chunk l h type_ coef addr v cont
+  let produce_points_to_chunk_ l h type_ coef addr kind value cont =
+    match kind, value with
+      _, None -> produce_uninit_points_to_chunk l h type_ coef addr (get_unique_var_symb_ "dummy" (option_type type_) true) cont
+    | RegularPointsTo, Some v -> produce_points_to_chunk l h type_ coef addr v cont
+    | MaybeUninit, Some v -> produce_uninit_points_to_chunk l h type_ coef addr v cont
 
   let produce_instance_predicate_chunk l h symbol coef target index family arguments size_first cont =
     let family_target = 
@@ -373,7 +380,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     with_context_helper (fun _ ->
     let ev = eval None env in
     match p with
-    | WPointsTo (l, WRead (lr, e, fparent, tparams, fname, frange, targs, fstatic, fvalue, fghost), tp, rhs) ->
+    | WPointsTo (l, WRead (lr, e, fparent, tparams, fname, frange, targs, fstatic, fvalue, fghost), tp, kind, rhs) ->
       if fstatic then
         let (_, (_, _, _, _, symb, _, _)), p__opt = List.assoc (fparent, fname) field_pred_map in
         evalpat (fghost = Ghost) ghostenv env rhs tp tp $. fun ghostenv env t ->
@@ -381,25 +388,27 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         cont h ghostenv env
       else
         let te = ev e in
-        evalpat_ (fghost = Ghost) ghostenv env rhs tp (instantiate_type tpenv tp) $. fun ghostenv env t ->
-        assume_field h env fparent tparams fname frange (List.map (instantiate_type tpenv) targs) fghost te t coef $. fun h ->
+        let tp_rhs = match kind with RegularPointsTo -> tp | MaybeUninit -> option_type tp in
+        evalpat_ (fghost = Ghost) ghostenv env rhs tp_rhs (instantiate_type tpenv tp_rhs) $. fun ghostenv env t ->
+        assume_field h env fparent tparams fname frange (List.map (instantiate_type tpenv) targs) fghost te kind t coef $. fun h ->
         cont h ghostenv env
-    | WPointsTo (l, WReadArray (la, ea, _, ei), tp, rhs) ->
+    | WPointsTo (l, WReadArray (la, ea, _, ei), tp, kind, rhs) ->
       let a = ev ea in
       let i = ev ei in
       evalpat false ghostenv env rhs tp tp $. fun ghostenv env t ->
       let slice = Chunk ((array_element_symb(), true), [instantiate_type tpenv tp], coef, [a; i; t], None) in
       cont (slice::h) ghostenv env
-    | WPointsTo (l, WVar (lv, x, GlobalName), tp, rhs) -> 
-      let (_, type_, symbn, _) = List.assoc x globalmap in    
+    | WPointsTo (l, WVar (lv, x, GlobalName), tp, kind, rhs) ->
+      if kind != RegularPointsTo then static_error l "Global variables are always initialized" None;
+      let (_, type_, symbn, _) = List.assoc x globalmap in
       evalpat false ghostenv env rhs tp tp $. fun ghostenv env t ->
       produce_points_to_chunk l h type_ coef symbn t $. fun h ->
       cont h ghostenv env
-    | WPointsTo (l, WDeref(ld, e, td), tp, rhs) ->  
+    | WPointsTo (l, WDeref(ld, e, td), tp, kind, rhs) ->
       let symbn = eval None env e in
-      let tp' = instantiate_type tpenv tp in
-      evalpat_ false ghostenv env rhs tp tp' $. fun ghostenv env t ->
-      produce_points_to_chunk_ l h tp' coef symbn t $. fun h ->
+      let tp_rhs = match kind with RegularPointsTo -> tp | MaybeUninit -> option_type tp in
+      evalpat_ false ghostenv env rhs tp_rhs (instantiate_type tpenv tp_rhs) $. fun ghostenv env t ->
+      produce_points_to_chunk_ l h (instantiate_type tpenv tp) coef symbn kind t $. fun h ->
       cont h ghostenv env
     | WPredAsn (l, g, is_global_predref, targs, pats0, pats) ->
       let targs' = instantiate_types tpenv targs in
@@ -1128,36 +1137,37 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 
   let dummypat = SrcPat DummyPat
   
-  let consume_points_to_chunk__core rules h typeid_env ghostenv env env' l type0 type_ coef coefpat addr rhs consumeUninitChunk cont =
+  let consume_points_to_chunk__core rules h typeid_env ghostenv env env' l type0 type_ coef coefpat addr kind rhs consumeUninitChunk cont =
     let type_ = unfold_inferred_type type_ in
+    let consumeUninitChunk = consumeUninitChunk && (kind = MaybeUninit || rhs = dummypat) in
     let tp0, tp =
-      if consumeUninitChunk && rhs = dummypat then
+      if consumeUninitChunk then
         option_type type0, option_type type_
       else
         type0, type_
     in
     match try_pointee_pred_symb0 type_ with
       Some (_, predsym, _, _, _, _, _, _, _, uninit_predsym, _, _) ->
-      consume_chunk_core rules h typeid_env ghostenv env env' l ((if consumeUninitChunk && rhs = dummypat then uninit_predsym else predsym), true) [] coef coefpat (Some 1) [TermPat addr; rhs] [voidPtrType; tp0] [voidPtrType; tp]
+      consume_chunk_core rules h typeid_env ghostenv env env' l ((if consumeUninitChunk then uninit_predsym else predsym), true) [] coef coefpat (Some 1) [TermPat addr; rhs] [voidPtrType; tp0] [voidPtrType; tp]
         (fun chunk h coef [_; value] size ghostenv env env' -> cont chunk h coef value ghostenv env env')
     | None ->
     match integer__chunk_args type_ with
       Some (k, signedness) ->
-      consume_chunk_core rules h typeid_env ghostenv env env' l ((if consumeUninitChunk && rhs = dummypat then integer___symb () else integer__symb ()), true) [] coef coefpat (Some 3)
+      consume_chunk_core rules h typeid_env ghostenv env env' l ((if consumeUninitChunk then integer___symb () else integer__symb ()), true) [] coef coefpat (Some 3)
         [TermPat addr; TermPat (rank_size_term k); TermPat (mk_bool (signedness = Signed)); rhs] [voidPtrType; intType; Bool; tp0] [voidPtrType; intType; Bool; tp]
         @@ fun chunk h coef [_; _; _; value] size ghostenv env env' ->
       assert_has_type env addr type_ h env l "Cannot prove compliance with C's effective types rules" None;
       cont chunk h coef value ghostenv env env'
     | None ->
-      consume_chunk_core rules h typeid_env ghostenv env env' l ((if consumeUninitChunk && rhs = dummypat then generic_points_to__symb () else generic_points_to_symb ()), true) [type_] coef coefpat (Some 1)
+      consume_chunk_core rules h typeid_env ghostenv env env' l ((if consumeUninitChunk then generic_points_to__symb () else generic_points_to_symb ()), true) [type_] coef coefpat (Some 1)
         [TermPat addr; rhs] [voidPtrType; tp0] [voidPtrType; tp]
         (fun chunk h coef [_; value] size ghostenv env env' -> cont chunk h coef value ghostenv env env')
 
-  let consume_points_to_chunk_ rules h typeid_env ghostenv env env' l type_ coef coefpat addr rhs consumeUninitChunk cont =
-    consume_points_to_chunk__core rules h typeid_env ghostenv env env' l type_ type_ coef coefpat addr rhs consumeUninitChunk cont
+  let consume_points_to_chunk_ rules h typeid_env ghostenv env env' l type_ coef coefpat addr kind rhs consumeUninitChunk cont =
+    consume_points_to_chunk__core rules h typeid_env ghostenv env env' l type_ type_ coef coefpat addr kind rhs consumeUninitChunk cont
   
-  let consume_points_to_chunk rules h typeid_env ghostenv env env' l type_ coef coefpat addr rhs cont =
-    consume_points_to_chunk_ rules h typeid_env ghostenv env env' l type_ coef coefpat addr rhs false cont
+  let consume_points_to_chunk rules h typeid_env ghostenv env env' l type_ coef coefpat addr kind rhs cont =
+    consume_points_to_chunk_ rules h typeid_env ghostenv env env' l type_ coef coefpat addr kind rhs false cont
 
   let consume_instance_predicate_chunk rules h typeid_env ghostenv env env' l symbol (target_type, target) (index_type, index) family coef coefpat pats types cont =
     let family_target, family_target_type =
@@ -1188,19 +1198,20 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         SrcPat DummyPat -> if not (is_dummy_frac_term coef) then assert_false h env l "Cannot match a non-dummy fraction chunk against a dummy fraction pattern. First leak the chunk using the 'leak' command." None
       | _ -> ()
     in
-    let points_to l coefpat e tp rhs =
+    let points_to l coefpat e tp kind rhs =
+      let tp_rhs = match kind with RegularPointsTo -> tp | MaybeUninit -> option_type tp in
       match e with
         WRead (lr, e, fparent, tparams, fname, frange, targs, fstatic, fvalue, fghost) ->
         let (_, (_, _, _, _, symb, _, _)), p__opt = List.assoc (fparent, fname) field_pred_map in
         let (inputParamCount, pats, tps0, tps) =
           if fstatic then
-            (Some 0, [rhs], [tp], [tp])
+            (Some 0, [rhs], [tp_rhs], [tp_rhs])
           else
-            (Some 1, [SrcPat (LitPat e); rhs], [voidPtrType; tp], [voidPtrType; instantiate_type tpenv tp])
+            (Some 1, [SrcPat (LitPat e); rhs], [voidPtrType; tp_rhs], [voidPtrType; instantiate_type tpenv tp_rhs])
         in
         let symb_used =
-          match rhs, p__opt with
-            SrcPat DummyPat, Some ((_, (_, _, _, _, symb_, _, _))) ->
+          match (kind, rhs), p__opt with
+            (_, SrcPat DummyPat | MaybeUninit, _), Some ((_, (_, _, _, _, symb_, _, _))) ->
             symb_
           | _ ->
             symb
@@ -1216,12 +1227,12 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         cont [chunk] h ghostenv env env' size
       | WVar (lv, x, GlobalName) -> 
         let (_, type_, symbn, _) = List.assoc x globalmap in  
-        consume_points_to_chunk_ rules h typeid_env ghostenv env env' l type_ coef coefpat symbn rhs true
+        consume_points_to_chunk_ rules h typeid_env ghostenv env env' l type_ coef coefpat symbn kind rhs true
           (fun chunk h coef _ ghostenv env env' -> check_dummy_coefpat l coefpat coef; cont [chunk] h ghostenv env env' None)
       | WDeref(ld, e, td) ->  
         let symbn = eval None env e in
         let td' = instantiate_type tpenv td in
-        consume_points_to_chunk__core rules h typeid_env ghostenv env env' l td td' coef coefpat symbn rhs true
+        consume_points_to_chunk__core rules h typeid_env ghostenv env env' l td td' coef coefpat symbn kind rhs true
           (fun chunk h coef _ ghostenv env env' -> check_dummy_coefpat l coefpat coef; cont [chunk] h ghostenv env env' None)
     in
     let pred_asn l coefpat g is_global_predref targs pats0 pats =
@@ -1303,7 +1314,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       cont [chunk] h ghostenv env env' size
     in
     match p with
-    | WPointsTo (l, e, tp, rhs) -> points_to l real_unit_pat e tp (SrcPat rhs)
+    | WPointsTo (l, e, tp, kind, rhs) -> points_to l real_unit_pat e tp kind (SrcPat rhs)
     | WPredAsn (l, g, is_global_predref, targs, pats0, pats) -> pred_asn l real_unit_pat g is_global_predref targs (srcpats pats0) (srcpats pats)
     | WInstPredAsn (l, e_opt, st, cfin, tn, g, index, pats) ->
       inst_call_pred l real_unit_pat e_opt st tn g index pats
@@ -1398,7 +1409,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let fresh_term = get_unique_var_symb i tp in
       assert_expr ((i, fresh_term) :: env) e h ((i, fresh_term) :: env) l "Cannot prove condition." None;
       cont [] h ghostenv env env' None
-    | CoefAsn (l, coefpat, WPointsTo (_, e, tp, rhs)) -> points_to l (SrcPat coefpat) e tp (SrcPat rhs)
+    | CoefAsn (l, coefpat, WPointsTo (_, e, tp, kind, rhs)) -> points_to l (SrcPat coefpat) e tp kind (SrcPat rhs)
     | CoefAsn (l, coefpat, WPredAsn (_, g, is_global_predref, targs, pat0, pats)) -> pred_asn l (SrcPat coefpat) g is_global_predref targs (srcpats pat0) (srcpats pats)
     | CoefAsn (l, coefpat, WInstPredAsn (_, e_opt, st, cfin, tn, g, index, pats)) -> inst_call_pred l (SrcPat coefpat) e_opt st tn g index pats
     | EnsuresAsn (l, body) ->
@@ -1508,29 +1519,29 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let find_edges construct_edge inputParameters xs wbody0 =
     let rec iter coef conds wbody =
       match wbody with
-        WPointsTo(_, WRead(lr, e, fparent, tparams, fname, frange, targs, fstatic, fvalue, fghost), tp, v) ->
+        WPointsTo(_, WRead(lr, e, fparent, tparams, fname, frange, targs, fstatic, fvalue, fghost), tp, kind, v) ->
         if expr_is_fixed inputParameters e || fstatic then
           let (_, (_, _, _, _, qsymb, _, _)), p__opt = List.assoc (fparent, fname) field_pred_map in
           let qsymb_used =
-            match v, p__opt with
-              DummyPat, Some ((_, (_, _, _, _, qsymb_, _, _))) -> qsymb_
+            match (kind, v), p__opt with
+              (_, DummyPat | MaybeUninit, _), Some ((_, (_, _, _, _, qsymb_, _, _))) -> qsymb_
             | _ -> qsymb
           in
           construct_edge qsymb_used coef None targs [] (if fstatic then [] else [voidPtrType]) (if fstatic then [] else [e]) conds
         else
           []
-      | WPointsTo (l, WDeref (_, e, _), tp, v) ->
+      | WPointsTo (l, WDeref (_, e, _), tp, kind, v) ->
         begin match try_pointee_pred_symb0 tp with
           Some (cn, csym, an, asym, mban, mbasym, nban, nbasym, ucn, ucsym, uan, uasym) ->
-          let qsymb_used = if v = DummyPat then ucsym else csym in
+          let qsymb_used = if kind = MaybeUninit || v = DummyPat then ucsym else csym in
           construct_edge qsymb_used coef None [] [] [voidPtrType] [e] conds
         | None ->
         match integer__chunk_args tp with
           Some (rank, signedness) ->
-          let qsymb_used = if v = DummyPat then integer___symb () else integer__symb () in
+          let qsymb_used = if kind = MaybeUninit || v = DummyPat then integer___symb () else integer__symb () in
           construct_edge qsymb_used coef None [] [] [voidPtrType; intType; Bool] [e; SizeofExpr (l, TypeExpr (ManifestTypeExpr (l, tp))); if signedness = Signed then True l else False l] conds
         | None ->
-          let qsymb_used = if v = DummyPat then generic_points_to__symb () else generic_points_to_symb () in
+          let qsymb_used = if kind = MaybeUninit || v = DummyPat then generic_points_to__symb () else generic_points_to_symb () in
           construct_edge qsymb_used coef None [tp] [] [voidPtrType] [e] conds
         end
       | WPredAsn(_, q, true, qtargs, qfns, qpats) ->

@@ -521,17 +521,19 @@ and of_expr = function
     of_option of_pat ef;
     of_option of_pat et
   ])
-| PointsTo (l, el, er) ->
+| PointsTo (l, el, kind, er) ->
   C ("PointsTo", [
     of_loc l;
     of_expr el;
+    (match kind with RegularPointsTo -> S "RegularPointsTo" | MaybeUninit -> S "MaybeUninit");
     of_pat er
   ])
-| WPointsTo (l, el, t, er) ->
+| WPointsTo (l, el, t, kind, er) ->
   C ("WPointsTo", [
     of_loc l;
     of_expr el;
     of_type t;
+    (match kind with RegularPointsTo -> S "RegularPointsTo" | MaybeUninit -> S "MaybeUninit");
     of_pat er
   ])
 | PredAsn (l, p, targs, indices, args) ->

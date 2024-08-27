@@ -127,9 +127,9 @@ let rec parse_expr_funcs allowStructExprs =
         end
       | _ ->
         begin function%parser
-          [ (l, Kwd "|->");
+          [ [%let (l, kind) = function%parser [ (l, Kwd "|->") ] -> l, RegularPointsTo | [ (l, Kwd "|-?->") ] -> l, MaybeUninit];
             parse_pat0 as rhs
-          ] -> PointsTo (l, e, rhs)
+          ] -> PointsTo (l, e, kind, rhs)
         | [ ] -> e
         end
       ]
