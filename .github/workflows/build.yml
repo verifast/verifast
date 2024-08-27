@@ -11,6 +11,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          fetch-tags: true
 
       - name: Build setup
         run: ./setup-build.sh
@@ -36,7 +37,7 @@ jobs:
 
   # Upload in a separate job to limit the code that has write access to repo contents
   upload_ubuntu:
-    if: github.repository == 'verifast/verifast' && github.event_name == 'push' && github.ref == 'refs/heads/master'
+    if: github.repository == 'verifast/verifast' && github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref_type == 'tag')
     needs:
       - build_ubuntu
     runs-on: ubuntu-latest
@@ -49,6 +50,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          fetch-tags: true
 
       - name: Set and push nightly tag
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
@@ -63,6 +65,7 @@ jobs:
           subject-path: ${{ needs.build_ubuntu.outputs.artifact_name }}
 
       - name: Upload binary package as nightly release asset
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
         uses: actions/github-script@v6
         env:
           ARTIFACT_NAME: ${{ needs.build_ubuntu.outputs.artifact_name }}
@@ -86,6 +89,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          fetch-tags: true
 
       - name: Remove conflicting Python file (issue 223)
         run: rm /usr/local/bin/2to3
@@ -120,7 +124,7 @@ jobs:
 
   # Upload in a separate job to limit the code that has write access to repo contents
   upload_macos:
-    if: github.repository == 'verifast/verifast' && github.event_name == 'push' && github.ref == 'refs/heads/master'
+    if: github.repository == 'verifast/verifast' && github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref_type == 'tag')
     needs:
       - build_macos
     runs-on: ubuntu-latest
@@ -133,6 +137,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          fetch-tags: true
 
       - name: Set and push nightly tag
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
@@ -147,6 +152,7 @@ jobs:
           subject-path: ${{ needs.build_macos.outputs.artifact_name }}
 
       - name: Upload binary package as nightly release asset
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
         uses: actions/github-script@v6
         env:
           ARTIFACT_NAME: ${{ needs.build_macos.outputs.artifact_name }}
@@ -170,6 +176,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          fetch-tags: true
 
       - name: Build setup
         run: ./setup-windows.bat
@@ -196,7 +203,7 @@ jobs:
 
   # Upload in a separate job to limit the code that has write access to repo contents
   upload_windows:
-    if: github.repository == 'verifast/verifast' && github.event_name == 'push' && github.ref == 'refs/heads/master'
+    if: github.repository == 'verifast/verifast' && github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref_type == 'tag')
     needs:
       - build_windows
     runs-on: ubuntu-latest
@@ -209,6 +216,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          fetch-tags: true
 
       - name: Set and push nightly tag
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
@@ -223,6 +231,7 @@ jobs:
           subject-path: ${{ needs.build_windows.outputs.artifact_name }}
 
       - name: Upload binary package as nightly release asset
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
         uses: actions/github-script@v6
         env:
           ARTIFACT_NAME: ${{ needs.build_windows.outputs.artifact_name }}
