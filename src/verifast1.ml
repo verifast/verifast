@@ -6011,7 +6011,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let pre_tenv = tenv in
     let rec check_asn tenv p =
       match p with
-      | PointsTo (l, ReadArray (lread, earray, SliceExpr (lslice, pstart, pend)), rhs) ->
+      | PointsTo (l, ReadArray (lread, earray, SliceExpr (lslice, pstart, pend)), kind, rhs) ->
         let (earray, slices) =
           let rec get_slices = function
             ReadArray (lread0, earray0, SliceExpr (lslice0, pstart0, pend0)) when language = CLang ->
@@ -6097,7 +6097,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               in
               wstart, wend
           in
-          let (wrhs, tenv) = check_pat (pn,ilist) tparams tenv (list_type elemtype) rhs in
+          let rhsElemType = match kind with RegularPointsTo -> elemtype | MaybeUninit -> option_type elemtype in
+          let (wrhs, tenv) = check_pat (pn,ilist) tparams tenv (list_type rhsElemType) rhs in
           let wfirst, wlength =
             match wstart, wend with
               None, Some wend -> warray, wend
@@ -6109,13 +6110,13 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           in
           begin match try_pointee_pred_symb0 elemtype with
             Some (pointee_pred_name, pointee_pred_symb, array_pred_name, array_pred_symb, _, _, _, _, _, _, uninit_array_pred_name, _) ->
-            let array_pred_name, elemtype = if wrhs = DummyPat then uninit_array_pred_name, option_type elemtype else array_pred_name, elemtype in
-            let p = new predref array_pred_name [PtrType elemtype; intType; list_type elemtype] (Some 2) in
+            let array_pred_name = if wrhs = DummyPat || kind = MaybeUninit then uninit_array_pred_name else array_pred_name in
+            let p = new predref array_pred_name [PtrType elemtype; intType; list_type rhsElemType] (Some 2) in
             (WPredAsn (l, p, true, [], [], [LitPat wfirst; wlength; wrhs]), tenv, [])
           | None ->
           match integer__chunk_args elemtype with
             Some (k, signedness) ->
-            let predname, pred_elemtype = if wrhs = DummyPat then "integers__", option_type elemtype else "integers_", elemtype in
+            let predname, pred_elemtype = if wrhs = DummyPat || kind = MaybeUninit then "integers__", option_type elemtype else "integers_", elemtype in
             let p = new predref predname [PtrType Void; intType; Bool; intType; list_type pred_elemtype] (Some 4) in
             let predAsn = WPredAsn (l, p, true, [], [], [LitPat wfirst; LitPat (SizeofExpr (l, TypeExpr (ManifestTypeExpr (l, elemtype)))); LitPat (if signedness = Signed then True l else False l); wlength; wrhs]) in
             let asn =
@@ -6126,7 +6127,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             in
             (asn, tenv, [])
           | None ->
-            let array_pred_name, elemtype' = if wrhs = DummyPat then "array_", option_type elemtype else "array", elemtype in
+            let array_pred_name, elemtype' = if wrhs = DummyPat || kind = MaybeUninit then "array_", option_type elemtype else "array", elemtype in
             let p = new predref array_pred_name [PtrType elemtype; intType; list_type elemtype'] (Some 2) in
             (WPredAsn (l, p, true, [elemtype], [], [LitPat wfirst; wlength; wrhs]), tenv, [])
           end
@@ -6143,7 +6144,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let args = [LitPat warray; wstart; wend; wrhs] in
           (WPredAsn (l, p, true, [elemtype], [], args), tenv, [])
         end
-      | PointsTo (l, lhs, v) ->
+      | PointsTo (l, lhs, kind, v) ->
         let (wlhs, t) = check_expr (pn,ilist) tparams tenv (Some true) lhs in
         begin match wlhs with
           WRead (_, _, _, _, _, _, _, _, _, _) | WReadArray (_, _, _, _) -> ()
@@ -6151,8 +6152,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | WDeref (_, _, _)  -> ()
         | _ -> static_error l "The left-hand side of a points-to assertion must be a field dereference, a global variable, a pointer variable dereference or an array element expression." None
         end;
-        let (wv, tenv') = check_pat (pn,ilist) tparams tenv t v in
-        (WPointsTo (l, wlhs, t, wv), tenv', [])
+        let (wv, tenv') = check_pat (pn,ilist) tparams tenv (match kind with RegularPointsTo -> t | MaybeUninit -> option_type t) v in
+        (WPointsTo (l, wlhs, t, kind, wv), tenv', [])
       | PredExprAsn (l, e, args) ->
         let w, tp = check_expr (pn,ilist) tparams tenv (Some true) e in
         let pts, inputParamCount =
@@ -6539,7 +6540,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let rec check_pred_precise fixed p =
     match p with
-      WPointsTo (l, lhs, tp, pv) ->
+      WPointsTo (l, lhs, tp, kind, pv) ->
       begin match lhs with
         WRead (lr, et, _, _, _, _, _, _, _, _) -> assert_expr_fixed fixed et
       | WReadArray (la, ea, tp, ei) -> assert_expr_fixed fixed ea; assert_expr_fixed fixed ei
@@ -6653,7 +6654,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 in
                 let points_to_predinst () =
                   let r = WRead (l, WVar (l, sn, LocalVar), sn, tparams, f, t, targs, false, ref (Some None), Real) in
-                  let body = WPointsTo (l, WDeref (l, AddressOf (l, r), t), t, LitPat (WVar (l, "value", LocalVar))) in
+                  let body = WPointsTo (l, WDeref (l, AddressOf (l, r), t), t, RegularPointsTo, LitPat (WVar (l, "value", LocalVar))) in
                   let inst =
                     (g, []),
                     ([], l, tparams, [sn, PtrType (StructType (sn, targs)); "value", t], symb, Some 1, body)
@@ -6664,9 +6665,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                     [
                       inst
                     ;
-                      let p_ = new predref (if dialect = Some Rust then "points_to_" else "generic_points_to_") [PtrType t; option_type t] (Some 1) in
-                      let r = WRead (l, WVar (l, sn, LocalVar), sn, tparams, f, t, targs, false, ref (Some None), Real) in
-                      let body = WPredAsn (l, p_, true, [t], [], [LitPat (AddressOf (l, r)); LitPat (WVar (l, "value", LocalVar))]) in
+                      let body = WPointsTo (l, WDeref (l, AddressOf (l, r), t), t, MaybeUninit, LitPat (WVar (l, "value", LocalVar))) in
                       ((g_, []),
                        ([], l, tparams, [sn, PtrType (StructType (sn, targs)); "value", InductiveType ("option", [t])], symb_, Some 1, body)
                       )

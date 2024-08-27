@@ -318,7 +318,7 @@ let _ =
       | SizeofExpr(_, TypeExpr type_sizeof) -> "sizeof(" ^ string_of_type_expr type_sizeof ^ ")"
       | AddressOf(_, expr_in) -> "&" ^ string_of_expr expr_in
       | AssignExpr(_, rec_expr, val_expr) -> "(" ^ string_of_expr rec_expr ^ " = " ^ string_of_expr val_expr ^ ")"
-      | PointsTo(_, expr_in, pat) -> "PointsTo(" ^ string_of_expr expr_in ^ ", " ^ string_of_pat pat ^ ")"
+      | PointsTo(_, expr_in, kind, pat) -> "PointsTo(" ^ string_of_expr expr_in ^ ", " ^ string_of_pat pat ^ ")"
       | ExprAsn(_, expr_in) -> string_of_expr expr_in
       | Sep(_, lhs, rhs) -> (string_of_expr lhs) ^ " &*& " ^ (string_of_expr rhs)
       | IfAsn(_, cond_expr, then_expr, else_expr) -> "(" ^ string_of_expr cond_expr ^") ? (" ^ string_of_expr then_expr ^ ") : (" ^ string_of_expr else_expr ^ ")"
@@ -662,11 +662,11 @@ let _ =
                         combine_or pattern_inside res_exact_match 
                       | _ -> pattern_inside
                 end
-              | PointsTo(_, expr_in, pat) ->
+              | PointsTo(_, expr_in, kind, pat) ->
                 begin
                   let pattern_inside = if (exactMacthOnly) then false, [] else combine_or (check_expr_for_pattern expr_in pattern false) (check_pat_for_pattern pat pattern) in
                   match pattern with
-                    | PointsTo(_, pattern_expr_in, pattern_pat) -> 
+                    | PointsTo(_, pattern_expr_in, pattern_kind, pattern_pat) -> 
                       let res_exact_match = combine_and (check_expr_for_pattern expr_in pattern_expr_in true) (check_pat_equal pat pattern_pat) in
                       combine_or pattern_inside res_exact_match 
                     | _ -> pattern_inside 

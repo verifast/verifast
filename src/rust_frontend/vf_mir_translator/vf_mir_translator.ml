@@ -819,7 +819,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       (* Todo: The size and bounds of the integer that this assertion is specifying will depend on the pointer `l` type
          which is error-prone. It is helpful if we add a sanity-check or use elevated `integer_(...)` predicates with bound infos *)
       let* pat = RustBelt.Aux.vid_op_to_var_pat vid_op loc in
-      Ok (PointsTo (loc, l, pat))
+      Ok (PointsTo (loc, l, RegularPointsTo, pat))
     in
     let ty_info =
       Mir.TyInfoBasic
@@ -881,7 +881,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       (* Todo: The size and bounds of the integer that this assertion is specifying will depend on the pointer `l` type
          which is error-prone. It is helpful if we add a sanity-check or use elevated `integer_(...)` predicates with bound infos *)
       let* pat = RustBelt.Aux.vid_op_to_var_pat vid_op loc in
-      Ok (PointsTo (loc, l, pat))
+      Ok (PointsTo (loc, l, RegularPointsTo, pat))
     in
     let ty_info =
       Mir.TyInfoBasic
@@ -981,7 +981,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             in
             let points_to tid l vid_op =
               let* pat = RustBelt.Aux.vid_op_to_var_pat vid_op loc in
-              Ok (PointsTo (loc, l, pat))
+              Ok (PointsTo (loc, l, RegularPointsTo, pat))
             in
             let interp =
               RustBelt.
@@ -1094,7 +1094,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let full_bor_content = Ok (Var (loc, fbc_name)) in
     let points_to tid l vid_op =
       let* pat = RustBelt.Aux.vid_op_to_var_pat vid_op loc in
-      Ok (PointsTo (loc, l, pat))
+      Ok (PointsTo (loc, l, RegularPointsTo, pat))
     in
     Mir.TyInfoBasic
       {
@@ -1146,7 +1146,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           let var_pat = VarPat (loc, vid) in
           let var_expr = Var (loc, vid) in
           let* own = own tid [ var_expr ] in
-          Ok (Sep (loc, PointsTo (loc, l, var_pat), own))
+          Ok (Sep (loc, PointsTo (loc, l, RegularPointsTo, var_pat), own))
       | _ -> Error "char points_to needs a value id"
     in
     Mir.TyInfoBasic
@@ -1383,7 +1383,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let full_bor_content = Ok (Var (loc, fbc_name)) in
     let points_to tid l vid_op =
       let* pat = RustBelt.Aux.vid_op_to_var_pat vid_op loc in
-      Ok (PointsTo (loc, l, pat))
+      Ok (PointsTo (loc, l, RegularPointsTo, pat))
     in
     let ty_info =
       Mir.TyInfoBasic
@@ -1484,7 +1484,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               in
               let points_to tid l vid_op =
                 let* pat = RustBelt.Aux.vid_op_to_var_pat vid_op loc in
-                Ok (PointsTo (loc, l, pat))
+                Ok (PointsTo (loc, l, RegularPointsTo, pat))
               in
               Ok (own, own_pred, shr, shr_pred, full_bor_content, points_to)
           | Mir.Not ->
@@ -1515,7 +1515,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               in
               let points_to tid l vid_op =
                 let* pat = RustBelt.Aux.vid_op_to_var_pat vid_op loc in
-                Ok (PointsTo (loc, l, pat))
+                Ok (PointsTo (loc, l, RegularPointsTo, pat))
               in
               Ok (own, own_pred, shr, shr_pred, full_bor_content, points_to)
         in
@@ -1644,7 +1644,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   | None -> DummyPat
                   | Some vid -> VarPat (loc, vid)
                 in
-                Ok (Ast.PointsTo (loc, l, rhs)));
+                Ok (Ast.PointsTo (loc, l, RegularPointsTo, rhs)));
           }
         in
         Ok (Mir.TyInfoBasic { vf_ty; interp })

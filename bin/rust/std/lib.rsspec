@@ -124,13 +124,13 @@ mod alloc {
     //@ terminates;
     
     fn realloc(buffer: *u8, layout: Layout, new_size: usize) -> *u8;
-    //@ req buffer[..?len] |-> ?vs1 &*& array_::<u8>(buffer + len, Layout::size_(layout) - len, ?vs2) &*& alloc_block(buffer, layout) &*& Layout::size_(layout) <= new_size;
+    //@ req buffer[..?len] |-> ?vs1 &*& buffer[len..Layout::size_(layout)] |-?-> ?vs2 &*& alloc_block(buffer, layout) &*& Layout::size_(layout) <= new_size;
     /*@
     ens
         if result == 0 {
-            buffer[..len] |-> vs1 &*& array_::<u8>(buffer + len, Layout::size_(layout) - len, vs2) &*& alloc_block(buffer, layout)
+            buffer[..len] |-> vs1 &*& buffer[len..Layout::size_(layout)] |-?-> vs2 &*& alloc_block(buffer, layout)
         } else {
-            result[..len] |-> vs1 &*& array_::<u8>(result + len, Layout::size_(layout) - len, vs2) &*&
+            result[..len] |-> vs1 &*& result[len..Layout::size_(layout)] |-?-> vs2 &*&
             result[Layout::size_(layout)..new_size] |-> _ &*& alloc_block(result, Layout::from_size_align_(new_size, Layout::align_(layout)))
         };
     @*/

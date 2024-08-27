@@ -109,7 +109,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       cont h coef t)
     
   let get_points_to' h typeid_env p tpx l cont =
-    consume_points_to_chunk rules h typeid_env [] [] [] l tpx real_unit dummypat p dummypat $. fun chunk h coef value ghostenv env env' ->
+    consume_points_to_chunk rules h typeid_env [] [] [] l tpx real_unit dummypat p RegularPointsTo dummypat $. fun chunk h coef value ghostenv env env' ->
     cont h coef value
 
   let current_thread_name = "currentThread"
@@ -1005,7 +1005,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                     | ObjType _ | ArrayType _ -> LitPat (Null fl)
                     | _ -> DummyPat
                   in
-                  Sep (l, post, WPointsTo (fl, WRead (fl, WVar (fl, "this", LocalVar), cn, [], f, ft, [], false, ref (Some None), Real), ft, value))
+                  Sep (l, post, WPointsTo (fl, WRead (fl, WVar (fl, "this", LocalVar), cn, [], f, ft, [], false, ref (Some None), Real), ft, RegularPointsTo, value))
               end
               super_post
               fds
@@ -1362,8 +1362,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let rec ass_mark_addr_taken a locals = 
     match a with
-      PointsTo(_, e, pat) -> expr_mark_addr_taken e locals; pat_expr_mark_addr_taken pat locals;
-    | WPointsTo(_, e, _, pat) -> expr_mark_addr_taken e locals; pat_expr_mark_addr_taken pat locals;
+      PointsTo(_, e, _, pat) -> expr_mark_addr_taken e locals; pat_expr_mark_addr_taken pat locals;
+    | WPointsTo(_, e, _, _, pat) -> expr_mark_addr_taken e locals; pat_expr_mark_addr_taken pat locals;
     | WPredAsn(_, _, _, _, pats1, pats2) -> List.iter (fun p -> pat_expr_mark_addr_taken p locals) (pats1 @ pats2)
     | InstPredAsn(_, e, _, index, pats) -> expr_mark_addr_taken e locals; expr_mark_addr_taken index locals; List.iter (fun p -> pat_expr_mark_addr_taken p locals) pats
     | WInstPredAsn(_, eopt, _, _, _, _, e, pats) -> 
@@ -1580,7 +1580,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | Unspecified -> cont h env None
         | Term t -> cont h env (Some t)
       end $. fun h env value ->
-      produce_points_to_chunk_ l h tp coef addr value $. fun h ->
+      produce_points_to_chunk_ l h tp coef addr RegularPointsTo value $. fun h ->
       cont h env
     in
     match tp with
@@ -1733,7 +1733,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               | Term t -> cont h env (Some t)
               | Unspecified -> cont h env (match gh with Ghost -> Some (get_unique_var_symb_ "value" t true) | Real -> None)
             end $. fun h env value ->
-            assume_field h env sn tparams f t0 targs gh addr value coef $. fun h ->
+            assume_field h env sn tparams f t0 targs gh addr RegularPointsTo value coef $. fun h ->
             iter h env fields inits
       in
       iter h env fields inits
@@ -1747,7 +1747,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       cont [chunk] h (Some (get_unique_var_symb "value" tp))
     in
     let consume_points_to_chunk () =
-      consume_points_to_chunk_ rules h typeid_env [] [] [] l tp real_unit coefpat addr dummypat consumeUninitChunk $. fun chunk h _ value _ _ _ ->
+      consume_points_to_chunk_ rules h typeid_env [] [] [] l tp real_unit coefpat addr RegularPointsTo dummypat consumeUninitChunk $. fun chunk h _ value _ _ _ ->
         cont [chunk] h (Some value)
     in  
     match tp with
@@ -2455,7 +2455,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         if pure then static_error l "Cannot write in a pure context." None;
         let consume_elem () =
           let target = mk_ptr_add_ l env arr i elem_tp in
-          consume_points_to_chunk_ rules h env [] env [] l elem_tp real_unit real_unit_pat target dummypat true $. fun _ h _ _ _ _ _ ->
+          consume_points_to_chunk_ rules h env [] env [] l elem_tp real_unit real_unit_pat target RegularPointsTo dummypat true $. fun _ h _ _ _ _ _ ->
           produce_points_to_chunk l h elem_tp real_unit target value $. fun h ->
           cont h env
         in
