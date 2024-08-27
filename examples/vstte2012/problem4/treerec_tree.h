@@ -24,14 +24,14 @@ bool tree_is_leaf(struct tree *t);
     //@ ensures tree(t, value) &*& switch (value) { case leaf: return result == true; case node(l, r): return result == false; };
 
 void tree_destruct_node(struct tree *t, struct tree **left, struct tree **right);
-    //@ requires tree(t, ?value) &*& value != leaf &*& pointer(left, _) &*& pointer(right, _);
+    //@ requires tree(t, ?value) &*& value != leaf &*& *left |-> _ &*& *right |-> _;
     /*@
     ensures
         switch (value) {
             case leaf: return false;
             case node(vl, vr): return
-                pointer(left, ?l) &*& tree(l, vl) &*&
-                pointer(right, ?r) &*& tree(r, vr);
+                *left |-> ?l &*& tree(l, vl) &*&
+                *right |-> ?r &*& tree(r, vr);
         };
     @*/
 

@@ -5835,6 +5835,18 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let mk_has_type p typeid = mk_app (has_type_symb ()) [p; typeid]
 
   let () =
+    if not fno_strict_aliasing && List.mem_assoc "has_type" purefuncmap then begin
+      ctxt#begin_formal;
+      let p = ctxt#mk_bound 0 ctxt#type_inductive in
+      let t = ctxt#mk_bound 1 ctxt#type_inductive in
+      let hasType_t_ptr = mk_has_type p (mk_pointer_typeid t) in
+      let hasType_void_ptr = mk_has_type p void_pointer_typeid_term in
+      let impl = ctxt#mk_implies hasType_t_ptr hasType_void_ptr in
+      ctxt#end_formal;
+      ctxt#assume_forall "has_type_void_ptr" [hasType_t_ptr] [ctxt#type_inductive; ctxt#type_inductive] impl
+      end
+
+  let () =
     structmap1 |> List.iter begin function
       (sn, (_, tparams, Some (_, fmap, _), _, structTypeidFunc)) ->
       fmap |> List.iter begin function (f, (l, Real, t, Some offsetFunc, _)) ->
@@ -6112,7 +6124,14 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             Some (pointee_pred_name, pointee_pred_symb, array_pred_name, array_pred_symb, _, _, _, _, _, _, uninit_array_pred_name, _) ->
             let array_pred_name = if wrhs = DummyPat || kind = MaybeUninit then uninit_array_pred_name else array_pred_name in
             let p = new predref array_pred_name [PtrType elemtype; intType; list_type rhsElemType] (Some 2) in
-            (WPredAsn (l, p, true, [], [], [LitPat wfirst; wlength; wrhs]), tenv, [])
+            let predAsn = WPredAsn (l, p, true, [], [], [LitPat wfirst; wlength; wrhs]) in
+            let asn =
+              if fno_strict_aliasing || not (is_ptr_type elemtype) then
+                predAsn
+              else
+                Sep (l, predAsn, ExprAsn (l, WPureFunCall (l, "has_type", [], [wfirst; TypeInfo (l, elemtype)])))
+            in
+            (asn, tenv, [])
           | None ->
           match integer__chunk_args elemtype with
             Some (k, signedness) ->
@@ -6676,7 +6695,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 let predinst p p_ = predinst_ p p_ t in
                 match t with
                   _ when dialect = Some Rust -> points_to_predinst ()
-                | PtrType _ -> predinst_ "pointer" "pointer_" (PtrType Void)
+                | PtrType _ -> points_to_predinst ()
                 | Int (Signed, PtrRank) -> predinst "intptr" "intptr_"
                 | Int (Unsigned, PtrRank) -> predinst "uintptr" "uintptr_"
                 | Int (Signed, CharRank) -> predinst "character" "char_"
@@ -7481,6 +7500,12 @@ let check_if_list_is_defined () =
     else
       assume (mk_has_type addr (typeid_of_core l typeid_env tp)) cont
 
+  let assume_has_type_if cond l typeid_env addr tp cont =
+    if cond then
+      assume_has_type l typeid_env addr tp cont
+    else
+      cont ()
+  
   let assert_has_type typeid_env addr tp h env l msg url =
     if not fno_strict_aliasing then
       assert_term (mk_has_type addr (typeid_of_core l typeid_env tp)) h env l msg url

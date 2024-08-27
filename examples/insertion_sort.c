@@ -135,8 +135,8 @@ static int compare(struct list_node* n0, struct list_node* n1)
 
 
 void insertion_sort_core(struct list_node** pfirst)
-//@ requires pointer(pfirst, ?l) &*& list_pred(l);
-//@ ensures pointer(pfirst, ?l0) &*& list_pred(l0);
+//@ requires *pfirst |-> ?l &*& list_pred(l);
+//@ ensures *pfirst |-> ?l0 &*& list_pred(l0);
 {
   if (*pfirst == 0) {
     // Empty list is trivially sorted

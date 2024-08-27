@@ -150,6 +150,11 @@ and inferred_type_state =
   | ContainsAnyConstraint of bool (* allow the type to contain 'any' in positive positions *)
   | EqConstraint of type_
 
+let is_ptr_type tp =
+  match tp with
+    PtrType _ -> true
+  | _ -> false
+
 let inferred_type_constraint_le c1 c2 =
   match c1, c2 with
     _, Unconstrained -> true

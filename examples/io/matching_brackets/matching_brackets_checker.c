@@ -15,7 +15,7 @@
 
 
 int *c;
-//@ predicate buffer(int *cc, int ccc) = pointer(&c, cc) &*& integer(cc, ccc);
+//@ predicate buffer(int *cc, int ccc) = c |-> cc &*& integer(cc, ccc);
 
 int pop_read_ahead()
 //@ requires buffer(?cc, ?c_old) &*& token(?t1) &*& read_char_io(t1, stdin, ?new_char, ?success, ?t2);

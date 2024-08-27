@@ -9,8 +9,8 @@ struct counter {
 static struct counter *c;
 
 void m()
-    //@ requires integer(&x, 7) &*& pointer(&c, ?ctr) &*& counter_f(ctr, ?v);
-    //@ ensures integer(&x, 8) &*& pointer(&c, ctr) &*& counter_f(ctr, v + 1);
+    //@ requires x |-> 7 &*& c |-> ?ctr &*& ctr->f |-> ?v;
+    //@ ensures x |-> 8 &*& c |-> ctr &*& ctr->f |-> v + 1;
 {
     int y = x;
     x = y + 1;

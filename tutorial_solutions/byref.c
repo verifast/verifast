@@ -64,8 +64,8 @@ typedef bool int_predicate(int x);
     //@ ensures true;
 
 void nodes_filter(struct node **n, int_predicate *p)
-    //@ requires pointer(n, ?node) &*& nodes(node, _) &*& is_int_predicate(p) == true;
-    //@ ensures pointer(n, ?node0) &*& nodes(node0, _);
+    //@ requires *n |-> ?node &*& nodes(node, _) &*& is_int_predicate(p) == true;
+    //@ ensures *n |-> ?node0 &*& nodes(node0, _);
 {
     if (*n != 0) {
         //@ open nodes(node, _);

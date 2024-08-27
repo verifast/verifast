@@ -1068,9 +1068,9 @@ predicate module_code(int moduleId;);
 
 predicate argv(char **argv, int argc; list<list<char> > arguments) =
     argc <= 0 ?
-        pointer(argv, 0) &*& arguments == nil
+        *argv |-> 0 &*& arguments == nil
     :
-        pointer(argv, ?arg)
+        *argv |-> ?arg
         &*& string(arg, ?head_arguments)
         &*& argv(argv + 1, argc - 1, ?tail_arguments)
         &*& arguments == cons(head_arguments, tail_arguments); // fix output parameter.

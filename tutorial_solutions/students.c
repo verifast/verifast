@@ -36,7 +36,7 @@ int main() //@ : main
     printf("How many students do you have? ");
     int n = read_int();
     if (n < 0 || 0x20000000 <= n) abort();
-    char **names = malloc(n * sizeof(char **));
+    char **names = malloc(n * sizeof(char *));
     if (names == 0) abort();
     for (int i = 0; ; i++)
         //@ requires names[i..n] |-> _;

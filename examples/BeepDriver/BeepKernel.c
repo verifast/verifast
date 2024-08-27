@@ -20,9 +20,9 @@ static struct beep_info *beepInfo;
 /*@
 
 predicate kernel_state() =
-    [1/2]pointer(&beepInfo, ?info) &*&
+    [1/2]beepInfo |-> ?info &*&
     info == 0 ?
-        [1/2]pointer(&beepInfo, 0)
+        [1/2]beepInfo |-> 0
     :
         beep_info_beepFunc(info, ?f) &*&
         [1/2]beep_info_beepState(info, ?s) &*&
@@ -31,7 +31,7 @@ predicate kernel_state() =
         malloc_block_beep_info(info);
 
 predicate beep_func_registration(predicate() beepState) =
-    [1/2]pointer(&beepInfo, ?info) &*&
+    [1/2]beepInfo |-> ?info &*&
     [1/2]beep_info_beepState(info, beepState);
 
 @*/

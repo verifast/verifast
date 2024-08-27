@@ -284,9 +284,9 @@ lemma void build_rec1_eq(int d, list<int> s)
 @*/
 
 bool build_rec(int d, struct list *s, struct tree **t)
-    //@ requires list(s, ?vs) &*& pointer(t, _);
+    //@ requires list(s, ?vs) &*& *t |-> ?_;
     /*@
-    ensures list(s, ?rvs) &*& pointer(t, ?rt) &*&
+    ensures list(s, ?rvs) &*& *t |-> ?rt &*&
         switch (build_rec1(d, vs)) {
             case fail: return result == false;
             case success(rvt, rvs0): return result == true &*& rvs == rvs0 &*& tree(rt, rvt);
@@ -338,9 +338,9 @@ lemma void build_complete(tree t)
 @*/
 
 bool build(struct list *s, struct tree **t)
-    //@ requires list(s, ?vs) &*& pointer(t, _);
+    //@ requires list(s, ?vs) &*& *t |-> ?_;
     /*@
-    ensures list(s, ?rvs) &*& pointer(t, ?rt) &*&
+    ensures list(s, ?rvs) &*& *t |-> ?rt &*&
     switch (build0(vs)) {
         case build_fail: return result == false;
         case build_success(rvt): return result == true &*& tree(rt, rvt) &*& rvs == nil;

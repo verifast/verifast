@@ -24,8 +24,8 @@ static Counter *c;
 static Counter cc;
 
 void m()
-    //@ requires integer(&x, 7) &*& pointer(&c, ?ctr) &*& Counter_f(ctr, ?v) &*& Counter_f(&cc, _);
-    //@ ensures integer(&x, 8) &*& pointer(&c, ctr) &*& Counter_f(ctr, v + 1) &*& Counter_f(&cc, 10);
+    //@ requires x |-> 7 &*& c |-> ?ctr &*& ctr->f |-> ?v &*& cc.f |-> _;
+    //@ ensures x |-> 8 &*& c |-> ctr &*& ctr->f |-> v + 1 &*& cc.f |-> 10;
 {
     int y = x;
     x = y + 1;

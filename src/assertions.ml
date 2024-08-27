@@ -319,6 +319,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     end $. fun () ->
     match try_pointee_pred_symb type_ with
       Some symb ->
+      assume_has_type_if (is_ptr_type type_) l [] addr type_ @@ fun () ->
       produce_chunk h (symb, true) [] coef (Some 1) [addr; value] None cont
     | None ->
     match integer__chunk_args type_ with
@@ -337,6 +338,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     end $. fun () ->
     match try_pointee_pred_symb0 type_ with
       Some (_, _, _, _, _, _, _, _, _, uninit_predsym, _, _) ->
+      assume_has_type_if (is_ptr_type type_) l [] addr type_ @@ fun () ->
       produce_chunk h (uninit_predsym, true) [] coef (Some 1) [addr; value] None cont
     | None ->
     match integer__chunk_args type_ with
@@ -347,6 +349,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       produce_chunk h (generic_points_to__symb (), true) [type_] coef (Some 1) [addr; value] None cont
 
   let produce_points_to_chunk_ l h type_ coef addr kind value cont =
+    assume_neq (mk_ptr_address addr) int_zero_term @@ fun () ->
     match kind, value with
       _, None -> produce_uninit_points_to_chunk l h type_ coef addr (get_unique_var_symb_ "dummy" (option_type type_) true) cont
     | RegularPointsTo, Some v -> produce_points_to_chunk l h type_ coef addr v cont
@@ -934,7 +937,10 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                (ctxt#pprint a)
                (ctxt#pprint i))
             None
-        | Some v -> v
+        | Some v ->
+          if is_ptr_type tp then
+            assert_has_type env a tp h env l "Cannot prove consistency with C's effective types rules" None;
+          v
         end
     | Some v -> v
   
@@ -946,7 +952,11 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let deref_pointer h env l pointerTerm pointeeType =
     match try_pointee_pred_symb pointeeType with
       None -> lookup_integer__chunk h env l pointeeType pointerTerm
-    | Some predsym -> lookup_points_to_chunk h env l predsym [] pointerTerm
+    | Some predsym ->
+      let result = lookup_points_to_chunk h env l predsym [] pointerTerm in
+      if is_ptr_type pointeeType then
+        assert_has_type env pointerTerm pointeeType h env l "Cannot prove consistency with C's effective types rules" None;
+      result
   
   let lists_disjoint xs ys =
     List.for_all (fun x -> not (List.mem x ys)) xs
@@ -1136,7 +1146,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let srcpats pats = List.map srcpat pats
 
   let dummypat = SrcPat DummyPat
-  
+
   let consume_points_to_chunk__core rules h typeid_env ghostenv env env' l type0 type_ coef coefpat addr kind rhs consumeUninitChunk cont =
     let type_ = unfold_inferred_type type_ in
     let consumeUninitChunk = consumeUninitChunk && (kind = MaybeUninit || rhs = dummypat) in
@@ -1149,7 +1159,10 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     match try_pointee_pred_symb0 type_ with
       Some (_, predsym, _, _, _, _, _, _, _, uninit_predsym, _, _) ->
       consume_chunk_core rules h typeid_env ghostenv env env' l ((if consumeUninitChunk then uninit_predsym else predsym), true) [] coef coefpat (Some 1) [TermPat addr; rhs] [voidPtrType; tp0] [voidPtrType; tp]
-        (fun chunk h coef [_; value] size ghostenv env env' -> cont chunk h coef value ghostenv env env')
+        $. fun chunk h coef [_; value] size ghostenv env env' ->
+      if is_ptr_type type_ then
+        assert_has_type env addr type_ h env l "Cannot prove compliance with C's effective types rules" None;
+      cont chunk h coef value ghostenv env env'
     | None ->
     match integer__chunk_args type_ with
       Some (k, signedness) ->

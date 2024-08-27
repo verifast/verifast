@@ -13,8 +13,8 @@ static int acc;
 static struct lock *adderLock;
 
 //@ predicate adderLockInv() = integer(&acc, _);
-//@ predicate adderDeviceState(;) = [1/2]module_code(AdderModule) &*& pointer(&adderLock, ?adderLock_) &*& lock(adderLock_, _, adderLockInv);
-//@ predicate adderFile(real frac, void *file) = [frac/2]module_code(AdderModule) &*& [frac]pointer(&adderLock, ?adderLock_) &*& [frac]lock(adderLock_, _, adderLockInv);
+//@ predicate adderDeviceState(;) = [1/2]module_code(AdderModule) &*& adderLock |-> ?adderLock_ &*& lock(adderLock_, _, adderLockInv);
+//@ predicate adderFile(real frac, void *file) = [frac/2]module_code(AdderModule) &*& [frac]adderLock |-> ?adderLock_ &*& [frac]lock(adderLock_, _, adderLockInv);
 
 void *adder_open()
     //@ requires [?f]adderDeviceState() &*& lockset(currentThread, nil);
@@ -80,7 +80,7 @@ static struct device *adderDevice;
 predicate adderState(struct module *self, int deviceCount) =
     [1/2]module_code(AdderModule) &*&
     deviceCount == 1 &*&
-    pointer(&adderDevice, ?adderDevice_) &*&
+    adderDevice |-> ?adderDevice_ &*&
     kernel_device(adderDevice_, self, adderName, ?adderNameChars, &adderOps, adderDeviceState) &*&
     struct_file_ops_padding(&adderOps) &*&
     length(adderNameChars) == 10;

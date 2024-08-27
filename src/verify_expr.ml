@@ -2505,6 +2505,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         end with
         | Some (Chunk (_, _, coef, [a; n; vs], _), h) ->
           if not (definitely_equal coef real_unit) then assert_false h0 env l "Assignment requires full permission." None;
+          if is_ptr_type elem_tp then
+            assert_has_type env a elem_tp h env l "Cannot prove consistency with C's effective types rules" None;
           let (_, _, _, _, update_symb) = List.assoc "update" purefuncmap in
           let updated = mk_app update_symb [i; apply_conversion (provertype_of_type elem_tp) ProverInductive value; vs] in
           assume (ctxt#mk_eq (mk_length updated) n) $. fun () ->
@@ -2584,7 +2586,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let n, elemTp, arrayPredSymb, mallocBlockSymb, extra_args, produce_has_type =
             match try_pointee_pred_symb0 elemTp with
               Some (_, _, _, asym, _, mbsym, _, _, _, _, _, uasym) ->
-              n, (if g = "calloc" then elemTp else option_type elemTp), (if g = "calloc" then asym else uasym), mbsym (), [], false
+              n, (if g = "calloc" then elemTp else option_type elemTp), (if g = "calloc" then asym else uasym), mbsym (), [], is_ptr_type elemTp
             | None ->
             match integer__chunk_args elemTp with
               Some (r, s) ->

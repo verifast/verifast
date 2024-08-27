@@ -1,6 +1,6 @@
-verifast CRT/threading.o stringBuffers.c sockets.o lists.c ghostlist.o -fno-strict-aliasing -assume_no_subobject_provenance chat.c
+verifast CRT/threading.o stringBuffers.c sockets.o ghostlist.o -fno-strict-aliasing -assume_no_subobject_provenance lists.c chat.c
 verifast -c -emit_vfmanifest stringBuffers.c
-verifast -c -emit_vfmanifest lists.c
+verifast -c -emit_vfmanifest -fno-strict-aliasing -assume_no_subobject_provenance lists.c
 verifast -c -emit_vfmanifest -fno-strict-aliasing -assume_no_subobject_provenance chat.c
 verifast CRT/threading.o stringBuffers.o sockets.o lists.o ghostlist.o chat.o
 del stringBuffers.vfmanifest

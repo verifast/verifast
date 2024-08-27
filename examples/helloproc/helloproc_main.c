@@ -39,14 +39,14 @@ predicate callback_data_mutexed() =
 predicate_family_instance
 	vf_procfs_read_callback_data(read_proc_callback)() =
 	
-	pointer(&mutex, ?mutex_ptr)
+	mutex |-> ?mutex_ptr
 	&*& vf_mutex(mutex_ptr, callback_data_mutexed);
 @*/
 
 
 /*@
 predicate module_state() =
-	pointer(&dir, ?dir_ptr)
+	dir |-> ?dir_ptr
 	&*& vf_procfs_dir(
 		dir_ptr,
 		cons(
@@ -63,7 +63,7 @@ predicate module_state() =
 		)
 		, 1
 	)
-	&*& pointer(&file, ?file_ptr)
+	&*& file |-> ?file_ptr
 	&*& vf_procfs_file(
 		file_ptr,
 		cons(
