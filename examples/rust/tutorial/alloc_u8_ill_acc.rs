@@ -1,0 +1,12 @@
+use std::alloc::{alloc, dealloc, handle_alloc_error, Layout};
+
+unsafe fn main()
+//@ req true;
+//@ ens true;
+{
+    let l = Layout::new::<u8>();
+    let p = alloc(l);
+    *p = 42;
+    assert!(*p == 42);
+    dealloc(p, l);
+}
