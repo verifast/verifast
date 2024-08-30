@@ -1,10 +1,11 @@
 [![CI](https://github.com/verifast/verifast/workflows/CI/badge.svg)](https://github.com/verifast/verifast/actions)
-[![Build status](https://ci.appveyor.com/api/projects/status/1w7vchky3k6erltw?svg=true)](https://ci.appveyor.com/project/verifast/verifast) [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.4705416.svg)](https://doi.org/10.5281/zenodo.4705416)
+[![Build status](https://ci.appveyor.com/api/projects/status/1w7vchky3k6erltw?svg=true)](https://ci.appveyor.com/project/verifast/verifast) [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.13620299.svg)](https://doi.org/10.5281/zenodo.13620299)
+
 
 VeriFast
 ========
 
-By Bart Jacobs\*, Jan Smans\*, and Frank Piessens\*, with contributions by Pieter Agten\*, Cedric Cuypers\*, Lieven Desmet\*, Jan Tobias Muehlberg\*, Willem Penninckx\*, Pieter Philippaerts\*, Amin Timany\*, Thomas Van Eyck\*, Gijs Vanspauwen\*,  Frédéric Vogels\*, and [external contributors](https://github.com/verifast/verifast/graphs/contributors)
+By Bart Jacobs\*, Jan Smans\*, and Frank Piessens\*, with contributions by Pieter Agten\*, Cedric Cuypers\*, Lieven Desmet\*, Niels Mommen\*, Jan Tobias Muehlberg\*, Willem Penninckx\*, Pieter Philippaerts\*, Nima Rahimi Foroushaani\*, Amin Timany\*, Thomas Van Eyck\*, Gijs Vanspauwen\*,  Frédéric Vogels\*, and [external contributors](https://github.com/verifast/verifast/graphs/contributors)
 
 \* imec-DistriNet research group, Department of Computer Science, KU Leuven - University of Leuven, Belgium
 
@@ -99,7 +100,7 @@ We gratefully acknowledge the following infrastructure providers.
 
 ### Funding
 
-This work is supported in part by the Flemish Research Fund (FWO-Vlaanderen), by the EU FP7 projects SecureChange, STANCE, ADVENT, and VESSEDIA, by Microsoft Research Cambridge as part of the Verified Software Initiative, and by the Research Fund KU Leuven.
+This work is supported in part by the Flemish Research Fund (FWO-Vlaanderen), by the EU FP7 projects SecureChange, STANCE, ADVENT, and VESSEDIA, by Microsoft Research Cambridge as part of the Verified Software Initiative, by the Research Fund KU Leuven, and by the Cybersecurity Research Program Flanders.
 
 Mailing lists
 -------------
