@@ -4582,6 +4582,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let open Mir in
     Ok Mir.{ loc; name; fields }
 
+  (* TODO: If own is precise make fbc precise too *)
   let gen_adt_full_borrow_content adt_kind name tparams lft_params
       (variants : Mir.variant_def_tr list) adt_def_loc =
     let open Ast in
