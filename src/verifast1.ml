@@ -6977,7 +6977,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             ctxt#assert_term (ctxt#mk_eq type_pred_term (snd ctorSymb));
             iter defs ds cont
           | None ->
-            static_error l "No such predicate or predicate constructor" None
+            static_error l ("No such predicate or predicate constructor: " ^ rhs) None
         else
           begin match try_assoc rhs predctormap with
             Some (PredCtorInfo (_, ctor_tparams, ctor_ps, ctor_ps', inputParamCount, _, ctorSymb)) ->
