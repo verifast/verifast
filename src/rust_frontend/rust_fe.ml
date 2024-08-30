@@ -217,6 +217,7 @@ module Make (Args : RUST_FE_ARGS) = struct
               ("Cannot create VF MIR from the received message. " ^ emsg)))
 
   let parse_rs_file (rustc_args : string list) (extern_specs : string list) (rs_file_path : string) =
+    Perf.init_windows_error_mode ();
     match get_vf_mir_rd rustc_args rs_file_path with
     | Ok vf_mir_rd -> VfMirTr.translate_vf_mir extern_specs vf_mir_rd Args.report_should_fail
     | Error einfo ->

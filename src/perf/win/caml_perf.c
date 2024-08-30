@@ -20,3 +20,15 @@ value caml_query_performance_counter() {
     }
     return caml_copy_int64(count.QuadPart);
 }
+
+value caml_SetErrorMode_0()
+{
+        SetErrorMode(0);
+        return Val_unit;
+}
+
+value caml_SetErrorMode_FAILCRITICALERRORS()
+{
+        SetErrorMode(SEM_FAILCRITICALERRORS);
+        return Val_unit;
+}

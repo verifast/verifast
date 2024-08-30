@@ -12,3 +12,12 @@ let seconds_since_startup () =
 
 let time () =
   Int64.to_float (Int64.sub (query_performance_counter ()) counter0_int64) *. count_length
+
+external setErrorMode_0: unit -> unit = "caml_SetErrorMode_0"
+external setErrorMode_FAILCRITICALERRORS: unit -> unit = "caml_SetErrorMode_FAILCRITICALERRORS"
+
+let init_windows_error_mode () =
+  if Sys.getenv_opt "VERIFAST_DEBUG_MISSING_DLL" = None then
+    setErrorMode_FAILCRITICALERRORS ()
+  else
+    setErrorMode_0 ()
