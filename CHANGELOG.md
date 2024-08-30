@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 24.08.30 - 2024-08-30
+
+Fixed a bug that caused the Rust test cases to fail on Windows if the `PATH` environment variable was spelled `Path` (as is the case typically, but not in our CI environment).
+
 ## 24.08 - 2024-08-27
 
 ### Breaking changes
