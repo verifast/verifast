@@ -1,4 +1,4 @@
-use std::alloc::{alloc, dealloc, handle_alloc_error, Layout};
+use std::alloc::{alloc, handle_alloc_error, Layout};
 
 unsafe fn main()
 //@ req true;
