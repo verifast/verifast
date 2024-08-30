@@ -63,16 +63,26 @@ module Make (Args : RUST_FE_ARGS) = struct
       Error (`EnvSettingFailed "Environment var names should not be empty")
     else
       let env = Array.to_list env in
+      let key = var_name ^ "=" in
+      let key_len = String.length key in
+      let key_uppercase = String.uppercase_ascii key in
       let env, var_values =
         List.partition_map
           (fun entry ->
-            let key = var_name ^ "=" in
-            if String.starts_with ~prefix:key entry then
-              let entry_len, key_len =
-                (String.length entry, String.length key)
+            let entry_len = String.length entry in
+            if entry_len < key_len then
+              Left entry
+            else
+              let entry_key = String.sub entry 0 key_len in
+              let matches =
+                match Vfconfig.platform with
+                  Windows -> key_uppercase = String.uppercase_ascii entry_key
+                | _ -> key = entry_key
               in
-              Right (String.sub entry key_len (entry_len - key_len))
-            else Left entry)
+              if matches then
+                Right (String.sub entry key_len (entry_len - key_len))
+              else
+                Left entry)
           env
       in
       let entry = var_name ^ "=" ^ path in
