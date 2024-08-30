@@ -88,16 +88,15 @@ module Make (Args : RUST_FE_ARGS) = struct
     try
       (*** TODO @Nima: Get these names from build system *)
       let tchain_name = "nightly-2023-12-31" in
-      let rustc_driver_prefix =
+      let* tchain_root = RustTChain.find_tchain_root tchain_name in
+      let tchain_lib, rustc_driver_prefix =
         match Vfconfig.platform with
-        | Windows -> "rustc_driver-"
-        | _ -> "librustc_driver-"
+        | Windows -> tchain_root ^ "/bin", "rustc_driver-"
+        | _ -> tchain_root ^ "/lib", "librustc_driver-"
       in
       let bin_name = "vf-rust-mir-exporter" in
       let bin_dir = Filename.dirname Sys.executable_name in
       let bin_path = bin_dir ^ "/" ^ bin_name in
-      let* tchain_root = RustTChain.find_tchain_root tchain_name in
-      let* tchain_lib = RustTChain.find_tchain_lib tchain_name in
       if not (Array.exists (String.starts_with ~prefix:rustc_driver_prefix) (Sys.readdir tchain_lib)) then
         Error (`RustcDriverMissing tchain_name)
       else
