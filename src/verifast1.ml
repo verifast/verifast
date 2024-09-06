@@ -1730,7 +1730,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               begin function
                 Import (l, _, p, None) ->
                 begin match try_assoc0 (p ^ item_path_separator ^ name) map with None -> [] | Some xy -> [xy] end
-              | Import (l, ghost', p, Some name') when ghost = ghost' && name = name' ->
+              | Import (l, ghost', p, Some name') when ghost = ghost' && String.starts_with ~prefix:name' name && (name = name' || dialect = Some Rust && String.starts_with ~prefix:(name' ^ item_path_separator) name) ->
                 begin match try_assoc0 (p ^ item_path_separator ^ name) map with None -> [] | Some xy -> [xy] end
               | _ -> []
               end

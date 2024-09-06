@@ -601,7 +601,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let ds = VfMirAnnotParser.parse_rsspec_file header_path in
       let pos = (header_path, 1, 1) in
       let loc = Ast.Lexed (pos, pos) in
-      Rust_parser.flatten_module_decls loc
+      Rust_parser.flatten_module_decls loc []
         [ Ast.ModuleDecl (loc, crateName, [], ds) ]
     in
     let header =
@@ -719,7 +719,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
   let translate_ghost_decl_batch (gh_decl_batch_cpn : AnnotationRd.t) =
     let* gh_decl_b = translate_annotation gh_decl_batch_cpn in
     let gh_decl_b = translate_annot_to_vf_parser_inp gh_decl_b in
-    Ok (VfMirAnnotParser.parse_ghost_decl_batch gh_decl_b)
+    Ok (VfMirAnnotParser.parse_ghost_use_decl_or_decl_batch gh_decl_b)
 
   let translate_ghost_decl_block (gdb_cpn : BodyRd.GhostDeclBlock.t) =
     let open BodyRd.GhostDeclBlock in
@@ -4689,9 +4689,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       ListAux.try_map translate_ghost_decl_batch
         (ghost_decl_batches_get_list module_cpn)
     in
+    let imports, decls = List.partition_map (fun x -> x) ghost_decl_batches in
     Ok
       (Ast.ModuleDecl
-         (loc, name, [], submodules @ List.flatten ghost_decl_batches))
+         (loc, name, List.flatten imports, submodules @ List.flatten decls))
 
   let modularize_decl (d : Ast.decl) : Ast.decl =
     match AstAux.decl_loc_name_and_name_setter d with
@@ -4747,6 +4748,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       in
       let* ghost_decl_batches =
         ListAux.try_map translate_ghost_decl_batch ghost_decl_batches_cpn
+      in
+      let ghost_imports, ghost_decl_batches =
+        List.partition_map (fun x -> x) ghost_decl_batches
       in
       let ghost_decls = module_decls @ List.flatten ghost_decl_batches in
       let ghost_decl_map = AstAux.decl_map_of ghost_decls in
@@ -4857,7 +4861,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       in
       Ok
         ( parse_prelude () @ headers,
-          Rust_parser.flatten_module_decls Ast.dummy_loc decls,
+          Rust_parser.flatten_module_decls Ast.dummy_loc
+            (List.flatten ghost_imports)
+            decls,
           Some debug_infos )
     in
     match job () with
