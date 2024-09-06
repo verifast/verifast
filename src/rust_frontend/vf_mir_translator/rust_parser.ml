@@ -752,7 +752,7 @@ in
 function%parser
   [ [%let ds = rep parse_decl] ] -> List.flatten ds
 
-let flatten_module_decls ltop ds =
+let flatten_module_decls ltop ilist ds =
   let rec iter lp pn ilist ds0 ds cont =
     match ds with
       [] -> PackageDecl (lp, pn, ilist, List.rev ds0)::cont ()
@@ -764,4 +764,33 @@ let flatten_module_decls ltop ds =
     | d::ds ->
       iter lp pn ilist (d::ds0) ds cont
   in
-  iter ltop "" [] [] ds (fun () -> [])
+  iter ltop "" ilist [] ds (fun () -> [])
+
+let rec parse_use_tree prefix = function%parser
+  [ (l, Kwd "*") ] -> [Import (l, Ghost, String.concat "::" (List.rev prefix), None)]
+| [ (l, Ident x);
+    [%let imports = function%parser
+       [ (_, Kwd "::");
+         [%let imports = function%parser
+            [ (l, Kwd "{");
+              [%let imports = rep_comma_ (parse_use_tree (x::prefix))];
+              (_, Kwd "}") ] -> List.flatten imports
+          | [ [%let imports = parse_use_tree (x::prefix)] ] -> imports
+         ] ] -> imports
+     | [ ] -> [Import (l, Ghost, String.concat "::" (List.rev prefix), Some x)]]
+  ] -> imports
+
+let parse_use_decl = function%parser
+  [ (l, Kwd "use"); [%let imports = parse_use_tree []]; (_, Kwd ";") ] -> imports
+
+let parse_ghost_use_decl_or_decl_batch = function%parser
+  [ (_, Kwd "/*@");
+    [%let ds = function%parser
+       [ parse_use_decl as imports] -> Either.Left imports
+     | [ parse_ghost_decls as ds ] -> Either.Right ds
+    ];
+    (_, Kwd "@*/")
+  ] -> ds
+
+let parse_use_decls = function%parser
+  [ [%let imports = rep parse_use_decl] ] -> List.flatten imports

@@ -1,4 +1,5 @@
 use std::io::Write;
+//@ use std::alloc::{alloc_block, Layout};
 
 struct Buffer {
     buffer: *mut u8,
@@ -11,7 +12,7 @@ struct Buffer {
 pred Buffer_(buffer: Buffer; size: usize, length: usize) =
     size == buffer.size &*& size <= isize::MAX &*&
     length == buffer.length &*&
-    std::alloc::alloc_block(buffer.buffer, std::alloc::Layout::from_size_align_(size, 1)) &*&
+    alloc_block(buffer.buffer, Layout::from_size_align_(size, 1)) &*&
     buffer.buffer[..length] |-> ?_ &*&
     buffer.buffer[length..size] |-> _;
 
