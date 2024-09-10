@@ -814,7 +814,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let own tid vs = Ok (True loc) in
     let own_pred = Ok (Var (loc, ty_name ^ "_own")) in
     let fbc_name = ty_name ^ "_full_borrow_content" in
-    let full_bor_content = Ok (Var (loc, fbc_name)) in
+    let full_bor_content = RustBelt.simple_fbc loc fbc_name in
     let points_to tid l vid_op =
       (* Todo: The size and bounds of the integer that this assertion is specifying will depend on the pointer `l` type
          which is error-prone. It is helpful if we add a sanity-check or use elevated `integer_(...)` predicates with bound infos *)
@@ -876,7 +876,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let own tid vs = Ok (True loc) in
     let own_pred = Ok (Var (loc, ty_name ^ "_own")) in
     let fbc_name = ty_name ^ "_full_borrow_content" in
-    let full_bor_content = Ok (Var (loc, fbc_name)) in
+    let full_bor_content = RustBelt.simple_fbc loc fbc_name in
     let points_to tid l vid_op =
       (* Todo: The size and bounds of the integer that this assertion is specifying will depend on the pointer `l` type
          which is error-prone. It is helpful if we add a sanity-check or use elevated `integer_(...)` predicates with bound infos *)
@@ -973,11 +973,12 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             let shr_pred = Ok (Var (loc, name ^ "_share")) in
             let full_bor_content =
               if lft_args = [] then
-                Ok (Var (loc, name ^ "_full_borrow_content"))
+                RustBelt.simple_fbc loc (name ^ "_full_borrow_content")
               else
+                fun tid l ->
                 Ok
-                  (ExprCallExpr
-                     (loc, Var (loc, name ^ "_full_borrow_content"), lft_args))
+                  (CallExpr
+                     (loc, name ^ "_full_borrow_content", [], [], List.map (fun e -> LitPat e) (lft_args @ [tid; l]), Static))
             in
             let points_to tid l vid_op =
               let* pat = RustBelt.Aux.vid_op_to_var_pat vid_op loc in
@@ -1040,7 +1041,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             "Expressing the shared ownership predicate of an enum value is not \
              yet supported"
         in
-        let full_bor_content =
+        let full_bor_content tid l =
           Error
             "Expressing the full borrow content of an enum value is not yet \
              supported"
@@ -1091,7 +1092,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let own _ _ = Ok (True loc) in
     let own_pred = Ok (Var (loc, "bool_own")) in
     let fbc_name = "bool_full_borrow_content" in
-    let full_bor_content = Ok (Var (loc, fbc_name)) in
+    let full_bor_content = RustBelt.simple_fbc loc fbc_name in
     let points_to tid l vid_op =
       let* pat = RustBelt.Aux.vid_op_to_var_pat vid_op loc in
       Ok (PointsTo (loc, l, RegularPointsTo, pat))
@@ -1139,7 +1140,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let own_pred = Ok (Var (loc, "char_own")) in
     let shr = Ok (Var (loc, "char_share")) in
     let fbc_name = "char_full_borrow_content" in
-    let full_bor_content = Ok (Var (loc, fbc_name)) in
+    let full_bor_content = RustBelt.simple_fbc loc fbc_name in
     let points_to tid l vid_op =
       match vid_op with
       | Some vid when vid != "" ->
@@ -1190,7 +1191,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       Error
         "Expressing the shared ownership of the never type is not yet supported"
     in
-    let full_bor_content =
+    let full_bor_content tid l =
       Error
         "Expressing the full borrow content of the never type is not yet \
          supported"
@@ -1222,7 +1223,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let shr_pred =
       Error "Expressing shared ownership of &str values is not yet supported"
     in
-    let full_bor_content =
+    let full_bor_content tid l =
       Error
         "Expressing the full borrow content of &str values is not yet supported"
     in
@@ -1260,7 +1261,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let shr_pred =
       Error "Expressing shared ownership of &[_] values is not yet supported"
     in
-    let full_bor_content =
+    let full_bor_content tid l =
       Error
         "Expressing the full borrow content of &[_] values is not yet supported"
     in
@@ -1380,7 +1381,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let own tid vs = Ok (True loc) in
     let own_pred = Ok (Var (loc, "raw_ptr_own")) in
     let fbc_name = "raw_ptr_full_borrow_content" in
-    let full_bor_content = Ok (Var (loc, fbc_name)) in
+    let full_bor_content = RustBelt.simple_fbc loc fbc_name in
     let points_to tid l vid_op =
       let* pat = RustBelt.Aux.vid_op_to_var_pat vid_op loc in
       Ok (PointsTo (loc, l, RegularPointsTo, pat))
@@ -1439,8 +1440,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               let own tid vs =
                 match vs with
                 | [ l ] ->
-                    let* ptee_fbc = ptee_fbc in
-                    let ptee_fbc = ExprCallExpr (loc, ptee_fbc, [ tid; l ]) in
+                    let* ptee_fbc = ptee_fbc tid l in
                     Ok
                       (CallExpr
                          ( loc,
@@ -1467,7 +1467,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   "Calling a function with a mutable reference type as a \
                    generic type argument is not yet supported"
               in
-              let full_bor_content =
+              let full_bor_content tid l =
                 (* This will need to add a definition for each mut reference type in the program because the body of the predicate will need to mention
                    [[&mut T]].own which depends on T. Another solution is to make VeriFast support Higher order predicates with non-predicate arguments *)
                 Error
@@ -1508,7 +1508,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   "Calling a function with a shared reference type as a \
                    generic type argument is not yet supported"
               in
-              let full_bor_content =
+              let full_bor_content tid l =
                 Error
                   "Expressing the full borrow content of a shared reference \
                    type is not yet supported"
@@ -1633,10 +1633,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                            [ k; t; l ] ) )));
             shr_pred =
               Ok (TypePredExpr (loc, IdentTypeExpr (loc, None, name), "share"));
-            full_bor_content =
+            full_bor_content = (fun tid l ->
               Ok
-                (TypePredExpr
-                   (loc, IdentTypeExpr (loc, None, name), "full_borrow_content"));
+                (ExprCallExpr (loc, TypePredExpr
+                   (loc, IdentTypeExpr (loc, None, name), "full_borrow_content"), [tid; l])));
             points_to =
               (fun t l vid ->
                 let rhs =
