@@ -692,6 +692,7 @@ cd tests
     verifast -c constructors.cpp
     verifast -c destructors.cpp
     verifast -c -disable_overflow_check lvalue_refs.cpp
+    verifast -c rvalue_refs.cpp
     verifast -c -allow_should_fail typeid.cpp
     verifast -c ghost_field.cpp
     verifast -c -disable_overflow_check non_compound_stmts.cpp

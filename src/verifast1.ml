@@ -1464,6 +1464,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         [] -> cont tddm
       | TypedefDecl (l, LValueRefTypeExpr _, _, _) :: _ ->
         static_error l "Typedefs for lvalue reference types are not supported." None
+      | TypedefDecl (l, RValueRefTypeExpr _, _, _) :: _ ->
+        static_error l "Typedefs for rvalue reference types are not supported." None
       | TypedefDecl (l, te, d, tparams)::ds ->
         (* C compiler detects duplicate typedefs *)
         iter pn ilist ((full_name pn d, (pn, ilist, l, tparams, te))::tddm) ds cont
@@ -2097,6 +2099,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       iter ts
     | LValueRefTypeExpr (l, te) -> RefType (check te)
+    | RValueRefTypeExpr (l, te) -> RefType (check te)
     in
     check te
   

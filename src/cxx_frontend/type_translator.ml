@@ -19,6 +19,7 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
     | Typedef t -> transl_typedef_type loc t
     | FixedWidth f -> transl_fixed_width_type loc f
     | LValueRef l -> transl_lvalue_ref_type loc l
+    | RValueRef l -> transl_rvalue_ref_type loc l
     | SubstTemplateTypeParam s -> transl_subst_template_type_param loc s
     | Undefined _ -> failwith "Undefined type."
     | _ -> Error.error loc "Unsupported type."
@@ -58,6 +59,10 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
   and transl_lvalue_ref_type (loc : Ast.loc) (l : R.Node.t) : Ast.type_expr =
     let ref_type = translate l in
     Ast.LValueRefTypeExpr (loc, ref_type)
+
+  and transl_rvalue_ref_type (loc : Ast.loc) (l : R.Node.t) : Ast.type_expr =
+    let ref_type = translate l in
+    Ast.RValueRefTypeExpr (loc, ref_type)
 
   and transl_elaborated_type (e : R.Node.t) : Ast.type_expr = translate e
 
