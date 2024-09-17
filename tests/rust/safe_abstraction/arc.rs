@@ -24,7 +24,7 @@ pred_ctor Arc_inv<T>(dk: lifetime_t, gid: isize, ptr: *ArcInner<T>)() = counting
     std::alloc::alloc_block(ptr as *u8, std::alloc::Layout::new_::<ArcInner<T>>()) &*& struct_ArcInner_padding::<T>(ptr) &*&
     borrow_end_token(dk, <T>.full_borrow_content(default_tid, &(*ptr).data)) };
 
-pred Arc_own<T>(t: thread_id_t, nnp: std::ptr::NonNull<ArcInner<T>>) = [_]std::ptr::NonNull_own(default_tid, nnp) &*& [_]exists(?ptr) &*& std::ptr::NonNull_ptr::<ArcInner<T>>(nnp) == ptr &*&
+pred Arc_own<T>(t: thread_id_t, arc: Arc<T>) = [_]std::ptr::NonNull_own(default_tid, arc.ptr) &*& [_]exists(?ptr) &*& std::ptr::NonNull_ptr::<ArcInner<T>>(arc.ptr) == ptr &*&
     [_]exists(?dk) &*& [_]exists(?gid) &*& [_]atomic_space(Marc, Arc_inv(dk, gid, ptr)) &*& ticket(dlft_pred(dk), gid, ?frac) &*& [frac]dlft_pred(dk)(gid, false) &*&
     [_](<T>.share)(dk, default_tid, &(*ptr).data) &*& pointer_within_limits(&(*ptr).data) == true &*& is_Send(typeid(T)) == true;
 
@@ -63,7 +63,8 @@ lem Arc_fbor_split<T>(k: lifetime_t, t: thread_id_t, l: *Arc<T>)
 {
     let klong = open_full_borrow_strong_m(k, Arc_full_borrow_content(t, l), qk);
     open Arc_full_borrow_content::<T>(t, l)();
-    open Arc_own(t, ?nnp);
+    open Arc_own(t, ?arc);
+    let nnp = arc.ptr;
     assert [_]exists::<lifetime_t>(?dk) &*& ticket(_, ?gid, ?frac);
     close Arc_frac_bc::<T>(l, nnp)();
     close sep(ticket_(dk, gid, frac), lifetime_token_(frac, dk))();
@@ -75,7 +76,7 @@ lem Arc_fbor_split<T>(k: lifetime_t, t: thread_id_t, l: *Arc<T>)
             open sep(ticket_(dk, gid, frac), lifetime_token_(frac, dk))();
             open ticket_(dk, gid, frac)();
             open Ctx::<T>(nnp, dk, gid, l)();
-            close Arc_own(t, nnp);
+            close Arc_own(t, arc);
             close Arc_full_borrow_content::<T>(t, l)();
         }{
             close Ctx::<T>(nnp, dk, gid, l)();
@@ -165,7 +166,7 @@ impl<T: Sync + Send> Arc<T> {
             //@ leak exists(p);
             //@ leak exists(dk);
             //@ leak exists::<isize>(gid);
-            //@ close Arc_own(_t, nnp);
+            //@ close Arc_own(_t, ret);
             ret
         }
     }
@@ -326,7 +327,7 @@ impl<T: Sync + Send> Clone for Arc<T> {
         let ret = Self { ptr: self.ptr };
         //@ close [qnnp]Arc_frac_bc::<T>(self, nnp)();
         //@ close_frac_borrow(qnnp, Arc_frac_bc(self, nnp));
-        //@ close Arc_own(_t, nnp);
+        //@ close Arc_own(_t, ret);
         ret
     }
 }
@@ -353,7 +354,7 @@ lem mod_eq_minus_one(x: i32, m: i32)
 impl<T: Sync + Send> Drop for Arc<T> {
     fn drop<'a>(&'a mut self) {
         //@ open Arc_full_borrow_content::<T>(_t, self)();
-        //@ open Arc_own::<T>(_t, ?nnp);
+        //@ open Arc_own::<T>(_t, ?arc);
         //@ assert [_]exists::<lifetime_t>(?dk) &*& [_]exists::<isize>(?gid) &*& [_]exists::<*ArcInner<T>>(?ptr);
         //@ let sp = &(*ptr).strong;
         unsafe {
@@ -395,7 +396,7 @@ impl<T: Sync + Send> Drop for Arc<T> {
             //@ close Pre();
             let sco = self.ptr.as_ref().strong.fetch_sub(1, Ordering::SeqCst);
             //@ open Post(sco);
-            //@ open std::ptr::NonNull_own(default_tid, nnp);
+            //@ open std::ptr::NonNull_own(default_tid, arc.ptr);
             if sco != 1 { return; }
             }
             //@ assert (*ptr).data |-> ?v;

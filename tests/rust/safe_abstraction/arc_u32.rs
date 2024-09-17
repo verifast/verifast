@@ -26,7 +26,7 @@ pred_ctor Arc_inv(dk: lifetime_t, gid: isize, ptr: *ArcInnerU32)() = counting(dl
     std::alloc::alloc_block(ptr as *u8, std::alloc::Layout::new_::<ArcInnerU32>()) &*& struct_ArcInnerU32_padding(ptr) &*&
     borrow_end_token(dk, u32_full_borrow_content(default_tid, &(*ptr).data)) };
 
-pred ArcU32_own(t: thread_id_t, nnp: std::ptr::NonNull<ArcInnerU32>) = [_]std::ptr::NonNull_own(default_tid, nnp) &*& [_]exists(?ptr) &*& std::ptr::NonNull_ptr::<ArcInnerU32>(nnp) == ptr &*&
+pred ArcU32_own(t: thread_id_t, arcU32: ArcU32) = [_]std::ptr::NonNull_own(default_tid, arcU32.ptr) &*& [_]exists(?ptr) &*& std::ptr::NonNull_ptr::<ArcInnerU32>(arcU32.ptr) == ptr &*&
     [_]exists(?dk) &*& [_]exists(?gid) &*& [_]atomic_space(Marc, Arc_inv(dk, gid, ptr)) &*& ticket(dlft_pred(dk), gid, ?frac) &*& [frac]dlft_pred(dk)(gid, false) &*&
     [_]u32_share(dk, default_tid, &(*ptr).data) &*& pointer_within_limits(&(*ptr).data) == true;
 
@@ -65,7 +65,8 @@ lem ArcU32_fbor_split(k: lifetime_t, t: thread_id_t, l: *ArcU32)
 {
     let klong = open_full_borrow_strong_m(k, ArcU32_full_borrow_content(t, l), qk);
     open ArcU32_full_borrow_content(t, l)();
-    open ArcU32_own(t, ?nnp);
+    open ArcU32_own(t, ?arcU32);
+    let nnp = arcU32.ptr;
     assert [_]exists::<lifetime_t>(?dk) &*& ticket(_, ?gid, ?frac);
     close Arc_frac_bc(l, nnp)();
     close sep(ticket_(dk, gid, frac), lifetime_token_(frac, dk))();
@@ -77,7 +78,7 @@ lem ArcU32_fbor_split(k: lifetime_t, t: thread_id_t, l: *ArcU32)
             open sep(ticket_(dk, gid, frac), lifetime_token_(frac, dk))();
             open ticket_(dk, gid, frac)();
             open Ctx(nnp, dk, gid, l)();
-            close ArcU32_own(t, nnp);
+            close ArcU32_own(t, arcU32);
             close ArcU32_full_borrow_content(t, l)();
         }{
             close Ctx(nnp, dk, gid, l)();
@@ -159,7 +160,7 @@ impl ArcU32 {
             //@ leak exists(p);
             //@ leak exists(dk);
             //@ leak exists::<isize>(gid);
-            //@ close ArcU32_own(_t, nnp);
+            //@ close ArcU32_own(_t, ret);
             ret
         }
     }
@@ -317,7 +318,7 @@ impl Clone for ArcU32 {
         let ret = Self { ptr: self.ptr };
         //@ close [qnnp]Arc_frac_bc(self, nnp)();
         //@ close_frac_borrow(qnnp, Arc_frac_bc(self, nnp));
-        //@ close ArcU32_own(_t, nnp);
+        //@ close ArcU32_own(_t, ret);
         ret
     }
 }
@@ -342,7 +343,7 @@ lem mod_eq_minus_one(x: i32, m: i32)
 impl Drop for ArcU32 {
     fn drop<'a>(&'a mut self) {
         //@ open ArcU32_full_borrow_content(_t, self)();
-        //@ open ArcU32_own(_t, ?nnp);
+        //@ open ArcU32_own(_t, ?arcU32);
         //@ assert [_]exists::<lifetime_t>(?dk) &*& [_]exists::<isize>(?gid) &*& [_]exists::<*ArcInnerU32>(?ptr);
         //@ let sp = &(*ptr).strong;
         unsafe {
@@ -383,7 +384,7 @@ impl Drop for ArcU32 {
             //@ close Pre();
             let sco = self.ptr.as_ref().strong.fetch_sub(1, Ordering::SeqCst);
             //@ open Post(sco);
-            //@ open std::ptr::NonNull_own(default_tid, nnp);
+            //@ open std::ptr::NonNull_own(default_tid, arcU32.ptr);
             if sco != 1 { return; }
             }
             //@ open_struct(ptr);

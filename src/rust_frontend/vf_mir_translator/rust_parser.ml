@@ -240,6 +240,8 @@ let rec parse_expr_funcs allowStructExprs =
     [ (_, Kwd "{"); parse_struct_expr_fields as es; (_, Kwd "}") ] when allowStructExprs ->
     begin match e with
       Var (l, x) -> CastExpr (l, StructTypeExpr (l, Some x, None, [], []), InitializerList (l, es))
+    | CallExpr (l, x, targs, [], [], Static) ->
+      CastExpr (l, StructTypeExpr (l, Some x, None, [], targs), InitializerList (l, es))
     | _ -> raise (ParseException (expr_loc e, "This expression form is not supported in this position"))
     end
   | [ ] -> e

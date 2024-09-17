@@ -76,14 +76,14 @@ pred Deque_(sentinel: *Node; elems: list<i32> ) =
     (*sentinel).next |-> ?first &*&
     Nodes(first, sentinel, last, sentinel, elems);
 
-pred Deque_own(t: thread_id_t, sentinel: *Node; size: i32) =
-    Deque_(sentinel, ?elems) &*& size == length(elems);
+pred Deque_own(t: thread_id_t, deque: Deque;) =
+    Deque_(deque.sentinel, ?elems) &*& deque.size == length(elems);
 
 pred Deque(deque: *Deque; elems: list<i32>) =
     (*deque).sentinel |-> ?sentinel &*& (*deque).size |-> ?size &*& Deque_(sentinel, elems) &*& size == length(elems);
 
 pred_ctor Deque_frac_borrow_content(t: thread_id_t, l: *Deque)(;) =
-    (*l).sentinel |-> ?sentinel &*& (*l).size |-> ?size &*& Deque_own(t, sentinel, size) &*& struct_Deque_padding(l);
+    (*l).sentinel |-> ?sentinel &*& (*l).size |-> ?size &*& Deque_own(t, Deque { sentinel, size }) &*& struct_Deque_padding(l);
 pred Deque_share(k: lifetime_t, t: thread_id_t, l: *Deque) = [_]frac_borrow(k, Deque_frac_borrow_content(t, l));
 
 // Proof obligations
@@ -126,7 +126,7 @@ impl Deque {
             //@ close_struct(sentinel);
             (*sentinel).prev = sentinel;
             (*sentinel).next = sentinel;
-            //@ close Deque_own(_t, sentinel, 0);
+            //@ close Deque_own(_t, Deque { sentinel, size: 0 });
             Deque { sentinel, size: 0 }
         }
     }

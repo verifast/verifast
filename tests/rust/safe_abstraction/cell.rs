@@ -6,7 +6,7 @@ pub struct Cell<T> {
 
 /*@
 
-pred Cell_own<T>(t: thread_id_t, v: T) = <T>.own(t, v);
+pred Cell_own<T>(t: thread_id_t, cell: Cell<T>) = <T>.own(t, cell.v);
 
 /*
 
@@ -19,7 +19,7 @@ is derivable.
 */
 
 pred_ctor Cell_nonatomic_borrow_content<T>(l: *Cell<T>, t: thread_id_t)() =
-  Cell_v(l, ?v) &*& struct_Cell_padding(l) &*& Cell_own(t, v);
+  Cell_v(l, ?v) &*& struct_Cell_padding(l) &*& Cell_own(t, Cell::<T> { v });
 
 // `SHR` for Cell<u32>
 pred Cell_share<T>(k: lifetime_t, t: thread_id_t, l: *Cell<T>) =
@@ -64,7 +64,7 @@ impl<T> Cell<T> {
         let c = Cell {
             v: std::cell::UnsafeCell::new(v),
         };
-        //@ close Cell_own::<T>(_t, v);
+        //@ close Cell_own::<T>(_t, c);
         c
     }
     
@@ -76,13 +76,13 @@ impl<T> Cell<T> {
             //@ thread_token_split(_t, MaskTop, mask);
             //@ open_nonatomic_borrow('a, _t, mask, _q_a);
             //@ open Cell_nonatomic_borrow_content::<T>(self, _t)();
-            //@ open Cell_own::<T>(_t, ?v0);
-            //@ open Cell_v(self, v0);
+            //@ open Cell_own::<T>(_t, ?cell);
+            //@ open Cell_v(self, cell.v);
             let result = std::ptr::read(self.v.get());
             std::ptr::write(self.v.get(), v);
             //@ assert partial_thread_token(_t, ?mask0);
             //@ close Cell_v(self, v);
-            //@ close Cell_own::<T>(_t, v);
+            //@ close Cell_own::<T>(_t, Cell::<T> { v });
             //@ close Cell_nonatomic_borrow_content::<T>(self, _t)();
             //@ close_nonatomic_borrow();
             //@ thread_token_merge(_t, mask0, mask);

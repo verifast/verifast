@@ -13,7 +13,7 @@ pred Account(account: *Account; balance: i32) =
     std::alloc::alloc_block(account as *u8, std::alloc::Layout::new_::<Account>()) &*& struct_Account_padding(account) &*&
     (*account).balance |-> balance;
 
-pred Account_own(t: thread_id_t, balance: i32) = true;
+pred Account_own(t: thread_id_t, account: Account) = true;
 pred Account_share(k: lifetime_t, t: thread_id_t, l: *Account) = true;
 
 lem Account_share_full(k: lifetime_t, t: thread_id_t, l: *Account)
@@ -66,8 +66,7 @@ impl Account {
         //@ close_points_to(account);
         //@ assert *account |-> ?value;
         let b = Box::from_raw(account);
-        //@ close Account_own(t, value.balance);
-        //@ close Account_own_(t, value);
+        //@ close Account_own(t, value);
         //@ std::boxed::Box_to_own(b);
         std::mem::drop(b);
     }

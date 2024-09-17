@@ -156,7 +156,7 @@ pub struct Tree {
 
 /*@
 
-pred Tree_own(t: thread_id_t, root: *mut Node;) = Tree(root, 0, ?shape);
+pred Tree_own(t: thread_id_t, tree: Tree;) = Tree(tree.root, 0, ?shape);
 
 pred Tree_share(k: lifetime_t, t: thread_id_t, l: *Tree) = true;
 
@@ -226,9 +226,9 @@ impl Tree {
         unsafe {
             //@ open_full_borrow(_q_a/2, 'a, Tree_full_borrow_content(_t, self));
             //@ open Tree_full_borrow_content(_t, self)();
-            //@ open Tree_own(_t, (*self).root);
+            //@ open Tree_own(_t, ?tree);
             Self::accept0::<V>(self.root, true, visitor);
-            //@ close Tree_own(_t, (*self).root);
+            //@ close Tree_own(_t, tree);
             //@ close Tree_full_borrow_content(_t, self)();
             //@ close_full_borrow(Tree_full_borrow_content(_t, self));
             //@ leak full_borrow(_, _) &*& full_borrow(_, _);

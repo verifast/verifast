@@ -19,12 +19,12 @@ pred_ctor rc_na_inv(dk: lifetime_t, gid: usize, ptr: *RcBoxU32, t: thread_id_t)(
 //pred_ctor ticket_(dk: lifetime_t, gid: usize, frac: real, destroyed: bool)(;) = ticket(dlft_pred(dk), gid, frac) &*& [frac]dlft_pred(dk)(gid, destroyed);
 
 // TODO: Add the following syntax to parser: `let ptr = std::ptr::NonNull_ptr(nnp);`
-pred RcU32_own(t: thread_id_t, nnp: std::ptr::NonNull<RcBoxU32>) =
-    std::ptr::NonNull_ptr(nnp) as usize != 0 &*&
-    [_]exists(?dk) &*& [_]exists(?gid) &*& [_]na_inv(t, MaskNshrSingle(std::ptr::NonNull_ptr(nnp)), rc_na_inv(dk, gid, std::ptr::NonNull_ptr(nnp), t)) &*&
+pred RcU32_own(t: thread_id_t, rcU32: RcU32) =
+    std::ptr::NonNull_ptr(rcU32.ptr) as usize != 0 &*&
+    [_]exists(?dk) &*& [_]exists(?gid) &*& [_]na_inv(t, MaskNshrSingle(std::ptr::NonNull_ptr(rcU32.ptr)), rc_na_inv(dk, gid, std::ptr::NonNull_ptr(rcU32.ptr), t)) &*&
     ticket(dlft_pred(dk), gid, ?frac) &*& [frac]dlft_pred(dk)(gid, false) &*&
-    [_]frac_borrow(dk, u32_full_borrow_content(t, &(*std::ptr::NonNull_ptr::<RcBoxU32>(nnp)).value)) &*&
-    pointer_within_limits(&(*std::ptr::NonNull_ptr::<RcBoxU32>(nnp)).value) == true;
+    [_]frac_borrow(dk, u32_full_borrow_content(t, &(*std::ptr::NonNull_ptr::<RcBoxU32>(rcU32.ptr)).value)) &*&
+    pointer_within_limits(&(*std::ptr::NonNull_ptr::<RcBoxU32>(rcU32.ptr)).value) == true;
 
 pred_ctor Rc_frac_bc(l: *RcU32, nnp: std::ptr::NonNull<RcBoxU32>)(;) = (*l).ptr |-> nnp;
 pred_ctor ticket_(dk: lifetime_t, gid: usize, frac: real)(;) = ticket(dlft_pred(dk), gid, frac) &*& [frac]ghost_cell(gid, false);
@@ -66,7 +66,8 @@ lem RcU32_fbor_split(t: thread_id_t, l: *RcU32) -> std::ptr::NonNull<RcBoxU32> /
 {
     let klong = open_full_borrow_strong_m(k, RcU32_full_borrow_content(t, l), q);
     open RcU32_full_borrow_content(t, l)();
-    open RcU32_own(t, ?nnp);
+    open RcU32_own(t, ?rcU32);
+    let nnp = rcU32.ptr;
     assert [_]exists::<lifetime_t>(?dk) &*& [_]exists::<usize>(?gid) &*& ticket(dlft_pred(dk), gid, ?frac);
     close Rc_frac_bc(l, nnp)();
     close sep(ticket_(dk, gid, frac), lifetime_token_(frac, dk))();
@@ -80,7 +81,7 @@ lem RcU32_fbor_split(t: thread_id_t, l: *RcU32) -> std::ptr::NonNull<RcBoxU32> /
         open sep(ticket_(dk, gid, frac), lifetime_token_(frac, dk))();
         open ticket_(dk, gid, frac)();
         open rc_ctx(t, l, nnp, dk, gid)();
-        close RcU32_own(t, nnp);
+        close RcU32_own(t, rcU32);
         close RcU32_full_borrow_content(t, l)();
     }{
         close_full_borrow_strong_m(klong, RcU32_full_borrow_content(t, l), sep(Rc_frac_bc(l, nnp), sep(ticket_(dk, gid, frac), lifetime_token_(frac, dk))));
@@ -145,7 +146,7 @@ impl RcU32 {
             //@ close rc_na_inv(dk, gid, p, _t)();
             //@ na_inv_new(_t, MaskNshrSingle(p), rc_na_inv(dk, gid, p, _t));
             //@ full_borrow_into_frac(dk, u32_full_borrow_content(_t, &(*p).value));
-            //@ close RcU32_own(_t, nnp);
+            //@ close RcU32_own(_t, ret);
             ret
         }
     }
@@ -218,7 +219,7 @@ impl Clone for RcU32 {
             let r = Self { ptr: self.ptr };
             //@ close [qp]Rc_frac_bc(self, nnp)();
             //@ close_frac_borrow(qp, Rc_frac_bc(self, nnp));
-            //@ close RcU32_own(_t, nnp);
+            //@ close RcU32_own(_t, r);
             r
         }
     }
@@ -230,7 +231,8 @@ impl Drop for RcU32 {
         unsafe {
             //@ open RcU32_full_borrow_content(_t, self)();
             let strong = self.ptr.as_ref().strong.get();
-            //@ open RcU32_own(_t, ?nnp);
+            //@ open RcU32_own(_t, ?rcU32);
+            //@ let nnp = rcU32.ptr;
             //@ assert [_]exists::<lifetime_t>(?dk) &*& [_]exists::<usize>(?gid);
             //@ let ptr = std::ptr::NonNull_ptr::<RcBoxU32>(nnp);
             //@ open thread_token(_t);

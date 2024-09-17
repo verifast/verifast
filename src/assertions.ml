@@ -802,17 +802,55 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         assert_false h0 env l ("No matching points-to chunk: " ^ (ctxt#pprint f_symb) ^ targs ^ "(" ^ (ctxt#pprint t) ^ ", _)") None
     | Some v -> v
 
-  let lookup_integer__chunk h0 env l tp t =
-    let (k, signedness) =
-      match int_rank_and_signedness tp with
-        Some (k, signedness) -> k, signedness
-      | None -> static_error l ("Dereferencing a pointer of type " ^ string_of_type tp ^ " is not yet supported.") None
-    in
-    match lookup_integer__chunk_core h0 t k signedness with
-      None -> assert_false h0 env l ("No matching points-to chunk: integer_(" ^ ctxt#pprint t ^ ", " ^ ctxt#pprint (rank_size_term k) ^ ", " ^ (if signedness = Signed then "true" else "false") ^ ", _)") None
-    | Some v ->
-      assert_has_type env t tp h0 env l "This read might violate C's effective types rules" None;
-      v
+  let rec deref_pointer h env l pointerTerm pointeeType =
+    match try_pointee_pred_symb pointeeType with
+      None -> lookup_integer__chunk h env l pointeeType pointerTerm
+    | Some predsym ->
+      let result = lookup_points_to_chunk h env l predsym [] pointerTerm in
+      if is_ptr_type pointeeType then
+        assert_has_type env pointerTerm pointeeType h env l "Cannot prove consistency with C's effective types rules" None;
+      result
+  and lookup_integer__chunk h0 env l tp t =
+    match int_rank_and_signedness tp with
+      Some (k, signedness) ->
+      begin match lookup_integer__chunk_core h0 t k signedness with
+        None -> assert_false h0 env l ("No matching points-to chunk: integer_(" ^ ctxt#pprint t ^ ", " ^ ctxt#pprint (rank_size_term k) ^ ", " ^ (if signedness = Signed then "true" else "false") ^ ", _)") None
+      | Some v ->
+        assert_has_type env t tp h0 env l "This read might violate C's effective types rules" None;
+        v
+      end
+    | None ->
+    match tp with
+      StructType (sn, targs) ->
+      let (_, tparams, body, _, structTypeidFunc) = List.assoc sn structmap in
+      let targs_typeids = List.map (typeid_of_core l env) targs in
+      let structTypeid = ctxt#mk_app structTypeidFunc targs_typeids in
+      let s_tpenv = List.combine tparams targs in
+      begin match body with
+        None ->
+        lookup_points_to_chunk h0 env l (generic_points_to_symb ()) [tp] t
+      | Some (_, fmap, _) ->
+        match lookup_points_to_chunk_core h0 (generic_points_to_symb ()) [tp] t with
+          Some v -> v
+        | None ->
+          let vs = fmap |> List.map @@ fun (f, (_, _, tp, offsetFunc_opt, _)) ->
+            let tp' = instantiate_type s_tpenv tp in
+            let (_, (_, _, _, _, fsymb, _, _)), _ = List.assoc (sn, f) field_pred_map in
+            let v =
+              match lookup_points_to_chunk_core h0 fsymb targs t with
+                Some v -> v
+              | None ->
+                let Some offsetFunc = offsetFunc_opt in
+                let offset = ctxt#mk_app offsetFunc targs_typeids in
+                deref_pointer h0 env l (mk_field_ptr t structTypeid offset) tp'
+            in
+            prover_convert_term v tp' tp
+          in
+          let (_, csym, _, _) = List.assoc sn struct_accessor_map in
+          ctxt#mk_app csym vs
+      end
+    | _ ->
+      lookup_points_to_chunk h0 env l (generic_points_to_symb ()) [tp] t
 
   let read_field h env l t fparent targs fname =
     let (_, (_, _, _, _, f_symb, _, _)), _ = List.assoc (fparent, fname) field_pred_map in
@@ -948,15 +986,6 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     match language with 
       Java -> read_java_array h env l a i tp
     | CLang -> read_c_array h env l a i tp
-  
-  let deref_pointer h env l pointerTerm pointeeType =
-    match try_pointee_pred_symb pointeeType with
-      None -> lookup_integer__chunk h env l pointeeType pointerTerm
-    | Some predsym ->
-      let result = lookup_points_to_chunk h env l predsym [] pointerTerm in
-      if is_ptr_type pointeeType then
-        assert_has_type env pointerTerm pointeeType h env l "Cannot prove consistency with C's effective types rules" None;
-      result
   
   let lists_disjoint xs ys =
     List.for_all (fun x -> not (List.mem x ys)) xs

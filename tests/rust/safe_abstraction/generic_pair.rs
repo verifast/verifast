@@ -5,7 +5,7 @@ pub struct Pair<A, B> {
 
 /*@
 
-pred Pair_own<A, B>(t: thread_id_t, fst: A, snd: B) = <A>.own(t, fst) &*& <B>.own(t, snd);
+pred Pair_own<A, B>(t: thread_id_t, pair: Pair<A, B>) = <A>.own(t, pair.fst) &*& <B>.own(t, pair.snd);
 
 pred Pair_share<A, B>(k: lifetime_t, t: thread_id_t, l: *Pair<A, B>) =
     [_](<A>.share)(k, t, &(*l).fst) &*&
@@ -44,7 +44,7 @@ lem Pair_split_full_borrow_m<A, B>(k: lifetime_t, t: thread_id_t, l: *Pair<A, B>
         open Pair_full_borrow_content::<A, B>(t, l)();
         open Pair_fst(l, _);
         open Pair_snd(l, _);
-        open Pair_own(_, _, _);
+        open Pair_own(_, _);
         close struct_Pair_padding_::<A, B>(l)();
         close_full_borrow_content::<A>(t, &(*l).fst);
         close_full_borrow_content::<B>(t, &(*l).snd);
@@ -59,7 +59,7 @@ lem Pair_split_full_borrow_m<A, B>(k: lifetime_t, t: thread_id_t, l: *Pair<A, B>
         open_full_borrow_content(t, &(*l).snd);
         close Pair_fst(l, ?fst);
         close Pair_snd(l, ?snd);
-        close Pair_own(t, fst, snd);
+        close Pair_own(t, Pair::<A, B> { fst, snd });
         close Pair_full_borrow_content::<A, B>(t, l)();
     } {
         close_full_borrow_strong_m(klong, Pair_full_borrow_content::<A, B>(t, l), sep(struct_Pair_padding_::<A, B>(l), sep(<A>.full_borrow_content(t, &(*l).fst), <B>.full_borrow_content(t, &(*l).snd))));
@@ -87,7 +87,7 @@ lem Pair_split_full_borrow<A, B>(k: lifetime_t, t: thread_id_t, l: *Pair<A, B>) 
         open Pair_full_borrow_content::<A, B>(t, l)();
         open Pair_fst(l, _);
         open Pair_snd(l, _);
-        open Pair_own(_, _, _);
+        open Pair_own(_, _);
         close struct_Pair_padding_::<A, B>(l)();
         close_full_borrow_content::<A>(t, &(*l).fst);
         close_full_borrow_content::<B>(t, &(*l).snd);
@@ -102,7 +102,7 @@ lem Pair_split_full_borrow<A, B>(k: lifetime_t, t: thread_id_t, l: *Pair<A, B>) 
         open_full_borrow_content(t, &(*l).snd);
         close Pair_fst(l, ?fst);
         close Pair_snd(l, ?snd);
-        close Pair_own(t, fst, snd);
+        close Pair_own(t, Pair::<A, B> { fst, snd });
         close Pair_full_borrow_content::<A, B>(t, l)();
     } {
         close_full_borrow_strong(klong, Pair_full_borrow_content::<A, B>(t, l), sep(struct_Pair_padding_::<A, B>(l), sep(<A>.full_borrow_content(t, &(*l).fst), <B>.full_borrow_content(t, &(*l).snd))));
@@ -130,32 +130,32 @@ lem Pair_share_full<A, B>(k: lifetime_t, t: thread_id_t, l: *Pair<A, B>)
 impl<A, B> Pair<A, B> {
 
     pub fn new(fst: A, snd: B) -> Self {
-        //@ close Pair_own::<A, B>(_t, fst, snd);
+        //@ close Pair_own::<A, B>(_t, Pair::<A, B> { fst, snd });
         Pair { fst, snd }
     }
 
     pub fn get_fst_leak_snd(self) -> A {
-        //@ open Pair_own::<A, B>(_t, self.fst, self.snd);
+        //@ open Pair_own::<A, B>(_t, _);
         let _snd = std::mem::ManuallyDrop::new(self.snd);
         //@ leak <B>.own(_t, self.snd);
         self.fst
     }
 
     pub fn get_fst_drop_snd(self) -> A {
-        //@ open Pair_own::<A, B>(_t, self.fst, self.snd);
+        //@ open Pair_own::<A, B>(_t, _);
         std::mem::drop(self.snd);
         self.fst
     }
 
     pub fn get_snd_leak_fst(self) -> B {
-        //@ open Pair_own::<A, B>(_t, self.fst, self.snd);
+        //@ open Pair_own::<A, B>(_t, _);
         let _fst = std::mem::ManuallyDrop::new(self.fst);
         //@ leak <A>.own(_t, self.fst);
         self.snd
     }
     
     pub fn get_snd_drop_fst(self) -> B {
-        //@ open Pair_own::<A, B>(_t, self.fst, self.snd);
+        //@ open Pair_own::<A, B>(_t, self);
         std::mem::drop(self.fst);
         self.snd
     }
@@ -174,12 +174,12 @@ impl<A, B> Pair<A, B> {
         unsafe {
             //@ open_full_borrow(_q_a, 'a, Pair_full_borrow_content::<A, B>(_t, self));
             //@ open Pair_full_borrow_content::<A, B>(_t, self)();
-            //@ open Pair_own(_t, ?fst0, ?snd0);
-            //@ open Pair_fst(self, fst0);
+            //@ open Pair_own(_t, ?pair0);
+            //@ open Pair_fst(self, pair0.fst);
             let result = std::ptr::read(&self.fst);
             std::ptr::write(&mut self.fst, new_fst);
             //@ close Pair_fst(self, new_fst);
-            //@ close Pair_own(_t, new_fst, snd0);
+            //@ close Pair_own(_t, Pair::<A, B> { fst: new_fst, snd: pair0.snd });
             //@ close Pair_full_borrow_content::<A, B>(_t, self)();
             //@ close_full_borrow(Pair_full_borrow_content::<A, B>(_t, self));
             //@ leak full_borrow(_, _);
@@ -191,12 +191,12 @@ impl<A, B> Pair<A, B> {
         unsafe {
             //@ open_full_borrow(_q_a, 'a, Pair_full_borrow_content::<A, B>(_t, self));
             //@ open Pair_full_borrow_content::<A, B>(_t, self)();
-            //@ open Pair_own(_t, ?fst0, ?snd0);
-            //@ open Pair_snd(self, snd0);
+            //@ open Pair_own(_t, ?pair0);
+            //@ open Pair_snd(self, pair0.snd);
             let result = std::ptr::read(&self.snd);
             std::ptr::write(&mut self.snd, new_snd);
             //@ close Pair_snd(self, new_snd);
-            //@ close Pair_own(_t, fst0, new_snd);
+            //@ close Pair_own(_t, Pair::<A, B> { fst: pair0.fst, snd: new_snd });
             //@ close Pair_full_borrow_content::<A, B>(_t, self)();
             //@ close_full_borrow(Pair_full_borrow_content::<A, B>(_t, self));
             //@ leak full_borrow(_, _);

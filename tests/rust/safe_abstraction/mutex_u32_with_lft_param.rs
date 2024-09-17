@@ -15,11 +15,11 @@ About the definitions:
 
 pred SysMutex(m: sys::locks::Mutex; P: pred());
 pred SysMutex_share(l: *sys::locks::Mutex; P: pred());
-pred sys::locks::Mutex_own(t: thread_id_t, m: *u32);
+pred sys::locks::Mutex_own(t: thread_id_t, m: sys::locks::Mutex);
 
 lem SysMutex_to_own(t: thread_id_t, m: sys::locks::Mutex);
     req SysMutex(m, _);
-    ens sys::locks::Mutex_own(t, m.m);
+    ens sys::locks::Mutex_own(t, m);
 
 lem SysMutex_share_full(l: *sys::locks::Mutex);
     req *l |-> ?m &*& SysMutex(m, ?P);
@@ -112,14 +112,14 @@ pub struct MutexU32 {
 /*@
 
 pred True(;) = true;
-pred MutexU32_own(t: thread_id_t, inner: sys::locks::Mutex, data: u32) = SysMutex(inner, True);
+pred MutexU32_own(t: thread_id_t, mutexU32: MutexU32) = SysMutex(mutexU32.inner, True);
 
 lem MutexU32_drop()
-    req MutexU32_own(?t, ?inner, ?data);
-    ens sys::locks::Mutex_own(t, inner.m);
+    req MutexU32_own(?t, ?mutexU32);
+    ens sys::locks::Mutex_own(t, mutexU32.inner);
 {
-    open MutexU32_own(t, inner, data);
-    SysMutex_to_own(t, inner);
+    open MutexU32_own(t, mutexU32);
+    SysMutex_to_own(t, mutexU32.inner);
 }
 
 pred_ctor MutexU32_fbc_inner(l: *MutexU32)(;) = (*l).inner |-> ?inner &*& SysMutex(inner, True) &*& struct_MutexU32_padding(l);
@@ -154,13 +154,13 @@ lem MutexU32_share_full(k: lifetime_t, t: thread_id_t, l: *MutexU32)
         open MutexU32_fbc_inner(l)();
         open u32_full_borrow_content(t0, &(*l).data)();
         assert (*l).inner |-> ?inner &*& (*l).data |-> ?data;
-        close MutexU32_own(t, inner, data);
+        close MutexU32_own(t, MutexU32 { inner, data });
         close MutexU32_full_borrow_content(t, l)();
     }{
         produce_lem_ptr_chunk implies(MutexU32_full_borrow_content(t, l), sep(MutexU32_fbc_inner(l), u32_full_borrow_content(t0, &(*l).data)))() {
             open MutexU32_full_borrow_content(t, l)();
             assert (*l).inner |-> ?inner &*& (*l).data |-> ?data;
-            open MutexU32_own(t, inner, data);
+            open MutexU32_own(t, MutexU32 { inner, data });
             close MutexU32_fbc_inner(l)();
             close u32_full_borrow_content(t0, &(*l).data)();
             close sep(MutexU32_fbc_inner(l), u32_full_borrow_content(t0, &(*l).data))();
@@ -200,11 +200,11 @@ unsafe impl Send for MutexU32 {}
 /*@
 
 lem MutexU32_send(t: thread_id_t, t1: thread_id_t)
-    req MutexU32_own(t, ?inner, ?data);
-    ens MutexU32_own(t1, inner, data);
+    req MutexU32_own(t, ?mutexU32);
+    ens MutexU32_own(t1, mutexU32);
 {
-    open MutexU32_own(t, inner, data);
-    close MutexU32_own(t1, inner, data);
+    open MutexU32_own(t, mutexU32);
+    close MutexU32_own(t1, mutexU32);
 }
 
 @*/
@@ -230,10 +230,10 @@ pub struct MutexGuardU32<'a> {
 /*@
 
 // TODO: Is this extra lifetime `klong` necessary here?
-pred MutexGuardU32_own<'a>(t: thread_id_t, lock: *MutexU32) =
-    [_]exists_np(?klong) &*& lifetime_inclusion('a, klong) == true &*& [_]frac_borrow('a, MutexU32_frac_borrow_content(klong, lock))
-    &*& SysMutex_locked(&(*lock).inner, full_borrow_(klong, u32_full_borrow_content(t0, &(*lock).data)), t)
-    &*& full_borrow(klong, u32_full_borrow_content(t0, &(*lock).data));
+pred MutexGuardU32_own<'a>(t: thread_id_t, mutexGuardU32: MutexGuardU32<'a>) =
+    [_]exists_np(?klong) &*& lifetime_inclusion('a, klong) == true &*& [_]frac_borrow('a, MutexU32_frac_borrow_content(klong, mutexGuardU32.lock))
+    &*& SysMutex_locked(&(*mutexGuardU32.lock).inner, full_borrow_(klong, u32_full_borrow_content(t0, &(*mutexGuardU32.lock).data)), t)
+    &*& full_borrow(klong, u32_full_borrow_content(t0, &(*mutexGuardU32.lock).data));
 
 pred_ctor MutexGuardU32_fbc_rest<'a>(klong: lifetime_t, t: thread_id_t, l: *MutexGuardU32<'a>, lock: *MutexU32)() =
     (*l).lock |-> lock &*& lifetime_inclusion('a, klong) == true &*& struct_MutexGuardU32_padding(l)
@@ -283,9 +283,7 @@ impl MutexU32 {
         let inner = unsafe { sys::locks::Mutex::new() };
         let data = UnsafeCell::new(v);
         let r = MutexU32 { inner, data };
-        // TODO: Dereferencing a pointer of type struct sys::locks::Mutex is not yet supported.
-        // close MutexU32_own(_t, inner, data); Next line is a workaround
-        //@ close MutexU32_own(_t, sys::locks::Mutex { m: inner.m }, data);
+        //@ close MutexU32_own(_t, r);
         r
     }
 
@@ -297,7 +295,7 @@ impl MutexU32 {
     */
     pub fn lock<'a>(&'a self) -> MutexGuardU32<'a>
     //@ req thread_token(?t) &*& [?qa]lifetime_token('a) &*& [_]MutexU32_share('a, t, self);
-    //@ ens thread_token(t) &*& [qa]lifetime_token('a) &*& MutexGuardU32_own::<'a>(t, result.lock);
+    //@ ens thread_token(t) &*& [qa]lifetime_token('a) &*& MutexGuardU32_own::<'a>(t, result);
     {
         unsafe {
             //@ open MutexU32_share('a, t, self);
@@ -308,7 +306,7 @@ impl MutexU32 {
             //@ assert [?qp]SysMutex_share(&(*self).inner, _);
             //@ close [qp]MutexU32_frac_borrow_content(klong, self)();
             //@ close_frac_borrow(qp, MutexU32_frac_borrow_content(klong, self));
-            //@ close MutexGuardU32_own::<'a>(t, self);
+            //@ close MutexGuardU32_own::<'a>(t, MutexGuardU32::<'a> { lock: self });
             MutexGuardU32 { lock: self }
         }
     }
@@ -329,7 +327,8 @@ impl<'b> MutexGuardU32<'b> {
     {
         //@ let kstrong = open_full_borrow_strong('a, MutexGuardU32_full_borrow_content::<'b>(t, self), qa/2);
         //@ open MutexGuardU32_full_borrow_content::<'b>(t, self)();
-        //@ open MutexGuardU32_own::<'b>(t, ?lock);
+        //@ open MutexGuardU32_own::<'b>(t, ?mutexGuardU32);
+        //@ let lock = mutexGuardU32.lock;
 
         // We need `(*lock).data |-> _` to get ptr provenance info
         //@ assert [_]exists_np(?kmlong);
@@ -352,7 +351,7 @@ impl<'b> MutexGuardU32<'b> {
                 open MutexGuardU32_fbc_rest::<'b>(kmlong, t, self, lock)();
                 open full_borrow_(kmlong, u32_full_borrow_content(t0, &(*lock).data))();
                 close exists_np(kmlong); leak exists_np(kmlong);
-                close MutexGuardU32_own::<'b>(t, lock);
+                close MutexGuardU32_own::<'b>(t, mutexGuardU32);
                 close MutexGuardU32_full_borrow_content::<'b>(t, self)();
             }{
                 close MutexGuardU32_fbc_rest::<'b>(kmlong, t, self, lock)();
@@ -393,7 +392,8 @@ impl<'a> Drop for MutexGuardU32<'a> {
     //@ ens thread_token(t) &*& [qkm]lifetime_token('a) &*& (*self).lock |-> ?lock &*& [_]MutexU32_share('a, t, lock) &*& struct_MutexGuardU32_padding(self);
     {
         //@ open MutexGuardU32_full_borrow_content::<'a>(t, self)();
-        //@ open MutexGuardU32_own::<'a>(t, ?lock);
+        //@ open MutexGuardU32_own::<'a>(t, ?mutexGuardU32);
+        //@ let lock = mutexGuardU32.lock;
         //@ open [_]exists_np(?kmlong);
         //@ open_frac_borrow('a, MutexU32_frac_borrow_content(kmlong, lock), qkm);
         //@ open MutexU32_frac_borrow_content(kmlong, lock)();

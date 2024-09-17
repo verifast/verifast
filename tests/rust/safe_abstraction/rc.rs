@@ -30,8 +30,8 @@ pred_ctor rc_na_inv<T>(dk: lifetime_t, gid: usize, ptr: *RcBox<T>, t: thread_id_
 
 inductive wrap<t> = wrap(t);
 
-pred Rc_own<T>(t: thread_id_t, nnp: std::ptr::NonNull<RcBox<T>>) =
-    wrap::<*RcBox<T>>(std::ptr::NonNull_ptr(nnp)) == wrap(?ptr) &*&
+pred Rc_own<T>(t: thread_id_t, rc: Rc<T>) =
+    wrap::<*RcBox<T>>(std::ptr::NonNull_ptr(rc.ptr)) == wrap(?ptr) &*&
     ptr as usize != 0 &*&
     [_]exists(?dk) &*& [_]exists(?gid) &*& [_]na_inv(t, MaskNshrSingle(ptr), rc_na_inv(dk, gid, ptr, t)) &*&
     ticket(dlft_pred(dk), gid, ?frac) &*& [frac]dlft_pred(dk)(gid, false) &*&
@@ -81,7 +81,8 @@ lem Rc_fbor_split<T>(t: thread_id_t, l: *Rc<T>) -> std::ptr::NonNull<RcBox<T>> /
 {
     let klong = open_full_borrow_strong_m(k, Rc_full_borrow_content::<T>(t, l), q);
     open Rc_full_borrow_content::<T>(t, l)();
-    open Rc_own::<T>(t, ?nnp);
+    open Rc_own::<T>(t, ?rc);
+    let nnp = rc.ptr;
     assert [_]exists::<lifetime_t>(?dk) &*& [_]exists::<usize>(?gid) &*& ticket(dlft_pred(dk), gid, ?frac);
     close Rc_frac_bc::<T>(l, nnp)();
     close sep(ticket_(dk, gid, frac), lifetime_token_(frac, dk))();
@@ -95,7 +96,7 @@ lem Rc_fbor_split<T>(t: thread_id_t, l: *Rc<T>) -> std::ptr::NonNull<RcBox<T>> /
         open sep(ticket_(dk, gid, frac), lifetime_token_(frac, dk))();
         open ticket_(dk, gid, frac)();
         open Rc_ctx::<T>(t, l, nnp, dk, gid)();
-        close Rc_own::<T>(t, nnp);
+        close Rc_own::<T>(t, rc);
         close Rc_full_borrow_content::<T>(t, l)();
     }{
         close_full_borrow_strong_m(klong, Rc_full_borrow_content::<T>(t, l), sep(Rc_frac_bc(l, nnp), sep(ticket_(dk, gid, frac), lifetime_token_(frac, dk))));
@@ -151,7 +152,7 @@ impl<T> Rc<T> {
             //@ close rc_na_inv::<T>(dk, gid, p, _t)();
             //@ na_inv_new(_t, MaskNshrSingle(p), rc_na_inv(dk, gid, p, _t));
             //@ share_full_borrow::<T>(dk, _t, &(*p).value);
-            //@ close Rc_own::<T>(_t, nnp);
+            //@ close Rc_own::<T>(_t, ret);
             ret
         }
     }
@@ -232,7 +233,7 @@ impl<T> Clone for Rc<T> {
             let r = Self { ptr: self.ptr };
             //@ close [qp]Rc_frac_bc::<T>(self, nnp)();
             //@ close_frac_borrow(qp, Rc_frac_bc(self, nnp));
-            //@ close Rc_own::<T>(_t, nnp);
+            //@ close Rc_own::<T>(_t, r);
             r
         }
     }
@@ -245,7 +246,8 @@ impl<T> Drop for Rc<T> {
         unsafe {
             //@ open Rc_full_borrow_content::<T>(_t, self)();
             let strong = (*self.ptr.as_ptr()).strong.get();
-            //@ open Rc_own::<T>(_t, ?nnp);
+            //@ open Rc_own::<T>(_t, ?rc);
+            //@ let nnp = rc.ptr;
             //@ assert [_]exists::<lifetime_t>(?dk) &*& [_]exists::<usize>(?gid);
             //@ let ptr = std::ptr::NonNull_ptr::<RcBox<T>>(nnp);
             //@ open thread_token(_t);

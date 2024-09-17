@@ -942,8 +942,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               StructTypeExpr (loc, Some name, None, [], lft_args @ targs)
             in
             let sz_expr = SizeofExpr (loc, TypeExpr vf_ty) in
-            let own tid vs =
-              let args = List.map (fun x -> LitPat x) (tid :: vs) in
+            let own tid v =
+              let args = List.map (fun x -> LitPat x) [ tid; v ] in
               Ok
                 (CallExpr
                    ( loc,
@@ -1122,22 +1122,19 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       (* https://doc.rust-lang.org/reference/types/textual.html *)
     in
     let size = SizeofExpr (loc, TypeExpr vf_ty) in
-    let own tid vs =
-      match vs with
-      | [ c ] ->
-          Ok
-            (CallExpr
-               ( loc,
-                 "char_own",
-                 (*type arguments*) [],
-                 (*indices*) [],
-                 [ LitPat tid; LitPat c ],
-                 Static ))
-          (* Todo: According to https://doc.rust-lang.org/reference/types/textual.html,
-             "It is immediate Undefined Behavior to create a char that falls outside this (0 <= v && v <= 0xD7FF || 0xE000 <= v && v <= 0x10FFFF) range".
-             So it is not enough to check char ranges in function boundaries. Miri warns about UB when reading an out-of-range character.
-             A proposal is to translate char-ptr/ref dereferences to calls to a function with a contract that checks for the range. *)
-      | _ -> Error "[[char]].own(tid, vs) should have `vs == [c]`"
+    let own tid c =
+      Ok
+        (CallExpr
+           ( loc,
+             "char_own",
+             (*type arguments*) [],
+             (*indices*) [],
+             [ LitPat tid; LitPat c ],
+             Static ))
+      (* Todo: According to https://doc.rust-lang.org/reference/types/textual.html,
+         "It is immediate Undefined Behavior to create a char that falls outside this (0 <= v && v <= 0xD7FF || 0xE000 <= v && v <= 0x10FFFF) range".
+         So it is not enough to check char ranges in function boundaries. Miri warns about UB when reading an out-of-range character.
+         A proposal is to translate char-ptr/ref dereferences to calls to a function with a contract that checks for the range. *)
     in
     let own_pred = Ok (Var (loc, "char_own")) in
     let shr = Ok (Var (loc, "char_share")) in
@@ -1148,7 +1145,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       | Some vid when vid != "" ->
           let var_pat = VarPat (loc, vid) in
           let var_expr = Var (loc, vid) in
-          let* own = own tid [ var_expr ] in
+          let* own = own tid var_expr in
           Ok (Sep (loc, PointsTo (loc, l, RegularPointsTo, var_pat), own))
       | _ -> Error "char points_to needs a value id"
     in
@@ -1447,20 +1444,17 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         let* own, own_pred, shr, shr_pred, full_bor_content, points_to =
           match mut with
           | Mir.Mut ->
-              let own tid vs =
-                match vs with
-                | [ l ] ->
-                    let* ptee_fbc = ptee_fbc tid l in
-                    Ok
-                      (CallExpr
-                         ( loc,
-                           "full_borrow",
-                           (*type arguments*) [],
-                           (*indices*) [],
-                           (*arguments*)
-                           [ LitPat lft; LitPat ptee_fbc ],
-                           Static ))
-                | _ -> Error "[[&mut T]].own(tid, vs) needs to vs == [l]"
+              let own tid l =
+                let* ptee_fbc = ptee_fbc tid l in
+                Ok
+                  (CallExpr
+                     ( loc,
+                       "full_borrow",
+                       (*type arguments*) [],
+                       (*indices*) [],
+                       (*arguments*)
+                       [ LitPat lft; LitPat ptee_fbc ],
+                       Static ))
               in
               let own_pred =
                 Error
@@ -1498,11 +1492,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               in
               Ok (own, own_pred, shr, shr_pred, full_bor_content, points_to)
           | Mir.Not ->
-              let own tid vs =
-                match vs with
-                | [ l ] -> ptee_shr lft tid l
-                | _ -> Error "[[&T]].own(tid, vs) needs to vs == [l]"
-              in
+              let own tid l = ptee_shr lft tid l in
               let own_pred =
                 Error
                   "Calling a function with a shared reference type as a \
@@ -1622,12 +1612,12 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           {
             size = SizeofExpr (loc, TypeExpr vf_ty);
             own =
-              (fun t vs ->
+              (fun t v ->
                 Ok
                   (Ast.ExprCallExpr
                      ( loc,
                        TypePredExpr (loc, IdentTypeExpr (loc, None, name), "own"),
-                       t :: vs )));
+                       [ t; v ] )));
             own_pred =
               Ok (TypePredExpr (loc, IdentTypeExpr (loc, None, name), "own"));
             shr =
@@ -3120,42 +3110,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
   let gen_own_asn (adt_defs : Mir.adt_def_tr list) (thread_id : Ast.expr)
       (loc : Ast.loc) (v : Ast.expr) (ty_info : Mir.ty_info) =
     let raw_ty = Mir.raw_type_of ty_info in
-    let* vs =
-      if not (AstAux.is_adt_ty raw_ty) then Ok [ v ]
-      else
-        let* adt_name = AstAux.adt_ty_name raw_ty in
-        match adt_name with
-        (*Todo: We need to have these built-in types defined during translation and not through headers*)
-        | "std_tuple_0_" | "std_empty_" -> Ok [ v ]
-        | _ -> (
-            match
-              List.find_opt
-                (fun ({ name } : Mir.adt_def_tr) -> name = adt_name)
-                adt_defs
-            with
-            | None -> Ok [ v ]
-            | Some adt_def -> (
-                let* adt_kind = Mir.decl_mir_adt_kind adt_def.def in
-                match adt_kind with
-                | Mir.Enum | Mir.Union ->
-                    failwith "Todo: Generate owner assertion for local ADT"
-                | Mir.Struct ->
-                    let* fields_opt = AstAux.decl_fields adt_def.def in
-                    let* fields =
-                      Option.to_result
-                        ~none:(`GenLocalTyAsn "ADT without fields definition")
-                        fields_opt
-                    in
-                    let vs =
-                      List.map
-                        (fun field ->
-                          Ast.Select (loc, v, AstAux.field_name field))
-                        fields
-                    in
-                    Ok vs))
-    in
     let RustBelt.{ size; own; shr } = Mir.interp_of ty_info in
-    match own thread_id vs with
+    match own thread_id v with
     | Ok asn -> Ok asn
     | Error estr ->
         Error (`GenLocalTyAsn ("Owner assertion function error: " ^ estr))
@@ -3187,15 +3143,17 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           adt_name ^ "_own",
           targs,
           [],
-          VarPat (adt_def_loc, "_t")
-          :: List.map (fun (loc, id, _) -> VarPat (loc, id)) adt_fields,
+          [ VarPat (adt_def_loc, "_t"); VarPat (adt_def_loc, "_v") ],
           Static )
     in
     let post =
       Result.get_ok
       @@ gen_own_asns adt_defs adt_def_loc
            (Var (adt_def_loc, "_t"))
-           (List.map (fun (loc, id, ty) -> (loc, Var (loc, id), ty)) adt_fields)
+           (List.map
+              (fun (loc, id, ty) ->
+                (loc, Select (loc, Var (loc, "_v"), id), ty))
+              adt_fields)
     in
     let post = match post with None -> True adt_def_loc | Some post -> post in
     Func
@@ -3446,7 +3404,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                           (Read (loc, Var (loc, "self"), name))
                           (Some name)
                       in
-                      let* own_asn = ty_interp.own tid [ Var (loc, name) ] in
+                      let* own_asn = ty_interp.own tid (Var (loc, name)) in
                       Ok
                         (Ast.Sep
                            (loc, Ast.Sep (loc, points_to_asn, own_asn), asn))
@@ -4049,10 +4007,26 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           | Error msg -> Error (`GenAdtFullBorContent msg)
         in
         let own_args =
-          LitPat (Var (adt_def_loc, tid_param_name))
-          :: List.map
-               (fun (f : Mir.field_def_tr) -> LitPat (Var (f.loc, f.name)))
-               fields
+          [
+            LitPat (Var (adt_def_loc, tid_param_name));
+            LitPat
+              (CastExpr
+                 ( adt_def_loc,
+                   Ast.StructTypeExpr
+                     ( adt_def_loc,
+                       Some name,
+                       None,
+                       [],
+                       List.map
+                         (fun x -> IdentTypeExpr (adt_def_loc, None, x))
+                         (lft_params @ tparams) ),
+                   InitializerList
+                     ( adt_def_loc,
+                       List.map
+                         (fun (f : Mir.field_def_tr) ->
+                           (None, Var (f.loc, f.name)))
+                         fields ) ));
+          ]
         in
         let own_pred =
           CallExpr
@@ -4431,47 +4405,6 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           let* proof_obligs =
             gen_adt_proof_obligs def lft_params tparams send_tparams
           in
-          let own__pred_decls =
-            if lft_params <> [] then []
-            else
-              let own_args =
-                fds
-                |> List.map @@ fun (fd : Mir.field_def_tr) ->
-                   Ast.LitPat (Select (def_loc, Var (def_loc, "v"), fd.name))
-              in
-              [
-                Ast.PredFamilyDecl
-                  ( def_loc,
-                    name ^ "_own_",
-                    tparams,
-                    0,
-                    [
-                      IdentTypeExpr (def_loc, None, "thread_id_t");
-                      StructTypeExpr
-                        (def_loc, Some name, None, [], tparams_targs);
-                    ],
-                    None,
-                    Ast.Inductiveness_Inductive );
-                Ast.PredFamilyInstanceDecl
-                  ( def_loc,
-                    name ^ "_own_",
-                    tparams,
-                    [],
-                    [
-                      (IdentTypeExpr (def_loc, None, "thread_id_t"), "t");
-                      ( StructTypeExpr
-                          (def_loc, Some name, None, [], tparams_targs),
-                        "v" );
-                    ],
-                    CallExpr
-                      ( def_loc,
-                        name ^ "_own",
-                        tparams_targs,
-                        [],
-                        LitPat (Var (def_loc, "t")) :: own_args,
-                        Static ) );
-              ]
-          in
           let type_pred_defs, delayed_proof_obligs =
             if tparams <> [] || lft_params <> [] then ([], [])
             else
@@ -4483,7 +4416,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                         (def_loc, Some name, None, [], tparams_targs),
                       "own",
                       def_loc,
-                      name ^ "_own_" );
+                      name ^ "_own" );
                   Ast.TypePredDef
                     ( def_loc,
                       tparams,
@@ -4529,7 +4462,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             ( Some full_bor_content,
               proof_obligs,
               delayed_proof_obligs,
-              own__pred_decls @ type_pred_defs )
+              type_pred_defs )
         else Ok (None, [], [], [])
       in
       Ok
