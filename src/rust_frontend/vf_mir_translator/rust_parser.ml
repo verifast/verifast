@@ -4,6 +4,8 @@ open Ast
 open Parser
 open Big_int
 
+let expr_of_lft_param loc x = CallExpr (loc, "lft_of", [], [], [LitPat (Typeid (loc, TypeExpr (IdentTypeExpr (loc, None, x))))], Static)
+
 let is_expr_with_block = function
   IfExpr (_, _, _, _) -> true
 | SwitchExpr (_, _, _, _) -> true
@@ -47,6 +49,8 @@ let rec parse_type = function%parser
     | [ ] -> IdentTypeExpr (l, None, x)
     ]
   ] -> t
+| [ (l, PrimePrefixedIdent "static") ] -> ManifestTypeExpr (l, StaticLifetime)
+| [ (l, PrimePrefixedIdent a) ] -> IdentTypeExpr (l, None, "'" ^ a)
 | [ (l, Kwd "fix"); (_, Kwd "("); [%let ts = rep_comma parse_type_with_opt_name]; (_, Kwd ")") ] ->
   PureFuncTypeExpr (l, List.map snd ts)
 | [ (l, Kwd "pred"); (_, Kwd "(");
@@ -65,7 +69,7 @@ let rec parse_type = function%parser
     ]
   ] -> ignore mutability; PtrTypeExpr (l, t)
 | [ (l, Kwd "&");
-    [%let lft = opt (function%parser [ (_, PrimePrefixedIdent lft) ] -> lft)];
+    [%let lft = opt (function%parser [ (_, PrimePrefixedIdent lft) ] -> "'" ^ lft)];
     [%let mutability  = opt (function%parser [ (_, Kwd "mut") ] -> ())];
     [%let tp = function%parser
        [ (ls, Kwd "["); parse_type as elemTp; (_, Kwd "]") ] -> StructTypeExpr (ls, Some "slice_ref", None, [], [elemTp])
@@ -263,6 +267,7 @@ let rec parse_expr_funcs allowStructExprs =
   | [ (l, CharToken c) ] -> IntLit (l, big_int_of_int (Char.code c), true, false, NoLSuffix)
   | [ (l, Kwd "typeid"); (_, Kwd "("); parse_type as t; (_, Kwd ")") ] -> Typeid (l, TypeExpr t)
   | [ (_, Kwd "<"); parse_type as t; (_, Kwd ">"); (l, Kwd "."); (_, Ident x) ] -> TypePredExpr (l, t, x)
+  | [ (l, PrimePrefixedIdent a) ] -> expr_of_lft_param l ("'" ^ a)
   and parse_match_arm = function%parser
     [ parse_expr as pat; (l, Kwd "=>"); parse_expr as rhs ] ->
     let lpat, lrhs = expr_loc pat, expr_loc rhs in
@@ -498,9 +503,9 @@ let parse_pred_body = function%parser
 let parse_type_params = function%parser
   [ (_, Kwd "<");
     [%let tparams = rep_comma (function%parser
-      [ (_, Ident x) ] -> Some x
-    | [ (_, PrimePrefixedIdent _) ] -> None)];
-    (_, Kwd ">") ] -> List.filter_map Fun.id tparams
+      [ (_, Ident x) ] -> x
+    | [ (_, PrimePrefixedIdent a) ] -> "'" ^ a)];
+    (_, Kwd ">") ] -> tparams
 | [ ] -> []
 
 let parse_func_header k = function%parser
@@ -653,6 +658,7 @@ let parse_ghost_decl = function%parser
   in
   if targ_names <> tparams then raise (ParseException (lrhs, "Right-hand side type arguments must match definition type parameters"));
   [TypePredDef (l, tparams, tp, predName, lrhs, rhs)]
+| [ (l, Kwd "let"); (lx, PrimePrefixedIdent x); (_, Kwd "="); parse_expr as e; (_, Kwd ";") ] -> [TypeWithTypeidDecl (l, x, CallExpr (l, "typeid_of_lft", [], [], [LitPat e], Static))]
 
 let parse_ghost_decls stream = List.flatten (rep parse_ghost_decl stream)
 
@@ -779,6 +785,9 @@ let rec parse_use_tree prefix = function%parser
          ] ] -> imports
      | [ ] -> [Import (l, Ghost, String.concat "::" (List.rev prefix), Some x)]]
   ] -> imports
+
+let parse_ghost_generic_arg_list = function%parser
+  [ (_, Kwd "/*@"); (_, Kwd "::"); parse_type_args as targs; (_, Kwd "@*/") ] -> targs
 
 let parse_use_decl = function%parser
   [ (l, Kwd "use"); [%let imports = parse_use_tree []]; (_, Kwd ";") ] -> imports

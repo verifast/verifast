@@ -237,9 +237,9 @@ impl<T: Sync + Send> Arc<T> {
 
     pub fn strong_count<'a>(this: &'a Self) -> usize {
         unsafe {
-            //@ open Arc_share(a, _t, this);
+            //@ open Arc_share('a, _t, this);
             //@ assert [_]exists::<std::ptr::NonNull<ArcInner<T>>>(?nnp);
-            //@ open_frac_borrow(a, Arc_frac_bc(this, nnp), _q_a/2);
+            //@ open_frac_borrow('a, Arc_frac_bc(this, nnp), _q_a/2);
             //@ open [?qnnp]Arc_frac_bc::<T>(this, nnp)();
             let ret = Self::strong_count_inner(this.ptr.as_ref());
             //@ close [qnnp]Arc_frac_bc::<T>(this, nnp)();
@@ -299,17 +299,17 @@ impl<T: Sync + Send> std::ops::Deref for Arc<T> {
 
     fn deref<'a>(&'a self) -> &'a T {
         unsafe {
-            //@ open Arc_share(a, _t, self);
+            //@ open Arc_share('a, _t, self);
             //@ assert [_]exists::<std::ptr::NonNull<ArcInner<T>>>(?nnp) &*& [_]exists::<real>(?frac) &*& [_]exists::<lifetime_t>(?dk);
-            //@ open_frac_borrow(a, Arc_frac_bc(self, nnp), _q_a);
+            //@ open_frac_borrow('a, Arc_frac_bc(self, nnp), _q_a);
             //@ open [?qnnp]Arc_frac_bc::<T>(self, nnp)();
             let ret = &self.ptr.as_ref().data;
             //@ close [qnnp]Arc_frac_bc::<T>(self, nnp)();
             //@ close_frac_borrow(qnnp, Arc_frac_bc(self, nnp));
-            //@ frac_borrow_lft_incl(a, frac, dk);
+            //@ frac_borrow_lft_incl('a, frac, dk);
             //@ produce_type_interp::<T>();
-            //@ share_mono::<T>(dk, a, default_tid, ret);
-            //@ Sync::sync::<T>(a, default_tid, _t, ret);
+            //@ share_mono::<T>(dk, 'a, default_tid, ret);
+            //@ Sync::sync::<T>('a, default_tid, _t, ret);
             //@ leak type_interp::<T>();
             ret
         }
@@ -318,9 +318,9 @@ impl<T: Sync + Send> std::ops::Deref for Arc<T> {
 
 impl<T: Sync + Send> Clone for Arc<T> {
     fn clone<'a>(&'a self) -> Arc<T> {
-        //@ open Arc_share(a, _t, self);
+        //@ open Arc_share('a, _t, self);
         //@ assert [_]exists::<std::ptr::NonNull<ArcInner<T>>>(?nnp);
-        //@ open_frac_borrow(a, Arc_frac_bc(self, nnp), _q_a/2);
+        //@ open_frac_borrow('a, Arc_frac_bc(self, nnp), _q_a/2);
         //@ open [?qnnp]Arc_frac_bc::<T>(self, nnp)();
         unsafe { Self::clone_inner(self.ptr.as_ref()) };
         let ret = Self { ptr: self.ptr };

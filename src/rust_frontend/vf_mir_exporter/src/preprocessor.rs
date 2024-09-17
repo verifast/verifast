@@ -55,16 +55,24 @@ impl<'a> TextIterator<'a> {
     }
 }
 
+#[derive(Copy, Clone, PartialEq, Debug)]
+pub enum GhostRangeKind {
+    Regular,
+    BlockDecls, // This ghost range contains the ghost decls of a block with ghost decls.
+    GenericArgs,
+}
+
 #[derive(Debug)]
 pub struct GhostRange {
     in_fn_body: bool,
-    pub is_block_decls: bool, // This ghost range contains the ghost decls of a block with ghost decls.
+    pub kind: GhostRangeKind,
     pub block_end: Option<SrcPos>, // The position of the closing brace of the block with ghost decls.
     pub end_of_preceding_token: SrcPos,
     start: SrcPos,
     end: SrcPos,
     contents: String,
     span: Option<rustc_span::Span>,
+    pub start_of_preceding_word: SrcPos,
 }
 
 impl GhostRange {
@@ -96,6 +104,12 @@ impl GhostRange {
             None,
         )
     }
+    pub fn start_of_preceding_word_byte_pos(&self) -> rustc_span::BytePos {
+        use rustc_span::BytePos;
+        let start_span = self.span.unwrap();
+        let source_file_start_pos = start_span.lo() - BytePos(self.start.byte_pos);
+        source_file_start_pos + BytePos(self.start_of_preceding_word.byte_pos)
+    }
     pub fn span(&self) -> Option<rustc_span::Span> {
         self.span
     }
@@ -116,6 +130,7 @@ fn ghost_range_contents_is_block_decls(contents: &str) -> bool {
         || trimmed_contents.starts_with("lem ")
         || trimmed_contents.starts_with("lem_auto ")
         || trimmed_contents.starts_with("lem_auto(")
+        || trimmed_contents.starts_with("let '")
 }
 
 /// If a ghost range occurs at the toplevel before the first token in a file,
@@ -144,6 +159,7 @@ pub fn preprocess(
     };
     let mut output = String::new();
     let mut inside_word = false;
+    let mut start_of_word: SrcPos = cs.pos;
     let mut brace_depth = 0;
     let mut last_token_was_fn = false;
     let mut next_block_is_fn_body = false;
@@ -277,8 +293,13 @@ pub fn preprocess(
                                             end,
                                             contents,
                                             span: None,
-                                            is_block_decls,
+                                            kind: if is_block_decls {
+                                                GhostRangeKind::BlockDecls
+                                            } else {
+                                                GhostRangeKind::Regular
+                                            },
                                             block_end: None,
+                                            start_of_preceding_word: start_of_word,
                                         }));
                                     }
                                     Some('~') => {
@@ -313,8 +334,9 @@ pub fn preprocess(
                                             end,
                                             contents,
                                             span: None,
-                                            is_block_decls: false,
+                                            kind: GhostRangeKind::Regular,
                                             block_end: None,
+                                            start_of_preceding_word: start_of_word,
                                         }));
                                         loop {
                                             match cs.peek() {
@@ -374,10 +396,12 @@ pub fn preprocess(
                                     },
                                     contents: String::new(),
                                     span: None,
-                                    is_block_decls: false,
+                                    kind: GhostRangeKind::Regular,
                                     block_end: None,
+                                    start_of_preceding_word: start_of_word,
                                 });
                                 let mut is_ghost_range = false;
+                                let mut is_generic_args = false;
                                 match cs.peek() {
                                     Some('@') => {
                                         cs.next();
@@ -387,8 +411,14 @@ pub fn preprocess(
                                         ghost_range.in_fn_body = fn_body_brace_depth != -1;
                                         ghost_range.start = cs.pos;
                                         if ghost_range.in_fn_body {
-                                            output.push_str(VF_GHOST_CMD_TAG);
-                                            cs.pos.byte_pos += VF_GHOST_CMD_TAG_LEN;
+                                            is_generic_args = match cs.peek() {
+                                                Some(':') => true,
+                                                _ => false,
+                                            };
+                                            if !is_generic_args {
+                                                output.push_str(VF_GHOST_CMD_TAG);
+                                                cs.pos.byte_pos += VF_GHOST_CMD_TAG_LEN;
+                                            }
                                         } else if start_of_whitespace.byte_pos == 0 {
                                             output.push_str(VF_SYNTHETIC_FIRST_TOKENS);
                                             cs.pos.byte_pos += VF_SYNTHETIC_FIRST_TOKENS_LEN;
@@ -454,25 +484,21 @@ pub fn preprocess(
                                     }
                                 }
                                 if is_ghost_range {
-                                    // Get rid of the */
                                     ghost_range.end = cs.pos;
-                                    // ghost_range.end.column -= 2;
-                                    // ghost_range
-                                    //     .contents
-                                    //     .truncate(ghost_range.contents.len() - 2);
-                                    // if ghost_range.contents.ends_with("@") {
-                                    //     ghost_range
-                                    //         .contents
-                                    //         .truncate(ghost_range.contents.len() - 1);
-                                    //     ghost_range.end.column -= 1;
-                                    // }
-                                    ghost_range.is_block_decls = fn_body_brace_depth != -1
+                                    ghost_range.kind = if is_generic_args {
+                                        GhostRangeKind::GenericArgs
+                                    } else if fn_body_brace_depth != -1
                                         && start_of_whitespace.byte_pos
                                             == start_of_block.byte_pos + 1
                                         && ghost_range_contents_is_block_decls(
                                             ghost_range.contents.strip_prefix("/*@").unwrap(),
-                                        );
-                                    if ghost_range.is_block_decls {
+                                        )
+                                    {
+                                        GhostRangeKind::BlockDecls
+                                    } else {
+                                        GhostRangeKind::Regular
+                                    };
+                                    if ghost_range.kind == GhostRangeKind::BlockDecls {
                                         open_blocks.push(OpenBlock {
                                             start_ghost_range_index: ghost_ranges.len(),
                                             brace_depth: brace_depth,
@@ -611,6 +637,7 @@ pub fn preprocess(
                         }
                     }
                     'f' if !was_inside_word => {
+                        start_of_word = cs.pos;
                         cs.next();
                         output.push('f');
                         next_block_is_fn_body |= old_last_token_was_fn;
@@ -630,6 +657,9 @@ pub fn preprocess(
                         }
                     }
                     c @ ('A'..='Z' | 'a'..='z' | '_') => {
+                        if !was_inside_word {
+                            start_of_word = cs.pos;
+                        }
                         cs.next();
                         output.push(c);
                         next_block_is_fn_body |= old_last_token_was_fn;

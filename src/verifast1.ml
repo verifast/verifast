@@ -557,6 +557,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let float_typeid_term = mk_typeid_term "float"
   let double_typeid_term = mk_typeid_term "double"
   let long_double_typeid_term = mk_typeid_term "long_double"
+  let static_lifetime_typeid_term = mk_typeid_term "'static_typeid"
 
   let sizeof_func_symb = mk_symbol "sizeof" [ctxt#type_inductive] ctxt#type_int Uninterp
 
@@ -2000,7 +2001,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         reportUseSite DeclKind_Union ld l;
         UnionType id
       | _ ->
-      static_error l ("No such type parameter, inductive datatype, class, interface, or function type: " ^pn^" "^id) None
+      static_error l ("No such type parameter, inductive datatype, class, interface, or function type: "^id) None
       end
     | IdentTypeExpr (l, Some(pac), id) ->
       let full_name = pac ^ item_path_separator ^ id in
@@ -5724,6 +5725,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let (_, _, _, _, _, _, _, _, _, _, ft_typeid) = List.assoc ftn functypemap0 in
       ft_typeid
     end
+  | StaticLifetime -> static_lifetime_typeid_term
   | GhostTypeParam tn | RealTypeParam tn  ->
     let x = tparam_typeid_varname tn in
     begin try

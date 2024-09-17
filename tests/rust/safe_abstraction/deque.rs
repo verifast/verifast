@@ -302,9 +302,9 @@ impl<T> Deque<T> {
     }
 
     pub fn get_size<'a>(&'a self) -> i32 {
-        //@ open Deque_share(a, _t, self);
+        //@ open Deque_share('a, _t, self);
         //@ assert [?q]exists(?nodes);
-        //@ open_frac_borrow(a, Deque_frac_borrow_content(nodes, _t, self), _q_a);
+        //@ open_frac_borrow('a, Deque_frac_borrow_content(nodes, _t, self), _q_a);
         //@ open [?qf]Deque_frac_borrow_content::<T>(nodes, _t, self)();
         let size = (*self).size;
         //@ close [qf]Deque_frac_borrow_content::<T>(nodes, _t, self)();
@@ -339,7 +339,7 @@ impl<T> Deque<T> {
     }
 
     pub fn push_front<'a>(&'a mut self, value: T) {
-        //@ open_full_borrow(_q_a, a, Deque_full_borrow_content(_t, self));
+        //@ open_full_borrow(_q_a, 'a, Deque_full_borrow_content(_t, self));
         //@ open Deque_full_borrow_content::<T>(_t, self)();
         //@ open Deque_own(_t, _, ?size);
         if (*self).size < 0x7fffffff {
@@ -405,7 +405,7 @@ impl<T> Deque<T> {
     }
 
     pub fn push_back<'a>(&'a mut self, value: T) {
-        //@ open_full_borrow(_q_a, a, Deque_full_borrow_content(_t, self));
+        //@ open_full_borrow(_q_a, 'a, Deque_full_borrow_content(_t, self));
         //@ open Deque_full_borrow_content::<T>(_t, self)();
         //@ open Deque_own(_t, _, ?size);
         if (*self).size < 0x7fffffff {
@@ -516,7 +516,7 @@ impl<T> Deque<T> {
     }
 
     pub fn pop_back<'a>(&'a mut self) -> T {
-        //@ open_full_borrow(_q_a, a, Deque_full_borrow_content(_t, self));
+        //@ open_full_borrow(_q_a, 'a, Deque_full_borrow_content(_t, self));
         //@ open Deque_full_borrow_content::<T>(_t, self)();
         //@ open Deque_own(_t, _, ?size);
         if (*self).size == 0 {

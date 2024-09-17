@@ -132,8 +132,8 @@ impl Deque {
     }
 
     pub fn get_size<'a>(&'a self) -> i32 {
-        //@ open Deque_share(a, _t, self);
-        //@ open_frac_borrow(a, Deque_frac_borrow_content(_t, self), _q_a);
+        //@ open Deque_share('a, _t, self);
+        //@ open_frac_borrow('a, Deque_frac_borrow_content(_t, self), _q_a);
         let size = (*self).size;
         //@ assert [?q_p]Deque_size(self, _);
         //@ close_frac_borrow(q_p, Deque_frac_borrow_content(_t, self));
@@ -161,7 +161,7 @@ impl Deque {
     }
 
     pub fn push_front<'a>(&'a mut self, value: i32) {
-        //@ open_full_borrow(_q_a, a, Deque_full_borrow_content(_t, self));
+        //@ open_full_borrow(_q_a, 'a, Deque_full_borrow_content(_t, self));
         //@ open Deque_full_borrow_content(_t, self)();
         if (*self).size < 0x7fffffff {
             unsafe {
@@ -212,7 +212,7 @@ impl Deque {
     }
 
     pub fn push_back<'a>(&'a mut self, value: i32) {
-        //@ open_full_borrow(_q_a, a, Deque_full_borrow_content(_t, self));
+        //@ open_full_borrow(_q_a, 'a, Deque_full_borrow_content(_t, self));
         //@ open Deque_full_borrow_content(_t, self)();
         if (*self).size < 0x7fffffff {
             unsafe { Self::unsafe_push_back(self, value) }
@@ -291,7 +291,7 @@ impl Deque {
     }
 
     pub fn pop_back<'a>(&'a mut self) -> i32 {
-        //@ open_full_borrow(_q_a, a, Deque_full_borrow_content(_t, self));
+        //@ open_full_borrow(_q_a, 'a, Deque_full_borrow_content(_t, self));
         //@ open Deque_full_borrow_content(_t, self)();
         if (*self).size == 0 {
             std::process::abort();
@@ -321,11 +321,11 @@ impl Deque {
     }
 
     pub fn swap<'a>(&'a mut self, other: &'a mut Deque) {
-        //@ open_full_borrow(_q_a/2, a, Deque_full_borrow_content(_t, self));
+        //@ open_full_borrow(_q_a/2, 'a, Deque_full_borrow_content(_t, self));
         //@ open Deque_full_borrow_content(_t, self)();
         let tmp_sen = (*self).sentinel;
         let tmp_sz = (*self).size;
-        //@ open_full_borrow(_q_a/2, a, Deque_full_borrow_content(_t, other));
+        //@ open_full_borrow(_q_a/2, 'a, Deque_full_borrow_content(_t, other));
         //@ open Deque_full_borrow_content(_t, other)();
         (*self).sentinel = (*other).sentinel;
         (*self).size = (*other).size;

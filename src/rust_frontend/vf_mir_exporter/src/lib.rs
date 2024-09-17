@@ -376,6 +376,7 @@ impl<'tcx> rustc_hir::intravisit::Visitor<'tcx> for HirVisitor {
 mod vf_mir_builder {
     mod capnp_utils;
     use crate::preprocessor::GhostRange;
+    use crate::preprocessor::GhostRangeKind;
     use crate::vf_mir_capnp::annotation as annot_cpn;
     use crate::vf_mir_capnp::body as body_cpn;
     use crate::vf_mir_capnp::hir as hir_cpn;
@@ -421,6 +422,7 @@ mod vf_mir_builder {
     use rustc_middle::bug;
     use rustc_middle::mir::interpret::AllocRange;
     use rustc_middle::ty;
+    use rustc_middle::ty::GenericParamDefKind;
     use rustc_middle::{mir, ty::TyCtxt};
     use rvalue_cpn::aggregate_data::aggregate_kind as aggregate_kind_cpn;
     use rvalue_cpn::binary_op_data as binary_op_data_cpn;
@@ -1049,6 +1051,20 @@ mod vf_mir_builder {
                 .expect(&format!("Failed to get HIR generics data"));
             Self::encode_hir_generics(enc_ctx, hir_gens, hir_gens_cpn);
 
+            let generics = tcx.generics_of(def_id);
+            body_cpn.reborrow().fill_generics(
+                &generics.params,
+                |mut generic_param_cpn, generic_param| {
+                    generic_param_cpn.set_name(generic_param.name.as_str());
+                    let mut kind_cpn = generic_param_cpn.init_kind();
+                    match generic_param.kind {
+                        GenericParamDefKind::Lifetime => kind_cpn.set_lifetime(()),
+                        GenericParamDefKind::Type { .. } => kind_cpn.set_type(()),
+                        GenericParamDefKind::Const { .. } => kind_cpn.set_const(()),
+                    }
+                },
+            );
+
             let predicates = tcx.predicates_of(def_id).predicates;
             body_cpn
                 .reborrow()
@@ -1136,9 +1152,16 @@ mod vf_mir_builder {
             );
 
             let ghost_decl_blocks = ghost_stmts
-                .extract_if(|annot| annot.is_block_decls)
+                .extract_if(|annot| annot.kind == GhostRangeKind::BlockDecls)
                 .collect::<LinkedList<_>>();
-
+            for b in &ghost_decl_blocks {
+                if b.kind == GhostRangeKind::GenericArgs {
+                    panic!(
+                        "Ghost generic args list not matched to function call at {:?}",
+                        b.span()
+                    );
+                }
+            }
             body_cpn.fill_ghost_stmts(&ghost_stmts, |ghost_stmt_cpn, ghost_stmt| {
                 Self::encode_annotation(tcx, &ghost_stmt, ghost_stmt_cpn);
             });
@@ -1575,11 +1598,19 @@ mod vf_mir_builder {
             mut fn_def_ty_cpn: fn_def_ty_cpn::Builder<'_>,
         ) {
             let def_path = tcx.def_path_str(*def_id);
-            debug!("Encoding FnDef for {}", def_path);
+            let late_bound_generic_param_count =
+                tcx.fn_sig(def_id).skip_binder().bound_vars().len();
+            debug!(
+                "Encoding FnDef for {} with {} late-bound generic params and substs {:?}",
+                def_path, late_bound_generic_param_count, substs
+            );
+            fn_def_ty_cpn.set_late_bound_generic_param_count(
+                late_bound_generic_param_count.try_into().unwrap(),
+            );
             let mut id_cpn = fn_def_ty_cpn.reborrow().init_id();
             id_cpn.set_name(&def_path);
             let mut id_mono_cpn = fn_def_ty_cpn.reborrow().init_id_mono();
-            if substs.is_empty() {
+            if substs.is_empty() && late_bound_generic_param_count == 0 {
                 id_mono_cpn.set_nothing(());
             } else {
                 let def_path_mono = tcx.def_path_str_with_args(*def_id, substs);
@@ -2055,8 +2086,23 @@ mod vf_mir_builder {
                 }
             }
 
-            let fn_span_data_cpn = fn_call_data_cpn.init_fn_span();
+            let fn_span_data_cpn = fn_call_data_cpn.reborrow().init_fn_span();
             Self::encode_span_data(tcx, &fn_span.data(), fn_span_data_cpn);
+
+            let fn_span_lo = fn_span.lo();
+            let ghost_generic_arg_lists: Vec<_> = enc_ctx
+                .annots
+                .extract_if(|annot| {
+                    annot.kind == GhostRangeKind::GenericArgs
+                        && annot.start_of_preceding_word_byte_pos() == fn_span_lo
+                })
+                .collect();
+            assert!(ghost_generic_arg_lists.len() <= 1);
+            if ghost_generic_arg_lists.len() == 1 {
+                let annot_opt_cpn = fn_call_data_cpn.reborrow().init_ghost_generic_arg_list();
+                let annot_cpn = annot_opt_cpn.init_something();
+                Self::encode_annotation(tcx, &ghost_generic_arg_lists[0], annot_cpn);
+            }
         }
 
         fn encode_operand(

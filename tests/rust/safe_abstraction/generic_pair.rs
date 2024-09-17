@@ -161,18 +161,18 @@ impl<A, B> Pair<A, B> {
     }
     
     pub fn deref_fst<'a>(&'a self) -> &'a A {
-        //@ open Pair_share::<A, B>(a, _t, self);
+        //@ open Pair_share::<A, B>('a, _t, self);
         &self.fst
     }
     
     pub fn deref_snd<'a>(&'a self) -> &'a B {
-        //@ open Pair_share::<A, B>(a, _t, self);
+        //@ open Pair_share::<A, B>('a, _t, self);
         &self.snd
     }
     
     pub fn replace_fst<'a>(&'a mut self, new_fst: A) -> A {
         unsafe {
-            //@ open_full_borrow(_q_a, a, Pair_full_borrow_content::<A, B>(_t, self));
+            //@ open_full_borrow(_q_a, 'a, Pair_full_borrow_content::<A, B>(_t, self));
             //@ open Pair_full_borrow_content::<A, B>(_t, self)();
             //@ open Pair_own(_t, ?fst0, ?snd0);
             //@ open Pair_fst(self, fst0);
@@ -189,7 +189,7 @@ impl<A, B> Pair<A, B> {
 
     pub fn replace_snd<'a>(&'a mut self, new_snd: B) -> B {
         unsafe {
-            //@ open_full_borrow(_q_a, a, Pair_full_borrow_content::<A, B>(_t, self));
+            //@ open_full_borrow(_q_a, 'a, Pair_full_borrow_content::<A, B>(_t, self));
             //@ open Pair_full_borrow_content::<A, B>(_t, self)();
             //@ open Pair_own(_t, ?fst0, ?snd0);
             //@ open Pair_snd(self, snd0);
@@ -205,14 +205,14 @@ impl<A, B> Pair<A, B> {
     }
     
     pub fn deref_fst_mut<'a>(&'a mut self) -> &'a mut A {
-        //@ Pair_split_full_borrow(a, _t, self);
-        //@ leak full_borrow(a, <B>.full_borrow_content(_t, &(*self).snd));
+        //@ Pair_split_full_borrow('a, _t, self);
+        //@ leak full_borrow('a, <B>.full_borrow_content(_t, &(*self).snd));
         &mut self.fst
     }
 
     pub fn deref_snd_mut<'a>(&'a mut self) -> &'a mut B {
-        //@ Pair_split_full_borrow(a, _t, self);
-        //@ leak full_borrow(a, <A>.full_borrow_content(_t, &(*self).fst));
+        //@ Pair_split_full_borrow('a, _t, self);
+        //@ leak full_borrow('a, <A>.full_borrow_content(_t, &(*self).fst));
         &mut self.snd
     }
     

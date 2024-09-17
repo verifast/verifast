@@ -136,33 +136,33 @@ pub struct MutexGuard<'a, T: Send> {
 /*@
 
 // TODO: Is this extra lifetime `klong` necessary here?
-pred MutexGuard_own<T>(km: lifetime_t, t: thread_id_t, lock: *Mutex<T>) =
-    [_]exists_np(?klong) &*& lifetime_inclusion(km, klong) == true &*& [_]frac_borrow(km, Mutex_frac_borrow_content(klong, lock))
+pred MutexGuard_own<'a, T>(t: thread_id_t, lock: *Mutex<T>) =
+    [_]exists_np(?klong) &*& lifetime_inclusion('a, klong) == true &*& [_]frac_borrow('a, Mutex_frac_borrow_content(klong, lock))
     &*& sys::locks::SysMutex_locked(&(*lock).inner, full_borrow_(klong, <T>.full_borrow_content(t0, &(*lock).data)), t)
     &*& full_borrow(klong, <T>.full_borrow_content(t0, &(*lock).data));
 
-pred_ctor MutexGuard_fbc_rest<T>(km: lifetime_t, klong: lifetime_t, t: thread_id_t, l: *MutexGuard<T>, lock: *Mutex<T>)() =
-    (*l).lock |-> lock &*& lifetime_inclusion(km, klong) == true &*& struct_MutexGuard_padding(l)
-    &*& [_]frac_borrow(km, Mutex_frac_borrow_content(klong, lock))
+pred_ctor MutexGuard_fbc_rest<'a, T>(klong: lifetime_t, t: thread_id_t, l: *MutexGuard<'a, T>, lock: *Mutex<T>)() =
+    (*l).lock |-> lock &*& lifetime_inclusion('a, klong) == true &*& struct_MutexGuard_padding(l)
+    &*& [_]frac_borrow('a, Mutex_frac_borrow_content(klong, lock))
     &*& sys::locks::SysMutex_locked(&(*lock).inner, full_borrow_(klong, <T>.full_borrow_content(t0, &(*lock).data)), t);
 
-pred MutexGuard_share<T>(km: lifetime_t, k: lifetime_t, t: thread_id_t, l: *MutexGuard<T>) = true;
+pred MutexGuard_share<'a, T>(k: lifetime_t, t: thread_id_t, l: *MutexGuard<'a, T>) = true;
 
-lem MutexGuard_share_mono<T>(km: lifetime_t, k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *MutexGuard<T>)
-    req lifetime_inclusion(k1, k) == true &*& [_]MutexGuard_share(km, k, t, l);
-    ens [_]MutexGuard_share(km, k1, t, l);
+lem MutexGuard_share_mono<'a, T>(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *MutexGuard<'a, T>)
+    req lifetime_inclusion(k1, k) == true &*& [_]MutexGuard_share::<'a, T>(k, t, l);
+    ens [_]MutexGuard_share::<'a, T>(k1, t, l);
 {
-    close MutexGuard_share(km, k1, t, l);
-    leak MutexGuard_share(km, k1, t, l);
+    close MutexGuard_share::<'a, T>(k1, t, l);
+    leak MutexGuard_share::<'a, T>(k1, t, l);
 }
 
-lem MutexGuard_share_full<T>(km: lifetime_t, k: lifetime_t, t: thread_id_t, l: *MutexGuard<T>)
-    req full_borrow(k, MutexGuard_full_borrow_content(km, t, l)) &*& [?q]lifetime_token(k);
-    ens [_]MutexGuard_share(km, k, t, l) &*& [q]lifetime_token(k);
+lem MutexGuard_share_full<'a, T>(k: lifetime_t, t: thread_id_t, l: *MutexGuard<'a, T>)
+    req full_borrow(k, MutexGuard_full_borrow_content::<'a, T>(t, l)) &*& [?q]lifetime_token(k);
+    ens [_]MutexGuard_share::<'a, T>(k, t, l) &*& [q]lifetime_token(k);
 {
     leak full_borrow(_, _);
-    close MutexGuard_share(km, k, t, l);
-    leak MutexGuard_share(km, k, t, l);
+    close MutexGuard_share::<'a, T>(k, t, l);
+    leak MutexGuard_share::<'a, T>(k, t, l);
 }
 
 @*/
@@ -173,12 +173,12 @@ unsafe impl<'a, T: Send> Sync for MutexGuard<'a, T> {}
 
 /*@
 
-lem MutexGuard_sync<T>(km: lifetime_t, t: thread_id_t, t1: thread_id_t)
-    req MutexGuard_share::<T>(km, ?k, t, ?l);
-    ens MutexGuard_share(km, k, t1, l);
+lem MutexGuard_sync<'a, T>(t: thread_id_t, t1: thread_id_t)
+    req MutexGuard_share::<'a, T>(?k, t, ?l);
+    ens MutexGuard_share::<'a, T>(k, t1, l);
 {
-    open MutexGuard_share(km, k, t, l);
-    close MutexGuard_share(km, k, t1, l);
+    open MutexGuard_share::<'a, T>(k, t, l);
+    close MutexGuard_share::<'a, T>(k, t1, l);
 }
 
 @*/
@@ -200,19 +200,19 @@ impl<T: Send> Mutex<T> {
     Note that in either case it is not undefined behaviour.
     */
     pub fn lock<'a>(&'a self) -> MutexGuard<'a, T>
-    //@ req thread_token(?t) &*& [?qa]lifetime_token(?a) &*& [_]Mutex_share(a, t, self);
-    //@ ens thread_token(t) &*& [qa]lifetime_token(a) &*& MutexGuard_own(a, t, result.lock);
+    //@ req thread_token(?t) &*& [?qa]lifetime_token('a) &*& [_]Mutex_share('a, t, self);
+    //@ ens thread_token(t) &*& [qa]lifetime_token('a) &*& MutexGuard_own::<'a, T>(t, result.lock);
     {
         unsafe {
-            //@ open Mutex_share(a, t, self);
+            //@ open Mutex_share('a, t, self);
             //@ assert [_]exists_np(?klong);
-            //@ open_frac_borrow(a, Mutex_frac_borrow_content(klong, self), qa);
+            //@ open_frac_borrow('a, Mutex_frac_borrow_content(klong, self), qa);
             //@ open Mutex_frac_borrow_content::<T>(klong, self)();
-            self.inner.lock();
+            self.inner.lock/*@::<'a> @*/();
             //@ assert [?qp]sys::locks::SysMutex_share(&(*self).inner, _);
             //@ close [qp]Mutex_frac_borrow_content::<T>(klong, self)();
             //@ close_frac_borrow(qp, Mutex_frac_borrow_content(klong, self));
-            //@ close MutexGuard_own(a, t, self);
+            //@ close MutexGuard_own::<'a, T>(t, self);
             MutexGuard { lock: self }
         }
     }
@@ -224,7 +224,7 @@ impl<'b, T: Send> Deref for MutexGuard<'b, T> {
     
     fn deref<'a>(&'a self) -> &'a T
     {
-        //@ assert lifetime_inclusion(a, b) == true;
+        //@ assert lifetime_inclusion('a, 'b) == true;
         //@ assume(false); //~allow_dead_code
         unsafe { &*(*self.lock).data.get() } //~allow_dead_code
     } //~allow_dead_code
@@ -237,20 +237,19 @@ impl<'b, T: Send> DerefMut for MutexGuard<'b, T> {
     /*@
     req
         is_Send(typeid(T)) == true &*&
-        thread_token(?t) &*& lifetimes(cons(?km, cons(?a, nil))) &*& [?qa]lifetime_token(a) &*& [?qkm]lifetime_token(km)
-        &*& full_borrow(a, MutexGuard_full_borrow_content(km, t, self))
-        &*& lifetime_inclusion(a, km) == true;
+        thread_token(?t) &*& [?qa]lifetime_token('a) &*& [?qb]lifetime_token('b)
+        &*& full_borrow('a, MutexGuard_full_borrow_content::<'b, T>(t, self))
+        &*& lifetime_inclusion('a, 'b) == true;
     @*/
-    //@ ens thread_token(t) &*& [qa]lifetime_token(a) &*& [qkm]lifetime_token(km) &*& full_borrow(a, <T>.full_borrow_content(t, result));
+    //@ ens thread_token(t) &*& [qa]lifetime_token('a) &*& [qb]lifetime_token('b) &*& full_borrow('a, <T>.full_borrow_content(t, result));
     {
-        //@ open lifetimes(_);
-        //@ let kstrong = open_full_borrow_strong(a, MutexGuard_full_borrow_content(km, t, self), qa/2);
-        //@ open MutexGuard_full_borrow_content::<T>(km, t, self)();
-        //@ open MutexGuard_own::<T>(km, t, ?lock);
+        //@ let kstrong = open_full_borrow_strong('a, MutexGuard_full_borrow_content::<'b, T>(t, self), qa/2);
+        //@ open MutexGuard_full_borrow_content::<'b, T>(t, self)();
+        //@ open MutexGuard_own::<'b, T>(t, ?lock);
         // We need `(*lock).data |-> _` to get ptr provenance info
         //@ assert [_]exists_np(?kmlong);
-        //@ lifetime_inclusion_trans(a, km, kmlong);
-        //@ lifetime_token_trade(a, qa/2, kmlong);
+        //@ lifetime_inclusion_trans('a, 'b, kmlong);
+        //@ lifetime_token_trade('a, qa/2, kmlong);
         //@ assert [?qkml]lifetime_token(kmlong);
         //@ open_full_borrow(qkml, kmlong, <T>.full_borrow_content(t0, &(*lock).data));
         //@ open_full_borrow_content::<T>(t0, &(*lock).data);
@@ -261,26 +260,26 @@ impl<'b, T: Send> DerefMut for MutexGuard<'b, T> {
         let r = unsafe { &mut *(*self.lock).data.get() };
         /*@
         produce_lem_ptr_chunk full_borrow_convert_strong(True,
-            sep(MutexGuard_fbc_rest(km, kmlong, t, self, lock), full_borrow_(kmlong, <T>.full_borrow_content(t0, &(*lock).data))),
+            sep(MutexGuard_fbc_rest::<'b, T>(kmlong, t, self, lock), full_borrow_(kmlong, <T>.full_borrow_content(t0, &(*lock).data))),
             kstrong,
-            MutexGuard_full_borrow_content(km, t, self))() {
-                open sep(MutexGuard_fbc_rest(km, kmlong, t, self, lock), full_borrow_(kmlong, <T>.full_borrow_content(t0, &(*lock).data)))();
-                open MutexGuard_fbc_rest::<T>(km, kmlong, t, self, lock)();
+            MutexGuard_full_borrow_content::<'b, T>(t, self))() {
+                open sep(MutexGuard_fbc_rest::<'b, T>(kmlong, t, self, lock), full_borrow_(kmlong, <T>.full_borrow_content(t0, &(*lock).data)))();
+                open MutexGuard_fbc_rest::<'b, T>(kmlong, t, self, lock)();
                 open full_borrow_(kmlong, <T>.full_borrow_content(t0, &(*lock).data))();
                 close exists_np(kmlong); leak exists_np(kmlong);
-                close MutexGuard_own(km, t, lock);
-                close MutexGuard_full_borrow_content::<T>(km, t, self)();
+                close MutexGuard_own::<'b, T>(t, lock);
+                close MutexGuard_full_borrow_content::<'b, T>(t, self)();
             }{
-                close MutexGuard_fbc_rest::<T>(km, kmlong, t, self, lock)();
+                close MutexGuard_fbc_rest::<'b, T>(kmlong, t, self, lock)();
                 close full_borrow_(kmlong, <T>.full_borrow_content(t0, &(*lock).data))();
-                close sep(MutexGuard_fbc_rest(km, kmlong, t, self, lock), full_borrow_(kmlong, <T>.full_borrow_content(t0, &(*lock).data)))();
-                close_full_borrow_strong(kstrong, MutexGuard_full_borrow_content(km, t, self),
-                    sep(MutexGuard_fbc_rest(km, kmlong, t, self, lock), full_borrow_(kmlong, <T>.full_borrow_content(t0, &(*lock).data))));
-                full_borrow_split(kstrong, MutexGuard_fbc_rest(km, kmlong, t, self, lock),
+                close sep(MutexGuard_fbc_rest::<'b, T>(kmlong, t, self, lock), full_borrow_(kmlong, <T>.full_borrow_content(t0, &(*lock).data)))();
+                close_full_borrow_strong(kstrong, MutexGuard_full_borrow_content::<'b, T>(t, self),
+                    sep(MutexGuard_fbc_rest::<'b, T>(kmlong, t, self, lock), full_borrow_(kmlong, <T>.full_borrow_content(t0, &(*lock).data))));
+                full_borrow_split(kstrong, MutexGuard_fbc_rest::<'b, T>(kmlong, t, self, lock),
                     full_borrow_(kmlong, <T>.full_borrow_content(t0, &(*lock).data)));
                 full_borrow_unnest(kstrong, kmlong, <T>.full_borrow_content(t0, &(*lock).data));
-                lifetime_inclusion_glb(a, kstrong, kmlong);
-                full_borrow_mono(lifetime_intersection(kstrong, kmlong), a, <T>.full_borrow_content(t0, &(*lock).data));
+                lifetime_inclusion_glb('a, kstrong, kmlong);
+                full_borrow_mono(lifetime_intersection(kstrong, kmlong), 'a, <T>.full_borrow_content(t0, &(*lock).data));
             }
         @*/
         //@ leak full_borrow(kstrong, _);
@@ -301,7 +300,7 @@ impl<'b, T: Send> DerefMut for MutexGuard<'b, T> {
                 ghost_rec_perm_top_unweaken();
                 close_full_borrow_content(t0, &(*lock).data);
             } {
-                full_borrow_implies(a, <T>.full_borrow_content(t0, &(*lock).data), <T>.full_borrow_content(t, &(*lock).data));
+                full_borrow_implies('a, <T>.full_borrow_content(t0, &(*lock).data), <T>.full_borrow_content(t, &(*lock).data));
             }
         }
         @*/
@@ -313,23 +312,23 @@ impl<'b, T: Send> DerefMut for MutexGuard<'b, T> {
 impl<'a, T: Send> Drop for MutexGuard<'a, T> {
 
     fn drop<'b>(self: &'b mut MutexGuard<'a, T>)
-    //@ req thread_token(?t) &*& [?qkm]lifetime_token(?km) &*& MutexGuard_full_borrow_content::<T>(km, t, self)();
-    //@ ens thread_token(t) &*& [qkm]lifetime_token(km) &*& (*self).lock |-> ?lock &*& [_]Mutex_share(km, t, lock) &*& struct_MutexGuard_padding(self);
+    //@ req thread_token(?t) &*& [?qa]lifetime_token('a) &*& MutexGuard_full_borrow_content::<'a, T>(t, self)();
+    //@ ens thread_token(t) &*& [qa]lifetime_token('a) &*& (*self).lock |-> ?lock &*& [_]Mutex_share('a, t, lock) &*& struct_MutexGuard_padding(self);
     {
-        //@ open MutexGuard_full_borrow_content::<T>(km, t, self)();
-        //@ open MutexGuard_own(km, t, ?lock);
+        //@ open MutexGuard_full_borrow_content::<'a, T>(t, self)();
+        //@ open MutexGuard_own::<'a, T>(t, ?lock);
         //@ open [_]exists_np(?kmlong);
-        //@ open_frac_borrow(km, Mutex_frac_borrow_content(kmlong, lock), qkm);
+        //@ open_frac_borrow('a, Mutex_frac_borrow_content(kmlong, lock), qa);
         //@ open Mutex_frac_borrow_content::<T>(kmlong, lock)();
         unsafe {
-            (*self.lock).inner.unlock();
+            (*self.lock).inner.unlock/*@::<'a> @*/();
         }
         //@ assert [?qp]sys::locks::SysMutex_share(&(*lock).inner, _);
         //@ close [qp]Mutex_frac_borrow_content::<T>(kmlong, lock)();
         //@ close_frac_borrow(qp, Mutex_frac_borrow_content(kmlong, lock));
-        //@ assert [?qfrac]frac_borrow(km, _);
+        //@ assert [?qfrac]frac_borrow('a, _);
         //@ close [qfrac]exists_np(kmlong);
-        //@ close [qfrac]Mutex_share(km, t, lock);
+        //@ close [qfrac]Mutex_share('a, t, lock);
     }
 
 }

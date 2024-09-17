@@ -174,3 +174,10 @@ let disjoint_batches get_loc elms =
   let* dbs = ListAux.try_fold_left f_aux [] elms in
   let dbs = List.map (fun (es, l) -> (List.rev es, l)) dbs in
   Ok (List.rev dbs)
+
+let loc_contains_srcpos (l : Ast.loc) (pos : Ast.srcpos) =
+  let ((path1, line1, col1), (path2, line2, col2)) = lexed_loc l in
+  let (path, line, col) = pos in
+  path = path1 && path = path2 &&
+  (line1 < line || line1 = line && col1 <= col) &&
+  (line < line2 || line = line2 && col <= col2)

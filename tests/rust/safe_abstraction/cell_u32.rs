@@ -69,11 +69,11 @@ impl CellU32 {
 
     /* VeriFast generates the contract of the safe functions based on the function's semantic type */
     pub fn get<'a>(&'a self) -> u32 {
-        //@ open CellU32_share(a, _t, self);
-        //@ assert [_]nonatomic_borrow(a, _t, ?_m, _);
+        //@ open CellU32_share('a, _t, self);
+        //@ assert [_]nonatomic_borrow('a, _t, ?_m, _);
         //@ open thread_token(_t);
         //@ thread_token_split(_t, MaskTop, _m);
-        //@ open_nonatomic_borrow(a, _t, _m, _q_a);
+        //@ open_nonatomic_borrow('a, _t, _m, _q_a);
         let v = unsafe { *self.v.get() };
         //@ close_nonatomic_borrow();
         //@ thread_token_merge(_t, mask_diff(MaskTop, _m), _m);
@@ -102,18 +102,18 @@ impl CellU32 {
     }
 
     pub fn swap<'a>(&'a self, other: &'a Self) {
-        //@ open CellU32_share(a, _t, self);
-        //@ open CellU32_share(a, _t, other);
+        //@ open CellU32_share('a, _t, self);
+        //@ open CellU32_share('a, _t, other);
         if self as *const CellU32 == other as *const CellU32 {
             return;
         }
-        //@ assert [_]nonatomic_borrow(a, _t, ?ms, CellU32_nonatomic_borrow_content(self, _t));
-        //@ assert [_]nonatomic_borrow(a, _t, ?mo, CellU32_nonatomic_borrow_content(other, _t));
+        //@ assert [_]nonatomic_borrow('a, _t, ?ms, CellU32_nonatomic_borrow_content(self, _t));
+        //@ assert [_]nonatomic_borrow('a, _t, ?mo, CellU32_nonatomic_borrow_content(other, _t));
         //@ open thread_token(_t);
         //@ thread_token_split(_t, MaskTop, ms);
         //@ thread_token_split(_t, mask_diff(MaskTop, ms), mo);
-        //@ open_nonatomic_borrow(a, _t, ms, _q_a/2);
-        //@ open_nonatomic_borrow(a, _t, mo, _q_a/2);
+        //@ open_nonatomic_borrow('a, _t, ms, _q_a/2);
+        //@ open_nonatomic_borrow('a, _t, mo, _q_a/2);
         let ps = self.v.get();
         let po = other.v.get();
         unsafe {

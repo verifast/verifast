@@ -70,11 +70,11 @@ impl<T> Cell<T> {
     
     fn replace<'a>(&'a self, v: T) -> T {
         unsafe {
-            //@ open Cell_share(a, _t, self);
-            //@ assert [_]nonatomic_borrow(a, _t, ?mask, Cell_nonatomic_borrow_content(self, _t));
+            //@ open Cell_share('a, _t, self);
+            //@ assert [_]nonatomic_borrow('a, _t, ?mask, Cell_nonatomic_borrow_content(self, _t));
             //@ open thread_token(_t);
             //@ thread_token_split(_t, MaskTop, mask);
-            //@ open_nonatomic_borrow(a, _t, mask, _q_a);
+            //@ open_nonatomic_borrow('a, _t, mask, _q_a);
             //@ open Cell_nonatomic_borrow_content::<T>(self, _t)();
             //@ open Cell_own::<T>(_t, ?v0);
             //@ open Cell_v(self, v0);
@@ -92,20 +92,20 @@ impl<T> Cell<T> {
     }
 
     fn swap<'a>(&'a self, other: &'a Self) {
-        //@ open Cell_share(a, _t, self);
-        //@ open Cell_share(a, _t, other);
+        //@ open Cell_share('a, _t, self);
+        //@ open Cell_share('a, _t, other);
         if self as *const Cell<T> == other as *const Cell<T> {
             return;
         }
-        //@ assert [_]nonatomic_borrow(a, _t, ?ms, Cell_nonatomic_borrow_content(self, _t));
-        //@ assert [_]nonatomic_borrow(a, _t, ?mo, Cell_nonatomic_borrow_content(other, _t));
+        //@ assert [_]nonatomic_borrow('a, _t, ?ms, Cell_nonatomic_borrow_content(self, _t));
+        //@ assert [_]nonatomic_borrow('a, _t, ?mo, Cell_nonatomic_borrow_content(other, _t));
         //@ open thread_token(_t);
         //@ thread_token_split(_t, MaskTop, ms);
         //@ thread_token_split(_t, mask_diff(MaskTop, ms), mo);
-        //@ open_nonatomic_borrow(a, _t, ms, _q_a/2);
+        //@ open_nonatomic_borrow('a, _t, ms, _q_a/2);
         //@ open Cell_nonatomic_borrow_content::<T>(self, _t)();
         //@ open Cell_v(self, ?vs);
-        //@ open_nonatomic_borrow(a, _t, mo, _q_a/2);
+        //@ open_nonatomic_borrow('a, _t, mo, _q_a/2);
         //@ open Cell_nonatomic_borrow_content::<T>(other, _t)();
         //@ open Cell_v(other, ?vo);
         let ps = self.v.get();

@@ -221,7 +221,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let env0_0 = List.map (function (p, t) -> (p, get_unique_var_symb p t)) xmap0 in
     let currentThreadEnv = [(current_thread_name, get_unique_var_symb current_thread_name current_thread_type)] in
     let env0 = tparam_typeid_env @ currentThreadEnv @ env0_0 @ cenv0 in
-    produce_asn_with_post tpenv0 [] [] env0 pre0 real_unit None None (fun h _ env0 post0_opt ->
+    produce_asn_with_post tparam_typeid_env tpenv0 [] [] env0 pre0 real_unit None None (fun h _ env0 post0_opt ->
       let post0 = match post0_opt with Some post0 -> post0 | None -> post0 in
       let bs = zip2 xmap env0_0 in
       let env = tparam_typeid_env @ currentThreadEnv @ List.map (fun ((p, _), (p0, v)) -> (p, v)) bs @ env00 in
@@ -238,7 +238,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           | Some t -> let result = get_unique_var_symb "result" t in (("result", result)::env, ("result", result)::env0)
         in
         execute_branch begin fun () ->
-          produce_asn tpenv h [] env post real_unit None None (fun h _ _ ->
+          produce_asn tparam_typeid_env tpenv h [] env post real_unit None None (fun h _ _ ->
             consume_asn rules tpenv0 h tparam_typeid_env [] env0 post0 true real_unit (fun _ h _ env0 _ ->
               check_leaks h env0 l (msg ^ "Implementation leaks heap chunks.")
             )
@@ -247,7 +247,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         epost |> List.iter begin fun (exceptp, epost) ->
           if not (is_unchecked_exception_type exceptp) then
             execute_branch begin fun () ->
-              produce_asn tpenv h [] env epost real_unit None None $. fun h _ _ ->
+              produce_asn tparam_typeid_env tpenv h [] env epost real_unit None None $. fun h _ _ ->
               let rec handle_exception handlers =
                 match handlers with
                 | [] -> assert_false h env l ("Potentially unhandled exception " ^ (string_of_type exceptp) ^ ".") None 
@@ -2182,7 +2182,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             r, env''
         in
         execute_branch begin fun () ->
-          produce_asn tpenv h ghostenv' env'' post real_unit None None $. fun h _ _ ->
+          produce_asn env tpenv h ghostenv' env'' post real_unit None None $. fun h _ _ ->
           with_context PopSubcontext $. fun () ->
           cont h env r
         end;
@@ -2191,7 +2191,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | Some(epost) ->
           epost |> List.iter begin fun (tp, post) ->
             execute_branch $. fun () ->
-            produce_asn tpenv h ghostenv' env' post real_unit None None $. fun h _ _ ->
+            produce_asn env tpenv h ghostenv' env' post real_unit None None $. fun h _ _ ->
             with_context PopSubcontext $. fun () ->
             let e = get_unique_var_symb_ "excep" tp false in
             econt l h env tp e

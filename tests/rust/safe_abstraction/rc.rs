@@ -164,17 +164,17 @@ impl<T> std::ops::Deref for Rc<T> {
 
     fn deref<'a>(&'a self) -> &'a T {
         unsafe {
-            //@ open Rc_share::<T>(a, _t, self);
+            //@ open Rc_share::<T>('a, _t, self);
             //@ assert [_]exists::<std::ptr::NonNull<RcBox<T>>>(?nnp);
-            //@ open_frac_borrow(a, Rc_frac_bc(self, nnp), _q_a);
+            //@ open_frac_borrow('a, Rc_frac_bc(self, nnp), _q_a);
             //@ open [?qp]Rc_frac_bc::<T>(self, nnp)();
             let r = &self.ptr.as_ref().value;
             //@ close [qp]Rc_frac_bc::<T>(self, nnp)();
             //@ close_frac_borrow(qp, Rc_frac_bc(self, nnp));
             //@ assert [_]exists::<real>(?frac) &*& [_]exists::<lifetime_t>(?dk);
-            //@ frac_borrow_lft_incl(a, frac, dk);
+            //@ frac_borrow_lft_incl('a, frac, dk);
             //@ produce_type_interp::<T>();
-            //@ share_mono::<T>(dk, a, _t, r);
+            //@ share_mono::<T>(dk, 'a, _t, r);
             //@ leak type_interp::<T>();
             r
         }
@@ -199,15 +199,15 @@ impl<T> Clone for Rc<T> {
 
     fn clone<'a>(&'a self) -> Self {
         unsafe {
-            //@ open Rc_share::<T>(a, _t, self);
+            //@ open Rc_share::<T>('a, _t, self);
             //@ assert [_]exists::<std::ptr::NonNull<RcBox<T>>>(?nnp);
-            //@ open_frac_borrow(a, Rc_frac_bc(self, nnp), _q_a/2);
+            //@ open_frac_borrow('a, Rc_frac_bc(self, nnp), _q_a/2);
             //@ open [?qp]Rc_frac_bc::<T>(self, nnp)();
             let strong = self.ptr.as_ref().strong.get(); //TODO: Why do we not get pointer_within_limits req here?
             //@ assert [_]exists::<lifetime_t>(?dk) &*& [_]exists::<usize>(?gid) &*& [?df]exists::<real>(?frac);
-            //@ open_frac_borrow(a, ticket_(dk, gid, frac), _q_a/4);
+            //@ open_frac_borrow('a, ticket_(dk, gid, frac), _q_a/4);
             //@ open [?qp_t]ticket_(dk, gid, frac)();
-            //@ open_frac_borrow(a, lifetime_token_(frac, dk), _q_a/4);
+            //@ open_frac_borrow('a, lifetime_token_(frac, dk), _q_a/4);
             //@ open [?qp_dk]lifetime_token_(frac, dk)();
             //@ close_dlft_pred_(dk, gid);
             //@ open thread_token(_t);

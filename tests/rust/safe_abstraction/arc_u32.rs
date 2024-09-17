@@ -229,9 +229,9 @@ impl ArcU32 {
 
     pub fn strong_count<'a>(this: &'a Self) -> usize {
         unsafe {
-            //@ open ArcU32_share(a, _t, this);
+            //@ open ArcU32_share('a, _t, this);
             //@ assert [_]exists::<std::ptr::NonNull<ArcInnerU32>>(?nnp);
-            //@ open_frac_borrow(a, Arc_frac_bc(this, nnp), _q_a/2);
+            //@ open_frac_borrow('a, Arc_frac_bc(this, nnp), _q_a/2);
             //@ open [?qnnp]Arc_frac_bc(this, nnp)();
             let ret = Self::strong_count_inner(this.ptr.as_ref());
             //@ close [qnnp]Arc_frac_bc(this, nnp)();
@@ -291,17 +291,17 @@ impl std::ops::Deref for ArcU32 {
 
     fn deref<'a>(&'a self) -> &'a u32 {
         unsafe {
-            //@ open ArcU32_share(a, _t, self);
+            //@ open ArcU32_share('a, _t, self);
             //@ assert [_]exists::<std::ptr::NonNull<ArcInnerU32>>(?nnp) &*& [_]exists::<real>(?frac) &*& [_]exists::<lifetime_t>(?dk);
-            //@ open_frac_borrow(a, Arc_frac_bc(self, nnp), _q_a);
+            //@ open_frac_borrow('a, Arc_frac_bc(self, nnp), _q_a);
             //@ open [?qnnp]Arc_frac_bc(self, nnp)();
             let ret = &self.ptr.as_ref().data;
             //@ close [qnnp]Arc_frac_bc(self, nnp)();
             //@ close_frac_borrow(qnnp, Arc_frac_bc(self, nnp));
-            //@ frac_borrow_lft_incl(a, frac, dk);
-            //@ u32_share_mono(dk, a, default_tid, ret);
-            //@ u32_sync(a, default_tid, _t, ret);
-            //@ open u32_share(a, _t, _);
+            //@ frac_borrow_lft_incl('a, frac, dk);
+            //@ u32_share_mono(dk, 'a, default_tid, ret);
+            //@ u32_sync('a, default_tid, _t, ret);
+            //@ open u32_share('a, _t, _);
             ret
         }
     }
@@ -309,9 +309,9 @@ impl std::ops::Deref for ArcU32 {
 
 impl Clone for ArcU32 {
     fn clone<'a>(&'a self) -> ArcU32 {
-        //@ open ArcU32_share(a, _t, self);
+        //@ open ArcU32_share('a, _t, self);
         //@ assert [_]exists::<std::ptr::NonNull<ArcInnerU32>>(?nnp);
-        //@ open_frac_borrow(a, Arc_frac_bc(self, nnp), _q_a/2);
+        //@ open_frac_borrow('a, Arc_frac_bc(self, nnp), _q_a/2);
         //@ open [?qnnp]Arc_frac_bc(self, nnp)();
         unsafe { Self::clone_inner(self.ptr.as_ref()) };
         let ret = Self { ptr: self.ptr };

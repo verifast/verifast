@@ -45,7 +45,7 @@ pub mod ptr {
             let r = NonNull {
                 pointer: reference as *mut T,
             };
-            //@ open_full_borrow(_q_a, a, <T>.full_borrow_content(_t, reference));
+            //@ open_full_borrow(_q_a, 'a, <T>.full_borrow_content(_t, reference));
             //@ open_full_borrow_content::<T>(_t, reference);
             //@ points_to_limits(reference);
             //@ close_full_borrow_content::<T>(_t, reference);
@@ -79,8 +79,8 @@ pub mod ptr {
     impl<T> Copy for NonNull<T> {}
     impl<T> Clone for NonNull<T> {
         fn clone<'a>(&'a self) -> Self {
-            //@ open ptr::NonNull_share(a, _t, self);
-            //@ open_frac_borrow(a, ptr::NonNull_frac_bc(_t, self), _q_a);
+            //@ open ptr::NonNull_share('a, _t, self);
+            //@ open_frac_borrow('a, ptr::NonNull_frac_bc(_t, self), _q_a);
             //@ open ptr::NonNull_frac_bc::<T>(_t, self)();
             let r = *self;
             //@ open ptr::NonNull_own::<T>(_t, _);

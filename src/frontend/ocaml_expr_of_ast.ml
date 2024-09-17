@@ -62,6 +62,7 @@ let rec of_type = function
 | PackageName p -> C ("PackageName", [S p])
 | RefType t -> C ("RefType", [of_type t])
 | AbstractType s -> C ("AbstractType", [S s])
+| StaticLifetime -> c "StaticLifetime"
 and of_inferred_type_state = function
   Unconstrained -> c "Unconstrained"
 | ContainsAnyConstraint b -> C ("ContainsAnyConstraint", [B b])
@@ -1047,6 +1048,8 @@ and of_decl = function
     of_loc lrhs;
     S rhs
   ])
+| TypeWithTypeidDecl (l, tn, e) ->
+  C ("TypeWithTypeidDecl", [of_loc l; s tn; of_expr e])
 | EnumDecl (l, name, values) ->
   C ("EnumDecl", [
     of_loc l;

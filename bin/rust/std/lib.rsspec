@@ -58,7 +58,7 @@ mod ptr {
         //@ req ptr as usize != 0;
         //@ ens NonNull_ptr(result) == ptr;
 
-        unsafe fn as_ref<'a>(self: &'a NonNull<T>) -> &'a T;
+        unsafe fn as_ref<'a, 'b>(self: &'b NonNull<T>) -> &'a T;
         //@ req [?q](*self) |-> ?v;
         //@ ens [q](*self) |-> v &*& result == NonNull_ptr(v);
 
@@ -254,31 +254,31 @@ mod vec {
     
     impl<T, A> Vec<T, A> {
     
-        fn len(self: *Vec<T, A>) -> usize;
+        fn len<'a>(self: &'a Vec<T, A>) -> usize;
         //@ req [?f](*self |-> ?self_) &*& [f]Vec::<T, A>(self_, ?capacity, ?elems);
         //@ ens [f](*self |-> self_) &*& [f]Vec::<T, A>(self_, capacity, elems) &*& result == length(elems);
     
-        fn push(self: *Vec<T, A>, elem: T);
+        fn push<'a>(self: &'a Vec<T, A>, elem: T);
         //@ req *self |-> ?self0 &*& Vec::<T, A>(self0, _, ?elems0);
         //@ ens *self |-> ?self1 &*& Vec::<T, A>(self1, _, append(elems0, [elem]));
         
-        fn reserve(self: *Vec<T, A>, additional: usize);
+        fn reserve<'a>(self: &'a Vec<T, A>, additional: usize);
         //@ req *self |-> ?self0 &*& Vec::<T, A>(self0, _, ?elems);
         //@ ens *self |-> ?self1 &*& Vec::<T, A>(self1, ?capacity, elems) &*& length(elems) + additional <= capacity;
         
-        fn as_mut_ptr(self: *Vec<T, A>) -> *mut T;
+        fn as_mut_ptr<'a>(self: &'a Vec<T, A>) -> *mut T;
         //@ req [?f](*self |-> ?self_) &*& [f]Vec_minus_buffer::<T, A>(self_, ?capacity, ?len, ?buffer);
         //@ ens [f](*self |-> self_) &*& [f]Vec_minus_buffer::<T, A>(self_, capacity, len, buffer) &*& result == buffer;
         
-        fn as_ptr(self: *Vec<T, A>) -> *const T;
+        fn as_ptr<'a>(self: &'a Vec<T, A>) -> *const T;
         //@ req [?f](*self |-> ?self_) &*& [f]Vec_minus_buffer::<T, A>(self_, ?capacity, ?len, ?buffer);
         //@ ens [f](*self |-> self_) &*& [f]Vec_minus_buffer::<T, A>(self_, capacity, len, buffer) &*& result == buffer;
 
-        fn spare_capacity_mut(self: *Vec<T, A>) -> &[T];
+        fn spare_capacity_mut<'a>(self: &'a Vec<T, A>) -> &[T];
         //@ req [?f](*self |-> ?self_) &*& [f]Vec_minus_buffer::<T, A>(self_, ?capacity, ?len, ?buffer);
         //@ ens [f](*self |-> self_) &*& [f]Vec_minus_buffer::<T, A>(self_, capacity, len, buffer) &*& result.ptr == buffer + len &*& result.len == capacity - len;
 
-        fn set_len(self: *Vec<T, A>, new_len: usize);
+        fn set_len<'a>(self: &'a Vec<T, A>, new_len: usize);
         //@ req *self |-> ?self0 &*& Vec_minus_buffer::<T, A>(self0, ?capacity, ?len, ?buffer) &*& new_len <= capacity;
         //@ ens *self |-> ?self1 &*& Vec_minus_buffer::<T, A>(self1, capacity, new_len, buffer);
         
@@ -294,11 +294,11 @@ mod io {
     
     trait Write {
     
-        fn write(self: *Self, buf: &[u8]) -> Result<usize>;
+        fn write<'a, 'b>(self: &'a Self, buf: &'b [u8]) -> Result<usize>;
         //@ req thread_token(?t) &*& *self |-> ?self0 &*& <Self>.own(t, self0) &*& [?f]buf.ptr[..buf.len] |-> ?bs;
         //@ ens thread_token(t) &*& *self |-> ?self1 &*& <Self>.own(t, self1) &*& [f]buf.ptr[..buf.len] |-> bs &*& std::result::Result_own::<usize, Error>(t, result);
         
-        fn flush(self: *Self) -> Result<()>;
+        fn flush<'a>(self: &'a Self) -> Result<()>;
         //@ req thread_token(?t) &*& *self |-> ?self0 &*& <Self>.own(t, self0);
         //@ ens thread_token(t) &*& *self |-> ?self1 &*& <Self>.own(t, self1);
         
@@ -377,19 +377,19 @@ mod sync {
             //@ req true;
             //@ ens result as *mut usize == ptr;
 
-            fn fetch_add(self: &AtomicUsize, val: usize, order: Ordering) -> usize;
+            fn fetch_add<'a>(self: &'a AtomicUsize, val: usize, order: Ordering) -> usize;
             //@ req order == std::sync::atomic::Ordering::SeqCst &*& is_AtomicUsize_fetch_add_ghop(?ghop, self, val, ?pre, ?post) &*& pre();
             //@ ens post(result);
 
-            fn fetch_sub(self: &AtomicUsize, val: usize, order: Ordering) -> usize;
+            fn fetch_sub<'a>(self: &'a AtomicUsize, val: usize, order: Ordering) -> usize;
             //@ req order == std::sync::atomic::Ordering::SeqCst &*& is_AtomicUsize_fetch_sub_ghop(?ghop, self, val, ?pre, ?post) &*& pre();
             //@ ens post(result);
 
-            fn load(self: &AtomicUsize, order: Ordering) -> usize;
+            fn load<'a>(self: &'a AtomicUsize, order: Ordering) -> usize;
             //@ req order == std::sync::atomic::Ordering::SeqCst &*& is_AtomicUsize_load_ghop(?ghop, self, ?pre, ?post) &*& pre();
             //@ ens post(result);
 
-            fn compare_exchange(self: &AtomicUsize, current: usize, new: usize, success: Ordering, failure: Ordering) -> std::result::Result<usize, usize>;
+            fn compare_exchange<'a>(self: &'a AtomicUsize, current: usize, new: usize, success: Ordering, failure: Ordering) -> std::result::Result<usize, usize>;
             /*@ req success == std::sync::atomic::Ordering::SeqCst &*& failure == std::sync::atomic::Ordering::SeqCst &*&
                 is_AtomicUsize_compare_exchange_ghop(?ghop, self, current, new, ?pre, ?post) &*& pre(); @*/
             //@ ens post(result);

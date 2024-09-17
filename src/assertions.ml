@@ -135,7 +135,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     match (g1, g2) with
       ((g1, literal1), (g2, literal2)) -> if literal1 && literal2 then g1 == g2 else definitely_equal g1 g2
   
-  let assume_field h0 env fparent tparams fname frange targs fghost tp kind tv tcoef cont =
+  let assume_field h0 typeid_env fparent tparams fname frange targs fghost tp kind tv tcoef cont =
     let ((_, (_, _, _, _, symb, _, _)), p__opt) = List.assoc (fparent, fname) field_pred_map in
     let tpenv = List.combine tparams targs in
     let frange = instantiate_type tpenv frange in
@@ -223,7 +223,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let (lf, gh, y, offset_opt, _) = List.assoc fname fmap in
         match offset_opt with
           Some offsetFunc ->
-          assume (mk_field_pointer_within_limits tp (ctxt#mk_app offsetFunc (List.map (typeid_of_core lf env) targs))) cont
+          assume (mk_field_pointer_within_limits tp (ctxt#mk_app offsetFunc (List.map (typeid_of_core lf typeid_env) targs))) cont
         | None -> cont ()
     end $. fun () ->
     iter h0
@@ -372,7 +372,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       else
         []
 
-    let rec produce_asn_core_with_post tpenv h ghostenv env p coef size_first size_all (assuming: bool) cont_with_post: symexec_result =
+    let rec produce_asn_core_with_post typeid_env tpenv h ghostenv env p coef size_first size_all (assuming: bool) cont_with_post: symexec_result =
     let cont h env ghostenv = cont_with_post h env ghostenv None in
     let with_context_helper cont =
       match p with
@@ -393,7 +393,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let te = ev e in
         let tp_rhs = match kind with RegularPointsTo -> tp | MaybeUninit -> option_type tp in
         evalpat_ (fghost = Ghost) ghostenv env rhs tp_rhs (instantiate_type tpenv tp_rhs) $. fun ghostenv env t ->
-        assume_field h env fparent tparams fname frange (List.map (instantiate_type tpenv) targs) fghost te kind t coef $. fun h ->
+        assume_field h typeid_env fparent tparams fname frange (List.map (instantiate_type tpenv) targs) fghost te kind t coef $. fun h ->
         cont h ghostenv env
     | WPointsTo (l, WReadArray (la, ea, _, ei), tp, kind, rhs) ->
       let a = ev ea in
@@ -424,7 +424,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           | None ->
             let PredCtorInfo (_, tparams, ps1, ps2, inputParamCount, body, funcsym) = List.assoc g#name predctormap in
             let typeid_msg () = Printf.sprintf "Taking typeids of predicate constructor type arguments <%s>: " (String.concat ", " (List.map string_of_type targs)) in
-            let targs_typeids = List.map (typeid_of_core_core l typeid_msg env) targs' in
+            let targs_typeids = List.map (typeid_of_core_core l typeid_msg typeid_env) targs' in
             let ctorargs = List.map (function (LitPat e | WCtorPat (_, _, _, _, _, _, _, Some e)) -> ev e | _ -> static_error l "Patterns are not supported in predicate constructor argument positions." None) pats0 in
             let tpenv0 = List.combine tparams targs in
             let ctorargs = List.map2 begin fun (_, pt) v ->
@@ -461,7 +461,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let env'' = env' @ zip2 (xs1@xs2) ts @ typeid_env_of_tpenv l env tpenv in
             with_context PushSubcontext $. fun () ->
             with_context (Executing (h, env'', l, "Applying autolemma")) $. fun () ->
-            produce_asn_core_with_post tpenv h [] env'' post real_unit size_first size_all true $. fun h_ _ _ _ ->
+            produce_asn_core_with_post typeid_env tpenv h [] env'' post real_unit size_first size_all true $. fun h_ _ _ _ ->
             with_context PopSubcontext $. fun () ->
             cont h_ ghostenv env
           in
@@ -516,11 +516,11 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       assume f $. fun () ->
       cont h ghostenv env
     | LetTypeAsn (l, x, tp, p) ->
-      produce_asn_core_with_post ((x, tp)::tpenv) h ghostenv env p coef size_first size_all assuming cont_with_post
+      produce_asn_core_with_post typeid_env ((x, tp)::tpenv) h ghostenv env p coef size_first size_all assuming cont_with_post
     | Sep (l, p1, p2) ->
-      produce_asn_core_with_post tpenv h ghostenv env p1 coef size_first size_all assuming $. fun h ghostenv env post ->
+      produce_asn_core_with_post typeid_env tpenv h ghostenv env p1 coef size_first size_all assuming $. fun h ghostenv env post ->
       if post <> None then assert_false h env l "Left-hand side of separating conjunction cannot specify a postcondition." None;
-      produce_asn_core_with_post tpenv h ghostenv env p2 coef size_all size_all assuming cont_with_post
+      produce_asn_core_with_post typeid_env tpenv h ghostenv env p2 coef size_all size_all assuming cont_with_post
     | IfAsn (l, e, p1, p2) ->
       let cont_with_post h ghostenv1 env1 post =
         let ghostenv, env =
@@ -529,8 +529,8 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         cont_with_post h ghostenv env post
       in
       branch
-        (fun _ -> assume (ev e) (fun _ -> produce_asn_core_with_post tpenv h ghostenv env p1 coef size_all size_all assuming cont_with_post))
-        (fun _ -> assume (ctxt#mk_not (ev e)) (fun _ -> produce_asn_core_with_post tpenv h ghostenv env p2 coef size_all size_all assuming cont_with_post))
+        (fun _ -> assume (ev e) (fun _ -> produce_asn_core_with_post typeid_env tpenv h ghostenv env p1 coef size_all size_all assuming cont_with_post))
+        (fun _ -> assume (ctxt#mk_not (ev e)) (fun _ -> produce_asn_core_with_post typeid_env tpenv h ghostenv env p2 coef size_all size_all assuming cont_with_post))
     | WSwitchAsn (l, e, i, cs) ->
       let cont_with_post h ghostenv1 env1 post =
         let ghostenv, env =
@@ -580,7 +580,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                in
                let pats = flatmap (function None -> [] | Some x -> [x]) pats in
                let xenv = flatmap (function (None, _, _) -> [] | (Some x, _, t) -> [x, t]) xts in
-               assume_eq t (mk_app cs (List.map (fun (x, t, _) -> t) xts)) (fun _ -> produce_asn_core_with_post tpenv h (pats @ ghostenv) (xenv @ env) p coef size_all size_all assuming cont_with_post))
+               assume_eq t (mk_app cs (List.map (fun (x, t, _) -> t) xts)) (fun _ -> produce_asn_core_with_post typeid_env tpenv h (pats @ ghostenv) (xenv @ env) p coef size_all size_all assuming cont_with_post))
             (fun _ -> iter cs)
         | [] -> success()
       in
@@ -595,12 +595,12 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         cont h ghostenv env
       end
     | CoefAsn (l, DummyPat, body) ->
-      produce_asn_core_with_post tpenv h ghostenv env body (get_dummy_frac_term ()) size_first size_all assuming cont_with_post
+      produce_asn_core_with_post typeid_env tpenv h ghostenv env body (get_dummy_frac_term ()) size_first size_all assuming cont_with_post
     | CoefAsn (l, DummyVarPat, body) ->
       static_error l "Producing a dummy variable pattern fraction is not yet supported" None
     | CoefAsn (l, coef', body) ->
       evalpat true ghostenv env coef' RealType RealType $. fun ghostenv env coef' ->
-      produce_asn_core_with_post tpenv h ghostenv env body (real_mul l coef coef') size_first size_all assuming cont_with_post
+      produce_asn_core_with_post typeid_env tpenv h ghostenv env body (real_mul l coef coef') size_first size_all assuming cont_with_post
     | EnsuresAsn (l, body) ->
       cont_with_post h ghostenv env (Some body)
     | WPredExprAsn (l, e, pts, inputParamCount, pats) ->
@@ -611,14 +611,14 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       cont h ghostenv env
     )
   
-  let rec produce_asn_core tpenv h ghostenv env p coef size_first size_all (assuming: bool) cont: symexec_result =
-    produce_asn_core_with_post tpenv h ghostenv env p coef size_first size_all (assuming: bool) (fun h env ghostenv post -> cont h env ghostenv)
+  let rec produce_asn_core typeid_env tpenv h ghostenv env p coef size_first size_all (assuming: bool) cont: symexec_result =
+    produce_asn_core_with_post typeid_env tpenv h ghostenv env p coef size_first size_all (assuming: bool) (fun h env ghostenv post -> cont h env ghostenv)
     
-  let produce_asn tpenv h ghostenv (env: (string * termnode) list) p coef size_first size_all cont =
-    produce_asn_core_with_post tpenv h ghostenv env p coef size_first size_all false (fun h env ghostenv post -> cont h env ghostenv)
+  let produce_asn typeid_env tpenv h ghostenv (env: (string * termnode) list) p coef size_first size_all cont =
+    produce_asn_core_with_post typeid_env tpenv h ghostenv env p coef size_first size_all false (fun h env ghostenv post -> cont h env ghostenv)
   
-  let produce_asn_with_post tpenv h ghostenv (env: (string * termnode) list) p coef size_first size_all cont =
-    produce_asn_core_with_post tpenv h ghostenv env p coef size_first size_all false cont
+  let produce_asn_with_post typeid_env tpenv h ghostenv (env: (string * termnode) list) p coef size_first size_all cont =
+    produce_asn_core_with_post typeid_env tpenv h ghostenv env p coef size_first size_all false cont
   
   (* Region: consumption of assertions *)
   
@@ -2103,7 +2103,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                         let produce_coef = if is_dummy_frac_term found_coef then get_dummy_frac_term () else found_coef in
                         with_context PushSubcontext @@ fun () ->
                         with_context (Executing (h, full_env, outer_l, "Auto-opening predicate")) @@ fun () ->
-                          produce_asn tpenv h ghostenv full_env outer_wbody produce_coef None None @@ fun h ghostenv env ->
+                          produce_asn typeid_env tpenv h ghostenv full_env outer_wbody produce_coef None None @@ fun h ghostenv env ->
                             with_context PopSubcontext @@ fun () ->
                             (* perform remaining opens *)
                             if is_dummy_frac_term found_coef then
@@ -2369,7 +2369,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               let tpenv = [] in
               let ghostenv = [] in
               let Some env = zip (List.map fst xs) [a; elem; v] in
-              produce_asn tpenv h ghostenv env wbody coef None None $. fun h _ _ ->
+              produce_asn typeid_env tpenv h ghostenv env wbody coef None None $. fun h _ _ ->
               cont (Some h)
       in
       let get_slice_upcast_rule l h typeid_env [elem_tp] terms_are_well_typed coef coefpat [arr; istart; iend] cont =

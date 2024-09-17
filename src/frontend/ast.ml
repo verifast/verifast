@@ -145,10 +145,28 @@ type type_ = (* ?type_ *)
   | PackageName of string (* not a real type; used only during type checking *)
   | RefType of type_ (* not a real type; used only for locals whose address is taken *)
   | AbstractType of string
+  | StaticLifetime (* 'static in Rust *)
 and inferred_type_state =
     Unconstrained
   | ContainsAnyConstraint of bool (* allow the type to contain 'any' in positive positions *)
   | EqConstraint of type_
+
+let type_fold_open state f = function
+  Bool | Void | Int (_, _) | RealType | Float | Double | LongDouble -> state
+| StructType (sn, targs) -> List.fold_left f state targs
+| UnionType _ -> state
+| PtrType tp -> f state tp
+| FuncType _ -> state
+| InlineFuncType tp -> f state tp
+| InductiveType (i, targs) -> List.fold_left f state targs
+| PredType (tparams, targs, _, _) -> List.fold_left f state targs
+| PureFuncType (tp1, tp2) -> f (f state tp1) tp2
+| ObjType (_, targs) -> List.fold_left f state targs
+| ArrayType tp -> f state tp
+| StaticArrayType (tp, _) -> f state tp
+| BoxIdType | HandleIdType | AnyType | RealTypeParam _ | InferredRealType _ | GhostTypeParam _ | InferredType (_, _) | ClassOrInterfaceName _ | PackageName _ -> state
+| RefType tp -> f state tp
+| AbstractType _ | StaticLifetime -> state
 
 let is_ptr_type tp =
   match tp with
@@ -915,6 +933,10 @@ and
   | ModuleDecl of loc * string * import list * decl list (* A Rust module. Is flattened into a list of PackageDecl after parsing. *)
   | TypePredDecl of loc * type_expr * string * string
   | TypePredDef of loc * string list * type_expr * string * loc * string
+  | TypeWithTypeidDecl of (* introduce a local type name whose typeid is given by the expression *)
+      loc *
+      string *
+      expr
 and (* shared box is deeltje ghost state, waarde kan enkel via actions gewijzigd worden, handle predicates geven info over de ghost state, zelfs als er geen eigendom over de box is*)
   action_decl = (* ?action_decl *)
   | ActionDecl of loc * string * bool (* does performing this action require a corresponding action permission? *) * (type_expr * string) list * expr * expr

@@ -81,6 +81,14 @@ module Make (Args : VF_MIR_ANNOT_PARSER_ARGS) = struct
       Lexer.Stream.Error msg -> raise (Lexer.ParseException (Lexed (loc()), msg))
     | Lexer.Stream.Failure -> raise (Lexer.ParseException (Lexed (loc()), "Parse error"))
       
+  let parse_ghost_generic_arg_list (annot : src_pos * string) =
+    let loc, ts = token_stream_from_annot annot in
+    try
+      ts |> Parser.noop_preprocessor |> parse_fully Rust_parser.parse_ghost_generic_arg_list
+    with
+      Lexer.Stream.Error msg -> raise (Lexer.ParseException (Lexed (loc()), msg))
+    | Lexer.Stream.Failure -> raise (Lexer.ParseException (Lexed (loc()), "Parse error"))
+        
   let rec parse_rsspec_file path =
     let pos = (path, 1, 1) in
     let text = Lexer.readFile path in

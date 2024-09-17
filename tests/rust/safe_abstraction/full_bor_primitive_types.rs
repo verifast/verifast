@@ -26,7 +26,7 @@ fn char_set<'a>(x: &'a mut char, y: char)
 }
 
 fn raw_ptr_set<'a>(x: &'a mut *mut i32, y: *mut i32) {
-    //@ open_full_borrow(_q_a, a, raw_ptr_full_borrow_content(_t, x));
+    //@ open_full_borrow(_q_a, 'a, raw_ptr_full_borrow_content(_t, x));
     //@ open raw_ptr_full_borrow_content(_t, x)();
     *x = y;
     //@ close raw_ptr_full_borrow_content(_t, x)();
@@ -47,7 +47,7 @@ fn i8_set<'a>(x: &'a mut i8, y: i8)
 }
 
 fn i16_set<'a>(x: &'a mut i16, y: i16) {
-    //@ open_full_borrow(_q_a, a, i16_full_borrow_content(_t, x));
+    //@ open_full_borrow(_q_a, 'a, i16_full_borrow_content(_t, x));
     //@ open i16_full_borrow_content(_t, x)();
     *x = y;
     //@ close i16_full_borrow_content(_t, x)();
@@ -56,7 +56,7 @@ fn i16_set<'a>(x: &'a mut i16, y: i16) {
 }
 
 fn i32_set<'a>(x: &'a mut i32, y: i32) {
-    //@ open_full_borrow(_q_a, a, i32_full_borrow_content(_t, x));
+    //@ open_full_borrow(_q_a, 'a, i32_full_borrow_content(_t, x));
     //@ open i32_full_borrow_content(_t, x)();
     *x = y;
     //@ close i32_full_borrow_content(_t, x)();
@@ -65,7 +65,7 @@ fn i32_set<'a>(x: &'a mut i32, y: i32) {
 }
 
 fn i64_set<'a>(x: &'a mut i64, y: i64) {
-    //@ open_full_borrow(_q_a, a, i64_full_borrow_content(_t, x));
+    //@ open_full_borrow(_q_a, 'a, i64_full_borrow_content(_t, x));
     //@ open i64_full_borrow_content(_t, x)();
     *x = y;
     //@ close i64_full_borrow_content(_t, x)();
@@ -74,7 +74,7 @@ fn i64_set<'a>(x: &'a mut i64, y: i64) {
 }
 
 fn i128_set<'a>(x: &'a mut i128, y: i128) {
-    //@ open_full_borrow(_q_a, a, i128_full_borrow_content(_t, x));
+    //@ open_full_borrow(_q_a, 'a, i128_full_borrow_content(_t, x));
     //@ open i128_full_borrow_content(_t, x)();
     *x = y;
     //@ close i128_full_borrow_content(_t, x)();
@@ -83,7 +83,7 @@ fn i128_set<'a>(x: &'a mut i128, y: i128) {
 }
 
 fn isize_set<'a>(x: &'a mut isize, y: isize) {
-    //@ open_full_borrow(_q_a, a, isize_full_borrow_content(_t, x));
+    //@ open_full_borrow(_q_a, 'a, isize_full_borrow_content(_t, x));
     //@ open isize_full_borrow_content(_t, x)();
     *x = y;
     //@ close isize_full_borrow_content(_t, x)();
@@ -92,7 +92,7 @@ fn isize_set<'a>(x: &'a mut isize, y: isize) {
 }
 
 fn u8_set<'a>(x: &'a mut u8, y: u8) {
-    //@ open_full_borrow(_q_a, a, u8_full_borrow_content(_t, x));
+    //@ open_full_borrow(_q_a, 'a, u8_full_borrow_content(_t, x));
     //@ open u8_full_borrow_content(_t, x)();
     *x = y;
     //@ close u8_full_borrow_content(_t, x)();
@@ -101,7 +101,7 @@ fn u8_set<'a>(x: &'a mut u8, y: u8) {
 }
 
 fn u16_set<'a>(x: &'a mut u16, y: u16) {
-    //@ open_full_borrow(_q_a, a, u16_full_borrow_content(_t, x));
+    //@ open_full_borrow(_q_a, 'a, u16_full_borrow_content(_t, x));
     //@ open u16_full_borrow_content(_t, x)();
     *x = y;
     //@ close u16_full_borrow_content(_t, x)();
@@ -110,7 +110,7 @@ fn u16_set<'a>(x: &'a mut u16, y: u16) {
 }
 
 fn u32_set<'a>(x: &'a mut u32, y: u32) {
-    //@ open_full_borrow(_q_a, a, u32_full_borrow_content(_t, x));
+    //@ open_full_borrow(_q_a, 'a, u32_full_borrow_content(_t, x));
     //@ open u32_full_borrow_content(_t, x)();
     *x = y;
     //@ close u32_full_borrow_content(_t, x)();
@@ -119,7 +119,7 @@ fn u32_set<'a>(x: &'a mut u32, y: u32) {
 }
 
 fn u64_set<'a>(x: &'a mut u64, y: u64) {
-    //@ open_full_borrow(_q_a, a, u64_full_borrow_content(_t, x));
+    //@ open_full_borrow(_q_a, 'a, u64_full_borrow_content(_t, x));
     //@ open u64_full_borrow_content(_t, x)();
     *x = y;
     //@ close u64_full_borrow_content(_t, x)();
@@ -128,7 +128,7 @@ fn u64_set<'a>(x: &'a mut u64, y: u64) {
 }
 
 fn u128_set<'a>(x: &'a mut u128, y: u128) {
-    //@ open_full_borrow(_q_a, a, u128_full_borrow_content(_t, x));
+    //@ open_full_borrow(_q_a, 'a, u128_full_borrow_content(_t, x));
     //@ open u128_full_borrow_content(_t, x)();
     *x = y;
     //@ close u128_full_borrow_content(_t, x)();
@@ -137,7 +137,7 @@ fn u128_set<'a>(x: &'a mut u128, y: u128) {
 }
 
 fn usize_set<'a>(x: &'a mut usize, y: usize) {
-    //@ open_full_borrow(_q_a, a, usize_full_borrow_content(_t, x));
+    //@ open_full_borrow(_q_a, 'a, usize_full_borrow_content(_t, x));
     //@ open usize_full_borrow_content(_t, x)();
     *x = y;
     //@ close usize_full_borrow_content(_t, x)();
@@ -146,7 +146,7 @@ fn usize_set<'a>(x: &'a mut usize, y: usize) {
 }
 
 fn triggers_verification<'a>(x: &'a mut i32) {
-    //@ open_full_borrow(_q_a, a, i32_full_borrow_content(_t, x));
+    //@ open_full_borrow(_q_a, 'a, i32_full_borrow_content(_t, x));
     //@ open i32_full_borrow_content(_t, x)();
     let y = unsafe { *(x as *const i32) };
     //@ close i32_full_borrow_content(_t, x)();

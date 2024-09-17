@@ -136,8 +136,8 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       else
       let (_, _, extended, inv, _) = List.assoc hname hpmap in
       match extended with (* tpenv h ghostenv (env: (string * termnode) list) p coef size_first size_all cont *)
-        None -> produce_asn [] h [] hpInvEnv inv real_unit None None (fun h _ _ -> cont h)
-      | Some(ehname) -> assume_handle_invs bcn hpmap ehname hpInvEnv h (fun h -> produce_asn [] h [] hpInvEnv inv real_unit None None (fun h _ _ -> cont h))
+        None -> produce_asn [] [] h [] hpInvEnv inv real_unit None None (fun h _ _ -> cont h)
+      | Some(ehname) -> assume_handle_invs bcn hpmap ehname hpInvEnv h (fun h -> produce_asn [] [] h [] hpInvEnv inv real_unit None None (fun h _ _ -> cont h))
 
   let rec assert_handle_invs bcn hpmap hname hpInvEnv h typeid_env cont = 
     if hname = bcn ^ "_handle" then
@@ -328,7 +328,8 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               with_context PushSubcontext $. fun () ->
               let ftargenv = List.map (fun (x, v, v0) -> (x, v0)) args in
               let pre_env = [("this", fterm)] @ currentThreadEnv @ ftargenv @ List.map (fun (x, x0, tp, t, t0) -> (x0, t0)) fparams in
-              produce_asn tpenv h [] pre_env pre real_unit None None $. fun h _ ft_env ->
+              let typeid_env = env in
+              produce_asn typeid_env tpenv h [] pre_env pre real_unit None None $. fun h _ ft_env ->
               with_context PopSubcontext $. fun () ->
               let tenv = List.map (fun (x, x0, tp, t, t0) -> (x, tp)) fparams @ tenv in
               let ghostenv = List.map (fun (x, x0, tp, t, t0) -> x) fparams @ ghostenv in
@@ -405,7 +406,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                     in
                     (f_env, ft_env, tenv, ghostenv, env)
                 in
-                produce_asn [] h [] f_env post1 real_unit None None $. fun h _ _ ->
+                produce_asn typeid_env [] h [] f_env post1 real_unit None None $. fun h _ _ ->
                 with_context PopSubcontext $. fun () ->
                 let tcont _ _ _ h _ = ftcheck_cont h ft_env in
                 verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss_after tcont return_cont econt
@@ -1354,7 +1355,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           end
         in
         with_context PushSubcontext (fun () ->
-          produce_asn tpenv h ghostenv env' p coef body_size body_size (fun h _ _ ->
+          produce_asn env tpenv h ghostenv env' p coef body_size body_size (fun h _ _ ->
             with_context PopSubcontext (fun () -> tcont sizemap tenv' ghostenv h env)
           )
         )
@@ -1488,7 +1489,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let boxArgMap = List.map (fun ((x, _), t) -> (x, t)) boxArgMap in
       let boxArgMapWithThis = ("this", boxId) :: boxArgMap in
       with_context PushSubcontext $. fun () ->
-      produce_asn [] h ghostenv boxArgMapWithThis inv real_unit None None $. fun h _ boxVarMap ->
+      produce_asn env [] h ghostenv boxArgMapWithThis inv real_unit None None $. fun h _ boxVarMap ->
           let rec dispose_handles tenv ghostenv h env handleClauses cont =
             match handleClauses with
               [] -> cont tenv ghostenv h env
@@ -1819,7 +1820,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let return_cont h'' tenv env retval = return_cont (h'' @ h) tenv env retval in
       let bs = List.map (fun x -> (x, get_unique_var_symb_ x (List.assoc x tenv) (List.mem x ghostenv))) (List.filter (fun x -> List.mem_assoc x env) xs) in
       let env = bs @ env in
-      produce_asn [] [] ghostenv env p real_unit None None $. fun h' ghostenv' env' ->
+      produce_asn env [] [] ghostenv env p real_unit None None $. fun h' ghostenv' env' ->
       begin fun cont ->
         match dec with
           None -> cont None
@@ -1896,7 +1897,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let bs = List.map (fun x -> (x, get_unique_var_symb_ x (List.assoc x tenv) (List.mem x ghostenv))) (List.filter (fun x -> List.mem_assoc x env') xs) in
       let old_xs_env = List.map (fun (x, t) -> ("old_" ^ x, t)) bs in
       let env' = bs @ env' in
-      produce_asn [] [] ghostenv' env' pre real_unit None None $. fun h' ghostenv' env' ->
+      produce_asn env [] [] ghostenv' env' pre real_unit None None $. fun h' ghostenv' env' ->
       begin fun cont ->
         match dec with
           None -> cont None
@@ -1936,7 +1937,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             env
         in
         let ghostenv = List.map (fun (x, _) -> x) old_xs_tenv @ ghostenv in
-        produce_asn [] h ghostenv env post real_unit None None $. fun h ghostenv env ->
+        produce_asn env [] h ghostenv env post real_unit None None $. fun h ghostenv env ->
         cont tenv''' ghostenv h env
       in
       let lblenv = List.map (fun (lbl, cont) -> (lbl, fun blocks_done sizemap ttenv _ h' env' -> free_locals endBodyLoc h' ttenv env' !locals_to_free (fun h' _ -> exit_loop h' env' (cont blocks_done sizemap)))) lblenv in
@@ -1998,7 +1999,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           end
           env'')
       in
-      produce_asn [] h' ghostenv'' env'' post real_unit None None $. fun h' _ _ ->
+      produce_asn env [] h' ghostenv'' env'' post real_unit None None $. fun h' _ _ ->
       let env' = bs' @ env' in
       List.iter (function PureStmt _ -> () | s -> static_error (stmt_loc s) "Only pure statements are allowed after the recursive call." None) ss_after;
       let ss_after_xs = block_assigned_variables ss_after in
@@ -2218,7 +2219,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
              in
                assume_all_handle_invs already_consumed_handles_info h (fun h ->
                consume_action_permission h $. fun h act_perm_chunks ->
-               produce_asn [] h ghostenv  (pre_boxArgMapWithThis @ inv_env) inv real_unit None None $. fun h _ pre_boxVarMap ->
+               produce_asn env [] h ghostenv (pre_boxArgMapWithThis @ inv_env) inv real_unit None None $. fun h _ pre_boxVarMap ->
                let nonpureStmtCount = ref 0 in
                let ss =
                  List.map
@@ -2326,9 +2327,9 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         ))
       ))
     | BlockStmt (l, ds, ss, closeBraceLoc, locals_to_free) ->
-      let (lems, predinsts, localpreds, localpredinsts) =
+      let (lems, predinsts, localpreds, localpredinsts, typedecls) =
         List.fold_left
-          begin fun (lems, predinsts, localpreds, localpredinsts) decl ->
+          begin fun (lems, predinsts, localpreds, localpredinsts, typedecls) decl ->
             match decl with
             | PredFamilyDecl (l, p, tparams, arity, tes, inputParamCount, inductiveness) ->
               if tparams <> [] then static_error l "Local predicates with type parameters are not yet supported." None;
@@ -2338,29 +2339,36 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               let ts = List.map (check_pure_type (pn,ilist) tparams Ghost) tes in
               let ptype = PredType ([], ts, inputParamCount, inductiveness) in
               let psymb = get_unique_var_symb p ptype in
-              (lems, predinsts, (p, (l, ts, inputParamCount, ptype, psymb))::localpreds, localpredinsts)
+              (lems, predinsts, (p, (l, ts, inputParamCount, ptype, psymb))::localpreds, localpredinsts, typedecls)
             | PredFamilyInstanceDecl (l, p, predinst_tparams, is, xs, body) ->
               begin match try_assoc p localpreds with
               | Some (_, ts, inputParamCount, ptype, psymb) ->
                 if predinst_tparams <> [] then static_error l "Local predicates with type parameters are not yet supported." None;
                 if is <> [] then static_error l "Local predicate families are not yet supported." None;
                 if List.mem_assoc p localpredinsts then static_error l "Duplicate predicate family instance." None;
-                (lems, predinsts, localpreds, (p, (l, ts, inputParamCount, ptype, psymb, xs, body))::localpredinsts)
+                (lems, predinsts, localpreds, (p, (l, ts, inputParamCount, ptype, psymb, xs, body))::localpredinsts, typedecls)
               | None ->
                 let i = match is with [i] -> i | _ -> static_error l "Local predicate family declarations must declare exactly one index." None in
                 if List.mem_assoc (p, i) predinsts then static_error l "Duplicate predicate family instance." None;
-                (lems, ((p, i), (l, predinst_tparams, xs, body))::predinsts, localpreds, localpredinsts)
+                (lems, ((p, i), (l, predinst_tparams, xs, body))::predinsts, localpreds, localpredinsts, typedecls)
               end
             | Func (l, Lemma(auto, trigger), tparams, rt, fn, xs, nonghost_callers_only, functype_opt, contract_opt, terminates, Some body, is_virtual, overrides) ->
               if List.mem_assoc fn funcmap || List.mem_assoc fn lems then static_error l "Duplicate function name." None;
               if List.mem_assoc fn tenv then static_error l "Local lemma name hides existing local variable name." None;
               let fterm = get_unique_var_symb fn (PtrType Void) in
-              ((fn, (auto, trigger, fterm, l, tparams, rt, xs, nonghost_callers_only, functype_opt, contract_opt, terminates, body))::lems, predinsts, localpreds, localpredinsts)
+              ((fn, (auto, trigger, fterm, l, tparams, rt, xs, nonghost_callers_only, functype_opt, contract_opt, terminates, body))::lems, predinsts, localpreds, localpredinsts, typedecls)
+            | TypeWithTypeidDecl (l, tn, e) ->
+              if List.mem tn tparams || List.mem_assoc tn typedecls then static_error l "Duplicate type parameter name" None;
+              let w = check_expr_t_pure tenv e voidPtrType in
+              let typeid_term = eval_non_pure true h env w in
+              (lems, predinsts, localpreds, localpredinsts, ("'" ^ tn, typeid_term)::typedecls)
             | _ -> static_error l "Local declarations must be lemmas or predicate family instances." None
           end
-          ([], [], [], [])
+          ([], [], [], [], [])
           ds
       in
+      let tparams = List.map fst typedecls @ tparams in
+      let env = List.map (fun (tn, typeid_term) -> tn ^ "_typeid", typeid_term) typedecls @ env in
       let (lems, predinsts, localpreds, localpredinsts) = (List.rev lems, List.rev predinsts, List.rev localpreds, List.rev localpredinsts) in
       let funcnameterms' =
         List.map
@@ -2422,7 +2430,16 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           LemInfo (verify_lems lems, g, indinfo, nonghost_callers_only)
       in
       check_block_declarations ss;
-      let cont h env = cont h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in      
+      let rec check_heap_targ () tp =
+        match unfold_inferred_type tp with
+          GhostTypeParam x when List.mem_assoc x typedecls ->
+          assert_false h env l "Local type appears in heap chunk type argument at end of block" None
+        | tp -> type_fold_open () check_heap_targ tp
+      in
+      let cont h env =
+        h |> List.iter (fun (Chunk (_, targs, _, _, _)) -> List.fold_left check_heap_targ () targs);
+        cont h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env)
+      in
       let cont h tenv env = free_locals closeBraceLoc h tenv env !locals_to_free cont in
       let return_cont h tenv env retval = free_locals closeBraceLoc h tenv env !locals_to_free (fun h env -> return_cont h tenv env retval) in
       let lblenv = List.map (fun (lbl, lblcont) -> (lbl, (fun blocksdone sizemap tenv ghostenv h env -> free_locals closeBraceLoc h tenv env !locals_to_free (fun h env -> lblcont blocksdone sizemap tenv ghostenv h env)))) lblenv in
@@ -2681,7 +2698,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 end
                 env
             in
-            produce_asn [] [] ghostenv env inv real_unit None None (fun h ghostenv env ->
+            produce_asn env [] [] ghostenv env inv real_unit None None (fun h ghostenv env ->
               let blocks_done = block::blocks_done in
               verify_miniblock (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss (cont blocks_done) return_cont econt
             )
@@ -2772,7 +2789,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let h = h_consumed @ h in
           with_context (Executing (h, param_env, l, "Auto-applying lemma")) $. fun () ->
             consume_asn rules tpenv h env ghostenv param_env pre true real_unit $. fun _ h ghostenv env size ->
-             produce_asn tpenv h ghostenv env post real_unit None None $. fun h ghostenv env -> cont (Some h)
+            produce_asn env tpenv h ghostenv env post real_unit None None $. fun h ghostenv env -> cont (Some h)
         else 
           fail ()
       ) (fun () -> cont None)
@@ -3015,7 +3032,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | _ -> 
           cont None env ghostenv
       end @@ fun this_term_opt env ghostenv -> 
-      produce_asn_with_post [] [] ghostenv env pre real_unit (Some (PredicateChunkSize 0)) None (fun h ghostenv env post' ->
+      produce_asn_with_post env [] [] ghostenv env pre real_unit (Some (PredicateChunkSize 0)) None (fun h ghostenv env post' ->
         let post =
           match post' with
             None -> post
@@ -3212,7 +3229,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       execute_branch @@ fun () ->
       with_context (Executing ([], env, loc, sprintf "Verifying constructor '%s'" g)) @@ fun () ->
       assume_neq (mk_ptr_address this_term) int_zero_term @@ fun () ->
-      produce_asn [] [] ghostenv env pre real_unit None None @@ fun h ghostenv env ->
+      produce_asn env [] [] ghostenv env pre real_unit None None @@ fun h ghostenv env ->
       init_constructs this_term init_list leminfo sizemap h env ghostenv @@ fun delegated h init_list ->
       if List.exists (function ("this", _) -> true | _ -> false) init_list then assert_false h env loc "Invalid order of initialization: the base or delegating constructor should already have been handled." None;
       init_fields delegated h this_term this_type init_list env ghostenv leminfo sizemap current_thread @@ fun h ->
@@ -3304,7 +3321,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       execute_branch @@ fun () ->
       with_context (Executing ([], env, loc, sprintf "Verifying destructor '%s'" g)) @@ fun () ->
       assume_neq (mk_ptr_address this_term) int_zero_term @@ fun () ->
-      produce_asn [] [] ghostenv env pre real_unit None None @@ fun h ghostenv env ->
+      produce_asn env [] [] ghostenv env pre real_unit None None @@ fun h ghostenv env ->
       let return_cont h tenv2 env2 retval =
         begin fun cont ->
           match try_get_pred_symb_from_map struct_name bases_constructed_map with
@@ -3403,7 +3420,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let (ss, explicitsupercall) = match ss with SuperConstructorCall(l, es) :: body -> (body, Some(SuperConstructorCall(l, es))) | _ -> (ss, None) in
         let (in_pure_context, leminfo, ghostenv) = (false, RealMethodInfo (if terminates then Some rank else None), []) in
         begin
-          produce_asn [] [] ghostenv env pre real_unit None None $. fun h ghostenv env ->
+          produce_asn env [] [] ghostenv env pre real_unit None None $. fun h ghostenv env ->
           let this = get_unique_var_symb "this" thisType in
           begin fun cont ->
             if cfin = FinalClass then assume (ctxt#mk_eq (ctxt#mk_app get_class_symbol [this]) (List.assoc cn classterms)) cont else cont ()
@@ -3525,7 +3542,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           end $. fun tenv ->
           let (sizemap, indinfo) = switch_stmt ss env in
           let tenv = match rt with None ->tenv | Some rt -> ("#result", rt)::tenv in
-          produce_asn [] [] ghostenv env pre real_unit None None $. fun h ghostenv env ->
+          produce_asn env [] [] ghostenv env pre real_unit None None $. fun h ghostenv env ->
           let do_return h env_post =
             consume_asn rules [] h env ghostenv env_post post true real_unit $. fun _ h ghostenv env size_first ->
             check_leaks h env closeBraceLoc "Function leaks heap chunks."
@@ -3644,7 +3661,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                       let pre_boxargsWithThis = ("this", boxId) :: pre_boxargs in
                       with_context (Executing ([], [], l, "Checking preserved_by clause.")) $. fun () ->
                         with_context PushSubcontext $. fun () ->
-                          produce_asn [] [] [] pre_boxargsWithThis boxinv real_unit None None $. fun h_pre _ pre_boxvars ->
+                          produce_asn [] [] [] [] pre_boxargsWithThis boxinv real_unit None None $. fun h_pre _ pre_boxvars ->
                             let aargs = List.map (fun (x, (y, t)) -> (x, y, get_unique_var_symb x t)) apbs in
                             let apre_env = List.map (fun (x, y, t) -> (y, t)) aargs in
                             assume (eval None ([("actionHandles", actionHandles)] @ pre_boxvars @ apre_env) pre) $. fun () ->
@@ -3669,7 +3686,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                                   let old_boxvars = List.map (fun (x, t) -> ("old_" ^ x, t)) pre_boxvars in
                                   let post_boxargs = List.map (fun (x, t) -> (x, get_unique_var_symb x t)) boxpmap in
                                   let post_boxargsWithThis = ("this", boxId) :: post_boxargs in
-                                  produce_asn [] hinv [] post_boxargsWithThis boxinv real_unit None None $. fun h_post_hinv _ post_boxvars ->
+                                  produce_asn [] [] hinv [] post_boxargsWithThis boxinv real_unit None None $. fun h_post_hinv _ post_boxvars ->
                                     with_context PopSubcontext $. fun () ->
                                     let ghostenv = List.map (fun (x, t) -> x) tenv in
                                       assume (eval None ([("actionHandles", actionHandles)] @ post_boxvars @ old_boxvars @ apre_env) post) $. fun () ->

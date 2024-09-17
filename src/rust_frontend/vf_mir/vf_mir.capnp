@@ -251,6 +251,7 @@ struct Ty {
         id @0: FnDefId;
         idMono @1: Option(FnDefId);
         substs @2: List(GenArg);
+        lateBoundGenericParamCount @3: UInt16; # The generic args are only for the early-bound params.
     }
 
     struct FnPtrTy {
@@ -288,6 +289,21 @@ struct Ty {
     }
 
     kind @0: TyKind;
+}
+
+# rustc_middle::ty::generics::GenericParamDefKind
+struct GenericParamDefKind {
+    union {
+        lifetime @0: Void;
+        type @1: Void;
+        const @2: Void;
+    }
+}
+
+# rustc_middle::ty::generics::GenericParamDef
+struct GenericParamDef {
+    name @0: Text;
+    kind @1: GenericParamDefKind;
 }
 
 # A predicate that can appear in a 'where' clause
@@ -563,6 +579,7 @@ struct Body {
                     destination @2: Option(DestinationData);
                     # The span of the function, without the dot and receiver e.g. `foo(a, b)` in `x.foo(a, b)`
                     fnSpan @3: SpanData;
+                    ghostGenericArgList @4: Option(Annotation);
                 }
 
                 union {
@@ -620,6 +637,7 @@ struct Body {
     implBlockHirGenerics @14: Option(Hir.Generics);
     implBlockPredicates @19: List(Predicate);
     hirGenerics @11: Hir.Generics;
+    generics @20: List(GenericParamDef); # Has only the early-bound generic params
     predicates @17: List(Predicate);
     isTraitFn @12: Bool;
     isDropFn @13: Bool; # Implements std::ops::Drop::drop

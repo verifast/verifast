@@ -224,7 +224,7 @@ impl Tree {
     pub fn accept<'a, V: TreeVisitor>(&'a mut self, visitor: &'a mut V)
     {
         unsafe {
-            //@ open_full_borrow(_q_a/2, a, Tree_full_borrow_content(_t, self));
+            //@ open_full_borrow(_q_a/2, 'a, Tree_full_borrow_content(_t, self));
             //@ open Tree_full_borrow_content(_t, self)();
             //@ open Tree_own(_t, (*self).root);
             Self::accept0::<V>(self.root, true, visitor);
@@ -258,7 +258,10 @@ impl Tree {
                     //@ lifetime_token_inv(k);
                     //@ if q < 1 { close [1 - q]hidden_lifetime_token(k1); }
                     //@ close_lifetime_intersection_token(q, k, k1);
-                    visitor.visit((*x).data);
+                    {
+                        //@ let 'b = kk1;
+                        visitor.visit/*@::<V, 'b> @*/((*x).data);
+                    }
                     //@ if q < 1 { open [1 - q]hidden_lifetime_token(k1); }
                     //@ open_lifetime_intersection_token(q, k, k1);
                     //@ end_lifetime(k1);

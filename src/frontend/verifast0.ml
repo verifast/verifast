@@ -56,7 +56,7 @@ let get_callers (ctxts: 'termnode context list): loc option list =
 let get_root_caller ctxts = match List.rev (get_callers ctxts) with Some l::_ -> Some l | _ -> None
 
 let tparam_is_uppercase tparam =
-  String.length tparam > 0 && match tparam.[0] with 'A'..'Z' -> true | _ -> false
+  String.length tparam > 0 && match tparam.[0] with 'A'..'Z'|'\'' -> true | _ -> false
 
 let rec c_string_of_type t =
   match t with
@@ -259,6 +259,7 @@ let rec rust_string_of_type t =
   | PackageName(n) -> n (* not a real type; used only during type checking *)
   | RefType(t) -> "ref " ^ (rust_string_of_type t)
   | AbstractType x -> x
+  | StaticLifetime -> "'static"
 
 let string_of_type lang dialect =
   match lang, dialect with
