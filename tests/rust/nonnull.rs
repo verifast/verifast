@@ -1,17 +1,17 @@
 /*@
-pred ptr::NonNull_own<T>(t: thread_id_t, nonNull: ptr::NonNull<T>;) = nonNull.pointer as usize != 0;
+pred_ctor ptr::NonNull_own<T>()(t: thread_id_t, nonNull: ptr::NonNull<T>;) = nonNull.pointer as usize != 0;
 pred_ctor ptr::NonNull_frac_bc<T>(t: thread_id_t, l: *ptr::NonNull<T>)(;) = (*l).pointer |-> ?p &*& struct_ptr::NonNull_padding(l) &*& ptr::NonNull_own(t, ptr::NonNull::<T> { pointer: p });
-pred ptr::NonNull_share<T>(k: lifetime_t, t: thread_id_t, l: *ptr::NonNull<T>) =
+pred_ctor ptr::NonNull_share<T>()(k: lifetime_t, t: thread_id_t, l: *ptr::NonNull<T>) =
     frac_borrow(k, ptr::NonNull_frac_bc(t, l));
 
 lem ptr::NonNull_share_mono<T>(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *ptr::NonNull<T>)
     req lifetime_inclusion(k1, k) == true &*& [_]ptr::NonNull_share(k, t, l);
     ens [_]ptr::NonNull_share(k1, t, l);
 {
-    open ptr::NonNull_share(k, t, l);
+    open ptr::NonNull_share::<T>()(k, t, l);
     frac_borrow_mono(k, k1, ptr::NonNull_frac_bc(t, l));
     assert [?q]frac_borrow(k1, _);
-    close [q]ptr::NonNull_share(k1, t, l);
+    close [q]ptr::NonNull_share::<T>()(k1, t, l);
 }
 
 lem ptr::NonNull_share_full<T>(k: lifetime_t, t: thread_id_t, l: *ptr::NonNull<T>)
@@ -79,14 +79,16 @@ pub mod ptr {
     impl<T> Copy for NonNull<T> {}
     impl<T> Clone for NonNull<T> {
         fn clone<'a>(&'a self) -> Self {
-            //@ open ptr::NonNull_share('a, _t, self);
+            //@ open ptr::NonNull_share::<T>()('a, _t, self);
             //@ open_frac_borrow('a, ptr::NonNull_frac_bc(_t, self), _q_a);
             //@ open ptr::NonNull_frac_bc::<T>(_t, self)();
             let r = *self;
-            //@ open ptr::NonNull_own::<T>(_t, _);
+            //@ open ptr::NonNull_own::<T>(_t, ?nnp);
             //@ assert [?qp](*self).pointer |-> _;
+            //@ close [qp]ptr::NonNull_own::<T>()(_t, nnp);
             //@ close [qp]ptr::NonNull_frac_bc::<T>(_t, self)();
             //@ close_frac_borrow(qp, ptr::NonNull_frac_bc(_t, self));
+            //@ close ptr::NonNull_own::<T>(_t, r);
             r
         }
     }

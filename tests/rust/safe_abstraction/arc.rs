@@ -24,14 +24,14 @@ pred_ctor Arc_inv<T>(dk: lifetime_t, gid: isize, ptr: *ArcInner<T>)() = counting
     std::alloc::alloc_block(ptr as *u8, std::alloc::Layout::new_::<ArcInner<T>>()) &*& struct_ArcInner_padding::<T>(ptr) &*&
     borrow_end_token(dk, <T>.full_borrow_content(default_tid, &(*ptr).data)) };
 
-pred Arc_own<T>(t: thread_id_t, arc: Arc<T>) = [_]std::ptr::NonNull_own(default_tid, arc.ptr) &*& [_]exists(?ptr) &*& std::ptr::NonNull_ptr::<ArcInner<T>>(arc.ptr) == ptr &*&
+pred_ctor Arc_own<T>()(t: thread_id_t, arc: Arc<T>) = [_]std::ptr::NonNull_own(default_tid, arc.ptr) &*& [_]exists(?ptr) &*& std::ptr::NonNull_ptr::<ArcInner<T>>(arc.ptr) == ptr &*&
     [_]exists(?dk) &*& [_]exists(?gid) &*& [_]atomic_space(Marc, Arc_inv(dk, gid, ptr)) &*& ticket(dlft_pred(dk), gid, ?frac) &*& [frac]dlft_pred(dk)(gid, false) &*&
     [_](<T>.share)(dk, default_tid, &(*ptr).data) &*& pointer_within_limits(&(*ptr).data) == true &*& is_Send(typeid(T)) == true;
 
 pred_ctor Arc_frac_bc<T>(l: *Arc<T>, nnp: std::ptr::NonNull<ArcInner<T>>)(;) = (*l).ptr |-> nnp;
 pred_ctor ticket_(dk: lifetime_t, gid: isize, frac: real)(;) = ticket(dlft_pred(dk), gid, frac) &*& [frac]ghost_cell(gid, false);
 
-pred Arc_share<T>(k: lifetime_t, t: thread_id_t, l: *Arc<T>) = [_]exists(?nnp) &*& [_]frac_borrow(k, Arc_frac_bc(l, nnp)) &*& [_]std::ptr::NonNull_own(default_tid, nnp) &*&
+pred_ctor Arc_share<T>()(k: lifetime_t, t: thread_id_t, l: *Arc<T>) = [_]exists(?nnp) &*& [_]frac_borrow(k, Arc_frac_bc(l, nnp)) &*& [_]std::ptr::NonNull_own(default_tid, nnp) &*&
     [_]exists(?ptr) &*& std::ptr::NonNull_ptr::<ArcInner<T>>(nnp) == ptr &*& [_]exists(?dk) &*& [_]exists(?gid) &*& [_]atomic_space(Marc, Arc_inv(dk, gid, ptr)) &*&
     [_]exists(?frac) &*& [_]frac_borrow(k, ticket_(dk, gid, frac)) &*& [_]frac_borrow(k, lifetime_token_(frac, dk)) &*& [_](<T>.share)(dk, default_tid, &(*ptr).data) &*&
     pointer_within_limits(&(*ptr).data) == true;
@@ -40,13 +40,13 @@ lem Arc_share_mono<T>(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *Arc<T>)
     req lifetime_inclusion(k1, k) == true &*& [_]Arc_share(k, t, l);
     ens [_]Arc_share(k1, t, l);
 {
-    open Arc_share(k, t, l);
+    open Arc_share::<T>()(k, t, l);
     assert [_]exists::<std::ptr::NonNull<ArcInner<T>>>(?nnp) &*& [_]exists::<lifetime_t>(?dk) &*& [_]exists::<isize>(?gid) &*& [_]exists::<real>(?frac);
     frac_borrow_mono(k, k1, Arc_frac_bc(l, nnp));
     frac_borrow_mono(k, k1, ticket_(dk, gid, frac));
     frac_borrow_mono(k, k1, lifetime_token_(frac, dk));
-    close Arc_share(k1, t, l);
-    leak Arc_share(k1, _, _);
+    close Arc_share::<T>()(k1, t, l);
+    leak Arc_share::<T>()(k1, _, _);
 }
 
 pred_ctor Ctx<T>(nnp: std::ptr::NonNull<ArcInner<T>>, dk: lifetime_t, gid: isize, l: *Arc<T>)() = [_]std::ptr::NonNull_own(default_tid, nnp) &*&
@@ -63,7 +63,7 @@ lem Arc_fbor_split<T>(k: lifetime_t, t: thread_id_t, l: *Arc<T>)
 {
     let klong = open_full_borrow_strong_m(k, Arc_full_borrow_content(t, l), qk);
     open Arc_full_borrow_content::<T>(t, l)();
-    open Arc_own(t, ?arc);
+    open Arc_own::<T>()(t, ?arc);
     let nnp = arc.ptr;
     assert [_]exists::<lifetime_t>(?dk) &*& ticket(_, ?gid, ?frac);
     close Arc_frac_bc::<T>(l, nnp)();
@@ -76,7 +76,7 @@ lem Arc_fbor_split<T>(k: lifetime_t, t: thread_id_t, l: *Arc<T>)
             open sep(ticket_(dk, gid, frac), lifetime_token_(frac, dk))();
             open ticket_(dk, gid, frac)();
             open Ctx::<T>(nnp, dk, gid, l)();
-            close Arc_own(t, arc);
+            close Arc_own::<T>()(t, arc);
             close Arc_full_borrow_content::<T>(t, l)();
         }{
             close Ctx::<T>(nnp, dk, gid, l)();
@@ -98,7 +98,7 @@ lem Arc_share_full<T>(k: lifetime_t, t: thread_id_t, l: *Arc<T>)
     full_borrow_into_frac_m(k, Arc_frac_bc(l, nnp));
     full_borrow_into_frac_m(k, ticket_(dk, gid, frac));
     full_borrow_into_frac_m(k, lifetime_token_(frac, dk));
-    close Arc_share(k, t, l);
+    close Arc_share::<T>()(k, t, l);
     leak Arc_share(k, t, l);
 }
 
@@ -121,8 +121,8 @@ lem Arc_sync<T>(k: lifetime_t, t: thread_id_t, t1: thread_id_t, l: *Arc<T>)
     req [_]Arc_share(k, t, l);
     ens [_]Arc_share(k, t1, l);
 {
-    open Arc_share(k, t, l);
-    close Arc_share(k, t1, l);
+    open Arc_share::<T>()(k, t, l);
+    close Arc_share::<T>()(k, t1, l);
     leak Arc_share(k, t1, l);
 }
 
@@ -166,7 +166,7 @@ impl<T: Sync + Send> Arc<T> {
             //@ leak exists(p);
             //@ leak exists(dk);
             //@ leak exists::<isize>(gid);
-            //@ close Arc_own(_t, ret);
+            //@ close Arc_own::<T>()(_t, ret);
             ret
         }
     }
@@ -238,7 +238,7 @@ impl<T: Sync + Send> Arc<T> {
 
     pub fn strong_count<'a>(this: &'a Self) -> usize {
         unsafe {
-            //@ open Arc_share('a, _t, this);
+            //@ open Arc_share::<T>()('a, _t, this);
             //@ assert [_]exists::<std::ptr::NonNull<ArcInner<T>>>(?nnp);
             //@ open_frac_borrow('a, Arc_frac_bc(this, nnp), _q_a/2);
             //@ open [?qnnp]Arc_frac_bc::<T>(this, nnp)();
@@ -300,7 +300,7 @@ impl<T: Sync + Send> std::ops::Deref for Arc<T> {
 
     fn deref<'a>(&'a self) -> &'a T {
         unsafe {
-            //@ open Arc_share('a, _t, self);
+            //@ open Arc_share::<T>()('a, _t, self);
             //@ assert [_]exists::<std::ptr::NonNull<ArcInner<T>>>(?nnp) &*& [_]exists::<real>(?frac) &*& [_]exists::<lifetime_t>(?dk);
             //@ open_frac_borrow('a, Arc_frac_bc(self, nnp), _q_a);
             //@ open [?qnnp]Arc_frac_bc::<T>(self, nnp)();
@@ -319,7 +319,7 @@ impl<T: Sync + Send> std::ops::Deref for Arc<T> {
 
 impl<T: Sync + Send> Clone for Arc<T> {
     fn clone<'a>(&'a self) -> Arc<T> {
-        //@ open Arc_share('a, _t, self);
+        //@ open Arc_share::<T>()('a, _t, self);
         //@ assert [_]exists::<std::ptr::NonNull<ArcInner<T>>>(?nnp);
         //@ open_frac_borrow('a, Arc_frac_bc(self, nnp), _q_a/2);
         //@ open [?qnnp]Arc_frac_bc::<T>(self, nnp)();
@@ -327,7 +327,7 @@ impl<T: Sync + Send> Clone for Arc<T> {
         let ret = Self { ptr: self.ptr };
         //@ close [qnnp]Arc_frac_bc::<T>(self, nnp)();
         //@ close_frac_borrow(qnnp, Arc_frac_bc(self, nnp));
-        //@ close Arc_own(_t, ret);
+        //@ close Arc_own::<T>()(_t, ret);
         ret
     }
 }

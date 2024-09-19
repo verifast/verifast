@@ -1289,7 +1289,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           | None -> 
             let PredCtorInfo (_, tparams, ps1, ps2, inputParamCount, body, funcsym) = List.assoc g#name predctormap in
             let typeid_msg () = Printf.sprintf "Taking typeids of predicate constructor type arguments <%s>: " (String.concat ", " (List.map string_of_type targs)) in
-            let targs_typeids = List.map (typeid_of_core_core l typeid_msg env) targs' in
+            let targs_typeids = List.map (typeid_of_core_core l typeid_msg env) targs in
             let ctorargs = List.map (function SrcPat (LitPat e | WCtorPat (_, _, _, _, _, _, _, Some e)) -> ev e | _ -> static_error l "Patterns are not supported in predicate constructor argument positions." None) pats0 in
             let tpenv0 = List.combine tparams targs in
             let ctorargs = List.map2 (fun (_, pt) v -> prover_convert_term v (instantiate_type tpenv0 pt) pt) ps1 ctorargs in

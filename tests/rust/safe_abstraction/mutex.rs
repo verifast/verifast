@@ -14,8 +14,16 @@ pub struct Mutex<T: Send> {
 /*@
 
 pred True(;) = true;
-pred Mutex_own<T>(t: thread_id_t, mutex: Mutex<T>) =
+pred_ctor Mutex_own<T>()(t: thread_id_t, mutex: Mutex<T>) =
     sys::locks::SysMutex(mutex.inner, True) &*& <T>.own(t, mutex.data);
+
+lem Mutex_drop<T>()
+    req Mutex_own::<T>()(?t, ?mutex);
+    ens sys::locks::Mutex_own(t, mutex.inner) &*& <T>.own(t, mutex.data);
+{
+    open Mutex_own::<T>()(t, mutex);
+    sys::locks::SysMutex_to_own(t);
+}
 
 pred_ctor Mutex_fbc_inner<T>(l: *Mutex<T>)(;) = (*l).inner |-> ?inner &*& sys::locks::SysMutex(inner, True) &*& struct_Mutex_padding(l);
 
@@ -24,21 +32,21 @@ fix t0() -> thread_id_t { default_value }
 pred_ctor Mutex_frac_borrow_content<T>(kfcc: lifetime_t, l: *Mutex<T>)(;) =
     sys::locks::SysMutex_share(&(*l).inner, full_borrow_(kfcc, <T>.full_borrow_content(t0, &(*l).data))) &*& struct_Mutex_padding(l);
 
-pred Mutex_share<T>(k: lifetime_t, t: thread_id_t, l: *Mutex<T>) =
+pred_ctor Mutex_share<T>()(k: lifetime_t, t: thread_id_t, l: *Mutex<T>) =
     exists_np(?kfcc) &*& lifetime_inclusion(k, kfcc) == true &*& frac_borrow(k, Mutex_frac_borrow_content::<T>(kfcc, l));
 
 lem Mutex_share_mono<T>(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *Mutex<T>)
     req lifetime_inclusion(k1, k) == true &*& [_]Mutex_share(k, t, l);
     ens [_]Mutex_share(k1, t, l);
 {
-    open Mutex_share(k, t, l);
+    open Mutex_share::<T>()(k, t, l);
     assert [_]exists_np(?kfcc);
     frac_borrow_mono(k, k1, Mutex_frac_borrow_content(kfcc, l));
     assert [?q]frac_borrow(k1, _);
     close [q]exists_np(kfcc);
     // TODO: Why does VeriFast not just close using any dummy fraction when it is trying to close a dummy fraction?
     lifetime_inclusion_trans(k1, k, kfcc);
-    close [q]Mutex_share(k1, t, l);
+    close [q]Mutex_share::<T>()(k1, t, l);
 }
 
 lem Mutex_share_full<T>(k: lifetime_t, t: thread_id_t, l: *Mutex<T>)
@@ -54,13 +62,13 @@ lem Mutex_share_full<T>(k: lifetime_t, t: thread_id_t, l: *Mutex<T>)
         ghost_rec_perm_top_weaken(type_depth(typeid(T)));
         Send::send(t0, t, data);
         ghost_rec_perm_top_unweaken();
-        close Mutex_own(t, Mutex::<T> { inner, data });
+        close Mutex_own::<T>()(t, Mutex::<T> { inner, data });
         close Mutex_full_borrow_content::<T>(t, l)();
     }{
         produce_lem_ptr_chunk implies(Mutex_full_borrow_content(t, l), sep(Mutex_fbc_inner(l), <T>.full_borrow_content(t0, &(*l).data)))() {
             open Mutex_full_borrow_content::<T>(t, l)();
             assert (*l).inner |-> ?inner &*& (*l).data |-> ?data;
-            open Mutex_own(t, Mutex::<T> { inner, data });
+            open Mutex_own::<T>()(t, Mutex::<T> { inner, data });
             close Mutex_fbc_inner::<T>(l)();
             open Mutex_data(l, _);
             ghost_rec_perm_top_weaken(type_depth(typeid(T)));
@@ -93,7 +101,7 @@ lem Mutex_share_full<T>(k: lifetime_t, t: thread_id_t, l: *Mutex<T>)
             assert [?qfb]frac_borrow(k, Mutex_frac_borrow_content(k, l));
             close [qfb]exists_np(k);
             lifetime_inclusion_refl(k);
-            close [qfb]Mutex_share(k, t, l);
+            close [qfb]Mutex_share::<T>()(k, t, l);
         }
     }
 }
@@ -108,9 +116,9 @@ lem Mutex_send<T>(t: thread_id_t, t1: thread_id_t) // TODO: Enforce this proof o
     req is_Send(typeid(T)) == true &*& type_interp::<T>() &*& Mutex_own::<T>(t, ?mutex);
     ens type_interp::<T>() &*& Mutex_own(t1, mutex);
 {
-    open Mutex_own(t, mutex);
+    open Mutex_own::<T>()(t, mutex);
     Send::send::<T>(t, t1, mutex.data);
-    close Mutex_own(t1, mutex);
+    close Mutex_own::<T>()(t1, mutex);
 }
 
 @*/
@@ -123,8 +131,8 @@ lem Mutex_sync<T>(t: thread_id_t, t1: thread_id_t) // TODO: Enforce this proof o
     req Mutex_share::<T>(?k, t, ?l);
     ens Mutex_share(k, t1, l);
 {
-    open Mutex_share(k, t, l);
-    close Mutex_share(k, t1, l);
+    open Mutex_share::<T>()(k, t, l);
+    close Mutex_share::<T>()(k, t1, l);
 }
 
 @*/
@@ -136,7 +144,7 @@ pub struct MutexGuard<'a, T: Send> {
 /*@
 
 // TODO: Is this extra lifetime `klong` necessary here?
-pred MutexGuard_own<'a, T>(t: thread_id_t, mutexGuard: MutexGuard<'a, T>) =
+pred_ctor MutexGuard_own<'a, T>()(t: thread_id_t, mutexGuard: MutexGuard<'a, T>) =
     [_]exists_np(?klong) &*& lifetime_inclusion('a, klong) == true &*& [_]frac_borrow('a, Mutex_frac_borrow_content(klong, mutexGuard.lock))
     &*& sys::locks::SysMutex_locked(&(*mutexGuard.lock).inner, full_borrow_(klong, <T>.full_borrow_content(t0, &(*mutexGuard.lock).data)), t)
     &*& full_borrow(klong, <T>.full_borrow_content(t0, &(*mutexGuard.lock).data));
@@ -146,7 +154,7 @@ pred_ctor MutexGuard_fbc_rest<'a, T>(klong: lifetime_t, t: thread_id_t, l: *Mute
     &*& [_]frac_borrow('a, Mutex_frac_borrow_content(klong, lock))
     &*& sys::locks::SysMutex_locked(&(*lock).inner, full_borrow_(klong, <T>.full_borrow_content(t0, &(*lock).data)), t);
 
-pred MutexGuard_share<'a, T>(k: lifetime_t, t: thread_id_t, l: *MutexGuard<'a, T>) = true;
+pred_ctor MutexGuard_share<'a, T>()(k: lifetime_t, t: thread_id_t, l: *MutexGuard<'a, T>) = true;
 
 lem MutexGuard_share_mono<'a, T>(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *MutexGuard<'a, T>)
     req lifetime_inclusion(k1, k) == true &*& [_]MutexGuard_share::<'a, T>(k, t, l);
@@ -189,7 +197,7 @@ impl<T: Send> Mutex<T> {
         let inner = unsafe { sys::locks::Mutex::new() };
         let data = UnsafeCell::new(v);
         let r = Mutex { inner, data };
-        //@ close Mutex_own(_t, r);
+        //@ close Mutex_own::<T>()(_t, r);
         r
     }
 
@@ -204,7 +212,7 @@ impl<T: Send> Mutex<T> {
     //@ ens thread_token(t) &*& [qa]lifetime_token('a) &*& MutexGuard_own::<'a, T>(t, result);
     {
         unsafe {
-            //@ open Mutex_share('a, t, self);
+            //@ open Mutex_share::<T>()('a, t, self);
             //@ assert [_]exists_np(?klong);
             //@ open_frac_borrow('a, Mutex_frac_borrow_content(klong, self), qa);
             //@ open Mutex_frac_borrow_content::<T>(klong, self)();
@@ -330,7 +338,7 @@ impl<'a, T: Send> Drop for MutexGuard<'a, T> {
         //@ close_frac_borrow(qp, Mutex_frac_borrow_content(kmlong, lock));
         //@ assert [?qfrac]frac_borrow('a, _);
         //@ close [qfrac]exists_np(kmlong);
-        //@ close [qfrac]Mutex_share('a, t, lock);
+        //@ close [qfrac]Mutex_share::<T>()('a, t, lock);
     }
 
 }

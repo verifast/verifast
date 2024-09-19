@@ -147,10 +147,10 @@ module AstAux = struct
     in
     iter "" ds (fun () -> [])
 
-  let decl_map_contains_pred_fam_inst map name =
+  let decl_map_contains_pred_fam_inst_or_pred_ctor_inst map name =
     map
     |> List.exists @@ function
-       | name', Ast.PredFamilyInstanceDecl (_, _, _, _, _, _) when name' = name
+       | name', (Ast.PredFamilyInstanceDecl (_, _, _, _, _, _)|Ast.PredCtorDecl (_, _, _, _, _, _, _)) when name' = name
          ->
            true
        | _ -> false
@@ -4393,9 +4393,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let* full_bor_content, proof_obligs, delayed_proof_obligs, aux_decls' =
         if
           is_local
-          && (AstAux.decl_map_contains_pred_fam_inst ghost_decl_map
+          && (AstAux.decl_map_contains_pred_fam_inst_or_pred_ctor_inst ghost_decl_map
                 (name ^ "_own")
-             || AstAux.decl_map_contains_pred_fam_inst ghost_decl_map
+             || AstAux.decl_map_contains_pred_fam_inst_or_pred_ctor_inst ghost_decl_map
                   (name ^ "_share"))
         then
           let* full_bor_content =
@@ -4406,12 +4406,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             gen_adt_proof_obligs def lft_params tparams send_tparams
           in
           let type_pred_defs, delayed_proof_obligs =
-            if tparams <> [] || lft_params <> [] then ([], [])
-            else
               ( [
                   Ast.TypePredDef
                     ( def_loc,
-                      tparams,
+                      vf_tparams,
                       StructTypeExpr
                         (def_loc, Some name, None, [], tparams_targs),
                       "own",
@@ -4419,7 +4417,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                       name ^ "_own" );
                   Ast.TypePredDef
                     ( def_loc,
-                      tparams,
+                      vf_tparams,
                       StructTypeExpr
                         (def_loc, Some name, None, [], tparams_targs),
                       "full_borrow_content",
@@ -4427,7 +4425,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                       name ^ "_full_borrow_content" );
                   Ast.TypePredDef
                     ( def_loc,
-                      tparams,
+                      vf_tparams,
                       StructTypeExpr
                         (def_loc, Some name, None, [], tparams_targs),
                       "share",
@@ -4451,7 +4449,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                 else
                   [
                     (fun adt_defs ->
-                      gen_adt_drop_proof_oblig adt_defs def_loc name tparams
+                      gen_adt_drop_proof_oblig adt_defs def_loc name vf_tparams
                         (List.map
                            (fun (fd : Mir.field_def_tr) ->
                              (fd.loc, fd.name, fd.ty))

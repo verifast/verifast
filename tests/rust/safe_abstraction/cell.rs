@@ -6,7 +6,7 @@ pub struct Cell<T> {
 
 /*@
 
-pred Cell_own<T>(t: thread_id_t, cell: Cell<T>) = <T>.own(t, cell.v);
+pred_ctor Cell_own<T>()(t: thread_id_t, cell: Cell<T>) = <T>.own(t, cell.v);
 
 /*
 
@@ -22,7 +22,7 @@ pred_ctor Cell_nonatomic_borrow_content<T>(l: *Cell<T>, t: thread_id_t)() =
   Cell_v(l, ?v) &*& struct_Cell_padding(l) &*& Cell_own(t, Cell::<T> { v });
 
 // `SHR` for Cell<u32>
-pred Cell_share<T>(k: lifetime_t, t: thread_id_t, l: *Cell<T>) =
+pred_ctor Cell_share<T>()(k: lifetime_t, t: thread_id_t, l: *Cell<T>) =
   [_]nonatomic_borrow(k, t, MaskNshrSingle(l), Cell_nonatomic_borrow_content(l, t));
 
 // Proof obligations
@@ -30,11 +30,11 @@ lem Cell_share_mono<T>(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *Cell<T
   req lifetime_inclusion(k1, k) == true &*& [_]Cell_share(k, t, l);
   ens [_]Cell_share(k1, t, l);
 {
-  open Cell_share(k, t, l);
+  open Cell_share::<T>()(k, t, l);
   assert [_]nonatomic_borrow(k, t, ?m, _);
   nonatomic_borrow_mono(k, k1, t, m, Cell_nonatomic_borrow_content(l, t));
-  close Cell_share(k1, t, l);
-  leak Cell_share(k1, t, l);
+  close Cell_share::<T>()(k1, t, l);
+  leak Cell_share::<T>()(k1, t, l);
 }
 
 lem Cell_share_full<T>(k: lifetime_t, t: thread_id_t, l: *Cell<T>)
@@ -53,8 +53,8 @@ lem Cell_share_full<T>(k: lifetime_t, t: thread_id_t, l: *Cell<T>)
     }
   }
   full_borrow_into_nonatomic_borrow_m(k, t, MaskNshrSingle(l), Cell_nonatomic_borrow_content(l, t));
-  close Cell_share(k, t, l);
-  leak Cell_share(k, t, l);
+  close Cell_share::<T>()(k, t, l);
+  leak Cell_share::<T>()(k, t, l);
 }
 @*/
 
@@ -70,7 +70,7 @@ impl<T> Cell<T> {
     
     fn replace<'a>(&'a self, v: T) -> T {
         unsafe {
-            //@ open Cell_share('a, _t, self);
+            //@ open Cell_share::<T>()('a, _t, self);
             //@ assert [_]nonatomic_borrow('a, _t, ?mask, Cell_nonatomic_borrow_content(self, _t));
             //@ open thread_token(_t);
             //@ thread_token_split(_t, MaskTop, mask);
@@ -92,8 +92,8 @@ impl<T> Cell<T> {
     }
 
     fn swap<'a>(&'a self, other: &'a Self) {
-        //@ open Cell_share('a, _t, self);
-        //@ open Cell_share('a, _t, other);
+        //@ open Cell_share::<T>()('a, _t, self);
+        //@ open Cell_share::<T>()('a, _t, other);
         if self as *const Cell<T> == other as *const Cell<T> {
             return;
         }

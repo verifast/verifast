@@ -230,7 +230,7 @@ pub struct MutexGuardU32<'a> {
 /*@
 
 // TODO: Is this extra lifetime `klong` necessary here?
-pred MutexGuardU32_own<'a>(t: thread_id_t, mutexGuardU32: MutexGuardU32<'a>) =
+pred_ctor MutexGuardU32_own<'a>()(t: thread_id_t, mutexGuardU32: MutexGuardU32<'a>) =
     [_]exists_np(?klong) &*& lifetime_inclusion('a, klong) == true &*& [_]frac_borrow('a, MutexU32_frac_borrow_content(klong, mutexGuardU32.lock))
     &*& SysMutex_locked(&(*mutexGuardU32.lock).inner, full_borrow_(klong, u32_full_borrow_content(t0, &(*mutexGuardU32.lock).data)), t)
     &*& full_borrow(klong, u32_full_borrow_content(t0, &(*mutexGuardU32.lock).data));
@@ -240,7 +240,7 @@ pred_ctor MutexGuardU32_fbc_rest<'a>(klong: lifetime_t, t: thread_id_t, l: *Mute
     &*& [_]frac_borrow('a, MutexU32_frac_borrow_content(klong, lock))
     &*& SysMutex_locked(&(*lock).inner, full_borrow_(klong, u32_full_borrow_content(t0, &(*lock).data)), t);
 
-pred MutexGuardU32_share<'a>(k: lifetime_t, t: thread_id_t, l: *MutexGuardU32<'a>) = true;
+pred_ctor MutexGuardU32_share<'a>()(k: lifetime_t, t: thread_id_t, l: *MutexGuardU32<'a>) = true;
 
 lem MutexGuardU32_share_mono<'a>(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *MutexGuardU32<'a>)
     req lifetime_inclusion(k1, k) == true &*& [_]MutexGuardU32_share::<'a>(k, t, l);

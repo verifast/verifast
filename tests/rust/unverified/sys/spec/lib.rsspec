@@ -3,8 +3,14 @@ mod locks {
     struct Mutex;
 
     /*@
+    
+    pred Mutex_own(t: thread_id_t, m: sys::locks::Mutex);
 
     pred SysMutex(m: sys::locks::Mutex; P: pred());
+    
+    lem SysMutex_to_own(t: thread_id_t);
+        req SysMutex(?m, _);
+        ens Mutex_own(t, m);
 
     pred SysMutex_share(l: *sys::locks::Mutex; P: pred());
 
