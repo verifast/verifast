@@ -5,9 +5,9 @@ pub struct Foo {
 
 /*@
 
-pred Foo_own(t: thread_id_t, foo: Foo) = true;
+pred <Foo>.own(t, foo) = true;
 
-pred Foo_share(k: lifetime_t, t: thread_id_t, l: *Foo) = true;
+pred <Foo>.share(k, t, l) = true;
 
 lem Foo_share_mono(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *Foo)
     req lifetime_inclusion(k1, k) == true &*& [_]Foo_share(k, t, l);

@@ -30,7 +30,7 @@ pred_ctor rc_na_inv<T>(dk: lifetime_t, gid: usize, ptr: *RcBox<T>, t: thread_id_
 
 inductive wrap<t> = wrap(t);
 
-pred_ctor Rc_own<T>()(t: thread_id_t, rc: Rc<T>) =
+pred<T> <Rc<T>>.own(t, rc) =
     wrap::<*RcBox<T>>(std::ptr::NonNull_ptr(rc.ptr)) == wrap(?ptr) &*&
     ptr as usize != 0 &*&
     [_]exists(?dk) &*& [_]exists(?gid) &*& [_]na_inv(t, MaskNshrSingle(ptr), rc_na_inv(dk, gid, ptr, t)) &*&
@@ -42,7 +42,7 @@ pred_ctor Rc_frac_bc<T>(l: *Rc<T>, nnp: std::ptr::NonNull<RcBox<T>>)(;) = (*l).p
 
 pred_ctor ticket_(dk: lifetime_t, gid: usize, frac: real)(;) = ticket(dlft_pred(dk), gid, frac) &*& [frac]ghost_cell(gid, false);
 
-pred_ctor Rc_share<T>()(k: lifetime_t, t: thread_id_t, l: *Rc<T>) =
+pred<T> <Rc<T>>.share(k, t, l) =
     [_]exists(?nnp) &*& [_]frac_borrow(k, Rc_frac_bc(l, nnp)) &*&
     wrap::<*RcBox<T>>(std::ptr::NonNull_ptr(nnp)) == wrap(?ptr) &*& ptr as usize != 0 &*&
     [_]exists(?dk) &*& [_]exists(?gid) &*& [_]na_inv(t, MaskNshrSingle(ptr), rc_na_inv(dk, gid, ptr, t)) &*&

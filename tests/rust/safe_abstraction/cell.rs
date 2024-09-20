@@ -6,7 +6,7 @@ pub struct Cell<T> {
 
 /*@
 
-pred_ctor Cell_own<T>()(t: thread_id_t, cell: Cell<T>) = <T>.own(t, cell.v);
+pred<T> <Cell<T>>.own(t, cell) = <T>.own(t, cell.v);
 
 /*
 
@@ -22,13 +22,13 @@ pred_ctor Cell_nonatomic_borrow_content<T>(l: *Cell<T>, t: thread_id_t)() =
   Cell_v(l, ?v) &*& struct_Cell_padding(l) &*& Cell_own(t, Cell::<T> { v });
 
 // `SHR` for Cell<u32>
-pred_ctor Cell_share<T>()(k: lifetime_t, t: thread_id_t, l: *Cell<T>) =
+pred<T> <Cell<T>>.share(k, t, l) =
   [_]nonatomic_borrow(k, t, MaskNshrSingle(l), Cell_nonatomic_borrow_content(l, t));
 
 // Proof obligations
 lem Cell_share_mono<T>(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *Cell<T>)
-  req lifetime_inclusion(k1, k) == true &*& [_]Cell_share(k, t, l);
-  ens [_]Cell_share(k1, t, l);
+  req lifetime_inclusion(k1, k) == true &*& [_]Cell_share::<T>(k, t, l);
+  ens [_]Cell_share::<T>(k1, t, l);
 {
   open Cell_share::<T>()(k, t, l);
   assert [_]nonatomic_borrow(k, t, ?m, _);
@@ -39,7 +39,7 @@ lem Cell_share_mono<T>(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *Cell<T
 
 lem Cell_share_full<T>(k: lifetime_t, t: thread_id_t, l: *Cell<T>)
   req atomic_mask(Nlft) &*& full_borrow(k, Cell_full_borrow_content(t, l)) &*& [?q]lifetime_token(k);
-  ens atomic_mask(Nlft) &*& [_]Cell_share(k, t, l) &*& [q]lifetime_token(k);
+  ens atomic_mask(Nlft) &*& [_]Cell_share::<T>(k, t, l) &*& [q]lifetime_token(k);
 {
   produce_lem_ptr_chunk implies(Cell_full_borrow_content(t, l), Cell_nonatomic_borrow_content(l, t))() {
     open Cell_full_borrow_content::<T>(t, l)();

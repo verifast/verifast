@@ -1,7 +1,7 @@
 /*@
-pred_ctor ptr::NonNull_own<T>()(t: thread_id_t, nonNull: ptr::NonNull<T>;) = nonNull.pointer as usize != 0;
+pred<T> <ptr::NonNull<T>>.own(t, nonNull;) = nonNull.pointer as usize != 0;
 pred_ctor ptr::NonNull_frac_bc<T>(t: thread_id_t, l: *ptr::NonNull<T>)(;) = (*l).pointer |-> ?p &*& struct_ptr::NonNull_padding(l) &*& ptr::NonNull_own(t, ptr::NonNull::<T> { pointer: p });
-pred_ctor ptr::NonNull_share<T>()(k: lifetime_t, t: thread_id_t, l: *ptr::NonNull<T>) =
+pred<T> <ptr::NonNull<T>>.share(k, t, l) =
     frac_borrow(k, ptr::NonNull_frac_bc(t, l));
 
 lem ptr::NonNull_share_mono<T>(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *ptr::NonNull<T>)

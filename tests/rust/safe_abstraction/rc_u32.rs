@@ -19,7 +19,7 @@ pred_ctor rc_na_inv(dk: lifetime_t, gid: usize, ptr: *RcBoxU32, t: thread_id_t)(
 //pred_ctor ticket_(dk: lifetime_t, gid: usize, frac: real, destroyed: bool)(;) = ticket(dlft_pred(dk), gid, frac) &*& [frac]dlft_pred(dk)(gid, destroyed);
 
 // TODO: Add the following syntax to parser: `let ptr = std::ptr::NonNull_ptr(nnp);`
-pred RcU32_own(t: thread_id_t, rcU32: RcU32) =
+pred <RcU32>.own(t, rcU32) =
     std::ptr::NonNull_ptr(rcU32.ptr) as usize != 0 &*&
     [_]exists(?dk) &*& [_]exists(?gid) &*& [_]na_inv(t, MaskNshrSingle(std::ptr::NonNull_ptr(rcU32.ptr)), rc_na_inv(dk, gid, std::ptr::NonNull_ptr(rcU32.ptr), t)) &*&
     ticket(dlft_pred(dk), gid, ?frac) &*& [frac]dlft_pred(dk)(gid, false) &*&
@@ -28,7 +28,7 @@ pred RcU32_own(t: thread_id_t, rcU32: RcU32) =
 
 pred_ctor Rc_frac_bc(l: *RcU32, nnp: std::ptr::NonNull<RcBoxU32>)(;) = (*l).ptr |-> nnp;
 pred_ctor ticket_(dk: lifetime_t, gid: usize, frac: real)(;) = ticket(dlft_pred(dk), gid, frac) &*& [frac]ghost_cell(gid, false);
-pred RcU32_share(k: lifetime_t, t: thread_id_t, l: *RcU32) =
+pred <RcU32>.share(k, t, l) =
     [_]exists(?nnp) &*& [_]frac_borrow(k, Rc_frac_bc(l, nnp)) &*& std::ptr::NonNull_ptr(nnp) as usize != 0 &*&
     [_]exists(?dk) &*& [_]exists(?gid) &*& [_]na_inv(t, MaskNshrSingle(std::ptr::NonNull_ptr(nnp)), rc_na_inv(dk, gid, std::ptr::NonNull_ptr(nnp), t)) &*&
     [_]exists(?frac) &*& [_]frac_borrow(k, ticket_(dk, gid, frac)) &*& [_]frac_borrow(k, lifetime_token_(frac, dk)) &*&

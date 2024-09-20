@@ -1144,7 +1144,7 @@ and
   | te -> raise (ParseException (type_expr_loc te, "Type parameter name expected"))
   in
   if targ_names <> tparams then raise (ParseException (lrhs, "Right-hand side type arguments must match definition type parameters"));
-  [TypePredDef (l, tparams, tp, predName, lrhs, rhs)]
+  [TypePredDef (l, tparams, tp, predName, Left (lrhs, rhs))]
 and
   parse_action_decls = function%parser
 | [ parse_action_decl as ad; 

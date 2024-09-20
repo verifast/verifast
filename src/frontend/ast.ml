@@ -932,7 +932,7 @@ and
   | RequireModuleDecl of loc * string
   | ModuleDecl of loc * string * import list * decl list (* A Rust module. Is flattened into a list of PackageDecl after parsing. *)
   | TypePredDecl of loc * type_expr * string * string
-  | TypePredDef of loc * string list * type_expr * string * loc * string
+  | TypePredDef of loc * string list * type_expr * string * (loc * string, string list * int option * asn) Either.t
   | TypeWithTypeidDecl of (* introduce a local type name whose typeid is given by the expression *)
       loc *
       string *

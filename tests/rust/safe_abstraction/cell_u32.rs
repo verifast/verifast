@@ -7,7 +7,7 @@ pub struct CellU32 {
 // Interpretation
 // `OWN` for Cell<u32>
 // [[cell(tau)]].OWN(t, vs) = [[tau]].OWN(t, vs)
-pred CellU32_own(t: thread_id_t, cellU32: CellU32;) = true; // The `v` parameter type carries the info
+pred <CellU32>.own(t, cellU32;) = true; // The `v` parameter type carries the info
 
 /* A note on `|= cell(tau) copy` judgement:
 In RustBelt `|= tau copy => |= cell(tau) copy` but it is not the case in Rust as it is prohibited
@@ -22,7 +22,7 @@ pred_ctor CellU32_nonatomic_borrow_content(l: *CellU32, t: thread_id_t)(;) =
   (*l).v |-> ?v &*& struct_CellU32_padding(l);
 
 // `SHR` for Cell<u32>
-pred CellU32_share(k: lifetime_t, t: thread_id_t, l: *CellU32) =
+pred <CellU32>.share(k, t, l) =
   [_]nonatomic_borrow(k, t, MaskNshrSingle(l), CellU32_nonatomic_borrow_content(l, t));
 
 // Proof obligations

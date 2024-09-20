@@ -5,7 +5,7 @@ pub struct Pair<A, B> {
 
 /*@
 
-pred_ctor Pair_own<A, B>()(t: thread_id_t, pair: Pair<A, B>) = <A>.own(t, pair.fst) &*& <B>.own(t, pair.snd);
+pred<A, B> <Pair<A, B>>.own(t, pair) = <A>.own(t, pair.fst) &*& <B>.own(t, pair.snd);
 
 lem Pair_drop<A, B>()
     req Pair_own::<A, B>(?t, ?pair);
@@ -14,7 +14,7 @@ lem Pair_drop<A, B>()
     open Pair_own::<A, B>(t, pair);
 }
 
-pred_ctor Pair_share<A, B>()(k: lifetime_t, t: thread_id_t, l: *Pair<A, B>) =
+pred<A, B> <Pair<A, B>>.share(k, t, l) =
     [_](<A>.share)(k, t, &(*l).fst) &*&
     pointer_within_limits(&(*l).snd) == true &*&
     [_](<B>.share)(k, t, &(*l).snd);

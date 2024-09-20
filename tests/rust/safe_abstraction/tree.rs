@@ -156,9 +156,9 @@ pub struct Tree {
 
 /*@
 
-pred Tree_own(t: thread_id_t, tree: Tree;) = Tree(tree.root, 0, ?shape);
+pred <Tree>.own(t, tree;) = Tree(tree.root, 0, ?shape);
 
-pred Tree_share(k: lifetime_t, t: thread_id_t, l: *Tree) = true;
+pred <Tree>.share(k, t, l) = true;
 
 lem Tree_share_mono(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *Tree)
     req lifetime_inclusion(k1, k) == true &*& [_]Tree_share(k, t, l);

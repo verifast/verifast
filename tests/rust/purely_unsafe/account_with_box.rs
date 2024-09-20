@@ -13,8 +13,8 @@ pred Account(account: *Account; balance: i32) =
     std::alloc::alloc_block(account as *u8, std::alloc::Layout::new_::<Account>()) &*& struct_Account_padding(account) &*&
     (*account).balance |-> balance;
 
-pred Account_own(t: thread_id_t, account: Account) = true;
-pred Account_share(k: lifetime_t, t: thread_id_t, l: *Account) = true;
+pred <Account>.own(t, account) = true;
+pred <Account>.share(k, t, l) = true;
 
 lem Account_share_full(k: lifetime_t, t: thread_id_t, l: *Account)
     req full_borrow(k, Account_full_borrow_content(t, l));

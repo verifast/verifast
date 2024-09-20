@@ -564,13 +564,43 @@ let parse_ghost_decl = function%parser
     ];
     (_, Kwd ";")
   ] -> [Inductive (l, i, tparams, cs)]
-| [ (l, Kwd "pred"); [%let (l, g) = parse_simple_path]; parse_type_params as tparams;
-    [%let (ps, inputParamCount) = parse_pred_paramlist ];
-    [%let body = opt parse_pred_body ];
-    (_, Kwd ";")
-  ] ->
-    [PredFamilyDecl (l, g, tparams, 0, List.map fst ps, inputParamCount, Inductiveness_Inductive)] @
-    (match body with None -> [] | Some body -> [PredFamilyInstanceDecl (l, g, tparams, [], ps, body)])
+| [ (l, Kwd "pred");
+    [%let ds = function%parser
+       [ parse_type_args as targs;
+         [%let (tparams, tp) = function%parser
+            [ (_, Kwd "<"); parse_type as tp; parse_right_angle_bracket as dummy ] ->
+            let tparams = targs |> List.map @@ function
+              IdentTypeExpr (_, None, x) -> x
+            | targ -> raise (ParseException (type_expr_loc targ, "Type parameter expected"))
+            in
+            (tparams, tp)
+          | [ ] ->
+            match targs with
+              [ tp ] -> ([], tp)
+            | _ -> raise (ParseException (l, "There should be exactly one type between the angle brackets"))
+         ];
+         (_, Kwd ".");
+         (lp, Ident p);
+         (_, Kwd "(");
+         [%let ps = rep_comma_ (function%parser [ (_, Ident x) ] -> x )];
+         [%let (ps, inputParamCount) = (function%parser
+             [ (_, Kwd ";"); [%let ps' = rep_comma_ (function%parser [ (_, Ident x) ] -> x)] ] -> (ps @ ps', Some (List.length ps))
+           | [ ] -> (ps, None))
+         ];
+         (_, Kwd ")");
+         (_, Kwd "=");
+         parse_asn as a;
+         (_, Kwd ";")
+       ] -> [TypePredDef (l, tparams, tp, p, Right (ps, inputParamCount, a))]
+    | [ [%let (l, g) = parse_simple_path]; parse_type_params as tparams;
+        [%let (ps, inputParamCount) = parse_pred_paramlist ];
+        [%let body = opt parse_pred_body ];
+        (_, Kwd ";")
+      ] ->
+      [PredFamilyDecl (l, g, tparams, 0, List.map fst ps, inputParamCount, Inductiveness_Inductive)] @
+      (match body with None -> [] | Some body -> [PredFamilyInstanceDecl (l, g, tparams, [], ps, body)])
+    ]
+  ] -> ds
 | [ (l, Kwd "pred_fam"); (li, Ident g);
     (_, Kwd "("); [%let index_params = rep_comma parse_param]; (_, Kwd ")");
     [%let (ps, inputParamCount) = parse_pred_paramlist ];
@@ -659,7 +689,7 @@ let parse_ghost_decl = function%parser
   | te -> raise (ParseException (type_expr_loc te, "Type parameter name expected"))
   in
   if targ_names <> tparams then raise (ParseException (lrhs, "Right-hand side type arguments must match definition type parameters"));
-  [TypePredDef (l, tparams, tp, predName, lrhs, rhs)]
+  [TypePredDef (l, tparams, tp, predName, Left (lrhs, rhs))]
 | [ (l, Kwd "let"); (lx, PrimePrefixedIdent x); (_, Kwd "="); parse_expr as e; (_, Kwd ";") ] -> [TypeWithTypeidDecl (l, x, CallExpr (l, "typeid_of_lft", [], [], [LitPat e], Static))]
 
 let parse_ghost_decls stream = List.flatten (rep parse_ghost_decl stream)

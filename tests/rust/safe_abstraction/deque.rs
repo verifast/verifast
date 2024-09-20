@@ -154,7 +154,7 @@ pred Deque_<T>(sentinel: *Node<T>; elems: list<T>) =
 pred_ctor elem_own<T>(t: thread_id_t)(elem: T) =
     <T>.own(t, elem);
 
-pred_ctor Deque_own<T>()(t: thread_id_t, deque: Deque<T>) =
+pred<T> <Deque<T>>.own(t, deque) =
     Deque_(deque.sentinel, ?elems) &*& deque.size == length(elems) &*& foreach(elems, elem_own::<T>(t));
 
 pred Deque<T>(deque: *Deque<T>, elems: list<T>) =
@@ -168,7 +168,7 @@ pred_ctor Deque_frac_borrow_content<T>(nodes: list<*Node<T>>, t: thread_id_t, l:
 pred_ctor elem_share<T>(k: lifetime_t, t: thread_id_t)(l: *Node<T>) =
     [_](<T>.share)(k, t, &(*l).value);
 
-pred_ctor Deque_share<T>()(k: lifetime_t, t: thread_id_t, l: *Deque<T>) =
+pred<T> <Deque<T>>.share(k, t, l) =
     exists::<list<*Node<T>>>(?nodes) &*&
     [_]frac_borrow(k, Deque_frac_borrow_content(nodes, t, l)) &*&
     foreach(nodes, elem_share::<T>(k, t));

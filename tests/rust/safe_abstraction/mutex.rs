@@ -1,3 +1,5 @@
+// verifast_options{extern:../unverified/sys}
+
 #![feature(negative_impls)]
 #![allow(dead_code)]
 
@@ -14,7 +16,7 @@ pub struct Mutex<T: Send> {
 /*@
 
 pred True(;) = true;
-pred_ctor Mutex_own<T>()(t: thread_id_t, mutex: Mutex<T>) =
+pred<T> <Mutex<T>>.own(t, mutex) =
     sys::locks::SysMutex(mutex.inner, True) &*& <T>.own(t, mutex.data);
 
 lem Mutex_drop<T>()
@@ -32,7 +34,7 @@ fix t0() -> thread_id_t { default_value }
 pred_ctor Mutex_frac_borrow_content<T>(kfcc: lifetime_t, l: *Mutex<T>)(;) =
     sys::locks::SysMutex_share(&(*l).inner, full_borrow_(kfcc, <T>.full_borrow_content(t0, &(*l).data))) &*& struct_Mutex_padding(l);
 
-pred_ctor Mutex_share<T>()(k: lifetime_t, t: thread_id_t, l: *Mutex<T>) =
+pred<T> <Mutex<T>>.share(k, t, l) =
     exists_np(?kfcc) &*& lifetime_inclusion(k, kfcc) == true &*& frac_borrow(k, Mutex_frac_borrow_content::<T>(kfcc, l));
 
 lem Mutex_share_mono<T>(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *Mutex<T>)
@@ -144,7 +146,7 @@ pub struct MutexGuard<'a, T: Send> {
 /*@
 
 // TODO: Is this extra lifetime `klong` necessary here?
-pred_ctor MutexGuard_own<'a, T>()(t: thread_id_t, mutexGuard: MutexGuard<'a, T>) =
+pred<'a, T> <MutexGuard<'a, T>>.own(t, mutexGuard) =
     [_]exists_np(?klong) &*& lifetime_inclusion('a, klong) == true &*& [_]frac_borrow('a, Mutex_frac_borrow_content(klong, mutexGuard.lock))
     &*& sys::locks::SysMutex_locked(&(*mutexGuard.lock).inner, full_borrow_(klong, <T>.full_borrow_content(t0, &(*mutexGuard.lock).data)), t)
     &*& full_borrow(klong, <T>.full_borrow_content(t0, &(*mutexGuard.lock).data));
@@ -154,7 +156,7 @@ pred_ctor MutexGuard_fbc_rest<'a, T>(klong: lifetime_t, t: thread_id_t, l: *Mute
     &*& [_]frac_borrow('a, Mutex_frac_borrow_content(klong, lock))
     &*& sys::locks::SysMutex_locked(&(*lock).inner, full_borrow_(klong, <T>.full_borrow_content(t0, &(*lock).data)), t);
 
-pred_ctor MutexGuard_share<'a, T>()(k: lifetime_t, t: thread_id_t, l: *MutexGuard<'a, T>) = true;
+pred<'a, T> <MutexGuard<'a, T>>.share(k, t, l) = true;
 
 lem MutexGuard_share_mono<'a, T>(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *MutexGuard<'a, T>)
     req lifetime_inclusion(k1, k) == true &*& [_]MutexGuard_share::<'a, T>(k, t, l);

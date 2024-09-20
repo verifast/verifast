@@ -1039,14 +1039,17 @@ and of_decl = function
     S selfTypeName;
     S predName
   ])
-| TypePredDef (l, tparams, te, predName, lrhs, rhs) ->
+| TypePredDef (l, tparams, te, predName, rhs) ->
   C ("TypePredDef", [
     of_loc l;
     of_list s tparams;
     of_type_expr te;
     S predName;
-    of_loc lrhs;
-    S rhs
+    match rhs with
+      Left (lrhs, rhs) ->
+      C ("Left", [of_loc lrhs; S rhs])
+    | Right (ps, inputParamCount, a) ->
+      C ("Right", [of_list s ps; of_option i inputParamCount; of_expr a])
   ])
 | TypeWithTypeidDecl (l, tn, e) ->
   C ("TypeWithTypeidDecl", [of_loc l; s tn; of_expr e])

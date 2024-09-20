@@ -2139,6 +2139,43 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let typepreddeclmap = typepreddeclmap1 @ typepreddeclmap0
 
+  let ps =
+    let extra_ps =
+      ps |> flatmap @@ function PackageDecl (lp, pn, ilist, ds) ->
+        ds |> flatmap @@ function
+          TypePredDef (l, tparams, te, tpn, Right (ps, inputParamCount, body)) ->
+          let tp = check_pure_type (pn,ilist) tparams Ghost te in
+          begin match tp with
+            StructType (sn, targs) ->
+            if targs <> List.map (fun x -> GhostTypeParam x) tparams then
+              static_error l "The struct type argument list must match the type parameter list exactly" None;
+            begin match List.assoc_opt tpn typepreddeclmap with
+              None -> static_error l "No such type predicate" None
+            | Some (_, selfTypeName, PredType ([], pts, inputParamCount', inductiveness), _) ->
+              let g = Printf.sprintf "%s_%s" sn tpn in
+              let tpenv = [selfTypeName, tp] in
+              let ps =
+                match zip pts ps with
+                  None -> static_error l "Incorrect number of parameters" None
+                | Some ps -> List.map (fun (tp, x) -> (ManifestTypeExpr (l, instantiate_type tpenv tp), x)) ps
+              in
+              let extra_ds = 
+                [TypePredDef (l, tparams, te, tpn, Left (l, g))] @
+                if tparams = [] then
+                  [PredFamilyDecl (l, g, tparams, 0, List.map (fun (t, p) -> t) ps, inputParamCount, inductiveness);
+                  PredFamilyInstanceDecl (l, g, tparams, [], ps, body)]
+                else
+                  [PredCtorDecl (l, g, tparams, [], ps, inputParamCount, body)]
+              in
+              [PackageDecl (l, pn, ilist, extra_ds)]
+            | _ -> static_error l "Inline type predicate definitions are supported only when the type of the type predicate is a non-generic predicate type" None
+            end
+          | _ -> static_error l "Inline type predicate definitions are supported only for struct types" None
+          end
+        | _ -> []
+    in
+    extra_ps @ ps
+
   let classmap1 =
     List.map
       begin fun (sn, (l, abstract, fin, meths, fds, constr, (super, supertargs), tparams, interfs, preds, pn, ilist)) ->
@@ -6868,7 +6905,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let rec iter ds =
       match ds with
         [] -> ()
-      | TypePredDef (l, tparams, te, predName, lrhs, rhs)::ds ->
+      | TypePredDef (l, tparams, te, predName, Left (lrhs, rhs))::ds ->
         check_tparams l [] tparams;
         let tp = check_pure_type ("",[]) tparams Ghost te in
         let (_, selfTypeName, predType, symb) =
@@ -7801,7 +7838,7 @@ let check_if_list_is_defined () =
       cont state (ctxt#mk_app get_class_symbol [t])
     | WPureFunCall (l, g, targs, args) ->
       begin match try_assoc g predctormap with
-        Some (PredCtorInfo(l, tparams, ps1, ps2, inputParamCount, body, (s, st))) ->
+        Some (PredCtorInfo(lg, tparams, ps1, ps2, inputParamCount, body, (s, st))) ->
           let targs_typeids = List.map (typeid_of_core l env) targs in
           evs state args $. fun state vs ->
           

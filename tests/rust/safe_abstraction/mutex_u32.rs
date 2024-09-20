@@ -112,7 +112,7 @@ pub struct MutexU32 {
 /*@
 
 pred True(;) = true;
-pred MutexU32_own(t: thread_id_t, mutexU32: MutexU32) = SysMutex(mutexU32.inner, True);
+pred <MutexU32>.own(t, mutexU32) = SysMutex(mutexU32.inner, True);
 
 lem MutexU32_drop()
     req MutexU32_own(?t, ?mutexU32);
@@ -129,7 +129,7 @@ fix t0() -> thread_id_t { default_value }
 pred_ctor MutexU32_frac_borrow_content(kfcc: lifetime_t, l: *MutexU32)(;) =
     SysMutex_share(&(*l).inner, full_borrow_(kfcc, u32_full_borrow_content(t0, &(*l).data))) &*& struct_MutexU32_padding(l);
 
-pred MutexU32_share(k: lifetime_t, t: thread_id_t, l: *MutexU32) =
+pred <MutexU32>.share(k, t, l) =
     exists_np(?kfcc) &*& lifetime_inclusion(k, kfcc) == true &*& frac_borrow(k, MutexU32_frac_borrow_content(kfcc, l));
 
 lem MutexU32_share_mono(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *MutexU32)

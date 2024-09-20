@@ -26,14 +26,14 @@ pred_ctor Arc_inv(dk: lifetime_t, gid: isize, ptr: *ArcInnerU32)() = counting(dl
     std::alloc::alloc_block(ptr as *u8, std::alloc::Layout::new_::<ArcInnerU32>()) &*& struct_ArcInnerU32_padding(ptr) &*&
     borrow_end_token(dk, u32_full_borrow_content(default_tid, &(*ptr).data)) };
 
-pred ArcU32_own(t: thread_id_t, arcU32: ArcU32) = [_]std::ptr::NonNull_own(default_tid, arcU32.ptr) &*& [_]exists(?ptr) &*& std::ptr::NonNull_ptr::<ArcInnerU32>(arcU32.ptr) == ptr &*&
+pred <ArcU32>.own(t, arcU32) = [_]std::ptr::NonNull_own(default_tid, arcU32.ptr) &*& [_]exists(?ptr) &*& std::ptr::NonNull_ptr::<ArcInnerU32>(arcU32.ptr) == ptr &*&
     [_]exists(?dk) &*& [_]exists(?gid) &*& [_]atomic_space(Marc, Arc_inv(dk, gid, ptr)) &*& ticket(dlft_pred(dk), gid, ?frac) &*& [frac]dlft_pred(dk)(gid, false) &*&
     [_]u32_share(dk, default_tid, &(*ptr).data) &*& pointer_within_limits(&(*ptr).data) == true;
 
 pred_ctor Arc_frac_bc(l: *ArcU32, nnp: std::ptr::NonNull<ArcInnerU32>)(;) = (*l).ptr |-> nnp;
 pred_ctor ticket_(dk: lifetime_t, gid: isize, frac: real)(;) = ticket(dlft_pred(dk), gid, frac) &*& [frac]ghost_cell(gid, false);
 
-pred ArcU32_share(k: lifetime_t, t: thread_id_t, l: *ArcU32) = [_]exists(?nnp) &*& [_]frac_borrow(k, Arc_frac_bc(l, nnp)) &*& [_]std::ptr::NonNull_own(default_tid, nnp) &*&
+pred <ArcU32>.share(k, t, l) = [_]exists(?nnp) &*& [_]frac_borrow(k, Arc_frac_bc(l, nnp)) &*& [_]std::ptr::NonNull_own(default_tid, nnp) &*&
     [_]exists(?ptr) &*& std::ptr::NonNull_ptr::<ArcInnerU32>(nnp) == ptr &*& [_]exists(?dk) &*& [_]exists(?gid) &*& [_]atomic_space(Marc, Arc_inv(dk, gid, ptr)) &*&
     [_]exists(?frac) &*& [_]frac_borrow(k, ticket_(dk, gid, frac)) &*& [_]frac_borrow(k, lifetime_token_(frac, dk)) &*& [_]u32_share(dk, default_tid, &(*ptr).data) &*&
     pointer_within_limits(&(*ptr).data) == true;
