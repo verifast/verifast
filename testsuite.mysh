@@ -565,6 +565,9 @@ cd tests
     cd ..
   cd ..
   cd errors
+    cd pred_confusion
+      verifast -c -allow_should_fail pred_confusion.c
+    cd ..
     verifast -c -allow_should_fail target.c
     verifast -c -allow_should_fail ctor_pattern_upcast.c
     verifast -c -allow_should_fail inductive_confusion.c

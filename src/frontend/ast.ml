@@ -253,7 +253,9 @@ let is_inductive_type t =
 
 type prover_type = ProverInt | ProverBool | ProverReal | ProverInductive (* ?prover_type *)
 
-class predref (name: string) (domain: type_ list) (inputParamCount: int option) = (* ?predref *)
+type pred_name = PredFam of string | PredCtor of string | LocalVar of string
+
+class predref (name: pred_name) (domain: type_ list) (inputParamCount: int option) = (* ?predref *)
   object
     method name = name
     method domain = domain

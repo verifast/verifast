@@ -372,7 +372,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       else
         []
 
-    let rec produce_asn_core_with_post typeid_env tpenv h ghostenv env p coef size_first size_all (assuming: bool) cont_with_post: symexec_result =
+  let rec produce_asn_core_with_post typeid_env tpenv h ghostenv env p coef size_first size_all (assuming: bool) cont_with_post: symexec_result =
     let cont h env ghostenv = cont_with_post h env ghostenv None in
     let with_context_helper cont =
       match p with
@@ -416,28 +416,28 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | WPredAsn (l, g, is_global_predref, targs, pats0, pats) ->
       let targs' = instantiate_types tpenv targs in
       let (g_symb, chunk_targs, pats0, pats, types, auto_info) =
-        if not is_global_predref then 
-          let Some term = try_assoc g#name env in ((term, false), targs', pats0, pats, g#domain, None)
-       else
-          begin match try_assoc g#name predfammap with
-            Some (_, _, _, declared_paramtypes, symb, _, _) -> ((symb, true), targs', pats0, pats, g#domain, Some (g#name, declared_paramtypes))
-          | None ->
-            let PredCtorInfo (_, tparams, ps1, ps2, inputParamCount, body, funcsym) = List.assoc g#name predctormap in
-            let typeid_msg () = Printf.sprintf "Taking typeids of predicate constructor type arguments <%s>: " (String.concat ", " (List.map string_of_type targs)) in
-            let targs_typeids = List.map (typeid_of_core_core l typeid_msg typeid_env) targs' in
-            let ctorargs = List.map (function (LitPat e | WCtorPat (_, _, _, _, _, _, _, Some e)) -> ev e | _ -> static_error l "Patterns are not supported in predicate constructor argument positions." None) pats0 in
-            let tpenv0 = List.combine tparams targs in
-            let ctorargs = List.map2 begin fun (_, pt) v ->
-                let pt1 = instantiate_type tpenv0 pt in
-                prover_convert_term v pt1 pt
-              end ps1 ctorargs
-            in
-            let g_symb = mk_app funcsym (targs_typeids @ ctorargs) in
-            let (symbol, symbol_term) = funcsym in
-            register_pred_ctor_application g_symb symbol symbol_term targs' ctorargs inputParamCount;
-            let pts = List.map (fun (_, pt) -> instantiate_type tpenv0 pt) ps2 in
-            ((g_symb, false), [], [], pats, pts, None)
-          end
+        match is_global_predref, g#name with
+          false, LocalVar x ->
+          let Some term = try_assoc x env in ((term, false), targs', pats0, pats, g#domain, None)
+        | true, PredFam g_name ->
+          let (_, _, _, declared_paramtypes, symb, _, _) = List.assoc g_name predfammap in
+          ((symb, true), targs', pats0, pats, g#domain, Some (g_name, declared_paramtypes))
+        | true, PredCtor g ->
+          let PredCtorInfo (_, tparams, ps1, ps2, inputParamCount, body, funcsym) = List.assoc g predctormap in
+          let typeid_msg () = Printf.sprintf "Taking typeids of predicate constructor type arguments <%s>: " (String.concat ", " (List.map string_of_type targs)) in
+          let targs_typeids = List.map (typeid_of_core_core l typeid_msg typeid_env) targs' in
+          let ctorargs = List.map (function (LitPat e | WCtorPat (_, _, _, _, _, _, _, Some e)) -> ev e | _ -> static_error l "Patterns are not supported in predicate constructor argument positions." None) pats0 in
+          let tpenv0 = List.combine tparams targs in
+          let ctorargs = List.map2 begin fun (_, pt) v ->
+              let pt1 = instantiate_type tpenv0 pt in
+              prover_convert_term v pt1 pt
+            end ps1 ctorargs
+          in
+          let g_symb = mk_app funcsym (targs_typeids @ ctorargs) in
+          let (symbol, symbol_term) = funcsym in
+          register_pred_ctor_application g_symb symbol symbol_term targs' ctorargs inputParamCount;
+          let pts = List.map (fun (_, pt) -> instantiate_type tpenv0 pt) ps2 in
+          ((g_symb, false), [], [], pats, pts, None)
       in
       let targs = targs' in
       let domain = instantiate_types tpenv types in
@@ -1278,28 +1278,29 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           (fun chunk h coef _ ghostenv env env' -> check_dummy_coefpat l coefpat coef; cont [chunk] h ghostenv env env' None)
     in
     let pred_asn l coefpat g is_global_predref targs pats0 pats =
-      if g#name = "junk" && is_global_predref then
+      if g#name = PredFam "junk" && is_global_predref then
         cont h [] ghostenv env env' None
       else
       let targs' = instantiate_types tpenv targs in
       let (g_symb, chunk_targs, pats0, pats, types) =
-        if is_global_predref then
-           match try_assoc g#name predfammap with
-            Some (_, _, _, _, symb, _, _) -> ((symb, true), targs', pats0, pats, g#domain)
-          | None -> 
-            let PredCtorInfo (_, tparams, ps1, ps2, inputParamCount, body, funcsym) = List.assoc g#name predctormap in
-            let typeid_msg () = Printf.sprintf "Taking typeids of predicate constructor type arguments <%s>: " (String.concat ", " (List.map string_of_type targs)) in
-            let targs_typeids = List.map (typeid_of_core_core l typeid_msg env) targs in
-            let ctorargs = List.map (function SrcPat (LitPat e | WCtorPat (_, _, _, _, _, _, _, Some e)) -> ev e | _ -> static_error l "Patterns are not supported in predicate constructor argument positions." None) pats0 in
-            let tpenv0 = List.combine tparams targs in
-            let ctorargs = List.map2 (fun (_, pt) v -> prover_convert_term v (instantiate_type tpenv0 pt) pt) ps1 ctorargs in
-            let g_symb = mk_app funcsym (targs_typeids @ ctorargs) in
-            let (symbol, symbol_term) = funcsym in
-            register_pred_ctor_application g_symb symbol symbol_term targs' ctorargs inputParamCount;
-            ((g_symb, false), [], [], pats, List.map (fun (_, pt) -> instantiate_type tpenv0 pt) ps2)
-        else
-          match try_assoc g#name env with
-            None -> assert_false [] env l (Printf.sprintf "Unbound variable '%s'" g#name) None
+        match is_global_predref, g#name with
+          true, PredFam g_name ->
+          let (_, _, _, _, symb, _, _) = List.assoc g_name predfammap in
+          ((symb, true), targs', pats0, pats, g#domain)
+        | true, PredCtor g_name ->
+          let PredCtorInfo (_, tparams, ps1, ps2, inputParamCount, body, funcsym) = List.assoc g_name predctormap in
+          let typeid_msg () = Printf.sprintf "Taking typeids of predicate constructor type arguments <%s>: " (String.concat ", " (List.map string_of_type targs)) in
+          let targs_typeids = List.map (typeid_of_core_core l typeid_msg env) targs in
+          let ctorargs = List.map (function SrcPat (LitPat e | WCtorPat (_, _, _, _, _, _, _, Some e)) -> ev e | _ -> static_error l "Patterns are not supported in predicate constructor argument positions." None) pats0 in
+          let tpenv0 = List.combine tparams targs in
+          let ctorargs = List.map2 (fun (_, pt) v -> prover_convert_term v (instantiate_type tpenv0 pt) pt) ps1 ctorargs in
+          let g_symb = mk_app funcsym (targs_typeids @ ctorargs) in
+          let (symbol, symbol_term) = funcsym in
+          register_pred_ctor_application g_symb symbol symbol_term targs' ctorargs inputParamCount;
+          ((g_symb, false), [], [], pats, List.map (fun (_, pt) -> instantiate_type tpenv0 pt) ps2)
+        | false, LocalVar g_name ->
+          match try_assoc g_name env with
+            None -> assert_false [] env l (Printf.sprintf "Unbound variable '%s'" g_name) None
           | Some term -> ((term, false), targs', pats0, pats, g#domain)
       in
       let targs = targs' in
@@ -1587,35 +1588,33 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           construct_edge qsymb_used coef None [tp] [] [voidPtrType] [e] conds
         end
       | WPredAsn(_, q, true, qtargs, qfns, qpats) ->
-          begin match try_assoc q#name predfammap with
-            Some (_, qtparams, _, qtps, qsymb, _, _) ->
-            begin match q#inputParamCount with
-              None -> assert false;
-            | Some qInputParamCount ->
-              let qIndices = List.map (fun (LitPat e) -> e) qfns in
-              let qInputActuals = List.map expr_of_fixed_pat (take qInputParamCount qpats) in
-              if List.for_all (fun e -> expr_is_fixed inputParameters e) (qIndices @ qInputActuals) then
-               construct_edge qsymb coef None qtargs qIndices (take qInputParamCount q#domain) qInputActuals conds
-              else
-                []
-            end
-          | None ->
-            begin match try_assoc q#name predctormap with
-              None -> []
-            | Some(PredCtorInfo (l, tparams, ps1, ps2, inputParamCount, wbody, (funcsym, vsymb))) ->
-              begin match inputParamCount with
-              | Some qInputParamCount when tparams = [] ->
-                let qIndices = List.map (fun (LitPat e) -> e) qfns in
-                let qInputActuals = List.map expr_of_fixed_pat (take qInputParamCount qpats) in
-                if List.for_all (fun e -> expr_is_fixed inputParameters e) (qIndices @ qInputActuals) then
-                let inputParamTypes = List.map snd ps1 @ take qInputParamCount (List.map snd ps2) in
-                construct_edge vsymb coef None [] [] inputParamTypes (qIndices @ qInputActuals) conds
-                else
-                  []
-              | _ -> []
-              end
-            end
+        begin match q#name with
+          PredFam q_name ->
+          let (_, qtparams, _, qtps, qsymb, _, _) = List.assoc q_name predfammap in
+          begin match q#inputParamCount with
+            None -> assert false;
+          | Some qInputParamCount ->
+            let qIndices = List.map (fun (LitPat e) -> e) qfns in
+            let qInputActuals = List.map expr_of_fixed_pat (take qInputParamCount qpats) in
+            if List.for_all (fun e -> expr_is_fixed inputParameters e) (qIndices @ qInputActuals) then
+              construct_edge qsymb coef None qtargs qIndices (take qInputParamCount q#domain) qInputActuals conds
+            else
+              []
           end
+        | PredCtor q_name ->
+          let PredCtorInfo (l, tparams, ps1, ps2, inputParamCount, wbody, (funcsym, vsymb)) = List.assoc q_name predctormap in
+          begin match inputParamCount with
+          | Some qInputParamCount when tparams = [] ->
+            let qIndices = List.map (fun (LitPat e) -> e) qfns in
+            let qInputActuals = List.map expr_of_fixed_pat (take qInputParamCount qpats) in
+            if List.for_all (fun e -> expr_is_fixed inputParameters e) (qIndices @ qInputActuals) then
+            let inputParamTypes = List.map snd ps1 @ take qInputParamCount (List.map snd ps2) in
+            construct_edge vsymb coef None [] [] inputParamTypes (qIndices @ qInputActuals) conds
+            else
+              []
+          | _ -> []
+          end
+        end
       | WInstPredAsn(l2, target_opt, static_type_name, static_type_finality, family_type_string, instance_pred_name, index, args) ->
         let qsymb =
           match dialect with

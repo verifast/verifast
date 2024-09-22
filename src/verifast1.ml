@@ -6162,7 +6162,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           begin match try_pointee_pred_symb0 elemtype with
             Some (pointee_pred_name, pointee_pred_symb, array_pred_name, array_pred_symb, _, _, _, _, _, _, uninit_array_pred_name, _) ->
             let array_pred_name = if wrhs = DummyPat || kind = MaybeUninit then uninit_array_pred_name else array_pred_name in
-            let p = new predref array_pred_name [PtrType elemtype; intType; list_type rhsElemType] (Some 2) in
+            let p = new predref (PredFam array_pred_name) [PtrType elemtype; intType; list_type rhsElemType] (Some 2) in
             let predAsn = WPredAsn (l, p, true, [], [], [LitPat wfirst; wlength; wrhs]) in
             let asn =
               if fno_strict_aliasing || not (is_ptr_type elemtype) then
@@ -6175,7 +6175,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           match integer__chunk_args elemtype with
             Some (k, signedness) ->
             let predname, pred_elemtype = if wrhs = DummyPat || kind = MaybeUninit then "integers__", option_type elemtype else "integers_", elemtype in
-            let p = new predref predname [PtrType Void; intType; Bool; intType; list_type pred_elemtype] (Some 4) in
+            let p = new predref (PredFam predname) [PtrType Void; intType; Bool; intType; list_type pred_elemtype] (Some 4) in
             let predAsn = WPredAsn (l, p, true, [], [], [LitPat wfirst; LitPat (SizeofExpr (l, TypeExpr (ManifestTypeExpr (l, elemtype)))); LitPat (if signedness = Signed then True l else False l); wlength; wrhs]) in
             let asn =
               if fno_strict_aliasing then
@@ -6186,7 +6186,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             (asn, tenv, [])
           | None ->
             let array_pred_name, elemtype' = if wrhs = DummyPat || kind = MaybeUninit then "array_", option_type elemtype else "array", elemtype in
-            let p = new predref array_pred_name [PtrType elemtype; intType; list_type elemtype'] (Some 2) in
+            let p = new predref (PredFam array_pred_name) [PtrType elemtype; intType; list_type elemtype'] (Some 2) in
             (WPredAsn (l, p, true, [elemtype], [], [LitPat wfirst; wlength; wrhs]), tenv, [])
           end
         | Java ->
@@ -6196,7 +6196,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             | _ -> static_error lread "Array in array dereference must be of array type." None
           in
           let (wrhs, tenv) = check_pat (pn,ilist) tparams tenv (list_type elemtype) rhs in
-          let p = new predref "java.lang.array_slice" [ArrayType elemtype; intType; intType; list_type elemtype] (Some 3) in
+          let p = new predref (PredFam "java.lang.array_slice") [ArrayType elemtype; intType; intType; list_type elemtype] (Some 3) in
           let wstart = match wstart with None -> LitPat (wintlit lslice zero_big_int) | Some wstart -> wstart in
           let wend = match wend with None -> LitPat (ArrayLengthExpr (lslice, warray)) | Some wend -> wend in
           let args = [LitPat warray; wstart; wend; wrhs] in
@@ -6227,7 +6227,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let targs = List.map (check_pure_type (pn, ilist) tparams Ghost) targs in
         begin fun cont ->
           match try_assoc p tenv |> option_map unfold_inferred_type with
-            Some (PredType (callee_tparams, ts, inputParamCount, inductiveness)) -> cont (p, false, callee_tparams, [], ts, inputParamCount)
+            Some (PredType (callee_tparams, ts, inputParamCount, inductiveness)) -> cont ((LocalVar p: pred_name), false, callee_tparams, [], ts, inputParamCount)
           | None | Some _ ->
             begin match resolve Ghost (pn,ilist) l p predfammap with
               Some (pname, (lp, callee_tparams, arity, xs, _, inputParamCount, inductiveness)) ->
@@ -6236,7 +6236,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 Java-> list_make arity (ObjType ("java.lang.Class", []))
               | _   -> list_make arity (PtrType Void)
               in
-              cont (pname, true, callee_tparams, ts0, xs, inputParamCount)
+              cont (PredFam pname, true, callee_tparams, ts0, xs, inputParamCount)
             | None ->
               begin match
                 match try_assoc p predctormap1 with
@@ -6251,7 +6251,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 | None -> None
               with
                 Some (tparams, ps1, ps2, inputParamCount) ->
-                cont (p, true, tparams, List.map snd ps1, List.map snd ps2, inputParamCount)
+                cont (PredCtor p, true, tparams, List.map snd ps1, List.map snd ps2, inputParamCount)
               | None ->
                 let error () = 
                   begin match try_assoc p tenv with
@@ -6686,8 +6686,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 begin
                 let ((g, (_, _, _, _, symb, _, _)), g__opt) = List.assoc (sn, f) field_pred_map in
                 let predinst___ p p_ domain0 t args =
-                  let p = new predref p (domain0 @ [t]) (Some (1 + List.length args)) in
-                  let p_ = new predref p_ (domain0 @ [InductiveType ("option", [t])]) (Some (1 + List.length args)) in
+                  let p = new predref (PredFam p) (domain0 @ [t]) (Some (1 + List.length args)) in
+                  let p_ = new predref (PredFam p_) (domain0 @ [InductiveType ("option", [t])]) (Some (1 + List.length args)) in
                   let inst =
                   ((g, []),
                    ([], l, tparams, [sn, PtrType (StructType (sn, targs)); "value", t], symb, Some 1,

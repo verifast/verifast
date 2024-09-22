@@ -237,11 +237,17 @@ let sexpr_of_method_binding (binding : method_binding) : sexpression =
     | Static   -> Symbol "class-method"
     | Instance -> Symbol "instance-method"
 
+let sexpr_of_pred_name (p: pred_name) : sexpression =
+  match p with
+    PredFam p -> build_list [ Symbol "pred-fam"; Symbol p ] []
+  | PredCtor p -> build_list [ Symbol "pred-ctor"; Symbol p ] []
+  | LocalVar x -> build_list [ Symbol "local-var"; Symbol x ] []
+
 let sexpr_of_predref (p: predref) : sexpression =
   build_list
     [ Symbol "pred-ref" ]
     [
-      "name", Symbol p#name;
+      "name", sexpr_of_pred_name p#name;
       "domain", sexpr_of_list sexpr_of_type_ p#domain;
       "inputParamCount", sexpr_of_option sexpr_of_int p#inputParamCount
     ]
@@ -774,7 +780,7 @@ let rec sexpr_of_pred (asn : asn) : sexpression =
                  ; "pat", sexpr_of_pat pat ]
     | WPredAsn (_, pred, glob, typs, pats1, pats2) ->
       build_list [ Symbol "pred-w-pred-asn"
-                 ; Symbol pred#name ]
+                 ; sexpr_of_pred_name pred#name ]
                  [ "glob", sexpr_of_bool glob
                  ; "typs", sexpr_of_list sexpr_of_type_ typs
                  ; "pat1", sexpr_of_list sexpr_of_pat pats1

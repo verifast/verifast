@@ -74,8 +74,13 @@ let of_prover_type = function
 | ProverReal -> c "ProverReal"
 | ProverInductive -> c "ProverInductive"
 
+let of_pred_name = function
+  PredFam p -> C ("PredFam", [s p])
+| PredCtor p -> C ("PredCtor", [s p])
+| LocalVar x -> C ("LocalVar", [s x])
+
 let of_predref p =
-  Call ("predref", [S p#name; of_list of_type p#domain; of_option i p#inputParamCount])
+  Call ("predref", [of_pred_name p#name; of_list of_type p#domain; of_option i p#inputParamCount])
 
 let of_ident_scope = function
   LocalVar -> c "LocalVar"

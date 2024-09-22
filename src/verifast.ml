@@ -1399,8 +1399,13 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           WPredAsn (_, p, is_global, targs, pats0, pats) ->
           if not is_global then static_error l "Local predicates are not yet supported here." None;
           if pats0 <> [] then static_error l "Predicate families are not yet supported here." None;
+          let p_name =
+            match p#name with
+              PredFam p_name -> p_name
+            | _ -> static_error l "Predicate constructors are not yet supported here" None
+          in
           let g_symb =
-            match try_assoc p#name predfammap with
+            match try_assoc p_name predfammap with
               None -> static_error l "No such predicate." None
             | Some (_, predfam_tparams, arity, pts, g_symb, inputParamCount, _) -> g_symb
           in
@@ -2731,7 +2736,8 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   (* Region: verification of function bodies *)
   and add_rule_for_lemma lemma_name l pre post ps frac q_ref q_input_args unbound =
-    let (_, _, _, _, q_symb, Some q_inputParamCount, _) = List.assoc q_ref#name predfammap in
+    let PredFam q_ref_name = q_ref#name in
+    let (_, _, _, _, q_symb, Some q_inputParamCount, _) = List.assoc q_ref_name predfammap in
     let rule l h typeid_env targs terms_are_well_typed coef coefpat ts cont =
       let rec f input_args ts unbound env =
         if unbound = [] then
@@ -2745,7 +2751,8 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       let param_env0 = f q_input_args ts unbound [] in (* env0 maps all parameters not bound by precondition to term *)
       let try_consume_pred h consumed param_env env asn frac p_ref p_args success_cont fail =
-        let (_, _, _, _, p_symb, Some p_inputParamCount, _) = List.assoc p_ref#name predfammap in
+        let PredFam p_ref_name = p_ref#name in
+        let (_, _, _, _, p_symb, Some p_inputParamCount, _) = List.assoc p_ref_name predfammap in
         let rec find_chunk hdone htodo =
           match htodo with
             [] -> fail ()
@@ -2836,15 +2843,25 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   | (WPredAsn(p_loc, p_ref, true, p_targs, p_args1, p_args2), Sep(_, WPredAsn(_, q_ref, true, q_targs, q_args1, q_args2), conditions))
     when List.length ps = 0 && List.for_all (fun arg -> match arg with | VarPat(_,_) -> true | _ -> false) (p_args1 @ p_args2) && 
          List.length p_targs = List.length tparams' && (List.for_all (fun (tp, t) -> match (tp, t) with (x, GhostTypeParam(y)) when x = y -> true | _ -> false) (zip2 tparams' p_targs)) &&
-         p_ref#name = q_ref#name && List.for_all2 (fun (VarPat(_, x)) arg2 -> match arg2 with LitPat(WVar(_, y, _)) -> x = y | _ -> false) (p_args1 @ p_args2) (q_args1 @ q_args2) &&
-         List.for_all2 (fun ta1 ta2 -> ta1 = ta2) p_targs q_targs && is_pure_spatial_assertion conditions -> 
-      (Hashtbl.add auto_lemmas (p_ref#name) (None, tparams', List.map (fun (VarPat(_,x)) -> x) p_args1, List.map (fun (VarPat(_,x)) -> x) p_args2, pre, post))
+         p_ref#name = q_ref#name &&
+         List.for_all2 (fun (VarPat(_, x)) arg2 -> match arg2 with LitPat(WVar(_, y, _)) -> x = y | _ -> false) (p_args1 @ p_args2) (q_args1 @ q_args2) &&
+         List.for_all2 (fun ta1 ta2 -> ta1 = ta2) p_targs q_targs && is_pure_spatial_assertion conditions ->
+    begin match p_ref#name with
+      PredFam p_ref_name ->
+      Hashtbl.add auto_lemmas p_ref_name (None, tparams', List.map (fun (VarPat(_,x)) -> x) p_args1, List.map (fun (VarPat(_,x)) -> x) p_args2, pre, post)
+    | _ -> ()
+    end
   | (CoefAsn(loc, VarPat(_,f), WPredAsn(p_loc, p_ref, _, p_targs, p_args1, p_args2)), Sep(_, CoefAsn(_, LitPat(WVar(_, g, _)), WPredAsn(_, q_ref, true, q_targs, q_args1, q_args2)), conditions)) 
     when List.length ps = 0 && List.for_all (fun arg -> match arg with | VarPat(_,_) -> true | _ -> false) (p_args1 @ p_args2) && 
          List.length p_targs = List.length tparams' && (List.for_all (fun (tp, t) -> match (tp, t) with | (x, GhostTypeParam(y)) when x = y -> true | _ -> false) (zip2 tparams' p_targs)) &&
-         p_ref#name = q_ref#name && List.for_all2 (fun (VarPat(_, x)) arg2 -> match arg2 with LitPat(WVar(_, y, _)) -> x = y | _ -> false) (p_args1 @ p_args2) (q_args1 @ q_args2) &&
+         p_ref#name = q_ref#name &&
+         List.for_all2 (fun (VarPat(_, x)) arg2 -> match arg2 with LitPat(WVar(_, y, _)) -> x = y | _ -> false) (p_args1 @ p_args2) (q_args1 @ q_args2) &&
          List.for_all2 (fun ta1 ta2 -> ta1 = ta2) p_targs q_targs && f = g && is_pure_spatial_assertion conditions->
-      (Hashtbl.add auto_lemmas (p_ref#name) (Some(f), tparams', List.map (fun (VarPat(_,x)) -> x) p_args1, List.map (fun (VarPat(_,x)) -> x) p_args2, pre, post))
+    begin match p_ref#name with
+      PredFam p_ref_name ->
+      Hashtbl.add auto_lemmas p_ref_name (Some(f), tparams', List.map (fun (VarPat(_,x)) -> x) p_args1, List.map (fun (VarPat(_,x)) -> x) p_args2, pre, post)
+    | _ -> ()
+    end
   | _ ->
     (* todo: determine values of parameters based on postcondition (instead of precondition) to avoid backtracking search *)
     let bound_param_vars_pred p_args vars must = 
