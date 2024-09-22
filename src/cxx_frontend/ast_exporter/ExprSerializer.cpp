@@ -332,6 +332,11 @@ struct ExprSerializerImpl
     return serializeCall(callBuilder, expr);
   }
 
+  bool VisitCXXDefaultArgExpr(const clang::CXXDefaultArgExpr * expr) {
+    serialize(expr->getExpr());
+    return true;
+  }
+
   bool VisitCXXThisExpr(const clang::CXXThisExpr *expr) {
     m_builder.setThis();
     return true;

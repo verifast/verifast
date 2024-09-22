@@ -14,9 +14,7 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
 
   let translate_param (param : R.Param.t) : Ast.type_expr * string =
     let open R.Param in
-    if has_default param then
-      failwith "Parameters with default expressions are not supported yet."
-    else (type_get param |> Type_translator.translate, name_get param)
+      (type_get param |> Type_translator.translate, name_get param)
 
   let rec translate_decomposed loc decl_desc =
     if D.is_implicit_get decl_desc then []
