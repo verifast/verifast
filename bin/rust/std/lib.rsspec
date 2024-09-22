@@ -43,8 +43,7 @@ mod ptr {
 
     struct NonNull<T>;
     /*@
-    pred NonNull_own<T>(t: thread_id_t, v: NonNull<T>;) = NonNull_ptr(v) as usize != 0;
-    pred NonNull_share<T>(k: lifetime_t, t: thread_id_t, l: *NonNull<T>);
+    pred_ctor NonNull_own<T>()(t: thread_id_t, v: NonNull<T>;) = NonNull_ptr(v) as usize != 0;
     fix NonNull_ptr<_T>(v: NonNull<_T>) -> *_T;
     @*/
 

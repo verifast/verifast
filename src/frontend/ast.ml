@@ -494,7 +494,8 @@ and
       string *
       type_expr list *
       pat list (* indices of predicate family instance *) *
-      pat list
+      pat list *
+      method_binding
   | WPredAsn of (* Predicate assertion, after type checking. (W is for well-formed) *)
       loc *
       predref *
@@ -605,6 +606,9 @@ and
   method_binding = (* ?method_binding *)
     Static
   | Instance
+  | PredFamCall
+  | PredCtorCall
+  | LocalVarPredCall
 and
   visibility = (* ?visibility *)
     Public
@@ -1068,7 +1072,7 @@ let rec expr_loc e =
   | InitializerList (l, _) -> l
   | PointsTo (l, e, kind, rhs) -> l
   | WPointsTo (l, e, tp, kind, rhs) -> l
-  | PredAsn (l, g, targs, ies, es) -> l
+  | PredAsn (l, g, targs, ies, es, _) -> l
   | WPredAsn (l, g, _, targs, ies, es) -> l
   | PredExprAsn (l, e, pats) -> l
   | WPredExprAsn (l, e, pts, inputParamCount, pats) -> l

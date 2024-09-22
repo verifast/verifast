@@ -236,6 +236,9 @@ let sexpr_of_method_binding (binding : method_binding) : sexpression =
   match binding with
     | Static   -> Symbol "class-method"
     | Instance -> Symbol "instance-method"
+    | PredFamCall -> Symbol "pred-fam-call"
+    | PredCtorCall -> Symbol "pred-ctor-call"
+    | LocalVarPredCall -> Symbol "local-var-pred-call"
 
 let sexpr_of_pred_name (p: pred_name) : sexpression =
   match p with
@@ -576,7 +579,7 @@ let rec sexpr_of_expr (expr : expr) : sexpression =
             "kind", (match kind with RegularPointsTo -> Symbol "RegularPointsTo" | MaybeUninit -> Symbol "MaybeUninit");
             "pat", sexpr_of_pat pat
           ]
-    | PredAsn (loc, name, typs, pats1, pats2) ->
+    | PredAsn (loc, name, typs, pats1, pats2, binding) ->
         build_list
           [ Symbol "expr-pred-asn" ]
           [
@@ -584,6 +587,7 @@ let rec sexpr_of_expr (expr : expr) : sexpression =
             "typs", sexpr_of_list sexpr_of_type_expr typs;
             "pats1", sexpr_of_list sexpr_of_pat pats1;
             "pats2", sexpr_of_list sexpr_of_pat pats2;
+            "binding", sexpr_of_method_binding binding;
           ]
     | WPredAsn (loc, pred_ref, global, typs, pats1, pats2) ->
         build_list
@@ -752,12 +756,13 @@ let rec sexpr_of_pred (asn : asn) : sexpression =
            ; sexpr_of_expr expr
            ; sexpr_of_pred thenp
            ; sexpr_of_pred elsep ]
-    | PredAsn (loc, p, types, indices, patterns) ->
+    | PredAsn (loc, p, types, indices, patterns, binding) ->
       build_list [ Symbol "pred-call-predicate"
                  ; Symbol p ]
                  [ "types", List (List.map sexpr_of_type_expr types)
                  ; "indices", List (List.map sexpr_of_pat indices)
-                 ; "arguments", List (List.map sexpr_of_pat patterns) ]
+                 ; "arguments", List (List.map sexpr_of_pat patterns)
+                 ; "binding", sexpr_of_method_binding binding ]
     | PointsTo (loc, expr, kind, pat) ->
       List [ Symbol "pred-access"
            ; sexpr_of_expr expr

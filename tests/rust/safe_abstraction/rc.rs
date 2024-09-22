@@ -281,6 +281,7 @@ impl<T> Drop for Rc<T> {
                 //@ close_na_inv(_t, MaskNshrSingle(ptr));
                 //@ thread_token_merge(_t, mask_diff(MaskTop, MaskNshrSingle(ptr)), MaskNshrSingle(ptr));
                 //@ close thread_token(_t);
+                //@ close std::ptr::NonNull_own::<RcBox<T>>()(_t, nnp);
             }
         }
     }

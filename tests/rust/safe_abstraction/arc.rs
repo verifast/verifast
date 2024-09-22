@@ -166,6 +166,8 @@ impl<T: Sync + Send> Arc<T> {
             //@ leak exists(p);
             //@ leak exists(dk);
             //@ leak exists::<isize>(gid);
+            //@ close std::ptr::NonNull_own::<ArcInner<T>>()(default_tid, nnp);
+            //@ leak std::ptr::NonNull_own::<ArcInner<T>>()(default_tid, nnp);
             //@ close Arc_own::<T>()(_t, ret);
             ret
         }
@@ -396,7 +398,8 @@ impl<T: Sync + Send> Drop for Arc<T> {
             //@ close Pre();
             let sco = self.ptr.as_ref().strong.fetch_sub(1, Ordering::SeqCst);
             //@ open Post(sco);
-            //@ open std::ptr::NonNull_own(default_tid, arc.ptr);
+            //@ open std::ptr::NonNull_own::<ArcInner<T>>(default_tid, arc.ptr);
+            //@ close std::ptr::NonNull_own::<ArcInner<T>>()(_t, arc.ptr);
             if sco != 1 { return; }
             }
             //@ assert (*ptr).data |-> ?v;

@@ -934,8 +934,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                      [ IdentTypeExpr (loc, None, name) ]
                  | _ -> []
             in
+            let vf_targs = lft_args @ targs in
             let vf_ty =
-              StructTypeExpr (loc, Some name, None, [], lft_args @ targs)
+              StructTypeExpr (loc, Some name, None, [], vf_targs)
             in
             let sz_expr = SizeofExpr (loc, TypeExpr vf_ty) in
             let own tid v =
@@ -944,10 +945,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                 (CallExpr
                    ( loc,
                      name ^ "_own",
-                     (*type arguments*) lft_args @ targs,
+                     (*type arguments*) vf_targs,
                      (*indices*) [],
                      args,
-                     Static ))
+                     if vf_targs = [] then PredFamCall else PredCtorCall ))
             in
             let shr lft tid l =
               Ok
@@ -957,11 +958,11 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                      CallExpr
                        ( loc,
                          name ^ "_share",
-                         (*type arguments*) lft_args @ targs,
+                         (*type arguments*) vf_targs,
                          (*indices*) [],
                          (*arguments*)
                          List.map (fun e -> LitPat e) [ lft; tid; l ],
-                         Static ) ))
+                         if vf_targs = [] then PredFamCall else PredCtorCall ) ))
             in
             let full_bor_content =
               if lft_args = [] then
@@ -3038,7 +3039,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           targs,
           [],
           [ VarPat (adt_def_loc, "_t"); VarPat (adt_def_loc, "_v") ],
-          Static )
+          if targs = [] then PredFamCall else PredCtorCall )
     in
     let post =
       Result.get_ok
@@ -3864,6 +3865,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         let fbor_content_name = name ^ "_full_borrow_content" in
         let tid_param_name = "tid" in
         let ptr_param_name = "l" in
+        let vf_tparams = lft_params @ tparams in
         let fbor_content_params =
           [
             ( IdentTypeExpr (adt_def_loc, None (*package name*), "thread_id_t"),
@@ -3875,7 +3877,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                        ( name,
                          List.map
                            (fun x -> GhostTypeParam x)
-                           (lft_params @ tparams) )) ),
+                           vf_tparams )) ),
               ptr_param_name );
           ]
         in
@@ -3913,7 +3915,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                        [],
                        List.map
                          (fun x -> IdentTypeExpr (adt_def_loc, None, x))
-                         (lft_params @ tparams) ),
+                         vf_tparams ),
                    InitializerList
                      ( adt_def_loc,
                        List.map
@@ -3929,11 +3931,11 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               (*type arguments*)
               List.map
                 (fun x -> IdentTypeExpr (adt_def_loc, None, x))
-                (lft_params @ tparams),
+                vf_tparams,
               (*indices*) [],
               (*arguments*)
               own_args,
-              Static )
+              if vf_tparams = [] then PredFamCall else PredCtorCall )
         in
         let padding_pred =
           CallExpr
@@ -3941,10 +3943,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               Printf.sprintf "struct_%s_padding" name,
               List.map
                 (fun x -> IdentTypeExpr (adt_def_loc, None, x))
-                (lft_params @ tparams),
+                vf_tparams,
               [],
               [ LitPat (Var (adt_def_loc, ptr_param_name)) ],
-              Static )
+              PredFamCall )
         in
         let (Some body_asn) =
           AstAux.list_to_sep_conj field_chunks
@@ -3954,7 +3956,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           PredCtorDecl
             ( adt_def_loc,
               fbor_content_name,
-              lft_params @ tparams (* type parameters*),
+              vf_tparams (* type parameters*),
               fbor_content_params,
               [],
               None
@@ -4046,7 +4048,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   (*indices*) [],
                   (*arguments*)
                   List.map lpat_var [ lft_n; "t"; "l" ],
-                  Static ) )
+                  if tparams_targs = [] then PredFamCall else PredCtorCall ) )
         in
         let pre =
           add_type_interp_asn
@@ -4144,7 +4146,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   (*indices*) [],
                   (*arguments*)
                   List.map lpat_var [ "k"; "t"; "l" ],
-                  Static ) )
+                  if tparams_targs = [] then PredFamCall else PredCtorCall ) )
         in
         let (Some post) =
           AstAux.list_to_sep_conj

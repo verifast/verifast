@@ -542,13 +542,14 @@ and of_expr = function
     (match kind with RegularPointsTo -> S "RegularPointsTo" | MaybeUninit -> S "MaybeUninit");
     of_pat er
   ])
-| PredAsn (l, p, targs, indices, args) ->
+| PredAsn (l, p, targs, indices, args, binding) ->
   C ("PredAsn", [
     of_loc l;
     S p;
     of_list of_type_expr targs;
     of_list of_pat indices;
-    of_list of_pat args
+    of_list of_pat args;
+    of_method_binding binding;
   ])
 | WPredAsn (l, p, isGlobal, targs, indices, args) ->
   C ("WPredAsn", [
@@ -692,6 +693,9 @@ and of_dialect = function
 and of_method_binding = function
   Static -> c "Static"
 | Instance -> c "Instance"
+| PredFamCall -> c "PredFamCall"
+| PredCtorCall -> c "PredCtorCall"
+| LocalVarPredCall -> c "LocalVarPredCall"
 and of_visibility = function
   Public -> c "Public"
 | Protected -> c "Protected"

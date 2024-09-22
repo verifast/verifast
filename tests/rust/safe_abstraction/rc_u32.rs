@@ -259,6 +259,8 @@ impl Drop for RcU32 {
                 //@ ghost_cell_mutate(gid, true);
                 //@ close dlft_pred(dk)(gid, true);
                 //@ start_counting(dlft_pred(dk), gid);
+            } else {
+                //@ close std::ptr::NonNull_own::<RcBoxU32>()(_t, nnp);
             }
             //@ close rc_na_inv(dk, gid, ptr, _t)();
             //@ close_na_inv(_t, MaskNshrSingle(ptr));

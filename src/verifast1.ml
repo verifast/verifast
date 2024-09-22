@@ -6223,22 +6223,23 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         in
         let wargs, tenv' = check_pats (pn,ilist) l tparams tenv pts args in
         (WPredExprAsn (l, w, pts, inputParamCount, wargs), tenv', [])
-      | PredAsn (l, p, targs, ps0, ps) ->
+      | PredAsn (l, p, targs, ps0, ps, binding) ->
         let targs = List.map (check_pure_type (pn, ilist) tparams Ghost) targs in
         begin fun cont ->
-          match try_assoc p tenv |> option_map unfold_inferred_type with
-            Some (PredType (callee_tparams, ts, inputParamCount, inductiveness)) -> cont ((LocalVar p: pred_name), false, callee_tparams, [], ts, inputParamCount)
-          | None | Some _ ->
-            begin match resolve Ghost (pn,ilist) l p predfammap with
-              Some (pname, (lp, callee_tparams, arity, xs, _, inputParamCount, inductiveness)) ->
+          match (try_assoc p tenv |> option_map unfold_inferred_type), binding with
+            Some (PredType (callee_tparams, ts, inputParamCount, inductiveness)), (Static|LocalVarPredCall) -> cont ((LocalVar p: pred_name), false, callee_tparams, [], ts, inputParamCount)
+          | _ ->
+            begin match resolve Ghost (pn,ilist) l p predfammap, binding with
+              Some (pname, (lp, callee_tparams, arity, xs, _, inputParamCount, inductiveness)), (Static|PredFamCall) ->
               reportUseSite DeclKind_Predicate lp l;
               let ts0 = match file_type path with
                 Java-> list_make arity (ObjType ("java.lang.Class", []))
               | _   -> list_make arity (PtrType Void)
               in
               cont (PredFam pname, true, callee_tparams, ts0, xs, inputParamCount)
-            | None ->
+            | _ ->
               begin match
+                if binding <> Static && binding <> PredCtorCall then None else
                 match try_assoc p predctormap1 with
                   Some (lp, tparams, ps1, ps2, inputParamCount, body, funcsym, pn, ilist) ->
                   reportUseSite DeclKind_Predicate lp l;
@@ -6467,7 +6468,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | e ->
         let a =
           match e with
-          | CallExpr (l, g, targs, pats0, pats, Static) -> PredAsn (l, g, targs, pats0, pats)
+          | CallExpr (l, g, targs, pats0, pats, binding) when binding <> Instance -> PredAsn (l, g, targs, pats0, pats, binding)
           | ExprCallExpr (l, e, args) -> PredExprAsn (l, e, List.map (fun e -> LitPat e) args)
           | CallExpr (l, g, [], pats0, LitPat e::pats, Instance) ->
             let index =

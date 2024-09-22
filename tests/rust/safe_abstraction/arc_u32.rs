@@ -160,6 +160,8 @@ impl ArcU32 {
             //@ leak exists(p);
             //@ leak exists(dk);
             //@ leak exists::<isize>(gid);
+            //@ close std::ptr::NonNull_own::<ArcInnerU32>()(default_tid, nnp);
+            //@ leak std::ptr::NonNull_own::<ArcInnerU32>()(default_tid, nnp);
             //@ close ArcU32_own(_t, ret);
             ret
         }
@@ -384,7 +386,8 @@ impl Drop for ArcU32 {
             //@ close Pre();
             let sco = self.ptr.as_ref().strong.fetch_sub(1, Ordering::SeqCst);
             //@ open Post(sco);
-            //@ open std::ptr::NonNull_own(default_tid, arcU32.ptr);
+            //@ open std::ptr::NonNull_own::<ArcInnerU32>(default_tid, arcU32.ptr);
+            //@ close std::ptr::NonNull_own::<ArcInnerU32>(_t, arcU32.ptr);
             if sco != 1 { return; }
             }
             //@ open_struct(ptr);
