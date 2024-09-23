@@ -156,25 +156,6 @@ pred_ctor MutexGuard_fbc_rest<'a, T>(klong: lifetime_t, t: thread_id_t, l: *Mute
     &*& [_]frac_borrow('a, Mutex_frac_borrow_content(klong, lock))
     &*& sys::locks::SysMutex_locked(&(*lock).inner, full_borrow_(klong, <T>.full_borrow_content(t0, &(*lock).data)), t);
 
-pred<'a, T> <MutexGuard<'a, T>>.share(k, t, l) = true;
-
-lem MutexGuard_share_mono<'a, T>(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *MutexGuard<'a, T>)
-    req lifetime_inclusion(k1, k) == true &*& [_]MutexGuard_share::<'a, T>(k, t, l);
-    ens [_]MutexGuard_share::<'a, T>(k1, t, l);
-{
-    close MutexGuard_share::<'a, T>(k1, t, l);
-    leak MutexGuard_share::<'a, T>(k1, t, l);
-}
-
-lem MutexGuard_share_full<'a, T>(k: lifetime_t, t: thread_id_t, l: *MutexGuard<'a, T>)
-    req full_borrow(k, MutexGuard_full_borrow_content::<'a, T>(t, l)) &*& [?q]lifetime_token(k);
-    ens [_]MutexGuard_share::<'a, T>(k, t, l) &*& [q]lifetime_token(k);
-{
-    leak full_borrow(_, _);
-    close MutexGuard_share::<'a, T>(k, t, l);
-    leak MutexGuard_share::<'a, T>(k, t, l);
-}
-
 @*/
 
 impl<'a, T: Send> !Send for MutexGuard<'a, T> {}

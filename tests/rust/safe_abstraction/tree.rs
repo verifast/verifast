@@ -158,25 +158,6 @@ pub struct Tree {
 
 pred <Tree>.own(t, tree;) = Tree(tree.root, 0, ?shape);
 
-pred <Tree>.share(k, t, l) = true;
-
-lem Tree_share_mono(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *Tree)
-    req lifetime_inclusion(k1, k) == true &*& [_]Tree_share(k, t, l);
-    ens [_]Tree_share(k1, t, l);
-{
-    close Tree_share(k1, t, l);
-    leak Tree_share(k1, t, l);
-}
-
-lem Tree_share_full(k: lifetime_t, t: thread_id_t, l: *Tree)
-    req full_borrow(k, Tree_full_borrow_content(t, l)) &*& [?q]lifetime_token(k);
-    ens [_]Tree_share(k, t, l) &*& [q]lifetime_token(k);
-{
-    close Tree_share(k, t, l);
-    leak Tree_share(k, t, l);
-    leak full_borrow(_, _);
-}
-
 pred hidden_lifetime_token(k: lifetime_t;) = lifetime_token(k);
 
 @*/

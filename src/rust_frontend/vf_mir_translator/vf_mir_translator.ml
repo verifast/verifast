@@ -935,9 +935,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                  | _ -> []
             in
             let vf_targs = lft_args @ targs in
-            let vf_ty =
-              StructTypeExpr (loc, Some name, None, [], vf_targs)
-            in
+            let vf_ty = StructTypeExpr (loc, Some name, None, [], vf_targs) in
             let sz_expr = SizeofExpr (loc, TypeExpr vf_ty) in
             let own tid v =
               let args = List.map (fun x -> LitPat x) [ tid; v ] in
@@ -962,7 +960,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                          (*indices*) [],
                          (*arguments*)
                          List.map (fun e -> LitPat e) [ lft; tid; l ],
-                         if vf_targs = [] then PredFamCall else PredCtorCall ) ))
+                         if vf_targs = [] then PredFamCall else PredCtorCall )
+                   ))
             in
             let full_bor_content =
               if lft_args = [] then
@@ -3874,10 +3873,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                 ( adt_def_loc,
                   PtrType
                     (StructType
-                       ( name,
-                         List.map
-                           (fun x -> GhostTypeParam x)
-                           vf_tparams )) ),
+                       (name, List.map (fun x -> GhostTypeParam x) vf_tparams))
+                ),
               ptr_param_name );
           ]
         in
@@ -4286,42 +4283,67 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         | UnionKind -> failwith "Todo: AdtDef::Union"
         | Undefined _ -> Error (`TrAdtDef "Unknown ADT kind")
       in
+      let user_provided_type_pred_def_for p =
+        ghost_decls
+        |> List.exists @@ function
+           | Ast.TypePredDef
+               ( _,
+                 _,
+                 (IdentTypeExpr (_, None, sn) | ConstructedTypeExpr (_, sn, _)),
+                 p',
+                 _ )
+             when sn = name && p' = p ->
+               true
+           | _ -> false
+      in
       let* full_bor_content, proof_obligs, delayed_proof_obligs, aux_decls' =
-        if
-          is_local
-          && (AstAux.decl_map_contains_pred_fam_inst_or_pred_ctor_inst
-                ghost_decl_map (name ^ "_own")
-             || AstAux.decl_map_contains_pred_fam_inst_or_pred_ctor_inst
-                  ghost_decl_map (name ^ "_share")
-             || ghost_decls
-                |> List.exists @@ function
-                   | Ast.TypePredDef
-                       ( _,
-                         _,
-                         ( IdentTypeExpr (_, None, sn)
-                         | ConstructedTypeExpr (_, sn, _) ),
-                         ("own" | "share"),
-                         _ )
-                     when sn = name ->
-                       true
-                   | _ -> false)
-        then
+        if is_local && AdtKindRd.get kind_cpn = StructKind then
           let* full_bor_content =
             gen_adt_full_borrow_content kind name tparams lft_params variants
               def_loc
           in
-          let* proof_obligs =
-            gen_adt_proof_obligs def lft_params tparams send_tparams
+          let user_provided_own_def = user_provided_type_pred_def_for "own" in
+          let user_provided_share_def =
+            user_provided_type_pred_def_for "share"
           in
-          let type_pred_defs, delayed_proof_obligs =
-            ( [
+          let* proof_obligs =
+            if user_provided_share_def then
+              gen_adt_proof_obligs def lft_params tparams send_tparams
+            else Ok []
+          in
+          let type_pred_defs =
+            (if user_provided_own_def then []
+             else
+               [
+                 Ast.TypePredDef
+                   ( def_loc,
+                     vf_tparams,
+                     StructTypeExpr (def_loc, Some name, None, [], tparams_targs),
+                     "own",
+                     Right ([ "t"; "v" ], Some 2, False def_loc) );
+               ])
+            @ [
                 Ast.TypePredDef
                   ( def_loc,
                     vf_tparams,
                     StructTypeExpr (def_loc, Some name, None, [], tparams_targs),
                     "full_borrow_content",
                     Left (def_loc, name ^ "_full_borrow_content") );
-              ],
+              ]
+            @
+            if user_provided_share_def then []
+            else
+              [
+                Ast.TypePredDef
+                  ( def_loc,
+                    vf_tparams,
+                    StructTypeExpr (def_loc, Some name, None, [], tparams_targs),
+                    "share",
+                    Right ([ "k"; "t"; "l" ], Some 3, True def_loc) );
+              ]
+          in
+          let delayed_proof_obligs =
+            if user_provided_own_def then
               let is_trivially_droppable =
                 fds
                 |> List.for_all @@ fun (fd : Mir.field_def_tr) ->
@@ -4344,7 +4366,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                          (fun (fd : Mir.field_def_tr) ->
                            (fd.loc, fd.name, fd.ty))
                          fds));
-                ] )
+                ]
+            else []
           in
           Ok
             ( Some full_bor_content,

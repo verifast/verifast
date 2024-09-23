@@ -14,23 +14,6 @@ pred Account(account: *Account; balance: i32) =
     (*account).balance |-> balance;
 
 pred <Account>.own(t, account) = true;
-pred <Account>.share(k, t, l) = true;
-
-lem Account_share_full(k: lifetime_t, t: thread_id_t, l: *Account)
-    req full_borrow(k, Account_full_borrow_content(t, l));
-    ens [_]Account_share(k, t, l);
-{
-    close Account_share(k, t, l);
-    leak full_borrow(_, _) &*& Account_share(k, t, l);
-}
-
-lem Account_share_mono(k1: lifetime_t, k2: lifetime_t, t: thread_id_t, l: *Account)
-    req [_]Account_share(k1, t, l);
-    ens [_]Account_share(k2, t, l);
-{
-    close Account_share(k2, t, l);
-    leak Account_share(k2, t, l);
-}
 
 @*/
 

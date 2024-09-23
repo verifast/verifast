@@ -49,8 +49,7 @@ cd safe_abstraction
   verifast -c -allow_should_fail -allow_dead_code drop_test.rs
   verifast -c tparam_own.rs
   verifast -c generic_pair.rs
-  verifast -c mutex_u32.rs
-  verifast -c mutex_u32_with_lft_param.rs
+  verifast -c -extern ../unverified/sys mutex_u32.rs
   verifast -c -extern ../unverified/sys mutex.rs
   verifast -c rc_u32.rs
   verifast -c rc.rs

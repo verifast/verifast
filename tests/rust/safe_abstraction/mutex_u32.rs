@@ -1,108 +1,14 @@
+// verifast_options{extern:../unverified/sys}
+
 #![feature(negative_impls)]
 #![allow(dead_code)]
-
-/*
-About the definitions:
-    Since to have `MutexU32::lock` verified we need to return the `[qa]lifetime_token(a)` back, we need to close the `frac_borrow` before the method ends.
-    To close that `frac_borrow` we need the `SysMutex_share` fraction used to lock the `sys::locks::Mutex` back.
-    That means the spec of `sys::locks::Mutex::lock` must return the `SysMutex_share` fraction it receives.
-    The latter means neither to have a full chunk of `SysMutex_share` nor a full chunk of `SysMutex` means the mutex is unlocked.
-    However, it does not make any problem, because if destroying a locked mutex is an undefined behaviour the implementation of `sys::locks::Mutex::drop`
-    just forgets about the mutex.
-*/
-
-/*@
-
-pred SysMutex(m: sys::locks::Mutex; P: pred());
-pred SysMutex_share(l: *sys::locks::Mutex; P: pred());
-pred sys::locks::Mutex_own(t: thread_id_t, m: sys::locks::Mutex);
-
-lem SysMutex_to_own(t: thread_id_t, m: sys::locks::Mutex);
-    req SysMutex(m, _);
-    ens sys::locks::Mutex_own(t, m);
-
-lem SysMutex_share_full(l: *sys::locks::Mutex);
-    req *l |-> ?m &*& SysMutex(m, ?P);
-    ens SysMutex_share(l, P);
-lem SysMutex_end_share(l: *sys::locks::Mutex);
-   req SysMutex_share(l, ?P);
-   ens *l |-> ?m &*& SysMutex(m, P);
-
-pred SysMutex_locked(l: *sys::locks::Mutex, P: pred(); t: thread_id_t);
-
-lem SysMutex_renew(m: sys::locks::Mutex, Q: pred());
-    req SysMutex(m, ?P) &*& Q();
-    ens SysMutex(m, Q);
-
-/* Justifying the soundness of `SysMutex_renew`:
-As mentioned above, with this specification for `sys::locks::Mutex` interface having a full chunk of `SysMutex` or `SysMutex_share`
-does not necessarily mean the mutex is not locked. If it was the case the lemma's soundness was easier to justify.
-We get `SysMutex(m, ?P)` in the `req` clause so there is not any fraction of `SysMutex(m, P)` or `SysMutex_share(lm, P)` anywhere else.
-After applying the lemma the soundness of `sys::locks::Mutex` interface is justified since if:
-- The mutex is unlocked and the resource `P()` is protected by mutex; It is in the mutex so to speak. We substitute `P` with `Q`
-    and from this point, there will be no `SysMutex`, `SysMutex_share` or `SysMutex_locked` chunk that mentions `P` anywhere.
-    It means we leak `P()` and the state is just like after a call to `sys::locks::Mutex::new` to protect `Q()`.
-
-- The mutex is locked, it means there should be a `SysMutex_locked(lm, P, ?t)` and `P()` in resources of some thread(s).
-    - `lock` gets verified which is fine because this call never returns. No other thread has `[?q]SysMutex_share(lm, P)`
-        to release the mutex.
-    - `unlock` cannot get verified with chunks mentioning `P` as there is no `[?q]SysMutex_share(lm, P)` anywhere and verification with
-        `SysMutex_locked(lm, Q, ?t)` does not represent a real execution as `lock` never returns.
-    - `drop` will get verified and it is sound because `sys::locks::Mutex` implementation of `Drop` does not destroy a locked mutex, but
-        simply leaks it. Here `Q()` gets leaked too.
-*/
-
-lem SysMutex_share_implies(l: *sys::locks::Mutex, P: pred(), P1: pred());
-    req SysMutex_share(l, P) &*& is_implies(?f, P, P1) &*& is_implies(?f1, P1, P);
-    ens SysMutex_share(l, P1) &*& is_implies(f, P, P1) &*& is_implies(f1, P1, P);
-
-@*/
-
-mod sys {
-    pub mod locks {
-        use std::process::abort;
-        pub struct Mutex {
-            m: *mut u32,
-        }
-
-        impl Mutex {
-            pub unsafe fn new() -> Mutex
-            //@ req exists::<pred()>(?P) &*& P();
-            //@ ens SysMutex(result, P);
-            {
-                abort();
-            }
-
-            // TODO: Use `current_thread` var in `SysMutex_locked` like in the `threading.h`. The `SysMutex` interface does not need `thread_token` in the contracts.
-            pub unsafe fn lock<'a>(&'a self)
-            //@ req thread_token(?t) &*& [?q]SysMutex_share(self, ?P);
-            //@ ens thread_token(t) &*& [q]SysMutex_share(self, P) &*& SysMutex_locked(self, P, t) &*& P();
-            {
-                abort();
-            }
-
-            pub unsafe fn unlock<'a>(&'a self)
-            //@ req thread_token(?t) &*& SysMutex_locked(self, ?P, t) &*& P() &*& [?q]SysMutex_share(self, P);
-            //@ ens thread_token(t) &*& [q]SysMutex_share(self, P);
-            {
-                abort();
-            }
-
-            // TODO: impl Drop for Mutex
-            unsafe fn drop<'a>(&'a mut self)
-            //@ req (*self) |-> ?m &*& SysMutex(m, _);
-            //@ ens (*self) |-> m;
-            {
-                abort();
-            }
-        }
-    }
-}
 
 use std::{
     cell::UnsafeCell,
     ops::{Deref, DerefMut},
 };
+
+//@ use sys::locks::*;
 
 pub struct MutexU32 {
     inner: sys::locks::Mutex,
@@ -119,7 +25,7 @@ lem MutexU32_drop()
     ens sys::locks::Mutex_own(t, mutexU32.inner);
 {
     open MutexU32_own(t, mutexU32);
-    SysMutex_to_own(t, mutexU32.inner);
+    SysMutex_to_own(t);
 }
 
 pred_ctor MutexU32_fbc_inner(l: *MutexU32)(;) = (*l).inner |-> ?inner &*& SysMutex(inner, True) &*& struct_MutexU32_padding(l);
