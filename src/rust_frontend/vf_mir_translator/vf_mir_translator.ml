@@ -398,7 +398,7 @@ module Mir = struct
   }
 
   type debug_info = { id : Ast.loc; info : var_debug_info list }
-  type visibility = Public | Restricted | Invisible
+  type visibility = Public | Restricted
   type adt_kind = Struct | Enum | Union
 
   let decl_mir_adt_kind (d : Ast.decl) =
@@ -3818,7 +3818,6 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     match get vis_cpn with
     | Public -> Ok Mir.Public
     | Restricted -> Ok Mir.Restricted
-    | Invisible -> Ok Mir.Invisible
     | Undefined _ -> Error (`TrVisibility "Unknown visibility kind")
 
   let translate_field_def (fdef_cpn : FieldDefRd.t) =
@@ -3832,6 +3831,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let* ty_info = translate_ty ty_cpn loc in
     let vis_cpn = vis_get fdef_cpn in
     let* vis = translate_visibility vis_cpn in
+    if vis = Public then raise (Ast.StaticError (loc, "Public fields are not yet supported", None));
     Ok Mir.{ name; ty = ty_info; vis; loc }
 
   let translate_to_vf_field_def

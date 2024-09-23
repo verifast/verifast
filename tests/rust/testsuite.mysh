@@ -1,5 +1,8 @@
 verifast -c ghost_cmd_inj.rs
 verifast -c parser_test.rs
+verifast -c -allow_should_fail type_pred_defs_for_imported_structs.rs
+verifast -c -allow_should_fail duplicate_type_pred_defs.rs
+verifast -c -allow_should_fail public_fields.rs
 begin_sequential
 cd unverified
   cd platform

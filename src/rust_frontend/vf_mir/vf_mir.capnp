@@ -106,7 +106,6 @@ struct Visibility {
     union {
         public @0: Void;
         restricted @1: Void;
-        invisible @2: Void;
     }
 }
 
