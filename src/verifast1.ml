@@ -6903,9 +6903,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let predctormap = predctormap1 @ predctormap0
 
   let () = (* Process type predicate definitions. *)
-    let rec iter ds =
+    let rec iter defs ds cont =
       match ds with
-        [] -> ()
+        [] -> cont defs
       | TypePredDef (l, tparams, te, predName, Left (lrhs, rhs))::ds ->
         check_tparams l [] tparams;
         let tp = check_pure_type ("",[]) tparams Ghost te in
@@ -6918,6 +6918,14 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
            For now, we do not attempt to prevent it at all, which is unsound if the user can introduce arbitrary type predicate
            definitions. Therefore, we allow this construct to be used only by the Rust translator. *)
         if dialect <> Some Rust then static_error l "Type predicate definitions are allowed only in Rust programs" None;
+        let defs =
+          match tp with
+            StructType (sn, _) ->
+            if List.mem_assoc sn structmap0 then static_error l "A type predicate definition for a struct type is allowed only in the file that declares the struct" None;
+            if List.mem (sn, predName) defs then static_error l (Printf.sprintf "Duplicate definition of type predicate %s for struct %s" predName sn) None;
+            (sn, predName)::defs
+          | _ -> defs (* TODO: Prevent duplicate type predicate definitions for non-struct types, probably by not allowing definitions for these types at all. *)
+        in
         let predType' = instantiate_type [selfTypeName, tp] predType in
         if tparams = [] then
           let typeid = typeid_of_core l [] tp in
@@ -6928,7 +6936,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             if nbIndices <> 0 then static_error lrhs "The right-hand side predicate is a predicate family" None;
             expect_type lrhs (Some true) (PredType ([], pts, inputParamCount, inductiveness)) predType';
             ctxt#assert_term (ctxt#mk_eq type_pred_term predSymb);
-            iter ds
+            iter defs ds cont
           | None ->
           match try_assoc rhs predctormap with
             Some (PredCtorInfo (_, ctor_tparams, ctor_ps, ctor_ps', inputParamCount, _, ctorSymb)) ->
@@ -6937,7 +6945,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let rhs_type = List.fold_right (fun (_, pt) ctp -> PureFuncType (pt, ctp)) ctor_ps pred_type in
             expect_type l (Some true) rhs_type predType';
             ctxt#assert_term (ctxt#mk_eq type_pred_term (snd ctorSymb));
-            iter ds
+            iter defs ds cont
           | None ->
             static_error l "No such predicate or predicate constructor" None
         else
@@ -6962,21 +6970,21 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let eq = ctxt#mk_eq typePredTerm ctorApp in
             ctxt#end_formal;
             ctxt#assume_forall (Printf.sprintf "type_pred_def_%s_%s" predName rhs) [typePredTerm] (List.map (fun x -> ctxt#type_inductive) tparams) eq;
-            iter ds
+            iter defs ds cont
           | None ->
             static_error lrhs "No such predicate constructor" None
           end
       | _::ds ->
-        iter ds
+        iter defs ds cont
     in
-    let rec iter' ps =
+    let rec iter' defs ps =
       match ps with
         [] -> ()
       | PackageDecl (l, pn, ilist, ds)::ps ->
-        iter ds;
-        iter' ps
+        iter defs ds @@ fun defs ->
+        iter' defs ps
     in
-    iter' ps
+    iter' [] ps
   
   let classmap1 =
     classmap1 |> List.map
