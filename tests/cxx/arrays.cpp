@@ -1,6 +1,6 @@
 int firstElement(int array[])
-// @ requires ints(array, ?len, ?vals) &*& len > 0;
-// @ ensures ints(array, len, vals);
+//@ requires ints(array, ?len, ?vals) &*& len > 0;
+//@ ensures ints(array, len, vals);
 {
   return array[0];
 }
