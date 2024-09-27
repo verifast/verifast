@@ -703,6 +703,7 @@ cd tests
     verifast -c casts.cpp
     verifast -c switch.cpp
     verifast -c declarations.cpp
+    verifast -c arrays.cpp
   cd ..
   cd rust
     call testsuite.mysh

@@ -20,6 +20,8 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
     | FixedWidth f -> transl_fixed_width_type loc f
     | LValueRef l -> transl_lvalue_ref_type loc l
     | SubstTemplateTypeParam s -> transl_subst_template_type_param loc s
+    | ConstantArray ca -> transl_constant_array_type loc ca
+    | IncompleteArray ia -> transl_incomplete_array loc ia
     | Undefined _ -> failwith "Undefined type."
     | _ -> Error.error loc "Unsupported type."
 
@@ -99,4 +101,13 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
   and transl_subst_template_type_param (loc : Ast.loc) (st : R.Node.t) :
       Ast.type_expr =
     translate st
+
+  and transl_constant_array_type (loc : Ast.loc) (ca : R.ConstantArray.t) : Ast.type_expr =
+    let open R.ConstantArray in
+    let elemCount = count_get ca in
+    let elemType = translate (type_get ca) in
+    Ast.StaticArrayTypeExpr (loc, elemType, elemCount)
+
+  and transl_incomplete_array (loc : Ast.loc) (ia : R.Node.t) : Ast.type_expr =
+    Ast.ArrayTypeExpr (loc, translate ia)
 end

@@ -48,6 +48,37 @@ struct TypeSerializerImpl
 #undef CASE_TYPE_FW
   }
 
+  bool VisitConstantArrayType(const clang::ConstantArrayType *type) {
+    // Initialize Cap'n Proto elements
+    stubs::ConstantArray::Builder constArrayBuilder = m_builder.initConstantArray();
+    stubs::Type::Builder typeBuilder = constArrayBuilder.initType().initDesc();
+
+    // Ensure that array size definitely doesn't overflow (Int16 for now)
+    if(type->getSize().getActiveBits() > 15 || type->getSize().isNegative()) {
+      clang::DiagnosticsEngine &diagsEngine = m_ASTSerializer->getASTContext().getDiagnostics();
+      unsigned diagID = diagsEngine.getCustomDiagID(clang::DiagnosticsEngine::Error, "Array size out of bounds.");
+      diagsEngine.Report(diagID) << type->getTypeClassName();
+    }
+
+    // Serialize type of array elements
+    m_ASTSerializer->serialize(typeBuilder, type->getElementType());
+
+    // Serialize array size
+    constArrayBuilder.setCount(type->getSize().getZExtValue());
+
+    return true;
+  }
+
+  bool VisitIncompleteArrayType(const clang::IncompleteArrayType *type) {
+    // Initialize Cap'n Proto element
+    stubs::Type::Builder typeBuilder = m_builder.initIncompleteArray().initDesc();
+
+    // Serialize type of array elements
+    m_ASTSerializer->serialize(typeBuilder, type->getElementType());
+
+    return true;
+  }
+
   bool VisitPointerType(const clang::PointerType *type) {
     stubs::Type::Builder pointerBuilder = m_builder.initPointer().initDesc();
     m_ASTSerializer->serialize(pointerBuilder, type->getPointeeType());
