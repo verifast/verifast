@@ -14,6 +14,16 @@ lem Pair_drop<A, B>()
     open Pair_own::<A, B>(t, pair);
 }
 
+lem Pair_send<A, B>(t1: thread_id_t)
+    req type_interp::<A>() &*& type_interp::<B>() &*& Pair_own::<A, B>(?t, ?pair) &*& is_Send(typeid(A)) && is_Send(typeid(B));
+    ens type_interp::<A>() &*& type_interp::<B>() &*& Pair_own::<A, B>(t1, pair);
+{
+    open Pair_own::<A, B>(t, pair);
+    Send::send::<A>(t, t1, pair.fst);
+    Send::send::<B>(t, t1, pair.snd);
+    close Pair_own::<A, B>(t1, pair);
+}
+
 pred<A, B> <Pair<A, B>>.share(k, t, l) =
     [_](<A>.share)(k, t, &(*l).fst) &*&
     pointer_within_limits(&(*l).snd) == true &*&
@@ -130,6 +140,17 @@ lem Pair_share_full<A, B>(k: lifetime_t, t: thread_id_t, l: *Pair<A, B>)
     share_full_borrow_m::<B>(k, t, &(*l).snd);
     close Pair_share::<A, B>(k, t, l);
     leak Pair_share(k, t, l);
+}
+
+lem Pair_sync<A, B>(t1: thread_id_t)
+    req type_interp::<A>() &*& type_interp::<B>() &*& [_]Pair_share::<A, B>(?k, ?t, ?l) &*& is_Sync(typeid(A)) && is_Sync(typeid(B));
+    ens type_interp::<A>() &*& type_interp::<B>() &*& [_]Pair_share::<A, B>(k, t1, l);
+{
+    open Pair_share::<A, B>(k, t, l);
+    Sync::sync::<A>(k, t, t1, &(*l).fst);
+    Sync::sync::<B>(k, t, t1, &(*l).snd);
+    close Pair_share::<A, B>(k, t1, l);
+    leak Pair_share::<A, B>(k, t1, l);
 }
 
 @*/

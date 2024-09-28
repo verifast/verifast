@@ -107,27 +107,6 @@ lem Arc_share_full<T>(k: lifetime_t, t: thread_id_t, l: *Arc<T>)
 unsafe impl<T: Sync + Send> Send for Arc<T> {}
 unsafe impl<T: Sync + Send> Sync for Arc<T> {}
 
-/*@
-
-lem Arc_send<T>(t: thread_id_t, t1: thread_id_t)
-    req Arc_own::<T>(t, ?nnp);
-    ens Arc_own::<T>(t1, nnp);
-{
-    open Arc_own::<T>(t, nnp);
-    close Arc_own::<T>(t1, nnp);
-}
-
-lem Arc_sync<T>(k: lifetime_t, t: thread_id_t, t1: thread_id_t, l: *Arc<T>)
-    req [_]Arc_share(k, t, l);
-    ens [_]Arc_share(k, t1, l);
-{
-    open Arc_share::<T>()(k, t, l);
-    close Arc_share::<T>()(k, t1, l);
-    leak Arc_share(k, t1, l);
-}
-
-@*/
-
 impl<T: Sync + Send> Arc<T> {
     pub fn new(data: T) -> Arc<T> {
         unsafe {

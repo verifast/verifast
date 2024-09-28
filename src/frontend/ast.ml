@@ -1003,6 +1003,19 @@ let func_kind_of_ghostness gh =
   
 (* Region: some AST inspector functions *)
 
+let type_expr_loc t =
+  match t with
+    ManifestTypeExpr (l, t) -> l
+  | StructTypeExpr (l, sn, _, _, _) -> l
+  | UnionTypeExpr (l, un, _) -> l
+  | IdentTypeExpr (l, _, x) -> l
+  | ConstructedTypeExpr (l, x, targs) -> l
+  | PtrTypeExpr (l, te) -> l
+  | ArrayTypeExpr(l, te) -> l
+  | PredTypeExpr(l, te, _) -> l
+  | PureFuncTypeExpr (l, tes) -> l
+  | FuncTypeExpr (l, _, _) -> l
+
 let string_of_func_kind f=
   match f with
     Lemma(_) -> "lemma"
@@ -1053,6 +1066,7 @@ let rec expr_loc e =
   | SwitchExpr (l, e, secs, _) -> l
   | WSwitchExpr (l, e, i, targs, secs, cdef, tenv, t0) -> l
   | SizeofExpr (l, e) -> l
+  | TypeExpr te -> type_expr_loc te
   | GenericExpr (l, e, cs, d) -> l
   | PredNameExpr (l, g) -> l
   | CastExpr (l, te, e) -> l
@@ -1193,19 +1207,6 @@ let stmt_fold f state s =
 (* Postfix iter *)
 let stmt_iter f s = stmt_fold (fun _ s -> f s) () s
 
-let type_expr_loc t =
-  match t with
-    ManifestTypeExpr (l, t) -> l
-  | StructTypeExpr (l, sn, _, _, _) -> l
-  | UnionTypeExpr (l, un, _) -> l
-  | IdentTypeExpr (l, _, x) -> l
-  | ConstructedTypeExpr (l, x, targs) -> l
-  | PtrTypeExpr (l, te) -> l
-  | ArrayTypeExpr(l, te) -> l
-  | PredTypeExpr(l, te, _) -> l
-  | PureFuncTypeExpr (l, tes) -> l
-  | FuncTypeExpr (l, _, _) -> l
-
 let expr_fold_open iter state e =
   let rec iters state es =
     match es with
@@ -1304,6 +1305,35 @@ let expr_fold_open iter state e =
   | WCxxNew (_, _, _) -> state
   | CxxDelete (_, arg) -> iter state arg
   | Typeid (_, e) -> iter state e
+  | TypeExpr te -> state
+  | PointsTo (l, e, kind, rhs) -> iterpat (iter state e) rhs
+  | WPointsTo (l, e, tp, kind, rhs) -> iterpat (iter state e) rhs
+  | PredAsn (l, g, targs, ies, es, _) -> iterpats (iterpats state ies) es
+  | WPredAsn (l, g, _, targs, ies, es) -> iterpats (iterpats state ies) es
+  | PredExprAsn (l, e, pats) -> iterpats (iter state e) pats
+  | WPredExprAsn (l, e, pts, inputParamCount, pats) -> iterpats (iter state e) pats
+  | InstPredAsn (l, e, g, index, pats) -> iterpats (iter (iter state e) index) pats
+  | WInstPredAsn (l, e_opt, tns, cfin, tn, g, index, pats) ->
+    let state = match e_opt with None -> state | Some e -> iter state e in
+    iterpats (iter state index) pats
+  | ExprAsn (l, e) -> iter state e
+  | MatchAsn (l, e, pat) -> iterpat (iter state e) pat
+  | WMatchAsn (l, e, pat, tp) -> iterpat (iter state e) pat
+  | LetTypeAsn (l, x, t, p) -> state
+  | TypePredExpr (l, t, x) -> state
+  | WTypePredExpr (l, t, x) -> state
+  | Sep (l, p1, p2) -> iter (iter state p1) p2
+  | IfAsn (l, e, p1, p2) -> iter (iter (iter state e) p1) p2
+  | WSwitchAsn (l, e, i, sacs) ->
+    let rec iter' state = function
+      [] -> state
+    | WSwitchAsnClause (l, _, _, _, a)::sacs -> iter' (iter state e) sacs
+    in
+    iter' (iter state e) sacs
+  | EmpAsn l -> state
+  | ForallAsn (l, tp, i, e) -> iter state e
+  | CoefAsn (l, coef, body) -> iter (iterpat state coef) body
+  | EnsuresAsn (l, body) -> iter state body
   | _ -> static_error (expr_loc e) "This expression form is not allowed in this position." None
 
 (* Postfix fold *)

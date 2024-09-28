@@ -105,8 +105,8 @@ unsafe impl Send for MutexU32 {}
 
 /*@
 
-lem MutexU32_send(t: thread_id_t, t1: thread_id_t)
-    req MutexU32_own(t, ?mutexU32);
+lem MutexU32_send(t1: thread_id_t)
+    req MutexU32_own(?t, ?mutexU32);
     ens MutexU32_own(t1, mutexU32);
 {
     open MutexU32_own(t, mutexU32);
@@ -116,18 +116,6 @@ lem MutexU32_send(t: thread_id_t, t1: thread_id_t)
 @*/
 
 unsafe impl Sync for MutexU32 {}
-
-/*@
-
-lem MutexU32_sync(t: thread_id_t, t1: thread_id_t)
-    req MutexU32_share(?k, t, ?l);
-    ens MutexU32_share(k, t1, l);
-{
-    open MutexU32_share(k, t, l);
-    close MutexU32_share(k, t1, l);
-}
-
-@*/
 
 impl MutexU32 {
     pub fn new(v: u32) -> MutexU32 {

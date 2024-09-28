@@ -114,8 +114,8 @@ unsafe impl<T: Send> Send for Mutex<T> {}
 
 /*@
 
-lem Mutex_send<T>(t: thread_id_t, t1: thread_id_t) // TODO: Enforce this proof obligation
-    req is_Send(typeid(T)) == true &*& type_interp::<T>() &*& Mutex_own::<T>(t, ?mutex);
+lem Mutex_send<T>(t1: thread_id_t)
+    req is_Send(typeid(T)) == true &*& type_interp::<T>() &*& Mutex_own::<T>(?t, ?mutex);
     ens type_interp::<T>() &*& Mutex_own(t1, mutex);
 {
     open Mutex_own::<T>()(t, mutex);
@@ -126,18 +126,6 @@ lem Mutex_send<T>(t: thread_id_t, t1: thread_id_t) // TODO: Enforce this proof o
 @*/
 
 unsafe impl<T: Send> Sync for Mutex<T> {}
-
-/*@
-
-lem Mutex_sync<T>(t: thread_id_t, t1: thread_id_t) // TODO: Enforce this proof obligation
-    req Mutex_share::<T>(?k, t, ?l);
-    ens Mutex_share(k, t1, l);
-{
-    open Mutex_share::<T>()(k, t, l);
-    close Mutex_share::<T>()(k, t1, l);
-}
-
-@*/
 
 pub struct MutexGuard<'a, T: Send> {
     lock: &'a Mutex<T>,
@@ -161,18 +149,6 @@ pred_ctor MutexGuard_fbc_rest<'a, T>(klong: lifetime_t, t: thread_id_t, l: *Mute
 impl<'a, T: Send> !Send for MutexGuard<'a, T> {}
 
 unsafe impl<'a, T: Send> Sync for MutexGuard<'a, T> {}
-
-/*@
-
-lem MutexGuard_sync<'a, T>(t: thread_id_t, t1: thread_id_t)
-    req MutexGuard_share::<'a, T>(?k, t, ?l);
-    ens MutexGuard_share::<'a, T>(k, t1, l);
-{
-    open MutexGuard_share::<'a, T>(k, t, l);
-    close MutexGuard_share::<'a, T>(k, t1, l);
-}
-
-@*/
 
 impl<T: Send> Mutex<T> {
     pub fn new(v: T) -> Mutex<T> {

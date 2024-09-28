@@ -1220,6 +1220,16 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | Const _ -> Ok Mir.GenArgConst
     | Undefined _ -> Error (`TrGenArg "Unknown generic arg. kind")
 
+  and decode_generic_param (gen_param_cpn : VfMirStub.Reader.GenericParamDef.t)
+      =
+    let open VfMirStub.Reader.GenericParamDef in
+    let open VfMirStub.Reader.GenericParamDefKind in
+    let name = name_get gen_param_cpn in
+    match get (kind_get gen_param_cpn) with
+    | Type -> `Type name
+    | Lifetime -> `Lifetime name
+    | Const -> failwith "Const generic parameters are not yet supported"
+
   and decode_generic_arg (gen_arg_cpn : GenArgRd.t) =
     let open GenArgRd in
     let kind_cpn = kind_get gen_arg_cpn in
@@ -1228,7 +1238,13 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | Lifetime region -> `Lifetime (translate_region region)
     | Type ty_cpn -> `Type (decode_ty ty_cpn)
     | Const _ -> `Const
-    | Undefined _ -> `Undefined
+
+  and string_of_generic_arg arg =
+    match arg with
+    | `Lifetime r -> r
+    | `Type ty -> string_of_decoded_type ty
+    | `Const -> "(const)"
+    | _ -> "(unknown)"
 
   and extract_implicit_outlives_preds_from_generic_arg regions arg =
     match arg with
@@ -1470,10 +1486,20 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | FnPtr fn_ptr_ty_cpn -> `FnPtr
     | Never -> `Never
     | Tuple substs_cpn -> `Tuple
-    | Param name -> `Param
+    | Param name -> `Param name
     | Str -> `Str
     | Slice elem_ty_cpn -> `Slice (decode_ty elem_ty_cpn)
     | Undefined _ -> `Undefined
+
+  and string_of_decoded_type ty =
+    match ty with
+    | `Bool -> "bool"
+    | `Adt (name, kind, args) ->
+        if args = [] then name
+        else
+          Printf.sprintf "%s<%s>" name
+            (String.concat ", " (List.map string_of_generic_arg args))
+    | _ -> "(type)"
 
   and extract_implicit_outlives_preds regions ty =
     match ty with
@@ -3513,42 +3539,43 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     in
     ListAux.try_map (translate_trait_required_fn adt_defs name) required_fns
 
-  let decode_predicate (loc : Ast.loc) (pred_cpn : VfMirStub.Reader.Predicate.t)
-      =
+  let decode_predicate (pred_cpn : VfMirStub.Reader.Predicate.t) =
     let open VfMirStub.Reader.Predicate in
     match get pred_cpn with
     | Outlives outlives_pred_cpn ->
         let open Outlives in
-        Ok
-          (`Outlives
-            ( translate_region (region1_get outlives_pred_cpn),
-              translate_region (region2_get outlives_pred_cpn) ))
+        `Outlives
+          ( translate_region (region1_get outlives_pred_cpn),
+            translate_region (region2_get outlives_pred_cpn) )
     | Trait trait_pred_cpn ->
         let open Trait in
-        let* args =
-          ListAux.try_map
-            (fun arg -> translate_generic_arg arg loc)
-            (args_get_list trait_pred_cpn)
+        let args =
+          args_get_list trait_pred_cpn |> List.map decode_generic_arg
         in
-        Ok (`Trait (def_id_get trait_pred_cpn, args))
-    | _ -> Ok `Ignored
+        `Trait (def_id_get trait_pred_cpn, args)
+    | _ -> `Ignored
+
+  let string_of_predicate pred =
+    match pred with
+    | `Outlives (r1, r2) -> Printf.sprintf "%s : %s" r1 r2
+    | `Trait (name, `Type arg :: args) ->
+        Printf.sprintf "%s : %s<%s>"
+          (string_of_decoded_type arg)
+          name
+          (String.concat ", " (List.map string_of_generic_arg args))
+    | `Ignored -> "(ignored)"
+    | _ -> "(unknown)"
 
   let compute_send_tparams preds =
     preds
     |> Util.flatmap (function
-         | `Trait ("std::marker::Send", [ Mir.GenArgType selfTy ]) -> (
-             match Mir.basic_type_of selfTy with
-             | ManifestTypeExpr (_, GhostTypeParam tparam) -> [ tparam ]
-             | _ -> [])
+         | `Trait ("std::marker::Send", [ `Type (`Param tparam) ]) -> [ tparam ]
          | _ -> [])
 
   let compute_sync_tparams preds =
     preds
     |> Util.flatmap (function
-         | `Trait ("std::marker::Sync", [ Mir.GenArgType selfTy ]) -> (
-             match Mir.basic_type_of selfTy with
-             | ManifestTypeExpr (_, GhostTypeParam tparam) -> [ tparam ]
-             | _ -> [])
+         | `Trait ("std::marker::Sync", [ `Type (`Param tparam) ]) -> [ tparam ]
          | _ -> [])
 
   let translate_body (body_tr_defs_ctx : body_tr_defs_ctx) (body_cpn : BodyRd.t)
@@ -3648,9 +3675,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         let vf_tparams =
           if is_trait_fn_get body_cpn then "Self" :: vf_tparams else vf_tparams
         in
-        let* preds =
+        let preds =
           impl_block_predicates_get_list body_cpn @ predicates_get_list body_cpn
-          |> ListAux.try_map (decode_predicate imp_loc)
+          |> List.map decode_predicate
         in
         let outlives_preds =
           preds
@@ -3831,7 +3858,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let* ty_info = translate_ty ty_cpn loc in
     let vis_cpn = vis_get fdef_cpn in
     let* vis = translate_visibility vis_cpn in
-    if vis = Public then raise (Ast.StaticError (loc, "Public fields are not yet supported", None));
+    if vis = Public then
+      raise (Ast.StaticError (loc, "Public fields are not yet supported", None));
     Ok Mir.{ name; ty = ty_info; vis; loc }
 
   let translate_to_vf_field_def
@@ -3962,7 +3990,144 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         in
         Ok fbor_content_pred_ctor
 
-  let gen_adt_proof_obligs adt_def lft_params tparams send_tparams =
+  let add_type_interp_asns loc tparams asn =
+    List.fold_right
+      (fun x asn ->
+        Ast.Sep
+          ( loc,
+            CallExpr
+              ( loc,
+                "type_interp",
+                [ IdentTypeExpr (loc, None, x) ],
+                [],
+                [],
+                Static ),
+            asn ))
+      tparams asn
+
+  let add_send_asns loc send_tparams asn =
+    List.fold_right
+      (fun x asn -> Ast.Sep (loc, mk_send_asn loc x, asn))
+      send_tparams asn
+
+  let gen_send_proof_oblig adt_def_loc name tparams vf_tparams send_tparams =
+    let open Ast in
+    let params = [ (IdentTypeExpr (adt_def_loc, None, "thread_id_t"), "t1") ] in
+    let tparams_targs =
+      List.map (fun x -> IdentTypeExpr (adt_def_loc, None, x)) vf_tparams
+    in
+    let pre =
+      CallExpr
+        ( adt_def_loc,
+          name ^ "_own",
+          tparams_targs,
+          [],
+          [ VarPat (adt_def_loc, "t0"); VarPat (adt_def_loc, "v") ],
+          if vf_tparams = [] then PredFamCall else PredCtorCall )
+    in
+    let pre =
+      add_type_interp_asns adt_def_loc tparams
+        (add_send_asns adt_def_loc send_tparams pre)
+    in
+    let post =
+      CallExpr
+        ( adt_def_loc,
+          name ^ "_own",
+          tparams_targs,
+          [],
+          [ LitPat (Var (adt_def_loc, "t1")); LitPat (Var (adt_def_loc, "v")) ],
+          if vf_tparams = [] then PredFamCall else PredCtorCall )
+    in
+    let post = add_type_interp_asns adt_def_loc tparams post in
+    Func
+      ( adt_def_loc,
+        Lemma
+          ( false
+            (*indicates whether an axiom should be generated for this lemma*),
+            None (*trigger*) ),
+        vf_tparams (*type parameters*),
+        None (*return type*),
+        name ^ "_send",
+        params,
+        false (*nonghost_callers_only*),
+        None
+        (*implemented function type, with function type type arguments and function type arguments*),
+        Some (pre, post) (*contract*),
+        false (*terminates*),
+        None (*body*),
+        false (*virtual*),
+        [] (*overrides*) )
+
+  let add_sync_asns loc sync_tparams asn =
+    List.fold_right
+      (fun x asn -> Ast.Sep (loc, mk_sync_asn loc x, asn))
+      sync_tparams asn
+
+  let gen_sync_proof_oblig adt_def_loc name lft_params tparams sync_tparams =
+    let open Ast in
+    let vf_tparams = lft_params @ tparams in
+    let tparams_targs =
+      List.map (fun x -> IdentTypeExpr (adt_def_loc, None, x)) vf_tparams
+    in
+    let params = [ (IdentTypeExpr (adt_def_loc, None, "thread_id_t"), "t1") ] in
+    let pre =
+      CoefAsn
+        ( adt_def_loc,
+          DummyPat,
+          CallExpr
+            ( adt_def_loc,
+              name ^ "_share",
+              tparams_targs,
+              [],
+              [
+                VarPat (adt_def_loc, "k");
+                VarPat (adt_def_loc, "t0");
+                VarPat (adt_def_loc, "l");
+              ],
+              if vf_tparams = [] then PredFamCall else PredCtorCall ) )
+    in
+    let pre =
+      add_type_interp_asns adt_def_loc tparams
+        (add_sync_asns adt_def_loc sync_tparams pre)
+    in
+    let post =
+      CoefAsn
+        ( adt_def_loc,
+          DummyPat,
+          CallExpr
+            ( adt_def_loc,
+              name ^ "_share",
+              tparams_targs,
+              [],
+              [
+                LitPat (Var (adt_def_loc, "k"));
+                LitPat (Var (adt_def_loc, "t1"));
+                LitPat (Var (adt_def_loc, "l"));
+              ],
+              if vf_tparams = [] then PredFamCall else PredCtorCall ) )
+    in
+    let post = add_type_interp_asns adt_def_loc tparams post in
+    Func
+      ( adt_def_loc,
+        Lemma
+          ( false
+            (*indicates whether an axiom should be generated for this lemma*),
+            None (*trigger*) ),
+        vf_tparams (*type parameters*),
+        None (*return type*),
+        name ^ "_sync",
+        params,
+        false (*nonghost_callers_only*),
+        None
+        (*implemented function type, with function type type arguments and function type arguments*),
+        Some (pre, post) (*contract*),
+        false (*terminates*),
+        None (*body*),
+        false (*virtual*),
+        [] (*overrides*) )
+
+  let gen_share_proof_obligs adt_def lft_params tparams send_tparams sync_preds
+      =
     let open Ast in
     let* adt_kind = Mir.decl_mir_adt_kind adt_def in
     match adt_kind with
@@ -3989,26 +4154,6 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           (ManifestTypeExpr (adt_def_loc, PtrType Void), n)
         in
         let lpat_var n = LitPat (Var (adt_def_loc, n)) in
-        let add_type_interp_asn asn =
-          List.fold_right
-            (fun x asn ->
-              Sep
-                ( adt_def_loc,
-                  CallExpr
-                    ( adt_def_loc,
-                      "type_interp",
-                      [ IdentTypeExpr (adt_def_loc, None, x) ],
-                      [],
-                      [],
-                      Static ),
-                  asn ))
-            tparams asn
-        in
-        let add_send_asns asn =
-          List.fold_right
-            (fun x asn -> Sep (adt_def_loc, mk_send_asn adt_def_loc x, asn))
-            send_tparams asn
-        in
         (*TY-SHR-MONO*)
         let params =
           [
@@ -4048,10 +4193,11 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   if tparams_targs = [] then PredFamCall else PredCtorCall ) )
         in
         let pre =
-          add_type_interp_asn
-            (add_send_asns (Sep (adt_def_loc, lft_inc_asn, shr_asn "k")))
+          add_type_interp_asns adt_def_loc tparams
+            (add_send_asns adt_def_loc send_tparams
+               (Sep (adt_def_loc, lft_inc_asn, shr_asn "k")))
         in
-        let post = add_type_interp_asn (shr_asn "k1") in
+        let post = add_type_interp_asns adt_def_loc tparams (shr_asn "k1") in
         let share_mono_po =
           Func
             ( adt_def_loc,
@@ -4131,7 +4277,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                ])
             None
         in
-        let pre = add_type_interp_asn (add_send_asns pre) in
+        let pre =
+          add_type_interp_asns adt_def_loc tparams
+            (add_send_asns adt_def_loc send_tparams pre)
+        in
         let share_pred =
           CoefAsn
             ( adt_def_loc,
@@ -4152,7 +4301,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                [ atomic_mask_token; share_pred; lft_token (lpat_var "q") ])
             None
         in
-        let post = add_type_interp_asn post in
+        let post = add_type_interp_asns adt_def_loc tparams post in
         let share_po =
           Func
             ( adt_def_loc,
@@ -4173,10 +4322,30 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               false (*virtual*),
               [] (*overrides*) )
         in
-        Ok [ share_mono_po; share_po ]
+        let sync_pos =
+          match sync_preds with
+          | None -> []
+          | Some sync_tparams ->
+              [
+                gen_sync_proof_oblig adt_def_loc name lft_params tparams
+                  sync_tparams;
+              ]
+        in
+        Ok ([ share_mono_po; share_po ] @ sync_pos)
+
+  type trait_impl = {
+    trait_impl_cpn : TraitImplRd.t;
+    loc : Ast.loc;
+    is_unsafe : bool;
+    is_negative : bool;
+    of_trait : string;
+    self_ty : string;
+    items : string list;
+  }
 
   let translate_adt_def (ghost_decl_map : (string * Ast.decl) list)
-      (ghost_decls : Ast.decl list) (adt_def_cpn : AdtDefRd.t) =
+      (ghost_decls : Ast.decl list) (trait_impls : trait_impl list)
+      (adt_def_cpn : AdtDefRd.t) =
     let open AdtDefRd in
     let id_cpn = id_get adt_def_cpn in
     let def_path = translate_adt_def_id id_cpn in
@@ -4226,9 +4395,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let* variants = ListAux.try_map translate_variant_def variants_cpn in
       let span_cpn = span_get adt_def_cpn in
       let* def_loc = translate_span_data span_cpn in
-      let* preds =
-        predicates_get_list adt_def_cpn
-        |> ListAux.try_map (decode_predicate def_loc)
+      let preds =
+        predicates_get_list adt_def_cpn |> List.map decode_predicate
       in
       let send_tparams = compute_send_tparams preds in
       let tparams_targs =
@@ -4283,36 +4451,255 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         | UnionKind -> failwith "Todo: AdtDef::Union"
         | Undefined _ -> Error (`TrAdtDef "Unknown ADT kind")
       in
-      let user_provided_type_pred_def_for p =
+      let user_provided_type_pred_defs_for p =
         ghost_decls
-        |> List.exists @@ function
+        |> Util.flatmap @@ function
            | Ast.TypePredDef
                ( _,
                  _,
                  (IdentTypeExpr (_, None, sn) | ConstructedTypeExpr (_, sn, _)),
                  p',
-                 _ )
+                 body )
              when sn = name && p' = p ->
-               true
-           | _ -> false
+               [ body ]
+           | _ -> []
       in
       let* full_bor_content, proof_obligs, delayed_proof_obligs, aux_decls' =
         if is_local && AdtKindRd.get kind_cpn = StructKind then
+          let user_provided_own_defs = user_provided_type_pred_defs_for "own" in
+          let user_provided_share_defs =
+            user_provided_type_pred_defs_for "share"
+          in
+          (* If send_preds = None, it means this ADT is never Send.
+             If send_preds = Some xs, then xs is a list of type parameters such that if any of them are not Send, then this ADT is not Send.
+             Note that Some [] is always a valid value for send_preds, and that if Some xs is a valid value, then Some (xs @ ys) is also a valid value.
+             Similarly, if sync_preds = None, it means this ADT is never Sync.
+             If sync_preds = Some xs, then xs is a list of type parameters such that if any of them are not Sync, then this ADT is not Sync.
+             xs may contain duplicates. *)
+          let send_preds, sync_preds =
+            let check_impl_generics_matches_adt loc trait_impl_cpn =
+              let impl_generics =
+                TraitImplRd.generics_get_list trait_impl_cpn
+                |> List.map decode_generic_param
+              in
+              if impl_generics <> generics then
+                Ast.static_error loc
+                  "Impl generic parameter names must match ADT generic \
+                   parameter names"
+                  None;
+              let [ `Type (`Adt (_, _, self_ty_gen_args)) ] =
+                TraitImplRd.gen_args_get_list trait_impl_cpn
+                |> List.map decode_generic_arg
+              in
+              match Util.zip impl_generics self_ty_gen_args with
+              | None ->
+                  Ast.static_error loc
+                    "Number of trait self type generic arguments does not \
+                     match impl generic parameter list"
+                    None
+              | Some bs -> (
+                  bs
+                  |> List.iter @@ function
+                     | `Type x, `Type (`Param y) when x = y -> ()
+                     | `Lifetime x, `Lifetime y when x = y -> ()
+                     | _ ->
+                         Ast.static_error loc
+                           "Trait self type generic arguments do not match \
+                            impl generic parameter list"
+                           None)
+            in
+            let check_impl_covers_adt { loc; trait_impl_cpn } =
+              check_impl_generics_matches_adt loc trait_impl_cpn;
+              let impl_preds =
+                TraitImplRd.predicates_get_list trait_impl_cpn
+                |> List.map decode_predicate
+              in
+              impl_preds
+              |> List.iter @@ fun impl_pred ->
+                 if not (List.mem impl_pred preds) then
+                   let string_of_preds preds =
+                     String.concat ", " (List.map string_of_predicate preds)
+                   in
+                   Ast.static_error loc
+                     (Printf.sprintf
+                        "Trait generic parameter constraint %s does not match \
+                         any of the ADT generic parameter constraints %s"
+                        (string_of_predicate impl_pred)
+                        (string_of_preds preds))
+                     None
+            in
+            let get_impl_preds trait_name { loc; trait_impl_cpn } =
+              check_impl_generics_matches_adt loc trait_impl_cpn;
+              let impl_preds =
+                TraitImplRd.predicates_get_list trait_impl_cpn
+                |> List.map decode_predicate
+              in
+              impl_preds
+              |> Util.flatmap (function
+                   | `Trait (trait_name', `Type (`Param x) :: _)
+                     when trait_name' = trait_name ->
+                       [ x ]
+                   | _ -> [])
+            in
+            let field_types =
+              variants_cpn
+              |> Util.flatmap @@ fun variant_cpn ->
+                 VariantDef.fields_get_list variant_cpn
+                 |> List.map @@ fun field_cpn ->
+                    VariantDef.FieldDef.ty_get field_cpn |> decode_ty
+            in
+            let preds_union preds1 preds2 =
+              match (preds1, preds2) with
+              | Some xs1, Some xs2 ->
+                  Some (xs1 @ xs2) (* May introduce duplicates *)
+              | _ -> None
+            in
+            let preds_intersection preds1 preds2 =
+              match (preds1, preds2) with
+              | Some xs1, Some xs2 ->
+                  Some (List.filter (fun x -> List.mem x xs2) xs1)
+              | Some xs1, None -> Some xs1
+              | None, Some xs2 -> Some xs2
+              | None, None -> None
+            in
+            let rec send_preds_of = function
+              | `Param x -> Some [ x ]
+              | `RawPtr -> None
+              | `Adt ("std::ptr::NonNull", _, _) -> None
+              | `Adt ("std::cell::UnsafeCell", _, [ `Type tp ]) ->
+                  send_preds_of tp
+              | _ -> Some []
+              (* Conservatively assume the type is always Send. TODO: Make this more precise. *)
+            in
+            let sync_preds_of = function
+              | `Param x -> Some [ x ]
+              | `RawPtr -> None
+              | `Adt ("std::ptr::NonNull", _, _) -> None
+              | `Adt ("std::cell::UnsafeCell", _, _) -> None
+              | _ -> Some []
+              (* Conservatively assume the type is always Sync. TODO: Make this more precise. *)
+            in
+            let send_preds =
+              field_types
+              |> List.fold_left
+                   (fun preds ty -> preds_union preds (send_preds_of ty))
+                   (Some [])
+            in
+            let send_impls =
+              trait_impls
+              |> List.filter (fun { of_trait; self_ty } ->
+                     of_trait = "std::marker::Send" && self_ty = name)
+            in
+            let negative_send_impls, positive_send_impls =
+              send_impls |> List.partition (fun { is_negative } -> is_negative)
+            in
+            let send_preds =
+              match send_preds with
+              | None -> None
+              | Some xs -> (
+                  match negative_send_impls with
+                  | [] -> Some xs
+                  | impl :: _ ->
+                      check_impl_covers_adt impl;
+                      (* OK, this negative impl covers all instantiations of the ADT so it cancels out the implicit send *)
+                      None)
+            in
+            let send_preds =
+              positive_send_impls
+              |> List.fold_left
+                   (fun preds trait_impl ->
+                     preds_intersection preds
+                       (Some (get_impl_preds "std::marker::Send" trait_impl)))
+                   send_preds
+            in
+            let variable_occurs_in_expr x e =
+              let rec iter acc e =
+                match e with
+                | Ast.Var (_, y) when x = y -> true
+                | _ -> Ast.expr_fold_open iter acc e
+              in
+              iter false e
+            in
+            let send_preds =
+              match send_preds with
+              | None -> None
+              | Some _ -> (
+                  match user_provided_own_defs with
+                  | [ Right ([ t; v ], _, body) ]
+                    when not (variable_occurs_in_expr t body) ->
+                      None
+                  | _ -> send_preds)
+            in
+            let sync_preds =
+              field_types
+              |> List.fold_left
+                   (fun preds ty -> preds_union preds (sync_preds_of ty))
+                   (Some [])
+            in
+            let sync_impls =
+              trait_impls
+              |> List.filter (fun { of_trait; self_ty } ->
+                     of_trait = "std::marker::Sync" && self_ty = name)
+            in
+            let negative_sync_impls, positive_sync_impls =
+              sync_impls |> List.partition (fun { is_negative } -> is_negative)
+            in
+            let sync_preds =
+              match sync_preds with
+              | None -> None
+              | Some xs -> (
+                  match negative_sync_impls with
+                  | [] -> Some xs
+                  | impl :: _ ->
+                      check_impl_covers_adt impl;
+                      None)
+            in
+            let sync_preds =
+              positive_sync_impls
+              |> List.fold_left
+                   (fun preds trait_impl ->
+                     preds_intersection preds
+                       (Some (get_impl_preds "std::marker::Sync" trait_impl)))
+                   sync_preds
+            in
+            let sync_preds =
+              match sync_preds with
+              | None -> None
+              | Some _ -> (
+                  match user_provided_share_defs with
+                  | [ Right ([ k; t; l ], _, body) ]
+                    when not (variable_occurs_in_expr t body) ->
+                      None
+                  | _ -> sync_preds)
+            in
+            (send_preds, sync_preds)
+          in
           let* full_bor_content =
             gen_adt_full_borrow_content kind name tparams lft_params variants
               def_loc
           in
-          let user_provided_own_def = user_provided_type_pred_def_for "own" in
-          let user_provided_share_def =
-            user_provided_type_pred_def_for "share"
+          let own_proof_obligs =
+            match send_preds with
+            | Some xs when user_provided_own_defs <> [] ->
+                let send_tparams =
+                  List.filter
+                    (fun x -> List.mem x xs || List.mem x send_tparams)
+                    tparams
+                in
+                [
+                  gen_send_proof_oblig def_loc name tparams vf_tparams
+                    send_tparams;
+                ]
+            | _ -> []
           in
-          let* proof_obligs =
-            if user_provided_share_def then
-              gen_adt_proof_obligs def lft_params tparams send_tparams
+          let* share_proof_obligs =
+            if user_provided_share_defs <> [] then
+              gen_share_proof_obligs def lft_params tparams send_tparams
+                sync_preds
             else Ok []
           in
           let type_pred_defs =
-            (if user_provided_own_def then []
+            (if user_provided_own_defs <> [] then []
              else
                [
                  Ast.TypePredDef
@@ -4331,7 +4718,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                     Left (def_loc, name ^ "_full_borrow_content") );
               ]
             @
-            if user_provided_share_def then []
+            if user_provided_share_defs <> [] then []
             else
               [
                 Ast.TypePredDef
@@ -4343,7 +4730,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               ]
           in
           let delayed_proof_obligs =
-            if user_provided_own_def then
+            if user_provided_own_defs <> [] then
               let is_trivially_droppable =
                 fds
                 |> List.for_all @@ fun (fd : Mir.field_def_tr) ->
@@ -4371,7 +4758,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           in
           Ok
             ( Some full_bor_content,
-              proof_obligs,
+              own_proof_obligs @ share_proof_obligs,
               delayed_proof_obligs,
               type_pred_defs )
         else Ok (None, [], [], [])
@@ -4409,22 +4796,27 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           (`CheckProofObligationFailed
             (loc, "Lemma " ^ po_name ^ " should be proven"))
 
-  type trait_impl = {
-    loc : Ast.loc;
-    of_trait : string;
-    self_ty : string;
-    items : string list;
-  }
-
   let translate_trait_impls (trait_impls_cpn : TraitImplRd.t list) =
     trait_impls_cpn
     |> ListAux.try_map (fun trait_impl_cpn ->
            let open TraitImplRd in
            let* loc = translate_span_data (span_get trait_impl_cpn) in
+           let is_unsafe = is_unsafe_get trait_impl_cpn in
+           let is_negative = is_negative_get trait_impl_cpn in
            let of_trait = of_trait_get trait_impl_cpn in
            let self_ty = self_ty_get trait_impl_cpn in
            let items = items_get_list trait_impl_cpn in
-           Ok ({ loc; of_trait; self_ty; items } : trait_impl))
+           Ok
+             ({
+                trait_impl_cpn;
+                loc;
+                is_unsafe;
+                is_negative;
+                of_trait;
+                self_ty;
+                items;
+              }
+               : trait_impl))
 
   let compute_trait_impl_prototypes (adt_defs : Mir.adt_def_tr list)
       traits_and_body_decls trait_impls =
@@ -4588,11 +4980,14 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       in
       let ghost_decls = module_decls @ List.flatten ghost_decl_batches in
       let ghost_decl_map = AstAux.decl_map_of ghost_decls in
+      let* trait_impls =
+        translate_trait_impls (VfMirRd.trait_impls_get_list vf_mir_cpn)
+      in
       let adt_defs_cpn = VfMirRd.adt_defs_get vf_mir_cpn in
       let* adt_defs_cpn = CapnpAux.ind_list_get_list adt_defs_cpn in
       let* adt_defs =
         ListAux.try_map
-          (translate_adt_def ghost_decl_map ghost_decls)
+          (translate_adt_def ghost_decl_map ghost_decls trait_impls)
           adt_defs_cpn
       in
       let adt_defs = List.filter_map Fun.id adt_defs in
@@ -4650,9 +5045,6 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let body_sigs = AstAux.sort_decls_lexically body_sigs in
       let body_decls = AstAux.sort_decls_lexically body_decls in
       let traits_and_body_decls = traits_decls @ List.map snd body_decls in
-      let* trait_impls =
-        translate_trait_impls (VfMirRd.trait_impls_get_list vf_mir_cpn)
-      in
       let debug_infos = VF0.DbgInfoRustFe debug_infos in
       let trait_impl_prototypes =
         compute_trait_impl_prototypes adt_defs traits_and_body_decls trait_impls

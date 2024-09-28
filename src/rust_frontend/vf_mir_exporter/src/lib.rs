@@ -288,7 +288,10 @@ impl rustc_driver::Callbacks for CompilerCalls {
 // }
 
 struct TraitImplInfo {
+    def_id: LocalDefId,
     span: Span,
+    is_unsafe: bool,
+    is_negative: bool,
     of_trait: rustc_hir::def_id::DefId,
     self_ty: rustc_hir::def_id::DefId,
     items: Vec<String>,
@@ -325,7 +328,13 @@ impl<'tcx> rustc_hir::intravisit::Visitor<'tcx> for HirVisitor {
                                     items.push(item.ident.to_string());
                                 }
                                 self.trait_impls.push(TraitImplInfo {
+                                    def_id: item.owner_id.def_id,
                                     span: item.span,
+                                    is_unsafe: impl_.unsafety == rustc_hir::Unsafety::Unsafe,
+                                    is_negative: match impl_.polarity {
+                                        rustc_hir::ImplPolarity::Negative(_) => true,
+                                        _ => false,
+                                    },
                                     of_trait,
                                     self_ty,
                                     items,
@@ -422,6 +431,7 @@ mod vf_mir_builder {
     use rustc_middle::bug;
     use rustc_middle::mir::interpret::AllocRange;
     use rustc_middle::ty;
+    use rustc_middle::ty::GenericParamDef;
     use rustc_middle::ty::GenericParamDefKind;
     use rustc_middle::{mir, ty::TyCtxt};
     use rvalue_cpn::aggregate_data::aggregate_kind as aggregate_kind_cpn;
@@ -512,6 +522,7 @@ mod vf_mir_builder {
     enum EncKind<'tcx, 'a> {
         Body(&'a mir::Body<'tcx>),
         Adt,
+        Other,
     }
     struct EncCtx<'tcx, 'a> {
         req_adts: Vec<ty::AdtDef<'tcx>>,
@@ -604,12 +615,35 @@ mod vf_mir_builder {
         }
 
         fn encode_trait_impls(&mut self, vf_mir_cpn: &mut vf_mir_cpn::Builder<'_>) {
+            let mut enc_ctx = EncCtx::new(self.tcx, EncKind::Other, LinkedList::new());
             vf_mir_cpn.fill_trait_impls(&self.trait_impls, |mut trait_impl_cpn, trait_impl| {
                 trace!("Encoding trait impl");
+                let trait_ref = self
+                    .tcx
+                    .impl_trait_ref(trait_impl.def_id)
+                    .unwrap()
+                    .skip_binder();
+                trait_impl_cpn.fill_gen_args(trait_ref.args, |gen_arg_cpn, gen_arg| {
+                    Self::encode_gen_arg(enc_ctx.tcx, &mut enc_ctx, gen_arg, gen_arg_cpn);
+                });
                 Self::encode_span_data(
                     self.tcx,
                     &trait_impl.span.data(),
                     trait_impl_cpn.reborrow().init_span(),
+                );
+                trait_impl_cpn.set_is_unsafe(trait_impl.is_unsafe);
+                trait_impl_cpn.set_is_negative(trait_impl.is_negative);
+                trait_impl_cpn.fill_generics(
+                    &self.tcx.generics_of(trait_impl.def_id).params,
+                    |generic_param_cpn, generic_param| {
+                        Self::encode_generic_param_def(generic_param, generic_param_cpn);
+                    },
+                );
+                trait_impl_cpn.fill_predicates(
+                    self.tcx.predicates_of(trait_impl.def_id).predicates,
+                    |pred_cpn, pred| {
+                        Self::encode_predicate(&mut enc_ctx, pred, pred_cpn);
+                    },
                 );
                 trait_impl_cpn.set_of_trait(&self.tcx.def_path_str(trait_impl.of_trait));
                 trait_impl_cpn.set_self_ty(&self.tcx.def_path_str(trait_impl.self_ty));
@@ -974,10 +1008,23 @@ mod vf_mir_builder {
                     let mut trait_cpn = pred_cpn.init_trait();
                     trait_cpn.set_def_id(&enc_ctx.tcx.def_path_str(trait_pred.trait_ref.def_id));
                     trait_cpn.fill_args(trait_pred.trait_ref.args, |arg_cpn, arg| {
-                        Self::encode_gen_arg(enc_ctx.tcx, enc_ctx, &arg, arg_cpn);
+                        Self::encode_gen_arg(enc_ctx.tcx, enc_ctx, arg, arg_cpn);
                     });
                 }
                 _ => pred_cpn.set_ignored(()),
+            }
+        }
+
+        fn encode_generic_param_def(
+            generic_param: &GenericParamDef,
+            mut generic_param_cpn: crate::vf_mir_capnp::generic_param_def::Builder<'_>,
+        ) {
+            generic_param_cpn.set_name(generic_param.name.as_str());
+            let mut kind_cpn = generic_param_cpn.init_kind();
+            match generic_param.kind {
+                GenericParamDefKind::Lifetime => kind_cpn.set_lifetime(()),
+                GenericParamDefKind::Type { .. } => kind_cpn.set_type(()),
+                GenericParamDefKind::Const { .. } => kind_cpn.set_const(()),
             }
         }
 
@@ -1054,14 +1101,8 @@ mod vf_mir_builder {
             let generics = tcx.generics_of(def_id);
             body_cpn.reborrow().fill_generics(
                 &generics.params,
-                |mut generic_param_cpn, generic_param| {
-                    generic_param_cpn.set_name(generic_param.name.as_str());
-                    let mut kind_cpn = generic_param_cpn.init_kind();
-                    match generic_param.kind {
-                        GenericParamDefKind::Lifetime => kind_cpn.set_lifetime(()),
-                        GenericParamDefKind::Type { .. } => kind_cpn.set_type(()),
-                        GenericParamDefKind::Const { .. } => kind_cpn.set_const(()),
-                    }
+                |generic_param_cpn, generic_param| {
+                    Self::encode_generic_param_def(generic_param, generic_param_cpn);
                 },
             );
 
@@ -1650,7 +1691,7 @@ mod vf_mir_builder {
         fn encode_gen_arg(
             tcx: TyCtxt<'tcx>,
             enc_ctx: &mut EncCtx<'tcx, 'a>,
-            gen_arg: &ty::GenericArg<'tcx>,
+            gen_arg: ty::GenericArg<'tcx>,
             gen_arg_cpn: gen_arg_cpn::Builder<'_>,
         ) {
             debug!("Encoding generic arg {:?}", gen_arg);
@@ -1849,7 +1890,7 @@ mod vf_mir_builder {
         ) {
             for (idx, targ) in targs.iter().enumerate() {
                 let targ_cpn = targs_cpn.reborrow().get(idx);
-                Self::encode_gen_arg(enc_ctx.tcx, enc_ctx, &targ, targ_cpn);
+                Self::encode_gen_arg(enc_ctx.tcx, enc_ctx, targ, targ_cpn);
             }
         }
 

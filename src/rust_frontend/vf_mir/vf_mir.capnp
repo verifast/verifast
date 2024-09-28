@@ -661,8 +661,13 @@ struct Trait {
 
 struct TraitImpl {
     span @3: SpanData;
+    isUnsafe @4: Bool;
+    isNegative @5: Bool;
     ofTrait @0: Text;
+    genArgs @8: List(Ty.GenArg); # The first argument is the self type
     selfTy @1: Text;
+    generics @6: List(GenericParamDef);
+    predicates @7: List(Predicate);
     items @2: List(Text);
 }
 

@@ -107,24 +107,6 @@ lem ArcU32_share_full(k: lifetime_t, t: thread_id_t, l: *ArcU32)
 
 unsafe impl Send for ArcU32 {}
 unsafe impl Sync for ArcU32 {}
-/*@
-lem ArcU32_send(t: thread_id_t, t1: thread_id_t)
-    req ArcU32_own(t, ?nnp);
-    ens ArcU32_own(t1, nnp);
-{
-    open ArcU32_own(t, nnp);
-    close ArcU32_own(t1, nnp);
-}
-
-lem ArcU32_sync(k: lifetime_t, t: thread_id_t, t1: thread_id_t, l: *ArcU32)
-    req [_]ArcU32_share(k, t, l);
-    ens [_]ArcU32_share(k, t1, l);
-{
-    open ArcU32_share(k, t, l);
-    close ArcU32_share(k, t1, l);
-    leak ArcU32_share(k, t1, l);
-}
-@*/
 
 impl ArcU32 {
     pub fn new(data: u32) -> ArcU32 {

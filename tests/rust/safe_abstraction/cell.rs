@@ -8,6 +8,15 @@ pub struct Cell<T> {
 
 pred<T> <Cell<T>>.own(t, cell) = <T>.own(t, cell.v);
 
+lem Cell_send<T>(t1: thread_id_t)
+    req type_interp::<T>() &*& Cell_own::<T>(?t, ?cell) &*& is_Send(typeid(T)) == true;
+    ens type_interp::<T>() &*& Cell_own::<T>(t1, cell);
+{
+    open Cell_own::<T>(t, cell);
+    Send::send(t, t1, cell.v);
+    close Cell_own::<T>(t1, cell);
+}
+
 /*
 
 A note on `|= cell(tau) copy` judgement:
