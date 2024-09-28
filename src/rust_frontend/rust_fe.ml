@@ -219,7 +219,15 @@ module Make (Args : RUST_FE_ARGS) = struct
   let parse_rs_file (rustc_args : string list) (extern_specs : string list) (rs_file_path : string) =
     Perf.init_windows_error_mode ();
     match get_vf_mir_rd rustc_args rs_file_path with
-    | Ok vf_mir_rd -> VfMirTr.translate_vf_mir extern_specs vf_mir_rd Args.report_should_fail
+    | Ok vf_mir_rd ->
+      let targetTriple = VfMirRd.target_triple_get vf_mir_rd in
+      let pointerWidth = VfMirRd.pointer_width_get vf_mir_rd in
+      let Some data_model = Args.data_model_opt in
+      let data_model_name = Ast.string_of_data_model data_model in
+      if pointerWidth <> 8 * (1 lsl data_model.ptr_width) then
+        raise (Parser.CompilationError (Printf.sprintf "C target %s does not match rustc target %s; specify a matching C target using the -target command-line option" data_model_name targetTriple));
+      (!Stats.stats)#set_success_qualifier (Printf.sprintf "target: %s (%s)" targetTriple data_model_name);
+      VfMirTr.translate_vf_mir extern_specs vf_mir_rd Args.report_should_fail
     | Error einfo ->
         let gen_emsg = "Rust frontend failed to generate VF MIR: " in
         let desc =

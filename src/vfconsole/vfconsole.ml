@@ -247,7 +247,7 @@ let _ =
       reportDeadCode ();
       dumpPerLineStmtExecCounts ();
       if print_stats then stats#printStats;
-      let msg = "0 errors found (" ^ (string_of_int (stats#getStmtExec)) ^ " statements verified)" in
+      let msg = stats#get_success_message in
       if json then
         exit_with_json_result (A [S "success"; S msg])
       else

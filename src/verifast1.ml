@@ -141,7 +141,19 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let reportStmt l = reportStmt (root_caller_token l)
   let reportStmtExec l = reportStmtExec (root_caller_token l)
 
-  let data_model = match language with Java -> Some data_model_java | CLang -> data_model
+  let data_model =
+    match language with
+      Java -> Some data_model_java
+    | CLang ->
+      match dialect with
+        Some Rust ->
+        if data_model = None then
+          match Vfconfig.platform with
+            Windows -> Some data_model_llp64
+          | _ -> Some data_model_lp64
+        else
+          data_model
+      | _ -> data_model
   let int_width, long_width, ptr_width = decompose_data_model data_model
   let intType = Int (Signed, IntRank)
   let sizeType = Int (Unsigned, PtrRank)

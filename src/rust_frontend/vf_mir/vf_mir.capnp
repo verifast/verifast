@@ -680,6 +680,8 @@ struct Module {
 }
 
 struct VfMir {
+    targetTriple @7: Text;
+    pointerWidth @8: UInt8;
     directives @4: List(Annotation);
     # Todo @Nima: We are using an inductive list to encode ADT definitions because the total size of `List`s
     # shoule be determined before initializing them which is not the case for ADT definitions. The standard way to

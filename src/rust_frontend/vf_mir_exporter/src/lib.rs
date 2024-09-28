@@ -244,7 +244,7 @@ impl rustc_driver::Callbacks for CompilerCalls {
             vf_mir_capnp_builder.set_structs(visitor.structs);
             vf_mir_capnp_builder.set_trait_impls(visitor.trait_impls);
             vf_mir_capnp_builder.add_bodies(bodies);
-            let msg_cpn = vf_mir_capnp_builder.build();
+            let msg_cpn = vf_mir_capnp_builder.build(compiler);
             capnp::serialize::write_message(&mut ::std::io::stdout(), msg_cpn.borrow_inner())
                 .unwrap();
         });
@@ -428,6 +428,7 @@ mod vf_mir_builder {
     use ref_data_cpn::borrow_kind as borrow_kind_cpn;
     use rustc_ast::util::comments::Comment;
     use rustc_hir as hir;
+    use rustc_interface::interface::Compiler;
     use rustc_middle::bug;
     use rustc_middle::mir::interpret::AllocRange;
     use rustc_middle::ty;
@@ -606,9 +607,14 @@ mod vf_mir_builder {
             self.bodies = bodies;
         }
 
-        pub fn build(mut self) -> ::capnp::message::TypedBuilder<vf_mir_cpn::Owned> {
+        pub fn build(
+            mut self,
+            compiler: &Compiler,
+        ) -> ::capnp::message::TypedBuilder<vf_mir_cpn::Owned> {
             let mut msg_cpn = ::capnp::message::TypedBuilder::<vf_mir_cpn::Owned>::new_default();
             let mut vf_mir_cpn = msg_cpn.init_root();
+            vf_mir_cpn.set_target_triple(&compiler.sess.target.llvm_target);
+            vf_mir_cpn.set_pointer_width(compiler.sess.target.pointer_width.try_into().unwrap());
             self.encode_trait_impls(&mut vf_mir_cpn);
             self.encode_mir(vf_mir_cpn);
             msg_cpn

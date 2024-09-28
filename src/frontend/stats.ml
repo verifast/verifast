@@ -9,6 +9,7 @@ class stats =
   object (self)
     val startTime = Perf.time()
     val startTicks = Stopwatch.processor_ticks()
+    val mutable successQualifier: string option = None
     val mutable stmtsParsedCount = 0
     val mutable openParsedCount = 0
     val mutable closeParsedCount = 0
@@ -25,6 +26,19 @@ class stats =
     val mutable functionTimings: (string * float) list = []
     
     method tickLength = let t1 = Perf.time() in let ticks1 = Stopwatch.processor_ticks() in (t1 -. startTime) /. Int64.to_float (Int64.sub ticks1 startTicks)
+
+    method success_qualifier = successQualifier
+    method set_success_qualifier qualifier =
+      assert (successQualifier = None);
+      successQualifier <- Some qualifier
+
+    method get_success_message =
+      let qualifierText =
+        match successQualifier with
+          None -> ""
+        | Some qualifier -> Printf.sprintf " (%s)" qualifier
+      in
+      Printf.sprintf "0 errors found (%d statements verified)%s" self#getStmtExec qualifierText
 
     method stmtParsed = stmtsParsedCount <- stmtsParsedCount + 1
     method openParsed = openParsedCount <- openParsedCount + 1

@@ -1706,7 +1706,7 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
                 else if runToCursor then
                   (msg := Some("0 errors found (cursor is unreachable)"); false)
                 else
-                  (msg := Some("0 errors found (" ^ (string_of_int (stats#getStmtExec)) ^ " statements verified)"); true)
+                  (msg := Some(stats#get_success_message); true)
               in
               updateMessageEntry(success)
             with

@@ -204,10 +204,7 @@ impl Clone for RcU32 {
             //@ counting_match_fraction(dlft_pred(dk), gid);
             //@ close_frac_borrow(qp_t, ticket_(dk, gid, frac));
             //@ close_frac_borrow(qp_dk, lifetime_token_(frac, dk));
-            /* TODO: `*strong == usize::MAX` instead of the following check leads to the error:
-               "Truncating cast to target-dependent-sized integer type is not yet supported."
-               for more infor see the `usize` type translation */
-            if *strong >= 0xFFFF {
+            if *strong >= usize::MAX {
                 abort();
             }
             *strong = *strong + 1;

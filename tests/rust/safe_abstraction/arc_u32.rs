@@ -231,7 +231,7 @@ impl ArcU32 {
     //@ ens [qa]lifetime_token(a) &*& ticket(dlft_pred(dk), gid, ?frac1) &*& [frac1]dlft_pred(dk)(gid, false);
     {
         let current = Self::strong_count_inner(ptr);
-        if current >= 0xFFFF { abort(); } //TODO: Use `usize::MAX` instead of `0xFFFF`
+        if current >= usize::MAX { abort(); }
         let cas_res;
         {
         /*@

@@ -232,6 +232,10 @@ let data_model_of_string s =
   match head_flatmap_option (fun (k, v) -> if String.uppercase_ascii k = s then Some v else None) data_models with
     None -> failwith ("Data model must be one of " ^ String.concat ", " (List.map fst data_models))
   | Some v -> v
+let string_of_data_model data_model =
+  match Util.flatmap (fun (name, model) -> if model = data_model then [name] else []) data_models with
+    name::_ -> name
+  | [] -> "(unnamed)"
 let intmax_width = 3 (* Assume that sizeof(intmax_t) is always 8 *)
 
 let java_byte_type = Int (Signed, FixedWidthRank 0)
