@@ -1731,6 +1731,11 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
               updateMessageEntry false
             | StaticError (l, emsg, eurl) ->
               handleStaticError l emsg eurl 
+            | RustcErrors (l, emsg, diagnostics) ->
+              let open Json in
+              List.iter (fun d -> Printf.printf "%s" (o_assoc "rendered" d |> s_value)) diagnostics;
+              print_newline ();
+              handleStaticError l (emsg ^ " (see console for details)") None
             | SymbolicExecutionError (ctxts, l, emsg, eurl) ->
               ctxts_lifo := Some (path, ctxts);
               updateStepItems();

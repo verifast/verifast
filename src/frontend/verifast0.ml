@@ -293,6 +293,7 @@ end) = struct
   
 end
 
+exception RustcErrors of loc * string * Json.json list
 exception SymbolicExecutionError of string context list * loc * string * string option
 
 (* prepends '~' to the given record name *)

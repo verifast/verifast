@@ -69,6 +69,7 @@ pub fn run_compiler() -> i32 {
         rustc_args.push("-Zpolonius".to_owned());
         // To have MIR dump annotated with lifetimes
         rustc_args.push("-Zverbose_internals".to_owned());
+        rustc_args.push("--error-format=json".to_owned());
 
         // Todo @Nima: Find the correct sysroot by yourself. for now we get it as an argument.
         // See filesearch::get_or_default_sysroot()

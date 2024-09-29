@@ -241,7 +241,33 @@ module Make (Args : RUST_FE_ARGS) = struct
           | `RustMirExpFailed (result, emsg) ->
               let failInfo =
                 match result with
-                  Unix.WEXITED exitCode ->
+                  Unix.WEXITED 1 -> (* Rustc aborted due to compilation errors *)
+                  let emsg_lines = String.split_on_char '\n' emsg in
+                  let diagnostics = List.filter (String.starts_with ~prefix:{|{"$message_type":"diagnostic"|}) emsg_lines in
+                  let open Json in
+                  let diagnostics = List.map parse_json diagnostics in
+                  let fallback () =
+                    let diagnostics_rendered = String.concat "" (List.map (fun d -> o_assoc "rendered" d |> s_value) diagnostics) in
+                    raise (RustFrontend diagnostics_rendered)
+                  in
+                  let errors = List.filter (fun (O ps) -> (List.assoc "level" ps |> s_value) = "error") diagnostics in
+                  begin match errors with
+                    O ps::_ ->
+                    let msg = List.assoc "message" ps |> s_value in
+                    begin match List.assoc "spans" ps with
+                      A (O ps::_) ->
+                      let path = List.assoc "file_name" ps |> s_value in
+                      let line_start = List.assoc "line_start" ps |> i_value in
+                      let line_end = List.assoc "line_end" ps |> i_value in
+                      let column_start = List.assoc "column_start" ps |> i_value in
+                      let column_end = List.assoc "column_end" ps |> i_value in
+                      let loc = Ast.Lexed ((path, line_start, column_start), (path, line_end, column_end)) in
+                      raise (Verifast0.RustcErrors (loc, msg, diagnostics)) 
+                    | _ -> fallback ()
+                    end
+                  | _ -> fallback ()
+                  end
+                | Unix.WEXITED exitCode ->
                   let exitCodeInfo =
                     match exitCode with
                       -1073741515 when Sys.os_type = "Win32" -> " (Missing DLL; define VERIFAST_DEBUG_MISSING_DLL to see dialog box with details)"
@@ -251,7 +277,7 @@ module Make (Args : RUST_FE_ARGS) = struct
                 | Unix.WSIGNALED signal -> Printf.sprintf "was killed with signal %d" signal
                 | Unix.WSTOPPED signal -> Printf.sprintf "was stopped with signal %d" signal
               in
-              Printf.sprintf "Rust MIR exporter executable %s: %s" failInfo emsg
+              Printf.sprintf "Rust MIR exporter executable %s:\n%s" failInfo emsg
           | `SysCallFailed emsg -> "System call failed: " ^ emsg
           | `RustcDriverMissing tchain_name -> Printf.sprintf "To verify Rust programs, VeriFast requires the rustc-dev component of the %s Rust toolchain, but this component is currently not installed; please run 'rustup +%s component add rustc-dev' to install it." tchain_name tchain_name
         in

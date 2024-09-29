@@ -2,4 +2,4 @@
  (name frontend)
  (wrapped false)
  (preprocess (pps ppx_parser))
- (libraries num camlp-streams perf stopwatch))
+ (libraries num camlp-streams perf stopwatch json))

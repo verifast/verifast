@@ -10,6 +10,10 @@ type json =
 | A of json list
 | O of (string * json) list
 
+let s_value (S value) = value
+let i_value (I value) = value
+let o_assoc name (O ps) = List.assoc name ps
+
 let hex_char_of_int i =
   char_of_int
     (if i <= 9 then int_of_char '0' + i else int_of_char 'a' - 10 + i)

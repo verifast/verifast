@@ -275,6 +275,13 @@ let _ =
       end
     | StaticError (l, msg, url) ->
       exit_with_msg l msg
+    | RustcErrors (l, msg, diagnostics) ->
+      if json then
+        exit_with_json_result (A [S "StaticError"; json_of_loc l; S msg; O ["rustc_diagnostics", A diagnostics]])
+      else begin
+        List.iter (fun d -> Printf.printf "%s" (o_assoc "rendered" d |> s_value)) diagnostics;
+        exit 1
+      end
     | SymbolicExecutionError (ctxts, l, msg, url) ->
       let language, dialect = file_specs path in
       let open JsonOf(struct let string_of_type = string_of_type language dialect end) in
