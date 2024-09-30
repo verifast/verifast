@@ -38,7 +38,7 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
     | IntegralCast c -> transl_integral_cast loc c
     | ConditionalOp op -> transl_conditional_op loc op
     | ArraySubscript s -> transl_array_subscript loc s
-    | InitList il -> trasl_initializer_list loc il
+    | InitList il -> transl_initializer_list loc il
     | Undefined _ -> failwith "Undefined expression"
     | _ -> Error.error loc "Unsupported expression."
 
@@ -265,7 +265,7 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
 
     Ast.ReadArray (loc, lhs, rhs)
 
-  and trasl_initializer_list (loc : Ast.loc) (il : R.Node.t Capnp_util.capnp_arr) : Ast.expr =
+  and transl_initializer_list (loc : Ast.loc) (il : R.Node.t Capnp_util.capnp_arr) : Ast.expr =
     (* Define function that converts an Expression to a list element of Ast.InitializerList *)
     let toListElement old =
       let ex = translate old in
