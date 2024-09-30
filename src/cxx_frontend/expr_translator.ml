@@ -37,6 +37,8 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
     | BindTemporary t -> transl_bind_temporary_expr t
     | IntegralCast c -> transl_integral_cast loc c
     | ConditionalOp op -> transl_conditional_op loc op
+    | ArraySubscript s -> transl_array_subscript loc s
+    | InitList il -> transl_initializer_list loc il
     | Undefined _ -> failwith "Undefined expression"
     | _ -> Error.error loc "Unsupported expression."
 
@@ -252,6 +254,25 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
     let th = translate @@ then_get op in
     let el = translate @@ else_get op in
     Ast.IfExpr(loc, cond, th, el)
+
+  and transl_array_subscript (loc : Ast.loc) (s : E.ArraySubscript.t) : Ast.expr =
+    let open E.ArraySubscript in
+
+    (* Translate array expression (e.g. variable name) *)
+    let lhs = translate @@ lhs_get s in
+    (* Translate index expression (e.g. a number) *)
+    let rhs = translate @@ rhs_get s in
+
+    Ast.ReadArray (loc, lhs, rhs)
+
+  and transl_initializer_list (loc : Ast.loc) (il : R.Node.t Capnp_util.capnp_arr) : Ast.expr =
+    (* Define function that converts an Expression to a list element of Ast.InitializerList *)
+    let toListElement old =
+      let ex = translate old in
+      (None, ex)
+    in
+    (* Return InitializerList with location and converted Expressions *)
+    Ast.InitializerList (loc, il |> Capnp_util.arr_map toListElement)
 
   and transl_cleanups_expr (e : R.Node.t) : Ast.expr = translate e
   and transl_bind_temporary_expr (e : R.Node.t) = translate e

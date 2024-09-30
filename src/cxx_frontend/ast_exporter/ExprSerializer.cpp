@@ -61,6 +61,37 @@ struct ExprSerializerImpl
     }
   }
 
+  bool VisitArraySubscriptExpr(const clang::ArraySubscriptExpr *expr) {
+    using SubscriptBuilder = stubs::Expr::ArraySubscript::Builder;
+    using ExprBuilder = stubs::Node<stubs::Expr>::Builder;
+
+    // Initialize Cap'n Proto elements
+    SubscriptBuilder builder = m_builder.initArraySubscript();
+
+    ExprBuilder lhsExpr = builder.initLhs();
+    ExprBuilder rhsExpr = builder.initRhs();
+
+    // Serialize subexpressions
+    m_ASTSerializer->serialize(lhsExpr, expr->getLHS());
+    m_ASTSerializer->serialize(rhsExpr, expr->getRHS());
+
+    return true;
+  }
+
+  bool VisitInitListExpr(const clang::InitListExpr *expr) {
+    // Initialize Cap'n Proto elements
+    ListBuilder<stubs::Node<stubs::Expr>> listBuilder = m_builder.initInitList(expr->getNumInits());
+
+    // Serialize each expression inside initialization list
+    size_t i(0);
+    for (const clang::Expr *arg : expr->inits()) {
+      ExprNodeBuilder const & a = listBuilder[i++];
+      m_ASTSerializer->serialize(a, arg);
+    }
+
+    return true;
+  }
+
   bool VisitUnaryOperator(const clang::UnaryOperator *uo) {
     stubs::Expr::UnaryOp::Builder builder = m_builder.initUnaryOp();
 

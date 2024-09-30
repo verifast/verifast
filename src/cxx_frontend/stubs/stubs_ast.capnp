@@ -66,6 +66,11 @@ struct Param {
   default @2 :ExprNode; # optional
 }
 
+struct ConstantArray {
+  type @0 :TypeNode;
+  count @1 : Int16;
+}
+
 struct Type {
   enum BuiltinKind {
     char @0;
@@ -112,6 +117,8 @@ struct Type {
     typedef @9 :Text;
     functionProto @10 :FunctionProto;
     substTemplateTypeParam @11 :TypeNode;
+    constantArray @12 :ConstantArray;
+    incompleteArray @13 :TypeNode;
   }
 }
 
@@ -431,6 +438,11 @@ struct Expr {
     type @1 :Type;
   }
 
+  struct ArraySubscript {
+    lhs @0 :ExprNode;
+    rhs @1 :ExprNode;
+  }
+
   union {
     unionNotInitialized @0 :Void;
     unaryOp @1 :UnaryOp;
@@ -456,6 +468,8 @@ struct Expr {
     bindTemporary @21 :ExprNode;
     integralCast @22 :Cast;
     conditionalOp @23 :ConditionalOp;
+    arraySubscript @24 :ArraySubscript;
+    initList @25 :List(ExprNode);
   }
 }
 
