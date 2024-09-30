@@ -158,6 +158,8 @@ let rec sexpr_of_type_expr : type_expr -> sexpression = function
         [ "type-exprs", sexpr_of_list sexpr_of_type_expr exprs ]
   | LValueRefTypeExpr (_, te) -> 
       List [ Symbol "type-expr-lvalue-ref"; sexpr_of_type_expr te ]
+  | RValueRefTypeExpr (_, te) ->
+      List [ Symbol "type-expr-rvalue-ref"; sexpr_of_type_expr te ]
 
 let sexpr_of_type_expr_option : type_expr option -> sexpression = function
   | Some t -> sexpr_of_type_expr t

@@ -414,6 +414,12 @@ struct ExprSerializerImpl
     return true;
   }
 
+  bool VisitMaterializeTemporaryExpr(clang::MaterializeTemporaryExpr const * expr) {
+    ExprNodeBuilder tempBuilder = m_builder.initMaterializeTemporary();
+    m_ASTSerializer->serialize(tempBuilder, expr->getSubExpr());
+    return true;
+  }
+
   void serialize(const clang::Expr *expr) {
     const Annotation *truncatingOpt =
         m_ASTSerializer->getAnnotationManager().getTruncating(expr);

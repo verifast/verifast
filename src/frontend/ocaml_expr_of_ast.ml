@@ -202,6 +202,11 @@ let rec of_type_expr = function
     of_loc l;
     of_type_expr tp
   ])
+| RValueRefTypeExpr (l, tp) ->
+  C ("RValueRefTypeExpr", [
+    of_loc l;
+    of_type_expr tp
+  ])
 and of_operator = function
   MinValue t -> C ("MinValue", [of_type t])
 | MaxValue t -> C ("MaxValue", [of_type t])

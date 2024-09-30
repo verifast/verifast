@@ -300,6 +300,7 @@ type type_expr = (* ?type_expr *)
   | PredTypeExpr of loc * type_expr list * int option (* if None, not necessarily precise; if Some n, precise with n input parameters *)
   | PureFuncTypeExpr of loc * type_expr list   (* Potentially uncurried *)
   | LValueRefTypeExpr of loc * type_expr
+  | RValueRefTypeExpr of loc * type_expr
 and
   operator =  (* ?operator *)
   | Add | Sub | PtrDiff | Le | Ge | Lt | Gt | Eq | Neq | And | Or | Xor | Not | Mul | Div | Mod | BitNot | BitAnd | BitXor | BitOr | ShiftLeft | ShiftRight

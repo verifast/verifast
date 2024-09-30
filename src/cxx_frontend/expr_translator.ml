@@ -37,6 +37,7 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
     | BindTemporary t -> transl_bind_temporary_expr t
     | IntegralCast c -> transl_integral_cast loc c
     | ConditionalOp op -> transl_conditional_op loc op
+    | MaterializeTemporary t -> transl_materialize_temporary_expr t
     | Undefined _ -> failwith "Undefined expression"
     | _ -> Error.error loc "Unsupported expression."
 
@@ -255,4 +256,5 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
 
   and transl_cleanups_expr (e : R.Node.t) : Ast.expr = translate e
   and transl_bind_temporary_expr (e : R.Node.t) = translate e
+  and transl_materialize_temporary_expr (e : R.Node.t) = translate e
 end

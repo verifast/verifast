@@ -456,6 +456,7 @@ struct Expr {
     bindTemporary @21 :ExprNode;
     integralCast @22 :Cast;
     conditionalOp @23 :ConditionalOp;
+    materializeTemporary @24 :ExprNode;
   }
 }
 
