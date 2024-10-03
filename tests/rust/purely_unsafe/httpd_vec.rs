@@ -1,3 +1,5 @@
+// verifast_options{extern:../unverified/platform}
+
 use std::io::Write;
 
 unsafe fn memchr(mut haystack: *const u8, mut size: usize, needle: u8) -> *const u8

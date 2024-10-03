@@ -1,3 +1,5 @@
+// verifast_options{extern:../unverified/platform}
+
 use std::io::Write;
 //@ use std::alloc::{alloc_block, Layout};
 

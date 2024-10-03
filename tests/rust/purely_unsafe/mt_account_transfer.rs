@@ -1,3 +1,5 @@
+// verifast_options{extern:../unverified/platform}
+
 mod simple_mutex;
 
 struct Accounts {
