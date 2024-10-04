@@ -3433,9 +3433,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                (loc, "Type parameters must start with an uppercase letter", None));
         Ok (name, loc)
     | Fresh id_cpn ->
-        failwith
-          (Printf.sprintf "Todo: ParamName::Fresh (at %s)"
-             (Ast.string_of_loc loc))
+        Ast.static_error loc
+          "Elided lifetimes are not yet supported. For now, please make them \
+           explicit."
+          None
     | Undefined _ -> Error (`TrHirGenericParamName "Unknown ParamName kind")
 
   let translate_hir_generic_param_kind (kind_cpn : HirGenericParamKindRd.t) =
