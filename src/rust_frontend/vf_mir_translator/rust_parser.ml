@@ -318,6 +318,7 @@ let rec parse_expr_funcs allowStructExprs =
               ] ] ->
             begin match x, targs, indices, args with
               "std::mem::size_of", [t], [], [] -> SizeofExpr (l, TypeExpr t)
+            | "std::mem::align_of", [t], [], [] -> AlignofExpr (l, t)
             | _ -> CallExpr (l, x, targs, indices, args, Static)
             end
           | [ ] ->

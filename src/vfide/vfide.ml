@@ -1931,7 +1931,7 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
     dialog#destroy()
   in
   
-  (** Dialog that allows the user to select a tab of the notebook by simply typing (part of) the name.
+  (* Dialog that allows the user to select a tab of the notebook by simply typing (part of) the name.
    *  This is sometimes faster than searching visually. *)
   let showFindFileDialog notebook () =
     let dialog = GWindow.dialog ~title:"Find file" ~parent:root () in
