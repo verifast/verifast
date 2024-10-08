@@ -968,6 +968,7 @@ and context () =
       match t with
         NumLit n -> Some n
       | TermNode t -> t#value#as_number
+      | App (_, _, Some t) -> t#value#as_number
       | Add (t1, t2) ->
         begin match self#eval_term t1, self#eval_term t2 with
           Some n1, Some n2 -> Some (n1 +/ n2)

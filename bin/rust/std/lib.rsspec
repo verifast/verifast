@@ -94,7 +94,7 @@ mod alloc {
         //@ ens result == Layout::new_::<T>();
 
         fn from_size_align_unchecked(size: usize, align: usize) -> Layout;
-        //@ req align == 1 || align == 2 || align == 4 || align == 8 || align == 16;
+        //@ req (align == 1 || align == 2 || align == 4 || align == 8 || align == 16) && size <= isize::MAX - isize::MAX % align;
         //@ ens result == Layout::from_size_align_(size, align);
 
     }

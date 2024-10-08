@@ -1,3 +1,5 @@
+// verifast_options{extern:../unverified/platform}
+
 use std::{ptr::null_mut, sync::atomic::{AtomicUsize, Ordering::SeqCst}};
 
 unsafe fn assert(b: bool)
