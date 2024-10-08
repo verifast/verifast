@@ -222,6 +222,7 @@ let rec rust_string_of_type t =
   | UnionType un -> "union " ^ un
   | PtrType Void -> "*_"
   | PtrType t -> "*" ^ rust_string_of_type t
+  | RustRefType (lft, kind, t) -> "&" ^ rust_string_of_type lft ^ (match kind with Mutable -> " mut " | Shared -> " ") ^ rust_string_of_type t
   | FuncType ft -> ft
   | InlineFuncType rt -> Printf.sprintf "fn(?) -> %s" (rust_string_of_type rt)
   | PredType (tparams, ts, inputParamCount, inductiveness) ->

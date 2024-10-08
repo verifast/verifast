@@ -1688,7 +1688,7 @@ mod vf_mir_builder {
                 ty::RegionKind::ReStatic => bug!(),
                 ty::RegionKind::ReVar(_) | ty::RegionKind::ReErased => {
                     // Todo @Nima: We should find a mapping of `RegionVid`s and lifetime variable names at `hir`
-                    region_cpn.set_id(/*&format!("{:?}", region)*/ "'erased");
+                    region_cpn.set_id(/*&format!("{:?}", region)*/ "'<erased>");
                 }
                 ty::RegionKind::RePlaceholder(_placeholder_region) => bug!(),
                 _ => bug!(),

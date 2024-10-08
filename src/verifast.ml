@@ -610,7 +610,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       require_pure();
       let e = match (targs, args) with ([], [LitPat e]) -> e | _ -> static_error l "open_points_to expects no type argument and one argument." None in
       let (w, tp) = check_expr (pn,ilist) tparams tenv e in
-      let pointeeType = match tp with PtrType tp -> tp | _ -> static_error l "The argument of open_points_to must be a pointer." None in
+      let pointeeType = match tp with PtrType tp | RustRefType (_, _, tp) -> tp | _ -> static_error l "The argument of open_points_to must be a pointer." None in
       eval_h h env w $. fun h env pointerTerm ->
       with_context (Executing (h, env, l, "Consuming points_to chunk")) $. fun () ->
       consume_chunk rules h env ghostenv [] [] l (generic_points_to_symb (), true) [pointeeType] real_unit dummypat (Some 1) [TermPat pointerTerm; SrcPat DummyPat] $. fun _ h coef [_; value] _ _ _ _ ->
@@ -619,7 +619,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       require_pure();
       let e = match (targs, args) with ([], [LitPat e]) -> e | _ -> static_error l "close_points_to expects no type argument and one argument." None in
       let (w, tp) = check_expr (pn,ilist) tparams tenv e in
-      let pointeeType = match tp with PtrType tp -> tp | _ -> static_error l "The argument of close_points_to must be a pointer." None in
+      let pointeeType = match tp with PtrType tp | RustRefType (_, _, tp) -> tp | _ -> static_error l "The argument of close_points_to must be a pointer." None in
       eval_h h env w $. fun h env pointerTerm ->
       with_context (Executing (h, env, l, "Consuming object")) $. fun () ->
       consume_c_object_core_core l real_unit_pat pointerTerm pointeeType h env true false $. fun _ h (Some value) ->

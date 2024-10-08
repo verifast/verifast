@@ -115,6 +115,10 @@ type int_rank =
 | PtrRank
 | FixedWidthRank of int  (* The size of an integer of rank k is 2^k bytes. *)
 
+type rust_ref_kind =
+  Mutable
+| Shared
+
 type type_ = (* ?type_ *)
     Bool
   | Void
@@ -126,6 +130,7 @@ type type_ = (* ?type_ *)
   | StructType of string * type_ list
   | UnionType of string
   | PtrType of type_
+  | RustRefType of type_ (*lifetime*) * rust_ref_kind * type_
   | FuncType of string   (* The name of a typedef whose body is a C function type. *)
   | InlineFuncType of type_ (* Return type only *)
   | InductiveType of string * type_ list
@@ -156,6 +161,7 @@ let type_fold_open state f = function
 | StructType (sn, targs) -> List.fold_left f state targs
 | UnionType _ -> state
 | PtrType tp -> f state tp
+| RustRefType (lft, _, tp) -> f (f state lft) tp
 | FuncType _ -> state
 | InlineFuncType tp -> f state tp
 | InductiveType (i, targs) -> List.fold_left f state targs
@@ -291,6 +297,7 @@ type type_expr = (* ?type_expr *)
   | UnionTypeExpr of loc * string option * field list option
   | EnumTypeExpr of loc * string option * (string * expr option) list option
   | PtrTypeExpr of loc * type_expr
+  | RustRefTypeExpr of loc * type_expr * rust_ref_kind * type_expr
   | ArrayTypeExpr of loc * type_expr
   | StaticArrayTypeExpr of loc * type_expr (* type *) * int (* number of elements*)
   | FuncTypeExpr of loc * type_expr (* return type *) * (type_expr * string) list (* parameters *)
@@ -1015,6 +1022,7 @@ let type_expr_loc t =
   | IdentTypeExpr (l, _, x) -> l
   | ConstructedTypeExpr (l, x, targs) -> l
   | PtrTypeExpr (l, te) -> l
+  | RustRefTypeExpr (l, _, _, _) -> l
   | ArrayTypeExpr(l, te) -> l
   | PredTypeExpr(l, te, _) -> l
   | PureFuncTypeExpr (l, tes) -> l

@@ -755,6 +755,12 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     Ok (name, loc)
 
   let translate_region (reg_cpn : RegionRd.t) = RegionRd.id_get reg_cpn
+
+  let translate_region_expr loc (reg_cpn : RegionRd.t) =
+    match RegionRd.id_get reg_cpn with
+    | "'static" | "'<erased>" -> Ast.ManifestTypeExpr (loc, StaticLifetime)
+    | x -> Ast.ManifestTypeExpr (loc, GhostTypeParam x)
+
   let int_size_rank = Ast.PtrRank
 
   let simple_shr loc fbc_name lft tid l =
@@ -1153,9 +1159,12 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         interp = RustBelt.{ size; own; shr; full_bor_content; points_to };
       }
 
-  and str_ref_ty_info loc =
+  and str_ref_ty_info loc lft mut =
     let open Ast in
-    let vf_ty = ManifestTypeExpr (loc, StructType ("str_ref", [])) in
+    if mut <> Mir.Not then
+      static_error loc "Mutable string references are not yet supported" None;
+    let (ManifestTypeExpr (_, lft)) = lft in
+    let vf_ty = ManifestTypeExpr (loc, StructType ("str_ref", [ lft ])) in
     let size = SizeofExpr (loc, TypeExpr vf_ty) in
     let own tid vs =
       Error "Expressing ownership of &str values is not yet supported"
@@ -1178,11 +1187,17 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         interp = RustBelt.{ size; own; shr; full_bor_content; points_to };
       }
 
-  and slice_ref_ty_info loc elem_ty_info =
+  and slice_ref_ty_info loc lft mut elem_ty_info =
     let open Ast in
+    if mut <> Mir.Not then
+      static_error loc "Mutable slice references are not yet supported" None;
     let vf_ty =
       StructTypeExpr
-        (loc, Some "slice_ref", None, [], [ Mir.basic_type_of elem_ty_info ])
+        ( loc,
+          Some "slice_ref",
+          None,
+          [],
+          [ lft; Mir.basic_type_of elem_ty_info ] )
     in
     let size = SizeofExpr (loc, TypeExpr vf_ty) in
     let own tid vs =
@@ -1358,20 +1373,21 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let open RefTyRd in
     let open Ast in
     let region_cpn = region_get ref_ty_cpn in
-    let region = translate_region region_cpn in
-    let lft = Rust_parser.expr_of_lft_param loc region in
+    let region = translate_region_expr loc region_cpn in
+    let lft = Rust_parser.expr_of_lft_param_expr loc region in
     let mut_cpn = mutability_get ref_ty_cpn in
     let* mut = translate_mutability mut_cpn in
     let ty_cpn = ty_get ref_ty_cpn in
     match TyRd.TyKind.get @@ TyRd.kind_get ty_cpn with
-    | Str -> Ok (str_ref_ty_info loc)
+    | Str -> Ok (str_ref_ty_info loc region mut)
     | Slice elem_ty_cpn ->
         let* elem_ty_info = translate_ty elem_ty_cpn loc in
-        Ok (slice_ref_ty_info loc elem_ty_info)
+        Ok (slice_ref_ty_info loc region mut elem_ty_info)
     | _ ->
         let* pointee_ty_info = translate_ty ty_cpn loc in
         let pointee_ty = Mir.basic_type_of pointee_ty_info in
-        let vf_ty = PtrTypeExpr (loc, pointee_ty) in
+        let rust_ref_kind = match mut with Mut -> Mutable | Not -> Shared in
+        let vf_ty = RustRefTypeExpr (loc, region, rust_ref_kind, pointee_ty) in
         let sz_expr = SizeofExpr (loc, TypeExpr vf_ty) in
         let RustBelt.
               {
@@ -1850,14 +1866,19 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           in
           match ty with
           | Ast.FuncType _ -> Ok (`TrTypedConstantFn ty_info)
-          | StructType ("str_ref", []) -> (
+          | StructType ("str_ref", [ lft ]) -> (
               match ConstValueRd.get @@ const_value_get val_cpn with
               | Slice bytes ->
                   Ok
                     (`TrTypedConstantScalar
                       (Ast.CastExpr
                          ( loc,
-                           StructTypeExpr (loc, Some "str_ref", None, [], []),
+                           StructTypeExpr
+                             ( loc,
+                               Some "str_ref",
+                               None,
+                               [],
+                               [ ManifestTypeExpr (loc, StaticLifetime) ] ),
                            InitializerList
                              ( loc,
                                [
@@ -2165,6 +2186,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                         None,
                         [],
                         [
+                          ManifestTypeExpr (fn_loc, StaticLifetime);
                           ManifestTypeExpr
                             (fn_loc, Int (Unsigned, FixedWidthRank 0));
                         ] )
@@ -3755,9 +3777,16 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             let* pre_post_template =
               if is_drop_fn_get body_cpn then
                 let ({ ty = self_ty } :: _) = param_decls in
-                let (PtrTypeExpr
-                      (_, StructTypeExpr (_, Some self_ty, _, _, self_ty_targs)))
-                    =
+                let ( PtrTypeExpr
+                        ( _,
+                          StructTypeExpr (_, Some self_ty, _, _, self_ty_targs)
+                        )
+                    | RustRefTypeExpr
+                        ( _,
+                          _,
+                          _,
+                          StructTypeExpr (_, Some self_ty, _, _, self_ty_targs)
+                        ) ) =
                   Mir.basic_type_of self_ty
                 in
                 let (input0 :: _) = inputs_get_list body_cpn in

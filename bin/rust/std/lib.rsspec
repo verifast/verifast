@@ -273,7 +273,7 @@ mod vec {
         //@ req [?f](*self |-> ?self_) &*& [f]Vec_minus_buffer::<T, A>(self_, ?capacity, ?len, ?buffer);
         //@ ens [f](*self |-> self_) &*& [f]Vec_minus_buffer::<T, A>(self_, capacity, len, buffer) &*& result == buffer;
 
-        fn spare_capacity_mut<'a>(self: &'a Vec<T, A>) -> &[T];
+        fn spare_capacity_mut<'a>(self: &'a Vec<T, A>) -> &'a [T];
         //@ req [?f](*self |-> ?self_) &*& [f]Vec_minus_buffer::<T, A>(self_, ?capacity, ?len, ?buffer);
         //@ ens [f](*self |-> self_) &*& [f]Vec_minus_buffer::<T, A>(self_, capacity, len, buffer) &*& result.ptr == buffer + len &*& result.len == capacity - len;
 

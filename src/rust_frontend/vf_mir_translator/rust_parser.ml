@@ -4,7 +4,8 @@ open Ast
 open Parser
 open Big_int
 
-let expr_of_lft_param loc x = CallExpr (loc, "lft_of", [], [], [LitPat (Typeid (loc, TypeExpr (IdentTypeExpr (loc, None, x))))], Static)
+let expr_of_lft_param_expr loc e = CallExpr (loc, "lft_of", [], [], [LitPat (Typeid (loc, TypeExpr e))], Static)
+let expr_of_lft_param loc x = expr_of_lft_param_expr loc (IdentTypeExpr (loc, None, x))
 
 let is_expr_with_block = function
   IfExpr (_, _, _, _) -> true
@@ -69,11 +70,18 @@ let rec parse_type = function%parser
     ]
   ] -> ignore mutability; PtrTypeExpr (l, t)
 | [ (l, Kwd "&");
-    [%let lft = opt (function%parser [ (_, PrimePrefixedIdent lft) ] -> "'" ^ lft)];
-    [%let mutability  = opt (function%parser [ (_, Kwd "mut") ] -> ())];
+    [%let lft = function%parser
+       [ (_, PrimePrefixedIdent "static") ] -> ManifestTypeExpr (l, StaticLifetime)
+     | [ (_, PrimePrefixedIdent lft) ] -> IdentTypeExpr (l, None, "'" ^ lft)
+     | [ ] -> raise (ParseException (l, "Explicit lifetime required"))
+    ];
+    [%let mutability = function%parser [ (_, Kwd "mut") ] -> Mutable | [ ] -> Shared];
     [%let tp = function%parser
-       [ (ls, Kwd "["); parse_type as elemTp; (_, Kwd "]") ] -> StructTypeExpr (ls, Some "slice_ref", None, [], [elemTp])
-     | [ parse_type as tp ] -> PtrTypeExpr (l, tp)
+       [ (ls, Kwd "["); parse_type as elemTp; (_, Kwd "]") ] ->
+       if mutability <> Shared then raise (ParseException (l, "Mutable slice references are not yet supported"));
+       StructTypeExpr (ls, Some "slice_ref", None, [], [lft; elemTp])
+     | [ parse_type as tp ] ->
+       RustRefTypeExpr (l, lft, mutability, tp)
     ]
   ] -> tp
 | [ (l, Kwd "any") ] -> ManifestTypeExpr (l, AnyType)

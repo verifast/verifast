@@ -1880,7 +1880,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       Int (_, _) ->
       let (min_term, max_term) = limits_of_type tp in
       assume (ctxt#mk_and (ctxt#mk_le min_term t) (ctxt#mk_le t max_term)) cont
-    | PtrType _ ->
+    | PtrType _ | RustRefType _ ->
       assume (mk_pointer_within_limits t) cont
     | _ -> static_error l (Printf.sprintf "Producing the limits of a variable of type '%s' is not yet supported." (string_of_type tp)) None
   
@@ -2999,7 +2999,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       eval_h_core (true, heapReadonly || not e2_safe) h env e1 $. fun h env v1 ->
       eval_h_core (true, heapReadonly || not e1_safe) h env e2 $. fun h env v2 ->
       begin match t with
-        PtrType tp when not pure && not assume_no_provenance && not (ctxt#query (ctxt#mk_or (ctxt#mk_eq (mk_ptr_address v1) int_zero_term) (ctxt#mk_eq (mk_ptr_address v2) int_zero_term))) ->
+        (PtrType tp | RustRefType (_, _, tp)) when not pure && not assume_no_provenance && not (ctxt#query (ctxt#mk_or (ctxt#mk_eq (mk_ptr_address v1) int_zero_term) (ctxt#mk_eq (mk_ptr_address v2) int_zero_term))) ->
         branch
           begin fun () ->
             assume (ctxt#mk_eq (mk_ptr_address v1) (mk_ptr_address v2)) $. fun () ->

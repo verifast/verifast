@@ -27,6 +27,10 @@ let of_int_rank = function
 | PtrRank -> c "PtrRank"
 | FixedWidthRank k -> C ("FixedWidthRank", [I k])
 
+let of_rust_ref_kind = function
+  Mutable -> c "Mutable"
+| Shared -> c "Shared"
+
 let rec of_type = function
   Bool -> c "Bool"
 | Void -> c "Void"
@@ -38,6 +42,7 @@ let rec of_type = function
 | StructType (s, targs) -> C ("StructType", [S s; of_list of_type targs])
 | UnionType u -> C ("UnionType", [S u])
 | PtrType t -> C ("PtrType", [of_type t])
+| RustRefType (lft, kind, t) -> C ("RustRefType", [of_type lft; of_rust_ref_kind kind; of_type t])
 | FuncType f -> C ("FuncType", [S f])
 | InductiveType (i, ts) -> C ("InductiveType", [S i; of_list of_type ts])
 | PredType (xs, ts, precise, ind) ->
@@ -150,6 +155,13 @@ let rec of_type_expr = function
 | PtrTypeExpr (l, t) ->
   C ("PtrTypeExpr", [
     of_loc l; 
+    of_type_expr t
+  ])
+| RustRefTypeExpr (l, lft, kind, t) ->
+  C ("RustRefTypeExpr", [
+    of_loc l;
+    of_type_expr lft;
+    of_rust_ref_kind kind;
     of_type_expr t
   ])
 | ArrayTypeExpr (l, elemTp) ->
