@@ -466,6 +466,7 @@ and of_expr = function
 | TypedExpr (e, t) -> C ("TypedExpr", [of_expr e; of_type t])
 | WidenedParameterArgument e -> C ("WidenedParameterArgument", [of_expr e])
 | SizeofExpr (l, e) -> C ("SizeofExpr", [of_loc l; of_expr e])
+| AlignofExpr (l, te) -> C ("AlignofExpr", [of_loc l; of_type_expr te])
 | TypePredExpr (l, te, x) -> C ("TypePredExpr", [of_loc l; of_type_expr te; S x])
 | WTypePredExpr (l, t, x) -> C ("WTypePredExpr", [of_loc l; of_type t; S x])
 | TypeExpr t -> C ("TypeExpr", [of_type_expr t])

@@ -16,6 +16,16 @@ fix truncate_signed(x: i32, nbBits: i32) -> i32; // nbBits does not include the 
 
 fix abs(x: i32) -> i32 { if x < 0 { -x } else { x } }
 
+fix is_power_of_2(n: i32) -> bool;
+
+lem_auto is_power_of_2_lem();
+    req true;
+    ens is_power_of_2(1) && is_power_of_2(2) && is_power_of_2(4) && is_power_of_2(8) && is_power_of_2(16) && is_power_of_2(32);
+
+lem size_align<T>();
+    req true;
+    ens std::mem::size_of::<T>() % std::mem::align_of::<T>() == 0;
+
 lem mul_mono_l(x: i32, y: i32, z: i32);
     req x <= y &*& 0 <= z;
     ens x * z <= y * z;
@@ -177,20 +187,20 @@ lem array_to_array_<T>(p: *T);
     ens [f]array_(p, count, map(some, vs));
 
 lem from_u8s_<T>(p: *T);
-    req [?f](p as *u8)[..std::mem::size_of::<T>()] |-> _;
+    req [?f](p as *u8)[..std::mem::size_of::<T>()] |-> _ &*& p as usize % std::mem::align_of::<T>() == 0;
     ens [f](*p |-> _);
 
 lem to_u8s_<T>(p: *T);
     req [?f](*p |-> _);
-    ens [f](p as *u8)[..std::mem::size_of::<T>()] |-> _;
+    ens [f](p as *u8)[..std::mem::size_of::<T>()] |-> _ &*& p as usize % std::mem::align_of::<T>() == 0;
 
 lem u8s__to_array_<T>(p: *T, size: i32);
-    req [?f](p as *u8)[..size * std::mem::size_of::<T>()] |-> _;
+    req [?f](p as *u8)[..size * std::mem::size_of::<T>()] |-> _ &*& p as usize % std::mem::align_of::<T>() == 0;
     ens [f]p[..size] |-> _;
 
 lem array__to_u8s_<T>(p: *T, size: i32);
     req [?f]p[..size] |-> _;
-    ens [f](p as *u8)[..size * std::mem::size_of::<T>()] |-> _;
+    ens [f](p as *u8)[..size * std::mem::size_of::<T>()] |-> _ &*& p as usize % std::mem::align_of::<T>() == 0;
 
 pred ghost_rec_perm(depth: i32;); // Permission to perform `depth` nested lemma function pointer calls.
 

@@ -23,11 +23,15 @@ mod intrinsics {
 mod mem {
 
     //@ fix size_of_<T>() -> usize { std::mem::size_of::<T>() }
-    //@ fix align_of_<T>() -> usize;
+    //@ fix align_of_<T>() -> usize { std::mem::align_of::<T>() }
 
     fn size_of<T>() -> usize;
     //@ req true;
     //@ ens result == std::mem::size_of_::<T>();
+    
+    fn align_of<T>() -> usize;
+    //@ req true;
+    //@ ens result == std::mem::align_of_::<T>();
 
     fn drop<T>(value: T);
     //@ req thread_token(?t) &*& <T>.own(t, value);
@@ -94,7 +98,7 @@ mod alloc {
         //@ ens result == Layout::new_::<T>();
 
         fn from_size_align_unchecked(size: usize, align: usize) -> Layout;
-        //@ req (align == 1 || align == 2 || align == 4 || align == 8 || align == 16) && size <= isize::MAX - isize::MAX % align;
+        //@ req is_power_of_2(align) == true && size <= isize::MAX - isize::MAX % align;
         //@ ens result == Layout::from_size_align_(size, align);
 
     }
@@ -117,6 +121,7 @@ mod alloc {
             true
         } else {
             result[..Layout::size_(layout)] |-> _ &*& alloc_block(result, layout) &*&
+            result as usize % Layout::align_(layout) == 0 &*&
             object_pointer_within_limits(result, Layout::size_(layout)) == true
         };
     @*/
@@ -321,9 +326,18 @@ mod sync {
         struct AtomicUsize;
 
         /*@
+        
+        lem_auto size_of_AtomicUsize();
+            req true;
+            ens std::mem::size_of::<AtomicUsize>() == std::mem::size_of::<usize>();
+        
+        lem_auto align_of_AtomicUsize();
+            req true;
+            ens std::mem::align_of::<AtomicUsize>() == std::mem::size_of::<usize>();
+        
         fix AtomicUsize_inner(v: AtomicUsize) -> usize;
         pred AtomicUsize(p: *AtomicUsize; v: usize) = *p |-> ?v_ &*& v == AtomicUsize_inner(v_);
-
+        
         lem AtomicUsize_to_usize(p: *AtomicUsize);
             req *p |-> ?v;
             ens *(p as *usize) |-> AtomicUsize_inner(v) &*& (p as usize) % std::mem::size_of::<usize>() == 0;
@@ -365,6 +379,7 @@ mod sync {
         lem_type AtomicUsize_compare_exchange_ghop(self: *AtomicUsize, current: usize, new: usize, pre: pred(), post: pred(std::result::Result<usize, usize>)) = lem();
             req atomic_mask(MaskTop) &*& is_AtomicUsize_compare_exchange_op(?op, self, current, new, ?P, ?Q) &*& P() &*& pre();
             ens atomic_mask(MaskTop) &*& is_AtomicUsize_compare_exchange_op(op, self, current, new, P, Q) &*& Q(?result) &*& post(result);
+        
         @*/
 
         impl AtomicUsize {
@@ -373,7 +388,7 @@ mod sync {
             //@ ens AtomicUsize_inner(result) == v;
 
             fn from_ptr<'a>(ptr: *mut usize) -> &'a AtomicUsize;
-            //@ req true;
+            //@ req ptr as usize % std::mem::align_of::<AtomicUsize>() == 0;
             //@ ens result as *mut usize == ptr;
 
             fn fetch_add<'a>(self: &'a AtomicUsize, val: usize, order: Ordering) -> usize;

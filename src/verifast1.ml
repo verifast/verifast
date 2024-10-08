@@ -578,8 +578,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let static_lifetime_typeid_term = mk_typeid_term "'static_typeid"
 
   let sizeof_func_symb = mk_symbol "sizeof" [ctxt#type_inductive] ctxt#type_int Uninterp
+  let alignof_func_symb = mk_symbol "alignof" [ctxt#type_inductive] ctxt#type_int Uninterp
 
   let mk_sizeof typeid_term = ctxt#mk_app sizeof_func_symb [typeid_term]
+  let mk_alignof typeid_term = ctxt#mk_app alignof_func_symb [typeid_term]
 
   let int_size_term, long_size_term, ptr_size_term =
     match data_model with
@@ -4892,6 +4894,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | _ ->
         (SizeofExpr (l, TypeExpr (ManifestTypeExpr (expr_loc e, t))), sizeType, None)
       end
+    | AlignofExpr (l, te) ->
+      let t = check_pure_type (pn,ilist) tparams Real te in
+      (AlignofExpr (l, ManifestTypeExpr (type_expr_loc te, t)), sizeType, None)
     | TypePredExpr (l, te, predName) ->
       let t = check_pure_type (pn,ilist) tparams Real te in
       begin match try_assoc predName typepreddeclmap with
@@ -5826,6 +5831,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let struct_size l env sn targs = sizeof_core l env (StructType (sn, targs))
   
   let sizeof l t = sizeof_core l [] t
+
+  let alignof_core l env t = mk_alignof (typeid_of_core l env t)
 
   let () = List.combine structmap1 structdeclmap |> List.iter begin fun ((sn, (l, tparams, body_opt, padding_predsym_opt, type_info_func)), (_, (_, _, _, attrs))) ->
     let assume_axiom axiom =
@@ -8156,6 +8163,8 @@ let check_if_list_is_defined () =
     | ProverTypeConversion (tfrom, tto, e) -> ev state e $. fun state v -> cont state (convert_provertype v tfrom tto)
     | SizeofExpr (l, TypeExpr (ManifestTypeExpr (_, t))) ->
       cont state (sizeof_core l env t)
+    | AlignofExpr (l, ManifestTypeExpr (_, t)) ->
+      cont state (alignof_core l env t)
     | SizeofExpr (l, w) ->
       ev state w $. fun state v ->
       cont state (mk_sizeof v)

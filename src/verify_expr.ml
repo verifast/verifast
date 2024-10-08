@@ -1331,7 +1331,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | WidenedParameterArgument e -> expr_mark_addr_taken e locals
     | InstanceOfExpr(_, e, _) ->  expr_mark_addr_taken e locals
     | SliceExpr (_, p1, p2) -> List.iter (function Some p -> pat_expr_mark_addr_taken p locals | _ -> ()) [p1; p2]
-    | SizeofExpr _ -> ()
+    | SizeofExpr _ | AlignofExpr _ -> ()
     | GenericExpr (l, e, cases, default) ->
       expr_mark_addr_taken e locals;
       List.iter (function (te, e) -> expr_mark_addr_taken e locals) cases;
@@ -1491,7 +1491,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | WidenedParameterArgument e -> expr_address_taken e
     | InstanceOfExpr(_, e, _) -> expr_address_taken e
     | SliceExpr (_, p1, p2) -> flatmap (function Some p -> pat_address_taken p | _ -> []) [p1; p2]
-    | SizeofExpr _ -> []
+    | SizeofExpr _ | AlignofExpr _ -> []
     | GenericExpr (l, e, cs, d) -> expr_address_taken e @ flatmap (fun (te, e) -> expr_address_taken e) cs @ (match d with None -> [] | Some e -> expr_address_taken e)
     | AddressOf (_, e) ->
       let rec iter = function
@@ -2252,7 +2252,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | WOperation(_, _, es, _) -> List.for_all is_safe_expr es
     | TruncatingExpr (_, e) -> is_safe_expr e
     | IfExpr(_, e1, e2, e3) -> List.for_all is_safe_expr [e1; e2; e3]
-    | SizeofExpr(_, _) -> true
+    | SizeofExpr(_, _) | AlignofExpr (_, _) -> true
     | AddressOf(_, e) -> is_safe_expr e
     | CastExpr (_, _, e) -> is_safe_expr e
     | Upcast (e, _, _) -> is_safe_expr e
