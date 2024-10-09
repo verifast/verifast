@@ -1352,6 +1352,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | CxxLValueToRValue (_, e) -> expr_mark_addr_taken e locals
     | CxxDerivedToBase (_, e, _) -> expr_mark_addr_taken e locals
     | Sep (_, e1, e2) -> expr_mark_addr_taken e1 locals; expr_mark_addr_taken e2 locals
+    | EnsuresAsn (_, e) -> expr_mark_addr_taken e locals
     | TypeExpr _ -> ()
     | Typeid (_, e) -> expr_mark_addr_taken e locals
     | TypePredExpr (_, _, _) | WTypePredExpr (_, _, _) -> ()
