@@ -1,0 +1,62 @@
+<html>
+<head>
+<title>VeriFast Help: Proof obligations for Rust structs with custom type interpretations</title>
+<link rel="stylesheet" type="text/css" href="verifast-help.css" />
+</head>
+<body>
+<p class="navbar">VeriFast Help > Concepts</p>
+<p class="section">Topic</p>
+<p>Proof obligations for Rust structs with custom type interpretations</p>
+<p class="section">Information</p>
+<p><b>Proof obligations for <code>own</code></b></p>
+<p>If a crate defines a struct S as well as a custom definition of <code>&lt;S>.own</code>, and the struct's field types are not trivially droppable and the struct does not implement the <code>Drop</code> trait, then the crate must prove the following lemma:</p>
+<pre>
+lem S_drop()
+    req S_own(?t, ?s);
+    ens &lt;T1>.own(t, s.f1) &*& ... &*& &lt;Tn>.own(t, s.fn);
+</pre>
+<p>where the fields of S are <code>f1</code> through <code>fn</code> and their types are <code>T1</code> through <code>Tn</code>.</p>
+<p>If a crate defines a struct S as well as a custom definition of <code>&lt;S>.own</code>, and S is Send, and the <code>own</code> predicate mentions the thread id, then the crate must prove the following lemma:</p>
+<pre>
+lem S_send(t1: thread_id_t)
+    req S_own(?t, ?s);
+    ens S_own(t1, s);
+</pre>
+<p><b>Proof obligations for <code>share</code></b></p>
+<p>If a crate defines a struct S as well as a custom definition of <code>&lt;S>.share</code>, then the crate must prove the following two lemmas:</p>
+<pre>
+lem S_share_full(k: lifetime_t, t: thread_id_t, l: *S)
+    req atomic_mask(Nlft) &*& [?q]lifetime_token(k) &*& full_borrow(k, S_full_borrow_content(t, l));
+    ens atomic_mask(Nlft) &*& [q]lifetime_token(k) &*& [_]S_share(k, t, l);
+
+lem S_share_mono(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *S)
+    req lifetime_inclusion(k1, k) == true &*& [_]S_share(k, t, l);
+    ens [_]S_share(k1, t, l);
+</pre>
+<p>Additionally, if S is Sync and the <code>share</code> predicate mentions the thread id, then the crate must prove the following lemma:</p>
+<pre>
+lem S_sync(t1: thread_id_t)
+    req [_]S_share(?k, ?t, ?l);
+    ens [_]S_share(k, t1, l);
+</pre>
+<p><b>Generic structs</b></p>
+<p>If struct S is generic in type parameters T1 through Tm, each of the above lemmas must also be generic in the same parameters. Furthermore, they may additionally require and ensure <code>type_interp::&ltTi>()</code>, for each <code>i</code>. Furthermore, if a type parameter is Send or Sync, an <code>is_Send(typeid(Ti)) == true</code> or <code>is_Sync(typeid(Ti)) == true</code> conjunct may be added to the precondition. For example:</p>
+<pre>
+lem Pair_send&lt;A, B>(t1: thread_id_t)
+    req type_interp::&lt;A>() &*& type_interp::&lt;B>() &*& Pair_own::&lt;A, B>(?t, ?pair) &*& is_Send(typeid(A)) && is_Send(typeid(B));
+    ens type_interp::&lt;A>() &*& type_interp::&lt;B>() &*& Pair_own::&lt;A, B>(t1, pair);
+{
+    open Pair_own::&lt;A, B>(t, pair);
+    Send::send::&lt;A>(t, t1, pair.fst);
+    Send::send::&lt;B>(t, t1, pair.snd);
+    close Pair_own::&lt;A, B>(t1, pair);
+}
+</pre>
+<p><b>Examples</b></p>
+<p>See:</p>
+<ul>
+  <li><a href="../tests/rust/safe_abstraction/Cell.rs"><code>Cell</code></a></li>
+  <li><a href="../tests/rust/safe_abstraction/generic_pair.rs"><code>Pair</code></a></li>
+</ul>
+</body>
+</html>

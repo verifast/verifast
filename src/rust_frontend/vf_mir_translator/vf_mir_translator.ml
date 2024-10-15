@@ -4822,9 +4822,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | Some (Ast.Func (_, _, _, _, _, _, _, _, _, _, Some body, _, _)) ->
         Ok () (*in case of duplicates VeriFast complains later*)
     | _ ->
-        Error
-          (`CheckProofObligationFailed
-            (loc, "Lemma " ^ po_name ^ " should be proven"))
+        Ast.static_error loc ("Lemma " ^ po_name ^ " should be proven") (Some "rust-struct-proof-obligations")
 
   let translate_trait_impls (trait_impls_cpn : TraitImplRd.t list) =
     trait_impls_cpn
