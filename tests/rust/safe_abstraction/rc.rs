@@ -268,7 +268,7 @@ impl<T> Drop for Rc<T> {
                 std::ptr::drop_in_place(&mut (*self.ptr.as_ptr()).value as *mut T);
                 //@ close RcBox_strong_(ptr, _);
                 //@ open_struct(ptr);
-                //@ close std::ptr::NonNull_own::<RcBox<T>>(_t, nnp);
+                //@ std::ptr::close_NonNull_own::<RcBox<T>>(_t, nnp);
                 std::alloc::dealloc(
                     self.ptr.as_ptr() as *mut u8,
                     std::alloc::Layout::new::<RcBox<T>>(),
@@ -278,7 +278,7 @@ impl<T> Drop for Rc<T> {
                 //@ close_na_inv(_t, MaskNshrSingle(ptr));
                 //@ thread_token_merge(_t, mask_diff(MaskTop, MaskNshrSingle(ptr)), MaskNshrSingle(ptr));
                 //@ close thread_token(_t);
-                //@ close std::ptr::NonNull_own::<RcBox<T>>()(_t, nnp);
+                //@ std::ptr::close_NonNull_own::<RcBox<T>>(_t, nnp);
             }
         }
     }

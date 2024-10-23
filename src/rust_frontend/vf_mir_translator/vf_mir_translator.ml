@@ -3605,6 +3605,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       =
     let open BodyRd in
     let var_id_trs_map_ref = ref [] in
+    let* fn_sig_loc = translate_span_data (fn_sig_span_get body_cpn) in
     let ghost_stmts_cpn = ghost_stmts_get_list body_cpn in
     let* ghost_stmts = ListAux.try_map translate_ghost_stmt ghost_stmts_cpn in
     let* ghost_stmts =
@@ -3716,19 +3717,15 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         let outlives_preds = implicit_outlives_preds @ outlives_preds in
         let send_tparams = compute_send_tparams preds in
         let sync_tparams = compute_sync_tparams preds in
-        let* ret_ty_info = translate_ty (output_get body_cpn) imp_loc in
-        let* param_tys =
-          ListAux.try_map
-            (fun ty_cpn -> translate_ty ty_cpn imp_loc)
-            (inputs_get_list body_cpn)
-        in
-        let arg_count = List.length param_tys in
+        let inputs = inputs_get_list body_cpn in
+        let arg_count = List.length inputs in
         let local_decls_cpn = local_decls_get_list body_cpn in
         let* local_decls =
           ListAux.try_map translate_local_decl local_decls_cpn
         in
         (* There should always be a return place for each function *)
         let (ret_place_decl :: local_decls) = local_decls in
+        let* ret_ty_info = translate_ty (output_get body_cpn) ret_place_decl.loc in
         let ret_place_decl = { ret_place_decl with ty = ret_ty_info } in
         let ({
                mutability = ret_mut;
@@ -3742,6 +3739,11 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         let ret_ty = Mir.basic_type_of ret_ty_info in
         let param_decls, local_decls =
           ListAux.partitioni (fun idx _ -> idx < arg_count) local_decls
+        in
+        let* param_tys =
+          ListAux.try_map
+            (fun (ty_cpn, ({loc} : Mir.local_decl)) -> translate_ty ty_cpn loc)
+            (List.combine inputs param_decls)
         in
         let param_decls =
           List.map2
@@ -3804,9 +3806,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                     self_gen_args
                 in
                 gen_drop_contract body_tr_defs_ctx.adt_defs self_ty
-                  self_ty_targs self_lft_args contract_loc
+                  self_ty_targs self_lft_args fn_sig_loc
               else
-                gen_contract body_tr_defs_ctx.adt_defs contract_loc
+                gen_contract body_tr_defs_ctx.adt_defs fn_sig_loc
                   lft_param_names outlives_preds send_tparams sync_tparams
                   param_decls ret_place_decl
             in

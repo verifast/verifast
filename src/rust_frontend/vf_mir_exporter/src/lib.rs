@@ -210,9 +210,12 @@ impl rustc_driver::Callbacks for CompilerCalls {
 
             let mut bodies = Vec::new();
             // Trigger borrow checking of all bodies.
-            for def_id in visitor.bodies {
+            for (def_id, span) in visitor.bodies {
                 //let _ = tcx.optimized_mir(def_id);
-                bodies.push(tcx.mir_drops_elaborated_and_const_checked(def_id).steal())
+                bodies.push((
+                    tcx.mir_drops_elaborated_and_const_checked(def_id).steal(),
+                    span,
+                ))
             }
 
             // See what bodies were borrow checked.
@@ -302,13 +305,15 @@ struct TraitImplInfo {
 struct HirVisitor {
     structs: Vec<LocalDefId>,
     trait_impls: Vec<TraitImplInfo>,
-    bodies: Vec<LocalDefId>,
+    bodies: Vec<(LocalDefId, Span)>,
 }
 
 impl<'tcx> rustc_hir::intravisit::Visitor<'tcx> for HirVisitor {
     fn visit_item(&mut self, item: &rustc_hir::Item) {
         match &item.kind {
-            rustc_hir::ItemKind::Fn(..) => self.bodies.push(item.owner_id.def_id),
+            rustc_hir::ItemKind::Fn(fn_sig, _, _) => {
+                self.bodies.push((item.owner_id.def_id, fn_sig.span))
+            }
             // We cannot send DefId of a struct to optimize_mir query
             rustc_hir::ItemKind::Struct(..) => self.structs.push(item.owner_id.def_id),
             rustc_hir::ItemKind::Impl(impl_) => {
@@ -350,16 +355,16 @@ impl<'tcx> rustc_hir::intravisit::Visitor<'tcx> for HirVisitor {
     }
 
     fn visit_trait_item(&mut self, trait_item: &rustc_hir::TraitItem) {
-        if let rustc_hir::TraitItemKind::Fn(_, trait_fn) = &trait_item.kind {
+        if let rustc_hir::TraitItemKind::Fn(fn_sig, trait_fn) = &trait_item.kind {
             if let rustc_hir::TraitFn::Provided(_) = trait_fn {
-                self.bodies.push(trait_item.owner_id.def_id);
+                self.bodies.push((trait_item.owner_id.def_id, fn_sig.span));
             }
         }
     }
 
     fn visit_impl_item(&mut self, impl_item: &rustc_hir::ImplItem) {
-        if let rustc_hir::ImplItemKind::Fn(..) = impl_item.kind {
-            self.bodies.push(impl_item.owner_id.def_id);
+        if let rustc_hir::ImplItemKind::Fn(fn_sig, _) = impl_item.kind {
+            self.bodies.push((impl_item.owner_id.def_id, fn_sig.span));
         }
     }
 
@@ -436,6 +441,7 @@ mod vf_mir_builder {
     use rustc_middle::ty::GenericParamDef;
     use rustc_middle::ty::GenericParamDefKind;
     use rustc_middle::{mir, ty::TyCtxt};
+    use rustc_span::Span;
     use rvalue_cpn::aggregate_data::aggregate_kind as aggregate_kind_cpn;
     use rvalue_cpn::binary_op_data as binary_op_data_cpn;
     use rvalue_cpn::ref_data as ref_data_cpn;
@@ -568,7 +574,7 @@ mod vf_mir_builder {
         directives: Vec<Box<GhostRange>>,
         structs: Vec<rustc_span::def_id::LocalDefId>,
         trait_impls: Vec<super::TraitImplInfo>,
-        bodies: Vec<mir::Body<'tcx>>,
+        bodies: Vec<(mir::Body<'tcx>, Span)>,
         annots: LinkedList<Box<GhostRange>>,
     }
 
@@ -604,7 +610,7 @@ mod vf_mir_builder {
             self.trait_impls = trait_impls;
         }
 
-        pub fn add_bodies(&mut self, bodies: Vec<mir::Body<'tcx>>) {
+        pub fn add_bodies(&mut self, bodies: Vec<(mir::Body<'tcx>, Span)>) {
             self.bodies = bodies;
         }
 
@@ -796,7 +802,12 @@ mod vf_mir_builder {
             // Encode traits (consumes annotations)
             self.encode_traits(&mut req_adt_defs, vf_mir_cpn.reborrow());
 
-            vf_mir_cpn.fill_bodies(&self.bodies, |body_cpn, body| {
+            vf_mir_cpn.fill_bodies(&self.bodies, |mut body_cpn, (body, span)| {
+                Self::encode_span_data(
+                    self.tcx,
+                    &span.data(),
+                    body_cpn.reborrow().init_fn_sig_span(),
+                );
                 let body_span = body.span.data();
                 let annots = self
                     .annots
@@ -836,10 +847,10 @@ mod vf_mir_builder {
                     let annot_span = annot
                         .span()
                         .expect("Dummy annotation found during serialization");
-                    if let Some(body) = self
+                    if let Some((body, span)) = self
                         .bodies
                         .iter()
-                        .find(|body| body.span.overlaps(annot_span))
+                        .find(|(body, span)| body.span.overlaps(annot_span))
                     {
                         panic!(
                             "Overlapping Ghost Declaration Block at {:?} and Function at {:?}",

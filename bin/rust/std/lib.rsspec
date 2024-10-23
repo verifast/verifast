@@ -46,8 +46,14 @@ mod ptr {
     //@ ens thread_token(t) &*& *to_drop |-> _;
 
     struct NonNull<T>;
+    
     /*@
-    pred_ctor NonNull_own<T>()(t: thread_id_t, v: NonNull<T>;) = NonNull_ptr(v) as usize != 0;
+    lem close_NonNull_own<T>(t: thread_id_t, v: NonNull<T>);
+        req NonNull_ptr(v) as usize != 0;
+        ens (NonNull_own::<T>())(t, v);
+    lem open_NonNull_own<T>(t: thread_id_t, v: NonNull<T>);
+        req [_](NonNull_own::<T>())(t, v);
+        ens NonNull_ptr(v) as usize != 0;
     fix NonNull_ptr<_T>(v: NonNull<_T>) -> *_T;
     @*/
 

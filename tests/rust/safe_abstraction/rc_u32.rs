@@ -248,7 +248,7 @@ impl Drop for RcU32 {
                 //@ close RcBoxU32_value_(ptr, _);
                 //@ open_struct(ptr);
                 // No need to drop a u32
-                //@ close std::ptr::NonNull_own::<RcBoxU32>(_t, nnp);
+                //@ std::ptr::close_NonNull_own::<RcBoxU32>(_t, nnp);
                 std::alloc::dealloc(
                     self.ptr.as_ptr() as *mut u8,
                     std::alloc::Layout::new::<RcBoxU32>(),
@@ -257,7 +257,7 @@ impl Drop for RcU32 {
                 //@ close dlft_pred(dk)(gid, true);
                 //@ start_counting(dlft_pred(dk), gid);
             } else {
-                //@ close std::ptr::NonNull_own::<RcBoxU32>()(_t, nnp);
+                //@ std::ptr::close_NonNull_own::<RcBoxU32>(_t, nnp);
             }
             //@ close rc_na_inv(dk, gid, ptr, _t)();
             //@ close_na_inv(_t, MaskNshrSingle(ptr));

@@ -619,6 +619,7 @@ struct Body {
         closeBraceSpan @1: SpanData; # After preprocessing, to match against the span of the inserted VeriFast_ghost_command() call.
     }
 
+    fnSigSpan @21: SpanData;
     defKind @0: DefKind;
     defPath @1: Text;
     moduleDefPath @18: Text; # Empty string if in crate root

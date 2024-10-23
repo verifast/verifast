@@ -423,7 +423,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let (_, _, _, declared_paramtypes, symb, _, _) = List.assoc g_name predfammap in
           ((symb, true), targs', pats0, pats, g#domain, Some (g_name, declared_paramtypes))
         | true, PredCtor g ->
-          let PredCtorInfo (_, tparams, ps1, ps2, inputParamCount, body, funcsym) = List.assoc g predctormap in
+          let (_, tparams, PredType ([], ps2, inputParamCount, _), ps1, funcsym) = List.assoc g purefuncmap in
           let typeid_msg () = Printf.sprintf "Taking typeids of predicate constructor type arguments <%s>: " (String.concat ", " (List.map string_of_type targs)) in
           let targs_typeids = List.map (typeid_of_core_core l typeid_msg typeid_env) targs' in
           let ctorargs = List.map (function (LitPat e | WCtorPat (_, _, _, _, _, _, _, Some e)) -> ev e | _ -> static_error l "Patterns are not supported in predicate constructor argument positions." None) pats0 in
@@ -436,7 +436,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let g_symb = mk_app funcsym (targs_typeids @ ctorargs) in
           let (symbol, symbol_term) = funcsym in
           register_pred_ctor_application g_symb symbol symbol_term targs' ctorargs inputParamCount;
-          let pts = List.map (fun (_, pt) -> instantiate_type tpenv0 pt) ps2 in
+          let pts = List.map (instantiate_type tpenv0) ps2 in
           ((g_symb, false), [], [], pats, pts, None)
       in
       let targs = targs' in
@@ -1288,7 +1288,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let (_, _, _, _, symb, _, _) = List.assoc g_name predfammap in
           ((symb, true), targs', pats0, pats, g#domain)
         | true, PredCtor g_name ->
-          let PredCtorInfo (_, tparams, ps1, ps2, inputParamCount, body, funcsym) = List.assoc g_name predctormap in
+          let (_, tparams, PredType ([], ps2, inputParamCount, _), ps1, funcsym) = List.assoc g_name purefuncmap in
           let typeid_msg () = Printf.sprintf "Taking typeids of predicate constructor type arguments <%s>: " (String.concat ", " (List.map string_of_type targs)) in
           let targs_typeids = List.map (typeid_of_core_core l typeid_msg env) targs in
           let ctorargs = List.map (function SrcPat (LitPat e | WCtorPat (_, _, _, _, _, _, _, Some e)) -> ev e | _ -> static_error l "Patterns are not supported in predicate constructor argument positions." None) pats0 in
@@ -1297,7 +1297,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let g_symb = mk_app funcsym (targs_typeids @ ctorargs) in
           let (symbol, symbol_term) = funcsym in
           register_pred_ctor_application g_symb symbol symbol_term targs' ctorargs inputParamCount;
-          ((g_symb, false), [], [], pats, List.map (fun (_, pt) -> instantiate_type tpenv0 pt) ps2)
+          ((g_symb, false), [], [], pats, List.map (instantiate_type tpenv0) ps2)
         | false, LocalVar g_name ->
           match try_assoc g_name env with
             None -> assert_false [] env l (Printf.sprintf "Unbound variable '%s'" g_name) None

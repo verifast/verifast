@@ -6277,19 +6277,14 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             | _ ->
               begin match
                 if binding <> Static && binding <> PredCtorCall then None else
-                match try_assoc p predctormap1 with
-                  Some (lp, tparams, ps1, ps2, inputParamCount, body, funcsym, pn, ilist) ->
-                  reportUseSite DeclKind_Predicate lp l;
-                  Some (tparams, ps1, ps2, inputParamCount)
-                | None ->
-                match try_assoc p predctormap0 with
-                  Some (PredCtorInfo (lp, tparams, ps1, ps2, inputParamCount, body, funcsym)) ->
+                match try_assoc p purefuncmap with
+                  Some (lp, tparams, PredType ([], ps2, inputParamCount, Inductiveness_Inductive), ps1, funcsym) ->
                   reportUseSite DeclKind_Predicate lp l;
                   Some (tparams, ps1, ps2, inputParamCount)
                 | None -> None
               with
                 Some (tparams, ps1, ps2, inputParamCount) ->
-                cont (PredCtor p, true, tparams, List.map snd ps1, List.map snd ps2, inputParamCount)
+                cont (PredCtor p, true, tparams, List.map snd ps1, ps2, inputParamCount)
               | None ->
                 let error () = 
                   begin match try_assoc p tenv with
@@ -6940,12 +6935,12 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let predctormap = predctormap1 @ predctormap0
 
   let () = (* Process type predicate definitions. *)
-    let rec iter defs ds cont =
+    let rec iter pn ilist defs ds cont =
       match ds with
         [] -> cont defs
       | TypePredDef (l, tparams, te, predName, Left (lrhs, rhs))::ds ->
         check_tparams l [] tparams;
-        let tp = check_pure_type ("",[]) tparams Ghost te in
+        let tp = check_pure_type (pn,ilist) tparams Ghost te in
         let (_, selfTypeName, predType, symb) =
           match try_assoc predName typepreddeclmap with
             None -> static_error l "No such type predicate" None
@@ -6967,34 +6962,34 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         if tparams = [] then
           let typeid = typeid_of_core l [] tp in
           let type_pred_term = ctxt#mk_app symb [typeid] in
-          match try_assoc rhs predfammap with
-            Some (_, pred_tparams, nbIndices, pts, predSymb, inputParamCount, inductiveness) ->
+          match resolve Ghost (pn,ilist) lrhs rhs predfammap with
+            Some (rhs, (_, pred_tparams, nbIndices, pts, predSymb, inputParamCount, inductiveness)) ->
             if pred_tparams <> [] then static_error lrhs "The right-hand side predicate has type parameters" None;
             if nbIndices <> 0 then static_error lrhs "The right-hand side predicate is a predicate family" None;
             expect_type lrhs (Some true) (PredType ([], pts, inputParamCount, inductiveness)) predType';
             ctxt#assert_term (ctxt#mk_eq type_pred_term predSymb);
-            iter defs ds cont
+            iter pn ilist defs ds cont
           | None ->
-          match try_assoc rhs predctormap with
-            Some (PredCtorInfo (_, ctor_tparams, ctor_ps, ctor_ps', inputParamCount, _, ctorSymb)) ->
+          match resolve Ghost (pn,ilist) lrhs rhs purefuncmap with
+            Some (rhs, (_, ctor_tparams, PredType ([], ctor_ps', inputParamCount, _), ctor_ps, ctorSymb)) ->
             if ctor_tparams <> [] then static_error l "The right-hand side predicate constructor has type parameters" None;
-            let pred_type = PredType ([], List.map snd ctor_ps', inputParamCount, Inductiveness_Inductive) in
+            let pred_type = PredType ([], ctor_ps', inputParamCount, Inductiveness_Inductive) in
             let rhs_type = List.fold_right (fun (_, pt) ctp -> PureFuncType (pt, ctp)) ctor_ps pred_type in
             expect_type l (Some true) rhs_type predType';
             ctxt#assert_term (ctxt#mk_eq type_pred_term (snd ctorSymb));
-            iter defs ds cont
+            iter pn ilist defs ds cont
           | None ->
             static_error l "No such predicate or predicate constructor" None
         else
-          begin match try_assoc rhs predctormap with
-            Some (PredCtorInfo (_, ctor_tparams, ctor_ps, ctor_ps', inputParamCount, _, ctorSymb)) ->
+          begin match resolve Ghost (pn,ilist) lrhs rhs purefuncmap with
+            Some (rhs, (_, ctor_tparams, PredType ([], ctor_ps', inputParamCount, Inductiveness_Inductive), ctor_ps, ctorSymb)) ->
             let tpenv =
               match zip ctor_tparams (List.map (fun x -> GhostTypeParam x) tparams) with
                 None -> static_error lrhs "Incorrect number of type arguments" None
               | Some bs -> bs
             in
             let ctor_pts = instantiate_types tpenv (List.map snd ctor_ps) in
-            let ctor_pts' = instantiate_types tpenv (List.map snd ctor_ps') in
+            let ctor_pts' = instantiate_types tpenv ctor_ps' in
             let pred_type = PredType ([], ctor_pts', inputParamCount, Inductiveness_Inductive) in
             let rhs_type = List.fold_right (fun pt ctp -> PureFuncType (pt, ctp)) ctor_pts pred_type in
             expect_type lrhs (Some true) rhs_type predType';
@@ -7007,18 +7002,18 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let eq = ctxt#mk_eq typePredTerm ctorApp in
             ctxt#end_formal;
             ctxt#assume_forall (Printf.sprintf "type_pred_def_%s_%s" predName rhs) [typePredTerm] (List.map (fun x -> ctxt#type_inductive) tparams) eq;
-            iter defs ds cont
+            iter pn ilist defs ds cont
           | None ->
             static_error lrhs "No such predicate constructor" None
           end
       | _::ds ->
-        iter defs ds cont
+        iter pn ilist defs ds cont
     in
     let rec iter' defs ps =
       match ps with
         [] -> ()
       | PackageDecl (l, pn, ilist, ds)::ps ->
-        iter defs ds @@ fun defs ->
+        iter pn ilist defs ds @@ fun defs ->
         iter' defs ps
     in
     iter' [] ps

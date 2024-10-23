@@ -781,10 +781,20 @@ let rec parse_decl = function%parser
        Some ([], fds, [], false)
     ]
   ] ->
+  let targs = List.map (fun x -> IdentTypeExpr (l, None, x)) tparams in
+  let structTypeExpr = StructTypeExpr (l, Some sn, None, [], targs) in
+  let own_paramTypes = [IdentTypeExpr (l, None, "thread_id_t"); structTypeExpr] in
+  let fbc_paramTypes = [IdentTypeExpr (l, None, "thread_id_t"), "t"; PtrTypeExpr (l, structTypeExpr), "l"] in
   [
     Struct (l, sn, tparams, body, []);
-    let targs = List.map (fun x -> IdentTypeExpr (l, None, x)) tparams in
-    TypedefDecl (l, StructTypeExpr (l, Some sn, None, [], targs), sn, tparams)
+    TypedefDecl (l, structTypeExpr, sn, tparams);
+    if tparams = [] then
+      PredFamilyDecl (l, sn ^ "_own", [], 0, own_paramTypes, None, Inductiveness_Inductive)
+    else
+      Func (l, Fixpoint, tparams, Some (PredTypeExpr (l, own_paramTypes, None)), sn ^ "_own", [], false, None, None, false, None, false, []);
+    TypePredDef (l, tparams, structTypeExpr, "own", Left (l, sn ^ "_own"));
+    Func (l, Fixpoint, tparams, Some (PredTypeExpr (l, [], None)), sn ^ "_full_borrow_content", fbc_paramTypes, false, None, None, false, None, false, []);
+    TypePredDef (l, tparams, structTypeExpr, "full_borrow_content", Left (l, sn ^ "_full_borrow_content"))
   ]
 | [ (_, Ident "union"); (l, Ident un); (_, Kwd "{"); (_, Kwd "}") ] -> [ Union (l, un, Some []) ]
 | [ (_, Kwd "enum"); (l, Ident en); parse_type_params as tparams; (_, Kwd "{");
