@@ -41,17 +41,12 @@ pub mod ptr {
     }
 
     impl<T> NonNull<T> {
-        pub fn from<'a>(reference: &'a mut T) -> Self {
+        pub fn from(reference: &mut T) -> Self {
             let r = NonNull {
                 pointer: reference as *mut T,
             };
-            //@ open_full_borrow(_q_a, 'a, <T>.full_borrow_content(_t, reference));
-            //@ open_full_borrow_content::<T>(_t, reference);
             //@ points_to_limits(reference);
-            //@ close_full_borrow_content::<T>(_t, reference);
-            //@ close_full_borrow(<T>.full_borrow_content(_t, reference));
             //@ close ptr::NonNull_own::<T>(_t, r);
-            //@ leak full_borrow(_, _);
             r
         }
 

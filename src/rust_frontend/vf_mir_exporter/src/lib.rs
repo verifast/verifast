@@ -1691,7 +1691,12 @@ mod vf_mir_builder {
                 ty::RegionKind::ReBound(de_bruijn_index, bound_region) => match bound_region.kind {
                     ty::BoundRegionKind::BrAnon => todo!(),
                     ty::BoundRegionKind::BrNamed(def_id, symbol) => {
-                        region_cpn.set_id(symbol.as_str());
+                        if symbol.as_str() == "'_" {
+                            let id = format!("'_{}", def_id.index.as_usize());
+                            region_cpn.set_id(&id);
+                        } else {
+                            region_cpn.set_id(symbol.as_str());
+                        }
                     }
                     ty::BoundRegionKind::BrEnv => todo!(),
                 },

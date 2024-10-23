@@ -12,6 +12,7 @@ type ty_interp = {
   shr : lft -> tid -> l -> (asn, string) result; (* Should be duplicable, e.g. a dummy pattern. The caller will not wrap this in a dummy coef asn. *)
   full_bor_content : tid -> l -> (Ast.expr, string) result;
   points_to : tid -> l -> vid option -> (asn, string) result;
+  pointee_fbc : (tid -> string (* l *) -> string (* suffix for bound variables *) -> (asn, string) result) option; (* None if this type is not a reference type *)
 }
 
 let simple_fbc loc fbc_name tid l = Ok (CallExpr (loc, fbc_name, [], [], [LitPat tid; LitPat l], Static))
@@ -23,6 +24,7 @@ let emp_ty_interp loc =
     shr = (fun _ _ _ -> Error "Not yet supported");
     full_bor_content = (fun _ _ -> Error "Not yet supported");
     points_to = (fun _ _ _ -> Ok (True loc));
+    pointee_fbc = None;
   }
 
 module Aux = struct

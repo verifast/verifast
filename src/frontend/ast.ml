@@ -1166,6 +1166,23 @@ let stmt_loc s =
   | Continue l -> l
   | SuperConstructorCall(l, _) -> l
 
+let type_expr_fold_open f state te =
+  match te with
+    StructTypeExpr (l, sn, body_opt, attrs, targs) -> List.fold_left f state targs
+  | UnionTypeExpr (l, un, body_opt) -> state
+  | EnumTypeExpr (l, en, body_opt) -> state
+  | PtrTypeExpr (l, te) -> f state te
+  | RustRefTypeExpr (l, lft, kind, te) -> f (f state lft) te
+  | ArrayTypeExpr (l, te) -> f state te
+  | StaticArrayTypeExpr (l, elemTp, n) -> f state elemTp
+  | FuncTypeExpr (l, retTp, ps) -> List.fold_left f (f state retTp) (List.map fst ps)
+  | ManifestTypeExpr (l, tp) -> state
+  | IdentTypeExpr (l, pn, x) -> state
+  | ConstructedTypeExpr (l, x, targs) -> List.fold_left f state targs
+  | PredTypeExpr (l, paramTps, inputParamCount) -> List.fold_left f state paramTps
+  | PureFuncTypeExpr (l, tps) -> List.fold_left f state tps
+  | LValueRefTypeExpr (l, tp) -> f state tp
+
 let stmt_fold_open f state s =
   match s with
     PureStmt (l, s) -> f state s

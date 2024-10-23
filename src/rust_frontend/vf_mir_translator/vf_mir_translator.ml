@@ -840,6 +840,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                 shr = simple_shr loc fbc_name;
                 full_bor_content;
                 points_to;
+                pointee_fbc = None;
               };
         }
     in
@@ -899,6 +900,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                 shr = simple_shr loc fbc_name;
                 full_bor_content;
                 points_to;
+                pointee_fbc = None;
               };
         }
     in
@@ -987,7 +989,15 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               Ok (PointsTo (loc, l, RegularPointsTo, pat))
             in
             let interp =
-              RustBelt.{ size = sz_expr; own; shr; full_bor_content; points_to }
+              RustBelt.
+                {
+                  size = sz_expr;
+                  own;
+                  shr;
+                  full_bor_content;
+                  points_to;
+                  pointee_fbc = None;
+                }
             in
             let ty_info =
               Mir.TyInfoGeneric
@@ -1036,7 +1046,15 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
              supported"
         in
         let interp =
-          RustBelt.{ size = sz_expr; own; shr; full_bor_content; points_to }
+          RustBelt.
+            {
+              size = sz_expr;
+              own;
+              shr;
+              full_bor_content;
+              points_to;
+              pointee_fbc = None;
+            }
         in
         let ty_info = Mir.TyInfoBasic { vf_ty; interp } in
         Ok ty_info
@@ -1081,6 +1099,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               shr = simple_shr loc fbc_name;
               full_bor_content;
               points_to;
+              pointee_fbc = None;
             };
       }
 
@@ -1128,6 +1147,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               shr = simple_shr loc fbc_name;
               full_bor_content;
               points_to;
+              pointee_fbc = None;
             };
       }
 
@@ -1156,7 +1176,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     Mir.TyInfoBasic
       {
         vf_ty;
-        interp = RustBelt.{ size; own; shr; full_bor_content; points_to };
+        interp =
+          RustBelt.
+            { size; own; shr; full_bor_content; points_to; pointee_fbc = None };
       }
 
   and str_ref_ty_info loc lft mut =
@@ -1184,7 +1206,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     Mir.TyInfoBasic
       {
         vf_ty;
-        interp = RustBelt.{ size; own; shr; full_bor_content; points_to };
+        interp =
+          RustBelt.
+            { size; own; shr; full_bor_content; points_to; pointee_fbc = None };
       }
 
   and slice_ref_ty_info loc lft mut elem_ty_info =
@@ -1218,7 +1242,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     Mir.TyInfoBasic
       {
         vf_ty;
-        interp = RustBelt.{ size; own; shr; full_bor_content; points_to };
+        interp =
+          RustBelt.
+            { size; own; shr; full_bor_content; points_to; pointee_fbc = None };
       }
 
   and translate_generic_arg (gen_arg_cpn : GenArgRd.t) (loc : Ast.loc) =
@@ -1364,6 +1390,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                 shr = simple_shr loc fbc_name;
                 full_bor_content;
                 points_to;
+                pointee_fbc = None;
               };
         }
     in
@@ -1399,7 +1426,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               } =
           Mir.interp_of pointee_ty_info
         in
-        let* own, shr, full_bor_content, points_to =
+        let* own, shr, full_bor_content, points_to, pointee_fbc =
           match mut with
           | Mir.Mut ->
               let own tid l =
@@ -1438,7 +1465,20 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                 let* pat = RustBelt.Aux.vid_op_to_var_pat vid_op loc in
                 Ok (PointsTo (loc, l, RegularPointsTo, pat))
               in
-              Ok (own, shr, full_bor_content, points_to)
+              let pointee_fbc tid l suffix =
+                let value_id = Printf.sprintf "_v%s_%s" suffix l in
+                let* pointee_own = ptee_own tid (Var (loc, value_id)) in
+                Ok
+                  (Sep
+                     ( loc,
+                       PointsTo
+                         ( loc,
+                           Deref (loc, Var (loc, l)),
+                           RegularPointsTo,
+                           VarPat (loc, value_id) ),
+                       pointee_own ))
+              in
+              Ok (own, shr, full_bor_content, points_to, Some pointee_fbc)
           | Mir.Not ->
               let own tid l = ptee_shr lft tid l in
               let shr lft tid l =
@@ -1455,7 +1495,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                 let* pat = RustBelt.Aux.vid_op_to_var_pat vid_op loc in
                 Ok (PointsTo (loc, l, RegularPointsTo, pat))
               in
-              Ok (own, shr, full_bor_content, points_to)
+              Ok (own, shr, full_bor_content, points_to, None)
         in
         let ty_info =
           Mir.TyInfoBasic
@@ -1463,7 +1503,14 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               vf_ty;
               interp =
                 RustBelt.
-                  { size = sz_expr; own; shr; full_bor_content; points_to };
+                  {
+                    size = sz_expr;
+                    own;
+                    shr;
+                    full_bor_content;
+                    points_to;
+                    pointee_fbc;
+                  };
             }
         in
         Ok ty_info
@@ -1587,6 +1634,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   | Some vid -> VarPat (loc, vid)
                 in
                 Ok (Ast.PointsTo (loc, l, RegularPointsTo, rhs)));
+            pointee_fbc = None;
           }
         in
         Ok (Mir.TyInfoBasic { vf_ty; interp })
@@ -3136,6 +3184,43 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           Static )
     in
     let thread_id_name = "_t" in
+    let ret_ty_has_elided_lifetimes =
+      let rec check_type state tp =
+        match tp with
+        | GhostTypeParam x when String.starts_with ~prefix:"'_" x -> true
+        | _ -> type_fold_open state check_type tp
+      in
+      let rec check_type_expr state te =
+        match te with
+        | IdentTypeExpr (_, _, x) when String.starts_with ~prefix:"'_" x -> true
+        | ManifestTypeExpr (_, tp) -> check_type state tp
+        | _ -> type_expr_fold_open check_type_expr state te
+      in
+      check_type_expr false (Mir.basic_type_of ret.ty)
+    in
+    let is_in_out_param (param : Mir.local_decl) =
+      match Mir.basic_type_of param.ty with
+      | RustRefTypeExpr
+          ( _,
+            (IdentTypeExpr (_, _, x) | ManifestTypeExpr (_, GhostTypeParam x)),
+            Mutable,
+            _ )
+        when (not ret_ty_has_elided_lifetimes)
+             && String.starts_with ~prefix:"'_" x ->
+          true
+      | _ -> false
+    in
+    let in_out_params, in_params = params |> List.partition is_in_out_param in
+    let add_in_out_param_asns suffix asn =
+      List.fold_right
+        (fun (param : Mir.local_decl) asn ->
+          let (Some pointee_fbc) = (Mir.interp_of param.ty).pointee_fbc in
+          let (Ok pointee_fbc) =
+            pointee_fbc (Var (param.loc, thread_id_name)) param.id suffix
+          in
+          Sep (param.loc, pointee_fbc, asn))
+        in_out_params asn
+    in
     let pre_na_token = nonatomic_token_b (bind_pat_b thread_id_name) in
     let post_na_token = nonatomic_token_b (lit_pat_b thread_id_name) in
     let lft_token_b q_pat_b n =
@@ -3188,7 +3273,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         (Var (contract_loc, thread_id_name))
         (List.map
            (fun ({ loc; id; ty } : Mir.local_decl) -> (loc, Var (loc, id), ty))
-           params)
+           in_params)
     in
     let pre_asn =
       AstAux.list_to_sep_conj
@@ -3196,9 +3281,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         params_ty_asns
     in
     let pre_asn =
-      match pre_asn with
-      | None -> pre_na_token
-      | Some pre_asn -> Sep (contract_loc, pre_na_token, pre_asn)
+      match pre_asn with None -> EmpAsn contract_loc | Some asn -> asn
+    in
+    let pre_asn =
+      Sep (contract_loc, pre_na_token, add_in_out_param_asns "0" pre_asn)
     in
     let* ret_ty_asn =
       gen_own_asn adt_defs
@@ -3210,7 +3296,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let (Some post_asn) =
       AstAux.list_to_sep_conj
         (List.map (fun asn -> (contract_loc, asn)) post_lft_tks)
-        (Some ret_ty_asn)
+        (Some (add_in_out_param_asns "1" ret_ty_asn))
       (*might be just True*)
     in
     let post_asn = Sep (contract_loc, post_na_token, post_asn) in
@@ -3455,10 +3541,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                (loc, "Type parameters must start with an uppercase letter", None));
         Ok (name, loc)
     | Fresh id_cpn ->
-        Ast.static_error loc
-          "Elided lifetimes are not yet supported. For now, please make them \
-           explicit."
-          None
+        Ok ("'_" ^ Stdint.Uint128.to_string (CapnpAux.uint128_get id_cpn), loc)
     | Undefined _ -> Error (`TrHirGenericParamName "Unknown ParamName kind")
 
   let translate_hir_generic_param_kind (kind_cpn : HirGenericParamKindRd.t) =
@@ -3725,7 +3808,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         in
         (* There should always be a return place for each function *)
         let (ret_place_decl :: local_decls) = local_decls in
-        let* ret_ty_info = translate_ty (output_get body_cpn) ret_place_decl.loc in
+        let* ret_ty_info =
+          translate_ty (output_get body_cpn) ret_place_decl.loc
+        in
         let ret_place_decl = { ret_place_decl with ty = ret_ty_info } in
         let ({
                mutability = ret_mut;
@@ -3742,7 +3827,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         in
         let* param_tys =
           ListAux.try_map
-            (fun (ty_cpn, ({loc} : Mir.local_decl)) -> translate_ty ty_cpn loc)
+            (fun (ty_cpn, ({ loc } : Mir.local_decl)) ->
+              translate_ty ty_cpn loc)
             (List.combine inputs param_decls)
         in
         let param_decls =
@@ -4824,7 +4910,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | Some (Ast.Func (_, _, _, _, _, _, _, _, _, _, Some body, _, _)) ->
         Ok () (*in case of duplicates VeriFast complains later*)
     | _ ->
-        Ast.static_error loc ("Lemma " ^ po_name ^ " should be proven") (Some "rust-struct-proof-obligations")
+        Ast.static_error loc
+          ("Lemma " ^ po_name ^ " should be proven")
+          (Some "rust-struct-proof-obligations")
 
   let translate_trait_impls (trait_impls_cpn : TraitImplRd.t list) =
     trait_impls_cpn
