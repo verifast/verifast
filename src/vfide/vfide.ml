@@ -1503,8 +1503,16 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
     ignore $. useSiteTag#connect#event ~callback:begin fun ~origin event iter ->
       if GdkEvent.get_type event = `KEY_PRESS then begin
         let key = GdkEvent.Key.cast event in
-        if GdkEvent.Key.keyval key = GdkKeysyms._d && List.mem `CONTROL (GdkEvent.Key.state key) then
-          go_to_loc declLoc
+        if GdkEvent.Key.keyval key = GdkKeysyms._d && List.mem `CONTROL (GdkEvent.Key.state key) then begin
+          if textPaned#max_position >= 300 && textPaned#position < 10 || textPaned#max_position - textPaned#position < 10 then
+            textPaned#set_position 150;
+          begin
+            let (tab, mark1, _) = create_marks_of_loc declLoc in
+            let k = index_of_byref tab !buffers in
+            subNotebook#goto_page k;
+            ignore $. Glib.Idle.add (fun () -> tab#subView#view#scroll_to_mark ~within_margin:0.2 (`MARK mark1); false)
+          end
+        end
       end;
       false
     end;

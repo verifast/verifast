@@ -328,7 +328,7 @@ let rec parse_expr_funcs allowStructExprs =
       | [ (_, Ident x1); [%let e = parse_path_rest l (x ^ "::" ^ x1) ] ] -> e
       ]
     ] -> e
-  | [ (l, Kwd "("); [%let args0 = rep_comma parse_pat ]; (_, Kwd ")");
+  | [ (_, Kwd "("); [%let args0 = rep_comma parse_pat ]; (_, Kwd ")");
       [%let (indices, args) = function%parser
          [ (_, Kwd "("); [%let args = rep_comma parse_pat]; (_, Kwd ")") ] -> (args0, args)
        | [ ] -> ([], args0)
