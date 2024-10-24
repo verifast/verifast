@@ -299,6 +299,8 @@ TOOLS_EXCEPT_VFIDE += ../bin/vf-cxx-ast-exporter$(DOTEXE) build-vf-rust-mir-expo
 
 TOOLS = $(TOOLS_EXCEPT_VFIDE) ../bin/vfide$(DOTEXE)
 
+vf: ../bin/verifast$(DOTEXE) ../bin/vfide$(DOTEXE)
+
 ifndef WITHOUT_LABLGTK
 build: $(TOOLS) $(STDLIB) tabhunt
 else

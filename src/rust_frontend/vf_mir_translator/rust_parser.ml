@@ -483,20 +483,21 @@ and parse_produce_lemma_function_pointer_chunk_stmt_function_type_clause = funct
   ] -> (ftn, [], args, params, openBraceLoc, ss, closeBraceLoc)
 and parse_block_stmt = function%parser
   [ (l, Kwd "{");
+    parse_ghost_decls as ds;
     parse_stmts as ss;
     (closeBraceLoc, Kwd "}")
-  ] -> BlockStmt (l, [], ss, closeBraceLoc, ref [])
+  ] -> BlockStmt (l, ds, ss, closeBraceLoc, ref [])
 and parse_stmts stream = rep parse_stmt stream
 
-let parse_param = function%parser
+and parse_param = function%parser
   [ (_, Ident x); (_, Kwd ":"); parse_type as t ] -> t, x
 | [ (_, Kwd "self"); (_, Kwd ":"); parse_type as t ] -> t, "self"
 
-let parse_struct_field = function%parser
+and parse_struct_field = function%parser
   [ (l, Ident x); (_, Kwd ":"); parse_type as t ] ->
   Field (l, Real, t, x, Instance, Public, false, None)
 
-let parse_pred_paramlist = function%parser
+and parse_pred_paramlist = function%parser
   [ (_, Kwd "(");
     [%let ps = rep_comma parse_param ];
     [%let (ps, inputParamCount) = begin function%parser
@@ -508,10 +509,10 @@ let parse_pred_paramlist = function%parser
     (_, Kwd ")")
   ] -> ps, inputParamCount
 
-let parse_pred_body = function%parser
+and parse_pred_body = function%parser
   [ (_, Kwd "="); parse_asn as p ] -> p
 
-let parse_type_params = function%parser
+and parse_type_params = function%parser
   [ (_, Kwd "<");
     [%let tparams = rep_comma (function%parser
       [ (_, Ident x) ] -> x
@@ -519,7 +520,7 @@ let parse_type_params = function%parser
     (_, Kwd ">") ] -> tparams
 | [ ] -> []
 
-let parse_func_header k = function%parser
+and parse_func_header k = function%parser
   [ (l, Ident g); [%let l, g = parse_simple_path_rest l g]; parse_type_params as tparams; (_, Kwd "("); [%let ps = rep_comma parse_param]; (_, Kwd ")");
     [%let rt = function%parser
       [ (_, Kwd "->"); parse_type as t ] -> Some t
@@ -527,7 +528,7 @@ let parse_func_header k = function%parser
     ]
   ] -> (l, g, tparams, ps, rt)
 
-let parse_func_rest k = function%parser
+and parse_func_rest k = function%parser
   [ [%let (l, g, tparams, ps, rt) = parse_func_header k];
     [%let d = function%parser
       [ (_, Kwd ";");
@@ -541,7 +542,7 @@ let parse_func_rest k = function%parser
     ]
   ] -> d
 
-let rec parse_ctors = function%parser
+and parse_ctors = function%parser
   [ (l, Ident cn);
     [%let ts = function%parser
      | [ (_, Kwd "(");
@@ -556,7 +557,7 @@ and parse_ctors_suffix = function%parser
 | [ (_, Kwd "|"); parse_ctors as cs ] -> cs
 | [ ] -> []
 
-let parse_lemma_keyword = function%parser
+and parse_lemma_keyword = function%parser
   [ (_, Kwd "lem") ] -> Lemma (false, None)
 | [ (_, Kwd "lem_auto");
     [%let trigger = function%parser
@@ -565,7 +566,7 @@ let parse_lemma_keyword = function%parser
     ]
   ] -> Lemma (true, trigger)
 
-let parse_ghost_decl = function%parser
+and parse_ghost_decl = function%parser
 | [ (l, Kwd "inductive"); (li, Ident i); parse_type_params as tparams; (_, Kwd "=");
     [%let cs = function%parser
      | [ parse_ctors as cs ] -> cs
@@ -699,9 +700,9 @@ let parse_ghost_decl = function%parser
   in
   if targ_names <> tparams then raise (ParseException (lrhs, "Right-hand side type arguments must match definition type parameters"));
   [TypePredDef (l, tparams, tp, predName, Left (lrhs, rhs))]
-| [ (l, Kwd "let"); (lx, PrimePrefixedIdent x); (_, Kwd "="); parse_expr as e; (_, Kwd ";") ] -> [TypeWithTypeidDecl (l, x, CallExpr (l, "typeid_of_lft", [], [], [LitPat e], Static))]
+| [ (l, Kwd "let_lft"); (lx, PrimePrefixedIdent x); (_, Kwd "="); parse_expr as e; (_, Kwd ";") ] -> [TypeWithTypeidDecl (l, x, CallExpr (l, "typeid_of_lft", [], [], [LitPat e], Static))]
 
-let parse_ghost_decls stream = List.flatten (rep parse_ghost_decl stream)
+and parse_ghost_decls stream = List.flatten (rep parse_ghost_decl stream)
 
 let parse_ghost_decl_block = function%parser
   [ (_, Kwd "/*@"); parse_ghost_decls as ds; (_, Kwd "@*/") ] -> ds

@@ -240,7 +240,7 @@ impl Tree {
                     //@ if q < 1 { close [1 - q]hidden_lifetime_token(k1); }
                     //@ close_lifetime_intersection_token(q, k, k1);
                     {
-                        //@ let 'b = kk1;
+                        //@ let_lft 'b = kk1;
                         visitor.visit/*@::<V, 'b> @*/((*x).data);
                     }
                     //@ if q < 1 { open [1 - q]hidden_lifetime_token(k1); }

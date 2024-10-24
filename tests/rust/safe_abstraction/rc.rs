@@ -62,11 +62,6 @@ lem Rc_share_mono<T>(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *Rc<T>)
     close [df]Rc_share::<T>(k1, t, l);
 }
 
-pred_ctor Rc_ctx<T>(t: thread_id_t, l: *Rc<T>, nnp: std::ptr::NonNull<RcBox<T>>, dk: lifetime_t, gid: usize)() =
-    struct_Rc_padding::<T>(l) &*&
-    [_]exists(dk) &*& [_]exists(gid) &*& [_]na_inv(t, MaskNshrSingle(std::ptr::NonNull_ptr(nnp)), rc_na_inv(dk, gid, std::ptr::NonNull_ptr(nnp), t)) &*&
-    [_](<T>.share(dk, t, &(*std::ptr::NonNull_ptr::<RcBox<T>>(nnp)).value));
-
 lem Rc_fbor_split<T>(t: thread_id_t, l: *Rc<T>) -> std::ptr::NonNull<RcBox<T>> //nnp
     req atomic_mask(?m) &*& mask_le(Nlft, m) == true &*&
         full_borrow(?k, Rc_full_borrow_content::<T>(t, l)) &*& [?q]lifetime_token(k);
@@ -87,19 +82,25 @@ lem Rc_fbor_split<T>(t: thread_id_t, l: *Rc<T>) -> std::ptr::NonNull<RcBox<T>> /
     close Rc_frac_bc::<T>(l, nnp)();
     close sep(ticket_(dk, gid, frac), lifetime_token_(frac, dk))();
     close sep(Rc_frac_bc(l, nnp), sep(ticket_(dk, gid, frac), lifetime_token_(frac, dk)))();
-    close Rc_ctx::<T>(t, l, nnp, dk, gid)();
-    produce_lem_ptr_chunk full_borrow_convert_strong(Rc_ctx(t, l, nnp, dk, gid),
-        sep(Rc_frac_bc(l, nnp), sep(ticket_(dk, gid, frac), lifetime_token_(frac, dk))), klong, Rc_full_borrow_content::<T>(t, l))()
     {
-        open sep(Rc_frac_bc(l, nnp), sep(ticket_(dk, gid, frac), lifetime_token_(frac, dk)))();
-        open Rc_frac_bc::<T>(l, nnp)();
-        open sep(ticket_(dk, gid, frac), lifetime_token_(frac, dk))();
-        open ticket_(dk, gid, frac)();
-        open Rc_ctx::<T>(t, l, nnp, dk, gid)();
-        close Rc_own::<T>(t, rc);
-        close Rc_full_borrow_content::<T>(t, l)();
-    }{
-        close_full_borrow_strong_m(klong, Rc_full_borrow_content::<T>(t, l), sep(Rc_frac_bc(l, nnp), sep(ticket_(dk, gid, frac), lifetime_token_(frac, dk))));
+        pred Ctx() =
+            struct_Rc_padding::<T>(l) &*&
+            [_]exists(dk) &*& [_]exists(gid) &*& [_]na_inv(t, MaskNshrSingle(std::ptr::NonNull_ptr(nnp)), rc_na_inv(dk, gid, std::ptr::NonNull_ptr(nnp), t)) &*&
+            [_](<T>.share(dk, t, &(*std::ptr::NonNull_ptr::<RcBox<T>>(nnp)).value));
+        close Ctx();
+        produce_lem_ptr_chunk full_borrow_convert_strong(Ctx,
+            sep(Rc_frac_bc(l, nnp), sep(ticket_(dk, gid, frac), lifetime_token_(frac, dk))), klong, Rc_full_borrow_content::<T>(t, l))()
+        {
+            open sep(Rc_frac_bc(l, nnp), sep(ticket_(dk, gid, frac), lifetime_token_(frac, dk)))();
+            open Rc_frac_bc::<T>(l, nnp)();
+            open sep(ticket_(dk, gid, frac), lifetime_token_(frac, dk))();
+            open ticket_(dk, gid, frac)();
+            open Ctx();
+            close Rc_own::<T>(t, rc);
+            close Rc_full_borrow_content::<T>(t, l)();
+        }{
+            close_full_borrow_strong_m(klong, Rc_full_borrow_content::<T>(t, l), sep(Rc_frac_bc(l, nnp), sep(ticket_(dk, gid, frac), lifetime_token_(frac, dk))));
+        }
     }
     full_borrow_mono(klong, k, sep(Rc_frac_bc(l, nnp), sep(ticket_(dk, gid, frac), lifetime_token_(frac, dk))));
     full_borrow_split_m(k, Rc_frac_bc(l, nnp), sep(ticket_(dk, gid, frac), lifetime_token_(frac, dk)));

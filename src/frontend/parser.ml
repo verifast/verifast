@@ -84,7 +84,7 @@ let rust_keywords = [
 
   "async"; "await"; "dyn";
 
-  "abstract"; "become"; "box"; "do"; "final"; "macro"; "override"; "priv";
+  "abstract"; "become"; (*"box";*) "do"; "final"; "macro"; "override"; "priv";
   "typeof"; "unsized"; "virtual"; "yield";
 
   "try";
@@ -107,10 +107,10 @@ let rust_ghost_keywords = [
   "box_class"; "action"; "handle_pred"; "preserved_by"; "consuming_box_pred"; "consuming_handle_pred"; "perform_action"; "nonghost_callers_only";
   "create_box"; "above"; "below"; "and_handle"; "and_fresh_handle"; "create_handle"; "create_fresh_handle"; "dispose_box"; 
   "produce_lem_ptr_chunk"; "dup_lem_ptr_chunk"; "produce_fn_ptr_chunk";
-  "producing_box_pred"; "producing_handle_pred"; "producing_fresh_handle_pred"; "box"; "handle"; "any"; "split_fraction"; "by"; "merge_fractions";
+  "producing_box_pred"; "producing_handle_pred"; "producing_fresh_handle_pred"; "handle"; "any"; "split_fraction"; "by"; "merge_fractions";
   "unloadable_module"; "decreases"; "forall_"; "import_module"; "require_module"; ".."; "extends"; "permbased";
   "terminates"; "abstract_type"; "fix_auto"; "typeid"; "activating"; "truncating"; "typedef"; "fn_type"; "lem_type";
-  "type_pred_decl"; "type_pred_def"
+  "type_pred_decl"; "type_pred_def"; "let_lft"
 ]
 
 let java_keywords = [

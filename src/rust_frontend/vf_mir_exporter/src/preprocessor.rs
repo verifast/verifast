@@ -130,7 +130,7 @@ fn ghost_range_contents_is_block_decls(contents: &str) -> bool {
         || trimmed_contents.starts_with("lem ")
         || trimmed_contents.starts_with("lem_auto ")
         || trimmed_contents.starts_with("lem_auto(")
-        || trimmed_contents.starts_with("let '")
+        || trimmed_contents.starts_with("let_lft ")
 }
 
 /// If a ghost range occurs at the toplevel before the first token in a file,
