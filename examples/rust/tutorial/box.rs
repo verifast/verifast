@@ -5,26 +5,25 @@ pub struct Box<T> {
 }
 
 /*@
-pred BoxU8_own(t: thread_id_t, ptr: *u8;) = *ptr |-> ?v_ &*& std::alloc::alloc_block(ptr, std::alloc::Layout::new_::<u8>());
-pred_ctor Box_ptr(l: *BoxU8, p: *u8)(;) = (*l).ptr |-> p;
-pred BoxU8_share(k: lifetime_t, t: thread_id_t, l: *BoxU8) = [_]exists(?p) &*& [_]frac_borrow(k, Box_ptr(l, p)) &*& [_]frac_borrow(k, u8_full_borrow_content(t, p));
+pred<T> <Box<T>>.own(t, b) = *b.ptr |-> ?v &*& <T>.own(t, v);
+pred_ctor frac_borrow_content<T>(l: *Box<T>, ptr: *T)(;) = (*l).ptr |-> ptr;
+pred<T> <Box<T>>.share(k, t, l) = [_]exists(?ptr) &*& [_]frac_borrow(k, frac_borrow_content(l, ptr)) &*& [_](<T>.share)(k, t, ptr);
 
-lem BoxU8_share_mono(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *BoxU8)
-    req lifetime_inclusion(k1, k) == true &*& [_]BoxU8_share(k, t, l);
-    ens [_]BoxU8_share(k1, t, l);
+lem Box_share_mono<T>(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *Box<T>)
+    req type_interp::<T>() &*& lifetime_inclusion(k1, k) == true &*& [_](<Box<T>>.share)(k, t, l);
+    ens type_interp::<T>() &*& [_](<Box<T>>.share)(k1, t, l);
 {
-    open BoxU8_share(k, t, l);
-    assert [_]exists(?p);
-    frac_borrow_mono(k, k1, Box_ptr(l, p));
-    frac_borrow_mono(k, k1, u8_full_borrow_content(t, p));
-    close BoxU8_share(k1, t, l);
-    leak BoxU8_share(k1, t, l);
+    open Box_share::<T>(k, t, l);
+    assert [_]exists(?ptr);
+    frac_borrow_mono(k, k1, frac_borrow_content(l, ptr));
+    share_mono(k, k1, t, ptr);
+    close Box_share::<T>(k1, t, l);
+    leak Box_share(k1, t, l);
 }
 
-pred_ctor ctx(l: *BoxU8, ptr: *u8)(;) = struct_BoxU8_padding(l) &*& std::alloc::alloc_block(ptr, std::alloc::Layout::new_::<u8>());
-lem BoxU8_share_full(k: lifetime_t, t: thread_id_t, l: *BoxU8)
-    req atomic_mask(Nlft) &*& [?q]lifetime_token(k) &*& full_borrow(k, BoxU8_full_borrow_content(t, l));
-    ens atomic_mask(Nlft) &*& [q]lifetime_token(k) &*& [_]BoxU8_share(k, t, l);
+lem Box_share_full<T>(k: lifetime_t, t: thread_id_t, l: *Box<T>)
+    req atomic_mask(Nlft) &*& [?q]lifetime_token(k) &*& full_borrow(k, Box_full_borrow_content(t, l));
+    ens atomic_mask(Nlft) &*& [q]lifetime_token(k) &*& [_](<Box<T>>.share)(k, t, l);
 {
     let klong = open_full_borrow_strong_m(k, BoxU8_full_borrow_content(t, l), q);
     open BoxU8_full_borrow_content(t, l)();
@@ -47,37 +46,41 @@ lem BoxU8_share_full(k: lifetime_t, t: thread_id_t, l: *BoxU8)
 }
 @*/
 
-impl BoxU8 {
-    pub fn new(v: u8) -> BoxU8 {
-        let l = Layout::new::<u8>();
+impl<T> Box<T> {
+    pub fn new(v: T) -> Box<T> {
+        let l = Layout::new::<T>();
+        if l.size() == 0 { std::process::abort(); }
         unsafe {
-        let p = alloc(l);
-        if p.is_null() {
-            handle_alloc_error(l);
-        }
-        *p = v;
-        Self { ptr: p }
+            let p = alloc(l) as *mut T;
+            if p.is_null() {
+                handle_alloc_error(l);
+            }
+            //@ from_u8s_(p);
+            std::ptr::write(p, v);
+            let r = Self { ptr: p };
+            //@ close Box_own::<T>(_t, r);
+            r
         }
     }
 }
 
-impl Drop for BoxU8 {
+impl<T> Drop for Box<T> {
     fn drop<'a>(&'a mut self)
-    //@ req thread_token(?t) &*& BoxU8_full_borrow_content(t, self)();
-    //@ ens thread_token(t) &*& (*self).ptr |-> ?_ &*& struct_BoxU8_padding(self);
+    //@ req thread_token(?t) &*& Box_full_borrow_content::<T>(t, self)();
+    //@ ens thread_token(t) &*& (*self).ptr |-> ?_ &*& struct_Box_padding(self);
     {
         unsafe {
             //@ open BoxU8_full_borrow_content(t, self)();
             //@ assert (*self).ptr |-> ?ptr;
             //@ to_u8s_(ptr);
-            dealloc(self.ptr as *mut u8, Layout::new::<u8>());
+            dealloc(self.ptr as *mut u8, Layout::new::<T>());
         }
     }
 }
 
-impl std::ops::Deref for BoxU8 {
-    type Target = u8;
-    fn deref<'a>(&'a self) -> &'a u8 {
+impl<T> std::ops::Deref for Box<T> {
+    type Target = T;
+    fn deref<'a>(&'a self) -> &'a T {
         //@ open BoxU8_share(a, _t, self);
         //@ assert [_]exists(?ptr);
         //@ open_frac_borrow(a, Box_ptr(self, ptr), _q_a);
@@ -88,8 +91,8 @@ impl std::ops::Deref for BoxU8 {
     }
 }
 
-impl std::ops::DerefMut for BoxU8 {
-    fn deref_mut<'a>(&'a mut self) -> &'a mut u8 {
+impl<T> std::ops::DerefMut for Box<T> {
+    fn deref_mut<'a>(&'a mut self) -> &'a mut T {
         //@ let klong = open_full_borrow_strong(a, BoxU8_full_borrow_content(_t, self), _q_a);
         //@ open BoxU8_full_borrow_content(_t, self)();
         let r = unsafe { &mut *self.ptr };
