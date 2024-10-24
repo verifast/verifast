@@ -155,6 +155,22 @@ lem close_full_borrow_strong(k1: lifetime_t, P: pred(), Q: pred());
     req close_full_borrow_token_strong(k1, P, ?q, ?k) &*& is_full_borrow_convert_strong(?f, ?Ctx, Q, k1, P) &*& Ctx() &*& Q();
     ens full_borrow(k1, Q) &*& [q]lifetime_token(k) &*& is_full_borrow_convert_strong(f, Ctx, Q, k1, P);
 
+pred close_full_borrow_token_strong_(k: lifetime_t, P: pred(), q: real);
+
+lem open_full_borrow_strong_(k: lifetime_t, P: pred());
+    nonghost_callers_only
+    req full_borrow(k, P) &*& [?q]lifetime_token(k);
+    ens P() &*& close_full_borrow_token_strong_(k, P, q);
+
+lem_type restore_full_borrow_(Ctx: pred(), Q: pred(), P: pred()) = lem();
+    req Ctx() &*& Q(); // Empty mask
+    ens P();
+
+lem close_full_borrow_strong_();
+    nonghost_callers_only
+    req close_full_borrow_token_strong_(?k, ?P, ?q) &*& is_restore_full_borrow_(?proof, ?Ctx, ?Q, P) &*& Ctx() &*& Q();
+    ens full_borrow(k, Q) &*& [q]lifetime_token(k) &*& is_restore_full_borrow_(proof, Ctx, Q, P);
+
 // LftL-bor-unnest
 pred_ctor full_borrow_(k: lifetime_t, P: pred())(;) = full_borrow(k, P);
 

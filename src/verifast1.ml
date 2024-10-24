@@ -6710,8 +6710,17 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     flatmap
       begin
         function
-          (sn, (_, tparams, Some (_, fmap, _), _, _)) ->
+          (sn, (lsn, tparams, Some (_, fmap, _), padding_symb_opt, _)) ->
           let targs = tparams_as_targs tparams in
+          begin match padding_symb_opt, fmap with
+          | Some symb, [_] ->
+            (* Single-field structs have no padding *)
+            [("struct_" ^ sn ^ "_padding", []),
+             ([], lsn, tparams, [sn, PtrType (StructType (sn, targs))], symb, Some 1,
+              EmpAsn lsn)]
+          | _ -> []
+          end
+          @
           flatmap
             begin
               function
