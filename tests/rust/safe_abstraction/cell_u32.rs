@@ -30,11 +30,11 @@ lem CellU32_share_mono(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *CellU3
   req lifetime_inclusion(k1, k) == true &*& [_]CellU32_share(k, t, l);
   ens [_]CellU32_share(k1, t, l);
 {
-  open CellU32_share(k, t, l);
+  open <CellU32>.share(k, t, l);
   assert [_]nonatomic_borrow(k, t, ?m, _);
   nonatomic_borrow_mono(k, k1, t, m, CellU32_nonatomic_borrow_content(l, t));
-  close CellU32_share(k1, t, l);
-  leak CellU32_share(k1, t, l);
+  close <CellU32>.share(k1, t, l);
+  leak <CellU32>.share(k1, t, l);
 }
 
 lem CellU32_share_full(k: lifetime_t, t: thread_id_t, l: *CellU32)
@@ -42,19 +42,19 @@ lem CellU32_share_full(k: lifetime_t, t: thread_id_t, l: *CellU32)
   ens atomic_mask(Nlft) &*& [_]CellU32_share(k, t, l) &*& [q]lifetime_token(k);
 {
   produce_lem_ptr_chunk implies(CellU32_full_borrow_content(t, l), CellU32_nonatomic_borrow_content(l, t))() {
-    open CellU32_full_borrow_content(t, l)();
-    close CellU32_nonatomic_borrow_content(l, t)();
+    open <CellU32>.full_borrow_content(t, l)();
+    close <CellU32>.nonatomic_borrow_content(l, t)();
   } {
     produce_lem_ptr_chunk implies(CellU32_nonatomic_borrow_content(l, t), CellU32_full_borrow_content(t, l))() {
-      open CellU32_nonatomic_borrow_content(l, t)();
-      close CellU32_full_borrow_content(t, l)();
+      open <CellU32>.nonatomic_borrow_content(l, t)();
+      close <CellU32>.full_borrow_content(t, l)();
     } {
       full_borrow_implies(k, CellU32_full_borrow_content(t, l), CellU32_nonatomic_borrow_content(l, t));
     }
   }
   full_borrow_into_nonatomic_borrow_m(k, t, MaskNshrSingle(l), CellU32_nonatomic_borrow_content(l, t));
-  close CellU32_share(k, t, l);
-  leak CellU32_share(k, t, l);
+  close <CellU32>.share(k, t, l);
+  leak <CellU32>.share(k, t, l);
 }
 @*/
 
@@ -63,13 +63,13 @@ impl CellU32 {
         let c = CellU32 {
             v: std::cell::UnsafeCell::new(u),
         };
-        //@ close CellU32_own(_t, c);
+        //@ close <CellU32>.own(_t, c);
         c
     }
 
     /* VeriFast generates the contract of the safe functions based on the function's semantic type */
     pub fn get<'a>(&'a self) -> u32 {
-        //@ open CellU32_share('a, _t, self);
+        //@ open <CellU32>.share('a, _t, self);
         //@ assert [_]nonatomic_borrow('a, _t, ?_m, _);
         //@ open thread_token(_t);
         //@ thread_token_split(_t, MaskTop, _m);
@@ -88,7 +88,7 @@ impl CellU32 {
     //@ ens thread_token(t) &*& [q]lifetime_token(a);
     {
         let p = self.v.get();
-        //@ open CellU32_share(a, t, self);
+        //@ open <CellU32>.share(a, t, self);
         //@ assert [_]nonatomic_borrow(a, t, ?m, _);
         //@ open thread_token(t);
         //@ thread_token_split(t, MaskTop, m);
@@ -102,8 +102,8 @@ impl CellU32 {
     }
 
     pub fn swap<'a>(&'a self, other: &'a Self) {
-        //@ open CellU32_share('a, _t, self);
-        //@ open CellU32_share('a, _t, other);
+        //@ open <CellU32>.share('a, _t, self);
+        //@ open <CellU32>.share('a, _t, other);
         if self as *const CellU32 == other as *const CellU32 {
             return;
         }

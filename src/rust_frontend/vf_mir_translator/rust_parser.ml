@@ -220,9 +220,12 @@ let rec parse_expr_funcs allowStructExprs =
     ] -> e
   and parse_suffix e = function%parser
     [ (l, Kwd "."); (_, Ident f); [%let e = parse_suffix (Select (l, e, f)) ] ] -> e
-  | [ (l, Kwd "("); [%let args = rep_comma parse_pat ]; (_, Kwd ")") ] ->
-    let args = args |> List.map @@ function LitPat e -> e | _ -> static_error l "Patterns are not supported as arguments here" None in
-    ExprCallExpr (l, e, args)
+  | [ (l, Kwd "("); [%let args = rep_comma parse_pat ]; (_, Kwd ")");
+      [%let e = parse_suffix begin
+         let args = args |> List.map @@ function LitPat e -> e | _ -> static_error l "Patterns are not supported as arguments here" None in
+         ExprCallExpr (l, e, args)
+       end]
+    ] -> e
   | [ (l, Kwd "[");
       [%let p1 = opt parse_pat];
       [%let index = function%parser
@@ -398,6 +401,34 @@ let parse_spec_clauses = function%parser
   if cs <> [] then raise (Stream.Error "The number, kind, or order of specification clauses is incorrect. Expected: nonghost_callers_only clause (optional), function type clause (optional), contract (optional), terminates clause (optional).");
   (nonghost_callers_only, ft, pre_post, terminates)
 
+let parse_pred_asn = function%parser
+  [ parse_expr as e ] ->
+  begin match e with
+    CallExpr (_, g, targs, es1, es2, Static) ->
+    (None, g, targs, es1, es2)
+  | CallExpr (_, g, targs, es1, LitPat target::es2, Instance) ->
+    (Some target, g, targs, es1, es2)
+  | ExprCallExpr (_, TypePredExpr (_, te, g), args) ->
+    begin match te with
+      IdentTypeExpr (_, None, sn) ->
+      (None, sn ^ "_" ^ g, [], [], List.map (fun e -> LitPat e) args)
+    | ConstructedTypeExpr (_, sn, targs) ->
+      (None, sn ^ "_" ^ g, targs, [], List.map (fun e -> LitPat e) args)
+    | _ ->
+      raise (ParseException (type_expr_loc te, "Opening or closing a type predicate for this type is not yet supported"))
+    end
+  | ExprCallExpr (_, ExprCallExpr (_, TypePredExpr (_, te, g), args1), args2) ->
+    begin match te with
+    IdentTypeExpr (_, None, sn) ->
+      (None, sn ^ "_" ^ g, [], List.map (fun e -> LitPat e) args1, List.map (fun e -> LitPat e) args2)
+    | ConstructedTypeExpr (_, sn, targs) ->
+      (None, sn ^ "_" ^ g, targs, List.map (fun e -> LitPat e) args1, List.map (fun e -> LitPat e) args2)
+    | _ ->
+      raise (ParseException (type_expr_loc te, "Opening or closing a type predicate for this type is not yet supported"))
+    end
+  | _ -> raise (ParseException (expr_loc e, "Body of open or close statement must be call expression."))
+  end
+
 let rec parse_stmt = function%parser
   [ (Lexed (sp1, _), Kwd "/*@"); parse_stmt as s; (Lexed (_, sp2), Kwd "@*/") ] ->
   PureStmt (Lexed (sp1, sp2), s)
@@ -405,28 +436,16 @@ let rec parse_stmt = function%parser
 | [ (l, Kwd "req"); parse_asn as req; (_, Kwd ";"); (_, Kwd "ens"); parse_asn as ens; (_, Kwd ";") ] -> SpecStmt (l, req, ens)
 | [ (l, Kwd "open");
     [%let coef = opt parse_coef];
-    parse_expr as e;
+    [%let (target, g, targs, es1, es2) = parse_pred_asn];
     (_, Kwd ";")
   ] ->
-  begin match e with
-    CallExpr (_, g, targs, es1, es2, Static) ->
-    Open (l, None, g, targs, es1, es2, coef)
-  | CallExpr (_, g, targs, es1, LitPat target::es2, Instance) ->
-    Open (l, Some target, g, targs, es1, es2, coef)
-  | _ -> raise (ParseException (l, "Body of open statement must be call expression."))
-  end
+  Open (l, target, g, targs, es1, es2, coef)
 | [ (l, Kwd "close");
     [%let coef = opt parse_coef];
-    parse_expr as e;
+    [%let (target, g, targs, es1, es2) = parse_pred_asn];
     (_, Kwd ";")
   ] ->
-  begin match e with
-    CallExpr (_, g, targs, es1, es2, Static) ->
-    Close (l, None, g, targs, es1, es2, coef)
-  | CallExpr (_, g, targs, es1, LitPat target::es2, Instance) ->
-    Close (l, Some target, g, targs, es1, es2, coef)
-  | _ -> raise (ParseException (l, "Body of close statement must be call expression."))
-  end
+  Close (l, target, g, targs, es1, es2, coef)
 | [ (l, Kwd "let"); (lx, Ident x); (_, Kwd "="); parse_expr as e; (_, Kwd ";") ] ->
   DeclStmt (l, [lx, None, x, Some e, (ref false, ref None)])
 | [ (l, Kwd "if"); parse_expr_no_struct_expr as e; parse_block_stmt as s1;

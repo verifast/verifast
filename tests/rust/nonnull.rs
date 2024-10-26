@@ -8,10 +8,10 @@ lem ptr::NonNull_share_mono<T>(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l:
     req lifetime_inclusion(k1, k) == true &*& [_]ptr::NonNull_share(k, t, l);
     ens [_]ptr::NonNull_share(k1, t, l);
 {
-    open ptr::NonNull_share::<T>()(k, t, l);
+    open <ptr::NonNull<T>>.share(k, t, l);
     frac_borrow_mono(k, k1, ptr::NonNull_frac_bc(t, l));
     assert [?q]frac_borrow(k1, _);
-    close [q]ptr::NonNull_share::<T>()(k1, t, l);
+    close [q]<ptr::NonNull<T>>.share(k1, t, l);
 }
 
 lem ptr::NonNull_share_full<T>(k: lifetime_t, t: thread_id_t, l: *ptr::NonNull<T>)
@@ -23,7 +23,7 @@ lem ptr::NonNull_share_full<T>(k: lifetime_t, t: thread_id_t, l: *ptr::NonNull<T
         close ptr::NonNull_full_borrow_content::<T>(t, l)();
     }{
         produce_lem_ptr_chunk implies(ptr::NonNull_full_borrow_content(t, l), ptr::NonNull_frac_bc(t, l))(){
-            open ptr::NonNull_full_borrow_content::<T>(t, l)();
+            open <ptr::NonNull<T>>.full_borrow_content(t, l)();
             close ptr::NonNull_frac_bc::<T>(t, l)();
         }{
             full_borrow_implies(k, ptr::NonNull_full_borrow_content(t, l), ptr::NonNull_frac_bc(t, l));
@@ -31,7 +31,7 @@ lem ptr::NonNull_share_full<T>(k: lifetime_t, t: thread_id_t, l: *ptr::NonNull<T
         }
     }
     assert [?qf]frac_borrow(k, ptr::NonNull_frac_bc(t, l));
-    close [qf]ptr::NonNull_share::<T>(k, t, l);
+    close [qf]<ptr::NonNull<T>>.share(k, t, l);
 }
 @*/
 
@@ -46,7 +46,7 @@ pub mod ptr {
                 pointer: reference as *mut T,
             };
             //@ points_to_limits(reference);
-            //@ close ptr::NonNull_own::<T>(_t, r);
+            //@ close <ptr::NonNull<T>>.own(_t, r);
             r
         }
 
@@ -66,7 +66,7 @@ pub mod ptr {
         }
 
         pub fn as_ptr(self) -> *mut T {
-            //@ open ptr::NonNull_own::<T>(_t, _);
+            //@ open <ptr::NonNull<T>>.own(_t, self);
             self.pointer as *mut T
         }
     }
@@ -78,12 +78,12 @@ pub mod ptr {
             //@ open_frac_borrow('a, ptr::NonNull_frac_bc(_t, self), _q_a);
             //@ open ptr::NonNull_frac_bc::<T>(_t, self)();
             let r = *self;
-            //@ open ptr::NonNull_own::<T>(_t, ?nnp);
+            //@ open <ptr::NonNull<T>>.own(_t, r);
             //@ assert [?qp](*self).pointer |-> _;
-            //@ close [qp]ptr::NonNull_own::<T>()(_t, nnp);
+            //@ close [qp]<ptr::NonNull<T>>.own()(_t, r);
             //@ close [qp]ptr::NonNull_frac_bc::<T>(_t, self)();
             //@ close_frac_borrow(qp, ptr::NonNull_frac_bc(_t, self));
-            //@ close ptr::NonNull_own::<T>(_t, r);
+            //@ close <ptr::NonNull<T>>.own(_t, r);
             r
         }
     }
