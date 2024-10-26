@@ -35,7 +35,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | Deref (l, e) -> expr_assigned_variables e
     | WDeref (_, e, _) | WReadUnionMember (_, e, _, _, _, _, _) -> expr_assigned_variables e
     | CallExpr (l, g, _, _, pats, _) -> flatmap (function (LitPat e) -> expr_assigned_variables e | _ -> []) pats
-    | ExprCallExpr (l, e, es) -> flatmap expr_assigned_variables (e::es)
+    | ExprCallExpr (l, e, es) -> flatmap (function LitPat e -> expr_assigned_variables e | _ -> []) (LitPat e::es)
     | WPureFunCall (l, g, targs, args) -> flatmap expr_assigned_variables args
     | WPureFunValueCall (l, e, es) -> flatmap expr_assigned_variables (e::es)
     | WMethodCall (l, cn, m, pts, args, mb, tpenv) -> flatmap expr_assigned_variables args
@@ -1313,7 +1313,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | _ -> 
         List.iter (fun pat -> pat_expr_mark_addr_taken pat locals) (ps1 @ ps2)
       end
-    | ExprCallExpr(_, e, es) -> List.iter (fun e -> expr_mark_addr_taken e locals) (e :: es)
+    | ExprCallExpr(_, e, es) -> expr_mark_addr_taken e locals; List.iter (fun e -> pat_expr_mark_addr_taken e locals) es
     | WFunPtrCall(_, e, ftn, es) -> List.iter (fun e -> expr_mark_addr_taken e locals) (e :: es)
     | WPureFunCall(_, _, _, es) -> List.iter (fun e -> expr_mark_addr_taken e locals) es
     | WPureFunValueCall(_, e, es) -> List.iter (fun e -> expr_mark_addr_taken e locals) (e :: es)
@@ -1474,7 +1474,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | Deref(_, e) -> (expr_address_taken e)
     | WDeref(_, e, _) | WReadUnionMember (_, e, _, _, _, _, _) -> (expr_address_taken e)
     | CallExpr(_, _, _, ps1, ps2, _) -> List.flatten (List.map (fun pat -> pat_address_taken pat) (ps1 @ ps2))
-    | ExprCallExpr(_, e, es) -> List.flatten (List.map (fun e -> expr_address_taken e) (e :: es))
+    | ExprCallExpr(_, e, es) -> expr_address_taken e @ flatmap pat_address_taken es
     | WFunPtrCall(_, e, ftn, es) -> List.flatten (List.map (fun e -> expr_address_taken e) (e :: es))
     | WPureFunCall(_, _, _, es) -> List.flatten (List.map (fun e -> expr_address_taken e) es)
     | WPureFunValueCall(_, e, es) -> List.flatten (List.map (fun e -> expr_address_taken e) (e :: es))

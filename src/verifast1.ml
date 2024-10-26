@@ -4575,6 +4575,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let tp = instantiate_type tpenv tp in
       (WFunCall (l, "#inductive_projection", [t], [w; i1; i2], Static), tp, None)
     | ExprCallExpr (l, e, es) ->
+      let es = List.map (function LitPat e -> e | _ -> static_error l "Patterns are not supported here" None) es in
       let (w, t, _) = check e in
       begin match (t, es) with
         (PureFuncType (_, _), _) -> check_pure_fun_value_call l w t es
@@ -6501,7 +6502,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let a =
           match e with
           | CallExpr (l, g, targs, pats0, pats, binding) when binding <> Instance -> PredAsn (l, g, targs, pats0, pats, binding)
-          | ExprCallExpr (l, e, args) -> PredExprAsn (l, e, List.map (fun e -> LitPat e) args)
+          | ExprCallExpr (l, e, args) -> PredExprAsn (l, e, args)
           | CallExpr (l, g, [], pats0, LitPat e::pats, Instance) ->
             let index =
               match pats0 with

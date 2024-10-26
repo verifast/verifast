@@ -407,7 +407,7 @@ and
   | ExprCallExpr of (* Call whose callee is an expression instead of a plain identifier *)
       loc *
       expr *
-      expr list
+      pat list
   | WFunPtrCall of loc * expr * string option (* function type name *) * expr list
   | WPureFunCall of loc * string * type_ list * expr list
   | WPureFunValueCall of loc * expr * expr list
@@ -1287,7 +1287,7 @@ let expr_fold_open iter state e =
   | Deref (l, e0) -> iter state e0
   | WDeref (l, e0, tp) -> iter state e0
   | CallExpr (l, g, targes, pats0, pats, mb) -> let state = iterpats state pats0 in let state = iterpats state pats in state
-  | ExprCallExpr (l, e, es) -> iters state (e::es)
+  | ExprCallExpr (l, e, es) -> iterpats (iter state e) es
   | WPureFunCall (l, g, targs, args) -> iters state args
   | WPureFunValueCall (l, e, args) -> iters state (e::args)
   | WFunCall (l, g, targs, args, _) -> iters state args

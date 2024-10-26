@@ -1109,7 +1109,7 @@ and
           Some ([ReturnStmt (l, Some (call g [call iargs (List.map (fun (t, x) -> Var (l, x)) ps)]))], l), false, []);
         Func (l, Fixpoint, tparams, Some rt, gdef_curried, [PureFuncTypeExpr (l, [iargsType; rt]), g; iargsType, "__args"], false, None, None, false,
           Some ([SwitchStmt (l, Var (l, "__args"), [SwitchStmtClause (l, call iargs (List.map (fun (t, x) -> Var (l, x)) ps),
-            [ReturnStmt (l, Some (call gdef ([ExprCallExpr (l, Var (l, g_uncurry), [Var (l, g)])] @ List.map (fun (t, x) -> Var (l, x)) ps)))])])], l), false, []);
+            [ReturnStmt (l, Some (call gdef ([ExprCallExpr (l, Var (l, g_uncurry), [LitPat (Var (l, g))])] @ List.map (fun (t, x) -> Var (l, x)) ps)))])])], l), false, []);
         Func (l, Fixpoint, tparams, Some (ManifestTypeExpr (l, intType)), gmeasure, [iargsType, "__args"], false, None, None, false,
           Some ([SwitchStmt (l, Var (l, "__args"), [SwitchStmtClause (l, call iargs (List.map (fun (t, x) -> Var (l, x)) ps),
             [ReturnStmt (l, Some measure)])])], l), false, []);
@@ -1121,7 +1121,7 @@ and
             IfStmt (l, Operation (l, Neq, [call g (List.map (fun (t, x) -> Var (l, x)) ps); bodyExpr]), [
               ExprStmt (call "fix_unfold" [Var (l, gdef_curried); Var (l, gmeasure); call iargs (List.map (fun (t, x) -> Var (l, x)) ps)]);
               Open (l, None, "exists", [], [], [CtorPat (l, "pair", [CtorPat (l, "pair", [VarPat (l, "f1__"); VarPat (l, "f2__")]); CtorPat (l, iargs, List.map (fun (t, x) -> VarPat (l, x ^ "0")) ps)])], None);
-              Assert (l, (MatchAsn (l, call "pair" [ExprCallExpr (l, Var (l, g_uncurry), [Var (l, "f1_")]); ExprCallExpr (l, Var (l, g_uncurry), [Var (l, "f2_")])],
+              Assert (l, (MatchAsn (l, call "pair" [ExprCallExpr (l, Var (l, g_uncurry), [LitPat (Var (l, "f1_"))]); ExprCallExpr (l, Var (l, g_uncurry), [LitPat (Var (l, "f2_"))])],
                 CtorPat (l, "pair", [VarPat (l, g ^ "__1"); VarPat (l, g ^ "__2")]))));
               Assert (l, Operation (l, Eq, [
                 call gdef ([Var (l, g ^ "__1")] @ List.map (fun (t, x) -> Var (l, x ^ "0")) ps);
@@ -2803,9 +2803,9 @@ and
 | [ (l, Kwd "--"); 
     [%l e = parse_expr_suffix_rest (AssignOpExpr (l, e0, Sub, IntLit (l, unit_big_int, true, false, NoLSuffix), true))] ] -> e
 | [ (l, Kwd "("); 
-    [%l es = rep_comma parse_expr]; 
+    [%l es = rep_comma parse_pattern]; 
     (_, Kwd ")"); 
-    [%l e = parse_expr_suffix_rest (match e0 with Read(l', e0', f') -> CallExpr (l', f', [], [], LitPat(e0'):: (List.map (fun e -> LitPat(e)) es), Instance) | _ -> ExprCallExpr (l, e0, es))]
+    [%l e = parse_expr_suffix_rest (match e0 with Read(l', e0', f') -> CallExpr (l', f', [], [], LitPat e0'::es, Instance) | _ -> ExprCallExpr (l, e0, es))]
   ] -> e
 | [ ] -> e0
 and

@@ -1604,7 +1604,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   (Ast.ExprCallExpr
                      ( loc,
                        TypePredExpr (loc, IdentTypeExpr (loc, None, name), "own"),
-                       [ t; v ] )));
+                       [ LitPat t; LitPat v ] )));
             shr =
               (fun k t l ->
                 Ok
@@ -1615,7 +1615,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                          ( loc,
                            TypePredExpr
                              (loc, IdentTypeExpr (loc, None, name), "share"),
-                           [ k; t; l ] ) )));
+                           [ LitPat k; LitPat t; LitPat l ] ) )));
             full_bor_content =
               (fun tid l ->
                 Ok
@@ -1625,7 +1625,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                          ( loc,
                            IdentTypeExpr (loc, None, name),
                            "full_borrow_content" ),
-                       [ tid; l ] )));
+                       [ LitPat tid; LitPat l ] )));
             points_to =
               (fun t l vid ->
                 let rhs =

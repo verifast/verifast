@@ -221,10 +221,7 @@ let rec parse_expr_funcs allowStructExprs =
   and parse_suffix e = function%parser
     [ (l, Kwd "."); (_, Ident f); [%let e = parse_suffix (Select (l, e, f)) ] ] -> e
   | [ (l, Kwd "("); [%let args = rep_comma parse_pat ]; (_, Kwd ")");
-      [%let e = parse_suffix begin
-         let args = args |> List.map @@ function LitPat e -> e | _ -> static_error l "Patterns are not supported as arguments here" None in
-         ExprCallExpr (l, e, args)
-       end]
+      [%let e = parse_suffix (ExprCallExpr (l, e, args))]
     ] -> e
   | [ (l, Kwd "[");
       [%let p1 = opt parse_pat];
@@ -411,18 +408,18 @@ let parse_pred_asn = function%parser
   | ExprCallExpr (_, TypePredExpr (_, te, g), args) ->
     begin match te with
       IdentTypeExpr (_, None, sn) ->
-      (None, sn ^ "_" ^ g, [], [], List.map (fun e -> LitPat e) args)
+      (None, sn ^ "_" ^ g, [], [], args)
     | ConstructedTypeExpr (_, sn, targs) ->
-      (None, sn ^ "_" ^ g, targs, [], List.map (fun e -> LitPat e) args)
+      (None, sn ^ "_" ^ g, targs, [], args)
     | _ ->
       raise (ParseException (type_expr_loc te, "Opening or closing a type predicate for this type is not yet supported"))
     end
   | ExprCallExpr (_, ExprCallExpr (_, TypePredExpr (_, te, g), args1), args2) ->
     begin match te with
     IdentTypeExpr (_, None, sn) ->
-      (None, sn ^ "_" ^ g, [], List.map (fun e -> LitPat e) args1, List.map (fun e -> LitPat e) args2)
+      (None, sn ^ "_" ^ g, [], args1, args2)
     | ConstructedTypeExpr (_, sn, targs) ->
-      (None, sn ^ "_" ^ g, targs, List.map (fun e -> LitPat e) args1, List.map (fun e -> LitPat e) args2)
+      (None, sn ^ "_" ^ g, targs, args1, args2)
     | _ ->
       raise (ParseException (type_expr_loc te, "Opening or closing a type predicate for this type is not yet supported"))
     end
