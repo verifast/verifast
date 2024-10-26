@@ -14,7 +14,7 @@ impl<T> Box<T> {
         unsafe {
             //@ open_full_borrow_strong_('a, Box_full_borrow_content(_t, self));
             //@ open Box_full_borrow_content::<T>(_t, self)();
-            //@ open Box_own::<T>(_t, ?box);
+            //@ open <Box<T>>.own(_t, ?box);
             let r = &mut *self.ptr;
             /*@
             {

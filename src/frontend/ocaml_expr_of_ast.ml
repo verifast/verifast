@@ -337,7 +337,7 @@ and of_expr = function
   C ("ExprCallExpr", [
     of_loc l;
     of_expr ef;
-    of_list of_expr args
+    of_list of_pat args
   ])
 | WFunPtrCall (l, ef, ftn_opt, args) ->
   C ("WFunPtrCall", [

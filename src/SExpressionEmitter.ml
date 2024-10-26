@@ -375,7 +375,7 @@ let rec sexpr_of_expr (expr : expr) : sexpression =
         [ Symbol "expr-call-expr" ]
         [
           "expr", sexpr_of_expr expr;
-          "args", sexpr_of_list sexpr_of_expr args
+          "args", sexpr_of_list sexpr_of_pat args
         ]
     | WFunPtrCall (_, callee, ftn_opt, exprs) ->
       build_list

@@ -312,7 +312,7 @@ let _ =
       | ReadArray(_, array_expr, index_expr) -> string_of_expr array_expr ^ "[" ^ string_of_expr index_expr ^ "]" 
       | Deref(_, expr_in) -> "*" ^ string_of_expr expr_in
       | CallExpr(_, name, _, _, args, _) -> name ^ "(" ^ string_of_pat_list args ^ ")"
-      | ExprCallExpr(_, callee_expr, args_expr) -> string_of_expr callee_expr ^ "(" ^ string_of_expr_list args_expr ^ ")"
+      | ExprCallExpr(_, callee_expr, args_expr) -> string_of_expr callee_expr ^ "(" ^ string_of_pat_list args_expr ^ ")"
       | IfExpr(_, cond_expr, then_expr, else_expr) -> "(" ^ string_of_expr cond_expr ^") ? (" ^ string_of_expr then_expr ^ ") : (" ^ string_of_expr else_expr ^ ")"
       | CastExpr(_, type_cast, expr_in) -> "(" ^ string_of_type_expr type_cast ^ ")" ^ string_of_expr expr_in 
       | SizeofExpr(_, TypeExpr type_sizeof) -> "sizeof(" ^ string_of_type_expr type_sizeof ^ ")"
@@ -625,11 +625,11 @@ let _ =
               | ExprCallExpr(_, callee_expr, args_expr) ->
                 begin
                   let pattern_inside = if (exactMacthOnly) then false, []
-                    else combine_or (check_expr_for_pattern callee_expr pattern false) (check_expr_list_for_pattern args_expr pattern)
+                    else combine_or (check_expr_for_pattern callee_expr pattern false) (check_pat_list_for_pattern args_expr pattern)
                   in
                   match pattern with
-                    | ExprCallExpr(_, pattern_callee_expr, pattern_args_expr) -> 
-                      let res_exact_match = combine_and (check_expr_for_pattern callee_expr pattern_callee_expr true) (check_expr_list_for_pattern_list args_expr pattern_args_expr) in
+                    | ExprCallExpr(_, pattern_callee_expr, pattern_args_expr) when List.length args_expr = List.length pattern_args_expr ->
+                      let res_exact_match = combine_and (check_expr_for_pattern callee_expr pattern_callee_expr true) (check_pat_list_equal_list args_expr pattern_args_expr) in
                       combine_or pattern_inside res_exact_match
                     | _ -> pattern_inside
                 end
