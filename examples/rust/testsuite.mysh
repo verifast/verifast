@@ -5,4 +5,5 @@ cd tutorial
   verifast -c unsafe_box_forget.rs
   verifast -c unsafe_box.rs
   verifast -c box_u8.rs
+  verifast -c box.rs
 cd ..
