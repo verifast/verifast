@@ -94,35 +94,46 @@ impl<T> Drop for Box<T> {
 impl<T> std::ops::Deref for Box<T> {
     type Target = T;
     fn deref<'a>(&'a self) -> &'a T {
-        //@ open BoxU8_share(a, _t, self);
-        //@ assert [_]exists(?ptr);
-        //@ open_frac_borrow(a, Box_ptr(self, ptr), _q_a);
-        //@ assert [?qp]Box_ptr(self, ptr)();
+        //@ open <Box<T>>.share('a, _t, self);
+        //@ assert [_]exists(?p);
+        //@ open_frac_borrow('a, field_ptr_chunk(self, p), _q_a);
+        //@ open [?qp]field_ptr_chunk::<T>(self, p)();
         let r = unsafe{ &*self.ptr };
-        //@ close_frac_borrow(qp, Box_ptr(self, ptr));
+        //@ close [qp]field_ptr_chunk::<T>(self, p)();
+        //@ close_frac_borrow(qp, field_ptr_chunk(self, p));
         r
     }
 }
 
 impl<T> std::ops::DerefMut for Box<T> {
     fn deref_mut<'a>(&'a mut self) -> &'a mut T {
-        //@ let klong = open_full_borrow_strong(a, BoxU8_full_borrow_content(_t, self), _q_a);
-        //@ open BoxU8_full_borrow_content(_t, self)();
+        //@ let klong = open_full_borrow_strong('a, <Box<T>>.full_borrow_content(_t, self), _q_a);
+        //@ open <Box<T>>.full_borrow_content(_t, self)();
         let r = unsafe { &mut *self.ptr };
-        //@ open BoxU8_own(_t, ?ptr);
-        //@ close sep(Box_ptr(self, ptr), u8_full_borrow_content(_t, ptr))();
+        //@ open <Box<T>>.own(_t, ?b);
+        //@ let p = b.ptr;
+        //@ close field_ptr_chunk::<T>(self, p)();
+        //@ close_full_borrow_content(_t, p);
+        //@ close sep(field_ptr_chunk(self, p), <T>.full_borrow_content(_t, p))();
         /*@
-        produce_lem_ptr_chunk full_borrow_convert_strong(ctx(self, ptr), sep(Box_ptr(self, ptr), u8_full_borrow_content(_t, ptr)), klong, BoxU8_full_borrow_content(_t, self))() {
-            open sep(Box_ptr(self, ptr), u8_full_borrow_content(_t, ptr))();
-            close BoxU8_own(_t, ptr);
-            close BoxU8_full_borrow_content(_t, self)();
+        {
+        pred ctx(;) = std::alloc::alloc_block(p as *u8, std::alloc::Layout::new_::<T>());
+        close ctx();
+        produce_lem_ptr_chunk full_borrow_convert_strong(ctx, sep(field_ptr_chunk(self, p), <T>.full_borrow_content(_t, p)), klong, <Box<T>>.full_borrow_content(_t, self))() {
+            open ctx();
+            open sep(field_ptr_chunk(self, p), <T>.full_borrow_content(_t, p))();
+            open_full_borrow_content(_t, p);
+            close <Box<T>>.own(_t, b);
+            open field_ptr_chunk::<T>(self, p)();
+            close <Box<T>>.full_borrow_content(_t, self)();
         }{
-            close_full_borrow_strong(klong, BoxU8_full_borrow_content(_t, self), sep(Box_ptr(self, ptr), u8_full_borrow_content(_t, ptr)));
+            close_full_borrow_strong(klong, <Box<T>>.full_borrow_content(_t, self), sep(field_ptr_chunk(self, p), <T>.full_borrow_content(_t, p)));
+        }
         }
         @*/
-        //@ full_borrow_mono(klong, a, sep(Box_ptr(self, ptr), u8_full_borrow_content(_t, ptr)));
-        //@ full_borrow_split(a, Box_ptr(self, ptr), u8_full_borrow_content(_t, ptr));
-        //@ leak full_borrow(a, Box_ptr(self, ptr));
+        //@ full_borrow_mono(klong, 'a, sep(field_ptr_chunk(self, p), <T>.full_borrow_content(_t, p)));
+        //@ full_borrow_split('a, field_ptr_chunk(self, p), <T>.full_borrow_content(_t, p));
+        //@ leak full_borrow('a, field_ptr_chunk(self, p));
         r
     }
 }
