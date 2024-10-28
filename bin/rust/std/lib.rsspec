@@ -389,7 +389,7 @@ mod boxed {
         fn new(x: T) -> Box<T, std::alloc::Global>;
         //@ req true;
         //@ ens Box(result, x);
-        
+
         unsafe fn from_raw(x: *T) -> Box<T, std::alloc::Global>;
         //@ req *x |-> ?value &*& std::alloc::alloc_block(x as *u8, std::alloc::Layout::new_::<T>());
         //@ ens Box(result, value);
