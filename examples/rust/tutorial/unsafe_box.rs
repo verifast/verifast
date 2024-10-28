@@ -19,12 +19,12 @@ impl<T> Box<T> {
         //@ from_u8s_(p);
         std::ptr::write(p, v);
         let r = Self { ptr: p };
-        //@ close Box(t, Box::<T>{ptr: p}, v);
+        //@ close Box(t, r, v);
         r
     }
 
     pub unsafe fn drop(this: Box<T>)
-    //@ req thread_token(?t) &*& Box(t, this, ?v_);
+    //@ req thread_token(?t) &*& Box(t, this, ?_);
     //@ ens thread_token(t);
     {
         //@ open Box(t, this, _);
@@ -39,7 +39,7 @@ impl<T> Box<T> {
     //@ ens thread_token(t) &*& Box(t, result, v);
     {
         let r = Self { ptr: raw };
-        //@ close Box(t, Box::<T> { ptr: raw }, v);
+        //@ close Box(t, r, v);
         r
     }
 
