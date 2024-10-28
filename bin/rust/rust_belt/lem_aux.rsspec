@@ -1,4 +1,4 @@
-//TODO: Move the proofs to separate files so they do not get checked with every library
+// TODO: Move the proofs to separate files so they do not get checked with every library
 /*@
 
 lem u32_sync(k: lifetime_t, t: thread_id_t, t1: thread_id_t, l: *u32)
