@@ -3,10 +3,12 @@ use std::alloc::{alloc, dealloc, handle_alloc_error, Layout};
 pub struct BoxU8 {
     ptr: *mut u8,
 }
+
 /*@
 pred BoxU8(b: BoxU8; v: u8) = *b.ptr |-> v &*& std::alloc::alloc_block(b.ptr, std::alloc::Layout::new_::<u8>()) &*&
     object_pointer_within_limits(b.ptr, 1) == true;
 @*/
+
 impl BoxU8 {
     pub unsafe fn new(v: u8) -> BoxU8
     //@ req true;
@@ -22,7 +24,7 @@ impl BoxU8 {
     }
 
     pub unsafe fn drop(this: BoxU8)
-    //@ req BoxU8(this, ?v_);
+    //@ req BoxU8(this, ?_);
     //@ ens true;
     {
         dealloc(this.ptr, Layout::new::<u8>());
