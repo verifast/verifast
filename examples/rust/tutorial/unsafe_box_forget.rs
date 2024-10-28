@@ -22,7 +22,7 @@ impl<T> Box<T> {
     }
 
     pub unsafe fn drop(this: Box<T>)
-    //@ req Box(this, ?v_);
+    //@ req Box(this, ?_);
     //@ ens true;
     {
         //@ to_u8s_(this.ptr);
