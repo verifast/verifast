@@ -27,7 +27,7 @@ static Foo global_foo;
 Copy in return statement is not elided.
 */
 Foo copy_foo() 
-//@ requires copies |-> ?c &*& global_foo.i |-> ?i;
+//@ requires copies |-> ?c &*& global_foo.i |-> ?i &*& &global_foo != 0;
 //@ ensures copies |-> c + 1 &*& global_foo.i |-> i &*& struct_Foo_padding(&result) &*& result.i |-> i;
 {
     return global_foo;

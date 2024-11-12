@@ -2009,12 +2009,21 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           in
           mk_varargs h env [] pats
         | SrcPat (LitPat e)::pats, (x, tp0)::ps ->
-          let e, tp0 = match tp0 with 
-          | RefType t -> make_addr_of (expr_loc e) e, PtrType t
-          | _ -> e, tp0 
+          let e, tp0, ref_init_loc_opt = match tp0 with 
+          | RefType t -> 
+            let e_loc = expr_loc e in
+            make_addr_of e_loc e, PtrType t, Some e_loc
+          | _ -> e, tp0, None
           in
           let tp = instantiate_type tpenv tp0 in
           eval_h h env (SrcPat (LitPat (box (check_expr_t (pn,ilist) tparams tenv e tp) tp tp0))) $. fun h env t ->
+          begin fun cont ->
+            match ref_init_loc_opt with 
+            | Some ref_init_loc -> 
+              assert_term (ctxt#mk_not @@ ctxt#mk_eq t @@ null_pointer_term ()) h env ref_init_loc "A reference must be initialized to refer to a valid object." None;
+              cont ()
+            | _ -> cont ()
+          end @@ fun () ->
           iter h env (t::ts) pats ps
         | TermPat t::pats, _::ps ->
           iter h env (t::ts) pats ps
