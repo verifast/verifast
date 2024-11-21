@@ -975,8 +975,13 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 in
                 iter h env [] bs
               | RefType t, Some e ->
-                let w = check_expr_t (pn, ilist) tparams tenv (make_addr_of (expr_loc e) e) (PtrType t) in
-                verify_expr false h env (Some (x ^ "_addr")) w (fun h env v -> cont h env v) econt
+                let e_loc = expr_loc e in
+                let w = check_expr_t (pn, ilist) tparams tenv (make_addr_of e_loc e) (PtrType t) in
+                let cont h env v =
+                  assert_term (ctxt#mk_not @@ ctxt#mk_eq v @@ null_pointer_term ()) h env e_loc "A reference must be initialized to refer to a valid object." None;
+                  cont h env v
+                in
+                verify_expr false h env (Some (x ^ "_addr")) w cont econt
               | _, Some e ->
                 let w = check_expr_t (pn, ilist) tparams tenv e t in
                 verify_expr false h env (Some x) w (fun h env v -> cont h env v) econt

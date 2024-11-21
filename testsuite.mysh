@@ -688,6 +688,11 @@ cd tests
         verifast -c -disable_overflow_check copy_global.cpp
         verifast -c -disable_overflow_check copy_param.cpp
     cd ..
+    cd references
+        verifast -c -disable_overflow_check lvalue_refs.cpp
+        verifast -c -allow_should_fail init_local_null_ref.cpp
+        verifast -c -allow_should_fail init_param_null_ref.cpp
+    cd ..
     verifast -c main_implicit_return.cpp
     verifast -c new_class.cpp
     verifast -c new_primitives.cpp
@@ -695,7 +700,6 @@ cd tests
     verifast -disable_overflow_check operators.cpp
     verifast -c constructors.cpp
     verifast -c destructors.cpp
-    verifast -c -disable_overflow_check lvalue_refs.cpp
     verifast -c -allow_should_fail typeid.cpp
     verifast -c ghost_field.cpp
     verifast -c -disable_overflow_check non_compound_stmts.cpp

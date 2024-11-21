@@ -47,6 +47,7 @@ int main()
 {
   Object o;
   int i = 0;
+  //@ integer_limits(&i);
   int &iRef = passRef(i);
   int iUnpacked = unpackRef(iRef);
   int iUnpackedArg = unpackRefArg(iRef);

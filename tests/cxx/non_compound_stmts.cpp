@@ -31,6 +31,7 @@ int main()
 //@ ensures true;
 {
   int i = 0;
+  //@ integer_limits(&i);
   emptyWhileBody();
   nonCompoundWhileBody(i);
   nonCompoundIfElseBody(i);
