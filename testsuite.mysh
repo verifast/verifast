@@ -467,6 +467,7 @@ cd tutorial_solutions
   verifast_both -target 32bit students.c
 cd ..
 cd tests
+  verifast -c -allow_should_fail issue601.c
   verifast -c issue536.c
   verifast -c continue.c
   verifast -c generic_points_to.c

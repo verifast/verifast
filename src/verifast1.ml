@@ -6282,7 +6282,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   Some (lp, tparams, PredType ([], ps2, inputParamCount, Inductiveness_Inductive), ps1, funcsym) ->
                   reportUseSite DeclKind_Predicate lp l;
                   Some (tparams, ps1, ps2, inputParamCount)
-                | None -> None
+                | _ -> None
               with
                 Some (tparams, ps1, ps2, inputParamCount) ->
                 cont (PredCtor p, true, tparams, List.map snd ps1, ps2, inputParamCount)
