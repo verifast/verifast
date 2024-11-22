@@ -10,11 +10,7 @@ pub fn fn_sig(tcx: TyCtxt<'_>, def_id: DefId) -> &rustc_hir::FnSig<'_> {
 }
 
 pub fn fn_body(tcx: TyCtxt<'_>, def_id: DefId) -> &rustc_hir::Body<'_> {
-    let hir_node = tcx
-        .hir()
-        .get_if_local(def_id)
-        .expect("expected DefId to be local");
     let fn_body_id =
-        hir::map::associated_body(hir_node).expect("expected DefId to be a function with body");
-    tcx.hir().body(fn_body_id.1)
+        tcx.hir().body_owned_by(def_id.expect_local());
+    tcx.hir().body(fn_body_id)
 }

@@ -6,10 +6,10 @@ verifast -c -allow_should_fail public_fields.rs
 begin_sequential
 cd unverified
   cd platform
-    cargo +nightly-2023-12-31 build
+    cargo build
   cd ..
   cd sys
-    cargo +nightly-2023-12-31 build
+    cargo build
   cd ..
 cd ..
 begin_parallel

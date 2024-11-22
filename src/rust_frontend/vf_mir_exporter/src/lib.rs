@@ -2,7 +2,6 @@
 #![feature(extract_if)]
 #![feature(box_patterns)]
 #![feature(split_array)]
-#![feature(byte_slice_trim_ascii)]
 #![allow(unused_imports)]
 #![allow(unused_variables)]
 #![deny(warnings)]
@@ -192,7 +191,7 @@ impl rustc_driver::Callbacks for CompilerCalls {
         compiler: &Compiler,
         queries: &'tcx Queries<'tcx>,
     ) -> Compilation {
-        compiler.sess.parse_sess.dcx.abort_if_errors();
+        compiler.sess.psess.dcx.abort_if_errors();
         queries.global_ctxt().unwrap().enter(|tcx| {
             /*** Collecting Annotations */
             // TODO: Get comments from preprocessor
@@ -441,6 +440,7 @@ mod vf_mir_builder {
     use rustc_middle::ty::GenericParamDef;
     use rustc_middle::ty::GenericParamDefKind;
     use rustc_middle::{mir, ty::TyCtxt};
+    use rustc_span::source_map::Spanned;
     use rustc_span::Span;
     use rvalue_cpn::aggregate_data::aggregate_kind as aggregate_kind_cpn;
     use rvalue_cpn::binary_op_data as binary_op_data_cpn;
@@ -647,7 +647,7 @@ mod vf_mir_builder {
                 trait_impl_cpn.set_is_unsafe(trait_impl.is_unsafe);
                 trait_impl_cpn.set_is_negative(trait_impl.is_negative);
                 trait_impl_cpn.fill_generics(
-                    &self.tcx.generics_of(trait_impl.def_id).params,
+                    &self.tcx.generics_of(trait_impl.def_id).own_params,
                     |generic_param_cpn, generic_param| {
                         Self::encode_generic_param_def(generic_param, generic_param_cpn);
                     },
@@ -1118,7 +1118,7 @@ mod vf_mir_builder {
 
             let generics = tcx.generics_of(def_id);
             body_cpn.reborrow().fill_generics(
-                &generics.params,
+                &generics.own_params,
                 |generic_param_cpn, generic_param| {
                     Self::encode_generic_param_def(generic_param, generic_param_cpn);
                 },
@@ -1536,9 +1536,9 @@ mod vf_mir_builder {
                     let adt_ty_cpn = ty_kind_cpn.init_adt();
                     Self::encode_ty_adt(tcx, enc_ctx, *adt_def, substs, adt_ty_cpn);
                 }
-                ty::TyKind::RawPtr(ty_and_mut) => {
+                ty::TyKind::RawPtr(ty, mutability) => {
                     let raw_ptr_ty_cpn = ty_kind_cpn.init_raw_ptr();
-                    Self::encode_ty_raw_ptr(tcx, enc_ctx, ty_and_mut, raw_ptr_ty_cpn);
+                    Self::encode_ty_raw_ptr(tcx, enc_ctx, *ty, *mutability, raw_ptr_ty_cpn);
                 }
                 ty::TyKind::Ref(region, ty, mutability) => {
                     let ref_ty_cpn = ty_kind_cpn.init_ref();
@@ -1624,13 +1624,14 @@ mod vf_mir_builder {
         fn encode_ty_raw_ptr(
             tcx: TyCtxt<'tcx>,
             enc_ctx: &mut EncCtx<'tcx, 'a>,
-            ty_and_mut: &ty::TypeAndMut<'tcx>,
+            ty: ty::Ty<'tcx>,
+            mutability: mir::Mutability,
             mut raw_ptr_ty_cpn: raw_ptr_ty_cpn::Builder<'_>,
         ) {
             let ty_cpn = raw_ptr_ty_cpn.reborrow().init_ty();
-            Self::encode_ty(tcx, enc_ctx, ty_and_mut.ty, ty_cpn);
+            Self::encode_ty(tcx, enc_ctx, ty, ty_cpn);
             let mut_cpn = raw_ptr_ty_cpn.init_mutability();
-            Self::encode_mutability(ty_and_mut.mutbl, mut_cpn);
+            Self::encode_mutability(mutability, mut_cpn);
         }
 
         fn encode_ty_ref(
@@ -2123,7 +2124,7 @@ mod vf_mir_builder {
             tcx: TyCtxt<'tcx>,
             enc_ctx: &mut EncCtx<'tcx, 'a>,
             func: &mir::Operand<'tcx>,
-            args: &Vec<mir::Operand<'tcx>>,
+            args: &Vec<Spanned<mir::Operand<'tcx>>>,
             destination: &mir::Place<'tcx>,
             target: &Option<mir::BasicBlock>,
             fn_span: &rustc_span::Span,
@@ -2134,7 +2135,7 @@ mod vf_mir_builder {
 
             // Encoding args
             fn_call_data_cpn.fill_args(args, |arg_cpn, arg| {
-                Self::encode_operand(tcx, enc_ctx, arg, arg_cpn);
+                Self::encode_operand(tcx, enc_ctx, &arg.node, arg_cpn);
             });
 
             // Encode destination
@@ -2226,7 +2227,7 @@ mod vf_mir_builder {
                     Self::encode_ty(tcx, enc_ctx, *ty, val_cpn.init_ty());
                 }
                 mir::Const::Unevaluated(unevaluated_const, ty) => {
-                    let const_value = const_.eval(tcx, ty::ParamEnv::empty(), None).unwrap();
+                    let const_value = const_.eval(tcx, ty::ParamEnv::empty(), Span::default()).unwrap();
                     let mut val_cpn = const_cpn.init_val();
                     Self::encode_const_value(
                         tcx,
@@ -2527,24 +2528,24 @@ mod span_utils {
         hir_body: &rustc_hir::Body<'tcx>,
         def_id: DefId,
     ) -> Span {
-        let mut body_span = hir_body.value.span;
-        if tcx.is_closure(def_id) {
-            // If the MIR function is a closure, and if the closure body span
-            // starts from a macro, but it's content is not in that macro, try
-            // to find a non-macro callsite, and instrument the spans there
-            // instead.
-            loop {
-                let expn_data = body_span.ctxt().outer_expn_data();
-                if expn_data.is_root() {
-                    break;
-                }
-                if let ExpnKind::Macro { .. } = expn_data.kind {
-                    body_span = expn_data.call_site;
-                } else {
-                    break;
-                }
-            }
-        }
+        let body_span = hir_body.value.span;
+        // if tcx.is_closure(def_id) {
+        //     // If the MIR function is a closure, and if the closure body span
+        //     // starts from a macro, but it's content is not in that macro, try
+        //     // to find a non-macro callsite, and instrument the spans there
+        //     // instead.
+        //     loop {
+        //         let expn_data = body_span.ctxt().outer_expn_data();
+        //         if expn_data.is_root() {
+        //             break;
+        //         }
+        //         if let ExpnKind::Macro { .. } = expn_data.kind {
+        //             body_span = expn_data.call_site;
+        //         } else {
+        //             break;
+        //         }
+        //     }
+        // }
         body_span
     }
 
