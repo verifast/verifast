@@ -335,7 +335,7 @@ impl<'tcx> rustc_hir::intravisit::Visitor<'tcx> for HirVisitor {
                                 self.trait_impls.push(TraitImplInfo {
                                     def_id: item.owner_id.def_id,
                                     span: item.span,
-                                    is_unsafe: impl_.unsafety == rustc_hir::Unsafety::Unsafe,
+                                    is_unsafe: impl_.safety == rustc_hir::Safety::Unsafe,
                                     is_negative: match impl_.polarity {
                                         rustc_hir::ImplPolarity::Negative(_) => true,
                                         _ => false,
@@ -703,7 +703,7 @@ mod vf_mir_builder {
                                         required_fn_cpn.reborrow().init_name_span(),
                                     );
                                     Self::encode_unsafety(
-                                        fn_sig.header.unsafety,
+                                        fn_sig.header.safety,
                                         required_fn_cpn.reborrow().init_unsafety(),
                                     );
                                     required_fn_cpn.fill_lifetime_params(
@@ -1093,7 +1093,7 @@ mod vf_mir_builder {
             }
 
             Self::encode_unsafety(
-                tcx.fn_sig(def_id).skip_binder().unsafety(),
+                tcx.fn_sig(def_id).skip_binder().safety(),
                 body_cpn.reborrow().init_unsafety(),
             );
 
@@ -1241,10 +1241,10 @@ mod vf_mir_builder {
             );
         }
 
-        fn encode_unsafety(us: hir::Unsafety, mut us_cpn: unsafety_cpn::Builder<'_>) {
+        fn encode_unsafety(us: hir::Safety, mut us_cpn: unsafety_cpn::Builder<'_>) {
             match us {
-                hir::Unsafety::Normal => us_cpn.set_safe(()),
-                hir::Unsafety::Unsafe => us_cpn.set_unsafe(()),
+                hir::Safety::Safe => us_cpn.set_safe(()),
+                hir::Safety::Unsafe => us_cpn.set_unsafe(()),
             }
         }
 
@@ -1859,7 +1859,6 @@ mod vf_mir_builder {
                     let operandr_cpn = bin_op_data_cpn.init_operandr();
                     Self::encode_operand(tcx, enc_ctx, operandr, operandr_cpn);
                 }
-                mir::Rvalue::CheckedBinaryOp(bin_op, box (operandl, operandr)) => todo!(),
                 mir::Rvalue::NullaryOp(null_op, ty) => todo!(),
                 mir::Rvalue::UnaryOp(un_op, operand) => {
                     let mut un_op_data_cpn = rvalue_cpn.init_unary_op();
@@ -1997,6 +1996,7 @@ mod vf_mir_builder {
             match un_op {
                 mir::UnOp::Not => un_op_cpn.set_not(()),
                 mir::UnOp::Neg => un_op_cpn.set_neg(()),
+                mir::UnOp::PtrMetadata => todo!(),
             }
         }
 
@@ -2552,7 +2552,7 @@ mod span_utils {
     pub fn body_imp_span<'tcx>(tcx: TyCtxt<'tcx>, mir_body: &mir::Body<'tcx>) -> SpanData {
         let def_id = mir_body.source.def_id();
         let hir_body = hir_utils::fn_body(tcx, def_id);
-        let body_imp_span = get_hir_body_span(tcx, hir_body, def_id);
+        let body_imp_span = get_hir_body_span(tcx, &hir_body, def_id);
         debug!(
             "The body implementation span for {:?} at {:?} is {:?}",
             mir_body.source.instance, mir_body.span, body_imp_span
@@ -2564,7 +2564,7 @@ mod span_utils {
         let def_id = mir_body.source.def_id();
         let fn_sig = hir_utils::fn_sig(tcx, def_id);
         let hir_body = hir_utils::fn_body(tcx, def_id);
-        let body_span = get_hir_body_span(tcx, hir_body, def_id);
+        let body_span = get_hir_body_span(tcx, &hir_body, def_id);
         let cspan = fn_sig.span.shrink_to_hi().with_hi(body_span.lo());
         debug!(
             "Contract span for {:?} is {:?}",
