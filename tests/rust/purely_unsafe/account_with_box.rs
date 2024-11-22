@@ -23,9 +23,7 @@ impl Account {
     //@ req true;
     //@ ens Account(result, 0);
     {
-        let result = Box::into_raw(Box::new(Account { balance: 0 }));
-        //@ open_points_to(result);
-        result
+        Box::into_raw(Box::new(Account { balance: 0 }))
     }
 
     unsafe fn get_balance(account: *mut Account) -> i32

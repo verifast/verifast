@@ -2202,10 +2202,171 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       )
       transitive_contains_edges_
     in
+    let get_auto_open_generic_points_to__chunk_rule sn tparams fmap padding_predsymb_opt =
+      fun l h typeid_env wanted_targs terms_are_well_typed wanted_coef wanted_coefpat wanted_indices_and_input_ts cont ->
+        let [structPointerTerm] = wanted_indices_and_input_ts in
+        let structType = StructType (sn, wanted_targs) in
+        let generic_points_to__symb = generic_points_to__symb () in
+        match extract
+          begin function
+            (Chunk ((g, is_symb), [targ], coef, [tp'; v], _)) when g == generic_points_to__symb && unify targ structType && definitely_equal tp' structPointerTerm -> Some coef
+          | _ -> None
+          end
+          h
+        with
+        | Some (coef, h) ->
+          let chunks = fmap |> List.map begin fun (fn', (_, Real, ft', _, _)) ->
+            let (_, Some (_, (_, _, _, _, symb_', _, _))) = List.assoc (sn, fn') field_pred_map in
+            Chunk ((symb_', true), wanted_targs, coef, [structPointerTerm; get_unique_var_symb_non_ghost fn' ft'], None)
+          end in
+          let chunks =
+            match padding_predsymb_opt with
+              None -> chunks
+            | Some padding_predsymb -> Chunk ((padding_predsymb, true), wanted_targs, coef, [structPointerTerm], None)::chunks
+          in
+          cont (Some (chunks @ h))
+        | None ->
+          cont None
+    in
+    let get_auto_open_generic_points_to_chunk_rule sn tparams fmap padding_predsymb_opt =
+      fun l h typeid_env wanted_targs terms_are_well_typed wanted_coef wanted_coefpat wanted_indices_and_input_ts cont ->
+        let [structPointerTerm] = wanted_indices_and_input_ts in
+        let structType = StructType (sn, wanted_targs) in
+        match extract
+          begin function
+            (Chunk ((g, is_symb), [targ], coef, [tp'; v], _)) when g == generic_points_to_symb () && unify targ structType && definitely_equal tp' structPointerTerm -> Some (coef, v)
+          | _ -> None
+          end
+          h
+        with
+          None -> cont None
+        | Some ((coef, v), h) ->
+          let tpenv = List.combine tparams wanted_targs in
+          let (_, _, getters, _) = List.assoc sn struct_accessor_map in
+          let chunks = List.map2 begin fun (fn', (_, Real, ft', _, _)) (_, getter) ->
+            let fv = prover_convert_term (ctxt#mk_app getter [v]) ft' (instantiate_type tpenv ft') in
+            let ((_, (_, _, _, _, symb', _, _)), _) = List.assoc (sn, fn') field_pred_map in
+            Chunk ((symb', true), wanted_targs, coef, [structPointerTerm; fv], None)
+          end fmap getters in
+          let chunks =
+            match padding_predsymb_opt with
+              None -> chunks
+            | Some padding_predsymb -> Chunk ((padding_predsymb, true), wanted_targs, coef, [structPointerTerm], None)::chunks
+          in
+          cont (Some (chunks @ h))
+    in
+    structmap |> List.iter begin function (sn, (_, tparams, Some (_, fmap, _), Some padding_predsymb, _)) ->
+      add_rule padding_predsymb (get_auto_open_generic_points_to__chunk_rule sn tparams fmap (Some padding_predsymb));
+      add_rule padding_predsymb (get_auto_open_generic_points_to_chunk_rule sn tparams fmap (Some padding_predsymb))
+    | _ -> ()
+    end;
+    let autoclose_struct_points_to__chunk_rule l h typeid_env [wanted_targ] terms_are_well_typed wanted_coef wanted_coefpat wanted_indices_and_input_ts cont =
+      match wanted_targ with
+        StructType (sn, targs) ->
+        begin match List.assoc sn structmap with
+          (_, tparams, Some (_, fmap, _), Some padding_predsymb, structTypeidFunc) ->
+          let [structPointerTerm] = wanted_indices_and_input_ts in
+          begin match fmap with
+            [(fn, (_, Real, ft, _, _))] ->
+            let ((_, (_, _, _, _, symb, _, _)), Some (_, (_, _, _, _, symb_, _, _))) = List.assoc (sn, fn) field_pred_map in
+            begin match extract
+              begin function
+                (Chunk ((g, is_symb), targs', coef, [tp'; _], _)) when (g == symb || g == symb_) && List.for_all2 unify targs' targs && definitely_equal tp' structPointerTerm -> Some coef
+              | _ -> None
+              end
+              h
+            with
+              None -> cont None
+            | Some (coef, h) ->
+              cont (Some (Chunk ((generic_points_to__symb (), true), [wanted_targ], coef, [structPointerTerm; get_unique_var_symb_non_ghost sn wanted_targ], None)::h))
+            end
+          | _ ->
+            begin match extract
+              begin function
+                (Chunk ((g, is_symb), targs', coef, [tp'], _)) when g == padding_predsymb && List.for_all2 unify targs' targs && definitely_equal tp' structPointerTerm -> Some coef
+              | _ -> None
+              end
+              h
+            with
+              None -> cont None
+            | Some (coef, h) ->
+              let rec iter h = function
+                [] -> cont (Some (Chunk ((generic_points_to__symb (), true), [wanted_targ], coef, [structPointerTerm; get_unique_var_symb_non_ghost sn wanted_targ], None)::h))
+              | (fn, (_, Real, ft, _, _))::fds ->
+                let ((_, (_, _, _, _, symb, _, _)), Some (_, (_, _, _, _, symb_, _, _))) = List.assoc (sn, fn) field_pred_map in
+                consume_chunk rules_cell h typeid_env [] [] [] l (symb_, true) targs real_unit (TermPat coef) (Some 1) [TermPat structPointerTerm; dummypat] @@ fun _ h _ _ _ _ _ _ ->
+                iter h fds
+              in
+              iter h fmap
+            end
+          end
+        | _ -> cont None
+        end
+      | _ -> cont None
+    in
+    begin try
+      add_rule (generic_points_to__symb ()) autoclose_struct_points_to__chunk_rule
+    with NoSuchPredicate _ -> ()
+    end;
+    let autoclose_struct_points_to_chunk_rule l h typeid_env [wanted_targ] terms_are_well_typed wanted_coef wanted_coefpat wanted_indices_and_input_ts cont =
+      match wanted_targ with
+        StructType (sn, targs) ->
+        begin match List.assoc sn structmap with
+          (_, tparams, Some (_, fmap, _), Some padding_predsymb, structTypeidFunc) ->
+          let [structPointerTerm] = wanted_indices_and_input_ts in
+          begin match fmap with
+            [(fn, (_, Real, ft, _, _))] ->
+            let ((_, (_, _, _, _, symb, _, _)), _) = List.assoc (sn, fn) field_pred_map in
+            begin match extract
+              begin function
+                (Chunk ((g, is_symb), targs', coef, [tp'; v], _)) when (g == symb) && List.for_all2 unify targs' targs && definitely_equal tp' structPointerTerm -> Some (coef, v)
+              | _ -> None
+              end
+              h
+            with
+              None -> cont None
+            | Some ((coef, v), h) ->
+              let (_, csym, _, _) = List.assoc sn struct_accessor_map in
+              cont (Some (Chunk ((generic_points_to_symb (), true), [wanted_targ], coef, [structPointerTerm; ctxt#mk_app csym [v]], None)::h))
+            end
+          | _ ->
+            begin match extract
+              begin function
+                (Chunk ((g, is_symb), targs', coef, [tp'], _)) when g == padding_predsymb && List.for_all2 unify targs' targs && definitely_equal tp' structPointerTerm -> Some coef
+              | _ -> None
+              end
+              h
+            with
+              None -> cont None
+            | Some (coef, h) ->
+              let rec iter h vs = function
+                [] ->
+                let (_, csym, _, _) = List.assoc sn struct_accessor_map in
+                cont (Some (Chunk ((generic_points_to_symb (), true), [wanted_targ], coef, [structPointerTerm; ctxt#mk_app csym (List.rev vs)], None)::h))
+              | (fn, (_, Real, ft, _, _))::fds ->
+                let ((_, (_, _, _, _, symb, _, _)), _) = List.assoc (sn, fn) field_pred_map in
+                consume_chunk rules_cell h typeid_env [] [] [] l (symb, true) targs real_unit (TermPat coef) (Some 1) [TermPat structPointerTerm; dummypat] @@ fun _ h _ [_; v] _ _ _ _ ->
+                iter h (v::vs) fds
+              in
+              iter h [] fmap
+            end
+          end
+        | _ -> cont None
+        end
+      | _ -> cont None
+    in
+    begin try
+      add_rule (generic_points_to_symb ()) autoclose_struct_points_to_chunk_rule
+    with NoSuchPredicate _ -> ()
+    end;
     (* rules for obtaining underscore (i.e. possibly uninitialized) field chunks *)
     field_pred_map |> List.iter begin function (_, (_, None)) -> () | ((sn, fn), ((_, (_, _, _, [_; ft], symb, _, _)), Some (_, (_, _, _, _, symb_, _, _)))) ->
-      let (_, tparams, Some (_, fmap, _), _, structTypeidFunc) = List.assoc sn structmap in
+      let (_, tparams, Some (_, fmap, _), padding_predsymb_opt, structTypeidFunc) = List.assoc sn structmap in
       let (_, gh, _, offset_opt, _) = List.assoc fn fmap in
+      add_rule symb_ (get_auto_open_generic_points_to__chunk_rule sn tparams fmap padding_predsymb_opt);
+      let auto_open_generic_points_to_chunk_rule = get_auto_open_generic_points_to_chunk_rule sn tparams fmap padding_predsymb_opt in
+      add_rule symb auto_open_generic_points_to_chunk_rule;
+      add_rule symb_ auto_open_generic_points_to_chunk_rule;
       begin match offset_opt with
         None -> ()
       | Some offsetFunc ->

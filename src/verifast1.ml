@@ -25,6 +25,8 @@ let (>) (x: int) (y: int) = x > y
 let min (x: int) (y: int) = min x y
 let max (x: int) (y: int) = max x y
 
+exception NoSuchPredicate of string
+
 type callbacks = {
   reportRange: range_kind -> loc0 -> unit;
   reportUseSite: decl_kind -> loc0 -> loc0 -> unit;
@@ -5702,7 +5704,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       try
         List.assoc p predfammap
       with
-        Not_found -> failwith (Printf.sprintf "A declaration for predicate %s is missing from the prelude" p)
+        Not_found -> raise (NoSuchPredicate (Printf.sprintf "A declaration for predicate %s is missing from the prelude" p))
     in
     symb
   let get_pure_func_symb g =

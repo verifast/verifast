@@ -339,7 +339,6 @@ impl<T> Deque<T> {
     }
 
     pub fn push_front(&mut self, value: T) {
-        //@ open_points_to(self);
         //@ open Deque_own::<T>()(_t, ?deque);
         if (*self).size < 0x7fffffff {
             unsafe {
@@ -354,7 +353,6 @@ impl<T> Deque<T> {
         //@ close elem_own::<T>(_t)(value);
         //@ close foreach(cons(value, elems), elem_own::<T>(_t));
         //@ close Deque_own::<T>()(_t, Deque::<T> { sentinel, size: deque.size + 1 });
-        //@ close_points_to(self);
     }
 
     unsafe fn unsafe_push_back(deque: *mut Deque<T>, value: T)
@@ -402,7 +400,6 @@ impl<T> Deque<T> {
     }
 
     pub fn push_back(&mut self, value: T) {
-        //@ open_points_to(self);
         //@ open Deque_own::<T>()(_t, ?deque);
         if (*self).size < 0x7fffffff {
             unsafe {
@@ -419,7 +416,6 @@ impl<T> Deque<T> {
         //@ close foreach([value], elem_own::<T>(_t));
         //@ foreach_append(elems, [value]);
         //@ close Deque_own::<T>()(_t, Deque::<T> { sentinel, size: deque.size + 1 });
-        //@ close_points_to(self);
     }
 
     unsafe fn unsafe_pop_front(deque: *mut Deque<T>) -> T
@@ -448,7 +444,6 @@ impl<T> Deque<T> {
         //@ req thread_token(?_t) &*& *self |-> ?deque &*& Deque_own::<T>(_t, deque);
         //@ ens thread_token(_t) &*& *self |-> ?deque1 &*& Deque_own::<T>(_t, deque1) &*& <T>.own(_t, result);
     {
-        //@ open_points_to(self);
         //@ open Deque_own::<T>()(_t, deque);
         if (*self).size == 0 {
             std::process::abort();
@@ -461,7 +456,6 @@ impl<T> Deque<T> {
             //@ open foreach(_, _);
             //@ open elem_own::<T>(_t)(result);
             //@ close Deque_own::<T>()(_t, Deque::<T> { sentinel, size: deque.size - 1 });
-            //@ close_points_to(self);
             return result;
         }
     }
@@ -507,7 +501,6 @@ impl<T> Deque<T> {
     }
 
     pub fn pop_back(&mut self) -> T {
-        //@ open_points_to(self);
         //@ open Deque_own::<T>()(_t, ?deque);
         if (*self).size == 0 {
             std::process::abort();
@@ -524,7 +517,6 @@ impl<T> Deque<T> {
             //@ nth_drop(0, length(elems) - 1, elems);
             //@ open elem_own::<T>(_t)(result);
             //@ close Deque_own::<T>()(_t, Deque::<T> { sentinel, size: deque.size - 1 });
-            //@ close_points_to(self);
             return result;
         }
     }

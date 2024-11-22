@@ -20,6 +20,8 @@ cd purely_unsafe
   verifast -c alloc.rs
   verifast -c reverse.rs
   verifast -c account.rs
+  verifast -c account_value.rs
+  verifast -c point_value.rs
   verifast -c account_with_box.rs
   verifast -c deque_i32.rs
   verifast -c deque.rs
