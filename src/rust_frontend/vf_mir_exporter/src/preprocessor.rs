@@ -38,7 +38,9 @@ impl<'a> TextIterator<'a> {
                         self.pos.column = 1;
                     }
                     '\n' => {
-                        if !self.last_char_was_cr {
+                        if self.last_char_was_cr {
+                            self.pos.byte_pos -= 1; // rustc normalizes CRLF to LF
+                        } else {
                             self.pos.line += 1;
                             self.pos.column = 1;
                         }
@@ -148,6 +150,7 @@ pub fn preprocess(
     directives: &mut Vec<Box<GhostRange>>,
     ghost_ranges: &mut Vec<Box<GhostRange>>,
 ) -> String {
+    let input_starts_with_bom = input.starts_with("\u{feff}");
     let mut cs = TextIterator {
         chars: input.chars().peekable(),
         pos: SrcPos {
@@ -157,6 +160,9 @@ pub fn preprocess(
         },
         last_char_was_cr: false,
     };
+    if input_starts_with_bom {
+        cs.chars.next(); // rustc removes BOM; we need to skip it to keep the byte positions correct
+    }
     let mut output = String::new();
     let mut inside_word = false;
     let mut start_of_word: SrcPos = cs.pos;

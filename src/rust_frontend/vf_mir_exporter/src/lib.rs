@@ -1206,8 +1206,8 @@ mod vf_mir_builder {
                 .collect::<LinkedList<_>>();
             assert!(
                 enc_ctx.annots.is_empty(),
-                "There are annotations for {} that are neither in contract nor in the body",
-                def_path
+                "There are annotations for {} that are neither in contract nor in the body: {:?}",
+                def_path, enc_ctx.annots
             );
 
             let ghost_decl_blocks = ghost_stmts
