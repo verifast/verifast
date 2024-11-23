@@ -1575,7 +1575,7 @@ mod vf_mir_builder {
                     let elem_ty_cpn = ty_kind_cpn.init_slice();
                     Self::encode_ty(tcx, enc_ctx, *elem_ty, elem_ty_cpn);
                 }
-                _ => todo!("Unsupported type kind"),
+                _ => todo!("Unsupported type kind {:?}", ty.kind()),
             }
         }
 
