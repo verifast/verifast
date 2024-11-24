@@ -191,7 +191,7 @@ impl rustc_driver::Callbacks for CompilerCalls {
         compiler: &Compiler,
         queries: &'tcx Queries<'tcx>,
     ) -> Compilation {
-        compiler.sess.psess.dcx.abort_if_errors();
+        compiler.sess.psess.dcx().abort_if_errors();
         queries.global_ctxt().unwrap().enter(|tcx| {
             /*** Collecting Annotations */
             // TODO: Get comments from preprocessor
@@ -579,7 +579,7 @@ mod vf_mir_builder {
     }
 
     impl<'tcx: 'a, 'a> VfMirCapnpBuilder<'tcx> {
-        pub fn new(tcx: TyCtxt<'tcx>) -> VfMirCapnpBuilder {
+        pub fn new(tcx: TyCtxt<'tcx>) -> VfMirCapnpBuilder<'tcx> {
             VfMirCapnpBuilder {
                 tcx,
                 directives: Vec::new(),
@@ -711,12 +711,12 @@ mod vf_mir_builder {
                                             ty::BoundVariableKind::Ty(bound_ty_kind) => todo!(),
                                             ty::BoundVariableKind::Region(bound_region_kind) => {
                                                 match bound_region_kind {
-                                                    ty::BoundRegionKind::BrAnon => todo!(),
-                                                    ty::BoundRegionKind::BrNamed(
+                                                    ty::BoundRegionKind::Anon => todo!(),
+                                                    ty::BoundRegionKind::Named(
                                                         def_id,
                                                         symbol,
                                                     ) => symbol.to_string(),
-                                                    ty::BoundRegionKind::BrEnv => todo!(),
+                                                    ty::BoundRegionKind::ClosureEnv => todo!(),
                                                 }
                                             }
                                             ty::BoundVariableKind::Const => todo!(),
@@ -1066,7 +1066,7 @@ mod vf_mir_builder {
                     def_kind_cpn.set_fn(());
                     if kind == hir::def::DefKind::AssocFn {
                         let assoc_item = tcx.associated_item(def_id);
-                        if assoc_item.container == ty::AssocItemContainer::TraitContainer {
+                        if assoc_item.container == ty::AssocItemContainer::Trait {
                             body_cpn.set_is_trait_fn(true);
                         } else {
                             if let Some(trait_fn) = assoc_item.trait_item_def_id {
@@ -1548,7 +1548,7 @@ mod vf_mir_builder {
                     let fn_def_ty_cpn = ty_kind_cpn.init_fn_def();
                     Self::encode_ty_fn_def(tcx, enc_ctx, def_id, substs, fn_def_ty_cpn);
                 }
-                ty::TyKind::FnPtr(binder) => {
+                ty::TyKind::FnPtr(binder, header) => {
                     let fn_ptr_ty_cpn = ty_kind_cpn.init_fn_ptr();
                     let fn_sig = binder
                         .no_bound_vars()
@@ -1690,8 +1690,8 @@ mod vf_mir_builder {
                     region_cpn.set_id(_early_bound_region.name.as_str())
                 }
                 ty::RegionKind::ReBound(de_bruijn_index, bound_region) => match bound_region.kind {
-                    ty::BoundRegionKind::BrAnon => todo!(),
-                    ty::BoundRegionKind::BrNamed(def_id, symbol) => {
+                    ty::BoundRegionKind::Anon => todo!(),
+                    ty::BoundRegionKind::Named(def_id, symbol) => {
                         if symbol.as_str() == "'_" {
                             let id = format!("'_{}", def_id.index.as_usize());
                             region_cpn.set_id(&id);
@@ -1699,7 +1699,7 @@ mod vf_mir_builder {
                             region_cpn.set_id(symbol.as_str());
                         }
                     }
-                    ty::BoundRegionKind::BrEnv => todo!(),
+                    ty::BoundRegionKind::ClosureEnv => todo!(),
                 },
                 ty::RegionKind::ReLateParam(_debruijn_index) => bug!(),
                 ty::RegionKind::ReStatic => bug!(),
@@ -1835,7 +1835,7 @@ mod vf_mir_builder {
                     Self::encode_place(enc_ctx, place, place_cpn);
                 }
                 mir::Rvalue::ThreadLocalRef(def_id) => todo!(),
-                mir::Rvalue::AddressOf(mutability, place) => {
+                mir::Rvalue::RawPtr(mutability, place) => {
                     let mut ao_data_cpn = rvalue_cpn.init_address_of();
                     let mutability_cpn = ao_data_cpn.reborrow().init_mutability();
                     Self::encode_mutability(*mutability, mutability_cpn);
@@ -2124,7 +2124,7 @@ mod vf_mir_builder {
             tcx: TyCtxt<'tcx>,
             enc_ctx: &mut EncCtx<'tcx, 'a>,
             func: &mir::Operand<'tcx>,
-            args: &Vec<Spanned<mir::Operand<'tcx>>>,
+            args: &Box<[Spanned<mir::Operand<'tcx>>]>,
             destination: &mir::Place<'tcx>,
             target: &Option<mir::BasicBlock>,
             fn_span: &rustc_span::Span,
@@ -2228,7 +2228,7 @@ mod vf_mir_builder {
                     Self::encode_ty(tcx, enc_ctx, *ty, val_cpn.init_ty());
                 }
                 mir::Const::Unevaluated(unevaluated_const, ty) => {
-                    let const_value = const_.eval(tcx, ty::ParamEnv::empty(), Span::default()).unwrap();
+                    let const_value = const_.eval(tcx, enc_ctx.body().typing_env(tcx), Span::default()).unwrap();
                     let mut val_cpn = const_cpn.init_val();
                     Self::encode_const_value(
                         tcx,
@@ -2352,37 +2352,37 @@ mod vf_mir_builder {
                     scalar_cpn.set_bool(bv);
                 }
                 ty::TyKind::Char => {
-                    let cv = scalar.try_to_u32().expect(err_msg);
+                    let cv = scalar.to_u32();
                     scalar_cpn.set_char(cv as u32);
                 }
                 ty::TyKind::Int(int_ty) => {
                     let mut int_val_cpn = scalar_cpn.init_int();
                     match int_ty {
                         ty::IntTy::Isize => {
-                            let visz = scalar.try_to_i64().expect(err_msg);
+                            let visz = scalar.to_i64();
                             capnp_utils::encode_int128(
                                 visz.try_into().unwrap(),
                                 int_val_cpn.init_isize(),
                             );
                         }
                         ty::IntTy::I8 => {
-                            let vi8 = scalar.try_to_i8().expect(err_msg);
+                            let vi8 = scalar.to_i8();
                             int_val_cpn.set_i8(vi8);
                         }
                         ty::IntTy::I16 => {
-                            let vi16 = scalar.try_to_i16().expect(err_msg);
+                            let vi16 = scalar.to_i16();
                             int_val_cpn.set_i16(vi16);
                         }
                         ty::IntTy::I32 => {
-                            let vi32 = scalar.try_to_i32().expect(err_msg);
+                            let vi32 = scalar.to_i32();
                             int_val_cpn.set_i32(vi32);
                         }
                         ty::IntTy::I64 => {
-                            let vi64 = scalar.try_to_i64().expect(err_msg);
+                            let vi64 = scalar.to_i64();
                             int_val_cpn.set_i64(vi64);
                         }
                         ty::IntTy::I128 => {
-                            let vi128 = scalar.try_to_i128().expect(err_msg);
+                            let vi128 = scalar.to_i128();
                             capnp_utils::encode_int128(vi128, int_val_cpn.init_i128());
                         }
                     }
@@ -2391,30 +2391,30 @@ mod vf_mir_builder {
                     let mut uint_val_cpn = scalar_cpn.init_uint();
                     match uint_ty {
                         ty::UintTy::Usize => {
-                            let vusz = scalar.try_to_u64().expect(err_msg);
+                            let vusz = scalar.to_u64();
                             capnp_utils::encode_u_int128(
                                 vusz.try_into().unwrap(),
                                 uint_val_cpn.init_usize(),
                             );
                         }
                         ty::UintTy::U8 => {
-                            let vu8 = scalar.try_to_u8().expect(err_msg);
+                            let vu8 = scalar.to_u8();
                             uint_val_cpn.set_u8(vu8);
                         }
                         ty::UintTy::U16 => {
-                            let vu16 = scalar.try_to_u16().expect(err_msg);
+                            let vu16 = scalar.to_u16();
                             uint_val_cpn.set_u16(vu16);
                         }
                         ty::UintTy::U32 => {
-                            let vu32 = scalar.try_to_u32().expect(err_msg);
+                            let vu32 = scalar.to_u32();
                             uint_val_cpn.set_u32(vu32);
                         }
                         ty::UintTy::U64 => {
-                            let vu64 = scalar.try_to_u64().expect(err_msg);
+                            let vu64 = scalar.to_u64();
                             uint_val_cpn.set_u64(vu64);
                         }
                         ty::UintTy::U128 => {
-                            let vu128 = scalar.try_to_u128().expect(err_msg);
+                            let vu128 = scalar.to_u128();
                             capnp_utils::encode_u_int128(vu128, uint_val_cpn.init_u128());
                         }
                     }
@@ -2493,12 +2493,13 @@ mod vf_mir_capnp {
 mod mir_utils {
     use rustc_hir::def_id::DefId;
     use rustc_middle::mir;
+    use rustc_middle::mir::pretty::PrettyPrintMirOptions;
     use rustc_middle::ty::TyCtxt;
 
     pub fn mir_body_pretty_string<'tcx>(tcx: TyCtxt<'tcx>, body: &mir::Body<'tcx>) -> String {
         use rustc_middle::mir::pretty::write_mir_fn;
         let mut buf: Vec<u8> = Vec::new();
-        write_mir_fn(tcx, body, &mut |_, _| Ok(()), &mut buf).expect(&format!(
+        write_mir_fn(tcx, body, &mut |_, _| Ok(()), &mut buf, PrettyPrintMirOptions { include_extra_comments: false }).expect(&format!(
             "Failed to generate pretty MIR for {:?}",
             body.source.instance
         ));

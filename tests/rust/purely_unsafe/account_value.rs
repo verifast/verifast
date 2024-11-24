@@ -51,8 +51,8 @@ impl Account {
 fn main1() {
     unsafe {
         let mut account = Account::new();
-        Account::deposit(std::ptr::addr_of_mut!(account), 1000);
-        assert(Account::get_balance(std::ptr::addr_of_mut!(account)) == 1000);
+        Account::deposit(&raw mut account, 1000);
+        assert(Account::get_balance(&raw mut account) == 1000);
     }
 }
 

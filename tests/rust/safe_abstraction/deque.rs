@@ -323,7 +323,7 @@ impl<T> Deque<T> {
         //@ close_struct(new_node);
         //@ open Deque(_, _);
         (*new_node).prev = (*deque).sentinel;
-        std::ptr::write(std::ptr::addr_of_mut!((*new_node).value), value);
+        std::ptr::write(&raw mut (*new_node).value, value);
         //@ let sentinel = (*deque).sentinel;
         //@ let first = (*sentinel).next;
         (*new_node).next = (*(*deque).sentinel).next;
@@ -367,7 +367,7 @@ impl<T> Deque<T> {
         //@ open Deque(_, _);
         //@ let sentinel = (*deque).sentinel;
         (*new_node).prev = (*(*deque).sentinel).prev;
-        std::ptr::write(std::ptr::addr_of_mut!((*new_node).value), value);
+        std::ptr::write(&raw mut (*new_node).value, value);
         (*new_node).next = (*deque).sentinel;
         //@ assert Deque__(sentinel, ?nodes);
         /*@

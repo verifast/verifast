@@ -1,3 +1,5 @@
+#![feature(rustc_private)]
+
 fn init_tracing() {
     // A builder for `FmtSubscriber`.
     let subscriber = tracing_subscriber::FmtSubscriber::builder()

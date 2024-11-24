@@ -51,8 +51,8 @@ impl Point {
 fn main1() {
     unsafe {
         let mut point = Point::new();
-        Point::set_x(std::ptr::addr_of_mut!(point), 1000);
-        assert(Point::get_x(std::ptr::addr_of_mut!(point)) == 1000);
+        Point::set_x(&raw mut point, 1000);
+        assert(Point::get_x(&raw mut point) == 1000);
     }
 }
 

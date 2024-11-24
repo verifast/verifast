@@ -122,7 +122,7 @@ impl<T> Deque<T> {
         }
         //@ close_struct(new_node);
         (*new_node).prev = (*deque).sentinel;
-        std::ptr::write(std::ptr::addr_of_mut!((*new_node).value), value);
+        std::ptr::write(&raw mut (*new_node).value, value);
         //@ close Node_value(new_node, _);
         //@ let sentinel = (*deque).sentinel;
         //@ let first = (*sentinel).next;
@@ -144,7 +144,7 @@ impl<T> Deque<T> {
         //@ close_struct(new_node);
         //@ let sentinel = (*deque).sentinel;
         (*new_node).prev = (*(*deque).sentinel).prev;
-        std::ptr::write(std::ptr::addr_of_mut!((*new_node).value), value);
+        std::ptr::write(&raw mut (*new_node).value, value);
         //@ close Node_value(new_node, _);
         (*new_node).next = (*deque).sentinel;
         /*@
@@ -176,7 +176,7 @@ impl<T> Deque<T> {
         let node = (*(*deque).sentinel).next;
         //@ open Nodes(_, _, _, _, _);
         //@ open Node_value(node, _);
-        let result = std::ptr::read(std::ptr::addr_of!((*node).value));
+        let result = std::ptr::read(&raw mut (*node).value);
         //@ close Node_value(node, _);
         (*(*node).prev).next = (*node).next;
         //@ open Nodes(_, _, _, _, _);
@@ -196,7 +196,7 @@ impl<T> Deque<T> {
         //@ Nodes_split_last(first);
         let node = (*(*deque).sentinel).prev;
         //@ open Node_value(node, _);
-        let result = std::ptr::read(std::ptr::addr_of!((*node).value));
+        let result = std::ptr::read(&raw const (*node).value);
         //@ close Node_value(node, _);
         /*@
         if 2 <= length(elems) {

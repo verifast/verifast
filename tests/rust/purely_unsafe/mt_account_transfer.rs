@@ -61,12 +61,12 @@ fn main() {
             std::alloc::handle_alloc_error(layout);
         }
         //@ close_struct(accounts);
-        std::ptr::write(std::ptr::addr_of_mut!((*accounts).balance1), 2000);
-        std::ptr::write(std::ptr::addr_of_mut!((*accounts).balance2), 0);
+        std::ptr::write(&raw mut (*accounts).balance1, 2000);
+        std::ptr::write(&raw mut (*accounts).balance2, 0);
         //@ close Accounts_inv(accounts)();
         //@ close exists(Accounts_inv(accounts));
         let mutex = simple_mutex::SimpleMutex_new();
-        std::ptr::write(std::ptr::addr_of_mut!((*accounts).mutex), mutex);
+        std::ptr::write(&raw mut (*accounts).mutex, mutex);
         //@ produce_fn_ptr_chunk platform::threading::thread_run(transfer)(transfer_pre)(data) { call(); }
         platform::threading::fork(transfer, accounts as *mut u8);
         simple_mutex::SimpleMutex_acquire(mutex);
