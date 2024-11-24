@@ -1876,8 +1876,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       | Value v_cpn -> translate_const_value v_cpn ty loc
       | Undefined _ -> Error (`TrTyConstKind "Unknown ConstKind")
 
-    let translate_typed_constant (ty_const_cpn : TyConstRd.t) (loc : Ast.loc) =
-      let open TyConstRd in
+    let translate_typed_constant (ty_const_cpn : ConstRd.TyConst.t) (loc : Ast.loc) =
+      let open ConstRd.TyConst in
       let ty_cpn = ty_get ty_const_cpn in
       let* ty_info = translate_ty ty_cpn loc in
       let ty_expr = Mir.raw_type_of ty_info in
@@ -1895,7 +1895,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           else translate_unit_constant loc
       | Ast.FuncType _ -> Ok (`TrTypedConstantFn ty_info)
       | Ast.Int (_, _) | Ast.Bool ->
-          let kind_cpn = kind_get ty_const_cpn in
+          let kind_cpn = TyConstRd.kind_get (const_get ty_const_cpn) in
           translate_ty_const_kind kind_cpn ty_expr loc
       | _ -> failwith "Todo: Constant of unsupported type"
 

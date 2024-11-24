@@ -1731,7 +1731,7 @@ mod vf_mir_builder {
                     Self::encode_ty(tcx, enc_ctx, ty, ty_cpn);
                 }
                 ty::GenericArgKind::Const(ty_const) => {
-                    Self::encode_typed_constant(tcx, enc_ctx, &ty_const, kind_cpn.init_const());
+                    Self::encode_typesystem_constant(tcx, enc_ctx, &ty_const, kind_cpn.init_const());
                 }
             }
         }
@@ -2212,9 +2212,10 @@ mod vf_mir_builder {
             const_cpn: const_cpn::Builder<'_>,
         ) {
             match const_ {
-                mir::Const::Ty(ty_const) => {
-                    let ty_const_cpn = const_cpn.init_ty();
-                    Self::encode_typed_constant(tcx, enc_ctx, ty_const, ty_const_cpn);
+                mir::Const::Ty(ty, ty_const) => {
+                    let mut ty_const_cpn = const_cpn.init_ty();
+                    Self::encode_ty(tcx, enc_ctx, *ty, ty_const_cpn.reborrow().init_ty());
+                    Self::encode_typesystem_constant(tcx, enc_ctx, ty_const, ty_const_cpn.init_const());
                 }
                 mir::Const::Val(const_value, ty) => {
                     let mut val_cpn = const_cpn.init_val();
@@ -2240,23 +2241,19 @@ mod vf_mir_builder {
             }
         }
 
-        fn encode_typed_constant(
+        fn encode_typesystem_constant(
             tcx: TyCtxt<'tcx>,
             enc_ctx: &mut EncCtx<'tcx, 'a>,
             ty_const: &ty::Const<'tcx>,
-            mut ty_const_cpn: ty_const_cpn::Builder<'_>,
+            ty_const_cpn: ty_const_cpn::Builder<'_>,
         ) {
-            debug!("Encoding typed constant {:?}", ty_const);
-            let ty_cpn = ty_const_cpn.reborrow().init_ty();
-            Self::encode_ty(tcx, enc_ctx, ty_const.ty(), ty_cpn);
-
+            debug!("Encoding typesystem constant {:?}", ty_const);
             let kind_cpn = ty_const_cpn.init_kind();
-            Self::encode_const_kind(tcx, ty_const.ty(), &ty_const.kind(), kind_cpn);
+            Self::encode_const_kind(tcx, &ty_const.kind(), kind_cpn);
         }
 
         fn encode_const_kind(
             tcx: TyCtxt<'tcx>,
-            ty: ty::Ty<'tcx>,
             const_kind: &ty::ConstKind<'tcx>,
             const_kind_cpn: const_kind_cpn::Builder<'_>,
         ) {
@@ -2274,9 +2271,9 @@ mod vf_mir_builder {
                 // variants when the code is monomorphic enough for that.
                 CK::Unevaluated(unevaluated) => todo!(),
                 // Used to hold computed value.
-                CK::Value(val_tree) => {
+                CK::Value(ty, val_tree) => {
                     let const_value_cpn = const_kind_cpn.init_value();
-                    Self::encode_val_tree(tcx, ty, val_tree, const_value_cpn);
+                    Self::encode_val_tree(tcx, *ty, val_tree, const_value_cpn);
                 }
                 // A placeholder for a const which could not be computed; this is
                 // propagated to avoid useless error messages.

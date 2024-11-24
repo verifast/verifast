@@ -157,8 +157,7 @@ struct Ty {
 
     # Typed constant value
     struct Const {
-        ty @0: Ty;
-        kind @1: ConstKind;
+        kind @0: ConstKind;
     }
 
     struct Region {
@@ -410,8 +409,12 @@ struct Body {
 
     struct ConstOperand {
         struct Const {
+            struct TyConst {
+                ty @0: Ty;
+                const @1: Ty.Const;
+            }
             union {
-                ty @0: Ty.Const;
+                ty @0: TyConst;
                 val :group {
                     constValue @1: ConstValue;
                     ty @2: Ty;

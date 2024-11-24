@@ -9,6 +9,6 @@ pub fn fn_sig(tcx: TyCtxt<'_>, def_id: DefId) -> &rustc_hir::FnSig<'_> {
         .expect("expected DefId to be a function")
 }
 
-pub fn fn_body(tcx: TyCtxt<'_>, def_id: DefId) -> rustc_hir::Body<'_> {
-    tcx.hir().body_owned_by(def_id.expect_local()).into_owned()
+pub fn fn_body(tcx: TyCtxt<'_>, def_id: DefId) -> &rustc_hir::Body<'_> {
+    tcx.hir().body_owned_by(def_id.expect_local())
 }
