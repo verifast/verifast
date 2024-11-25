@@ -59,7 +59,7 @@ end
 module LineHashtbl = Hashtbl.Make(HashedLine)
 
 let _ =
-  let verify ?(emitter_callback = fun _ _ _ -> ()) (print_stats : bool) (options : options) (prover : string) (path : string) (emitHighlightedSourceFiles : bool) (dumpPerLineStmtExecCounts : bool) allowDeadCode json mergeOptionsFromSourceFile breakpoint focus targetPath =
+  let verify ?(emitter_callback = fun _ _ _ -> ()) (print_stats : bool) (options : options) (prover : string) (path : string) (emitHighlightedSourceFiles : bool) (dumpPerLineStmtExecCounts : bool) allowDeadCode json expectedJsonResult applyQuickFix mergeOptionsFromSourceFile breakpoint focus targetPath =
     let exit l =
       Java_frontend_bridge.unload();
       exit l
@@ -155,9 +155,23 @@ let _ =
         reportUseSite, get_use_sites_json
     in
     let exit_with_json_result resultJson =
-      let majorVersion = 2 in
-      let minorVersion = 0 in
-      print_json_endline (A [S "VeriFast-Json"; I majorVersion; I minorVersion; O ["result", resultJson; "useSites", get_use_sites_json (); "executionForest", get_execution_forest_json ()]])
+      match expectedJsonResult with
+        Some path ->
+        let expectedJson = readFile path in
+        let resultJsonString = string_of_json resultJson in
+        if resultJsonString = expectedJson then
+          exit 0
+        else begin
+          print_endline ("Expected JSON result in file " ^ path ^ ":");
+          print_endline expectedJson;
+          print_endline "Actual JSON result:";
+          print_endline resultJsonString;
+          exit 1
+        end
+      | None ->
+        let majorVersion = 2 in
+        let minorVersion = 0 in
+        print_json_endline (A [S "VeriFast-Json"; I majorVersion; I minorVersion; O ["result", resultJson; "useSites", get_use_sites_json (); "executionForest", get_execution_forest_json ()]])
     in
     let exit_with_msg l msg =
       if json then begin
@@ -166,6 +180,22 @@ let _ =
         print_endline (string_of_loc l ^ ": " ^ msg);
         exit 1
       end
+    in
+    let json_of_quick_fix_kind = function
+      InsertTextAt (pos, text) -> A [S "InsertTextAt"; json_of_srcpos pos; S text]
+    in
+    let json_of_quick_fix (description, kind) =
+      O ["description", S description; "kind", json_of_quick_fix_kind kind]
+    in
+    let json_of_error_attributes attrs =
+      let {help_topic; quick_fixes} = parse_error_attributes attrs in
+      let props =
+        [
+          "help_topic", (match help_topic with None -> None | Some topic -> Some (S topic));
+          "quick_fixes", (match quick_fixes with [] -> None | _ -> Some (A (List.map json_of_quick_fix quick_fixes)))
+        ]
+      in
+      O (flatmap (function (k, Some v) -> [k, v] | _ -> []) props)
     in
     let verify range_callback =
     try
@@ -274,7 +304,27 @@ let _ =
         exit 1
       end
     | StaticError (l, msg, url) ->
-      exit_with_msg l msg
+      begin match applyQuickFix with
+        None -> ()
+      | Some file ->
+        let QuickFix (descr, InsertTextAt ((insertPath, insertLine, insertCol), insertText))::_ = List.filter (function QuickFix (_, _) -> true | _ -> false) (Option.get url) in
+        let text = readFile path in
+        let lines = String.split_on_char '\n' text in
+        let lines_before, line::lines_after = Util.take_drop (insertLine - 1) lines in
+        let before = String.sub line 0 (insertCol - 1) in
+        let after = String.sub line (insertCol - 1) (String.length line - insertCol + 1) in
+        let lines = lines_before @ (before ^ insertText ^ after) :: lines_after in
+        let text = String.concat "\n" lines in
+        let outfile = open_out_bin file in
+        output_string outfile text;
+        close_out outfile;
+        Printf.printf "Applied quick fix: %s\n" descr;
+        exit 0
+      end;
+      if json then
+        exit_with_json_result (A [S "StaticError"; json_of_loc l; S msg; json_of_error_attributes url])
+      else
+        exit_with_msg l msg
     | RustcErrors (l, msg, diagnostics) ->
       if json then
         exit_with_json_result (A [S "StaticError"; json_of_loc l; S msg; O ["rustc_diagnostics", A diagnostics]])
@@ -286,7 +336,7 @@ let _ =
       let language, dialect = file_specs path in
       let open JsonOf(struct let string_of_type = string_of_type language dialect end) in
       if json then begin
-        exit_with_json_result (A [S "SymbolicExecutionError"; A (List.map json_of_ctxt ctxts); json_of_loc l; S msg; match url with None -> Null | Some s -> S s])
+        exit_with_json_result (A [S "SymbolicExecutionError"; A (List.map json_of_ctxt ctxts); json_of_loc l; S msg; json_of_error_attributes url])
       end else
         exit_with_msg l msg
     in
@@ -397,6 +447,8 @@ let _ =
   in
   let stats = ref false in
   let json = ref false in
+  let expected_json_result_file = ref None in
+  let apply_quick_fix = ref None in
   let verbose = ref 0 in
   let verbose_flags = ref [] in
   let vfbindings = ref Vfbindings.default in
@@ -460,6 +512,8 @@ let _ =
             [ "-stats", Set stats, " "
             ; "-read_options_from_source_file", Set readOptionsFromSourceFile, "Retrieve disable_overflow_check, prover, target settings from first line of .c/.java file; syntax: //verifast_options{disable_overflow_check prover:z3v4.5 target:32bit}"
             ; "-json", Set json, "Report result as JSON"
+            ; "-expect_json_result", String (fun file -> json := true; expected_json_result_file := Some file), "Expect JSON result from file"
+            ; "-apply_quick_fix", String (fun file -> apply_quick_fix := Some file), "Apply the quick fix proposed by VeriFast and write the resulting source file to the specified file"
             ; "-verbose", Set_int verbose, "-1 = file processing; 1 = statement executions; 2 = produce/consume steps; 4 = prover queries."
             ; "-verbose_flag", String (fun flag -> verbose_flags := flag::!verbose_flags), "Enable particular verbose output. Flags: rust_exporter"
             ; "-prover", String (fun str -> prover := str), "Set SMT prover (" ^ list_provers() ^ ")."
@@ -550,7 +604,7 @@ let _ =
                 SExpressionEmitter.emit target_file packages
               | None             -> ()
         in
-        verify ~emitter_callback:emitter_callback !stats options !prover filename !emitHighlightedSourceFiles !dumpPerLineStmtExecCounts !allowDeadCode !json !readOptionsFromSourceFile !breakpoint !focus !targetPath;
+        verify ~emitter_callback:emitter_callback !stats options !prover filename !emitHighlightedSourceFiles !dumpPerLineStmtExecCounts !allowDeadCode !json !expected_json_result_file !apply_quick_fix !readOptionsFromSourceFile !breakpoint !focus !targetPath;
         allModules := ((Filename.chop_extension filename) ^ ".vfmanifest")::!allModules
       end
     else if Filename.check_suffix filename ".o" then

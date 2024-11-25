@@ -227,7 +227,8 @@ struct Ty {
         id @0: AdtDefId;
         variants @1: List(VariantDef);
         kind @2: AdtKind;
-        span @3: SpanData;
+        span @3: SpanData; # The span of the name of the ADT
+        defSpan @9: SpanData; # The span of the entire ADT definition
         vis @4: Visibility;
         isLocal @5: Bool;
         hirGenerics @6: Hir.Generics;

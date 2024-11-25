@@ -295,7 +295,7 @@ end) = struct
 end
 
 exception RustcErrors of loc * string * Json.json list
-exception SymbolicExecutionError of string context list * loc * string * string option
+exception SymbolicExecutionError of string context list * loc * string * error_attribute list option
 
 (* prepends '~' to the given record name *)
 let cxx_dtor_name struct_name = "~" ^ struct_name ^ "()"

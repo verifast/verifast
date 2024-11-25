@@ -4511,7 +4511,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let vf_tparams = lft_params @ tparams in
       let variants_cpn = variants_get_list adt_def_cpn in
       let* variants = ListAux.try_map translate_variant_def variants_cpn in
-      let span_cpn = span_get adt_def_cpn in
+      let span_cpn = def_span_get adt_def_cpn in
       let* def_loc = translate_span_data span_cpn in
       let preds =
         predicates_get_list adt_def_cpn |> List.map decode_predicate
@@ -4899,20 +4899,49 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
 
   (** Checks for the existence of a lemma for proof obligation in ghost code.
       The consistency of the lemma with proof obligation will be checked by VeriFast later *)
-  let check_proof_obligation gh_decl_map po =
-    let loc = AstAux.decl_loc po in
-    let* po_name =
-      Option.to_result
-        ~none:(`ChekProofObligationFatal "Proof obligation without a name")
-        (AstAux.decl_name po)
+  let check_proof_obligations gh_decl_map proof_obligs =
+    let unmet_proof_obligs =
+      proof_obligs
+      |> List.filter @@ fun po ->
+         let (Some po_name) = AstAux.decl_name po in
+         match Util.try_assoc po_name gh_decl_map with
+         | Some (Ast.Func (_, _, _, _, _, _, _, _, _, _, Some body, _, _)) ->
+             false
+         | _ -> true
     in
-    match Util.try_assoc po_name gh_decl_map with
-    | Some (Ast.Func (_, _, _, _, _, _, _, _, _, _, Some body, _, _)) ->
-        Ok () (*in case of duplicates VeriFast complains later*)
-    | _ ->
-        Ast.static_error loc
-          ("Lemma " ^ po_name ^ " should be proven")
-          (Some "rust-struct-proof-obligations")
+    if unmet_proof_obligs <> [] then
+      let loc = AstAux.decl_loc (List.hd unmet_proof_obligs) in
+      let unmet_proof_obligs_at_loc =
+        List.filter (fun po -> AstAux.decl_loc po = loc) unmet_proof_obligs
+      in
+      let msg, descr =
+        match unmet_proof_obligs_at_loc with
+        | [ po ] ->
+            ( Printf.sprintf "Lemma %s should be proven"
+                (Option.get (AstAux.decl_name po)),
+              "Insert lemma template" )
+        | pos ->
+            ( Printf.sprintf "Lemmas %s should be proven"
+                (String.concat ", "
+                   (List.map (fun po -> Option.get (AstAux.decl_name po)) pos)),
+              "Insert lemma templates" )
+      in
+      let (Lexed (_, end_pos)) = loc in
+      let text_to_insert =
+        Printf.sprintf "\n\n/*@\n\n%s\n\n@*/"
+        @@ String.concat "\n\n"
+        @@ List.map Ast_to_src.string_of_decl unmet_proof_obligs_at_loc
+      in
+      raise
+        (Ast.StaticError
+           ( loc,
+             msg,
+             Some
+               [
+                 HelpTopic "rust-struct-proof-obligations";
+                 QuickFix (descr, InsertTextAt (end_pos, text_to_insert));
+               ] ))
+    else Ok ()
 
   let translate_trait_impls (trait_impls_cpn : TraitImplRd.t list) =
     trait_impls_cpn
@@ -5136,11 +5165,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let adts_full_bor_content_preds =
         List.filter_map Fun.id adts_full_bor_content_preds
       in
-      let* _ =
-        ListAux.try_map
-          (fun po -> check_proof_obligation ghost_decl_map po)
-          adts_proof_obligs
-      in
+      let* _ = check_proof_obligations ghost_decl_map adts_proof_obligs in
       let* traits_cpn =
         CapnpAux.ind_list_get_list (VfMirRd.traits_get vf_mir_cpn)
       in

@@ -64,6 +64,16 @@ cd safe_abstraction
   verifast -c rc.rs
   verifast -c arc_u32.rs
   verifast -c arc.rs
+  begin_sequential
+    verifast -c -apply_quick_fix proof_obligs_quick_fix_test_result.rs proof_obligs_quick_fix_test.rs
+    verifast -c proof_obligs_quick_fix_test_result.rs
+    del proof_obligs_quick_fix_test_result.rs
+  end_sequential
+  begin_sequential
+    verifast -c -apply_quick_fix proof_obligs_quick_fix_test_generic_result.rs proof_obligs_quick_fix_test_generic.rs
+    verifast -c proof_obligs_quick_fix_test_generic_result.rs
+    del proof_obligs_quick_fix_test_generic_result.rs
+  end_sequential
 cd ..
 end_parallel
 end_sequential

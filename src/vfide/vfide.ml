@@ -519,7 +519,8 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
   let show_help url =
     launch_browser (!bindir ^ "/../help/" ^ url ^ ".html")
   in
-  ignore (helpButton#connect#clicked ~callback:(fun () -> (match(!url) with None -> () | Some(url) -> show_help url);));
+  ignore (helpButton#connect#clicked ~callback:(fun () -> (match (parse_error_attributes !url).help_topic with None -> () | Some url  -> show_help url);));
+  let fixButton = GButton.button ~show:false ~label:"Fix" ~packing:(messageHBox#pack) () in
   toolbar#insert messageToolItem;
   rootVbox#pack (toolbar#coerce);
   let treeSeparator = GPack.paned `HORIZONTAL ~packing:(rootVbox#pack ~expand:true) () in
@@ -924,7 +925,7 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
   in
   let updateMessageEntry (success: bool) =
     (match !msg with
-      None -> messageEntry#coerce#misc#hide(); helpButton#coerce#misc#hide()
+      None -> messageEntry#coerce#misc#hide(); fixButton#coerce#misc#hide(); helpButton#coerce#misc#hide()
     | Some msg ->
       let (backColor, textColor) = if success then ("green", "black") else ("red", "white") in
       messageEntry#coerce#misc#show();
@@ -935,10 +936,14 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
       end;
       messageEntry#coerce#misc#modify_base [`NORMAL, `NAME backColor];
       messageEntry#coerce#misc#modify_text [`NORMAL, `NAME textColor]);
-    (match !url with
-      None -> helpButton#coerce#misc#hide();
+    (match (parse_error_attributes !url).help_topic with
+      None -> helpButton#coerce#misc#hide()
     | Some(_) -> helpButton#coerce#misc#show();
-    )
+    );
+    begin match (parse_error_attributes !url).quick_fixes with
+      [] -> fixButton#coerce#misc#hide()
+    | _ -> fixButton#coerce#misc#show()
+    end
   in
   let load tab newPath =
     try
@@ -1480,6 +1485,20 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
     ignore $. Glib.Idle.add (fun () -> ignore $. tab#mainView#view#scroll_to_iter ~within_margin:0.2 it; (* NOTE: scroll_to_iter returns a boolean *) false);
     ()
   in
+  let fix_button_clicked () =
+    match (parse_error_attributes !url).quick_fixes with
+      [] -> ()
+    | (descr, InsertTextAt (insertPos, textToInsert))::_ ->
+      let (path, line, col) = insertPos in
+      let (k, tab) = get_tab_for_path path in
+      textNotebook#goto_page k;
+      let buffer = tab#buffer in
+      let it = srcpos_iter buffer (line, col) in
+      buffer#place_cursor ~where:it;
+      buffer#insert ~iter:it textToInsert;
+      ignore $. Glib.Idle.add (fun () -> ignore $. tab#mainView#view#scroll_to_iter ~within_margin:0.2 it; (* NOTE: scroll_to_iter returns a boolean *) false);
+  in
+  ignore (fixButton#connect#clicked ~callback:fix_button_clicked);
   let handleStaticError l emsg eurl =
     if l <> dummy_loc then
       apply_tag_by_loc "error" (root_caller_token l);
@@ -1738,7 +1757,7 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
               msg := Some (emsg ^ " (see console for details)");
               updateMessageEntry false
             | StaticError (l, emsg, eurl) ->
-              handleStaticError l emsg eurl 
+              handleStaticError l emsg eurl
             | RustcErrors (l, emsg, diagnostics) ->
               let open Json in
               List.iter (fun d -> Printf.printf "%s" (o_assoc "rendered" d |> s_value)) diagnostics;

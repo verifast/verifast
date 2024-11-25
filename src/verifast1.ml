@@ -1178,7 +1178,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 
   let assert_false h env l msg url =
     Util.push (Node (ErrorNode, ref [])) !currentForest;
-    raise (SymbolicExecutionError (pprint_context_stack !contextStack dbg_info, l, msg, url))
+    raise (SymbolicExecutionError (pprint_context_stack !contextStack dbg_info, l, msg, Option.map (fun topic -> [HelpTopic topic]) url))
 
   let push_node l msg =
     let oldPath, oldBranch, oldTargetPath = !currentPath, !currentBranch, !targetPath in

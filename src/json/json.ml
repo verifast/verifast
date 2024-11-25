@@ -121,6 +121,11 @@ let pprint_json_endline indent json =
   Buffer.output_buffer stdout buf;
   print_newline ()
 
+let string_of_json json =
+  let buf = Buffer.create 1024 in
+  buffer_add_json buf json;
+  Buffer.contents buf
+
 type json_token_type = LBracket | RBracket | LBrace | RBrace | Comma | Colon | NullToken | True | False | Integer | String | Eof
 
 let string_of_token_type = function

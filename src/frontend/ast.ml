@@ -59,9 +59,34 @@ type loc =
  
 let dummy_loc = DummyLoc
 
-exception StaticError of loc * string * string option
+type quick_fix_kind =
+  InsertTextAt of srcpos * string
 
-let static_error l msg url = raise (StaticError (l, msg, url))
+type error_attribute =
+  HelpTopic of string
+| QuickFix of string (* brief description *) * quick_fix_kind
+
+exception StaticError of loc * string * error_attribute list option
+
+let static_error l msg url =
+  let attrs =
+    match url with
+      None -> None
+    | Some url -> Some [HelpTopic url]
+  in
+  raise (StaticError (l, msg, attrs))
+
+type error_attributes = {help_topic: string option; quick_fixes: (string * quick_fix_kind) list}
+
+let parse_error_attributes attrs =
+  let rec parse topic fixes = function
+    | [] -> {help_topic = topic; quick_fixes = fixes}
+    | HelpTopic url::rest -> parse (Some url) fixes rest
+    | QuickFix (desc, fixKind)::rest -> parse topic ((desc, fixKind)::fixes) rest
+  in
+  match attrs with
+    None -> {help_topic = None; quick_fixes = []}
+  | Some attrs -> parse None [] attrs
 
 let rec root_caller_token l =
   match l with

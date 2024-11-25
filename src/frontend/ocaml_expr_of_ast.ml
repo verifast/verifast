@@ -255,7 +255,7 @@ and of_expr = function
   ])
 | StringLit (l, s) -> C ("StringLit", [of_loc l; S s])
 | ClassLit (l, cn) -> C ("ClassLit", [of_loc l; S cn])
-| Typeid (l, e) -> C ("TypeId", [of_loc l; of_expr e])
+| Typeid (l, e) -> C ("Typeid", [of_loc l; of_expr e])
 | TypeInfo (l, t) -> C ("TypeInfo", [of_loc l; of_type t])
 | Read (l, e, f) -> C ("Read", [of_loc l; of_expr e; S f])
 | Select (l, e, f) -> C ("Select", [of_loc l; of_expr e; S f])

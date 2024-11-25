@@ -925,6 +925,10 @@ mod vf_mir_builder {
             let span_cpn = adt_def_cpn.reborrow().init_span();
             let span = tcx.def_span(adt_def.did());
             Self::encode_span_data(tcx, &span.data(), span_cpn);
+            if let Some(rustc_hir::Node::Item(item)) = tcx.hir().get_if_local(adt_def.did()) {
+                let def_span = item.span.data();
+                Self::encode_span_data(tcx, &def_span, adt_def_cpn.reborrow().init_def_span());
+            }
             let vis_cpn = adt_def_cpn.reborrow().init_vis();
             let vis = tcx.visibility(adt_def.did());
             Self::encode_visibility(vis, vis_cpn);
