@@ -1876,7 +1876,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       | Value v_cpn -> translate_const_value v_cpn ty loc
       | Undefined _ -> Error (`TrTyConstKind "Unknown ConstKind")
 
-    let translate_typed_constant (ty_const_cpn : ConstRd.TyConst.t) (loc : Ast.loc) =
+    let translate_typed_constant (ty_const_cpn : ConstRd.TyConst.t)
+        (loc : Ast.loc) =
       let open ConstRd.TyConst in
       let ty_cpn = ty_get ty_const_cpn in
       let* ty_info = translate_ty ty_cpn loc in
@@ -2054,8 +2055,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                  there is a problem with extending the implementation for clean-up paths *)
               | "std::ptr::mut_ptr::<impl *mut T>::is_null" -> (
                   match (substs, args_cpn) with
-                  | ( [ Mir.GenArgType gen_arg_ty_info ],
-                      [ arg_cpn ] ) ->
+                  | [ Mir.GenArgType gen_arg_ty_info ], [ arg_cpn ] ->
                       let* tmp_rvalue_binders, [ arg ] =
                         translate_operands [ (arg_cpn, fn_loc) ]
                       in
@@ -2081,8 +2081,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               | "std::ptr::const_ptr::<impl *const T>::offset"
               | "std::ptr::mut_ptr::<impl *mut T>::offset" -> (
                   match (substs, args_cpn) with
-                  | ( [ Mir.GenArgType gen_arg_ty_info ],
-                      [ arg1_cpn; arg2_cpn ] ) ->
+                  | [ Mir.GenArgType gen_arg_ty_info ], [ arg1_cpn; arg2_cpn ]
+                    ->
                       let* tmp_rvalue_binders, [ arg1; arg2 ] =
                         translate_operands
                           [ (arg1_cpn, fn_loc); (arg2_cpn, fn_loc) ]
@@ -2098,8 +2098,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               | "std::ptr::const_ptr::<impl *const T>::offset_from"
               | "std::ptr::mut_ptr::<impl *mut T>::offset_from" -> (
                   match (substs, args_cpn) with
-                  | ( [ Mir.GenArgType gen_arg_ty_info ],
-                      [ arg1_cpn; arg2_cpn ] ) ->
+                  | [ Mir.GenArgType gen_arg_ty_info ], [ arg1_cpn; arg2_cpn ]
+                    ->
                       let* tmp_rvalue_binders, [ arg1; arg2 ] =
                         translate_operands
                           [ (arg1_cpn, fn_loc); (arg2_cpn, fn_loc) ]
@@ -2121,8 +2121,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               | "std::ptr::const_ptr::<impl *const T>::add"
               | "std::ptr::mut_ptr::<impl *mut T>::add" -> (
                   match (substs, args_cpn) with
-                  | ( [ Mir.GenArgType gen_arg_ty_info ],
-                      [ arg1_cpn; arg2_cpn ] ) ->
+                  | [ Mir.GenArgType gen_arg_ty_info ], [ arg1_cpn; arg2_cpn ]
+                    ->
                       let* tmp_rvalue_binders, [ arg1; arg2 ] =
                         translate_operands
                           [ (arg1_cpn, fn_loc); (arg2_cpn, fn_loc) ]
@@ -2148,8 +2148,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               | "std::ptr::const_ptr::<impl *const T>::sub"
               | "std::ptr::mut_ptr::<impl *mut T>::sub" -> (
                   match (substs, args_cpn) with
-                  | ( [ Mir.GenArgType gen_arg_ty_info ],
-                      [ arg1_cpn; arg2_cpn ] ) ->
+                  | [ Mir.GenArgType gen_arg_ty_info ], [ arg1_cpn; arg2_cpn ]
+                    ->
                       let* tmp_rvalue_binders, [ arg1; arg2 ] =
                         translate_operands
                           [ (arg1_cpn, fn_loc); (arg2_cpn, fn_loc) ]
