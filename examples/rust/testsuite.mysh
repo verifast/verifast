@@ -1,6 +1,6 @@
 cd tutorial
   verifast -c -allow_dead_code alloc_u8.rs
-  verifast -c unsafe_box_u8.rs
+  verifast -c -allow_dead_code unsafe_box_u8.rs
   verifast -c unsafe_box_u8_abs.rs
   verifast -c unsafe_box_forget.rs
   verifast -c unsafe_box.rs
