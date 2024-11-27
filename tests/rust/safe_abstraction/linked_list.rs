@@ -94,20 +94,20 @@ pub struct Iter<'a, T: 'a> {
 }
 
 //#[stable(feature = "collection_debug", since = "1.17.0")]
-impl<T: fmt::Debug> fmt::Debug for Iter<'_, T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple("Iter")
-            .field(&*mem::ManuallyDrop::new(LinkedList {
-                head: self.head,
-                tail: self.tail,
-                len: self.len,
-                alloc: Global,
-                marker: PhantomData,
-            }))
-            .field(&self.len)
-            .finish()
-    }
-}
+// impl<T: fmt::Debug> fmt::Debug for Iter<'_, T> {
+//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+//         f.debug_tuple("Iter")
+//             .field(&*mem::ManuallyDrop::new(LinkedList {
+//                 head: self.head,
+//                 tail: self.tail,
+//                 len: self.len,
+//                 alloc: Global,
+//                 marker: PhantomData,
+//             }))
+//             .field(&self.len)
+//             .finish()
+//     }
+// }
 
 // FIXME(#26925) Remove in favor of `#[derive(Clone)]`
 //#[stable(feature = "rust1", since = "1.0.0")]
@@ -131,20 +131,20 @@ pub struct IterMut<'a, T: 'a> {
 }
 
 //#[stable(feature = "collection_debug", since = "1.17.0")]
-impl<T: fmt::Debug> fmt::Debug for IterMut<'_, T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple("IterMut")
-            .field(&*mem::ManuallyDrop::new(LinkedList {
-                head: self.head,
-                tail: self.tail,
-                len: self.len,
-                alloc: Global,
-                marker: PhantomData,
-            }))
-            .field(&self.len)
-            .finish()
-    }
-}
+// impl<T: fmt::Debug> fmt::Debug for IterMut<'_, T> {
+//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+//         f.debug_tuple("IterMut")
+//             .field(&*mem::ManuallyDrop::new(LinkedList {
+//                 head: self.head,
+//                 tail: self.tail,
+//                 len: self.len,
+//                 alloc: Global,
+//                 marker: PhantomData,
+//             }))
+//             .field(&self.len)
+//             .finish()
+//     }
+// }
 
 /// An owning iterator over the elements of a `LinkedList`.
 ///
@@ -162,11 +162,11 @@ pub struct IntoIter<
 }
 
 //#[stable(feature = "collection_debug", since = "1.17.0")]
-impl<T: fmt::Debug, A: Allocator> fmt::Debug for IntoIter<T, A> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple("IntoIter").field(&self.list).finish()
-    }
-}
+// impl<T: fmt::Debug, A: Allocator> fmt::Debug for IntoIter<T, A> {
+//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+//         f.debug_tuple("IntoIter").field(&self.list).finish()
+//     }
+// }
 
 impl<T> Node<T> {
     fn new(element: T) -> Self {
@@ -2223,25 +2223,25 @@ unsafe impl<T: Send, A: Allocator + Send> Send for LinkedList<T, A> {}
 unsafe impl<T: Sync, A: Allocator + Sync> Sync for LinkedList<T, A> {}
 
 //#[stable(feature = "rust1", since = "1.0.0")]
-unsafe impl<T: Sync> Send for Iter<'_, T> {}
+unsafe impl<'a, T: Sync> Send for Iter<'a, T> {}
 
 //#[stable(feature = "rust1", since = "1.0.0")]
-unsafe impl<T: Sync> Sync for Iter<'_, T> {}
+unsafe impl<'a, T: Sync> Sync for Iter<'a, T> {}
 
 //#[stable(feature = "rust1", since = "1.0.0")]
-unsafe impl<T: Send> Send for IterMut<'_, T> {}
+unsafe impl<'a, T: Send> Send for IterMut<'a, T> {}
 
 //#[stable(feature = "rust1", since = "1.0.0")]
-unsafe impl<T: Sync> Sync for IterMut<'_, T> {}
+unsafe impl<'a, T: Sync> Sync for IterMut<'a, T> {}
 
 /*#[unstable(feature = "linked_list_cursors", issue = "58533")]*/
-unsafe impl<T: Sync, A: Allocator + Sync> Send for Cursor<'_, T, A> {}
+unsafe impl<'a, T: Sync, A: Allocator + Sync> Send for Cursor<'a, T, A> {}
 
 /*#[unstable(feature = "linked_list_cursors", issue = "58533")]*/
-unsafe impl<T: Sync, A: Allocator + Sync> Sync for Cursor<'_, T, A> {}
+unsafe impl<'a, T: Sync, A: Allocator + Sync> Sync for Cursor<'a, T, A> {}
 
 /*#[unstable(feature = "linked_list_cursors", issue = "58533")]*/
-unsafe impl<T: Send, A: Allocator + Send> Send for CursorMut<'_, T, A> {}
+unsafe impl<'a, T: Send, A: Allocator + Send> Send for CursorMut<'a, T, A> {}
 
 /*#[unstable(feature = "linked_list_cursors", issue = "58533")]*/
-unsafe impl<T: Sync, A: Allocator + Sync> Sync for CursorMut<'_, T, A> {}
+unsafe impl<'a, T: Sync, A: Allocator + Sync> Sync for CursorMut<'a, T, A> {}

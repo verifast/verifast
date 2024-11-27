@@ -1041,9 +1041,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         in
         (* Todo: Nested structs *)
         let points_to tid l vid_op =
-          Error
-            "Expressing a points-to assertion for an enum pointer is not yet \
-             supported"
+          let* pat = RustBelt.Aux.vid_op_to_var_pat vid_op loc in
+          Ok (PointsTo (loc, l, RegularPointsTo, pat))
         in
         let interp =
           RustBelt.
@@ -1584,15 +1583,24 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | Int int_ty_cpn -> translate_int_ty int_ty_cpn loc
     | UInt u_int_ty_cpn -> translate_u_int_ty u_int_ty_cpn loc
     | Char -> Ok (char_ty_info loc)
+    | Float -> Ast.static_error loc "Floating point types are not yet supported" None
     | Adt adt_ty_cpn -> translate_adt_ty adt_ty_cpn loc
+    | Foreign -> Ast.static_error loc "Foreign types are not yet supported" None
     | RawPtr raw_ptr_ty_cpn -> translate_raw_ptr_ty raw_ptr_ty_cpn loc
     | Ref ref_ty_cpn -> translate_ref_ty ref_ty_cpn loc
     | FnDef fn_def_ty_cpn -> translate_fn_def_ty fn_def_ty_cpn loc
     | FnPtr fn_ptr_ty_cpn -> translate_fn_ptr_ty fn_ptr_ty_cpn loc
+    | Dynamic -> Ast.static_error loc "Dynamic types are not yet supported" None
+    | Closure -> Ast.static_error loc "Closure types are not yet supported" None
+    | CoroutineClosure ->
+        Ast.static_error loc "Coroutine closure types are not yet supported" None
+    | Coroutine -> Ast.static_error loc "Coroutine types are not yet supported" None
+    | CoroutineWitness -> Ast.static_error loc "Coroutine witness types are not yet supported" None
     | Never -> Ok (never_ty_info loc)
     | Tuple tys_cpn ->
         let tys_cpn = Capnp.Array.to_list tys_cpn in
         translate_tuple_ty tys_cpn loc
+    | Alias _ -> Ast.static_error loc "Alias types are not yet supported" None
     | Param name ->
         let vf_ty = ManifestTypeExpr (loc, GhostTypeParam name) in
         let interp : RustBelt.ty_interp =
@@ -1638,6 +1646,14 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           }
         in
         Ok (Mir.TyInfoBasic { vf_ty; interp })
+    | Bound -> Ast.static_error loc "Bound types are not yet supported" None
+    | Placeholder -> Ast.static_error loc "Placeholder types are not yet supported" None
+    | Infer -> Ast.static_error loc "Infer types are not yet supported" None
+    | Error -> Ast.static_error loc "Error types are not yet supported" None
+    | Str -> Ast.static_error loc "Str types are not yet supported" None
+    | Array _ -> Ast.static_error loc "Array types are not yet supported" None
+    | Pattern -> Ast.static_error loc "Pattern types are not yet supported" None
+    | Slice _ -> Ast.static_error loc "Slice types are not yet supported" None
     | Undefined _ -> Error (`TrTy "Unknown Rust type kind")
 
   type body_tr_defs_ctx = { adt_defs : Mir.adt_def_tr list }
