@@ -1490,6 +1490,7 @@ let make_file_preprocessor0 reportMacroCall path get_macro set_macro peek junk i
                   in
                   match peek () with
                   | Some (_, Kwd ")") -> 
+                    junk ();
                     List.rev seen
                   | _ ->
                     if not first then begin
