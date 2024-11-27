@@ -203,7 +203,7 @@ pub fn preprocess(
                         cs.next();
                         output.push('{');
                         if next_block_is_fn_body {
-                            assert!(fn_body_brace_depth == -1);
+                            assert!(fn_body_brace_depth == -1, "{}:{}: nested functions are not yet supported", start_of_block.line, start_of_block.column);
                             fn_body_brace_depth = brace_depth;
                             next_block_is_fn_body = false;
                         }
