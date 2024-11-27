@@ -75,8 +75,9 @@ cd safe_abstraction
     del proof_obligs_quick_fix_test_generic_result.rs
   end_sequential
   begin_sequential
-    rustup run nightly-2024-11-23 vf-rust-mir-exporter linked_list.rs > linked_list.vf_mir
+    rustup run nightly-2024-11-23 vf-rust-mir-exporter linked_list.rs > linked_list.vf_mir 2> linked_list.exporter-trace
     del linked_list.vf_mir
+    del linked_list.exporter-trace
   end_sequential
 cd ..
 end_parallel
