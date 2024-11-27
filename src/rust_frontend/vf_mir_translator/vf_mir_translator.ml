@@ -1027,8 +1027,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         in
         let vf_ty = ConstructedTypeExpr (loc, name, targs) in
         let sz_expr = SizeofExpr (loc, TypeExpr vf_ty) in
-        let own tid vs =
-          Error "Expressing ownership of an enum value is not yet supported"
+        let own tid v =
+          Ok
+            (ExprCallExpr
+               (loc, TypePredExpr (loc, vf_ty, "own"), [ LitPat tid; LitPat v ]))
         in
         let shr lft tid l =
           Error
@@ -3497,7 +3499,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     Ok (pre, post)
 
   (** makes the mappings used for substituting the MIR level local declaration ids with names closer to variables surface name *)
-  let make_var_id_name_maps (loc: Ast.loc) (vdis : Mir.var_debug_info list) =
+  let make_var_id_name_maps (loc : Ast.loc) (vdis : Mir.var_debug_info list) =
     let make_var_id_name_entries surf_names_set id surf_name =
       match List.find_opt (fun (n, _) -> n = surf_name) surf_names_set with
       | None ->
@@ -3522,7 +3524,12 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
              let y = x + 2;
              ``
              The third `x` refers to the first x but the code might be confusing for the user *)
-          Ast.static_error loc (Printf.sprintf "This function shadows local variable name '%s'; this is not yet supported in VeriFast" surf_name) None
+          Ast.static_error loc
+            (Printf.sprintf
+               "This function shadows local variable name '%s'; this is not \
+                yet supported in VeriFast"
+               surf_name)
+            None
       (*
           let internal_name =
             TrName.tag_internal surf_name ^ string_of_int !counter
