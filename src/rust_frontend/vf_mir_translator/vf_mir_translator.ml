@@ -3497,7 +3497,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     Ok (pre, post)
 
   (** makes the mappings used for substituting the MIR level local declaration ids with names closer to variables surface name *)
-  let make_var_id_name_maps (vdis : Mir.var_debug_info list) =
+  let make_var_id_name_maps (loc: Ast.loc) (vdis : Mir.var_debug_info list) =
     let make_var_id_name_entries surf_names_set id surf_name =
       match List.find_opt (fun (n, _) -> n = surf_name) surf_names_set with
       | None ->
@@ -3522,7 +3522,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
              let y = x + 2;
              ``
              The third `x` refers to the first x but the code might be confusing for the user *)
-          failwith "Todo: Shadowed variable names"
+          Ast.static_error loc (Printf.sprintf "This function shadows local variable name '%s'; this is not yet supported in VeriFast" surf_name) None
       (*
           let internal_name =
             TrName.tag_internal surf_name ^ string_of_int !counter
@@ -3776,7 +3776,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let vdis_cpn = var_debug_info_get_list body_cpn in
     (* Since var id translation map is empty var debug info contains the plain Mir ids *)
     let* vdis = ListAux.try_map translate_var_debug_info vdis_cpn in
-    let env_map, trs_map = make_var_id_name_maps vdis in
+    let env_map, trs_map = make_var_id_name_maps imp_loc vdis in
     let _ = var_id_trs_map_ref := trs_map in
     let def_kind_cpn = def_kind_get body_cpn in
     let def_kind = DefKind.get def_kind_cpn in

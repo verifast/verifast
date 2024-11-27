@@ -186,21 +186,24 @@ impl<T, A: Allocator> LinkedList<T, A> {
     /// `node` must point to a valid node that was boxed and leaked using the list's allocator.
     /// This method takes ownership of the node, so the pointer should not be used again.
     #[inline]
-    unsafe fn push_front_node(&mut self, node: NonNull<Node<T>>) {
+    unsafe fn push_front_node(&mut self, node: NonNull<Node<T>>)
+    //@ req true;
+    //@ ens true;
+    {
         // This method takes care not to create mutable references to whole nodes,
         // to maintain validity of aliasing pointers into `element`.
         unsafe {
             (*node.as_ptr()).next = self.head;
             (*node.as_ptr()).prev = None;
-            let node = Some(node);
+            let node_ = Some(node);
 
             match self.head {
-                None => self.tail = node,
+                None => self.tail = node_,
                 // Not creating new mutable (unique!) references overlapping `element`.
-                Some(head) => (*head.as_ptr()).prev = node,
+                Some(head) => (*head.as_ptr()).prev = node_,
             }
 
-            self.head = node;
+            self.head = node_;
             self.len += 1;
         }
     }
@@ -213,8 +216,8 @@ impl<T, A: Allocator> LinkedList<T, A> {
         match self.head {
             None => None,
             Some(node) => unsafe {
-                let node = Box::from_raw_in(node.as_ptr(), &self.alloc);
-                self.head = node.next;
+                let node_ = Box::from_raw_in(node.as_ptr(), &self.alloc);
+                self.head = node_.next;
 
                 match self.head {
                     None => self.tail = None,
@@ -223,7 +226,7 @@ impl<T, A: Allocator> LinkedList<T, A> {
                 }
 
                 self.len -= 1;
-                Some(node)
+                Some(node_)
             }
         }
     }
