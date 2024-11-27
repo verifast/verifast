@@ -1251,6 +1251,17 @@ and eval_and_convert_operands e1 e2 =
   let n2 = if u2 = u then n2 else extract_big_int n2 0 intmax_bitwidth in
   u, n1, n2
 
+module Macro_param = struct
+type t =
+  | Ident of string
+  | VarArgs of string option (* optional name: args... *)
+
+let name_of_macro_param = function
+  | Ident s
+  | VarArgs (Some s) -> s
+  | VarArgs None -> "__VA_ARGS__"
+end
+
 let make_file_preprocessor0 reportMacroCall path get_macro set_macro peek junk in_ghost_range dataModel =
   let peek () =
     match peek () with
@@ -1464,28 +1475,64 @@ let make_file_preprocessor0 reportMacroCall path get_macro set_macro peek junk i
                  *)
                 Some (l, Kwd "(") when has_no_whitespace_between lx l->
                 junk ();
-                let rec params first =
+                let check_end seen =
                   match peek () with
-                    Some (_, Kwd ")") -> junk (); []
+                  | Some (_, Kwd ")") ->
+                    junk ();
+                    List.rev seen
+                  | Some (l, _) ->
+                    error l "Expected ')' for ending macro parameter list"
+                in
+                let rec params first seen =
+                  let check_duplicate l param =
+                    if seen |> List.exists (fun p -> Macro_param.name_of_macro_param p = param) then error l "Duplicate macro parameter"
+                    else ()
+                  in
+                  match peek () with
+                  | Some (_, Kwd ")") -> 
+                    List.rev seen
                   | _ ->
                     if not first then begin
                       match peek () with
-                        Some (_, Kwd ",") -> junk ()
+                      | Some (_, Kwd ",") -> junk ()
                       | Some (l, _) -> error l "Expected ',' for separating macro parameters or ')' for ending macro parameter list"
                     end;
                     begin match peek () with
-                      Some (_, Ident x) -> junk (); x::params false
-                    | Some (_, Kwd "...") -> junk (); "..."::params false
+                      Some (l, Ident x) -> junk (); 
+                      begin match peek () with
+                      | Some (_, Kwd "...") ->
+                        junk ();
+                        check_end ((Macro_param.VarArgs (Some x)) :: seen)
+                      | _ ->
+                        check_duplicate l x;
+                        params false (Macro_param.Ident x :: seen)
+                      end
+                    | Some (_, Kwd "...") -> 
+                      junk ();
+                      check_end (Macro_param.VarArgs None :: seen)
                     | Some (l, _) -> error l "Macro parameter expected"
                     end
                 in
-                Some (params true)
+                Some (params true [])
               | _ -> None
+            in
+            let has_named_var_param =
+              match params with
+              | Some params ->
+                params |> List.exists (function Macro_param.VarArgs (Some _) -> true | _ -> false)
+              | _ -> false
             in
             let rec body () =
               match peek () with
                 Some (_, Eof) | Some (_, Eol) -> []
-              | Some t -> junk (); t::body ()
+              | Some t -> 
+                if has_named_var_param then
+                  begin match t with
+                  | l, Ident ("__VA_ARGS__") -> error l "You cannot use '__VA_ARGS__' in a variadic macro with a named variable argument"
+                  | _ -> ()
+                  end;
+                junk (); 
+                t::body ()
             in 
             let body = body () in
             set_macro x (Some (lx0, params, body));
@@ -1615,16 +1662,19 @@ let make_file_preprocessor0 reportMacroCall path get_macro set_macro peek junk i
                 | Some t -> junk (); t::arg ()
               in
               let binding param =
-                match param with
-                  "..." -> 
-                  let rec varargs () =
-                    match peek () with
-                      Some (_, Kwd ")") -> []
-                    | Some ((_, Kwd ",") as t) -> junk (); let arg0 = arg () in [t]::arg0::varargs ()
-                  in
-                  "__VA_ARGS__", let arg0 = arg () in List.concat (arg0::varargs ())
-                | param ->
-                  param, arg ()
+                let tokens = 
+                  match param with
+                  | Macro_param.VarArgs _ ->
+                    let rec varargs () =
+                      match peek () with
+                        Some (_, Kwd ")") -> []
+                      | Some ((_, Kwd ",") as t) -> junk (); let arg0 = arg () in [t]::arg0::varargs ()
+                    in
+                    let arg0 = arg () in 
+                    List.concat (arg0::varargs ())
+                  | _ -> arg ()
+                in
+                Macro_param.name_of_macro_param param, tokens
               in
               let rec args params first =
                 match params with

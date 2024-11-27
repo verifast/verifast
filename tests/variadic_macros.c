@@ -21,6 +21,8 @@ int foo2(int x, int y)
 
 #define FOO(f, ...) f(__VA_ARGS__)
 #define FOO2(...) foo2(__VA_ARGS__)
+#define FOO_(f, args...) f(args)
+#define FOO2_(as...) foo2(as)
 
 void test()
 //@ requires true;
@@ -29,10 +31,18 @@ void test()
   int result;
   result = FOO(foo0,);
   assert(result == 42);
+  result = FOO_(foo0,);
+  assert(result == 42);
   result = FOO(foo1, 10);
+  assert(result == 10);
+  result = FOO_(foo1, 10);
   assert(result == 10);
   result = FOO(foo2, 20, 30);
   assert(result == -10);
+  result = FOO_(foo2, 20, 30);
+  assert(result == -10);
   result = FOO2(40, 60);
+  assert(result == -20);
+  result = FOO2_(40, 60);
   assert(result == -20);
 }
