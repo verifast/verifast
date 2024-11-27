@@ -517,6 +517,7 @@ let rec sexpr_of_expr (expr : expr) : sexpression =
             "t2", sexpr_of_prover_type t2;
             "e", sexpr_of_expr e
           ]
+    | Unbox (e, t) -> build_list [ Symbol "expr-unbox" ] [ "e", sexpr_of_expr e; "t", sexpr_of_type_ t ]
     | ArrayTypeExpr' (_, e) ->
         build_list
           [ Symbol "expr-array-type" ]

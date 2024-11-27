@@ -484,6 +484,7 @@ and of_expr = function
     of_prover_type ptt;
     of_expr e
   ])
+| Unbox (e, t) -> C ("Unbox", [of_expr e; of_type t])
 | ArrayTypeExpr' (l, e) -> C ("ArrayTypeExpr'", [of_loc l; of_expr e])
 | AssignExpr (l, el, er) ->
   C ("AssignExpr", [

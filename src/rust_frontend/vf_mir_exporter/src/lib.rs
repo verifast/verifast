@@ -945,6 +945,18 @@ mod vf_mir_builder {
                 .expect(&format!("Failed to get HIR generics data"));
             Self::encode_hir_generics(enc_ctx, hir_gens, hir_gens_cpn);
 
+            let variances = tcx.variances_of(adt_def.did());
+            let mut variances_cpn = adt_def_cpn.reborrow().init_variances(variances.len());
+            for (i, variance) in variances.iter().enumerate() {
+                let variance_cpn = match variance {
+                    rustc_middle::ty::Variance::Invariant => crate::vf_mir_capnp::Variance::Invariant,
+                    rustc_middle::ty::Variance::Covariant => crate::vf_mir_capnp::Variance::Covariant,
+                    rustc_middle::ty::Variance::Contravariant => crate::vf_mir_capnp::Variance::Contravariant,
+                    rustc_middle::ty::Variance::Bivariant => crate::vf_mir_capnp::Variance::Bivariant,
+                };
+                variances_cpn.set(i as u32, variance_cpn);
+            }
+
             let predicates = tcx.predicates_of(adt_def.did()).predicates;
             adt_def_cpn.fill_predicates(predicates, |pred_cpn, pred| {
                 Self::encode_predicate(enc_ctx, pred, pred_cpn);

@@ -28,6 +28,13 @@ pred<T> <Arc<T>>.own(t, arc) = [_]std::ptr::NonNull_own(default_tid, arc.ptr) &*
     [_]exists(?dk) &*& [_]exists(?gid) &*& [_]atomic_space(Marc, Arc_inv(dk, gid, ptr)) &*& ticket(dlft_pred(dk), gid, ?frac) &*& [frac]dlft_pred(dk)(gid, false) &*&
     [_](<T>.share)(dk, default_tid, &(*ptr).data) &*& pointer_within_limits(&(*ptr).data) == true &*& is_Send(typeid(T)) == true;
 
+lem Arc_own_mono<T0, T1>()
+    req type_interp::<T0>() &*& type_interp::<T1>() &*& Arc_own::<T0>(?t, ?v) &*& is_subtype_of::<T0, T1>() == true;
+    ens type_interp::<T0>() &*& type_interp::<T1>() &*& Arc_own::<T1>(t, Arc::<T1> { ptr: upcast(v.ptr) });
+{
+    assume(false);
+}
+
 pred_ctor Arc_frac_bc<T>(l: *Arc<T>, nnp: std::ptr::NonNull<ArcInner<T>>)(;) = (*l).ptr |-> nnp;
 pred_ctor ticket_(dk: lifetime_t, gid: isize, frac: real)(;) = ticket(dlft_pred(dk), gid, frac) &*& [frac]ghost_cell(gid, false);
 

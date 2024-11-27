@@ -4,9 +4,13 @@ open Verifast0
 let rec string_of_type_expr = function
   ManifestTypeExpr (l, tp) -> rust_string_of_type tp
 | IdentTypeExpr (l, None, x) -> x
-| StructTypeExpr (l, Some sn, None, [], targs) -> Printf.sprintf "%s%s" sn (string_of_targs targs)
+| StructTypeExpr (l, Some sn, None, [], targs) -> Printf.sprintf "%s%s" sn (string_of_type_targs targs)
 | te -> failwith (Printf.sprintf "string_of_type_expr: %s" (Ocaml_expr_formatter.string_of_ocaml_expr true (Ocaml_expr_of_ast.of_type_expr te)))
-and string_of_targs = function
+and string_of_type_targs = function
+  [] -> ""
+| ts -> Printf.sprintf "<%s>" (String.concat ", " (List.map string_of_type_expr ts))
+
+let string_of_val_targs = function
   [] -> ""
 | ts -> Printf.sprintf "::<%s>" (String.concat ", " (List.map string_of_type_expr ts))
 
@@ -23,15 +27,19 @@ let string_of_ret = function
 
 let rec string_of_expr = function
   Var (l, x) -> x
+| CallExpr (l, "lft_of", [], [], [LitPat (Typeid (_, TypeExpr (IdentTypeExpr (_, None, x))))], Static) when String.starts_with ~prefix:"'" x -> x
 | CallExpr (l, f, targs, ps1, ps2, binding) ->
   let args1 = if ps1 = [] then "" else Printf.sprintf "(%s)" (string_of_pats ps1) in
-  Printf.sprintf "%s%s%s(%s)" f (string_of_targs targs) args1 (string_of_pats ps2)
+  Printf.sprintf "%s%s%s(%s)" f (string_of_val_targs targs) args1 (string_of_pats ps2)
 | TypePredExpr (l, te, p) -> Printf.sprintf "<%s>.%s" (string_of_type_expr te) p
 | Typeid (l, e) -> Printf.sprintf "typeid(%s)" (string_of_expr e)
 | TypeExpr te -> string_of_type_expr te
 | Select (l, e, f) -> Printf.sprintf "%s.%s" (string_of_expr e) f
 | Operation (l, Eq, [e1; e2]) -> Printf.sprintf "%s == %s" (string_of_expr e1) (string_of_expr e2)
 | True l -> "true"
+| CastExpr (l, StructTypeExpr (_, Some sn, _, [], targs), InitializerList (_, fs)) ->
+  Printf.sprintf "%s%s { %s }" sn (string_of_val_targs targs) (String.concat ", " (List.map (fun (Some (_, f), e) -> Printf.sprintf "%s: %s" f (string_of_expr e)) fs))
+| CastExpr (l, te, e) -> Printf.sprintf "%s as %s" (string_of_expr e) (string_of_type_expr te)
 | e -> failwith (Printf.sprintf "string_of_expr: %s" (Ocaml_expr_formatter.string_of_ocaml_expr true (Ocaml_expr_of_ast.of_expr e)))
 and string_of_pats ps = String.concat ", " (List.map string_of_pat ps)
 and string_of_pat = function
@@ -42,13 +50,13 @@ and string_of_pat = function
 let rec string_of_bool_expr = function
   CallExpr (l, f, targs, ps1, ps2, binding) ->
   let args1 = if ps1 = [] then "" else Printf.sprintf "(%s)" (string_of_pats ps1) in
-  Printf.sprintf "%s%s%s(%s) == true" f (string_of_targs targs) args1 (string_of_pats ps2)
+  Printf.sprintf "%s%s%s(%s) == true" f (string_of_val_targs targs) args1 (string_of_pats ps2)
 | e -> string_of_expr e
 
 let rec string_of_asn = function
   CallExpr (l, f, targs, ps1, ps2, binding) ->
   let args1 = if ps1 = [] then "" else Printf.sprintf "(%s)" (string_of_pats ps1) in
-  Printf.sprintf "%s%s%s(%s)" f (string_of_targs targs) args1 (string_of_pats ps2)
+  Printf.sprintf "%s%s%s(%s)" f (string_of_val_targs targs) args1 (string_of_pats ps2)
 | ExprCallExpr (l, epred, eargs) -> Printf.sprintf "%s(%s)" (string_of_expr epred) (string_of_pats eargs)
 | Sep (l, e1, e2) -> Printf.sprintf "%s &*& %s" (string_of_asn e1) (string_of_asn e2)
 | ExprAsn (l, e) -> string_of_bool_expr e

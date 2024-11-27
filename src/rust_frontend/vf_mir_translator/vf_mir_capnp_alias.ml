@@ -24,6 +24,7 @@ module AnnotationRd = VfMirStub.Reader.Annotation
 module UnsafetyRd = VfMirStub.Reader.Unsafety
 module IdentRd = VfMirStub.Reader.Ident
 module VisibilityRd = VfMirStub.Reader.Visibility
+module VarianceRd = VfMirStub.Reader.Variance
 
 (* Hir *)
 module HirRd = VfMirStub.Reader.Hir

@@ -4176,6 +4176,250 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         false (*virtual*),
         [] (*overrides*) )
 
+  let gen_own_variance_proof_oblig adt_def_loc name lft_params tparams variances
+      fds =
+    let open Ast in
+    assert (List.length variances = List.length lft_params + List.length tparams);
+    let lft_param_variances, tparam_variances =
+      Util.take_drop (List.length lft_params) variances
+    in
+    let lft_params01, all_lft_params_and_pres =
+      List.split
+        (List.map2
+           (fun x variance ->
+             if variance = VarianceRd.Invariant then ((x, x), ([ x ], []))
+             else
+               let x0 = x ^ "0" in
+               let x1 = x ^ "1" in
+               ( (x0, x1),
+                 ( [ x0; x1 ],
+                   match variance with
+                   | Covariant ->
+                       [
+                         ExprAsn
+                           ( adt_def_loc,
+                             CallExpr
+                               ( adt_def_loc,
+                                 "lifetime_inclusion",
+                                 [],
+                                 [],
+                                 [
+                                   LitPat
+                                     (Rust_parser.expr_of_lft_param adt_def_loc
+                                        x1);
+                                   LitPat
+                                     (Rust_parser.expr_of_lft_param adt_def_loc
+                                        x0);
+                                 ],
+                                 Static ) );
+                       ]
+                   | Contravariant ->
+                       [
+                         ExprAsn
+                           ( adt_def_loc,
+                             CallExpr
+                               ( adt_def_loc,
+                                 "lifetime_inclusion",
+                                 [],
+                                 [],
+                                 [
+                                   LitPat
+                                     (Rust_parser.expr_of_lft_param adt_def_loc
+                                        x0);
+                                   LitPat
+                                     (Rust_parser.expr_of_lft_param adt_def_loc
+                                        x1);
+                                 ],
+                                 Static ) );
+                       ]
+                   | _ -> [] ) ))
+           lft_params lft_param_variances)
+    in
+    let all_lft_params, lft_param_pres = List.split all_lft_params_and_pres in
+    let all_lft_params = List.flatten all_lft_params in
+    let lft_param_pres = List.flatten lft_param_pres in
+    let lft_params0, lft_params1 = List.split lft_params01 in
+    let tparams01, all_tparams_and_pres =
+      List.split
+        (List.map2
+           (fun x variance ->
+             if variance = VarianceRd.Invariant then ((x, x), ([ x ], []))
+             else
+               let x0 = x ^ "0" in
+               let x1 = x ^ "1" in
+               ( (x0, x1),
+                 ( [ x0; x1 ],
+                   match variance with
+                   | Covariant ->
+                       [
+                         ExprAsn
+                           ( adt_def_loc,
+                             CallExpr
+                               ( adt_def_loc,
+                                 "is_subtype_of",
+                                 [
+                                   IdentTypeExpr (adt_def_loc, None, x0);
+                                   IdentTypeExpr (adt_def_loc, None, x1);
+                                 ],
+                                 [],
+                                 [],
+                                 Static ) );
+                       ]
+                   | Contravariant ->
+                       [
+                         ExprAsn
+                           ( adt_def_loc,
+                             CallExpr
+                               ( adt_def_loc,
+                                 "is_subtype_of",
+                                 [
+                                   IdentTypeExpr (adt_def_loc, None, x1);
+                                   IdentTypeExpr (adt_def_loc, None, x0);
+                                 ],
+                                 [],
+                                 [],
+                                 Static ) );
+                       ]
+                   | _ -> [] ) ))
+           tparams tparam_variances)
+    in
+    let all_tparams, tparam_pres = List.split all_tparams_and_pres in
+    let all_tparams = List.flatten all_tparams in
+    let tparam_pres = List.flatten tparam_pres in
+    let tparams0, tparams1 = List.split tparams01 in
+    let vf_tparams = all_lft_params @ all_tparams in
+    let vf_tparams0 = lft_params0 @ tparams0 in
+    let tparams_targs0 =
+      List.map (fun x -> IdentTypeExpr (adt_def_loc, None, x)) vf_tparams0
+    in
+    let vf_tparams1 = lft_params1 @ tparams1 in
+    let tparams_targs1 =
+      List.map (fun x -> IdentTypeExpr (adt_def_loc, None, x)) vf_tparams1
+    in
+    let pre =
+      CallExpr
+        ( adt_def_loc,
+          name ^ "_own",
+          tparams_targs0,
+          [],
+          [ VarPat (adt_def_loc, "t"); VarPat (adt_def_loc, "v") ],
+          if vf_tparams = [] then PredFamCall else PredCtorCall )
+    in
+    let pre =
+      List.fold_left (fun a1 a2 -> Sep (adt_def_loc, a1, a2)) pre lft_param_pres
+    in
+    let pre =
+      List.fold_left (fun a1 a2 -> Sep (adt_def_loc, a1, a2)) pre tparam_pres
+    in
+    let pre = add_type_interp_asns adt_def_loc all_tparams pre in
+    let tp0 =
+      StructTypeExpr (adt_def_loc, Some name, None, [], tparams_targs0)
+    in
+    let tp1 =
+      StructTypeExpr (adt_def_loc, Some name, None, [], tparams_targs1)
+    in
+    let init_for_fd ({ name = f; ty; vis; loc = l } : Mir.field_def_tr) =
+      let e =
+        match Mir.basic_type_of ty with
+        | PtrTypeExpr (_, _) | RustRefTypeExpr (_, _, _, _) ->
+            CastExpr
+              ( l,
+                ManifestTypeExpr (adt_def_loc, PtrType Void),
+                Select (l, Var (l, "v"), f) )
+        | _ ->
+            CallExpr
+              ( l,
+                "upcast",
+                [],
+                [],
+                [ LitPat (Select (l, Var (l, "v"), f)) ],
+                Static )
+      in
+      (Some (l, f), e)
+    in
+    let upcast_call =
+      CallExpr
+        ( adt_def_loc,
+          "upcast",
+          [ tp0; tp1 ],
+          [],
+          [ LitPat (Var (adt_def_loc, "v")) ],
+          Static )
+    in
+    let upcast_expr =
+      CastExpr
+        ( adt_def_loc,
+          tp1,
+          InitializerList (adt_def_loc, List.map init_for_fd fds) )
+    in
+    let post =
+      CallExpr
+        ( adt_def_loc,
+          name ^ "_own",
+          tparams_targs1,
+          [],
+          [ LitPat (Var (adt_def_loc, "t")); LitPat upcast_expr ],
+          if vf_tparams = [] then PredFamCall else PredCtorCall )
+    in
+    let post = add_type_interp_asns adt_def_loc all_tparams post in
+    ( [
+        Func
+          ( adt_def_loc,
+            Lemma
+              ( false
+                (*indicates whether an axiom should be generated for this lemma*),
+                None (*trigger*) ),
+            vf_tparams (*type parameters*),
+            None (*return type*),
+            name ^ "_own_mono",
+            [],
+            false (*nonghost_callers_only*),
+            None
+            (*implemented function type, with function type type arguments and function type arguments*),
+            Some (pre, post) (*contract*),
+            false (*terminates*),
+            None (*body*),
+            false (*virtual*),
+            [] (*overrides*) );
+      ],
+      let post =
+        ExprAsn
+          ( adt_def_loc,
+            Operation (adt_def_loc, Eq, [ upcast_call; upcast_expr ]) )
+      in
+      [
+        Func
+          ( adt_def_loc,
+            Lemma
+              ( false
+                (*indicates whether an axiom should be generated for this lemma*),
+                None (*trigger*) ),
+            vf_tparams (*type parameters*),
+            None (*return type*),
+            name ^ "_upcast",
+            [ (tp0, "v") ],
+            false (*nonghost_callers_only*),
+            None
+            (*implemented function type, with function type type arguments and function type arguments*),
+            Some (EmpAsn adt_def_loc, post) (*contract*),
+            false (*terminates*),
+            Some
+              ( [
+                  ExprStmt
+                    (CallExpr
+                       ( adt_def_loc,
+                         "assume",
+                         [],
+                         [],
+                         [ LitPat (False adt_def_loc) ],
+                         Static ));
+                ],
+                adt_def_loc )
+            (*body*),
+            false (*virtual*),
+            [] (*overrides*) );
+      ] )
+
   let add_sync_asns loc sync_tparams asn =
     List.fold_right
       (fun x asn -> Ast.Sep (loc, mk_sync_asn loc x, asn))
@@ -4509,6 +4753,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         Util.flatmap (function `Lifetime x -> [ x ] | _ -> []) generics
       in
       let vf_tparams = lft_params @ tparams in
+      let variances = variances_get_list adt_def_cpn in
       let variants_cpn = variants_get_list adt_def_cpn in
       let* variants = ListAux.try_map translate_variant_def variants_cpn in
       let span_cpn = def_span_get adt_def_cpn in
@@ -4810,6 +5055,18 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                 ]
             | _ -> []
           in
+          let own_variance_proof_obligs, upcast_lemmas =
+            if
+              user_provided_own_defs <> []
+              && List.exists
+                   (fun variance -> variance <> VarianceRd.Invariant)
+                   variances
+            then
+              gen_own_variance_proof_oblig def_loc name lft_params tparams
+                variances fds
+            else ([], [])
+          in
+          let own_proof_obligs = own_variance_proof_obligs @ own_proof_obligs in
           let* share_proof_obligs =
             if user_provided_share_defs <> [] then
               gen_share_proof_obligs def lft_params tparams send_tparams
@@ -4878,7 +5135,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             ( Some full_bor_content,
               own_proof_obligs @ share_proof_obligs,
               delayed_proof_obligs,
-              type_pred_defs )
+              upcast_lemmas @ type_pred_defs )
         else Ok (None, [], [], [])
       in
       Ok

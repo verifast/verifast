@@ -205,4 +205,12 @@ lem_auto lft_of_typeid_of_lft(k: lifetime_t);
     req true;
     ens lft_of(typeid_of_lft(k)) == k;
 
+fix is_subtype_of<T0, T1>() -> bool; // T0 is a subtype of T1
+
+fix upcast<t0, t1>(x: t0) -> t1; // Cast a value of type t0 to a supertype t1 of t0
+
+lem own_mono<T0, T1>(t: thread_id_t, v: T0);
+    req type_interp::<T0>() &*& type_interp::<T1>() &*& <T0>.own(t, v) &*& is_subtype_of::<T0, T1>() == true;
+    ens type_interp::<T0>() &*& type_interp::<T1>() &*& <T1>.own(t, upcast::<T0, T1>(v));
+
 @*/

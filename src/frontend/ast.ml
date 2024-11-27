@@ -498,6 +498,7 @@ and
   | GenericExpr of loc * expr * (type_expr * expr) list * expr option (* default clause *) (* C11 generic selection (keyword '_Generic') *)
   | AddressOf of loc * expr
   | ProverTypeConversion of prover_type * prover_type * expr  (* Generated during type checking in the presence of type parameters, to get the prover types right *)
+  | Unbox of expr * type_ (* Generated during type checking; Unbox (e, t) converts the value of e, which is of prover type Inductive, to the prover type of t *)
   | ArrayTypeExpr' of loc * expr (* horrible hack --- for well-formed programs, this exists only during parsing *)
   | AssignExpr of loc * expr * expr
   | AssignOpExpr of loc * expr * operator * expr * bool (* true = return value of lhs before operation *)
@@ -1119,6 +1120,7 @@ let rec expr_loc e =
   | WAssignOpExpr (l, lhs, x, rhs, postOp) -> l
   | CommaExpr (l, e1, e2) -> l
   | ProverTypeConversion (t1, t2, e) -> expr_loc e
+  | Unbox (e, t) -> expr_loc e
   | InstanceOfExpr(l, e, tp) -> l
   | SuperMethodCall(l, _, _) -> l
   | WSuperMethodCall(l, _, _, _, _) -> l
@@ -1347,6 +1349,7 @@ let expr_fold_open iter state e =
     end
   | AddressOf (l, e0) -> iter state e0
   | ProverTypeConversion (pt, pt0, e0) -> iter state e0
+  | Unbox (e, t) -> iter state e
   | ArrayTypeExpr' (l, e) -> iter state e
   | AssignExpr (l, lhs, rhs) -> iter (iter state lhs) rhs
   | AssignOpExpr (l, lhs, op, rhs, post) -> iter (iter state lhs) rhs

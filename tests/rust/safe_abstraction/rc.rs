@@ -38,6 +38,13 @@ pred<T> <Rc<T>>.own(t, rc) =
     [_](<T>.share(dk, t, &(*ptr).value)) &*&
     pointer_within_limits(&(*ptr).value) == true;
 
+lem Rc_own_mono<T0, T1>()
+    req type_interp::<T0>() &*& type_interp::<T1>() &*& Rc_own::<T0>(?t, ?v) &*& is_subtype_of::<T0, T1>() == true;
+    ens type_interp::<T0>() &*& type_interp::<T1>() &*& Rc_own::<T1>(t, Rc::<T1> { ptr: upcast(v.ptr) });
+{
+    assume(false);
+}
+
 pred_ctor Rc_frac_bc<T>(l: *Rc<T>, nnp: std::ptr::NonNull<RcBox<T>>)(;) = (*l).ptr |-> nnp;
 
 pred_ctor ticket_(dk: lifetime_t, gid: usize, frac: real)(;) = ticket(dlft_pred(dk), gid, frac) &*& [frac]ghost_cell(gid, false);

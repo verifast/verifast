@@ -1337,6 +1337,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       List.iter (function (te, e) -> expr_mark_addr_taken e locals) cases;
       begin match default with None -> () | Some e -> expr_mark_addr_taken e locals end
     | ProverTypeConversion(_, _, e) ->  expr_mark_addr_taken e locals
+    | Unbox (e, _) -> expr_mark_addr_taken e locals
     | ArrayTypeExpr'(_, e) ->  expr_mark_addr_taken e locals
     | AssignExpr(_, e1, e2) ->  expr_mark_addr_taken e1 locals;  expr_mark_addr_taken e2 locals
     | AssignOpExpr(_, e1, _, e2, _) -> expr_mark_addr_taken e1 locals;  expr_mark_addr_taken e2 locals
@@ -1502,6 +1503,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       iter e
     | ProverTypeConversion(_, _, e) -> expr_address_taken e
+    | Unbox (e, _) -> expr_address_taken e
     | ArrayTypeExpr'(_, e) -> expr_address_taken e
     | AssignExpr(_, e1, e2) -> (expr_address_taken e1) @ (expr_address_taken e2)
     | AssignOpExpr(_, e1, _, e2, _) -> (expr_address_taken e1) @ (expr_address_taken e2)

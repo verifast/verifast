@@ -1,5 +1,14 @@
 /*@
 pred<T> <ptr::NonNull<T>>.own(t, nonNull;) = nonNull.pointer as usize != 0;
+
+lem ptr::NonNull_own_mono<T0, T1>()
+    req type_interp::<T0>() &*& type_interp::<T1>() &*& ptr::NonNull_own::<T0>(?t, ?v) &*& is_subtype_of::<T0, T1>() == true;
+    ens type_interp::<T0>() &*& type_interp::<T1>() &*& ptr::NonNull_own::<T1>(t, ptr::NonNull::<T1> { pointer: v.pointer as *_ });
+{
+    open ptr::NonNull_own::<T0>(t, v);
+    close ptr::NonNull_own::<T1>(t, ptr::NonNull::<T1> { pointer: v.pointer as *_ });
+}
+
 pred_ctor ptr::NonNull_frac_bc<T>(t: thread_id_t, l: *ptr::NonNull<T>)(;) = (*l).pointer |-> ?p &*& struct_ptr::NonNull_padding(l) &*& ptr::NonNull_own(t, ptr::NonNull::<T> { pointer: p });
 pred<T> <ptr::NonNull<T>>.share(k, t, l) =
     frac_borrow(k, ptr::NonNull_frac_bc(t, l));

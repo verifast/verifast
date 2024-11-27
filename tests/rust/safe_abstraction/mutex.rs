@@ -139,6 +139,17 @@ pred<'a, T> <MutexGuard<'a, T>>.own(t, mutexGuard) =
     &*& sys::locks::SysMutex_locked(&(*mutexGuard.lock).inner, full_borrow_(klong, <T>.full_borrow_content(t0, &(*mutexGuard.lock).data)), t)
     &*& full_borrow(klong, <T>.full_borrow_content(t0, &(*mutexGuard.lock).data));
 
+lem MutexGuard_own_mono<'a0, 'a1, T>()
+    req type_interp::<T>() &*& MutexGuard_own::<'a0, T>(?t, ?v) &*& lifetime_inclusion('a1, 'a0) == true;
+    ens type_interp::<T>() &*& MutexGuard_own::<'a1, T>(t, MutexGuard::<'a1, T> { lock: v.lock as *_ });
+{
+    open MutexGuard_own::<'a0, T>(t, v);
+    assert [_]exists_np(?klong);
+    lifetime_inclusion_trans('a1, 'a0, klong);
+    frac_borrow_mono('a0, 'a1, Mutex_frac_borrow_content(klong, v.lock));
+    close MutexGuard_own::<'a1, T>(t, v);
+}
+
 pred_ctor MutexGuard_fbc_rest<'a, T>(klong: lifetime_t, t: thread_id_t, l: *MutexGuard<'a, T>, lock: *Mutex<T>)() =
     (*l).lock |-> lock &*& lifetime_inclusion('a, klong) == true &*& struct_MutexGuard_padding(l)
     &*& [_]frac_borrow('a, Mutex_frac_borrow_content(klong, lock))

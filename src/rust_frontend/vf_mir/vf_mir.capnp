@@ -146,6 +146,13 @@ struct Hir {
     }
 }
 
+enum Variance {
+    covariant @0;
+    invariant @1;
+    contravariant @2;
+    bivariant @3;
+}
+
 struct Ty {
 
     struct ConstKind {
@@ -232,6 +239,7 @@ struct Ty {
         vis @4: Visibility;
         isLocal @5: Bool;
         hirGenerics @6: Hir.Generics;
+        variances @10: List(Variance); # One for each generic lifetime or type parameter
         predicates @7: List(Predicate);
         implementsDrop @8: Bool;
     }

@@ -7,6 +7,17 @@ pub struct Pair<A, B> {
 
 pred<A, B> <Pair<A, B>>.own(t, pair) = <A>.own(t, pair.fst) &*& <B>.own(t, pair.snd);
 
+lem Pair_own_mono<A0, A1, B0, B1>()
+    req type_interp::<A0>() &*& type_interp::<A1>() &*& type_interp::<B0>() &*& type_interp::<B1>() &*& Pair_own::<A0, B0>(?t, ?v) &*& is_subtype_of::<A0, A1>() == true &*& is_subtype_of::<B0, B1>() == true;
+    ens type_interp::<A0>() &*& type_interp::<A1>() &*& type_interp::<B0>() &*& type_interp::<B1>() &*& Pair_own::<A1, B1>(t, Pair::<A1, B1> { fst: upcast(v.fst), snd: upcast(v.snd) });
+{
+    open Pair_own::<A0, B0>(t, v);
+    Pair_upcast::<A0, A1, B0, B1>(v);
+    own_mono::<A0, A1>(t, v.fst);
+    own_mono::<B0, B1>(t, v.snd);
+    close Pair_own::<A1, B1>(t, upcast(v));
+}
+
 lem Pair_drop<A, B>()
     req Pair_own::<A, B>(?t, ?pair);
     ens <A>.own(t, pair.fst) &*& <B>.own(t, pair.snd);

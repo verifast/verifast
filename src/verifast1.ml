@@ -3058,7 +3058,13 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     match unfold_inferred_type t0 with GhostTypeParam _ -> convert_provertype_expr e (provertype_of_type t) ProverInductive | _ -> e
   
   let unbox e t0 t =
-    match unfold_inferred_type t0 with GhostTypeParam _ -> convert_provertype_expr e ProverInductive (provertype_of_type t) | _ -> e
+    match unfold_inferred_type t0 with
+      GhostTypeParam _ ->
+      begin match unfold_inferred_type t with
+        InferredType _ -> Unbox (e, t)
+      | _ -> convert_provertype_expr e ProverInductive (provertype_of_type t)
+      end
+    | _ -> e
 
   (* A universal type is one that is isomorphic to the universe for purposes of type erasure *)
   let rec is_universal_type tp =
@@ -8176,6 +8182,9 @@ let check_if_list_is_defined () =
       ctxt#set_fpclauses symbol 0 fpclauses;
       cont state (ctxt#mk_app symbol (t::List.map (fun (x, t) -> t) env))
     | ProverTypeConversion (tfrom, tto, e) -> ev state e $. fun state v -> cont state (convert_provertype v tfrom tto)
+    | Unbox (e, t) ->
+      ev state e $. fun state v ->
+      cont state (convert_provertype v ProverInductive (provertype_of_type t))
     | SizeofExpr (l, TypeExpr (ManifestTypeExpr (_, t))) ->
       cont state (sizeof_core l env t)
     | AlignofExpr (l, ManifestTypeExpr (_, t)) ->
