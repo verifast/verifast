@@ -3894,6 +3894,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let report_range = reportRange
             let report_macro_call = reportMacroCall
             let verbose_flags = verbose_flags
+            let skip_specless_fns = Vfbindings.get Vfparam_skip_specless_fns vfbindings
           end
         )
         in

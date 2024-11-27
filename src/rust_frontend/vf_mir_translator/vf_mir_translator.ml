@@ -5282,19 +5282,17 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
            else if of_trait = "std::ops::DerefMut" then (
              assert (items = [ "deref_mut" ]);
              [] (* DerefMut is safe *))
-           else if of_trait = "std::clone::Clone" then (
-             assert (items = [ "clone" ]);
-             []
+           else if of_trait = "std::clone::Clone" then []
              (* clone is safe *)
-             (* TODO: Support for traits from other crates. I think it is generally sound to ignore safe traits here *))
+             (* TODO: Support for traits from other crates. I think it is generally sound to ignore safe traits here *)
            else
              items
-             |> List.map (fun item ->
+             |> Util.flatmap (fun item ->
                     let trait_fn_name = Printf.sprintf "%s::%s" of_trait item in
                     let impl_fn_name =
                       Printf.sprintf "<%s as %s>::%s" self_ty of_trait item
                     in
-                    let (Some prototype) =
+                    match
                       traits_and_body_decls
                       |> Util.head_flatmap_option (function
                            | Ast.Func
@@ -5351,8 +5349,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                                       false,
                                       [] ))
                            | _ -> None)
-                    in
-                    prototype))
+                    with
+                    | Some prototype -> [ prototype ]
+                    | None -> []))
 
   let rec translate_module (module_cpn : VfMirStub.Reader.Module.t) :
       (Ast.decl, _) result =
@@ -5410,7 +5409,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     else d
 
   let translate_vf_mir (extern_specs : string list) (vf_mir_cpn : VfMirRd.t)
-      (report_should_fail : string -> Ast.loc0 -> unit) =
+      (report_should_fail : string -> Ast.loc0 -> unit)
+      (skip_specless_fns : bool) =
     let job _ =
       let directives_cpn = VfMirRd.directives_get_list vf_mir_cpn in
       let* directives = ListAux.try_map translate_annotation directives_cpn in
@@ -5478,6 +5478,16 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       in
       let traits_decls = List.flatten traits_decls in
       let bodies_cpn = VfMirRd.bodies_get_list vf_mir_cpn in
+      let bodies_cpn =
+        if skip_specless_fns then
+          List.filter
+            (fun body_cpn ->
+              not
+                (Capnp.Array.is_empty
+                   (ContractRd.annotations_get (BodyRd.contract_get body_cpn))))
+            bodies_cpn
+        else bodies_cpn
+      in
       let body_tr_defs_ctx = { adt_defs } in
       let* bodies_tr_res =
         ListAux.try_map (translate_body body_tr_defs_ctx) bodies_cpn

@@ -1,3 +1,5 @@
+// verifast_options{skip_specless_fns}
+
 //! A doubly-linked list with owned nodes.
 //!
 //! The `LinkedList` allows pushing and popping elements at either end
@@ -243,15 +245,15 @@ impl<T, A: Allocator> LinkedList<T, A> {
         unsafe {
             (*node.as_ptr()).next = None;
             (*node.as_ptr()).prev = self.tail;
-            let node = Some(node);
+            let node_ = Some(node);
 
             match self.tail {
-                None => self.head = node,
+                None => self.head = node_,
                 // Not creating new mutable (unique!) references overlapping `element`.
-                Some(tail) => (*tail.as_ptr()).next = node,
+                Some(tail) => (*tail.as_ptr()).next = node_,
             }
 
-            self.tail = node;
+            self.tail = node_;
             self.len += 1;
         }
     }
@@ -264,8 +266,8 @@ impl<T, A: Allocator> LinkedList<T, A> {
         match self.tail {
             None => None,
             Some(node) => unsafe {
-                let node = Box::from_raw_in(node.as_ptr(), &self.alloc);
-                self.tail = node.prev;
+                let node_ = Box::from_raw_in(node.as_ptr(), &self.alloc);
+                self.tail = node_.prev;
 
                 match self.tail {
                     None => self.head = None,
@@ -274,7 +276,7 @@ impl<T, A: Allocator> LinkedList<T, A> {
                 }
 
                 self.len -= 1;
-                Some(node)
+                Some(node_)
             }
         }
     }
@@ -286,20 +288,23 @@ impl<T, A: Allocator> LinkedList<T, A> {
     /// This method takes care not to create mutable references to `element`, to
     /// maintain validity of aliasing pointers.
     #[inline]
-    unsafe fn unlink_node(&mut self, mut node: NonNull<Node<T>>) {
-        let node = unsafe { node.as_mut() }; // this one is ours now, we can create an &mut.
+    unsafe fn unlink_node(&mut self, mut node: NonNull<Node<T>>)
+    //@ req true;
+    //@ ens true;
+    {
+        let node_ = unsafe { node.as_mut() }; // this one is ours now, we can create an &mut.
 
         // Not creating new mutable (unique!) references overlapping `element`.
-        match node.prev {
-            Some(prev) => unsafe { (*prev.as_ptr()).next = node.next },
+        match node_.prev {
+            Some(prev) => unsafe { (*prev.as_ptr()).next = node_.next },
             // this node is the head node
-            None => self.head = node.next,
+            None => self.head = node_.next,
         };
 
-        match node.next {
-            Some(next) => unsafe { (*next.as_ptr()).prev = node.prev },
+        match node_.next {
+            Some(next) => unsafe { (*next.as_ptr()).prev = node_.prev },
             // this node is the tail node
-            None => self.tail = node.prev,
+            None => self.tail = node_.prev,
         };
 
         self.len -= 1;
@@ -316,19 +321,22 @@ impl<T, A: Allocator> LinkedList<T, A> {
         mut splice_start: NonNull<Node<T>>,
         mut splice_end: NonNull<Node<T>>,
         splice_length: usize,
-    ) {
+    )
+    //@ req true;
+    //@ ens true;
+    {
         // This method takes care not to create multiple mutable references to whole nodes at the same time,
         // to maintain validity of aliasing pointers into `element`.
-        if let Some(mut existing_prev) = existing_prev {
+        if let Some(mut existing_prev_) = existing_prev {
             unsafe {
-                existing_prev.as_mut().next = Some(splice_start);
+                existing_prev_.as_mut().next = Some(splice_start);
             }
         } else {
             self.head = Some(splice_start);
         }
-        if let Some(mut existing_next) = existing_next {
+        if let Some(mut existing_next_) = existing_next {
             unsafe {
-                existing_next.as_mut().prev = Some(splice_end);
+                existing_next_.as_mut().prev = Some(splice_end);
             }
         } else {
             self.tail = Some(splice_end);
