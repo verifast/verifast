@@ -1132,6 +1132,12 @@ fn generate_setter(
                                 result.push(Line(format!(
                                     "    where F: FnMut({elem_builder_type}, E::Item), E: IntoIterator, E::IntoIter: ExactSizeIterator {{"
                                 )));
+                                if discriminant_value != field::NO_DISCRIMINANT {
+                                    result.push(indent(Line(format!(
+                                        "self.builder.set_data_field::<u16>({}, {});",
+                                        discriminant_offset as usize, discriminant_value as usize
+                                    ))));
+                                }
                                 result.push(indent(Line(format!(
                                     "<{builder_type}>::fill(self.builder.reborrow().get_pointer_field({offset}), elems, body)"
                                 ))));
@@ -1144,6 +1150,12 @@ fn generate_setter(
                                 result.push(Line(format!(
                                     "    where E: IntoIterator, E::IntoIter: ExactSizeIterator, E::Item: AsRef<str> {{"
                                 )));
+                                if discriminant_value != field::NO_DISCRIMINANT {
+                                    result.push(indent(Line(format!(
+                                        "self.builder.set_data_field::<u16>({}, {});",
+                                        discriminant_offset as usize, discriminant_value as usize
+                                    ))));
+                                }
                                 result.push(indent(Line(format!(
                                     "<{builder_type}>::fill(self.builder.reborrow().get_pointer_field({offset}), elems)"
                                 ))));

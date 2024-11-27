@@ -1061,8 +1061,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | UnionKind -> failwith "Todo: AdtTy::Union"
     | Undefined _ -> Error (`TrAdtTy "Unknown ADT kind")
 
-  and translate_tuple_ty (substs_cpn : GenArgRd.t list) (loc : Ast.loc) =
-    if not @@ ListAux.is_empty @@ substs_cpn then
+  and translate_tuple_ty (tys_cpn : TyRd.t list) (loc : Ast.loc) =
+    if not @@ ListAux.is_empty @@ tys_cpn then
       failwith "Todo: Tuple Ty is not implemented yet"
     else
       let name = TrTyTuple.make_tuple_type_name [] in
@@ -1590,9 +1590,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | FnDef fn_def_ty_cpn -> translate_fn_def_ty fn_def_ty_cpn loc
     | FnPtr fn_ptr_ty_cpn -> translate_fn_ptr_ty fn_ptr_ty_cpn loc
     | Never -> Ok (never_ty_info loc)
-    | Tuple substs_cpn ->
-        let substs_cpn = Capnp.Array.to_list substs_cpn in
-        translate_tuple_ty substs_cpn loc
+    | Tuple tys_cpn ->
+        let tys_cpn = Capnp.Array.to_list tys_cpn in
+        translate_tuple_ty tys_cpn loc
     | Param name ->
         let vf_ty = ManifestTypeExpr (loc, GhostTypeParam name) in
         let interp : RustBelt.ty_interp =
@@ -1872,7 +1872,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         (loc : Ast.loc) =
       let open TyConstKindRd in
       match get ck_cpn with
-      | Param -> failwith "Todo: ConstKind::Param"
+      | Param _ -> failwith "Todo: ConstKind::Param"
       | Value v_cpn -> translate_const_value v_cpn ty loc
       | Undefined _ -> Error (`TrTyConstKind "Unknown ConstKind")
 
@@ -2525,7 +2525,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           let field_names = field_names_get_list adt_data_cpn in
           Ok Mir.(AggKindAdt { adt_kind; adt_name; variant_name; field_names })
       | Closure -> failwith "Todo: AggregateKind::Closure"
-      | Generator -> failwith "Todo: AggregateKind::Generator"
+      | Coroutine -> failwith "Todo: AggregateKind::Coroutine"
+      | CoroutineClosure -> failwith "Todo: AggregateKind::CoroutineClosure"
+      | RawPtr -> failwith "Todo: AggregateKind::RawPtr"
       | Undefined _ -> Error (`TrAggregateKind "Unknown AggregateKind")
 
     let translate_aggregate (agg_data_cpn : AggregateDataRd.t) (loc : Ast.loc) =

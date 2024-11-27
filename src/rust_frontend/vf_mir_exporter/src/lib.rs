@@ -1547,11 +1547,13 @@ mod vf_mir_builder {
                     let u_int_ty_cpn = ty_kind_cpn.init_u_int();
                     Self::encode_ty_uint(u_int_ty, u_int_ty_cpn)
                 }
+                ty::TyKind::Float(_) => ty_kind_cpn.set_float(()),
                 ty::TyKind::Char => ty_kind_cpn.set_char(()),
                 ty::TyKind::Adt(adt_def, substs) => {
                     let adt_ty_cpn = ty_kind_cpn.init_adt();
                     Self::encode_ty_adt(tcx, enc_ctx, *adt_def, substs, adt_ty_cpn);
                 }
+                ty::TyKind::Foreign(_) => ty_kind_cpn.set_foreign(()),
                 ty::TyKind::RawPtr(ty, mutability) => {
                     let raw_ptr_ty_cpn = ty_kind_cpn.init_raw_ptr();
                     Self::encode_ty_raw_ptr(tcx, enc_ctx, *ty, *mutability, raw_ptr_ty_cpn);
@@ -1572,26 +1574,48 @@ mod vf_mir_builder {
                     let output_cpn = fn_ptr_ty_cpn.init_output();
                     Self::encode_ty(tcx, enc_ctx, fn_sig.output(), output_cpn);
                 }
+                ty::TyKind::Dynamic(_, _, _) => ty_kind_cpn.set_dynamic(()),
+                ty::TyKind::Closure(_, _) => ty_kind_cpn.set_closure(()),
+                ty::TyKind::CoroutineClosure(_, _) => ty_kind_cpn.set_coroutine_closure(()),
+                ty::TyKind::Coroutine(_, _) => ty_kind_cpn.set_coroutine(()),
+                ty::TyKind::CoroutineWitness(_, _) => ty_kind_cpn.set_coroutine_witness(()),
                 ty::TyKind::Never => ty_kind_cpn.set_never(()),
-                ty::TyKind::Tuple(substs) => {
-                    let len = substs.len();
-                    if len == 0
-                    // Unit type
-                    {
-                        let tuple_ty_cpn = ty_kind_cpn.init_tuple(len);
-                    } else {
-                        todo!("Tuple types");
-                    }
+                ty::TyKind::Tuple(gen_args) => {
+                    ty_kind_cpn.fill_tuple(gen_args.iter(), |gen_arg_cpn, gen_arg| {
+                        Self::encode_ty(tcx, enc_ctx, gen_arg, gen_arg_cpn);
+                    });
+                }
+                ty::TyKind::Alias(kind, alias_ty) => {
+                    let mut alias_ty_cpn = ty_kind_cpn.init_alias();
+                    alias_ty_cpn.set_kind(match kind {
+                        ty::AliasTyKind::Projection => crate::vf_mir_capnp::ty::AliasTyKind::Projection,
+                        ty::AliasTyKind::Inherent => crate::vf_mir_capnp::ty::AliasTyKind::Inherent,
+                        ty::AliasTyKind::Opaque => crate::vf_mir_capnp::ty::AliasTyKind::Opaque,
+                        ty::AliasTyKind::Weak => crate::vf_mir_capnp::ty::AliasTyKind::Weak,
+                    });
+                    alias_ty_cpn.set_def_id(&tcx.def_path_str(alias_ty.def_id));
+                    alias_ty_cpn.fill_args(alias_ty.args, |arg_cpn, arg| {
+                        Self::encode_gen_arg(tcx, enc_ctx, arg, arg_cpn);
+                    });
                 }
                 ty::TyKind::Param(param_ty) => {
                     ty_kind_cpn.set_param(&param_ty.to_string());
                 }
+                ty::TyKind::Bound(_, _) => ty_kind_cpn.set_bound(()),
+                ty::TyKind::Placeholder(_) => ty_kind_cpn.set_placeholder(()),
+                ty::TyKind::Infer(_) => ty_kind_cpn.set_infer(()),
+                ty::TyKind::Error(_) => ty_kind_cpn.set_error(()),
                 ty::TyKind::Str => ty_kind_cpn.set_str(()),
+                ty::TyKind::Array(ty, size) => {
+                    let mut array_ty_cpn = ty_kind_cpn.init_array();
+                    Self::encode_ty(tcx, enc_ctx, *ty, array_ty_cpn.reborrow().init_elem_ty());
+                    Self::encode_typesystem_constant(tcx, enc_ctx, size, array_ty_cpn.init_size());
+                }
+                ty::TyKind::Pat(_, _) => ty_kind_cpn.set_pattern(()),
                 ty::TyKind::Slice(elem_ty) => {
                     let elem_ty_cpn = ty_kind_cpn.init_slice();
                     Self::encode_ty(tcx, enc_ctx, *elem_ty, elem_ty_cpn);
                 }
-                _ => todo!("Unsupported type kind {:?}", ty.kind()),
             }
         }
 
@@ -1718,7 +1742,7 @@ mod vf_mir_builder {
                     ty::BoundRegionKind::ClosureEnv => todo!(),
                 },
                 ty::RegionKind::ReLateParam(_debruijn_index) => bug!(),
-                ty::RegionKind::ReStatic => bug!(),
+                ty::RegionKind::ReStatic => region_cpn.set_id("'static"),
                 ty::RegionKind::ReVar(_) | ty::RegionKind::ReErased => {
                     // Todo @Nima: We should find a mapping of `RegionVid`s and lifetime variable names at `hir`
                     region_cpn.set_id(/*&format!("{:?}", region)*/ "'<erased>");
@@ -1936,11 +1960,13 @@ mod vf_mir_builder {
         fn encode_aggregate_kind(
             enc_ctx: &mut EncCtx<'tcx, 'a>,
             agg_kind: &mir::AggregateKind<'tcx>,
-            agg_kind_cpn: aggregate_kind_cpn::Builder<'_>,
+            mut agg_kind_cpn: aggregate_kind_cpn::Builder<'_>,
         ) {
             match agg_kind {
-                mir::AggregateKind::Array(_ty) => todo!(),
-                mir::AggregateKind::Tuple => todo!(),
+                mir::AggregateKind::Array(_ty) => {
+                    Self::encode_ty(enc_ctx.tcx, enc_ctx, *_ty, agg_kind_cpn.init_array());
+                }
+                mir::AggregateKind::Tuple => agg_kind_cpn.set_tuple(()),
                 mir::AggregateKind::Adt(
                     def_id,
                     variant_idx,
@@ -1972,8 +1998,10 @@ mod vf_mir_builder {
                     let substs_cpn = adt_data_cpn.reborrow().init_substs(substs.len());
                     Self::encode_ty_args(enc_ctx, substs, substs_cpn);
                 }
-                mir::AggregateKind::Closure(_def_id, _substs) => todo!(),
-                _ => todo!(),
+                mir::AggregateKind::Closure(_def_id, _substs) => agg_kind_cpn.set_closure(()),
+                mir::AggregateKind::Coroutine(_def_id, _substs) => agg_kind_cpn.set_coroutine(()),
+                mir::AggregateKind::CoroutineClosure(_def_id, _substs) => agg_kind_cpn.set_coroutine_closure(()),
+                mir::AggregateKind::RawPtr(_ty, _mutability) => agg_kind_cpn.set_raw_ptr(()),
             }
         }
 
@@ -2276,7 +2304,11 @@ mod vf_mir_builder {
             use ty::ConstKind as CK;
             match const_kind {
                 // A const generic parameter.
-                CK::Param(param_const) => todo!(),
+                CK::Param(param_const) => {
+                    let mut param_const_cpn = const_kind_cpn.init_param();
+                    param_const_cpn.set_index(param_const.index);
+                    param_const_cpn.set_name(param_const.name.as_str());
+                }
                 // Infer the value of the const.
                 CK::Infer(infer_const) => todo!(),
                 // Bound const variable, used only when preparing a trait query.
@@ -2477,13 +2509,15 @@ mod vf_mir_builder {
                 mir::ProjectionElem::Field(field, fty) => {
                     let mut field_data_cpn = place_elm_cpn.init_field();
                     field_data_cpn.set_index(field.as_u32());
-                    let adt_def = ty
-                        .ty_adt_def()
-                        .expect(&format!("{:?} type for a PlaceElem::Field projection", ty));
-                    if adt_def.is_struct() {
-                        let name = adt_def.non_enum_variant().fields[*field].name;
-                        let name_cpn = field_data_cpn.reborrow().init_name();
-                        Self::encode_symbol(&name, name_cpn.init_something());
+                    match ty.kind() {
+                        ty::TyKind::Adt(adt_def, gen_args) => {
+                            if adt_def.is_struct() {
+                                let name = adt_def.non_enum_variant().fields[*field].name;
+                                let name_cpn = field_data_cpn.reborrow().init_name();
+                                Self::encode_symbol(&name, name_cpn.init_something());
+                            }
+                        }
+                        _ => {}
                     }
                     let ty_cpn = field_data_cpn.init_ty();
                     Self::encode_ty(enc_ctx.tcx, enc_ctx, *fty, ty_cpn);
