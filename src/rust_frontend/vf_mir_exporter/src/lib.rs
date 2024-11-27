@@ -2116,7 +2116,9 @@ mod vf_mir_builder {
                     unwind,
                     replace,
                 } => {
-                    terminator_kind_cpn.set_drop(());
+                    let mut drop_data_cpn = terminator_kind_cpn.init_drop();
+                    Self::encode_place(enc_ctx, place, drop_data_cpn.reborrow().init_place());
+                    Self::encode_basic_block_id(*target, drop_data_cpn.init_target());
                 }
                 _ => todo!("Unsupported Mir terminator kind"),
             }

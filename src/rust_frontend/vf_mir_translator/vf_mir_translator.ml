@@ -1583,7 +1583,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | Int int_ty_cpn -> translate_int_ty int_ty_cpn loc
     | UInt u_int_ty_cpn -> translate_u_int_ty u_int_ty_cpn loc
     | Char -> Ok (char_ty_info loc)
-    | Float -> Ast.static_error loc "Floating point types are not yet supported" None
+    | Float ->
+        Ast.static_error loc "Floating point types are not yet supported" None
     | Adt adt_ty_cpn -> translate_adt_ty adt_ty_cpn loc
     | Foreign -> Ast.static_error loc "Foreign types are not yet supported" None
     | RawPtr raw_ptr_ty_cpn -> translate_raw_ptr_ty raw_ptr_ty_cpn loc
@@ -1593,9 +1594,13 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | Dynamic -> Ast.static_error loc "Dynamic types are not yet supported" None
     | Closure -> Ast.static_error loc "Closure types are not yet supported" None
     | CoroutineClosure ->
-        Ast.static_error loc "Coroutine closure types are not yet supported" None
-    | Coroutine -> Ast.static_error loc "Coroutine types are not yet supported" None
-    | CoroutineWitness -> Ast.static_error loc "Coroutine witness types are not yet supported" None
+        Ast.static_error loc "Coroutine closure types are not yet supported"
+          None
+    | Coroutine ->
+        Ast.static_error loc "Coroutine types are not yet supported" None
+    | CoroutineWitness ->
+        Ast.static_error loc "Coroutine witness types are not yet supported"
+          None
     | Never -> Ok (never_ty_info loc)
     | Tuple tys_cpn ->
         let tys_cpn = Capnp.Array.to_list tys_cpn in
@@ -1647,7 +1652,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         in
         Ok (Mir.TyInfoBasic { vf_ty; interp })
     | Bound -> Ast.static_error loc "Bound types are not yet supported" None
-    | Placeholder -> Ast.static_error loc "Placeholder types are not yet supported" None
+    | Placeholder ->
+        Ast.static_error loc "Placeholder types are not yet supported" None
     | Infer -> Ast.static_error loc "Infer types are not yet supported" None
     | Error -> Ast.static_error loc "Error types are not yet supported" None
     | Str -> Ast.static_error loc "Str types are not yet supported" None
@@ -2457,9 +2463,25 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           Ok ([ Ast.ReturnStmt (loc, Some (Ast.Var (loc, ret_place_id))) ], [])
       | Unreachable -> Ok ([ Ast.Assert (loc, False loc) ], [])
       | Call fn_call_data_cpn -> translate_fn_call fn_call_data_cpn loc
-      | Drop ->
-          raise
-            (Ast.StaticError (loc, "Implicit drops are not yet supported", None))
+      | Drop drop_data_cpn ->
+          let open DropData in
+          let place_cpn = place_get drop_data_cpn in
+          let* place = translate_place place_cpn loc in
+          let target_cpn = target_get drop_data_cpn in
+          let target = translate_basic_block_id target_cpn in
+          Ok
+            ( [
+                Ast.ExprStmt
+                  (CallExpr
+                     ( loc,
+                       "std::ptr::drop_in_place",
+                       [],
+                       [],
+                       [ LitPat (AddressOf (loc, place)) ],
+                       Static ));
+                Ast.GotoStmt (loc, target);
+              ],
+              [ target ] )
       | Undefined _ -> Error (`TrTerminatorKind "Unknown Mir terminator kind")
 
     let translate_terminator (ret_place_id : string)

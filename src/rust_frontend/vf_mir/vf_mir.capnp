@@ -633,6 +633,11 @@ struct Body {
                     ghostGenericArgList @4: Option(Annotation);
                 }
 
+                struct DropData {
+                    place @0: Place;
+                    target @1: BasicBlockId;
+                }
+
                 union {
                     goto @0: BasicBlockId;
                     switchInt @1: SwitchIntData;
@@ -640,7 +645,7 @@ struct Body {
                     return @3: Void;
                     unreachable @6: Void;
                     call @4: FnCallData;
-                    drop @5: Void;
+                    drop @5: DropData;
                 }
             }
 
