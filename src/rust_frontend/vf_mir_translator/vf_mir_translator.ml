@@ -2296,7 +2296,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let translate_fn_call (fn_call_data_cpn : FnCallDataRd.t) (loc : Ast.loc) =
       let open FnCallDataRd in
       let func_cpn = func_get fn_call_data_cpn in
-      let fn_span_cpn = fn_span_get fn_call_data_cpn in
+      let fn_span_cpn = call_span_get fn_call_data_cpn in
       let* fn_loc = translate_span_data fn_span_cpn in
       let args_cpn = args_get_list fn_call_data_cpn in
       let ghost_generic_arg_list_opt_cpn =
