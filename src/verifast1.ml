@@ -1963,7 +1963,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | _ -> GhostTypeParam id
       end
       else
-      match resolve2' Real (pn,ilist) l id typedefmap0 typedefmap1 with
+      match resolve2' Ghost (pn,ilist) l id typedefmap0 typedefmap1 with
         Some (id, (ld, tparams, t)) ->
         reportUseSite DeclKind_Typedef ld l;
         if tparams <> [] then static_error l "Missing type arguments" None;

@@ -170,7 +170,7 @@ mod alloc {
     //@ ens false;
     //@ terminates;
     
-    struct Global;
+    struct Global {}
     
 }
 

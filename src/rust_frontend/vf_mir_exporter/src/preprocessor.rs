@@ -188,7 +188,7 @@ pub fn preprocess(
         last_token_was_fn = false;
         match cs.peek() {
             None => {
-                output.push_str("\n\nfn VeriFast_ghost_command() {}\n");
+                output.push_str("\n\nconst fn VeriFast_ghost_command() {}\n");
                 return output;
             }
             Some(c) => {
