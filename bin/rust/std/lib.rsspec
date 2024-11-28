@@ -4,6 +4,12 @@ abstract_type type_info;
 
 @*/
 
+mod marker {
+
+    struct PhantomData<T> {}
+
+}
+
 mod intrinsics {
 
     unsafe fn copy_nonoverlapping<T>(src: *mut T, dst: *mut T, count: usize);
@@ -118,12 +124,35 @@ mod alloc {
     }
     
     //@ pred alloc_block(ptr: *u8; layout: Layout);
+    //@ pred alloc_block_in<A>(alloc: A, ptr: *u8, layout: Layout;);
     
     /*@
     
     lem alloc_aligned(ptr: *mut u8);
         req [?f]alloc_block(ptr, ?layout);
         ens [f]alloc_block(ptr, layout) &*& (ptr as usize) % Layout::align_(layout) == 0;
+    
+    @*/
+    
+    /*@
+    
+    // The following lemmas express that sharing an allocator does not change its value. In other words, allocators do not involve UnsafeCell.
+    
+    fix is_Allocator<A>() -> bool;
+    
+    pred share_allocator_end_token<A>(f: real, k: lifetime_t, l: *A, alloc: A);
+    
+    lem share_allocator<A>(k: lifetime_t, t: thread_id_t, l: *A);
+        req [?f](*l |-> ?alloc) &*& is_Allocator::<A>() == true;
+        ens [f/2](*l |-> alloc) &*& [_](<A>.share(k, t, l)) &*& share_allocator_end_token(f/2, k, l, alloc);
+    
+    lem shared_allocator_lift_alloc_block<'a, A>(p: *u8);
+        req share_allocator_end_token::<A>(?f, 'a, ?l, ?alloc) &*& alloc_block_in::<&'a A>(l, p, ?layout);
+        ens share_allocator_end_token::<A>(f, 'a, l, alloc) &*& alloc_block_in::<A>(alloc, p, layout);
+    
+    lem end_share_allocator<A>();
+        req share_allocator_end_token::<A>(?f, ?k, ?l, ?alloc) &*& [_]lifetime_dead_token(k);
+        ens [f](*l |-> alloc);
     
     @*/
 
@@ -163,7 +192,15 @@ mod alloc {
     //@ ens false;
     //@ terminates;
     
-    struct Global;
+    struct Global {}
+    
+    /*@
+    
+    lem produce_Global_own(t: thread_id_t);
+        req true;
+        ens <Global>.own(t, Global {});
+    
+    @*/
     
 }
 
@@ -173,10 +210,16 @@ mod boxed {
     
     /*@
     
-    pred Box<T, A>(self: Box<T, A>, value: T);
+    pred Box<T>(self: Box<T, std::alloc::Global>, value: T);
     
-    lem Box_to_own<T, A>(self: Box<T, A>);
-        req thread_token(?t) &*& Box::<T, A>(self, ?value) &*& <T>.own(t, value);
+    lem Box_to_own<T>(self: Box<T, std::alloc::Global>);
+        req thread_token(?t) &*& Box::<T>(self, ?value) &*& <T>.own(t, value);
+        ens thread_token(t) &*& <Box<T, std::alloc::Global>>.own(t, self);
+    
+    pred Box_in<T, A>(self: Box<T, A>, alloc: A, value: T);
+    
+    lem Box_in_to_own<T, A>(self: Box<T, A>);
+        req thread_token(?t) &*& Box_in::<T, A>(self, ?alloc, ?value) &*& <A>.own(t, alloc) &*& <T>.own(t, value);
         ens thread_token(t) &*& <Box<T, A>>.own(t, self);
     
     @*/
@@ -195,9 +238,17 @@ mod boxed {
     
     impl<T, A> Box<T, A> {
     
+        fn new_in(x: T, alloc: A) -> Box<T, A>;
+        //@ req thread_token(?t) &*& <A>.own(t, alloc);
+        //@ ens thread_token(t) &*& <A>.own(t, alloc) &*& Box_in(result, alloc, x);
+    
         fn into_raw(b: Box<T, std::alloc::Global>) -> *T;
         //@ req Box(b, ?value);
         //@ ens *result |-> value &*& std::alloc::alloc_block(result as *u8, std::alloc::Layout::new_::<T>()) &*& result as usize != 0;
+    
+        fn leak<'a>(b: Box<T, A>) -> &'a mut T;
+        //@ req Box_in::<T, A>(b, ?alloc, ?value);
+        //@ ens *result |-> value &*& std::alloc::alloc_block_in(alloc, result as *u8, std::alloc::Layout::new_::<T>()) &*& result as *_ as usize != 0;
     
     }
 
@@ -237,7 +288,7 @@ mod result {
     impl<T, E> Result<T, E> {
     
         fn unwrap(self: Result<T, E>) -> T;
-        //@ req thread_token(?t) &*& Result_own::<T, E>(t, self);
+        //@ req thread_token(?t) &*& Result_own::<T, E>(t, self); // FIXME: For unwind safety, I think this needs to take a lifetime_token at a lifetime that is outlived by E.
         //@ ens thread_token(t);
     
     }

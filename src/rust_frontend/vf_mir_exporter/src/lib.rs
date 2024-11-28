@@ -1352,7 +1352,7 @@ mod vf_mir_builder {
                 }
                 mir::VarDebugInfoContents::Const(constant) => {
                     let constant_cpn = vdi_contents_cpn.init_const();
-                    Self::encode_const_operand(tcx, enc_ctx, constant, constant_cpn)
+                    Self::encode_const_operand(tcx, enc_ctx, constant, constant_cpn);
                 }
             }
         }
@@ -2177,7 +2177,7 @@ mod vf_mir_builder {
             mut fn_call_data_cpn: fn_call_data_cpn::Builder<'_>,
         ) {
             let func_cpn = fn_call_data_cpn.reborrow().init_func();
-            Self::encode_operand(tcx, enc_ctx, func, func_cpn);
+            let func_span_opt = Self::encode_operand(tcx, enc_ctx, func, func_cpn);
 
             // Encoding args
             fn_call_data_cpn.fill_args(args, |arg_cpn, arg| {
@@ -2197,22 +2197,24 @@ mod vf_mir_builder {
                 }
             }
 
-            let fn_span_data_cpn = fn_call_data_cpn.reborrow().init_fn_span();
-            Self::encode_span_data(tcx, &fn_span.data(), fn_span_data_cpn);
+            let call_span_data_cpn = fn_call_data_cpn.reborrow().init_call_span();
+            Self::encode_span_data(tcx, &fn_span.data(), call_span_data_cpn);
 
-            let fn_span_lo = fn_span.lo();
-            let ghost_generic_arg_lists: Vec<_> = enc_ctx
-                .annots
-                .extract_if(|annot| {
-                    annot.kind == GhostRangeKind::GenericArgs
-                        && annot.start_of_preceding_word_byte_pos() == fn_span_lo
-                })
-                .collect();
-            assert!(ghost_generic_arg_lists.len() <= 1);
-            if ghost_generic_arg_lists.len() == 1 {
-                let annot_opt_cpn = fn_call_data_cpn.reborrow().init_ghost_generic_arg_list();
-                let annot_cpn = annot_opt_cpn.init_something();
-                Self::encode_annotation(tcx, &ghost_generic_arg_lists[0], annot_cpn);
+            if let Some(func_span) = func_span_opt {
+                let func_span_hi = func_span.hi();
+                let ghost_generic_arg_lists: Vec<_> = enc_ctx
+                    .annots
+                    .extract_if(|annot| {
+                        annot.kind == GhostRangeKind::GenericArgs
+                            && annot.span().unwrap().lo() == func_span_hi
+                    })
+                    .collect();
+                assert!(ghost_generic_arg_lists.len() <= 1);
+                if ghost_generic_arg_lists.len() == 1 {
+                    let annot_opt_cpn = fn_call_data_cpn.reborrow().init_ghost_generic_arg_list();
+                    let annot_cpn = annot_opt_cpn.init_something();
+                    Self::encode_annotation(tcx, &ghost_generic_arg_lists[0], annot_cpn);
+                }
             }
         }
 
@@ -2221,20 +2223,22 @@ mod vf_mir_builder {
             enc_ctx: &mut EncCtx<'tcx, 'a>,
             operand: &mir::Operand<'tcx>,
             operand_cpn: operand_cpn::Builder<'_>,
-        ) {
+        ) -> Option<Span> {
             debug!("Encoding Operand {:?}", operand);
             match operand {
                 mir::Operand::Copy(place) => {
                     let place_cpn = operand_cpn.init_copy();
                     Self::encode_place(enc_ctx, place, place_cpn);
+                    None
                 }
                 mir::Operand::Move(place) => {
                     let place_cpn = operand_cpn.init_move();
                     Self::encode_place(enc_ctx, place, place_cpn);
+                    None
                 }
                 mir::Operand::Constant(box constant) => {
                     let constant_cpn = operand_cpn.init_constant();
-                    Self::encode_const_operand(tcx, enc_ctx, constant, constant_cpn);
+                    Some(Self::encode_const_operand(tcx, enc_ctx, constant, constant_cpn))
                 }
             }
         }
@@ -2244,11 +2248,12 @@ mod vf_mir_builder {
             enc_ctx: &mut EncCtx<'tcx, 'a>,
             const_operand: &mir::ConstOperand<'tcx>,
             mut const_operand_cpn: const_operand_cpn::Builder<'_>,
-        ) {
+        ) -> Span {
             let span_data_cpn = const_operand_cpn.reborrow().init_span();
             Self::encode_span_data(tcx, &const_operand.span.data(), span_data_cpn);
             let const_cpn = const_operand_cpn.init_const();
             Self::encode_const(tcx, enc_ctx, &const_operand.const_, const_cpn);
+            const_operand.span
         }
 
         fn encode_const(

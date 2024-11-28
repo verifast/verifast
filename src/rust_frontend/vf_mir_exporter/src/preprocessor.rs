@@ -74,7 +74,6 @@ pub struct GhostRange {
     end: SrcPos,
     contents: String,
     span: Option<rustc_span::Span>,
-    pub start_of_preceding_word: SrcPos,
 }
 
 impl GhostRange {
@@ -105,12 +104,6 @@ impl GhostRange {
             SyntaxContext::root(),
             None,
         )
-    }
-    pub fn start_of_preceding_word_byte_pos(&self) -> rustc_span::BytePos {
-        use rustc_span::BytePos;
-        let start_span = self.span.unwrap();
-        let source_file_start_pos = start_span.lo() - BytePos(self.start.byte_pos);
-        source_file_start_pos + BytePos(self.start_of_preceding_word.byte_pos)
     }
     pub fn span(&self) -> Option<rustc_span::Span> {
         self.span
@@ -165,7 +158,6 @@ pub fn preprocess(
     }
     let mut output = String::new();
     let mut inside_word = false;
-    let mut start_of_word: SrcPos = cs.pos;
     let mut brace_depth = 0;
     let mut last_token_was_fn = false;
     let mut next_block_is_fn_body = false;
@@ -188,7 +180,7 @@ pub fn preprocess(
         last_token_was_fn = false;
         match cs.peek() {
             None => {
-                output.push_str("\n\nfn VeriFast_ghost_command() {}\n");
+                output.push_str("\n\nconst fn VeriFast_ghost_command() {}\n");
                 return output;
             }
             Some(c) => {
@@ -305,7 +297,6 @@ pub fn preprocess(
                                                 GhostRangeKind::Regular
                                             },
                                             block_end: None,
-                                            start_of_preceding_word: start_of_word,
                                         }));
                                     }
                                     Some('~') => {
@@ -342,7 +333,6 @@ pub fn preprocess(
                                             span: None,
                                             kind: GhostRangeKind::Regular,
                                             block_end: None,
-                                            start_of_preceding_word: start_of_word,
                                         }));
                                         loop {
                                             match cs.peek() {
@@ -404,7 +394,6 @@ pub fn preprocess(
                                     span: None,
                                     kind: GhostRangeKind::Regular,
                                     block_end: None,
-                                    start_of_preceding_word: start_of_word,
                                 });
                                 let mut is_ghost_range = false;
                                 let mut is_generic_args = false;
@@ -643,7 +632,6 @@ pub fn preprocess(
                         }
                     }
                     'f' if !was_inside_word => {
-                        start_of_word = cs.pos;
                         cs.next();
                         output.push('f');
                         next_block_is_fn_body |= old_last_token_was_fn;
@@ -663,9 +651,6 @@ pub fn preprocess(
                         }
                     }
                     c @ ('A'..='Z' | 'a'..='z' | '_') => {
-                        if !was_inside_word {
-                            start_of_word = cs.pos;
-                        }
                         cs.next();
                         output.push(c);
                         next_block_is_fn_body |= old_last_token_was_fn;

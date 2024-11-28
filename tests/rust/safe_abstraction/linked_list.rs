@@ -37,10 +37,79 @@ use core::ptr::NonNull;
 use std::alloc::{Allocator, Global};
 use std::boxed::Box;
 
+//@ use std::alloc::{alloc_block_in, Layout, Global};
 //@ use std::option::{Option, Option::None, Option::Some};
+//@ use std::ptr::{NonNull, NonNull_ptr};
 
 #[cfg(test)]
 mod tests;
+
+/*@
+
+lem foreach_unappend<a>(xs1: list<a>, xs2: list<a>, p: pred(a))
+    req foreach(append(xs1, xs2), p);
+    ens foreach(xs1, p) &*& foreach(xs2, p);
+{
+    match xs1 {
+        nil => {}
+        cons(x, xs10) => {
+            open foreach(_, _);
+            foreach_unappend(xs10, xs2, p);
+        }
+    }
+    close foreach(xs1, p);
+}
+
+
+pred foreachp2<a, b>(xs: list<a>, p: pred(a; b); ys: list<b>) =
+    match xs {
+        nil => ys == nil,
+        cons(x, xs0) => p(x, ?y) &*& foreachp2(xs0, p, ?ys0) &*& ys == cons(y, ys0)
+    };
+
+lem_auto foreachp2_inv<a, b>()
+    req foreachp2::<a, b>(?xs, ?p, ?ys);
+    ens foreachp2::<a, b>(xs, p, ys) &*& length(ys) == length(xs);
+{
+    open foreachp2(xs, p, ys);
+    match xs {
+        nil => {}
+        cons(x, xs0) => {
+            foreachp2_inv();
+        }
+    }
+    close foreachp2(xs, p, ys);
+}
+
+lem foreachp2_append<a, b>(xs1: list<a>, xs2: list<a>, p: pred(a; b))
+    req foreachp2(xs1, p, ?ys1) &*& foreachp2(xs2, p, ?ys2);
+    ens foreachp2(append(xs1, xs2), p, append(ys1, ys2));
+{
+    open foreachp2(xs1, p, ys1);
+    match xs1 {
+        nil => {}
+        cons(x, xs10) => {
+            foreachp2_append(xs10, xs2, p);
+            close foreachp2(append(xs1, xs2), p, append(ys1, ys2));
+        }
+    }
+}
+
+lem foreachp2_unappend<a, b>(xs1: list<a>, xs2: list<a>, p: pred(a; b))
+    req foreachp2(append(xs1, xs2), p, ?ys);
+    ens foreachp2(xs1, p, take(length(xs1), ys)) &*& foreachp2(xs2, p, drop(length(xs1), ys));
+{
+    match xs1 {
+        nil => {}
+        cons(x, xs10) => {
+            open foreachp2(_, _, _);
+            foreachp2_unappend(xs10, xs2, p);
+        }
+    }
+    close foreachp2(xs1, p, take(length(xs1), ys));
+}
+
+@*/
 
 trait SpecExtend<I> {
     fn spec_extend(&mut self, iter: I);
@@ -84,10 +153,48 @@ struct Node<T> {
     element: T,
 }
 
+/*@
+
+pred Nodes<T, A>(alloc: A, n: Option<NonNull<Node<T>>>, prev: Option<NonNull<Node<T>>>, last: Option<NonNull<Node<T>>>, next: Option<NonNull<Node<T>>>; nodes: list<NonNull<Node<T>>>) =
+    if n == next {
+        nodes == [] &*& last == prev
+    } else {
+        n == Option::Some(?n_) &*&
+        alloc_block_in::<A>(alloc, NonNull_ptr(n_) as *u8, Layout::new_::<Node<T>>()) &*& struct_Node_padding(NonNull_ptr(n_)) &*&
+        (*NonNull_ptr(n_)).prev |-> prev &*&
+        (*NonNull_ptr(n_)).next |-> ?next0 &*&
+        Nodes(alloc, next0, n, last, next, ?nodes0) &*&
+        nodes == cons(n_, nodes0)
+    };
+
+pred_ctor elem_fbc<T>(t: thread_id_t)(node: NonNull<Node<T>>) = (*NonNull_ptr(node)).element |-> ?elem &*& <T>.own(t, elem);
+
+pred<T, A> <LinkedList<T, A>>.own(t, ll) =
+    <A>.own(t, ll.alloc) &*&
+    Nodes(ll.alloc, ll.head, None, ll.tail, None, ?nodes) &*&
+    ll.len == length(nodes) &*&
+    foreach(nodes, elem_fbc::<T>(t));
+
+lem LinkedList_own_mono<T0, T1, A0, A1>()
+    req type_interp::<T0>() &*& type_interp::<T1>() &*& type_interp::<A0>() &*& type_interp::<A1>() &*& LinkedList_own::<T0, A0>(?t, ?v) &*& is_subtype_of::<T0, T1>() == true &*& is_subtype_of::<A0, A1>() == true;
+    ens type_interp::<T0>() &*& type_interp::<T1>() &*& type_interp::<A0>() &*& type_interp::<A1>() &*& LinkedList_own::<T1, A1>(t, LinkedList::<T1, A1> { head: upcast(v.head), tail: upcast(v.tail), len: upcast(v.len), alloc: upcast(v.alloc), marker: upcast(v.marker) });
+{
+    assume(false);
+}
+
+lem LinkedList_send<T, A>(t1: thread_id_t)
+    req type_interp::<T>() &*& type_interp::<A>() &*& is_Send(typeid(A)) == true &*& LinkedList_own::<T, A>(?t0, ?v);
+    ens type_interp::<T>() &*& type_interp::<A>() &*& LinkedList_own::<T, A>(t1, v);
+{
+    assume(false);
+}
+
+@*/
+
 /// An iterator over the elements of a `LinkedList`.
 ///
 /// This `struct` is created by [`LinkedList::iter()`]. See its
-/// documentation for more.
+/// documentation for more. 
 #[must_use = "iterators are lazy and do nothing unless consumed"]
 //#[stable(feature = "rust1", since = "1.0.0")]
 pub struct Iter<'a, T: 'a> {
@@ -193,22 +300,44 @@ impl<T, A: Allocator> LinkedList<T, A> {
     /// `node` must point to a valid node that was boxed and leaked using the list's allocator.
     /// This method takes ownership of the node, so the pointer should not be used again.
     #[inline]
-    unsafe fn push_front_node(&mut self, node: NonNull<Node<T>>) {
+    unsafe fn push_front_node(&mut self, node: NonNull<Node<T>>)
+    /*@
+    req thread_token(?t) &*& *self |-> ?self0 &*& <A>.own(t, self0.alloc) &*& Nodes(self0.alloc, self0.head, None, self0.tail, None, ?nodes) &*&
+        length(nodes) == self0.len &*& foreach(nodes, elem_fbc::<T>(t)) &*&
+        *NonNull_ptr(node) |-> ?n &*& <T>.own(t, n.element) &*& alloc_block_in::<A>(self0.alloc, NonNull_ptr(node) as *u8, Layout::new_::<Node<T>>());
+    @*/
+    //@ ens thread_token(t) &*& *self |-> ?self1 &*& <LinkedList<T, A>>.own(t, self1);
+    {
         // This method takes care not to create mutable references to whole nodes,
         // to maintain validity of aliasing pointers into `element`.
         unsafe {
+            //@ open_points_to(self);
             (*node.as_ptr()).next = self.head;
             (*node.as_ptr()).prev = None;
             let node_ = Some(node);
 
+            //@ open Nodes(_, _, _, _, _, _);
             match self.head {
-                None => self.tail = node_,
+                None => {
+                    //@ close Nodes::<T, A>(self0.alloc, None, None, None, None, nil);
+                    self.tail = node_
+                }
                 // Not creating new mutable (unique!) references overlapping `element`.
-                Some(head) => (*head.as_ptr()).prev = node_,
+                Some(head) => {
+                    (*head.as_ptr()).prev = node_;
+                    //@ close Nodes(self0.alloc, self0.head, node_, self0.tail, None, nodes);
+                }
             }
 
             self.head = node_;
+            //@ assume(self0.len < usize::MAX);
             self.len += 1;
+            //@ close_points_to(self);
+            //@ assert *self |-> ?self1;
+            //@ close Nodes(self0.alloc, node_, None, self1.tail, None, cons(node, nodes));
+            //@ close elem_fbc::<T>(t)(node);
+            //@ close foreach(cons(node, nodes), elem_fbc::<T>(t));
+            //@ close <LinkedList<T, A>>.own(t, self1);
         }
     }
 
@@ -473,8 +602,15 @@ impl<T> LinkedList<T> {
     /*#[rustc_const_stable(feature = "const_linked_list_new", since = "1.39.0")]*/
     //#[stable(feature = "rust1", since = "1.0.0")]
     #[must_use]
-    pub const fn new() -> Self {
-        LinkedList { head: None, tail: None, len: 0, alloc: Global, marker: PhantomData }
+    pub const fn new() -> Self
+    //@ req thread_token(?t);
+    //@ ens thread_token(t) &*& <LinkedList<T, Global>>.own(t, result);
+    {
+        let r = LinkedList { head: None, tail: None, len: 0, alloc: Global, marker: PhantomData };
+        //@ close foreach(nil, elem_fbc::<T>(t));
+        //@ std::alloc::produce_Global_own(t);
+        //@ close <LinkedList<T, Global>>.own(t, r);
+        r
     }
 
     /// Moves all elements from `other` to the end of the list.
@@ -872,10 +1008,28 @@ impl<T, A: Allocator> LinkedList<T, A> {
     /// assert_eq!(dl.front().unwrap(), &1);
     /// ```
     //#[stable(feature = "rust1", since = "1.0.0")]
-    pub fn push_front(&mut self, elt: T) {
+    pub fn push_front(&mut self, elt: T)
+    //@ req thread_token(?t) &*& *self |-> ?ll0 &*& <LinkedList<T, A>>.own(t, ll0) &*& <T>.own(t, elt);
+    //@ ens thread_token(t) &*& *self |-> ?ll1 &*& <LinkedList<T, A>>.own(t, ll1);
+    {
         unsafe {
-            let node = Box::new_in(Node::new(elt), &self.alloc);
-            let node_ptr = NonNull::from(Box::leak(node));
+            //@ open_points_to(self);
+            //@ open <LinkedList<T, A>>.own(t, ll0);
+            let node_ptr;
+            //@ let k = begin_lifetime();
+            {
+                //@ let_lft 'a = k;
+                //@ assume(std::alloc::is_Allocator::<A>()); // TODO
+                //@ std::alloc::share_allocator::<A>('a, t, &(*self).alloc);
+                //@ close_ref_own::<'a, A>(&(*self).alloc);
+                let node = Box::new_in/*@::<Node<T>, &'a A> @*/(Node::new(elt), &self.alloc);
+                node_ptr = NonNull::new_unchecked(Box::leak(node) as *mut Node<T>); //NonNull::from(Box::leak(node));
+                //@ std::alloc::shared_allocator_lift_alloc_block::<'a, A>(NonNull_ptr(node_ptr) as *u8);
+                //@ leak <&'a A>.own(t, &(*self).alloc);
+            }
+            //@ end_lifetime(k);
+            //@ std::alloc::end_share_allocator::<A>();
+            //@ close_points_to(self);
             // SAFETY: node_ptr is a unique pointer to a node we boxed with self.alloc and leaked
             self.push_front_node(node_ptr);
         }

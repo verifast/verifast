@@ -628,8 +628,8 @@ struct Body {
                     func @0: Operand;
                     args @1: List(Operand);
                     destination @2: Option(DestinationData);
-                    # The span of the function, without the dot and receiver e.g. `foo(a, b)` in `x.foo(a, b)`
-                    fnSpan @3: SpanData;
+                    # The span of the call, without the dot and receiver e.g. `foo(a, b)` in `x.foo(a, b)`
+                    callSpan @3: SpanData;
                     ghostGenericArgList @4: Option(Annotation);
                 }
 
