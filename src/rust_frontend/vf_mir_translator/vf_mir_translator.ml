@@ -1027,8 +1027,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         in
         let vf_ty = ConstructedTypeExpr (loc, name, targs) in
         let sz_expr = SizeofExpr (loc, TypeExpr vf_ty) in
-        let own tid vs =
-          Error "Expressing ownership of an enum value is not yet supported"
+        let own tid v =
+          Ok
+            (ExprCallExpr
+               (loc, TypePredExpr (loc, vf_ty, "own"), [ LitPat tid; LitPat v ]))
         in
         let shr lft tid l =
           Error
@@ -1041,9 +1043,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         in
         (* Todo: Nested structs *)
         let points_to tid l vid_op =
-          Error
-            "Expressing a points-to assertion for an enum pointer is not yet \
-             supported"
+          let* pat = RustBelt.Aux.vid_op_to_var_pat vid_op loc in
+          Ok (PointsTo (loc, l, RegularPointsTo, pat))
         in
         let interp =
           RustBelt.
@@ -1061,8 +1062,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | UnionKind -> failwith "Todo: AdtTy::Union"
     | Undefined _ -> Error (`TrAdtTy "Unknown ADT kind")
 
-  and translate_tuple_ty (substs_cpn : GenArgRd.t list) (loc : Ast.loc) =
-    if not @@ ListAux.is_empty @@ substs_cpn then
+  and translate_tuple_ty (tys_cpn : TyRd.t list) (loc : Ast.loc) =
+    if not @@ ListAux.is_empty @@ tys_cpn then
       failwith "Todo: Tuple Ty is not implemented yet"
     else
       let name = TrTyTuple.make_tuple_type_name [] in
@@ -1584,15 +1585,29 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | Int int_ty_cpn -> translate_int_ty int_ty_cpn loc
     | UInt u_int_ty_cpn -> translate_u_int_ty u_int_ty_cpn loc
     | Char -> Ok (char_ty_info loc)
+    | Float ->
+        Ast.static_error loc "Floating point types are not yet supported" None
     | Adt adt_ty_cpn -> translate_adt_ty adt_ty_cpn loc
+    | Foreign -> Ast.static_error loc "Foreign types are not yet supported" None
     | RawPtr raw_ptr_ty_cpn -> translate_raw_ptr_ty raw_ptr_ty_cpn loc
     | Ref ref_ty_cpn -> translate_ref_ty ref_ty_cpn loc
     | FnDef fn_def_ty_cpn -> translate_fn_def_ty fn_def_ty_cpn loc
     | FnPtr fn_ptr_ty_cpn -> translate_fn_ptr_ty fn_ptr_ty_cpn loc
+    | Dynamic -> Ast.static_error loc "Dynamic types are not yet supported" None
+    | Closure -> Ast.static_error loc "Closure types are not yet supported" None
+    | CoroutineClosure ->
+        Ast.static_error loc "Coroutine closure types are not yet supported"
+          None
+    | Coroutine ->
+        Ast.static_error loc "Coroutine types are not yet supported" None
+    | CoroutineWitness ->
+        Ast.static_error loc "Coroutine witness types are not yet supported"
+          None
     | Never -> Ok (never_ty_info loc)
-    | Tuple substs_cpn ->
-        let substs_cpn = Capnp.Array.to_list substs_cpn in
-        translate_tuple_ty substs_cpn loc
+    | Tuple tys_cpn ->
+        let tys_cpn = Capnp.Array.to_list tys_cpn in
+        translate_tuple_ty tys_cpn loc
+    | Alias _ -> Ast.static_error loc "Alias types are not yet supported" None
     | Param name ->
         let vf_ty = ManifestTypeExpr (loc, GhostTypeParam name) in
         let interp : RustBelt.ty_interp =
@@ -1638,6 +1653,15 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           }
         in
         Ok (Mir.TyInfoBasic { vf_ty; interp })
+    | Bound -> Ast.static_error loc "Bound types are not yet supported" None
+    | Placeholder ->
+        Ast.static_error loc "Placeholder types are not yet supported" None
+    | Infer -> Ast.static_error loc "Infer types are not yet supported" None
+    | Error -> Ast.static_error loc "Error types are not yet supported" None
+    | Str -> Ast.static_error loc "Str types are not yet supported" None
+    | Array _ -> Ast.static_error loc "Array types are not yet supported" None
+    | Pattern -> Ast.static_error loc "Pattern types are not yet supported" None
+    | Slice _ -> Ast.static_error loc "Slice types are not yet supported" None
     | Undefined _ -> Error (`TrTy "Unknown Rust type kind")
 
   type body_tr_defs_ctx = { adt_defs : Mir.adt_def_tr list }
@@ -1872,7 +1896,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         (loc : Ast.loc) =
       let open TyConstKindRd in
       match get ck_cpn with
-      | Param -> failwith "Todo: ConstKind::Param"
+      | Param _ -> failwith "Todo: ConstKind::Param"
       | Value v_cpn -> translate_const_value v_cpn ty loc
       | Undefined _ -> Error (`TrTyConstKind "Unknown ConstKind")
 
@@ -2441,9 +2465,25 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           Ok ([ Ast.ReturnStmt (loc, Some (Ast.Var (loc, ret_place_id))) ], [])
       | Unreachable -> Ok ([ Ast.Assert (loc, False loc) ], [])
       | Call fn_call_data_cpn -> translate_fn_call fn_call_data_cpn loc
-      | Drop ->
-          raise
-            (Ast.StaticError (loc, "Implicit drops are not yet supported", None))
+      | Drop drop_data_cpn ->
+          let open DropData in
+          let place_cpn = place_get drop_data_cpn in
+          let* place = translate_place place_cpn loc in
+          let target_cpn = target_get drop_data_cpn in
+          let target = translate_basic_block_id target_cpn in
+          Ok
+            ( [
+                Ast.ExprStmt
+                  (CallExpr
+                     ( loc,
+                       "std::ptr::drop_in_place",
+                       [],
+                       [],
+                       [ LitPat (AddressOf (loc, place)) ],
+                       Static ));
+                Ast.GotoStmt (loc, target);
+              ],
+              [ target ] )
       | Undefined _ -> Error (`TrTerminatorKind "Unknown Mir terminator kind")
 
     let translate_terminator (ret_place_id : string)
@@ -2525,7 +2565,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           let field_names = field_names_get_list adt_data_cpn in
           Ok Mir.(AggKindAdt { adt_kind; adt_name; variant_name; field_names })
       | Closure -> failwith "Todo: AggregateKind::Closure"
-      | Generator -> failwith "Todo: AggregateKind::Generator"
+      | Coroutine -> failwith "Todo: AggregateKind::Coroutine"
+      | CoroutineClosure -> failwith "Todo: AggregateKind::CoroutineClosure"
+      | RawPtr -> failwith "Todo: AggregateKind::RawPtr"
       | Undefined _ -> Error (`TrAggregateKind "Unknown AggregateKind")
 
     let translate_aggregate (agg_data_cpn : AggregateDataRd.t) (loc : Ast.loc) =
@@ -3457,7 +3499,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     Ok (pre, post)
 
   (** makes the mappings used for substituting the MIR level local declaration ids with names closer to variables surface name *)
-  let make_var_id_name_maps (vdis : Mir.var_debug_info list) =
+  let make_var_id_name_maps (loc : Ast.loc) (vdis : Mir.var_debug_info list) =
     let make_var_id_name_entries surf_names_set id surf_name =
       match List.find_opt (fun (n, _) -> n = surf_name) surf_names_set with
       | None ->
@@ -3482,7 +3524,12 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
              let y = x + 2;
              ``
              The third `x` refers to the first x but the code might be confusing for the user *)
-          failwith "Todo: Shadowed variable names"
+          Ast.static_error loc
+            (Printf.sprintf
+               "This function shadows local variable name '%s'; this is not \
+                yet supported in VeriFast"
+               surf_name)
+            None
       (*
           let internal_name =
             TrName.tag_internal surf_name ^ string_of_int !counter
@@ -3638,10 +3685,19 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     in
     Ok decl
 
-  let translate_trait (adt_defs : Mir.adt_def_tr list) (trait_cpn : TraitRd.t) =
+  let translate_trait (adt_defs : Mir.adt_def_tr list) (skip_specless_fns : bool) (trait_cpn : TraitRd.t) =
     let name = TraitRd.name_get trait_cpn in
     let* required_fns =
       CapnpAux.ind_list_get_list (TraitRd.required_fns_get trait_cpn)
+    in
+    let required_fns =
+      if skip_specless_fns then
+      required_fns
+      |> List.filter (fun required_fn_cpn ->
+             not
+               (Capnp.Array.is_empty
+                  (TraitRd.RequiredFn.contract_get required_fn_cpn)))
+      else required_fns
     in
     ListAux.try_map (translate_trait_required_fn adt_defs name) required_fns
 
@@ -3736,7 +3792,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let vdis_cpn = var_debug_info_get_list body_cpn in
     (* Since var id translation map is empty var debug info contains the plain Mir ids *)
     let* vdis = ListAux.try_map translate_var_debug_info vdis_cpn in
-    let env_map, trs_map = make_var_id_name_maps vdis in
+    let env_map, trs_map = make_var_id_name_maps imp_loc vdis in
     let _ = var_id_trs_map_ref := trs_map in
     let def_kind_cpn = def_kind_get body_cpn in
     let def_kind = DefKind.get def_kind_cpn in
@@ -3998,6 +4054,16 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let name = name_get vdef_cpn in
     let fields_cpn = fields_get_list vdef_cpn in
     let* fields = ListAux.try_map translate_field_def fields_cpn in
+    let open Mir in
+    let fields =
+      List.filter
+        (fun { ty } ->
+          match Mir.basic_type_of ty with
+          | StructTypeExpr (_, Some "std::marker::PhantomData", _, _, _) ->
+              false
+          | _ -> true)
+        fields
+    in
     Ok Mir.{ loc; name; fields }
 
   let gen_adt_full_borrow_content adt_kind name tparams lft_params
@@ -5235,19 +5301,17 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
            else if of_trait = "std::ops::DerefMut" then (
              assert (items = [ "deref_mut" ]);
              [] (* DerefMut is safe *))
-           else if of_trait = "std::clone::Clone" then (
-             assert (items = [ "clone" ]);
-             []
+           else if of_trait = "std::clone::Clone" then []
              (* clone is safe *)
-             (* TODO: Support for traits from other crates. I think it is generally sound to ignore safe traits here *))
+             (* TODO: Support for traits from other crates. I think it is generally sound to ignore safe traits here *)
            else
              items
-             |> List.map (fun item ->
+             |> Util.flatmap (fun item ->
                     let trait_fn_name = Printf.sprintf "%s::%s" of_trait item in
                     let impl_fn_name =
                       Printf.sprintf "<%s as %s>::%s" self_ty of_trait item
                     in
-                    let (Some prototype) =
+                    match
                       traits_and_body_decls
                       |> Util.head_flatmap_option (function
                            | Ast.Func
@@ -5304,8 +5368,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                                       false,
                                       [] ))
                            | _ -> None)
-                    in
-                    prototype))
+                    with
+                    | Some prototype -> [ prototype ]
+                    | None -> []))
 
   let rec translate_module (module_cpn : VfMirStub.Reader.Module.t) :
       (Ast.decl, _) result =
@@ -5363,7 +5428,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     else d
 
   let translate_vf_mir (extern_specs : string list) (vf_mir_cpn : VfMirRd.t)
-      (report_should_fail : string -> Ast.loc0 -> unit) =
+      (report_should_fail : string -> Ast.loc0 -> unit)
+      (skip_specless_fns : bool) =
     let job _ =
       let directives_cpn = VfMirRd.directives_get_list vf_mir_cpn in
       let* directives = ListAux.try_map translate_annotation directives_cpn in
@@ -5427,10 +5493,20 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         CapnpAux.ind_list_get_list (VfMirRd.traits_get vf_mir_cpn)
       in
       let* traits_decls =
-        ListAux.try_map (translate_trait adt_defs) traits_cpn
+        ListAux.try_map (translate_trait adt_defs skip_specless_fns) traits_cpn
       in
       let traits_decls = List.flatten traits_decls in
       let bodies_cpn = VfMirRd.bodies_get_list vf_mir_cpn in
+      let bodies_cpn =
+        if skip_specless_fns then
+          List.filter
+            (fun body_cpn ->
+              not
+                (Capnp.Array.is_empty
+                   (ContractRd.annotations_get (BodyRd.contract_get body_cpn))))
+            bodies_cpn
+        else bodies_cpn
+      in
       let body_tr_defs_ctx = { adt_defs } in
       let* bodies_tr_res =
         ListAux.try_map (translate_body body_tr_defs_ctx) bodies_cpn

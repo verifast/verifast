@@ -216,6 +216,15 @@ mod process {
 }
 //Todo @Nima: Edit Rust parser so it substitutes `!` type with std_empty_ union
 
+mod option {
+
+    enum Option<T> {
+        None,
+        Some(T),
+    }
+
+}
+
 mod result {
 
     enum Result<T, E> {

@@ -5,6 +5,7 @@ module type RUST_FE_ARGS =
     val report_range : Lexer.range_kind -> Ast.loc0 -> unit
     val report_macro_call : Ast.loc0 -> Ast.loc0 -> unit
     val verbose_flags : string list
+    val skip_specless_fns : bool
   end
 module Make :
   functor (_ : RUST_FE_ARGS) ->

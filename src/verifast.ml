@@ -1037,7 +1037,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let tcont _ _ _ h env = tcont sizemap tenv ghostenv h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
       begin match unfold_inferred_type tp with
         InductiveType (i, targs) ->
-        let (tn, targs, Some (_, itparams, ctormap, _, _, _, _, _)) = (i, targs, try_assoc' Ghost (pn,ilist) i inductivemap) in
+        let (tn, targs, Some (_, itparams, ctormap, _, _, _, _, _, _)) = (i, targs, try_assoc' Ghost (pn,ilist) i inductivemap) in
         let (Some tpenv) = zip itparams targs in
         let (cs, cdef) =
           let rec iter cs cdef = function
@@ -3894,6 +3894,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let report_range = reportRange
             let report_macro_call = reportMacroCall
             let verbose_flags = verbose_flags
+            let skip_specless_fns = Vfbindings.get Vfparam_skip_specless_fns vfbindings
           end
         )
         in

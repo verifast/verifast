@@ -156,8 +156,14 @@ enum Variance {
 struct Ty {
 
     struct ConstKind {
+
+        struct ParamConst {
+            index @0: UInt32;
+            name @1: Text;
+        }
+
         union {
-            param @0: Void;
+            param @0: ParamConst;
             value @1: Body.ConstValue;
         }
     }
@@ -276,21 +282,53 @@ struct Ty {
         mutability @2: Mutability;
     }
 
+    enum AliasTyKind {
+        projection @0;
+        inherent @1;
+        opaque @2;
+        weak @3;
+    }
+
+    struct AliasTy {
+        kind @0: AliasTyKind;
+        defId @1: Text;
+        args @2: List(GenArg);
+    }
+
+    struct ArrayTy {
+        elemTy @0: Ty;
+        size @1: Const;
+    }
+
     struct TyKind {
         union {
             bool @0: Void;
             int @1: IntTy;
             uInt @2: UIntTy;
             char @9: Void;
+            float @16: Void; # TODO: Elaborate
             adt @3: AdtTy;
+            foreign @17: Void; # TODO: Elaborate
             rawPtr @4: RawPtrTy;
             ref @5: RefTy;
             fnDef @6: FnDefTy;
             fnPtr @10: FnPtrTy;
+            dynamic @19: Void; # TODO: Elaborate
+            closure @20: Void; # TODO: Elaborate
+            coroutineClosure @21: Void; # TODO: Elaborate
+            coroutine @22: Void; # TODO: Elaborate
+            coroutineWitness @23: Void; # TODO: Elaborate
             never @7: Void;
-            tuple @8: List(GenArg);
+            tuple @8: List(Ty);
+            alias @14: AliasTy;
             param @11: Text;
+            bound @24: Void; # TODO: Elaborate
+            placeholder @25: Void; # TODO: Elaborate
+            infer @26: Void; # TODO: Elaborate
+            error @27: Void; # TODO: Elaborate
             str @12: Void;
+            array @15: ArrayTy;
+            pattern @18: Void; # TODO: Elaborate
             slice @13: Ty;
         }
     }
@@ -526,7 +564,9 @@ struct Body {
                         tuple @1: Void;
                         adt @2: AdtData;
                         closure @3: Void;
-                        generator @4: Void;
+                        coroutine @4: Void;
+                        coroutineClosure @5: Void;
+                        rawPtr @6: Void; # Create a raw pointer from a thin pointer and metadata (length or vtable)
                     }
                 }
                 aggregateKind @0: AggregateKind;
@@ -593,6 +633,11 @@ struct Body {
                     ghostGenericArgList @4: Option(Annotation);
                 }
 
+                struct DropData {
+                    place @0: Place;
+                    target @1: BasicBlockId;
+                }
+
                 union {
                     goto @0: BasicBlockId;
                     switchInt @1: SwitchIntData;
@@ -600,7 +645,7 @@ struct Body {
                     return @3: Void;
                     unreachable @6: Void;
                     call @4: FnCallData;
-                    drop @5: Void;
+                    drop @5: DropData;
                 }
             }
 
