@@ -2385,7 +2385,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         lhs_to_lvalue h env w $. fun h env w ->
         cont h env (LValues.ValueField (l, w, getter, setter, tp, tp'))
       | WReadInductiveField (l, w, data_type_name, constructor_name, field_name, targs, type_, type_instantiated) ->
-        let (_, _, _, getters, setters, _, _, _) = List.assoc data_type_name inductivemap in
+        let (_, _, _, getters, setters, _, _, _, _) = List.assoc data_type_name inductivemap in
         let getter = List.assoc field_name getters in
         let setter = List.assoc field_name setters in
         lhs_to_lvalue h env w $. fun h env w ->
@@ -2653,7 +2653,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         end
     | WFunCall (l, "#inductive_ctor_index", [InductiveType (i, targs)], [w], Static) ->
       eval_h h env w $. fun h env v ->
-      let (_, inductive_tparams, ctormap, _, _, _, _, _) = List.assoc i inductivemap in
+      let (_, inductive_tparams, ctormap, _, _, _, _, _, _) = List.assoc i inductivemap in
       let rec iter ctor_index ctormap =
         let (cn, (pfn, (_, _, _, pts, ctorsymb)))::ctormap = ctormap in
         let verify_case () =
@@ -2670,7 +2670,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let ctor_index = int_of_big_int ctor_index in
       let arg_index = int_of_big_int arg_index in
       eval_h h env w $. fun h env v ->
-      let (_, inductive_tparams, ctormap, _, _, _, _, _) = List.assoc i inductivemap in
+      let (_, inductive_tparams, ctormap, _, _, _, _, _, _) = List.assoc i inductivemap in
       let tpenv = List.combine inductive_tparams targs in
       let rx, rt =
         let (cn, (pfn, (_, _, _, pts, _))) = List.nth ctormap ctor_index in
