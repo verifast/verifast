@@ -37,10 +37,79 @@ use core::ptr::NonNull;
 use std::alloc::{Allocator, Global};
 use std::boxed::Box;
 
+//@ use std::alloc::{alloc_block_in, Layout};
 //@ use std::option::{Option, Option::None, Option::Some};
+//@ use std::ptr::{NonNull, NonNull_ptr};
 
 #[cfg(test)]
 mod tests;
+
+/*@
+
+lem foreach_unappend<a>(xs1: list<a>, xs2: list<a>, p: pred(a))
+    req foreach(append(xs1, xs2), p);
+    ens foreach(xs1, p) &*& foreach(xs2, p);
+{
+    match xs1 {
+        nil => {}
+        cons(x, xs10) => {
+            open foreach(_, _);
+            foreach_unappend(xs10, xs2, p);
+        }
+    }
+    close foreach(xs1, p);
+}
+
+
+pred foreachp2<a, b>(xs: list<a>, p: pred(a; b); ys: list<b>) =
+    match xs {
+        nil => ys == nil,
+        cons(x, xs0) => p(x, ?y) &*& foreachp2(xs0, p, ?ys0) &*& ys == cons(y, ys0)
+    };
+
+lem_auto foreachp2_inv<a, b>()
+    req foreachp2::<a, b>(?xs, ?p, ?ys);
+    ens foreachp2::<a, b>(xs, p, ys) &*& length(ys) == length(xs);
+{
+    open foreachp2(xs, p, ys);
+    match xs {
+        nil => {}
+        cons(x, xs0) => {
+            foreachp2_inv();
+        }
+    }
+    close foreachp2(xs, p, ys);
+}
+
+lem foreachp2_append<a, b>(xs1: list<a>, xs2: list<a>, p: pred(a; b))
+    req foreachp2(xs1, p, ?ys1) &*& foreachp2(xs2, p, ?ys2);
+    ens foreachp2(append(xs1, xs2), p, append(ys1, ys2));
+{
+    open foreachp2(xs1, p, ys1);
+    match xs1 {
+        nil => {}
+        cons(x, xs10) => {
+            foreachp2_append(xs10, xs2, p);
+            close foreachp2(append(xs1, xs2), p, append(ys1, ys2));
+        }
+    }
+}
+
+lem foreachp2_unappend<a, b>(xs1: list<a>, xs2: list<a>, p: pred(a; b))
+    req foreachp2(append(xs1, xs2), p, ?ys);
+    ens foreachp2(xs1, p, take(length(xs1), ys)) &*& foreachp2(xs2, p, drop(length(xs1), ys));
+{
+    match xs1 {
+        nil => {}
+        cons(x, xs10) => {
+            open foreachp2(_, _, _);
+            foreachp2_unappend(xs10, xs2, p);
+        }
+    }
+    close foreachp2(xs1, p, take(length(xs1), ys));
+}
+
+@*/
 
 trait SpecExtend<I> {
     fn spec_extend(&mut self, iter: I);
@@ -84,10 +153,47 @@ struct Node<T> {
     element: T,
 }
 
+/*@
+
+pred Nodes<T, A>(alloc: A, n: Option<NonNull<Node<T>>>, prev: Option<NonNull<Node<T>>>, last: Option<NonNull<Node<T>>>, next: Option<NonNull<Node<T>>>; nodes: list<NonNull<Node<T>>>) =
+    if n == next {
+        nodes == [] &*& last == prev
+    } else {
+        n == Option::Some(?n_) &*&
+        alloc_block_in::<A>(alloc, NonNull_ptr(n_) as *u8, Layout::new_::<Node<T>>()) &*& struct_Node_padding(NonNull_ptr(n_)) &*&
+        (*NonNull_ptr(n_)).prev |-> prev &*&
+        (*NonNull_ptr(n_)).next |-> ?next0 &*&
+        Nodes(alloc, next0, n, last, next, ?nodes0) &*&
+        nodes == cons(n_, nodes0)
+    };
+
+pred_ctor elem_fbc<T>(t: thread_id_t)(node: NonNull<Node<T>>) = (*NonNull_ptr(node)).element |-> ?elem &*& <T>.own(t, elem);
+
+pred<T, A> <LinkedList<T, A>>.own(t, ll) =
+    Nodes(ll.alloc, ll.head, None, ll.tail, None, ?nodes) &*&
+    ll.len == length(nodes) &*&
+    foreach(nodes, elem_fbc::<T>(t));
+
+lem LinkedList_own_mono<T0, T1, A0, A1>()
+    req type_interp::<T0>() &*& type_interp::<T1>() &*& type_interp::<A0>() &*& type_interp::<A1>() &*& LinkedList_own::<T0, A0>(?t, ?v) &*& is_subtype_of::<T0, T1>() == true &*& is_subtype_of::<A0, A1>() == true;
+    ens type_interp::<T0>() &*& type_interp::<T1>() &*& type_interp::<A0>() &*& type_interp::<A1>() &*& LinkedList_own::<T1, A1>(t, LinkedList::<T1, A1> { head: upcast(v.head), tail: upcast(v.tail), len: upcast(v.len), alloc: upcast(v.alloc), marker: upcast(v.marker) });
+{
+    assume(false);
+}
+
+lem LinkedList_send<T, A>(t1: thread_id_t)
+    req type_interp::<T>() &*& type_interp::<A>() &*& is_Send(typeid(A)) == true &*& LinkedList_own::<T, A>(?t0, ?v);
+    ens type_interp::<T>() &*& type_interp::<A>() &*& LinkedList_own::<T, A>(t1, v);
+{
+    assume(false);
+}
+
+@*/
+
 /// An iterator over the elements of a `LinkedList`.
 ///
 /// This `struct` is created by [`LinkedList::iter()`]. See its
-/// documentation for more.
+/// documentation for more. 
 #[must_use = "iterators are lazy and do nothing unless consumed"]
 //#[stable(feature = "rust1", since = "1.0.0")]
 pub struct Iter<'a, T: 'a> {

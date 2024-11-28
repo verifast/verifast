@@ -2051,7 +2051,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         else  
           ObjType (id, List.map check targs)
       | None ->
-      match resolve2' Real (pn,ilist) l id typedefmap0 typedefmap1 with
+      match resolve2' Ghost (pn,ilist) l id typedefmap0 typedefmap1 with
         Some (id, (ld, tparams, t)) ->
         reportUseSite DeclKind_Typedef ld l;
         let tpenv =
@@ -2896,7 +2896,13 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | _ -> t
       end
     | _ -> t
-  
+
+  let rec unfold_inferred_type_deep t =
+    match unfold_inferred_type t with
+      PtrType t -> PtrType (unfold_inferred_type_deep t)
+    | RustRefType (lft, mut, t) -> RustRefType (lft, mut, unfold_inferred_type_deep t)
+    | t -> t
+
   let rec type_satisfies_contains_any_constraint assumeTypeParamsContainAnyPositiveOnly allowContainsAnyPositive tp =
     match unfold_inferred_type tp with
       Bool | AbstractType _ | Int (_, _) | Float | Double | LongDouble | RealType | FuncType _ | PtrType _ | RustRefType _ | ObjType _ | ArrayType _ | BoxIdType | HandleIdType -> true
@@ -5104,7 +5110,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   and check_deref_core functypemap funcmap classmap interfmap (pn,ilist) l tparams tenv e f =
     let (w, t, _) = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv None e in
     begin
-    match t with
+    match unfold_inferred_type_deep t with
     | InductiveType(inductive_name, targs) -> begin
         let (_, _, constructors, _, _, _, _, _, _) = List.assoc inductive_name inductivemap in
         match constructors with
@@ -5184,7 +5190,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         (e, PackageName name, None)
       else
         static_error l "No such type or package" None
-    | _ -> static_error l "Target expression of field dereference should be of type pointer-to-struct." None
+    | t -> static_error l (Printf.sprintf "Target expression of field dereference should be of type pointer-to-struct. Instead, found '%s'." (string_of_type t)) None
     end
   
   let check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (inAnnotation: bool option) e =

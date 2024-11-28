@@ -4,6 +4,12 @@ abstract_type type_info;
 
 @*/
 
+mod marker {
+
+    struct PhantomData<T> {}
+
+}
+
 mod intrinsics {
 
     unsafe fn copy_nonoverlapping<T>(src: *mut T, dst: *mut T, count: usize);
@@ -118,6 +124,7 @@ mod alloc {
     }
     
     //@ pred alloc_block(ptr: *u8; layout: Layout);
+    //@ pred alloc_block_in<A>(alloc: A, ptr: *u8, layout: Layout;);
     
     /*@
     
