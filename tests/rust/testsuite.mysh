@@ -74,11 +74,7 @@ cd safe_abstraction
     verifast -c proof_obligs_quick_fix_test_generic_result.rs
     del proof_obligs_quick_fix_test_generic_result.rs
   end_sequential
-  begin_sequential
-    rustup run nightly-2024-11-23 vf-rust-mir-exporter linked_list.rs > linked_list.vf_mir 2> linked_list.exporter-trace
-    del linked_list.vf_mir
-    del linked_list.exporter-trace
-  end_sequential
+  verifast -c -skip_specless_fns linked_list.rs
 cd ..
 end_parallel
 end_sequential

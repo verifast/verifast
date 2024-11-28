@@ -3685,10 +3685,19 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     in
     Ok decl
 
-  let translate_trait (adt_defs : Mir.adt_def_tr list) (trait_cpn : TraitRd.t) =
+  let translate_trait (adt_defs : Mir.adt_def_tr list) (skip_specless_fns : bool) (trait_cpn : TraitRd.t) =
     let name = TraitRd.name_get trait_cpn in
     let* required_fns =
       CapnpAux.ind_list_get_list (TraitRd.required_fns_get trait_cpn)
+    in
+    let required_fns =
+      if skip_specless_fns then
+      required_fns
+      |> List.filter (fun required_fn_cpn ->
+             not
+               (Capnp.Array.is_empty
+                  (TraitRd.RequiredFn.contract_get required_fn_cpn)))
+      else required_fns
     in
     ListAux.try_map (translate_trait_required_fn adt_defs name) required_fns
 
@@ -5484,7 +5493,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         CapnpAux.ind_list_get_list (VfMirRd.traits_get vf_mir_cpn)
       in
       let* traits_decls =
-        ListAux.try_map (translate_trait adt_defs) traits_cpn
+        ListAux.try_map (translate_trait adt_defs skip_specless_fns) traits_cpn
       in
       let traits_decls = List.flatten traits_decls in
       let bodies_cpn = VfMirRd.bodies_get_list vf_mir_cpn in

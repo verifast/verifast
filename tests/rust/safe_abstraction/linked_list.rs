@@ -37,6 +37,8 @@ use core::ptr::NonNull;
 use std::alloc::{Allocator, Global};
 use std::boxed::Box;
 
+//@ use std::option::{Option, Option::None, Option::Some};
+
 #[cfg(test)]
 mod tests;
 
@@ -171,7 +173,10 @@ pub struct IntoIter<
 // }
 
 impl<T> Node<T> {
-    fn new(element: T) -> Self {
+    unsafe fn new(element: T) -> Self
+    //@ req true;
+    //@ ens result == Node::<T> { next: None, prev: None, element };
+    {
         Node { next: None, prev: None, element }
     }
 
@@ -188,10 +193,7 @@ impl<T, A: Allocator> LinkedList<T, A> {
     /// `node` must point to a valid node that was boxed and leaked using the list's allocator.
     /// This method takes ownership of the node, so the pointer should not be used again.
     #[inline]
-    unsafe fn push_front_node(&mut self, node: NonNull<Node<T>>)
-    //@ req true;
-    //@ ens true;
-    {
+    unsafe fn push_front_node(&mut self, node: NonNull<Node<T>>) {
         // This method takes care not to create mutable references to whole nodes,
         // to maintain validity of aliasing pointers into `element`.
         unsafe {
@@ -288,10 +290,7 @@ impl<T, A: Allocator> LinkedList<T, A> {
     /// This method takes care not to create mutable references to `element`, to
     /// maintain validity of aliasing pointers.
     #[inline]
-    unsafe fn unlink_node(&mut self, mut node: NonNull<Node<T>>)
-    //@ req true;
-    //@ ens true;
-    {
+    unsafe fn unlink_node(&mut self, mut node: NonNull<Node<T>>) {
         let node_ = unsafe { node.as_mut() }; // this one is ours now, we can create an &mut.
 
         // Not creating new mutable (unique!) references overlapping `element`.
@@ -321,10 +320,7 @@ impl<T, A: Allocator> LinkedList<T, A> {
         mut splice_start: NonNull<Node<T>>,
         mut splice_end: NonNull<Node<T>>,
         splice_length: usize,
-    )
-    //@ req true;
-    //@ ens true;
-    {
+    ) {
         // This method takes care not to create multiple mutable references to whole nodes at the same time,
         // to maintain validity of aliasing pointers into `element`.
         if let Some(mut existing_prev_) = existing_prev {
@@ -877,10 +873,10 @@ impl<T, A: Allocator> LinkedList<T, A> {
     /// ```
     //#[stable(feature = "rust1", since = "1.0.0")]
     pub fn push_front(&mut self, elt: T) {
-        let node = Box::new_in(Node::new(elt), &self.alloc);
-        let node_ptr = NonNull::from(Box::leak(node));
-        // SAFETY: node_ptr is a unique pointer to a node we boxed with self.alloc and leaked
         unsafe {
+            let node = Box::new_in(Node::new(elt), &self.alloc);
+            let node_ptr = NonNull::from(Box::leak(node));
+            // SAFETY: node_ptr is a unique pointer to a node we boxed with self.alloc and leaked
             self.push_front_node(node_ptr);
         }
     }
@@ -926,10 +922,10 @@ impl<T, A: Allocator> LinkedList<T, A> {
     //#[stable(feature = "rust1", since = "1.0.0")]
     #[rustc_confusables("push", "append")]
     pub fn push_back(&mut self, elt: T) {
-        let node = Box::new_in(Node::new(elt), &self.alloc);
-        let node_ptr = NonNull::from(Box::leak(node));
-        // SAFETY: node_ptr is a unique pointer to a node we boxed with self.alloc and leaked
         unsafe {
+            let node = Box::new_in(Node::new(elt), &self.alloc);
+            let node_ptr = NonNull::from(Box::leak(node));
+            // SAFETY: node_ptr is a unique pointer to a node we boxed with self.alloc and leaked
             self.push_back_node(node_ptr);
         }
     }
