@@ -4045,6 +4045,16 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let name = name_get vdef_cpn in
     let fields_cpn = fields_get_list vdef_cpn in
     let* fields = ListAux.try_map translate_field_def fields_cpn in
+    let open Mir in
+    let fields =
+      List.filter
+        (fun { ty } ->
+          match Mir.basic_type_of ty with
+          | StructTypeExpr (_, Some "std::marker::PhantomData", _, _, _) ->
+              false
+          | _ -> true)
+        fields
+    in
     Ok Mir.{ loc; name; fields }
 
   let gen_adt_full_borrow_content adt_kind name tparams lft_params
