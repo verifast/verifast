@@ -2,6 +2,8 @@
 
 fix default_value<t>() -> t;
 
+inductive unit = unit;
+
 inductive option<t> = none | some(t);
 
 inductive pair<a, b> = pair(a, b);

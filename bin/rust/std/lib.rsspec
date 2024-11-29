@@ -124,7 +124,7 @@ mod alloc {
     }
     
     //@ pred alloc_block(ptr: *u8; layout: Layout);
-    //@ pred alloc_block_in<A>(alloc: A, ptr: *u8, layout: Layout;);
+    //@ pred alloc_block_in(alloc_id: any, ptr: *u8, layout: Layout;);
     
     /*@
     
@@ -136,23 +136,21 @@ mod alloc {
     
     /*@
     
-    // The following lemmas express that sharing an allocator does not change its value. In other words, allocators do not involve UnsafeCell.
+    pred Allocator<A>(t: thread_id_t, alloc: A, alloc_id: any);
     
-    fix is_Allocator<A>() -> bool;
+    pred share_allocator_end_token<A>(l: &'static A, alloc_id: any, alloc_id_: any);
     
-    pred share_allocator_end_token<A>(f: real, k: lifetime_t, l: *A, alloc: A);
+    lem share_allocator<A>(l: *A);
+        req *l |-> ?alloc &*& Allocator(?t, alloc, ?alloc_id);
+        ens Allocator::<&'static A>(t, l, ?alloc_id_) &*& share_allocator_end_token(l, alloc_id, alloc_id_);
     
-    lem share_allocator<A>(k: lifetime_t, t: thread_id_t, l: *A);
-        req [?f](*l |-> ?alloc) &*& is_Allocator::<A>() == true;
-        ens [f/2](*l |-> alloc) &*& [_](<A>.share(k, t, l)) &*& share_allocator_end_token(f/2, k, l, alloc);
-    
-    lem shared_allocator_lift_alloc_block<'a, A>(p: *u8);
-        req share_allocator_end_token::<A>(?f, 'a, ?l, ?alloc) &*& alloc_block_in::<&'a A>(l, p, ?layout);
-        ens share_allocator_end_token::<A>(f, 'a, l, alloc) &*& alloc_block_in::<A>(alloc, p, layout);
+    lem shared_allocator_lift_alloc_block<A>(p: *u8);
+        req share_allocator_end_token::<A>(?l, ?alloc_id, ?alloc_id_) &*& alloc_block_in(alloc_id_, p, ?layout);
+        ens share_allocator_end_token::<A>(l, alloc_id, alloc_id_) &*& alloc_block_in(alloc_id, p, layout);
     
     lem end_share_allocator<A>();
-        req share_allocator_end_token::<A>(?f, ?k, ?l, ?alloc) &*& [_]lifetime_dead_token(k);
-        ens [f](*l |-> alloc);
+        req share_allocator_end_token::<A>(?l, ?alloc_id, ?alloc_id_) &*& Allocator::<&'static A>(?t, _, alloc_id_);
+        ens *l |-> ?alloc &*& Allocator::<A>(t, alloc, alloc_id);
     
     @*/
 
@@ -196,9 +194,11 @@ mod alloc {
     
     /*@
     
-    lem produce_Global_own(t: thread_id_t);
+    fix Global_alloc_id() -> any;
+    
+    lem produce_Allocator_Global(t: thread_id_t);
         req true;
-        ens <Global>.own(t, Global {});
+        ens Allocator(t, Global {}, Global_alloc_id);
     
     @*/
     
@@ -216,11 +216,7 @@ mod boxed {
         req thread_token(?t) &*& Box::<T>(self, ?value) &*& <T>.own(t, value);
         ens thread_token(t) &*& <Box<T, std::alloc::Global>>.own(t, self);
     
-    pred Box_in<T, A>(self: Box<T, A>, alloc: A, value: T);
-    
-    lem Box_in_to_own<T, A>(self: Box<T, A>);
-        req thread_token(?t) &*& Box_in::<T, A>(self, ?alloc, ?value) &*& <A>.own(t, alloc) &*& <T>.own(t, value);
-        ens thread_token(t) &*& <Box<T, A>>.own(t, self);
+    pred Box_in<T, A>(t: thread_id_t, self: Box<T, A>, alloc_id: any, value: T);
     
     @*/
 
@@ -239,16 +235,16 @@ mod boxed {
     impl<T, A> Box<T, A> {
     
         fn new_in(x: T, alloc: A) -> Box<T, A>;
-        //@ req thread_token(?t) &*& <A>.own(t, alloc);
-        //@ ens thread_token(t) &*& <A>.own(t, alloc) &*& Box_in(result, alloc, x);
+        //@ req thread_token(?t) &*& std::alloc::Allocator(t, alloc, ?alloc_id);
+        //@ ens thread_token(t) &*& Box_in(t, result, alloc_id, x);
     
         fn into_raw(b: Box<T, std::alloc::Global>) -> *T;
         //@ req Box(b, ?value);
         //@ ens *result |-> value &*& std::alloc::alloc_block(result as *u8, std::alloc::Layout::new_::<T>()) &*& result as usize != 0;
     
         fn leak<'a>(b: Box<T, A>) -> &'a mut T;
-        //@ req Box_in::<T, A>(b, ?alloc, ?value);
-        //@ ens *result |-> value &*& std::alloc::alloc_block_in(alloc, result as *u8, std::alloc::Layout::new_::<T>()) &*& result as *_ as usize != 0;
+        //@ req Box_in::<T, A>(?t, b, ?alloc_id, ?value);
+        //@ ens *result |-> value &*& std::alloc::alloc_block_in(alloc_id, result as *u8, std::alloc::Layout::new_::<T>()) &*& result as *_ as usize != 0 &*& std::alloc::Allocator::<A>(t, _, alloc_id);
     
     }
 

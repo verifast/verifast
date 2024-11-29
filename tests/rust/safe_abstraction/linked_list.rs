@@ -37,7 +37,7 @@ use core::ptr::NonNull;
 use std::alloc::{Allocator, Global};
 use std::boxed::Box;
 
-//@ use std::alloc::{alloc_block_in, Layout, Global};
+//@ use std::alloc::{alloc_block_in, Layout, Global, Allocator};
 //@ use std::option::{Option, Option::None, Option::Some};
 //@ use std::ptr::{NonNull, NonNull_ptr};
 
@@ -155,23 +155,23 @@ struct Node<T> {
 
 /*@
 
-pred Nodes<T, A>(alloc: A, n: Option<NonNull<Node<T>>>, prev: Option<NonNull<Node<T>>>, last: Option<NonNull<Node<T>>>, next: Option<NonNull<Node<T>>>; nodes: list<NonNull<Node<T>>>) =
+pred Nodes<T>(alloc_id: any, n: Option<NonNull<Node<T>>>, prev: Option<NonNull<Node<T>>>, last: Option<NonNull<Node<T>>>, next: Option<NonNull<Node<T>>>; nodes: list<NonNull<Node<T>>>) =
     if n == next {
         nodes == [] &*& last == prev
     } else {
         n == Option::Some(?n_) &*&
-        alloc_block_in::<A>(alloc, NonNull_ptr(n_) as *u8, Layout::new_::<Node<T>>()) &*& struct_Node_padding(NonNull_ptr(n_)) &*&
+        alloc_block_in(alloc_id, NonNull_ptr(n_) as *u8, Layout::new_::<Node<T>>()) &*& struct_Node_padding(NonNull_ptr(n_)) &*&
         (*NonNull_ptr(n_)).prev |-> prev &*&
         (*NonNull_ptr(n_)).next |-> ?next0 &*&
-        Nodes(alloc, next0, n, last, next, ?nodes0) &*&
+        Nodes(alloc_id, next0, n, last, next, ?nodes0) &*&
         nodes == cons(n_, nodes0)
     };
 
 pred_ctor elem_fbc<T>(t: thread_id_t)(node: NonNull<Node<T>>) = (*NonNull_ptr(node)).element |-> ?elem &*& <T>.own(t, elem);
 
 pred<T, A> <LinkedList<T, A>>.own(t, ll) =
-    <A>.own(t, ll.alloc) &*&
-    Nodes(ll.alloc, ll.head, None, ll.tail, None, ?nodes) &*&
+    Allocator(t, ll.alloc, ?alloc_id) &*&
+    Nodes(alloc_id, ll.head, None, ll.tail, None, ?nodes) &*&
     ll.len == length(nodes) &*&
     foreach(nodes, elem_fbc::<T>(t));
 
@@ -302,9 +302,9 @@ impl<T, A: Allocator> LinkedList<T, A> {
     #[inline]
     unsafe fn push_front_node(&mut self, node: NonNull<Node<T>>)
     /*@
-    req thread_token(?t) &*& *self |-> ?self0 &*& <A>.own(t, self0.alloc) &*& Nodes(self0.alloc, self0.head, None, self0.tail, None, ?nodes) &*&
+    req thread_token(?t) &*& *self |-> ?self0 &*& Allocator(t, self0.alloc, ?alloc_id) &*& Nodes(alloc_id, self0.head, None, self0.tail, None, ?nodes) &*&
         length(nodes) == self0.len &*& foreach(nodes, elem_fbc::<T>(t)) &*&
-        *NonNull_ptr(node) |-> ?n &*& <T>.own(t, n.element) &*& alloc_block_in::<A>(self0.alloc, NonNull_ptr(node) as *u8, Layout::new_::<Node<T>>());
+        *NonNull_ptr(node) |-> ?n &*& <T>.own(t, n.element) &*& alloc_block_in(alloc_id, NonNull_ptr(node) as *u8, Layout::new_::<Node<T>>());
     @*/
     //@ ens thread_token(t) &*& *self |-> ?self1 &*& <LinkedList<T, A>>.own(t, self1);
     {
@@ -319,13 +319,13 @@ impl<T, A: Allocator> LinkedList<T, A> {
             //@ open Nodes(_, _, _, _, _, _);
             match self.head {
                 None => {
-                    //@ close Nodes::<T, A>(self0.alloc, None, None, None, None, nil);
+                    //@ close Nodes::<T>(alloc_id, None, None, None, None, nil);
                     self.tail = node_
                 }
                 // Not creating new mutable (unique!) references overlapping `element`.
                 Some(head) => {
                     (*head.as_ptr()).prev = node_;
-                    //@ close Nodes(self0.alloc, self0.head, node_, self0.tail, None, nodes);
+                    //@ close Nodes(alloc_id, self0.head, node_, self0.tail, None, nodes);
                 }
             }
 
@@ -334,7 +334,7 @@ impl<T, A: Allocator> LinkedList<T, A> {
             self.len += 1;
             //@ close_points_to(self);
             //@ assert *self |-> ?self1;
-            //@ close Nodes(self0.alloc, node_, None, self1.tail, None, cons(node, nodes));
+            //@ close Nodes(alloc_id, node_, None, self1.tail, None, cons(node, nodes));
             //@ close elem_fbc::<T>(t)(node);
             //@ close foreach(cons(node, nodes), elem_fbc::<T>(t));
             //@ close <LinkedList<T, A>>.own(t, self1);
@@ -608,7 +608,7 @@ impl<T> LinkedList<T> {
     {
         let r = LinkedList { head: None, tail: None, len: 0, alloc: Global, marker: PhantomData };
         //@ close foreach(nil, elem_fbc::<T>(t));
-        //@ std::alloc::produce_Global_own(t);
+        //@ std::alloc::produce_Allocator_Global(t);
         //@ close <LinkedList<T, Global>>.own(t, r);
         r
     }
@@ -1015,19 +1015,10 @@ impl<T, A: Allocator> LinkedList<T, A> {
         unsafe {
             //@ open_points_to(self);
             //@ open <LinkedList<T, A>>.own(t, ll0);
-            let node_ptr;
-            //@ let k = begin_lifetime();
-            {
-                //@ let_lft 'a = k;
-                //@ assume(std::alloc::is_Allocator::<A>()); // TODO
-                //@ std::alloc::share_allocator::<A>('a, t, &(*self).alloc);
-                //@ close_ref_own::<'a, A>(&(*self).alloc);
-                let node = Box::new_in/*@::<Node<T>, &'a A> @*/(Node::new(elt), &self.alloc);
-                node_ptr = NonNull::new_unchecked(Box::leak(node) as *mut Node<T>); //NonNull::from(Box::leak(node));
-                //@ std::alloc::shared_allocator_lift_alloc_block::<'a, A>(NonNull_ptr(node_ptr) as *u8);
-                //@ leak <&'a A>.own(t, &(*self).alloc);
-            }
-            //@ end_lifetime(k);
+            //@ std::alloc::share_allocator::<A>(&(*self).alloc);
+            let node = Box::new_in(Node::new(elt), &self.alloc);
+            let node_ptr = NonNull::new_unchecked(Box::leak(node) as *mut Node<T>); //NonNull::from(Box::leak(node));
+            //@ std::alloc::shared_allocator_lift_alloc_block::<A>(NonNull_ptr(node_ptr) as *u8);
             //@ std::alloc::end_share_allocator::<A>();
             //@ close_points_to(self);
             // SAFETY: node_ptr is a unique pointer to a node we boxed with self.alloc and leaked
