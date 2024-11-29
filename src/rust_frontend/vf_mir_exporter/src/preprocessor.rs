@@ -369,6 +369,9 @@ pub fn preprocess(
                                 }
                             }
                             Some('*') => {
+                                let mut start_of_comment = cs.pos;
+                                start_of_comment.byte_pos -= 1;
+                                start_of_comment.column -= 1;
                                 cs.next();
                                 last_token_was_fn = old_last_token_was_fn;
                                 inside_whitespace = true;
@@ -431,7 +434,7 @@ pub fn preprocess(
                                 loop {
                                     match cs.peek() {
                                         None => {
-                                            panic!("EOF inside multiline comment");
+                                            panic!("EOF inside multiline comment starting at {}:{}", start_of_comment.line, start_of_comment.column);
                                         }
                                         Some('*') => {
                                             cs.next();
@@ -439,7 +442,7 @@ pub fn preprocess(
                                             ghost_range.contents.push('*');
                                             match cs.peek() {
                                                 None => {
-                                                    panic!("EOF inside multiline comment");
+                                                    panic!("EOF inside multiline comment starting at {}:{}", start_of_comment.line, start_of_comment.column);
                                                 }
                                                 Some('/') => {
                                                     cs.next();
@@ -460,7 +463,7 @@ pub fn preprocess(
                                             ghost_range.contents.push('/');
                                             match cs.peek() {
                                                 None => {
-                                                    panic!("EOF inside multiline comment");
+                                                    panic!("EOF inside multiline comment starting at {}:{}", start_of_comment.line, start_of_comment.column);
                                                 }
                                                 Some('*') => {
                                                     cs.next();

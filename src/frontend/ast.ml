@@ -611,13 +611,6 @@ and
   | CtorPat of loc * string * pat list
   | WCtorPat of loc * string * type_ list * string * type_ list * type_ list * pat list * expr option (* The expression if it is also a literal pattern *)
 and
-  switch_asn_clause = (* ?switch_asn_clause *)
-  | SwitchAsnClause of
-      loc * 
-      string * 
-      string list * 
-      asn
-and
   wswitch_asn_clause = (* ?switch_asn_clause *)
   | WSwitchAsnClause of
       loc * 

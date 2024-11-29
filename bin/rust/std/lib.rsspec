@@ -148,6 +148,10 @@ mod alloc {
         req share_allocator_end_token::<A>(?l, ?alloc_id, ?alloc_id_) &*& alloc_block_in(alloc_id_, p, ?layout);
         ens share_allocator_end_token::<A>(l, alloc_id, alloc_id_) &*& alloc_block_in(alloc_id, p, layout);
     
+    lem shared_allocator_lower_alloc_block<A>(p: *u8);
+        req share_allocator_end_token::<A>(?l, ?alloc_id, ?alloc_id_) &*& alloc_block_in(alloc_id, p, ?layout);
+        ens share_allocator_end_token::<A>(l, alloc_id, alloc_id_) &*& alloc_block_in(alloc_id_, p, layout);
+    
     lem end_share_allocator<A>();
         req share_allocator_end_token::<A>(?l, ?alloc_id, ?alloc_id_) &*& Allocator::<&'static A>(?t, _, alloc_id_);
         ens *l |-> ?alloc &*& Allocator::<A>(t, alloc, alloc_id);
@@ -237,10 +241,18 @@ mod boxed {
         fn new_in(x: T, alloc: A) -> Box<T, A>;
         //@ req thread_token(?t) &*& std::alloc::Allocator(t, alloc, ?alloc_id);
         //@ ens thread_token(t) &*& Box_in(t, result, alloc_id, x);
+        
+        fn from_raw_in(x: *T, alloc: A) -> Box<T, A>;
+        //@ req *x |-> ?value &*& std::alloc::Allocator(?t, alloc, ?alloc_id) &*& std::alloc::alloc_block_in(alloc_id, x as *u8, std::alloc::Layout::new_::<T>());
+        //@ ens Box_in(t, result, alloc_id, value);
     
         fn into_raw(b: Box<T, std::alloc::Global>) -> *T;
         //@ req Box(b, ?value);
         //@ ens *result |-> value &*& std::alloc::alloc_block(result as *u8, std::alloc::Layout::new_::<T>()) &*& result as usize != 0;
+        
+        fn into_inner(b: Box<T, A>) -> T;
+        //@ req thread_token(?t) &*& Box_in::<T, A>(t, b, ?alloc_id, ?value);
+        //@ ens thread_token(t) &*& std::alloc::Allocator::<A>(t, _, alloc_id) &*& result == value;
     
         fn leak<'a>(b: Box<T, A>) -> &'a mut T;
         //@ req Box_in::<T, A>(?t, b, ?alloc_id, ?value);
@@ -279,12 +291,10 @@ mod result {
         Err(E),
     }
     
-    //@ pred Result_own<T, E>(t: thread_id_t, v: Result<T, E>);
-    
     impl<T, E> Result<T, E> {
     
         fn unwrap(self: Result<T, E>) -> T;
-        //@ req thread_token(?t) &*& Result_own::<T, E>(t, self); // FIXME: For unwind safety, I think this needs to take a lifetime_token at a lifetime that is outlived by E.
+        //@ req thread_token(?t) &*& std::result::Result_own::<T, E>(t, self); // FIXME: For unwind safety, I think this needs to take a lifetime_token at a lifetime that is outlived by E.
         //@ ens thread_token(t);
     
     }

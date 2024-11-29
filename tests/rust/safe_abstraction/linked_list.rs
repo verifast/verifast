@@ -22,6 +22,7 @@
 #![feature(extend_one)]
 #![feature(exact_size_is_empty)]
 #![feature(hasher_prefixfree_extras)]
+#![feature(box_into_inner)]
 
 use std as core;
 
@@ -40,6 +41,7 @@ use std::boxed::Box;
 //@ use std::alloc::{alloc_block_in, Layout, Global, Allocator};
 //@ use std::option::{Option, Option::None, Option::Some};
 //@ use std::ptr::{NonNull, NonNull_ptr};
+//@ use std::boxed::Box_in;
 
 #[cfg(test)]
 mod tests;
@@ -287,8 +289,11 @@ impl<T> Node<T> {
         Node { next: None, prev: None, element }
     }
 
-    fn into_element<A: Allocator>(self: Box<Self, A>) -> T {
-        self.element
+    unsafe fn into_element<A: Allocator>(self: Box<Self, A>) -> T
+    //@ req thread_token(?t) &*& Box_in::<Node<T>, A>(t, self, ?alloc_id, ?node);
+    //@ ens thread_token(t) &*& result == node.element &*& Allocator::<A>(t, _, alloc_id);
+    {
+        Box::into_inner(self).element // self.element
     }
 }
 
@@ -343,20 +348,51 @@ impl<T, A: Allocator> LinkedList<T, A> {
 
     /// Removes and returns the node at the front of the list.
     #[inline]
-    fn pop_front_node(&mut self) -> Option<Box<Node<T>, &A>> {
+    unsafe fn pop_front_node(&mut self) -> Option<Box<Node<T>, &A>>
+    /*@
+    req thread_token(?t) &*&
+        *self |-> ?self0 &*&
+        Allocator(t, self0.alloc, ?alloc_id) &*&
+        Nodes(alloc_id, self0.head, None, self0.tail, None, ?nodes0) &*&
+        length(nodes0) == self0.len &*&
+        foreach(nodes0, elem_fbc::<T>(t));
+    @*/
+    /*@
+    ens thread_token(t) &*&
+        (*self).head |-> ?head1 &*&
+        (*self).tail |-> ?tail1 &*&
+        Nodes(alloc_id, head1, None, tail1, None, ?nodes1) &*&
+        (*self).len |-> length(nodes1) &*&
+        struct_LinkedList_padding::<T, A>(self) &*&
+        foreach(nodes1, elem_fbc::<T>(t)) &*&
+        match result {
+            Option::None => (*self).alloc |-> ?alloc1 &*& Allocator(t, alloc1, alloc_id),
+            Option::Some(b) => std::alloc::share_allocator_end_token::<A>(&(*self).alloc, alloc_id, ?alloc_id_) &*& Box_in::<Node<T>, &'static A>(t, b, alloc_id_, ?node) &*& <T>.own(t, node.element)
+        };
+            // *NonNull_ptr(node) |-> ?n &*& <T>.own(t, n.element) &*& alloc_block_in(alloc_id, NonNull_ptr(node) as *u8, Layout::new_::<Node<T>>());
+    @*/
+    {
         // This method takes care not to create mutable references to whole nodes,
         // to maintain validity of aliasing pointers into `element`.
+        //@ open_points_to(self);
         match self.head {
             None => None,
             Some(node) => unsafe {
+                //@ open Nodes(_, _, _, _, _, _);
+                //@ open foreach(nodes0, elem_fbc::<T>(t));
+                //@ open elem_fbc::<T>(t)(node);
+                //@ std::alloc::share_allocator(&(*self).alloc);
+                self.head = (*node.as_ptr()).next;
+                //@ std::alloc::shared_allocator_lower_alloc_block::<A>(NonNull_ptr(node) as *u8);
                 let node_ = Box::from_raw_in(node.as_ptr(), &self.alloc);
-                self.head = node_.next;
 
+                //@ open Nodes(_, ?next, _, ?tail, _, _);
                 match self.head {
                     None => self.tail = None,
                     // Not creating new mutable (unique!) references overlapping `element`.
                     Some(head) => (*head.as_ptr()).prev = None,
                 }
+                //@ close Nodes(alloc_id, next, None, (*self).tail, None, _);
 
                 self.len -= 1;
                 Some(node_)
@@ -1046,8 +1082,29 @@ impl<T, A: Allocator> LinkedList<T, A> {
     /// assert_eq!(d.pop_front(), None);
     /// ```
     //#[stable(feature = "rust1", since = "1.0.0")]
-    pub fn pop_front(&mut self) -> Option<T> {
-        self.pop_front_node().map(Node::into_element)
+    pub fn pop_front(&mut self) -> Option<T>
+    //@ req thread_token(?t) &*& *self |-> ?self0 &*& <LinkedList<T, A>>.own(t, self0);
+    //@ ens thread_token(t) &*& *self |-> ?self1 &*& <LinkedList<T, A>>.own(t, self1) &*& <Option<T>>.own(t, result);
+    {
+        unsafe {
+            //@ open <LinkedList<T, A>>.own(t, self0);
+            match self.pop_front_node() { //.map(Node::into_element)
+                None => {
+                    //@ close_points_to(self);
+                    //@ close <LinkedList<T, A>>.own(t, *self);
+                    //@ close <std::option::Option<T>>.own(t, None);
+                    None
+                }
+                Some(node) => {
+                    let r = Some(node.into_element());
+                    //@ std::alloc::end_share_allocator::<A>();
+                    //@ close_points_to(self);
+                    //@ close <LinkedList<T, A>>.own(t, *self);
+                    //@ close <std::option::Option<T>>.own(t, r);
+                    r
+                }
+            }
+        }
     }
 
     /// Appends an element to the back of a list.
@@ -1093,7 +1150,12 @@ impl<T, A: Allocator> LinkedList<T, A> {
     /// ```
     //#[stable(feature = "rust1", since = "1.0.0")]
     pub fn pop_back(&mut self) -> Option<T> {
-        self.pop_back_node().map(Node::into_element)
+        unsafe {
+            match self.pop_back_node() { //.map(Node::into_element)
+                None => None,
+                Some(node) => Some(node.into_element())
+            }
+        }
     }
 
     /// Splits the list into two at the given index. Returns everything after the given index,
@@ -1343,19 +1405,23 @@ struct DropGuard<'a, T, A: Allocator>(&'a mut LinkedList<T, A>);
 
 impl<'a, T, A: Allocator> Drop for DropGuard<'a, T, A> {
     fn drop(&mut self) {
-        // Continue the same loop we do below. This only runs when a destructor has
-        // panicked. If another one panics this will abort.
-        while self.0.pop_front_node().is_some() {}
+        unsafe {
+            // Continue the same loop we do below. This only runs when a destructor has
+            // panicked. If another one panics this will abort.
+            while self.0.pop_front_node().is_some() {}
+        }
     }
 }
 
 //#[stable(feature = "rust1", since = "1.0.0")]
 unsafe impl<#[may_dangle] T, A: Allocator> Drop for LinkedList<T, A> {
     fn drop(&mut self) {
-        // Wrap self so that if a destructor panics, we can try to keep looping
-        let guard = DropGuard(self);
-        while guard.0.pop_front_node().is_some() {}
-        mem::forget(guard);
+        unsafe {
+            // Wrap self so that if a destructor panics, we can try to keep looping
+            let guard = DropGuard(self);
+            while guard.0.pop_front_node().is_some() {}
+            mem::forget(guard);
+        }
     }
 }
 

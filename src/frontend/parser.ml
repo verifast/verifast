@@ -2267,29 +2267,6 @@ and
 | [ (_, Kwd "^"); parse_expr as e ] -> LitPat (WidenedParameterArgument e)
 | [ parse_cond_expr as e ] -> pat_of_expr e
 and
-  parse_switch_asn_clauses = function%parser
-| [ parse_switch_asn_clause as c; parse_switch_asn_clauses as cs ] -> c::cs
-| [ ] -> []
-and
-  parse_switch_asn_clause = function%parser
-| [ (l, Kwd "case"); 
-    (_, Ident c); 
-    [%l
-    pats = (function%parser 
-    | [ (_, Kwd "("); 
-        (lx, Ident x); 
-        [%l () = (fun _ -> register_varname x)]; 
-        parse_more_pats as xs 
-      ] -> x::xs 
-    | [ ] -> []
-    )
-    ]; 
-    (_, Kwd ":"); 
-    (_, Kwd "return"); 
-    parse_asn as p; 
-    (_, Kwd ";") 
-  ] -> SwitchAsnClause (l, c, pats, p)
-and
   parse_comma_expr = function%parser
   [ parse_assign_expr as e1; [%let e = parse_comma_expr_rest e1] ] -> e
 and

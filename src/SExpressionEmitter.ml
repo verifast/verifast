@@ -712,17 +712,6 @@ and sexpr_of_switch_clause (c : switch_expr_clause) : sexpression =
           [ Symbol "switch-clause"; Symbol name ]
           [ "args", sexpr_of_list (fun x -> Symbol x) args; "body", sexpr_of_expr e ]
 
-and sexpr_of_switch_asn_clause (c: switch_asn_clause) : sexpression =
-  match c with
-    | SwitchAsnClause (loc, name, l, expr) ->
-        build_list
-          [ Symbol "switch-asn-clause" ]
-          [
-            "name", Symbol name;
-            "l", sexpr_of_list (fun x -> Symbol x) l;
-            "expr", sexpr_of_expr expr
-          ]
-
 and sexpr_of_wswitch_asn_clause (c: wswitch_asn_clause) : sexpression =
   match c with
     | WSwitchAsnClause (loc, name, l, ptypes, expr) ->

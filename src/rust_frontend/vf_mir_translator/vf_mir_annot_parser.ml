@@ -32,7 +32,7 @@ module Make (Args : VF_MIR_ANNOT_PARSER_ARGS) = struct
       | [] -> None
       | (_, current_tk_str) :: rest_strs -> (
           match Lexer.Stream.peek current_tk_str with
-          | None | Some (_, Lexer.Eof) ->
+          | None | Some (_, Lexer.Eof) when rest_strs <> [] ->
               tk_strs_ref := rest_strs;
               next_tk n
           | Some _ as some_tk ->

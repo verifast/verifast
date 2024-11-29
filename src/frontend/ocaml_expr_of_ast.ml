@@ -674,14 +674,6 @@ and of_pat = function
     of_list of_pat args;
     of_option of_expr e
   ])
-and of_switch_asn_clause = function
-  SwitchAsnClause (l, cn, xs, a) ->
-  C ("SwitchAsnClause", [
-    of_loc l;
-    S cn;
-    of_list s xs;
-    of_expr a
-  ])
 and of_wswitch_asn_clause = function
   WSwitchAsnClause (l, cn, xs, pts, a) ->
   C ("WSwitchAsnClause", [

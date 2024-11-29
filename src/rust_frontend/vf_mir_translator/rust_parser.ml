@@ -820,7 +820,29 @@ let rec parse_decl = function%parser
          [%let dummy = function%parser [ (_, Kwd ",") ] -> () | [ ] -> ()]
        ] -> ctor)];
     (_, Kwd "}")
-  ] -> [Inductive (l, en, tparams, ctors)]
+  ] ->
+  let tparams_targs = List.map (fun x -> IdentTypeExpr (l, None, x)) tparams in
+  let own_pred_def =
+    TypePredDef (l, tparams, ConstructedTypeExpr (l, en, tparams_targs), "own", Left (l, en ^ "_own"))
+  in
+  let own_pred_decls =
+    let clauses = ctors |> List.map begin function Ctor (lc, cn, ps) ->
+      let arg_own_asns = ps |> List.map begin function (x, tp) ->
+        ExprCallExpr (lc, TypePredExpr (lc, tp, "own"), [LitPat (Var (lc, "_t")); LitPat (Var (lc, x))])
+      end in
+      let body = List.fold_left (fun a1 a2 -> Sep (lc, a1, a2)) (EmpAsn lc) arg_own_asns in
+      SwitchExprClause (lc, cn, List.map fst ps, body)
+    end in
+    let body = SwitchExpr (l, Var (l, "_v"), clauses, None) in
+    if tparams = [] then
+      [
+        PredFamilyDecl (l, en ^ "_own", [], 0, [IdentTypeExpr (l, None, "thread_id_t"); ConstructedTypeExpr (l, en, [])], None, Inductiveness_Inductive);
+        PredFamilyInstanceDecl (l, en ^ "_own", [], [], [IdentTypeExpr (l, None, "thread_id_t"), "_t"; ConstructedTypeExpr (l, en, []), "_v"], body)
+      ]
+    else
+      [PredCtorDecl (l, en ^ "_own", tparams, [], [IdentTypeExpr (l, None, "thread_id_t"), "_t"; ConstructedTypeExpr (l, en, tparams_targs), "_v"], None, body)]
+  in
+  [Inductive (l, en, tparams, ctors)] @ own_pred_decls @ [own_pred_def]
 | [ parse_ghost_decl_block as ds ] -> ds
 in
 function%parser
