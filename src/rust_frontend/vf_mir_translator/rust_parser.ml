@@ -26,7 +26,9 @@ let parse_right_angle_bracket stream = stream |> function%parser
   Lexer.Stream.push (Some (Lexed ((path, line, col + 1), (path', line', col')), Kwd ">")) stream
 | [ (Lexed ((path, line, col), (path', line', col')), Ident ">>>") ] ->
   Lexer.Stream.push (Some (Lexed ((path, line, col + 1), (path', line', col')), Kwd ">>")) stream
-
+| [ (Lexed ((path, line, col), (path', line', col')), Ident ">>>>") ] ->
+  Lexer.Stream.push (Some (Lexed ((path, line, col + 1), (path', line', col')), Ident ">>>")) stream
+  
 let rec parse_type = function%parser
   [ (l, Ident "i8") ] -> ManifestTypeExpr (l, Int (Signed, FixedWidthRank 0))
 | [ (l, Ident "i16") ] -> ManifestTypeExpr (l, Int (Signed, FixedWidthRank 1))
@@ -219,7 +221,12 @@ let rec parse_expr_funcs allowStructExprs =
       ]
     ] -> e
   and parse_suffix e = function%parser
-    [ (l, Kwd "."); (_, Ident f); [%let e = parse_suffix (Select (l, e, f)) ] ] -> e
+    [ (l, Kwd ".");
+      [%let e = function%parser
+         [ (_, Ident f); [%let e = parse_suffix (Select (l, e, f)) ] ] -> e
+       | [ (_, Int (i, dec, usuffix, lsuffix, _)); [%let e = parse_suffix (Select (l, e, string_of_big_int i)) ] ] -> e
+      ]
+    ] -> e
   | [ (l, Kwd "("); [%let args = rep_comma parse_pat ]; (_, Kwd ")");
       [%let e = parse_suffix (ExprCallExpr (l, e, args))]
     ] -> e
@@ -238,6 +245,7 @@ let rec parse_expr_funcs allowStructExprs =
   | [ ] -> (Some (lf, f), Var (lf, f))
   and parse_struct_expr_field = function%parser
     [ (lf, Ident f); [%let e = parse_struct_expr_field_rest lf f] ] -> e
+  | [ (lf, Int (i, dec, usuffix, lsuffix, _)); [%let e = parse_struct_expr_field_rest lf (string_of_big_int i)] ] -> e
   and parse_struct_expr_fields = function%parser
     [ parse_struct_expr_field as e; parse_struct_expr_fields_rest as es ] -> e::es
   | [ ] -> []

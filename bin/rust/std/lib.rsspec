@@ -7,7 +7,15 @@ abstract_type type_info;
 mod marker {
 
     struct PhantomData<T> {}
-
+    
+    /*@
+    
+    lem close_PhantomData_own<T>(t: thread_id_t, marker: PhantomData<T>);
+        req true;
+        ens <PhantomData<T>>.own(t, marker);
+    
+    @*/
+    
 }
 
 mod intrinsics {
@@ -43,6 +51,10 @@ mod mem {
     //@ req thread_token(?t) &*& <T>.own(t, value);
     //@ ens thread_token(t);
     
+    fn forget<T>(value: T);
+    //@ req thread_token(?t) &*& <T>.own(t, value);
+    //@ ens thread_token(t);
+    
 }
 
 mod ptr {
@@ -56,7 +68,7 @@ mod ptr {
     /*@
     
     lem close_NonNull_own<T>(t: thread_id_t, v: NonNull<T>);
-        req NonNull_ptr(v) as usize != 0;
+        req true;
         ens (NonNull_own::<T>())(t, v);
         
     lem open_NonNull_own<T>(t: thread_id_t, v: NonNull<T>);
@@ -137,6 +149,10 @@ mod alloc {
     /*@
     
     pred Allocator<A>(t: thread_id_t, alloc: A, alloc_id: any);
+    
+    lem Allocator_to_own<A>();
+        req Allocator::<A>(?t, ?alloc, _);
+        ens <A>.own(t, alloc);
     
     pred share_allocator_end_token<A>(l: &'static A, alloc_id: any, alloc_id_: any);
     
@@ -222,6 +238,10 @@ mod boxed {
     
     pred Box_in<T, A>(t: thread_id_t, self: Box<T, A>, alloc_id: any, value: T);
     
+    lem Box_in_to_own<T, A>(self: Box<T, A>);
+        req Box_in::<T, A>(?t, self, ?alloc_id, ?value) &*& <T>.own(t, value);
+        ens <Box<T, A>>.own(t, self);
+    
     @*/
 
     impl<T> Box<T> {
@@ -280,6 +300,14 @@ mod option {
     enum Option<T> {
         None,
         Some(T),
+    }
+    
+    impl<T> Option<T> {
+    
+        fn is_some<'a>(self: &'a Option<T>) -> bool;
+        //@ req [?f](*self |-> ?v);
+        //@ ens [f](*self |-> v) &*& result == (v != Option::None);
+        
     }
 
 }

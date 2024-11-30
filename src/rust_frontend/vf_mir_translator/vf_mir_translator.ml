@@ -756,10 +756,13 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
 
   let translate_region (reg_cpn : RegionRd.t) = RegionRd.id_get reg_cpn
 
-  let translate_region_expr loc (reg_cpn : RegionRd.t) =
-    match RegionRd.id_get reg_cpn with
+  let vf_ty_arg_of_region loc (reg : string) =
+    match reg with
     | "'static" | "'<erased>" -> Ast.ManifestTypeExpr (loc, StaticLifetime)
     | x -> Ast.ManifestTypeExpr (loc, GhostTypeParam x)
+
+  let translate_region_expr loc (reg_cpn : RegionRd.t) =
+    vf_ty_arg_of_region loc (RegionRd.id_get reg_cpn)
 
   let int_size_rank = Ast.PtrRank
 
@@ -939,7 +942,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               gen_args
               |> Util.flatmap @@ function
                  | Mir.GenArgLifetime name ->
-                     [ IdentTypeExpr (loc, None, name) ]
+                     [ vf_ty_arg_of_region loc name ]
                  | _ -> []
             in
             let vf_targs = lft_args @ targs in
