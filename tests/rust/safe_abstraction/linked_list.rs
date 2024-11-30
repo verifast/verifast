@@ -157,6 +157,29 @@ struct Node<T> {
 
 /*@
 
+pred<T> <Node<T>>.own(t, node) = <T>.own(t, node.element);
+
+lem Node_drop<T>()
+    req Node_own::<T>(?_t, ?_v);
+    ens <std::option::Option<std::ptr::NonNull<Node<T>>>>.own(_t, _v.next) &*& <std::option::Option<std::ptr::NonNull<Node<T>>>>.own(_t, _v.prev) &*& <T>.own(_t, _v.element);
+{
+    assume(false);
+}
+
+lem Node_own_mono<T0, T1>()
+    req type_interp::<T0>() &*& type_interp::<T1>() &*& Node_own::<T0>(?t, ?v) &*& is_subtype_of::<T0, T1>() == true;
+    ens type_interp::<T0>() &*& type_interp::<T1>() &*& Node_own::<T1>(t, Node::<T1> { next: upcast(v.next), prev: upcast(v.prev), element: upcast(v.element) });
+{
+    assume(false);
+}
+
+lem Node_send<T>(t1: thread_id_t)
+    req type_interp::<T>() &*& is_Send(typeid(T)) == true &*& Node_own::<T>(?t0, ?v);
+    ens type_interp::<T>() &*& Node_own::<T>(t1, v);
+{
+    assume(false);
+}
+
 pred Nodes<T>(alloc_id: any, n: Option<NonNull<Node<T>>>, prev: Option<NonNull<Node<T>>>, last: Option<NonNull<Node<T>>>, next: Option<NonNull<Node<T>>>; nodes: list<NonNull<Node<T>>>) =
     if n == next {
         nodes == [] &*& last == prev
@@ -348,7 +371,7 @@ impl<T, A: Allocator> LinkedList<T, A> {
 
     /// Removes and returns the node at the front of the list.
     #[inline]
-    unsafe fn pop_front_node(&mut self) -> Option<Box<Node<T>, &A>>
+    unsafe fn pop_front_node<'a>(&'a mut self) -> Option<Box<Node<T>, &'a A>>
     /*@
     req thread_token(?t) &*&
         *self |-> ?self0 &*&
@@ -367,7 +390,7 @@ impl<T, A: Allocator> LinkedList<T, A> {
         foreach(nodes1, elem_fbc::<T>(t)) &*&
         match result {
             Option::None => (*self).alloc |-> ?alloc1 &*& Allocator(t, alloc1, alloc_id),
-            Option::Some(b) => std::alloc::share_allocator_end_token::<A>(&(*self).alloc, alloc_id, ?alloc_id_) &*& Box_in::<Node<T>, &'static A>(t, b, alloc_id_, ?node) &*& <T>.own(t, node.element)
+            Option::Some(b) => std::alloc::share_allocator_end_token::<A>(&(*self).alloc, alloc_id, ?alloc_id_) &*& Box_in::<Node<T>, &'a A>(t, b, alloc_id_, ?node) &*& <T>.own(t, node.element)
         };
             // *NonNull_ptr(node) |-> ?n &*& <T>.own(t, n.element) &*& alloc_block_in(alloc_id, NonNull_ptr(node) as *u8, Layout::new_::<Node<T>>());
     @*/
@@ -1403,6 +1426,19 @@ impl<T, A: Allocator> LinkedList<T, A> {
 
 struct DropGuard<'a, T, A: Allocator>(&'a mut LinkedList<T, A>);
 
+/*@
+
+pred<'a, T, A> <DropGuard<'a, T, A>>.own(t, guard) = true;
+
+lem DropGuard_own_mono<'a0, 'a1, T, A>()
+    req type_interp::<T>() &*& type_interp::<A>() &*& DropGuard_own::<'a0, T, A>(?t, ?v) &*& lifetime_inclusion('a1, 'a0) == true;
+    ens type_interp::<T>() &*& type_interp::<A>() &*& DropGuard_own::<'a1, T, A>(t, DropGuard::<'a1, T, A> { 0: v.0 as *_ });
+{
+    assume(false);
+}
+
+@*/
+
 impl<'a, T, A: Allocator> Drop for DropGuard<'a, T, A> {
     fn drop(&mut self) {
         unsafe {
@@ -1415,12 +1451,46 @@ impl<'a, T, A: Allocator> Drop for DropGuard<'a, T, A> {
 
 //#[stable(feature = "rust1", since = "1.0.0")]
 unsafe impl<#[may_dangle] T, A: Allocator> Drop for LinkedList<T, A> {
-    fn drop(&mut self) {
+    fn drop(&mut self)
+    //@ req thread_token(?t) &*& <LinkedList<T, A>>.full_borrow_content(t, self)();
+    /*@
+    ens thread_token(t) &*&
+        (*self).head |-> ?head &*& <Option<NonNull<Node<T>> >>.own(t, head) &*&
+        (*self).tail |-> ?tail &*& <Option<NonNull<Node<T>> >>.own(t, tail) &*&
+        (*self).len |-> ?_ &*&
+        (*self).alloc |-> ?alloc &*& <A>.own(t, alloc) &*&
+        (*self).marker |-> ?marker &*& <std::marker::PhantomData<std::boxed::Box<Node<T>, A>>>.own(t, marker) &*&
+        struct_LinkedList_padding::<T, A>(self);
+    @*/
+    {
         unsafe {
             // Wrap self so that if a destructor panics, we can try to keep looping
             let guard = DropGuard(self);
-            while guard.0.pop_front_node().is_some() {}
+            //@ open_full_borrow_content(t, self);
+            loop {
+                //@ inv thread_token(t) &*& *self |-> ?self0 &*& <LinkedList<T, A>>.own(t, self0) &*& guard.0 |-> self &*& element |-> _;
+                match guard.0.pop_front() {
+                    None => { break; }
+                    Some(element) => {
+                        //@ open <std::option::Option<T>>.own(t, _);
+                        //@ close_full_borrow_content(t, &element);
+                    }
+                }
+            }
+            //@ close <DropGuard<'static, T, A>>.own(t, guard);
             mem::forget(guard);
+            //@ let head = (*self).head;
+            //@ match head { Option::None => {} Option::Some(head_) => { std::ptr::close_NonNull_own::<Node<T>>(t, head_); } }
+            //@ close <std::option::Option<NonNull<Node<T>>>>.own(t, head);
+            //@ match (*self).tail { Option::None => {} Option::Some(tail_) => { std::ptr::close_NonNull_own::<Node<T>>(t, tail_); } }
+            //@ close <std::option::Option<NonNull<Node<T>>>>.own(t, (*self).tail);
+            //@ open <LinkedList<T, A>>.own(t, _);
+            //@ std::alloc::Allocator_to_own::<A>();
+            //@ assert (*self).marker |-> ?marker;
+            //@ std::marker::close_PhantomData_own::<std::boxed::Box<Node<T>, A>>()(t, marker);
+            //@ leak Nodes(_, _, _, _, _, _);
+            //@ leak foreach(_, _);
+            //@ leak <Option<T>>.own(t, None);
         }
     }
 }

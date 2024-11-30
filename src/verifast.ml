@@ -988,7 +988,6 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             in
             get_initial_value h env x t e $. fun h env v ->
             if !address_taken then begin
-              if is_inductive_type(t) then static_error l "Taking the address of an inductive variable is not allowed." None;
               let addr = get_unique_var_symb_non_ghost (x ^ "_addr") (PtrType t) in
               if pure then static_error l "Taking the address of a ghost variable is not allowed." None;
               produce_points_to_chunk l h t real_unit addr v $. fun h ->
@@ -1109,7 +1108,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               in
               iter [] [] [] pats pts
             in
-            let Some (_, _, _, _, ctorsym) = try_assoc' Ghost (pn,ilist) cn purefuncmap in
+            let Some (_, (_, _, _, _, ctorsym)) = resolve Ghost (pn,ilist) l cn purefuncmap in
             let sizemap =
               match try_assq v sizemap with
                 None -> sizemap
