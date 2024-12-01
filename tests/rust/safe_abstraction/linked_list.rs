@@ -390,7 +390,7 @@ impl<T, A: Allocator> LinkedList<T, A> {
         foreach(nodes1, elem_fbc::<T>(t)) &*&
         match result {
             Option::None => (*self).alloc |-> ?alloc1 &*& Allocator(t, alloc1, alloc_id),
-            Option::Some(b) => std::alloc::share_allocator_end_token::<A>(&(*self).alloc, alloc_id, ?alloc_id_) &*& Box_in::<Node<T>, &'a A>(t, b, alloc_id_, ?node) &*& <T>.own(t, node.element)
+            Option::Some(b) => std::alloc::share_allocator_end_token::<A>(&(*self).alloc, alloc_id) &*& Box_in::<Node<T>, &'a A>(t, b, alloc_id, ?node) &*& <T>.own(t, node.element)
         };
             // *NonNull_ptr(node) |-> ?n &*& <T>.own(t, n.element) &*& alloc_block_in(alloc_id, NonNull_ptr(node) as *u8, Layout::new_::<Node<T>>());
     @*/
@@ -404,9 +404,8 @@ impl<T, A: Allocator> LinkedList<T, A> {
                 //@ open Nodes(_, _, _, _, _, _);
                 //@ open foreach(nodes0, elem_fbc::<T>(t));
                 //@ open elem_fbc::<T>(t)(node);
-                //@ std::alloc::share_allocator(&(*self).alloc);
+                //@ std::alloc::share_allocator::<'static, A>(&(*self).alloc);
                 self.head = (*node.as_ptr()).next;
-                //@ std::alloc::shared_allocator_lower_alloc_block::<A>(NonNull_ptr(node) as *u8);
                 let node_ = Box::from_raw_in(node.as_ptr(), &self.alloc);
 
                 //@ open Nodes(_, ?next, _, ?tail, _, _);
@@ -906,16 +905,33 @@ impl<T, A: Allocator> LinkedList<T, A> {
     /// ```
     #[inline]
     //#[stable(feature = "rust1", since = "1.0.0")]
-    pub fn clear(&mut self) {
+    pub fn clear(&mut self)
+    //@ req thread_token(?t) &*& *self |-> ?self0 &*& <LinkedList<T, A>>.own(t, self0);
+    //@ ens thread_token(t) &*& *self |-> ?self1 &*& <LinkedList<T, A>>.own(t, self1);
+    {
+        //@ open_points_to(self);
+        //@ open <LinkedList<T, A>>.own(t, self0);
         // We need to drop the nodes while keeping self.alloc
         // We can do this by moving (head, tail, len) into a new list that borrows self.alloc
-        drop(LinkedList {
+        let ll = LinkedList {
             head: self.head.take(),
             tail: self.tail.take(),
-            len: mem::take(&mut self.len),
+            len: mem::replace(&mut self.len, 0), //mem::take(&mut self.len),
             alloc: &self.alloc,
             marker: PhantomData,
-        });
+        };
+        //@ let k = begin_lifetime();
+        {
+            //@ let_lft 'a = k;
+            //@ std::alloc::share_allocator_at_lifetime::<'a, A>(&(*self).alloc);
+            //@ close <LinkedList<T, &'a A>>.own(t, ll);
+            drop/*@::<LinkedList<T, &'a A>> @*/(ll);
+        }
+        //@ end_lifetime(k);
+        //@ std::alloc::end_share_allocator_at_lifetime::<A>();
+        //@ close_points_to(self);
+        //@ close foreach(nil, elem_fbc::<T>(t));
+        //@ close <LinkedList<T, A>>.own(t, *self);
     }
 
     /// Returns `true` if the `LinkedList` contains an element equal to the
@@ -1074,11 +1090,10 @@ impl<T, A: Allocator> LinkedList<T, A> {
         unsafe {
             //@ open_points_to(self);
             //@ open <LinkedList<T, A>>.own(t, ll0);
-            //@ std::alloc::share_allocator::<A>(&(*self).alloc);
+            //@ std::alloc::share_allocator::<'static, A>(&(*self).alloc);
             let node = Box::new_in(Node::new(elt), &self.alloc);
             let node_ptr = NonNull::new_unchecked(Box::leak(node) as *mut Node<T>); //NonNull::from(Box::leak(node));
-            //@ std::alloc::shared_allocator_lift_alloc_block::<A>(NonNull_ptr(node_ptr) as *u8);
-            //@ std::alloc::end_share_allocator::<A>();
+            //@ std::alloc::end_share_allocator::<'static, A>();
             //@ close_points_to(self);
             // SAFETY: node_ptr is a unique pointer to a node we boxed with self.alloc and leaked
             self.push_front_node(node_ptr);
@@ -1120,7 +1135,7 @@ impl<T, A: Allocator> LinkedList<T, A> {
                 }
                 Some(node) => {
                     let r = Some(node.into_element());
-                    //@ std::alloc::end_share_allocator::<A>();
+                    //@ std::alloc::end_share_allocator::<'static, A>();
                     //@ close_points_to(self);
                     //@ close <LinkedList<T, A>>.own(t, *self);
                     //@ close <std::option::Option<T>>.own(t, r);

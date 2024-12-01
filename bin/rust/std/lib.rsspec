@@ -55,6 +55,10 @@ mod mem {
     //@ req thread_token(?t) &*& <T>.own(t, value);
     //@ ens thread_token(t);
     
+    fn replace<'a, T>(dest: &'a mut T, src: T) -> T;
+    //@ req *dest |-> ?v;
+    //@ ens *dest |-> src &*& result == v;
+    
 }
 
 mod ptr {
@@ -154,22 +158,26 @@ mod alloc {
         req Allocator::<A>(?t, ?alloc, _);
         ens <A>.own(t, alloc);
     
-    pred share_allocator_end_token<A>(l: &'static A, alloc_id: any, alloc_id_: any);
+    pred share_allocator_end_token<A>(l: *A, alloc_id: any);
     
-    lem share_allocator<A>(l: *A);
+    lem share_allocator<'a, A>(l: *A);
         req *l |-> ?alloc &*& Allocator(?t, alloc, ?alloc_id);
-        ens Allocator::<&'static A>(t, l, ?alloc_id_) &*& share_allocator_end_token(l, alloc_id, alloc_id_);
+        ens Allocator::<&'a A>(t, l, alloc_id) &*& share_allocator_end_token(l, alloc_id);
     
-    lem shared_allocator_lift_alloc_block<A>(p: *u8);
-        req share_allocator_end_token::<A>(?l, ?alloc_id, ?alloc_id_) &*& alloc_block_in(alloc_id_, p, ?layout);
-        ens share_allocator_end_token::<A>(l, alloc_id, alloc_id_) &*& alloc_block_in(alloc_id, p, layout);
+    lem end_share_allocator<'a, A>();
+        req share_allocator_end_token::<A>(?l, ?alloc_id) &*& Allocator::<&'a A>(?t, _, alloc_id);
+        ens *l |-> ?alloc &*& Allocator::<A>(t, alloc, alloc_id);
     
-    lem shared_allocator_lower_alloc_block<A>(p: *u8);
-        req share_allocator_end_token::<A>(?l, ?alloc_id, ?alloc_id_) &*& alloc_block_in(alloc_id, p, ?layout);
-        ens share_allocator_end_token::<A>(l, alloc_id, alloc_id_) &*& alloc_block_in(alloc_id_, p, layout);
+    pred share_allocator_at_lifetime_end_token<A>(t: thread_id_t, l: *A, alloc_id: any, k: lifetime_t);
     
-    lem end_share_allocator<A>();
-        req share_allocator_end_token::<A>(?l, ?alloc_id, ?alloc_id_) &*& Allocator::<&'static A>(?t, _, alloc_id_);
+    lem share_allocator_at_lifetime<'a, A>(l: *A);
+        nonghost_callers_only
+        req *l |-> ?alloc &*& Allocator(?t, alloc, ?alloc_id);
+        ens Allocator::<&'a A>(t, l, alloc_id) &*& share_allocator_at_lifetime_end_token(t, l, alloc_id, 'a);
+    
+    lem end_share_allocator_at_lifetime<A>();
+        nonghost_callers_only
+        req share_allocator_at_lifetime_end_token::<A>(?t, ?l, ?alloc_id, ?k) &*& [_]lifetime_dead_token(k);
         ens *l |-> ?alloc &*& Allocator::<A>(t, alloc, alloc_id);
     
     @*/
@@ -307,6 +315,10 @@ mod option {
         fn is_some<'a>(self: &'a Option<T>) -> bool;
         //@ req [?f](*self |-> ?v);
         //@ ens [f](*self |-> v) &*& result == (v != Option::None);
+        
+        fn take<'a>(self: &'a mut Option<T>) -> Option<T>;
+        //@ req *self |-> ?v;
+        //@ ens *self |-> Option::None &*& result == v;
         
     }
 

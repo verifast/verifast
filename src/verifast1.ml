@@ -489,6 +489,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     (* Using expressions of the types below as values is wrong, but we must not crash here because this function is in some cases called by the type checker before it detects that there is a problem and produces a proper error message. *)
     | ClassOrInterfaceName n -> ProverInt
     | PackageName n -> ProverInt
+    | StaticLifetime -> ProverInductive
+    | t -> failwith ("provertype_of_type: " ^ string_of_type t)
   
   let typenode_of_type t = typenode_of_provertype (provertype_of_type t)
   let type_info_type_node = typenode_of_type type_info_ref_type
@@ -577,7 +579,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let float_typeid_term = mk_typeid_term "float"
   let double_typeid_term = mk_typeid_term "double"
   let long_double_typeid_term = mk_typeid_term "long_double"
-  let static_lifetime_typeid_term = mk_typeid_term "'static_typeid"
+  let static_lifetime_typeid_term = mk_typeid_term "'static"
 
   let sizeof_func_symb = mk_symbol "sizeof" [ctxt#type_inductive] ctxt#type_int Uninterp
   let alignof_func_symb = mk_symbol "alignof" [ctxt#type_inductive] ctxt#type_int Uninterp
@@ -2953,9 +2955,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       (_, Void) -> true
     | (Void, _) -> true
     | ((PtrType t | RustRefType (_, _, t)), (PtrType t0 | RustRefType (_, _, t0))) -> compatible_pointees t t0
-    | t, t0 -> unify t t0
+    | t, t0 -> unify_relaxed t t0
   
-  and unify t1 t2 =
+  and unify_relaxed t1 t2 =
     t1 == t2 ||
     match (unfold_inferred_type t1, unfold_inferred_type t2) with
       (InferredType (_, t'), InferredType (_, t0')) ->
@@ -2968,13 +2970,13 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       end
     | (t, InferredType (_, t0)) | (InferredType (_, t0), t) -> type_satisfies_inferred_type_constraint !t0 t && (t0 := EqConstraint t; true)
     | (InductiveType (i1, args1), InductiveType (i2, args2)) ->
-      i1=i2 && List.for_all2 unify args1 args2
+      i1=i2 && List.for_all2 unify_relaxed args1 args2
     | (StructType (s1, args1), StructType (s2, args2)) ->
-      s1 = s2 && List.for_all2 unify args1 args2
-    | (PureFuncType (d1, r1), PureFuncType(d2, r2)) -> unify d1 d2 && unify r1 r2
+      s1 = s2 && List.for_all2 unify_relaxed args1 args2
+    | (PureFuncType (d1, r1), PureFuncType(d2, r2)) -> unify_relaxed d1 d2 && unify_relaxed r1 r2
     | (PredType ([], ts1, inputParamCount1, inductiveness1), PredType ([], ts2, inputParamCount2, inductiveness2)) ->
-      for_all2 unify ts1 ts2 && inputParamCount1 = inputParamCount2 && inductiveness1 = inductiveness2
-    | (ArrayType t1, ArrayType t2) -> unify t1 t2
+      for_all2 unify_relaxed ts1 ts2 && inputParamCount1 = inputParamCount2 && inductiveness1 = inductiveness2
+    | (ArrayType t1, ArrayType t2) -> unify_relaxed t1 t2
     | ((PtrType t1 | RustRefType (_, _, t1)), (PtrType t2 | RustRefType (_, _, t2))) -> compatible_pointees t1 t2
     | (InlineFuncType _, PtrType _) -> true
     | (PtrType _, InlineFuncType _) -> true
@@ -2984,6 +2986,38 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       if x1 <> "" && x1.[0] = '\'' || x2 <> "" && x2.[0] = '\'' then true else x1 = x2
     | (t1, t2) -> t1 = t2
   
+  (* If [unify_strict t1 t2] returns [true], then t1 and t2 must have the same typeid.
+   * unify_strict is used to match heap chunk type arguments if uppercase_type_params_carry_typeid. *)
+  let rec unify_strict t1 t2 =
+    t1 == t2 ||
+    match (unfold_inferred_type t1, unfold_inferred_type t2) with
+      (InferredType (_, t'), InferredType (_, t0')) ->
+      if t' == t0' then true else begin
+        if inferred_type_constraint_le !t' !t0' then
+          t0' := EqConstraint t1
+        else
+          t' := EqConstraint t2;
+        true
+      end
+    | (t, InferredType (_, t0)) | (InferredType (_, t0), t) -> type_satisfies_inferred_type_constraint !t0 t && (t0 := EqConstraint t; true)
+    | (InductiveType (i1, args1), InductiveType (i2, args2)) ->
+      i1=i2 && List.for_all2 unify_strict args1 args2
+    | (StructType (s1, args1), StructType (s2, args2)) ->
+      s1 = s2 && List.for_all2 unify_strict args1 args2
+    | (PureFuncType (d1, r1), PureFuncType(d2, r2)) -> unify_strict d1 d2 && unify_strict r1 r2
+    | (PredType ([], ts1, inputParamCount1, inductiveness1), PredType ([], ts2, inputParamCount2, inductiveness2)) ->
+      for_all2 unify_strict ts1 ts2 && inputParamCount1 = inputParamCount2 && inductiveness1 = inductiveness2
+    | (ArrayType t1, ArrayType t2) -> unify_strict t1 t2
+    | (PtrType t1, PtrType t2) -> if fno_strict_aliasing then compatible_pointees t1 t2 else unify_strict t1 t2
+    | (RustRefType (lft1, mut1, t1), RustRefType (lft2, mut2, t2)) -> unify_strict lft1 lft2 && mut1 = mut2 && unify_strict t1 t2
+    | (InlineFuncType _, PtrType _) -> true
+    | (PtrType _, InlineFuncType _) -> true
+    | (StaticLifetime, _) | (_, StaticLifetime) -> true
+    | (GhostTypeParam x1, GhostTypeParam x2) -> x1 = x2
+    | (t1, t2) -> t1 = t2
+
+  let unify t1 t2 = if uppercase_type_params_carry_typeid then unify_strict t1 t2 else unify_relaxed t1 t2
+
   let width_group w =
     match w with
       PtrWidth -> 1
@@ -3046,7 +3080,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | (PredType ([], ts, inputParamCount, inductiveness), PredType ([], ts0, inputParamCount0, inductiveness0)) ->
       begin
         match zip ts ts0 with
-          Some tpairs when List.for_all (fun (t, t0) -> unify t t0) tpairs && (inputParamCount0 = None || inputParamCount = inputParamCount0) -> ()
+          Some tpairs when List.for_all (fun (t, t0) -> unify_relaxed t t0) tpairs && (inputParamCount0 = None || inputParamCount = inputParamCount0) -> ()
         | _ -> static_error l (msg ^ "Predicate type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".") None
       end
     | (PureFuncType (t1, t2), PureFuncType (t10, t20)) -> expect_type_core l msg inAnnotation t10 t1; expect_type_core l msg inAnnotation t2 t20
@@ -3054,7 +3088,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | (InductiveType (i1, args1), InductiveType (i2, args2)) when i1 = i2 ->
       List.iter2 (expect_type_core l msg inAnnotation) args1 args2
     | (_, Void) -> ()
-    | _ -> if unify t t0 then () else static_error l (msg ^ "Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".") None
+    | _ -> if unify_relaxed t t0 then () else static_error l (msg ^ "Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".") None
   
   let expect_type l (inAnnotation: bool option) t t0 = expect_type_core l "" inAnnotation t t0
   
@@ -4930,7 +4964,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let (_, t, _) = check e in
       let matching_cases = cs |> flatmap begin fun (te, e) ->
           let tc = check_pure_type (pn,ilist) tparams Real te in
-          if unify t tc then [tc, e] else []
+          if unify_relaxed t tc then [tc, e] else []
         end
       in
       begin match matching_cases with
