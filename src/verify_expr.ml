@@ -1967,6 +1967,12 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     consume_chunk rules h [] [] [] [] l (call_perm__symb, true) [] real_unit real_unit_pat (Some 2) [TermPat currentThread; TermPat t] $. fun _ h _ _ _ _ _ _ ->
     cont h
 
+  let is_lifetime tp =
+    match tp with
+      StaticLifetime -> true
+    | GhostTypeParam x when String.starts_with ~prefix:"'" x -> true
+    | _ -> false
+  
   let verify_call funcmap eval_h l (pn, ilist) xo g targs pats (callee_tparams, tr, ps, funenv, pre, post, epost, terminates, dynamic_dispatch) pure is_upcall target_class leminfo sizemap h tparams tenv ghostenv env cont econt =
     let check_expr_t (pn,ilist) tparams tenv e tp = check_expr_t_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (Some pure) e tp in
     let check_expr (pn,ilist) tparams tenv pure e = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv pure e in
@@ -1980,6 +1986,15 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         None -> static_error l "Incorrect number of type arguments." None
       | Some tpenv -> tpenv
     in
+    if dialect = Some Rust then
+      List.iter begin fun (x, tp) ->
+        if String.starts_with ~prefix:"'" x then begin
+          if not (is_lifetime tp) then
+            static_error l (Printf.sprintf "Type argument for type parameter %s must be a lifetime variable" x) None
+        end else
+          if is_lifetime tp then
+             static_error l (Printf.sprintf "Type argument for type parameter %s must not be a lifetime variable" x) None
+      end tpenv;
     let ys: string list = List.map (function (p, t) -> p) ps in
     begin fun cont ->
       let rec iter h env ts pats ps =

@@ -2769,6 +2769,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               ec_contains_any ptr negative
             | PureFuncType (t1, t2) ->
               check_type true t1; check_type negative t2
+            | StructType (_, _) when dialect = Some Rust -> () (* We don't support ghost fields in Rust structs, so these cannot be recursive or contain 'any' or predicate values *)
             | t -> static_error l (Printf.sprintf "Type '%s' is not supported as an inductive constructor parameter type." (string_of_type t)) None
           in
           let (_, parameter_types) = List.split parameter_names_and_types in
@@ -2809,7 +2810,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   !status0 <> 1 &&
                   (check_inhabited i0 l0 ctors0 status0; true)
                 end
-            in
+              | StructType (_, _) when dialect = Some Rust -> true (* We don't support ghost fields in Rust *)
+              in
             if List.for_all type_is_inhabited pts then () else find_ctor ctors
         in
         find_ctor ctors;
@@ -5608,7 +5610,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             InductiveType (i, _) ->
             let (_, inductive_tparams, ctormap, _, _, _, _, _, _) = List.assoc i inductivemap in
             begin match try_assoc g ctormap with
-              Some (_, (_, _, _, param_names_types, symb)) ->
+              Some (_, (ld, _, _, param_names_types, symb)) ->
+              reportUseSite DeclKind_InductiveCtor ld l;
               let (_, ts0) = List.split param_names_types in
               let targs = List.map (fun _ -> InferredType (object end, ref Unconstrained)) inductive_tparams in
               let Some tpenv = zip inductive_tparams targs in
@@ -5643,7 +5646,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           InductiveType (i, _) ->
           let (_, inductive_tparams, ctormap, _, _, _, _, _, _) = List.assoc i inductivemap in
           begin match try_assoc g ctormap with
-            Some (_, (_, _, _, param_names_types, symb)) ->
+            Some (_, (ld, _, _, param_names_types, symb)) ->
+            reportUseSite DeclKind_InductiveCtor ld l;
             let (_, ts0) = List.split param_names_types in
             let targs = List.map (fun _ -> InferredType (object end, ref Unconstrained)) inductive_tparams in
             let Some tpenv = zip inductive_tparams targs in

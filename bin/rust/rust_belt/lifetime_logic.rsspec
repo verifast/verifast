@@ -287,6 +287,13 @@ lem frac_borrow_implies(k: lifetime_t, P: pred(;), Q: pred(;));
     req [_]frac_borrow(k, P) &*& is_implies_frac(?f, P, Q) &*& is_implies_frac(?f1, Q, P);
     ens [_]frac_borrow(k, Q) &*& is_implies_frac(f, P, Q) &*& is_implies_frac(f1, Q, P);
 
+pred_ctor sep_(P: pred(;), Q: pred(;))(;) = P() &*& Q();
+
+// Not in Rustbelt!
+lem frac_borrow_split(k: lifetime_t, P: pred(;), Q: pred(;));
+    req [_]frac_borrow(k, sep_(P, Q));
+    ens [_]frac_borrow(k, P) &*& [_]frac_borrow(k, Q);
+
 // LftL-fract-acc-atomic
 pred close_frac_borrow_token_atomic(b: bool, q: real, P: pred(;), k: lifetime_t);
 

@@ -55,7 +55,7 @@ mod mem {
     //@ req thread_token(?t) &*& <T>.own(t, value);
     //@ ens thread_token(t);
     
-    fn replace<'a, T>(dest: &'a mut T, src: T) -> T;
+    fn replace<T, 'a>(dest: &'a mut T, src: T) -> T;
     //@ req *dest |-> ?v;
     //@ ens *dest |-> src &*& result == v;
     
