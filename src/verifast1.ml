@@ -1763,7 +1763,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               imports
           in
           match matches with
-            [] -> None
+            [] ->
+            if String.starts_with ~prefix:"core::" name then
+              try_assoc0 ("std::" ^ String.sub name 6 (String.length name - 6)) map
+            else
+              None
           | [xy] -> Some xy
           | _ ->
             let fqns = List.map (fun (x, y) -> "'" ^ x ^ "'") matches in

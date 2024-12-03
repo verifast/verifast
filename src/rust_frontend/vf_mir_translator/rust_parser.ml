@@ -768,6 +768,7 @@ let rec parse_decl = function%parser
   let (lx, x, targs) =
     match tp with
     | IdentTypeExpr (lx, None, x) -> (lx, x, [])
+    | ManifestTypeExpr (lx, tp) -> (lx, Printf.sprintf "<impl %s>" (Verifast0.rust_string_of_type tp), [])
     | ConstructedTypeExpr (lx, x, targs) ->
       let targs = targs |> List.map @@ function
           IdentTypeExpr (ltarg, None, x) -> x
