@@ -291,6 +291,13 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let check_func_header pn ilist tparams0 tenv0 env0 l k tparams rt fn fterm xs nonghost_callers_only functype_opt contract_opt terminates body =
     if terminates && k <> Regular then static_error l "Terminates clause not allowed here." None;
     check_tparams l tparams0 tparams;
+    let tparam_typeid_tenv = tparams |> flatmap @@ fun x ->
+      if tparam_carries_typeid x then
+        let paramName = x ^ "_typeid" in
+        [paramName, voidPtrType]
+      else
+        []
+    in
     let tparams1 = tparams0 @ tparams in
     let rt = match rt with None -> None | Some rt -> Some (check_pure_type (pn,ilist) tparams1 Ghost rt) in
     let xmap =
@@ -310,7 +317,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       iter [] xs
     in
-    let tenv = [(current_thread_name, current_thread_type); "#pre", match rt with None -> Void | Some rt -> rt] @ xmap @ tenv0 in
+    let tenv = [(current_thread_name, current_thread_type); "#pre", match rt with None -> Void | Some rt -> rt] @ xmap @ tparam_typeid_tenv @ tenv0 in
     let (pre, pre_tenv, post) =
       match contract_opt with
         None -> static_error l "Non-fixpoint function must have contract." None

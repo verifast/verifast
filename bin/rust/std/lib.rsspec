@@ -4,6 +4,18 @@ abstract_type type_info;
 
 @*/
 
+mod num {
+
+    impl usize {
+    
+        fn checked_sub(self: usize, other: usize) -> std::option::Option<usize>;
+        //@ req true;
+        //@ ens if self < other { result == std::option::Option::None } else { result == std::option::Option::Some(self - other) };
+        
+    }
+
+}
+
 mod marker {
 
     struct PhantomData<T> {}
@@ -323,6 +335,10 @@ mod option {
         fn take<'a>(self: &'a mut Option<T>) -> Option<T>;
         //@ req *self |-> ?v;
         //@ ens *self |-> Option::None &*& result == v;
+        
+        fn unwrap_or(self: Option<T>, default: T) -> T;
+        //@ req true;
+        //@ ens result == match self { Option::None => default, Option::Some(v) => v };
         
     }
 
