@@ -1680,7 +1680,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let tpenv = List.combine tparams targs in
       let producePaddingChunk = match language, dialect, fields with CLang, Some Rust, [] -> false | _ -> producePaddingChunk in
       let field_values_of_struct_as_value v =
-        let (_, _, getters, _) = List.assoc sn struct_accessor_map in
+        let (_, csym, getters, _) = List.assoc sn struct_accessor_map in
+        if getters = [] then ctxt#assert_term (ctxt#mk_eq v (ctxt#mk_app csym []));
         List.combine getters fields |> List.map begin fun ((_, getter), (f, (lf, gh, t, offset, finit))) ->
           prover_convert_term (ctxt#mk_app getter [v]) t (instantiate_type tpenv t)
         end

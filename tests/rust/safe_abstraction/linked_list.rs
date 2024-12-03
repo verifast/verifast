@@ -1030,21 +1030,45 @@ impl<T, A: Allocator> LinkedList<T, A> {
     ) -> Self
     where
         A: Clone,
+    /*@
+    req thread_token(?t) &*&
+        (*self).alloc |-> ?alloc0 &*& Allocator::<A>(t, alloc0, ?alloc_id) &*&
+        (*self).head |-> ?head0 &*&
+        (*self).tail |-> ?tail0 &*&
+        struct_LinkedList_padding(self) &*&
+        Nodes::<T>(alloc_id, head0, None, split_node, ?next0, ?nodes1) &*&
+        Nodes::<T>(alloc_id, next0, split_node, tail0, None, ?nodes2) &*&
+        foreach(nodes1, elem_fbc::<T>(t)) &*&
+        foreach(nodes2, elem_fbc::<T>(t)) &*&
+        (*self).len |-> length(nodes1) + length(nodes2) &*&
+        length(nodes1) == at;
+    @*/
+    /*@
+    ens thread_token(t) &*&
+        *self |-> ?self1 &*& <LinkedList<T, A>>.own(t, self1) &*&
+        <LinkedList<T, A>>.own(t, result);
+    @*/
     {
         // The split node is the new tail node of the first part and owns
         // the head of the second part.
-        if let Some(mut split_node) = split_node {
+        if let Some(mut split_node_) = split_node {
+            //@ Nodes_last_lemma(head0);
+            //@ Nodes_split_off_last(head0);
+            //@ assert Nodes(alloc_id, head0, None, ?prev0, split_node, ?nodes10);
             let second_part_head;
             let second_part_tail;
             unsafe {
-                second_part_head = split_node.as_mut().next.take();
+                second_part_head = split_node_.as_mut().next.take();
             }
+            //@ open Nodes(_, next0, split_node, tail0, None, nodes2);
             if let Some(mut head) = second_part_head {
                 unsafe {
                     head.as_mut().prev = None;
                 }
                 second_part_tail = self.tail;
+                //@ close Nodes::<T>(alloc_id, next0, None, tail0, None, nodes2);
             } else {
+                //@ close Nodes::<T>(alloc_id, next0, None, None, None, nodes2);
                 second_part_tail = None;
             }
 
@@ -1052,20 +1076,42 @@ impl<T, A: Allocator> LinkedList<T, A> {
                 head: second_part_head,
                 tail: second_part_tail,
                 len: self.len - at,
-                alloc: self.alloc.clone(),
+                alloc: clone_allocator(&self.alloc),
                 marker: PhantomData,
             };
 
             // Fix the tail ptr of the first part
-            self.tail = Some(split_node);
+            self.tail = Some(split_node_);
             self.len = at;
-
+            //@ close Nodes::<T>(alloc_id, None, split_node, split_node, None, []);
+            //@ close Nodes::<T>(alloc_id, split_node, prev0, split_node, None, [split_node_]);
+            //@ Nodes_append(head0);
+            //@ close_points_to(self);
+            //@ close <LinkedList<T, A>>.own(t, *self);
+            //@ assert Nodes(_, _, _, _, _, nodes2);
+            //@ assert length(nodes2) == second_part.len;
+            //@ close <LinkedList<T, A>>.own(t, second_part);
             second_part
         } else {
-            mem::replace(self, LinkedList::new_in(self.alloc.clone()))
+            let alloc = clone_allocator(&self.alloc);
+            //@ std::alloc::Allocator_to_own::<A>(alloc);
+            //@ close_points_to(self);
+            //@ Nodes_append(head0);
+            //@ foreach_append(nodes1, nodes2);
+            //@ close <LinkedList<T, A>>.own(t, *self);
+            let r = LinkedList::new_in(alloc);
+            mem::replace(self, r)
         }
     }
 }
+
+unsafe fn clone_allocator<'a, A: Allocator + Clone>(alloc: &'a A) -> A
+//@ req thread_token(?t) &*& [?f](*alloc |-> ?alloc_) &*& Allocator::<A>(t, alloc_, ?alloc_id);
+//@ ens thread_token(t) &*& [f](*alloc |-> alloc_) &*& Allocator::<A>(t, alloc_, alloc_id) &*& Allocator::<A>(t, result, alloc_id);
+{
+    //@ assume(false); //~allow_dead_code
+    alloc.clone()      //~allow_dead_code
+}                      //~allow_dead_code
 
 //#[stable(feature = "rust1", since = "1.0.0")]
 impl<T> Default for LinkedList<T> {
@@ -1166,8 +1212,15 @@ impl<T, A: Allocator> LinkedList<T, A> {
     /// ```
     #[inline]
     /*#[unstable(feature = "allocator_api", issue = "32838")]*/
-    pub const fn new_in(alloc: A) -> Self {
-        LinkedList { head: None, tail: None, len: 0, alloc, marker: PhantomData }
+    pub const fn new_in(alloc: A) -> Self
+    //@ req thread_token(?t) &*& <A>.own(t, alloc);
+    //@ ens thread_token(t) &*& <LinkedList<T, A>>.own(t, result);
+    {
+        let r = LinkedList { head: None, tail: None, len: 0, alloc, marker: PhantomData };
+        //@ std::alloc::open_Allocator_own::<A>(alloc);
+        //@ close foreach(nil, elem_fbc::<T>(t));
+        //@ close <LinkedList<T, A>>.own(t, r);
+        r
     }
     /// Provides a forward iterator.
     ///
@@ -1771,35 +1824,95 @@ impl<T, A: Allocator> LinkedList<T, A> {
     pub fn split_off(&mut self, at: usize) -> LinkedList<T, A>
     where
         A: Clone,
+    //@ req thread_token(?t) &*& *self |-> ?self0 &*& <LinkedList<T, A>>.own(t, self0);
+    //@ ens thread_token(t) &*& *self |-> ?self1 &*& <LinkedList<T, A>>.own(t, self1) &*& <LinkedList<T, A>>.own(t, result);
     {
-        let len = self.len();
-        assert!(at <= len, "Cannot split off at a nonexistent index");
-        if at == 0 {
-            return mem::replace(self, Self::new_in(self.alloc.clone()));
-        } else if at == len {
-            return Self::new_in(self.alloc.clone());
-        }
+        unsafe {
+            //@ open <LinkedList<T, A>>.own(t, self0);
+            //@ open_points_to(self);
+            let len = self.len;
+            //@ assert (*self).head |-> ?head &*& (*self).tail |-> ?tail &*& Nodes(?alloc_id, _, _, _, _, _);
+            assert!(at <= len, "Cannot split off at a nonexistent index");
+            if at == 0 {
+                let alloc1 = clone_allocator(&self.alloc);
+                //@ std::alloc::Allocator_to_own::<A>(alloc1);
+                //@ close_points_to(self);
+                //@ close <LinkedList<T, A>>.own(t, self0);
+                return mem::replace(self, Self::new_in(alloc1));
+            } else if at == len {
+                let alloc2 = clone_allocator(&self.alloc);
+                //@ std::alloc::Allocator_to_own::<A>(alloc2);
+                //@ close_points_to(self);
+                //@ close <LinkedList<T, A>>.own(t, self0);
+                return Self::new_in(alloc2);
+            }
 
-        // Below, we iterate towards the `i-1`th node, either from the start or the end,
-        // depending on which would be faster.
-        let split_node = if at - 1 <= len - 1 - (at - 1) {
-            let mut iter = self.iter_mut();
-            // instead of skipping using .skip() (which creates a new struct),
-            // we skip manually so we can access the head field without
-            // depending on implementation details of Skip
-            for _ in 0..at - 1 {
-                iter.next();
-            }
-            iter.head
-        } else {
-            // better off starting from the end
-            let mut iter = self.iter_mut();
-            for _ in 0..len - 1 - (at - 1) {
-                iter.next_back();
-            }
-            iter.tail
-        };
-        unsafe { self.split_off_after_node(split_node, at) }
+            // Below, we iterate towards the `i-1`th node, either from the start or the end,
+            // depending on which would be faster.
+            let mut iter;
+            let mut i;
+            //@ assert Nodes(alloc_id, head, None, tail, None, ?nodes);
+            let split_node = if at - 1 <= len - 1 - (at - 1) {
+                iter = self.head;
+                i = 0;
+                //@ close Nodes(alloc_id, head, None, None, head, []);
+                loop {
+                    /*@
+                    inv Nodes(alloc_id, head, None, ?prev, iter, ?nodes1) &*& Nodes(alloc_id, iter, prev, tail, None, ?nodes2) &*&
+                        length(nodes1) == i &*& append(nodes1, nodes2) == nodes &*& i < at &*& at < length(nodes);
+                    @*/
+                    if i == at - 1 {
+                        break;
+                    }
+                    //@ open Nodes(alloc_id, iter, prev, tail, None, nodes2);
+                    //@ assert iter == Option::Some(?iter_);
+                    //@ open Nodes(alloc_id, ?next, iter, tail, None, tail(nodes2));
+                    //@ close Nodes(alloc_id, next, iter, tail, None, tail(nodes2));
+                    iter = (*iter.unwrap_unchecked().as_ptr()).next;
+                    //@ close Nodes(alloc_id, next, Some(iter_), Some(iter_), next, []);
+                    //@ close Nodes(alloc_id, Some(iter_), prev, Some(iter_), next, [iter_]);
+                    //@ Nodes_append_(head);
+                    //@ append_assoc(nodes1, [iter_], tail(nodes2));
+                    i += 1;
+                }
+                //@ open Nodes(alloc_id, iter, prev, tail, None, nodes2);
+                //@ assert iter == Option::Some(?iter_);
+                //@ open Nodes(alloc_id, ?next, iter, tail, None, tail(nodes2));
+                //@ close Nodes(alloc_id, next, iter, tail, None, tail(nodes2));
+                //@ close Nodes::<T>(alloc_id, next, iter, iter, next, []);
+                //@ close Nodes::<T>(alloc_id, iter, prev, iter, next, [iter_]);
+                //@ Nodes_append_(head);
+                //@ append_assoc(nodes1, [iter_], tail(nodes2));
+                //@ foreach_unappend(append(nodes1, [iter_]), tail(nodes2), elem_fbc::<T>(t));
+                iter
+            } else {
+                // better off starting from the end
+                iter = self.tail;
+                i = 0;
+                //@ close Nodes(alloc_id, None, iter, iter, None, []);
+                loop { // for _ in 0..len - 1 - (at - 1) {
+                    /*@
+                    inv Nodes(alloc_id, head, None, iter, ?next, ?nodes1) &*& Nodes(alloc_id, next, iter, tail, None, ?nodes2) &*&
+                        length(nodes2) == i &*& append(nodes1, nodes2) == nodes &*& i <= len - at;
+                    @*/
+                    if i == len - 1 - (at - 1) {
+                        break;
+                    }
+                    //@ Nodes_last_lemma(head);
+                    //@ Nodes_split_off_last(head);
+                    //@ let old_iter = iter;
+                    //@ assert iter == Option::Some(?iter_);
+                    iter = (*iter.unwrap_unchecked().as_ptr()).prev;
+                    //@ assert Nodes(_, head, _, ?last, old_iter, ?nodes11);
+                    //@ close Nodes(alloc_id, old_iter, last, tail, None, _);
+                    //@ append_assoc(nodes11, [iter_], nodes2);
+                    i += 1;
+                }
+                //@ foreach_unappend(nodes1, nodes2, elem_fbc::<T>(t));
+                iter
+            };
+            unsafe { self.split_off_after_node(split_node, at) }
+        }
     }
 
     /// Removes the element at the given index and returns it.
@@ -2045,8 +2158,8 @@ unsafe impl<#[may_dangle] T, A: Allocator> Drop for LinkedList<T, A> {
             //@ close <std::option::Option<NonNull<Node<T>>>>.own(t, head);
             //@ match (*self).tail { Option::None => {} Option::Some(tail_) => { std::ptr::close_NonNull_own::<Node<T>>(t, tail_); } }
             //@ close <std::option::Option<NonNull<Node<T>>>>.own(t, (*self).tail);
-            //@ open <LinkedList<T, A>>.own(t, _);
-            //@ std::alloc::Allocator_to_own::<A>();
+            //@ open <LinkedList<T, A>>.own(t, ?ll);
+            //@ std::alloc::Allocator_to_own::<A>(ll.alloc);
             //@ assert (*self).marker |-> ?marker;
             //@ std::marker::close_PhantomData_own::<std::boxed::Box<Node<T>, A>>()(t, marker);
             //@ leak Nodes(_, _, _, _, _, _);
