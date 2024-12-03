@@ -778,12 +778,19 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
       end else false
     );
     ignore $. textFindEntry#connect#activate ~callback:(fun () ->
-      let cursor = buffer#get_iter `INSERT in
-      match cursor#forward_char#forward_search textFindEntry#text with
-        None -> GToolbox.message_box ~title:"VeriFast IDE" "Text not found"
-      | Some (iter1, iter2) ->
+      let found (iter1, iter2) =
         buffer#select_range iter1 iter2;
         srcText#scroll_to_mark ~within_margin:0.2 `INSERT
+      in
+      let needle = textFindEntry#text in
+      let cursor = buffer#get_iter `INSERT in
+      match cursor#forward_char#forward_search needle with
+        None -> 
+        begin match (buffer#get_iter `START)#forward_search needle with
+          None -> GToolbox.message_box ~title:"VeriFast IDE" "Text not found"
+        | Some range -> found range
+        end
+      | Some range -> found range
     );
     ignore $. srcText#event#connect#key_press ~callback:(fun key ->
       if GdkEvent.Key.keyval key = GdkKeysyms._f && List.mem `CONTROL (GdkEvent.Key.state key) then begin
