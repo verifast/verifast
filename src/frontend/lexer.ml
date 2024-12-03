@@ -597,7 +597,21 @@ let make_lexer_core keywords ghostKeywords startpos text reportRange inComment i
         Some (ident_or_keyword "!=" false)
       end else
         Some (ident_or_keyword "!" false)
-    | ('%' | '&' | '$' | '#' | '+' | '-' | '=' | '>' |
+    | '>' ->
+      start_token ();
+      text_junk ();
+      begin match text_peek () with
+        '=' -> text_junk (); Some (Kwd ">=")
+      | '>' ->
+        text_junk ();
+        begin match text_peek () with
+          '=' -> text_junk (); Some (Kwd ">>=")
+        | '>' -> text_junk (); Some (ident_or_keyword ">>>" false)
+        | _ -> Some (Kwd ">>")
+        end
+      | _ -> Some (Kwd ">")
+      end
+    | ('%' | '&' | '$' | '#' | '+' | '-' | '=' |
        '?' | '@' | '\\' | '~' | '^' | '|' as c) ->
         start_token();
         text_junk ();

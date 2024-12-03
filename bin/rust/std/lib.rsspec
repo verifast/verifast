@@ -96,6 +96,10 @@ mod ptr {
         unsafe fn new_unchecked(ptr: *mut T) -> NonNull<T>;
         //@ req ptr as usize != 0;
         //@ ens NonNull_ptr(result) == ptr;
+        
+        unsafe fn as_mut<'a, 'b>(self: &'b mut NonNull<T>) -> &'a mut T;
+        //@ req *self |-> ?v;
+        //@ ens *self |-> v &*& result == NonNull_ptr(v);
 
         unsafe fn as_ref<'a, 'b>(self: &'b NonNull<T>) -> &'a T;
         //@ req [?q](*self) |-> ?v;

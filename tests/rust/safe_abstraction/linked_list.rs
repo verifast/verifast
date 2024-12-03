@@ -193,6 +193,92 @@ pred Nodes<T>(alloc_id: any, n: Option<NonNull<Node<T>>>, prev: Option<NonNull<N
         nodes == cons(n_, nodes0)
     };
 
+lem Nodes_last_lemma<T>(n: Option<NonNull<Node<T>>>)
+    req Nodes::<T>(?alloc_id, n, ?prev, ?last, ?next, ?nodes);
+    ens Nodes::<T>(alloc_id, n, prev, last, next, nodes) &*&
+        match last {
+            Option::None => n == next && prev == last && nodes == [],
+            Option::Some(last_) =>
+                match prev {
+                    Option::None => n != next && length(nodes) > 0 && nth(length(nodes) - 1, nodes) == last_,
+                    Option::Some(prev_) => nth(length(nodes), cons(prev_, nodes)) == last_
+                }
+        };
+{
+    open Nodes(alloc_id, n, prev, last, next, nodes);
+    if n == next {
+    } else {
+        assert Nodes(_, ?next0, _, _, _, _);
+        Nodes_last_lemma(next0);
+    }
+    close Nodes(alloc_id, n, prev, last, next, nodes);
+}
+
+lem Nodes_split_off_last<T>(n: Option<NonNull<Node<T>>>)
+    req Nodes::<T>(?alloc_id, n, ?prev, ?last, ?next, ?nodes) &*& n != next;
+    ens last == Option::Some(?last_) &*&
+        Nodes::<T>(alloc_id, n, prev, ?last1, last, ?nodes0) &*&
+        alloc_block_in(alloc_id, NonNull_ptr(last_) as *u8, Layout::new_::<Node<T>>()) &*&
+        (*NonNull_ptr(last_)).prev |-> last1 &*&
+        (*NonNull_ptr(last_)).next |-> next &*&
+        pointer_within_limits(&(*NonNull_ptr(last_)).element) == true &*&
+        struct_Node_padding(NonNull_ptr(last_)) &*&
+        nodes == append(nodes0, [last_]);
+{
+    open Nodes::<T>(alloc_id, n, prev, last, next, nodes);
+    assert Nodes(alloc_id, ?next0, _, _, _, _);
+    assert n == Option::Some(?n_);
+    if next0 == next {
+        open Nodes(alloc_id, next0, _, _, _, _);
+        close Nodes::<T>(alloc_id, n, prev, prev, n, []);
+    } else {
+        Nodes_split_off_last(next0);
+        assert Nodes(alloc_id, next0, n, ?last1, last, ?nodes0);
+        close Nodes::<T>(alloc_id, n, prev, last1, last, cons(n_, nodes0));
+    }
+}
+
+lem Nodes_append<T>(n: Option<NonNull<Node<T>>>)
+    req Nodes::<T>(?alloc_id, n, ?prev, ?n1, ?n2, ?nodes1) &*& Nodes::<T>(alloc_id, n2, n1, ?tail, None, ?nodes2);
+    ens Nodes::<T>(alloc_id, n, prev, tail, None, append(nodes1, nodes2));
+{
+    open Nodes::<T>(alloc_id, n, prev, n1, n2, nodes1);
+    if n == n2 {
+    } else {
+        assert n == Option::Some(?n_);
+        Nodes_append((*NonNull_ptr(n_)).next);
+        close Nodes::<T>(alloc_id, n, prev, tail, None, append(nodes1, nodes2));
+    }
+}
+
+lem Nodes_append_<T>(n: Option<NonNull<Node<T>>>)
+    req Nodes::<T>(?alloc_id, n, ?prev, ?n1, ?n2, ?nodes1) &*& Nodes::<T>(alloc_id, n2, n1, ?n3, ?n4, ?nodes2) &*& Nodes::<T>(alloc_id, n4, ?n5, ?tail, None, ?nodes3);
+    ens Nodes::<T>(alloc_id, n, prev, n3, n4, append(nodes1, nodes2)) &*& Nodes::<T>(alloc_id, n4, n5, tail, None, nodes3);
+{
+    open Nodes::<T>(alloc_id, n, prev, n1, n2, nodes1);
+    if n == n2 {
+    } else {
+        assert n == Option::Some(?n_);
+        Nodes_append_((*NonNull_ptr(n_)).next);
+        open Nodes(alloc_id, n4, n5, tail, None, nodes3);
+        close Nodes(alloc_id, n4, n5, tail, None, nodes3);
+        close Nodes::<T>(alloc_id, n, prev, n3, n4, append(nodes1, nodes2));
+    }
+}
+
+lem Nodes_append__<T>(n: Option<NonNull<Node<T>>>)
+    req Nodes::<T>(?alloc_id, n, ?prev, ?n1, ?n2, ?nodes1) &*& Nodes::<T>(alloc_id, n2, n1, ?n3, Option::Some(?n4), ?nodes2) &*& (*NonNull_ptr(n4)).prev |-> n3;
+    ens Nodes::<T>(alloc_id, n, prev, n3, Some(n4), append(nodes1, nodes2)) &*& (*NonNull_ptr(n4)).prev |-> n3;
+{
+    open Nodes::<T>(alloc_id, n, prev, n1, n2, nodes1);
+    if n == n2 {
+    } else {
+        assert n == Option::Some(?n_);
+        Nodes_append__((*NonNull_ptr(n_)).next);
+        close Nodes::<T>(alloc_id, n, prev, n3, Some(n4), append(nodes1, nodes2));
+    }
+}
+
 pred_ctor elem_fbc<T>(t: thread_id_t)(node: NonNull<Node<T>>) = (*NonNull_ptr(node)).element |-> ?elem &*& <T>.own(t, elem);
 
 pred<T, A> <LinkedList<T, A>>.own(t, ll) =
@@ -776,20 +862,65 @@ impl<T, A: Allocator> LinkedList<T, A> {
     /// This method takes care not to create mutable references to `element`, to
     /// maintain validity of aliasing pointers.
     #[inline]
-    unsafe fn unlink_node(&mut self, mut node: NonNull<Node<T>>) {
+    unsafe fn unlink_node(&mut self, mut node: NonNull<Node<T>>)
+    /*@
+    req (*self).head |-> ?head &*& (*self).tail |-> ?tail &*&
+        Nodes::<T>(?alloc_id, head, None, ?prev_, Some(node), ?nodes1) &*&
+        alloc_block_in(alloc_id, NonNull_ptr(node) as *u8, Layout::new_::<Node<T>>()) &*&
+        (*NonNull_ptr(node)).next |-> ?next_ &*&
+        (*NonNull_ptr(node)).prev |-> prev_ &*&
+        struct_Node_padding(NonNull_ptr(node)) &*&
+        Nodes::<T>(alloc_id, next_, Some(node), tail, None, ?nodes2) &*&
+        (*self).len |-> length(nodes1) + 1 + length(nodes2);
+    @*/
+    /*@
+    ens (*self).head |-> ?head1 &*& (*self).tail |-> ?tail1 &*&
+        Nodes::<T>(alloc_id, head1, None, prev_, next_, nodes1) &*&
+        alloc_block_in(alloc_id, NonNull_ptr(node) as *u8, Layout::new_::<Node<T>>()) &*&
+        (*NonNull_ptr(node)).next |-> next_ &*&
+        (*NonNull_ptr(node)).prev |-> prev_ &*&
+        struct_Node_padding(NonNull_ptr(node)) &*&
+        Nodes::<T>(alloc_id, next_, prev_, tail1, None, nodes2) &*&
+        (*self).len |-> length(nodes1) + length(nodes2);
+    @*/
+    {
         let node_ = unsafe { node.as_mut() }; // this one is ours now, we can create an &mut.
 
         // Not creating new mutable (unique!) references overlapping `element`.
         match node_.prev {
-            Some(prev) => unsafe { (*prev.as_ptr()).next = node_.next },
+            Some(prev) => unsafe {
+                //@ Nodes_last_lemma(head);
+                //@ Nodes_split_off_last(head);
+                //@ assert Nodes(_, head, None, ?pprev, prev_, ?nodes10);
+                (*prev.as_ptr()).next = node_.next;
+                //@ open Nodes(alloc_id, next_, Some(node), tail, None, nodes2);
+                //@ close Nodes(alloc_id, next_, Some(node), tail, None, nodes2);
+                //@ close Nodes::<T>(alloc_id, next_, prev_, prev_, next_, []);
+                //@ close Nodes::<T>(alloc_id, prev_, pprev, prev_, next_, [prev]);
+                //@ Nodes_append_(head);
+            },
             // this node is the head node
-            None => self.head = node_.next,
+            None => {
+                //@ Nodes_last_lemma(head);
+                //@ open Nodes(alloc_id, head, _, _, _, nodes1);
+                //@ close Nodes(alloc_id, next_, None, None, next_, []);
+                self.head = node_.next
+            }
         };
 
         match node_.next {
-            Some(next) => unsafe { (*next.as_ptr()).prev = node_.prev },
+            Some(next) => unsafe {
+                //@ open Nodes(alloc_id, next_, Some(node), tail, None, nodes2);
+                (*next.as_ptr()).prev = node_.prev;
+                //@ close Nodes(alloc_id, next_, prev_, tail, None, nodes2);
+            },
             // this node is the tail node
-            None => self.tail = node_.prev,
+            None => {
+                //@ open Nodes(alloc_id, next_, Some(node), _, _, nodes2);
+                //@ close Nodes(alloc_id, next_, prev_, prev_, next_, []);
+                self.tail = node_.prev;
+                
+            }
         };
 
         self.len -= 1;
@@ -1141,8 +1272,43 @@ impl<T, A: Allocator> LinkedList<T, A> {
     #[inline]
     #[must_use]
     /*#[unstable(feature = "linked_list_cursors", issue = "58533")]*/
-    pub fn cursor_front_mut(&mut self) -> CursorMut<'_, T, A> {
-        CursorMut { index: 0, current: self.head, list: self }
+    pub fn cursor_front_mut<'a>(&'a mut self) -> CursorMut<'a, T, A>
+    //@ req thread_token(?t) &*& [?q]lifetime_token('a) &*& full_borrow('a, <LinkedList<T, A>>.full_borrow_content(t, self));
+    //@ ens thread_token(t) &*& [q]lifetime_token('a) &*& <CursorMut<'a, T, A>>.own(t, result);
+    {
+        //@ let klong = open_full_borrow_strong('a, <LinkedList<T, A>>.full_borrow_content(t, self), q);
+        //@ open <LinkedList<T, A>>.full_borrow_content(t, self)();
+        //@ let current = (*self).head;
+        let r = CursorMut { index: 0, current: self.head, list: self };
+        //@ open <LinkedList<T, A>>.own(t, *self);
+        //@ assert (*self).alloc |-> ?alloc &*& Allocator::<A>(t, alloc, ?alloc_id);
+        //@ close Nodes(alloc_id, current, None, None, current, nil);
+        //@ close foreach(nil, elem_fbc::<T>(t));
+        //@ let ghost_cell_id = create_ghost_cell::<pair<usize, Option<NonNull<Node<T>>>>>(pair(0, current));
+        //@ close CursorMut_fbc::<T, A>(t, ghost_cell_id, self)();
+        /*@
+        {
+            pred Ctx() = true;
+            produce_lem_ptr_chunk full_borrow_convert_strong(Ctx, CursorMut_fbc::<T, A>(t, ghost_cell_id, self), klong, <LinkedList<T, A>>.full_borrow_content(t, self))() {
+                open Ctx();
+                open CursorMut_fbc::<T, A>(t, ghost_cell_id, self)();
+                assert [1/2]ghost_cell(ghost_cell_id, pair(?index1, ?current1));
+                let head = (*self).head;
+                assert Nodes(_, head, None, ?before_current, current1, ?nodes1) &*& Nodes(_, current1, before_current, ?tail, None, ?nodes2);
+                Nodes_append::<T>((*self).head);
+                foreach_append(nodes1, nodes2);
+                close <LinkedList<T, A>>.own(t, *self);
+                close <LinkedList<T, A>>.full_borrow_content(t, self)();
+                leak [1/2]ghost_cell(_, _);
+            } {
+                close Ctx();
+                close_full_borrow_strong(klong, <LinkedList<T, A>>.full_borrow_content(t, self), CursorMut_fbc::<T, A>(t, ghost_cell_id, self));
+                full_borrow_mono(klong, 'a, CursorMut_fbc::<T, A>(t, ghost_cell_id, self));
+            }
+        }
+        @*/
+        //@ close <CursorMut<'a, T, A>>.own(t, r);
+        r
     }
 
     /// Provides a cursor at the back element.
@@ -2076,6 +2242,50 @@ pub struct CursorMut<
     list: &'a mut LinkedList<T, A>,
 }
 
+/*@
+
+pred_ctor CursorMut_fbc<T, A>(t: thread_id_t, ghost_cell_id: i32, list: *LinkedList<T, A>)() =
+    [1/2]ghost_cell::<pair<usize, Option<NonNull<Node<T>>>>>(ghost_cell_id, pair(?index, ?current)) &*&
+    (*list).alloc |-> ?alloc &*&
+    Allocator::<A>(t, alloc, ?alloc_id) &*&
+    (*list).head |-> ?head &*&
+    (*list).tail |-> ?tail &*&
+    Nodes::<T>(alloc_id, head, None, ?before_current, current, ?nodes1) &*&
+    Nodes::<T>(alloc_id, current, before_current, tail, None, ?nodes2) &*&
+    foreach(nodes1, elem_fbc::<T>(t)) &*&
+    foreach(nodes2, elem_fbc::<T>(t)) &*&
+    (*list).len |-> length(nodes1) + length(nodes2) &*&
+    index == length(nodes1) &*&
+    (*list).marker |-> ?_ &*&
+    struct_LinkedList_padding(list);
+
+pred<'a, T, A> <CursorMut<'a, T, A>>.own(t, cursor) =
+    [1/2]ghost_cell::<pair<usize, Option<NonNull<Node<T>>>>>(?ghost_cell_id, pair(cursor.index, cursor.current)) &*&
+    full_borrow('a, CursorMut_fbc::<T, A>(t, ghost_cell_id, cursor.list));
+
+lem CursorMut_drop<'a, T, A>()
+    req CursorMut_own::<'a, T, A>(?_t, ?_v);
+    ens <std::option::Option<std::ptr::NonNull<Node<T>>>>.own(_t, _v.current) &*& full_borrow(lft_of(typeid('a)), LinkedList_full_borrow_content(_t, _v.list));
+{
+    assume(false);
+}
+
+lem CursorMut_own_mono<'a0, 'a1, T, A>()
+    req type_interp::<T>() &*& type_interp::<A>() &*& CursorMut_own::<'a0, T, A>(?t, ?v) &*& lifetime_inclusion('a1, 'a0) == true;
+    ens type_interp::<T>() &*& type_interp::<A>() &*& CursorMut_own::<'a1, T, A>(t, CursorMut::<'a1, T, A> { index: upcast(v.index), current: upcast(v.current), list: v.list as *_ });
+{
+    assume(false);
+}
+
+lem CursorMut_send<'a, T, A>(t1: thread_id_t)
+    req type_interp::<T>() &*& type_interp::<A>() &*& CursorMut_own::<'a, T, A>(?t0, ?v);
+    ens type_interp::<T>() &*& type_interp::<A>() &*& CursorMut_own::<'a, T, A>(t1, v);
+{
+    assume(false);
+}
+
+@*/
+
 /*#[unstable(feature = "linked_list_cursors", issue = "58533")]*/
 impl<T: fmt::Debug, A: Allocator> fmt::Debug for CursorMut<'_, T, A> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -2220,20 +2430,51 @@ impl<'a, T, A: Allocator> CursorMut<'a, T, A> {
     /// the first element of the `LinkedList`. If it is pointing to the last
     /// element of the `LinkedList` then this will move it to the "ghost" non-element.
     /*#[unstable(feature = "linked_list_cursors", issue = "58533")]*/
-    pub fn move_next(&mut self) {
+    pub fn move_next(&mut self)
+    //@ req thread_token(?t) &*& [?q]lifetime_token('a) &*& *self |-> ?self0 &*& <CursorMut<'a, T, A>>.own(t, self0);
+    //@ ens thread_token(t) &*& [q]lifetime_token('a) &*& *self |-> ?self1 &*& <CursorMut<'a, T, A>>.own(t, self1);
+    {
+        //@ open_points_to(self);
+        //@ open <CursorMut<'a, T, A>>.own(t, self0);
+        //@ assert [1/2]ghost_cell(?ghost_cell_id, _);
+        //@ open_full_borrow(q, 'a, CursorMut_fbc::<T, A>(t, ghost_cell_id, self0.list));
+        //@ open CursorMut_fbc::<T, A>(t, ghost_cell_id, self0.list)();
+        //@ let head = (*self0.list).head;
+        //@ let tail = (*self0.list).tail;
         match self.current.take() {
             // We had no current element; the cursor was sitting at the start position
             // Next element should be the head of the list
             None => {
+                //@ close CursorMut_current(self, _);
                 self.current = self.list.head;
                 self.index = 0;
+                //@ open Nodes(?alloc_id, None, ?before_current, tail, None, ?nodes2);
+                //@ close Nodes(alloc_id, head, None, None, head, nil);
             }
             // We had a previous element, so let's go to its next
             Some(current) => unsafe {
+                //@ open Nodes(?alloc_id, self0.current, ?before_current, tail, None, ?nodes2);
+                //@ close CursorMut_current(self, _);
                 self.current = current.as_ref().next;
                 self.index += 1;
+                //@ let self1_= *self;
+                //@ assert Nodes(alloc_id, head, None, _, _, ?nodes1);
+                //@ open Nodes(alloc_id, self1_.current, self0.current, tail, None, tail(nodes2));
+                //@ close Nodes(alloc_id, self1_.current, self0.current, tail, None, tail(nodes2));
+                //@ close Nodes(alloc_id, self1_.current, self0.current, self0.current, self1_.current, nil);
+                //@ close Nodes(alloc_id, self0.current, before_current, self0.current, self1_.current, [current]);
+                //@ Nodes_append_(head);
+                //@ open foreach(nodes2, _);
+                //@ close foreach([], elem_fbc::<T>(t));
+                //@ close foreach([current], elem_fbc::<T>(t));
+                //@ foreach_append(nodes1, [current]);
             },
-        }
+        };
+        //@ let self1 = *self;
+        //@ ghost_cell_mutate(ghost_cell_id, pair(self1.index, self1.current));
+        //@ close CursorMut_fbc::<T, A>(t, ghost_cell_id, self1.list)();
+        //@ close_full_borrow(CursorMut_fbc::<T, A>(t, ghost_cell_id, self1.list));
+        //@ close <CursorMut<'a, T, A>>.own(t, self1);
     }
 
     /// Moves the cursor to the previous element of the `LinkedList`.
@@ -2405,13 +2646,39 @@ impl<'a, T, A: Allocator> CursorMut<'a, T, A> {
     /// If the cursor is currently pointing to the "ghost" non-element then no element
     /// is removed and `None` is returned.
     /*#[unstable(feature = "linked_list_cursors", issue = "58533")]*/
-    pub fn remove_current(&mut self) -> Option<T> {
-        let unlinked_node = self.current?;
-        unsafe {
-            self.current = unlinked_node.as_ref().next;
-            self.list.unlink_node(unlinked_node);
-            let unlinked_node = Box::from_raw_in(unlinked_node.as_ptr(), &self.list.alloc);
-            Some(unlinked_node.element)
+    pub fn remove_current(&mut self) -> Option<T>
+    //@ req thread_token(?t) &*& [?q]lifetime_token('a) &*& *self |-> ?self0 &*& <CursorMut<'a, T, A>>.own(t, self0);
+    //@ ens thread_token(t) &*& [q]lifetime_token('a) &*& *self |-> ?self1 &*& <CursorMut<'a, T, A>>.own(t, self1) &*& <Option<T>>.own(t, result);
+    {
+        //let unlinked_node = self.current?;
+        match self.current {
+            None => {
+                //@ close <std::option::Option<T>>.own(t, None);
+                None
+            }
+            Some(unlinked_node) => unsafe {
+                //@ open <CursorMut<'a, T, A>>.own(t, self0);
+                //@ assert [1/2]ghost_cell(?ghost_cell_id, _);
+                //@ open_full_borrow(q, 'a, CursorMut_fbc::<T, A>(t, ghost_cell_id, self0.list));
+                //@ open CursorMut_fbc::<T, A>(t, ghost_cell_id, self0.list)();
+                //@ open Nodes::<T>(?alloc_id, self0.current, ?before_current, ?tail, None, ?nodes2);
+                
+                self.current = unlinked_node.as_ref().next;
+                //@ let current1 = (*self).current;
+                //@ open foreach(nodes2, elem_fbc::<T>(t));
+                //@ open elem_fbc::<T>(t)(unlinked_node);
+                self.list.unlink_node(unlinked_node);
+                //@ std::alloc::share_allocator::<'static, A>(&(*self0.list).alloc);
+                let unlinked_node_ = Box::from_raw_in(unlinked_node.as_ptr(), &self.list.alloc);
+                let r = Some(Box::into_inner(unlinked_node_).element); // Some(unlinked_node_.element)
+                //@ std::alloc::end_share_allocator::<'static, A>();
+                //@ ghost_cell_mutate(ghost_cell_id, pair(self0.index, current1));
+                //@ close CursorMut_fbc::<T, A>(t, ghost_cell_id, self0.list)();
+                //@ close_full_borrow(CursorMut_fbc::<T, A>(t, ghost_cell_id, self0.list));
+                //@ close <CursorMut<'a, T, A>>.own(t, *self);
+                //@ close <std::option::Option<T>>.own(t, r);
+                r
+            }
         }
     }
 
