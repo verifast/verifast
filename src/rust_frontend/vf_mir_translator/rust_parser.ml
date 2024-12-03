@@ -26,8 +26,6 @@ let parse_right_angle_bracket stream = stream |> function%parser
   Lexer.Stream.push (Some (Lexed ((path, line, col + 1), (path', line', col')), Kwd ">")) stream
 | [ (Lexed ((path, line, col), (path', line', col')), Ident ">>>") ] ->
   Lexer.Stream.push (Some (Lexed ((path, line, col + 1), (path', line', col')), Kwd ">>")) stream
-| [ (Lexed ((path, line, col), (path', line', col')), Ident ">>>>") ] ->
-  Lexer.Stream.push (Some (Lexed ((path, line, col + 1), (path', line', col')), Ident ">>>")) stream
   
 let rec parse_type = function%parser
   [ (l, Ident "i8") ] -> ManifestTypeExpr (l, Int (Signed, FixedWidthRank 0))
