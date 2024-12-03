@@ -1408,8 +1408,8 @@ and
     parse_primary_type as t0 
   ] -> t0
 | [ (l, Kwd "const"); 
-    parse_primary_type as t0 
-  ] -> t0
+    parse_primary_type as t0
+  ] -> ConstTypeExpr (l, t0)
 | [ (l, Kwd "register"); 
     parse_primary_type as t0 
   ] -> t0
@@ -1529,7 +1529,7 @@ and
     [%l t = parse_type_suffix t0] 
   ] -> t
 | [ (l, Kwd "const"); 
-    [%l t = parse_type_suffix t0] 
+    [%l t = parse_type_suffix (ConstTypeExpr (l, t0))] 
   ] -> t
 | [ (l, Kwd "["); 
     (_, Kwd "]"); 

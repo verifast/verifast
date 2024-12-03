@@ -332,6 +332,7 @@ type type_expr = (* ?type_expr *)
   | PredTypeExpr of loc * type_expr list * int option (* if None, not necessarily precise; if Some n, precise with n input parameters *)
   | PureFuncTypeExpr of loc * type_expr list   (* Potentially uncurried *)
   | LValueRefTypeExpr of loc * type_expr
+  | ConstTypeExpr of loc * type_expr
 and
   operator =  (* ?operator *)
   | Add | Sub | PtrDiff | Le | Ge | Lt | Gt | Eq | Neq | And | Or | Xor | Not | Mul | Div | Mod | BitNot | BitAnd | BitXor | BitOr | ShiftLeft | ShiftRight
@@ -674,7 +675,7 @@ and
       stmt
   | DeclStmt of (* enkel declaratie *)
       loc *
-      (loc * type_expr option * string * expr option * (bool ref (* indicates whether address is taken *) * string list ref option ref (* pointer to enclosing block's list of variables whose address is taken *))) list
+      (loc * type_expr option * string * expr option * (bool ref (* indicates whether address is taken *) * (string * bool (*is_const_var*)) list ref option ref (* pointer to enclosing block's list of variables whose address is taken *))) list
   | ExprStmt of expr
   | IfStmt of (* if  regel-conditie-branch1-branch2  *)
       loc *
@@ -716,7 +717,7 @@ and
       decl list *
       stmt list *
       loc *
-      string list ref
+      (string * bool (*is_const_var*)) list ref
   | PerformActionStmt of
       loc *
       bool ref (* in non-pure context *) *
@@ -1047,6 +1048,7 @@ let type_expr_loc t =
   | PredTypeExpr(l, te, _) -> l
   | PureFuncTypeExpr (l, tes) -> l
   | FuncTypeExpr (l, _, _) -> l
+  | ConstTypeExpr (l, te) -> l
 
 let string_of_func_kind f=
   match f with
@@ -1202,6 +1204,7 @@ let type_expr_fold_open f state te =
   | PredTypeExpr (l, paramTps, inputParamCount) -> List.fold_left f state paramTps
   | PureFuncTypeExpr (l, tps) -> List.fold_left f state tps
   | LValueRefTypeExpr (l, tp) -> f state tp
+  | ConstTypeExpr (l, tp) -> f state tp
 
 let stmt_fold_open f state s =
   match s with

@@ -1282,7 +1282,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let rec mark_if_local locals x =
     match locals with
       [] -> ()
-    | (block, head) :: rest -> match try_assoc x head with None -> mark_if_local rest x | Some(addrtaken) -> addrtaken := true; (if(not (List.mem x !block)) then block := x :: (!block))
+    | (block, head) :: rest -> match try_assoc x head with None -> mark_if_local rest x | Some(addrtaken, isConstVar) -> addrtaken := true; (if(not (List.mem_assoc x !block)) then block := (x, isConstVar) :: (!block))
   
   let rec expr_mark_addr_taken e locals = 
     match e with
@@ -1410,7 +1410,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       (* filter out lvalue ref decls: don't mark them as 'addr_taken' so we don't try to consume their chunks at the end of their scope/block *)
       let locals_wo_lvalue_refs = ds 
         |> List.filter (function (_, Some tx, _, _, _) -> is_lvalue_ref_type_expr tx |> not | _ -> true)
-        |> List.map @@ fun (_, _, x, _, (addr_taken, _)) -> x, addr_taken 
+        |> List.map @@ fun (_, tp, x, _, (addr_taken, _)) -> x, (addr_taken, match tp with Some (ConstTypeExpr (_, _)) -> true | _ -> false)
       in
       cont ((block, locals_wo_lvalue_refs @ mylocals) :: rest)
     | BlockStmt(_, _, ss, _, locals_to_free) -> stmts_mark_addr_taken ss ((locals_to_free, []) :: locals) pure (fun _ -> cont locals)

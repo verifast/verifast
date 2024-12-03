@@ -159,18 +159,19 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let rec free_locals_core h locals =
         match locals with
           [] -> cont h env
-        | x::locals ->
+        | (x, isConstVar)::locals ->
           match try_assoc x env with
             None ->
             free_locals_core h locals
           | Some addr ->
+            let coefpat = if isConstVar then TermPat real_half else real_unit_pat in
             match List.assoc x tenv with
               StaticArrayType (elemTp, elemCount) as t ->
-              consume_c_object_core_core closeBraceLoc real_unit_pat addr t h env true true $. fun _ h _ ->
+              consume_c_object_core_core closeBraceLoc coefpat addr t h env true true $. fun _ h _ ->
               free_locals_core h locals
             | RefType t -> (* free locals of which the address is taken *)
               let verify_dtor_call = verify_dtor_call (pn, ilist) leminfo funcmap predinstmap sizemap tenv ghostenv h env addr (Some x) in
-              consume_cxx_object closeBraceLoc real_unit_pat addr t verify_dtor_call true h env @@ fun h env -> 
+              consume_cxx_object closeBraceLoc coefpat addr t verify_dtor_call true h env @@ fun h env -> 
               free_locals_core h locals
       in
       match locals with
@@ -883,6 +884,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         match xs with
           [] -> tcont sizemap tenv ghostenv h env
         | (l, te, x, e, (address_taken, blockPtr))::xs ->
+          let is_const_var = match te with Some (ConstTypeExpr (_, _)) -> true | _ -> false in
           let t = option_map (check_pure_type (pn,ilist) tparams (if pure then Ghost else Real)) te in
           if List.mem_assoc x tenv then static_error l ("Declaration hides existing local variable '" ^ x ^ "'.") None;
           let ghostenv = if pure then x::ghostenv else List.filter (fun y -> y <> x) ghostenv in
@@ -901,7 +903,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           | Some t ->
           let produce_object envTp =
             if pure then static_error l "Cannot declare a variable of this type in a ghost context." None;
-            begin let Some block = !blockPtr in if not (List.mem x !block) then block := x::!block end;
+            begin let Some block = !blockPtr in if not (List.mem_assoc x !block) then block := (x, is_const_var)::!block end;
             let addr_name = x ^ "_addr" in 
             let addr = get_unique_var_symb_non_ghost addr_name (PtrType Void) in
             match e, dialect with
@@ -918,7 +920,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 | Some e -> Expr (check_c_initializer check_expr_t (pn,ilist) tparams tenv e t)
               in
               let verify_ctor_call = verify_ctor_call (pn, ilist) leminfo funcmap predinstmap sizemap tenv ghostenv h env addr (Some addr_name) in
-              produce_cxx_object l real_unit addr t eval_h verify_ctor_call init true true h env @@ fun h env ->
+              produce_cxx_object l (if is_const_var then real_half else real_unit) addr t eval_h verify_ctor_call init true true h env @@ fun h env ->
               iter h ((x, envTp)::tenv) ghostenv ((x, addr)::env) xs
           in
           (* If a struct directly or indirectly contains an array, we treat it like a resource, not like a pure value. *)
@@ -990,7 +992,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             if !address_taken then begin
               let addr = get_unique_var_symb_non_ghost (x ^ "_addr") (PtrType t) in
               if pure then static_error l "Taking the address of a ghost variable is not allowed." None;
-              produce_points_to_chunk l h t real_unit addr v $. fun h ->
+              produce_points_to_chunk l h t (if is_const_var then real_half else real_unit) addr v $. fun h ->
               iter h ((x, RefType(t)) :: tenv) ghostenv ((x, addr)::env) xs
             end else begin
               if e = None && not pure then

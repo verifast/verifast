@@ -214,6 +214,11 @@ let rec of_type_expr = function
     of_loc l;
     of_type_expr tp
   ])
+| ConstTypeExpr (l, tp) ->
+  C ("ConstTypeExpr", [
+    of_loc l;
+    of_type_expr tp
+  ])
 and of_operator = function
   MinValue t -> C ("MinValue", [of_type t])
 | MaxValue t -> C ("MaxValue", [of_type t])
@@ -742,7 +747,7 @@ and of_stmt = function
         of_option of_expr init;
         T [
           of_ref b addressTaken;
-          of_ref (of_option (of_ref (of_list s))) addressTakenList
+          of_ref (of_option (of_ref (of_list (fun (x, isConstVar) -> T [s x; b isConstVar])))) addressTakenList
         ]
       ]
     end ds
@@ -799,7 +804,7 @@ and of_stmt = function
     of_list of_decl ds;
     of_list of_stmt ss;
     of_loc closeBraceLoc;
-    of_ref (of_list s) addressTaken
+    of_ref (of_list (fun (x, isConstVar) -> T [s x; b isConstVar])) addressTaken
   ])
 | PerformActionStmt (_, _, _, _, _, _, _, _, _, _, _, _) -> failwith "TODO"
 | SplitFractionStmt (_, _, _, _, _) -> failwith "TODO"
