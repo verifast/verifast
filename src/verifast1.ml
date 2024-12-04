@@ -2129,6 +2129,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       iter ts
     | LValueRefTypeExpr (l, te) -> RefType (check te)
+    | ConstTypeExpr (l, te) -> check te
     in
     check te
   
