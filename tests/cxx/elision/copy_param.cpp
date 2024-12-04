@@ -25,7 +25,7 @@ struct Foo {
 Copy in return statement is not elided.
 */
 Foo copy_foo(const Foo &f) 
-//@ requires copies |-> ? c &*& &f != 0 &*& f.i |-> ?i;
+//@ requires copies |-> ? c &*& f.i |-> ?i;
 //@ ensures copies |-> c + 1 &*& f.i |-> i &*& struct_Foo_padding(&result) &*& result.i |-> i;
 {
     return f;
