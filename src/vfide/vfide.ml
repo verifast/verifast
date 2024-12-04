@@ -768,7 +768,7 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
     let textScroll =
       GBin.scrolled_window ~hpolicy:`AUTOMATIC ~vpolicy:`AUTOMATIC ~shadow_type:`IN
         ~packing:textVbox#add () in
-    let srcText = (*GText.view*) SourceView.source_view ~source_buffer:buffer ~packing:textScroll#add () in
+    let srcText = (*GText.view*) SourceView.source_view ~insert_spaces_instead_of_tabs:true ~source_buffer:buffer ~packing:textScroll#add () in
     lineMarksTable#show_in_source_view srcText;
     stmtExecCountsColumn#show_in_source_view srcText;
     srcText#misc#modify_font_by_name !scaledCodeFont;

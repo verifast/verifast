@@ -1045,6 +1045,21 @@ mod vf_mir_builder {
                         Self::encode_gen_arg(enc_ctx.tcx, enc_ctx, arg, arg_cpn);
                     });
                 }
+                ty::ClauseKind::Projection(projection_pred) => {
+                    let mut proj_cpn = pred_cpn.init_projection();
+                    let mut proj_term_cpn = proj_cpn.reborrow().init_projection_term();
+                    proj_term_cpn.set_def_id(&enc_ctx.tcx.def_path_str(projection_pred.projection_term.def_id));
+                    proj_term_cpn.fill_args(projection_pred.projection_term.args, |arg_cpn, arg| {
+                        Self::encode_gen_arg(enc_ctx.tcx, enc_ctx, arg, arg_cpn);
+                    });
+                    let term_cpn = proj_cpn.reborrow().init_term();
+                    match projection_pred.term.unpack() {
+                        ty::TermKind::Ty(ty) =>
+                            Self::encode_ty(enc_ctx.tcx, enc_ctx, ty, term_cpn.init_ty()),
+                        ty::TermKind::Const(const_) =>
+                            Self::encode_typesystem_constant(enc_ctx.tcx, enc_ctx, &const_, term_cpn.init_const()),
+                    }
+                }
                 _ => pred_cpn.set_ignored(()),
             }
         }
@@ -1141,6 +1156,7 @@ mod vf_mir_builder {
             );
 
             let predicates = tcx.predicates_of(def_id).predicates;
+            trace!("Encoding predicates: {:?}", predicates);
             body_cpn
                 .reborrow()
                 .fill_predicates(predicates, |pred_cpn, pred| {

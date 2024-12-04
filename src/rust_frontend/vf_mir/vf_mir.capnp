@@ -361,9 +361,24 @@ struct Predicate {
         defId @0: Text; # DefId of the trait (Foo)
         args @1: List(Ty.GenArg); # The Self type (T) followed by the trait type args (A, B, C)
     }
+    struct Projection { # <T as Trait<A, B, C>>::AssocType<D, E, F> == G
+        struct AliasTerm { # <T as Trait<A, B, C>>::AssocType<D, E, F>
+            defId @0: Text; # DefId of the associated type Trait::AssocType
+            args @1: List(Ty.GenArg); # The Self type (T) followed by the trait args (A, B, C) and the associated type args (D, E, F)
+        }
+        struct Term {
+            union {
+                ty @0: Ty;
+                const @1: Ty.Const;
+            }
+        }
+        projectionTerm @0: AliasTerm;
+        term @1: Term; # G
+    }
     union {
         outlives @0: Outlives;
         trait @2: Trait;
+        projection @3: Projection;
         ignored @1: Void; # A predicate that we are ignoring for now
     }
 }

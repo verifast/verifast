@@ -163,21 +163,40 @@ lem Node_drop<T>()
     req Node_own::<T>(?_t, ?_v);
     ens <std::option::Option<std::ptr::NonNull<Node<T>>>>.own(_t, _v.next) &*& <std::option::Option<std::ptr::NonNull<Node<T>>>>.own(_t, _v.prev) &*& <T>.own(_t, _v.element);
 {
-    assume(false);
+    open <Node<T>>.own(_t, _v);
+    match _v.next {
+        Option::None => {}
+        Option::Some(next_) => {
+            std::ptr::close_NonNull_own(_t, next_);
+        }
+    }
+    close <std::option::Option<std::ptr::NonNull<Node<T>>>>.own(_t, _v.next);
+    match _v.prev {
+        Option::None => {}
+        Option::Some(prev_) => {
+            std::ptr::close_NonNull_own(_t, prev_);
+        }
+    }
+    close <std::option::Option<std::ptr::NonNull<Node<T>>>>.own(_t, _v.prev);
 }
 
 lem Node_own_mono<T0, T1>()
     req type_interp::<T0>() &*& type_interp::<T1>() &*& Node_own::<T0>(?t, ?v) &*& is_subtype_of::<T0, T1>() == true;
     ens type_interp::<T0>() &*& type_interp::<T1>() &*& Node_own::<T1>(t, Node::<T1> { next: upcast(v.next), prev: upcast(v.prev), element: upcast(v.element) });
 {
-    assume(false);
+    open <Node<T0>>.own(t, v);
+    own_mono::<T0, T1>(t, v.element);
+    Node_upcast::<T0, T1>(v);
+    close <Node<T1>>.own(t, upcast(v));
 }
 
 lem Node_send<T>(t1: thread_id_t)
     req type_interp::<T>() &*& is_Send(typeid(T)) == true &*& Node_own::<T>(?t0, ?v);
     ens type_interp::<T>() &*& Node_own::<T>(t1, v);
 {
-    assume(false);
+    open <Node<T>>.own(t0, v);
+    Send::send::<T>(t0, t1, v.element);
+    close <Node<T>>.own(t1, v);
 }
 
 pred Nodes<T>(alloc_id: any, n: Option<NonNull<Node<T>>>, prev: Option<NonNull<Node<T>>>, last: Option<NonNull<Node<T>>>, next: Option<NonNull<Node<T>>>; nodes: list<NonNull<Node<T>>>) =
@@ -238,6 +257,32 @@ lem Nodes_split_off_last<T>(n: Option<NonNull<Node<T>>>)
     }
 }
 
+lem Nodes_append_one_<T>(head: Option<NonNull<Node<T>>>)
+    req Nodes::<T>(?alloc_id, head, ?prev, ?last, Option::Some(?n), ?nodes1) &*&
+        alloc_block_in(alloc_id, NonNull_ptr(n) as *u8, Layout::new_::<Node<T>>()) &*&
+        (*NonNull_ptr(n)).prev |-> last &*&
+        (*NonNull_ptr(n)).next |-> ?next &*&
+        pointer_within_limits(&(*NonNull_ptr(n)).element) == true &*&
+        struct_Node_padding(NonNull_ptr(n)) &*&
+        Nodes(alloc_id, next, Option::Some(n), ?tail, None, ?nodes2);
+    ens Nodes(alloc_id, head, prev, Option::Some(n), next, append(nodes1, [n])) &*&
+        Nodes(alloc_id, next, Option::Some(n), tail, None, nodes2);
+{
+    open Nodes::<T>(alloc_id, head, prev, last, Option::Some(n), nodes1);
+    if head == Option::Some(n) {
+        open Nodes(alloc_id, next, Option::Some(n), tail, None, nodes2);
+        close Nodes(alloc_id, next, Option::Some(n), tail, None, nodes2);
+        close Nodes(alloc_id, next, Option::Some(n), Some(n), next, []);
+    } else {
+        open Nodes(alloc_id, next, Option::Some(n), tail, None, nodes2);
+        close Nodes(alloc_id, next, Option::Some(n), tail, None, nodes2);
+        open Nodes(_, ?next0, head, _, _, _);
+        close Nodes(alloc_id, next0, head, last, Option::Some(n), tail(nodes1));
+        Nodes_append_one_(next0);
+    }
+    close Nodes::<T>(alloc_id, head, prev, Some(n), next, append(nodes1, [n]));
+}
+
 lem Nodes_append<T>(n: Option<NonNull<Node<T>>>)
     req Nodes::<T>(?alloc_id, n, ?prev, ?n1, ?n2, ?nodes1) &*& Nodes::<T>(alloc_id, n2, n1, ?tail, None, ?nodes2);
     ens Nodes::<T>(alloc_id, n, prev, tail, None, append(nodes1, nodes2));
@@ -287,11 +332,25 @@ pred<T, A> <LinkedList<T, A>>.own(t, ll) =
     ll.len == length(nodes) &*&
     foreach(nodes, elem_fbc::<T>(t));
 
+lem Nodes_upcast<T0, T1>()
+    req Nodes::<T0>(?alloc_id, ?head, ?prev, ?tail, ?next, ?nodes) &*& is_subtype_of::<T0, T1>() == true;
+    ens Nodes::<T1>(alloc_id, upcast(head), upcast(prev), upcast(tail), upcast(next), upcast(nodes));
+{
+    assume(false);
+}
+
 lem LinkedList_own_mono<T0, T1, A0, A1>()
     req type_interp::<T0>() &*& type_interp::<T1>() &*& type_interp::<A0>() &*& type_interp::<A1>() &*& LinkedList_own::<T0, A0>(?t, ?v) &*& is_subtype_of::<T0, T1>() == true &*& is_subtype_of::<A0, A1>() == true;
     ens type_interp::<T0>() &*& type_interp::<T1>() &*& type_interp::<A0>() &*& type_interp::<A1>() &*& LinkedList_own::<T1, A1>(t, LinkedList::<T1, A1> { head: upcast(v.head), tail: upcast(v.tail), len: upcast(v.len), alloc: upcast(v.alloc), marker: upcast(v.marker) });
 {
+    open <LinkedList<T0, A0>>.own(t, v);
+    LinkedList_upcast::<T0, T1, A0, A1>(v);
+    assert Allocator(t, ?alloc, _);
+    std::alloc::Allocator_upcast::<A0, A1>(alloc);
+    
     assume(false);
+    
+    //close <LinkedList<T1, A1>>.own(t, upcast(v));
 }
 
 lem LinkedList_send<T, A>(t1: thread_id_t)
@@ -2086,15 +2145,52 @@ impl<T, A: Allocator> LinkedList<T, A> {
     /// assert_eq!(odds.into_iter().collect::<Vec<_>>(), vec![1, 3, 5, 9, 11, 13, 15]);
     /// ```
     /*#[unstable(feature = "extract_if", reason = "recently added", issue = "43244")]*/
-    pub fn extract_if<F>(&mut self, filter: F) -> ExtractIf<'_, T, F, A>
+    pub fn extract_if<'a, F>(&'a mut self, filter: F) -> ExtractIf<'a, T, F, A>
     where
         F: FnMut(&mut T) -> bool,
+    //@ req thread_token(?t) &*& [?q]lifetime_token('a) &*& full_borrow('a, <LinkedList<T, A>>.full_borrow_content(t, self)) &*& <F>.own(t, filter);
+    //@ ens thread_token(t) &*& [q]lifetime_token('a) &*& <ExtractIf<'a, T, F, A>>.own(t, result);
     {
+        //@ let klong = open_full_borrow_strong('a, <LinkedList<T, A>>.full_borrow_content(t, self), q);
+        //@ open <LinkedList<T, A>>.full_borrow_content(t, self)();
+        //@ open <LinkedList<T, A>>.own(t, ?self0);
+        //@ open_points_to(self);
+        //@ assert Nodes(?alloc_id, _, _, _, _, _);
+        
         // avoid borrow issues.
         let it = self.head;
         let old_len = self.len;
+        
+        //@ let ghost_cell_id = create_ghost_cell::<pair<Option<NonNull<Node<T>>>, usize>>(pair(it, 0));
 
-        ExtractIf { list: self, it, pred: filter, idx: 0, old_len }
+        /*@
+        {
+            pred Ctx() = struct_LinkedList_padding(self);
+            produce_lem_ptr_chunk full_borrow_convert_strong(Ctx, ExtractIf_fbc(t, self, ghost_cell_id, self0.len), klong, <LinkedList<T, A>>.full_borrow_content(t, self))() {
+                open Ctx();
+                open ExtractIf_fbc::<T, A>(t, self, ghost_cell_id, self0.len)();
+                let head1 = (*self).head;
+                assert Nodes(_, head1, None, _, _, ?nodes1) &*& Nodes(_, _, _, _, _, ?nodes2);
+                Nodes_append((*self).head);
+                foreach_append(nodes1, nodes2);
+                close <LinkedList<T, A>>.own(t, *self);
+                close_points_to(self);
+                close <LinkedList<T, A>>.full_borrow_content(t, self)();
+                leak [1/2]ghost_cell(_, _);
+            } {
+                close Ctx();
+                close Nodes::<T>(alloc_id, it, None, None, it, []);
+                close foreach([], elem_fbc::<T>(t));
+                close ExtractIf_fbc::<T, A>(t, self, ghost_cell_id, self0.len)();
+                close_full_borrow_strong(klong, <LinkedList<T, A>>.full_borrow_content(t, self), ExtractIf_fbc(t, self, ghost_cell_id, self0.len));
+                full_borrow_mono(klong, 'a, ExtractIf_fbc(t, self, ghost_cell_id, self0.len));
+            }
+        }
+        @*/
+        
+        let r = ExtractIf { list: self, it, pred: filter, idx: 0, old_len };
+        //@ close <ExtractIf<'a, T, F, A>>.own(t, r);
+        r
     }
 }
 
@@ -3227,27 +3323,113 @@ pub struct ExtractIf<
     old_len: usize,
 }
 
+/*@
+
+pred_ctor ExtractIf_fbc<T, A>(t: thread_id_t, list: *LinkedList<T, A>, ghost_cell_id: i32, old_len: usize)() =
+    [1/2]ghost_cell::<pair<Option<NonNull<Node<T>>>, usize>>(ghost_cell_id, pair(?it, ?idx)) &*&
+    (*list).alloc |-> ?alloc &*& Allocator::<A>(t, alloc, ?alloc_id) &*&
+    (*list).head |-> ?head &*&
+    (*list).tail |-> ?tail &*&
+    Nodes::<T>(alloc_id, head, None, ?prev, it, ?nodes1) &*&
+    Nodes::<T>(alloc_id, it, prev, tail, None, ?nodes2) &*&
+    foreach(nodes1, elem_fbc::<T>(t)) &*&
+    foreach(nodes2, elem_fbc::<T>(t)) &*&
+    (*list).len |-> length(append(nodes1, nodes2)) &*&
+    old_len <= usize::MAX &*&
+    old_len - idx == length(nodes2);
+
+pred<'a, T, F, A> <ExtractIf<'a, T, F, A>>.own(t, ex) =
+    <F>.own(t, ex.`pred`) &*& 0 <= ex.idx &*&
+    [1/2]ghost_cell::<pair<Option<NonNull<Node<T>>>, usize>>(?ghost_cell_id, pair(ex.it, ex.idx)) &*&
+    full_borrow('a, ExtractIf_fbc::<T, A>(t, ex.list, ghost_cell_id, ex.old_len));
+
+lem ExtractIf_drop<'a, T, F, A>()
+    req ExtractIf_own::<'a, T, F, A>(?_t, ?_v);
+    ens full_borrow(lft_of(typeid('a)), LinkedList_full_borrow_content(_t, _v.list)) &*& <std::option::Option<std::ptr::NonNull<Node<T>>>>.own(_t, _v.it) &*& <F>.own(_t, _v.`pred`);
+{
+    assume(false);
+}
+
+lem ExtractIf_own_mono<'a0, 'a1, T, F0, F1, A>()
+    req type_interp::<T>() &*& type_interp::<F0>() &*& type_interp::<F1>() &*& type_interp::<A>() &*& ExtractIf_own::<'a0, T, F0, A>(?t, ?v) &*& lifetime_inclusion('a1, 'a0) == true &*& is_subtype_of::<F0, F1>() == true;
+    ens type_interp::<T>() &*& type_interp::<F0>() &*& type_interp::<F1>() &*& type_interp::<A>() &*& ExtractIf_own::<'a1, T, F1, A>(t, ExtractIf::<'a1, T, F1, A> { list: v.list as *_, it: upcast(v.it), `pred`: upcast(v.`pred`), idx: upcast(v.idx), old_len: upcast(v.old_len) });
+{
+    assume(false);
+}
+
+lem ExtractIf_send<'a, T, F, A>(t1: thread_id_t)
+    req type_interp::<T>() &*& type_interp::<F>() &*& type_interp::<A>() &*& is_Send(typeid(F)) == true &*& ExtractIf_own::<'a, T, F, A>(?t0, ?v);
+    ens type_interp::<T>() &*& type_interp::<F>() &*& type_interp::<A>() &*& ExtractIf_own::<'a, T, F, A>(t1, v);
+{
+    assume(false);
+}
+
+@*/
+
+fn call_pred<T, F: FnMut(&mut T) -> bool>(f: &mut F, element: &mut T) -> bool
+//@ req thread_token(?t) &*& *f |-> ?f0 &*& <F>.own(t, f0) &*& *element |-> ?element0 &*& <T>.own(t, element0);
+//@ ens thread_token(t) &*& *f |-> ?f1 &*& <F>.own(t, f1) &*& *element |-> ?element1 &*& <T>.own(t, element1);
+{
+    //@ assume(false); //~allow_dead_code
+    f(element) //~allow_dead_code
+} //~allow_dead_code
+
 /*#[unstable(feature = "extract_if", reason = "recently added", issue = "43244")]*/
-impl<T, F, A: Allocator> Iterator for ExtractIf<'_, T, F, A>
+impl<'a, T, F, A: Allocator> Iterator for ExtractIf<'a, T, F, A>
 where
     F: FnMut(&mut T) -> bool,
 {
     type Item = T;
 
-    fn next(&mut self) -> Option<T> {
-        while let Some(mut node) = self.it {
-            unsafe {
-                self.it = node.as_ref().next;
-                self.idx += 1;
+    fn next(&mut self) -> Option<T>
+    //@ req thread_token(?t) &*& [?q]lifetime_token('a) &*& *self |-> ?self0 &*& <ExtractIf<'a, T, F, A>>.own(t, self0);
+    //@ ens thread_token(t) &*& [q]lifetime_token('a) &*& *self |-> ?self1 &*& <ExtractIf<'a, T, F, A>>.own(t, self1) &*& <Option<T>>.own(t, result);
+    {
+        loop { //while let Some(mut node) = self.it {
+            //@ inv thread_token(t) &*& [q]lifetime_token('a) &*& *self |-> ?self1 &*& <ExtractIf<'a, T, F, A>>.own(t, self1) &*& node |-> _;
+            //@ open_points_to(self);
+            match self.it {
+                None => break,
+                Some(mut node) => unsafe {
+                    //@ open <ExtractIf<'a, T, F, A>>.own(t, self1);
+                    //@ assert [1/2]ghost_cell(?ghost_cell_id, _);
+                    //@ open_full_borrow(q, 'a, ExtractIf_fbc(t, self1.list, ghost_cell_id, self1.old_len));
+                    //@ open ExtractIf_fbc::<T, A>(t, self1.list, ghost_cell_id, self1.old_len)();
+                    //@ assert Allocator::<A>(t, ?alloc, _);
+                    //@ open Nodes(?alloc_id, self1.it, ?prev, ?tail, None, ?nodes2);
+                    self.it = node.as_ref().next;
+                    self.idx += 1;
+                    //@ ghost_cell_mutate(ghost_cell_id, pair((*self).it, (*self).idx));
+                    
+                    //@ open foreach(nodes2, elem_fbc::<T>(t));
+                    //@ open elem_fbc::<T>(t)(node);
 
-                if (self.pred)(&mut node.as_mut().element) {
-                    // `unlink_node` is okay with aliasing `element` references.
-                    self.list.unlink_node(node);
-                    return Some(Box::from_raw_in(node.as_ptr(), &self.list.alloc).element);
+                    if call_pred(&mut self.pred, &mut node.as_mut().element) {
+                        // `unlink_node` is okay with aliasing `element` references.
+                        self.list.unlink_node(node);
+                        //@ std::alloc::share_allocator::<'static, A>(&(*self1.list).alloc);
+                        let r = Some(Box::into_inner(Box::from_raw_in(node.as_ptr(), &self.list.alloc)).element);
+                        //@ std::alloc::end_share_allocator::<'static, A>();
+                        //@ close ExtractIf_fbc::<T, A>(t, self1.list, ghost_cell_id, self1.old_len)();
+                        //@ close_full_borrow(ExtractIf_fbc(t, self1.list, ghost_cell_id, self1.old_len));
+                        //@ close <ExtractIf<'a, T, F, A>>.own(t, *self);
+                        //@ close <std::option::Option<T>>.own(t, r);
+                        return r
+                    }
+                    
+                    //@ assert Nodes(_, ?head, None, _, self1.it, ?nodes1);
+                    //@ Nodes_append_one_(head);
+                    //@ close foreach([], elem_fbc::<T>(t));
+                    //@ close elem_fbc::<T>(t)(node);
+                    //@ close foreach([node], elem_fbc::<T>(t));
+                    //@ foreach_append(nodes1, [node]);
+                    //@ close ExtractIf_fbc::<T, A>(t, self1.list, ghost_cell_id, self1.old_len)();
+                    //@ close_full_borrow(ExtractIf_fbc(t, self1.list, ghost_cell_id, self1.old_len));
+                    //@ close <ExtractIf<'a, T, F, A>>.own(t, *self);
                 }
             }
         }
-
+        //@ close <std::option::Option<T>>.own(t, None);
         None
     }
 
