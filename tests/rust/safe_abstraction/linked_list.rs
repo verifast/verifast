@@ -339,6 +339,23 @@ lem LinkedList_own_mono<T0, T1, A0, A1>()
     //close <LinkedList<T1, A1>>.own(t, upcast(v));
 }
 
+lem LinkedList_elems_send<T>(t0: thread_id_t, t1: thread_id_t)
+    req foreach(?nodes, elem_fbc::<T>(t0)) &*& type_interp::<T>() &*& is_Send(typeid(T)) == true;
+    ens foreach(nodes, elem_fbc::<T>(t1)) &*& type_interp::<T>();
+{
+    open foreach(nodes, elem_fbc::<T>(t0));
+    match nodes {
+        nil => {}
+        cons(n, nodes0) => {
+            open elem_fbc::<T>(t0)(n);
+            Send::send(t0, t1, (*NonNull_ptr(n)).element);
+            close elem_fbc::<T>(t1)(n);
+            LinkedList_elems_send::<T>(t0, t1);
+        }
+    }
+    close foreach(nodes, elem_fbc::<T>(t1));
+}
+
 lem LinkedList_send<T, A>(t1: thread_id_t)
     req type_interp::<T>() &*& type_interp::<A>() &*& is_Send(typeid(T)) == true &*& is_Send(typeid(A)) == true &*& LinkedList_own::<T, A>(?t0, ?v);
     ens type_interp::<T>() &*& type_interp::<A>() &*& LinkedList_own::<T, A>(t1, v);
@@ -346,25 +363,7 @@ lem LinkedList_send<T, A>(t1: thread_id_t)
     open <LinkedList<T, A>>.own(t0, v);
     assert Allocator(t0, ?alloc, _);
     std::alloc::Allocator_send(t1, alloc);
-    {
-        lem iter()
-            req foreach(?nodes, elem_fbc::<T>(t0)) &*& type_interp::<T>();
-            ens type_interp::<T>() &*& foreach(nodes, elem_fbc::<T>(t1));
-        {
-            open foreach(nodes, elem_fbc::<T>(t0));
-            match nodes {
-                nil => {}
-                cons(n, nodes0) => {
-                    open elem_fbc::<T>(t0)(n);
-                    Send::send::<T>(t0, t1, (*NonNull_ptr(n)).element);
-                    close elem_fbc::<T>(t1)(n);
-                    iter();
-                }
-            }
-            close foreach(nodes, elem_fbc::<T>(t1));
-        }
-        iter();
-    }
+    LinkedList_elems_send::<T>(t0, t1);
     close <LinkedList<T, A>>.own(t1, v);
 }
 
@@ -1460,6 +1459,7 @@ impl<T, A: Allocator> LinkedList<T, A> {
     //@ req thread_token(?t) &*& [?q]lifetime_token('a) &*& full_borrow('a, <LinkedList<T, A>>.full_borrow_content(t, self));
     //@ ens thread_token(t) &*& [q]lifetime_token('a) &*& <CursorMut<'a, T, A>>.own(t, result);
     {
+        //@ let t1 = if is_Send(typeid(T)) && is_Send(typeid(A)) { default_tid } else { t };
         //@ let klong = open_full_borrow_strong('a, <LinkedList<T, A>>.full_borrow_content(t, self), q);
         //@ open <LinkedList<T, A>>.full_borrow_content(t, self)();
         //@ let current = (*self).head;
@@ -1467,27 +1467,40 @@ impl<T, A: Allocator> LinkedList<T, A> {
         //@ open <LinkedList<T, A>>.own(t, *self);
         //@ assert (*self).alloc |-> ?alloc &*& Allocator::<A>(t, alloc, ?alloc_id);
         //@ close Nodes(alloc_id, current, None, None, current, nil);
-        //@ close foreach(nil, elem_fbc::<T>(t));
+        //@ close foreach(nil, elem_fbc::<T>(t1));
         //@ let ghost_cell_id = create_ghost_cell::<pair<usize, Option<NonNull<Node<T>>>>>(pair(0, current));
-        //@ close CursorMut_fbc::<T, A>(t, ghost_cell_id, self)();
+        //@ produce_type_interp::<T>();
+        //@ produce_type_interp::<A>();
+        /*@
+        if t1 != t {
+            std::alloc::Allocator_send(t1, alloc);
+            LinkedList_elems_send::<T>(t, t1);
+        }
+        @*/
+        //@ close CursorMut_fbc::<T, A>(t1, ghost_cell_id, self)();
         /*@
         {
-            pred Ctx() = true;
-            produce_lem_ptr_chunk full_borrow_convert_strong(Ctx, CursorMut_fbc::<T, A>(t, ghost_cell_id, self), klong, <LinkedList<T, A>>.full_borrow_content(t, self))() {
+            pred Ctx() = type_interp::<T>() &*& type_interp::<A>();
+            produce_lem_ptr_chunk full_borrow_convert_strong(Ctx, CursorMut_fbc::<T, A>(t1, ghost_cell_id, self), klong, <LinkedList<T, A>>.full_borrow_content(t, self))() {
                 open Ctx();
-                open CursorMut_fbc::<T, A>(t, ghost_cell_id, self)();
+                open CursorMut_fbc::<T, A>(t1, ghost_cell_id, self)();
                 assert [1/2]ghost_cell(ghost_cell_id, pair(?index1, ?current1));
                 let head = (*self).head;
                 assert Nodes(_, head, None, ?before_current, current1, ?nodes1) &*& Nodes(_, current1, before_current, ?tail, None, ?nodes2);
                 Nodes_append::<T>((*self).head);
                 foreach_append(nodes1, nodes2);
+                if t1 != t {
+                    assert Allocator(_, ?alloc1, _);
+                    std::alloc::Allocator_send(t, alloc1);
+                    LinkedList_elems_send::<T>(t1, t);
+                }
                 close <LinkedList<T, A>>.own(t, *self);
                 close <LinkedList<T, A>>.full_borrow_content(t, self)();
-                leak [1/2]ghost_cell(_, _);
+                leak [1/2]ghost_cell(_, _) &*& type_interp::<T>() &*& type_interp::<A>();
             } {
                 close Ctx();
-                close_full_borrow_strong(klong, <LinkedList<T, A>>.full_borrow_content(t, self), CursorMut_fbc::<T, A>(t, ghost_cell_id, self));
-                full_borrow_mono(klong, 'a, CursorMut_fbc::<T, A>(t, ghost_cell_id, self));
+                close_full_borrow_strong(klong, <LinkedList<T, A>>.full_borrow_content(t, self), CursorMut_fbc::<T, A>(t1, ghost_cell_id, self));
+                full_borrow_mono(klong, 'a, CursorMut_fbc::<T, A>(t1, ghost_cell_id, self));
             }
         }
         @*/
@@ -1515,47 +1528,61 @@ impl<T, A: Allocator> LinkedList<T, A> {
     //@ req thread_token(?t) &*& [?q]lifetime_token('a) &*& full_borrow('a, <LinkedList<T, A>>.full_borrow_content(t, self));
     //@ ens thread_token(t) &*& [q]lifetime_token('a) &*& <CursorMut<'a, T, A>>.own(t, result);
     {
+        //@ let t1 = if is_Send(typeid(T)) && is_Send(typeid(A)) { default_tid } else { t };
         //@ let klong = open_full_borrow_strong('a, <LinkedList<T, A>>.full_borrow_content(t, self), q);
         //@ open <LinkedList<T, A>>.full_borrow_content(t, self)();
         let r = CursorMut { index: self.len.checked_sub(1).unwrap_or(0), current: self.tail, list: self };
         //@ open <LinkedList<T, A>>.own(t, *self);
         //@ assert (*self).alloc |-> ?alloc &*& Allocator::<A>(t, alloc, ?alloc_id) &*& (*self).head |-> ?head_;
         //@ Nodes_last_lemma(head_);
+        //@ produce_type_interp::<T>();
+        //@ produce_type_interp::<A>();
+        /*@
+        if t1 != t {
+            std::alloc::Allocator_send::<A>(t1, alloc);
+            LinkedList_elems_send::<T>(t, t1);
+        }
+        @*/
         /*@
         match r.current {
             Option::None => {
                 close Nodes::<T>(alloc_id, None, None, None, None, []);
-                close foreach([], elem_fbc::<T>(t));
+                close foreach([], elem_fbc::<T>(t1));
             }
             Option::Some(tail_) => {
                 Nodes_split_off_last(head_);
                 assert Nodes(alloc_id, head_, _, _, _, ?nodes0);
                 close Nodes::<T>(alloc_id, None, r.current, r.current, None, []);
                 close Nodes::<T>(alloc_id, r.current, _, r.current, None, [tail_]);
-                foreach_unappend(nodes0, [tail_], elem_fbc::<T>(t));
+                foreach_unappend(nodes0, [tail_], elem_fbc::<T>(t1));
             }
         }
         @*/
         //@ let ghost_cell_id = create_ghost_cell::<pair<usize, Option<NonNull<Node<T>>>>>(pair(r.index, r.current));
-        //@ close CursorMut_fbc::<T, A>(t, ghost_cell_id, self)();
+        //@ close CursorMut_fbc::<T, A>(t1, ghost_cell_id, self)();
         /*@
         {
-            pred Ctx() = true;
-            produce_lem_ptr_chunk full_borrow_convert_strong(Ctx, CursorMut_fbc::<T, A>(t, ghost_cell_id, self), klong, <LinkedList<T, A>>.full_borrow_content(t, self))() {
+            pred Ctx() = type_interp::<T>() &*& type_interp::<A>();
+            produce_lem_ptr_chunk full_borrow_convert_strong(Ctx, CursorMut_fbc::<T, A>(t1, ghost_cell_id, self), klong, <LinkedList<T, A>>.full_borrow_content(t, self))() {
                 open Ctx();
-                open CursorMut_fbc::<T, A>(t, ghost_cell_id, self)();
+                open CursorMut_fbc::<T, A>(t1, ghost_cell_id, self)();
                 assert [1/2]ghost_cell(ghost_cell_id, pair(?index1, ?current1));
                 let head = (*self).head;
                 assert Nodes(_, head, None, ?before_current, current1, ?nodes1) &*& Nodes(_, current1, before_current, ?tail, None, ?nodes2);
                 Nodes_append::<T>((*self).head);
                 foreach_append(nodes1, nodes2);
+                if t1 != t {
+                    assert Allocator(_, ?alloc1, _);
+                    std::alloc::Allocator_send(t, alloc1);
+                    LinkedList_elems_send::<T>(t1, t);
+                }
                 close <LinkedList<T, A>>.own(t, *self);
                 close <LinkedList<T, A>>.full_borrow_content(t, self)();
-                leak [1/2]ghost_cell(_, _);
+                leak [1/2]ghost_cell(_, _) &*& type_interp::<T>() &*& type_interp::<A>();
             } {
                 close Ctx();
-                close_full_borrow_strong(klong, <LinkedList<T, A>>.full_borrow_content(t, self), CursorMut_fbc::<T, A>(t, ghost_cell_id, self));
-                full_borrow_mono(klong, 'a, CursorMut_fbc::<T, A>(t, ghost_cell_id, self));
+                close_full_borrow_strong(klong, <LinkedList<T, A>>.full_borrow_content(t, self), CursorMut_fbc::<T, A>(t1, ghost_cell_id, self));
+                full_borrow_mono(klong, 'a, CursorMut_fbc::<T, A>(t1, ghost_cell_id, self));
             }
         }
         @*/
@@ -2591,7 +2618,7 @@ pred_ctor CursorMut_fbc<T, A>(t: thread_id_t, ghost_cell_id: i32, list: *LinkedL
 
 pred<'a, T, A> <CursorMut<'a, T, A>>.own(t, cursor) =
     [1/2]ghost_cell::<pair<usize, Option<NonNull<Node<T>>>>>(?ghost_cell_id, pair(cursor.index, cursor.current)) &*&
-    full_borrow('a, CursorMut_fbc::<T, A>(t, ghost_cell_id, cursor.list));
+    full_borrow('a, CursorMut_fbc::<T, A>(if is_Send(typeid(T)) && is_Send(typeid(A)) { default_tid } else { t }, ghost_cell_id, cursor.list));
 
 lem CursorMut_own_mono<'a0, 'a1, T, A>()
     req type_interp::<T>() &*& type_interp::<A>() &*& CursorMut_own::<'a0, T, A>(?t, ?v) &*& lifetime_inclusion('a1, 'a0) == true;
@@ -2605,8 +2632,7 @@ lem CursorMut_send<'a, T, A>(t1: thread_id_t)
     ens type_interp::<T>() &*& type_interp::<A>() &*& CursorMut_own::<'a, T, A>(t1, v);
 {
     open <CursorMut<'a, T, A>>.own(t0, v);
-    assume(false);
-    //close <CursorMut<'a, T, A>>.own(t1, v);
+    close <CursorMut<'a, T, A>>.own(t1, v);
 }
 
 @*/
@@ -2761,9 +2787,10 @@ impl<'a, T, A: Allocator> CursorMut<'a, T, A> {
     {
         //@ open_points_to(self);
         //@ open <CursorMut<'a, T, A>>.own(t, self0);
+        //@ let t1 = if is_Send(typeid(T)) && is_Send(typeid(A)) { default_tid } else { t };
         //@ assert [1/2]ghost_cell(?ghost_cell_id, _);
-        //@ open_full_borrow(q, 'a, CursorMut_fbc::<T, A>(t, ghost_cell_id, self0.list));
-        //@ open CursorMut_fbc::<T, A>(t, ghost_cell_id, self0.list)();
+        //@ open_full_borrow(q, 'a, CursorMut_fbc::<T, A>(t1, ghost_cell_id, self0.list));
+        //@ open CursorMut_fbc::<T, A>(t1, ghost_cell_id, self0.list)();
         //@ let head = (*self0.list).head;
         //@ let tail = (*self0.list).tail;
         match self.current.take() {
@@ -2790,15 +2817,15 @@ impl<'a, T, A: Allocator> CursorMut<'a, T, A> {
                 //@ close Nodes(alloc_id, self0.current, before_current, self0.current, self1_.current, [current]);
                 //@ Nodes_append_(head);
                 //@ open foreach(nodes2, _);
-                //@ close foreach([], elem_fbc::<T>(t));
-                //@ close foreach([current], elem_fbc::<T>(t));
+                //@ close foreach([], elem_fbc::<T>(t1));
+                //@ close foreach([current], elem_fbc::<T>(t1));
                 //@ foreach_append(nodes1, [current]);
             },
         };
         //@ let self1 = *self;
         //@ ghost_cell_mutate(ghost_cell_id, pair(self1.index, self1.current));
-        //@ close CursorMut_fbc::<T, A>(t, ghost_cell_id, self1.list)();
-        //@ close_full_borrow(CursorMut_fbc::<T, A>(t, ghost_cell_id, self1.list));
+        //@ close CursorMut_fbc::<T, A>(t1, ghost_cell_id, self1.list)();
+        //@ close_full_borrow(CursorMut_fbc::<T, A>(t1, ghost_cell_id, self1.list));
         //@ close <CursorMut<'a, T, A>>.own(t, self1);
     }
 
@@ -2812,11 +2839,12 @@ impl<'a, T, A: Allocator> CursorMut<'a, T, A> {
     //@ req thread_token(?t) &*& [?q]lifetime_token('a) &*& *self |-> ?self0 &*& <CursorMut<'a, T, A>>.own(t, self0);
     //@ ens thread_token(t) &*& [q]lifetime_token('a) &*& *self |-> ?self1 &*& <CursorMut<'a, T, A>>.own(t, self1);
     {
+        //@ let t1 = if is_Send(typeid(T)) && is_Send(typeid(A)) { default_tid } else { t };
         //@ open_points_to(self);
         //@ open <CursorMut<'a, T, A>>.own(t, self0);
         //@ assert [1/2]ghost_cell(?ghost_cell_id, _);
-        //@ open_full_borrow(q, 'a, CursorMut_fbc::<T, A>(t, ghost_cell_id, self0.list));
-        //@ open CursorMut_fbc::<T, A>(t, ghost_cell_id, self0.list)();
+        //@ open_full_borrow(q, 'a, CursorMut_fbc::<T, A>(t1, ghost_cell_id, self0.list));
+        //@ open CursorMut_fbc::<T, A>(t1, ghost_cell_id, self0.list)();
         //@ let head = (*self0.list).head;
         //@ let tail = (*self0.list).tail;
         //@ let len = (*self0.list).len;
@@ -2828,13 +2856,13 @@ impl<'a, T, A: Allocator> CursorMut<'a, T, A> {
                 self.current = self.list.tail;
                 self.index = self.list.len.checked_sub(1).unwrap_or(0);
                 //@ assert nodes2 == [];
-                //@ open foreach([], elem_fbc::<T>(t));
+                //@ open foreach([], elem_fbc::<T>(t1));
                 /*@
                 match tail {
                     Option::None => {
                         Nodes_last_lemma(head);
                         close Nodes(alloc_id, self0.current, tail, tail, None, nodes2);
-                        close foreach([], elem_fbc::<T>(t));
+                        close foreach([], elem_fbc::<T>(t1));
                         assert len == 0;
                     }
                     Option::Some(tail_) => {
@@ -2843,7 +2871,7 @@ impl<'a, T, A: Allocator> CursorMut<'a, T, A> {
                         assert Nodes(alloc_id, head, None, ?before_tail, tail, ?nodes10);
                         close Nodes::<T>(alloc_id, None, tail, tail, None, []);
                         close Nodes::<T>(alloc_id, tail, _, tail, None, [tail_]);
-                        foreach_unappend(nodes10, [tail_], elem_fbc::<T>(t));
+                        foreach_unappend(nodes10, [tail_], elem_fbc::<T>(t1));
                     }
                 }
                 @*/
@@ -2867,7 +2895,7 @@ impl<'a, T, A: Allocator> CursorMut<'a, T, A> {
                         //@ assert before_current == Option::Some(?current1);
                         //@ assert Nodes(_, head, None, ?last, before_current, ?nodes10);
                         //@ close Nodes::<T>(alloc_id, before_current, last, tail, None, cons(current1, nodes2));
-                        //@ foreach_unappend(nodes10, [current1], elem_fbc::<T>(t));
+                        //@ foreach_unappend(nodes10, [current1], elem_fbc::<T>(t1));
                         //@ foreach_append([current1], nodes2);
                         self.index = index1;
                     }
@@ -2876,8 +2904,8 @@ impl<'a, T, A: Allocator> CursorMut<'a, T, A> {
         }
         //@ let self1 = *self;
         //@ ghost_cell_mutate(ghost_cell_id, pair(self1.index, self1.current));
-        //@ close CursorMut_fbc::<T, A>(t, ghost_cell_id, self1.list)();
-        //@ close_full_borrow(CursorMut_fbc::<T, A>(t, ghost_cell_id, self1.list));
+        //@ close CursorMut_fbc::<T, A>(t1, ghost_cell_id, self1.list)();
+        //@ close_full_borrow(CursorMut_fbc::<T, A>(t1, ghost_cell_id, self1.list));
         //@ close <CursorMut<'a, T, A>>.own(t, self1);
     }
 
@@ -2893,6 +2921,7 @@ impl<'a, T, A: Allocator> CursorMut<'a, T, A> {
     //@ ens thread_token(t) &*& [qa]lifetime_token('a) &*& [qb]lifetime_token('b) &*& <Option<&'b mut T>>.own(t, result);
     {
         unsafe {
+            //@ let t1 = if is_Send(typeid(T)) && is_Send(typeid(A)) { default_tid } else { t };
             //@ let klongb = open_full_borrow_strong('b, <CursorMut<'a, T, A>>.full_borrow_content(t, self), qb);
             //@ open <CursorMut<'a, T, A>>.full_borrow_content(t, self)();
             match self.current { //self.current.map(|current| &mut (*current.as_ptr()).element)
@@ -2924,67 +2953,76 @@ impl<'a, T, A: Allocator> CursorMut<'a, T, A> {
                             [1/2]ghost_cell(ghost_cell_id, pair(index, current_));
                         {
                             pred Ctx() = true;
-                            produce_lem_ptr_chunk full_borrow_convert_strong(Ctx, sep(Ctx1, full_borrow_('a, CursorMut_fbc::<T, A>(t, ghost_cell_id, list))), klongb, <CursorMut<'a, T, A>>.full_borrow_content(t, self))() {
+                            produce_lem_ptr_chunk full_borrow_convert_strong(Ctx, sep(Ctx1, full_borrow_('a, CursorMut_fbc::<T, A>(t1, ghost_cell_id, list))), klongb, <CursorMut<'a, T, A>>.full_borrow_content(t, self))() {
                                 open Ctx();
-                                open sep(Ctx1, full_borrow_('a, CursorMut_fbc::<T, A>(t, ghost_cell_id, list)))();
+                                open sep(Ctx1, full_borrow_('a, CursorMut_fbc::<T, A>(t1, ghost_cell_id, list)))();
                                 open Ctx1();
                                 close <CursorMut<'a, T, A>>.own(t, self0);
                                 close <CursorMut<'a, T, A>>.full_borrow_content(t, self)();
                             } {
                                 close Ctx();
                                 close Ctx1();
-                                close sep(Ctx1, full_borrow_('a, CursorMut_fbc::<T, A>(t, ghost_cell_id, list)))();
-                                close_full_borrow_strong(klongb, <CursorMut<'a, T, A>>.full_borrow_content(t, self), sep(Ctx1, full_borrow_('a, CursorMut_fbc::<T, A>(t, ghost_cell_id, list))));
+                                close sep(Ctx1, full_borrow_('a, CursorMut_fbc::<T, A>(t1, ghost_cell_id, list)))();
+                                close_full_borrow_strong(klongb, <CursorMut<'a, T, A>>.full_borrow_content(t, self), sep(Ctx1, full_borrow_('a, CursorMut_fbc::<T, A>(t1, ghost_cell_id, list))));
                             }
-                            full_borrow_mono(klongb, 'b, sep(Ctx1, full_borrow_('a, CursorMut_fbc::<T, A>(t, ghost_cell_id, list))));
-                            full_borrow_split('b, Ctx1, full_borrow_('a, CursorMut_fbc::<T, A>(t, ghost_cell_id, list)));
-                            full_borrow_unnest('b, 'a, CursorMut_fbc::<T, A>(t, ghost_cell_id, list));
+                            full_borrow_mono(klongb, 'b, sep(Ctx1, full_borrow_('a, CursorMut_fbc::<T, A>(t1, ghost_cell_id, list))));
+                            full_borrow_split('b, Ctx1, full_borrow_('a, CursorMut_fbc::<T, A>(t1, ghost_cell_id, list)));
+                            full_borrow_unnest('b, 'a, CursorMut_fbc::<T, A>(t1, ghost_cell_id, list));
                             lifetime_inclusion_refl('b);
                             lifetime_inclusion_glb('b, 'b, 'a);
-                            full_borrow_mono(lifetime_intersection('b, 'a), 'b, CursorMut_fbc::<T, A>(t, ghost_cell_id, list));
+                            full_borrow_mono(lifetime_intersection('b, 'a), 'b, CursorMut_fbc::<T, A>(t1, ghost_cell_id, list));
                         }
                         open_full_borrow(qb/2, 'b, Ctx1);
                         open Ctx1();
-                        let klongb2 = open_full_borrow_strong('b, CursorMut_fbc::<T, A>(t, ghost_cell_id, list), qb/2);
-                        open CursorMut_fbc::<T, A>(t, ghost_cell_id, list)();
+                        let klongb2 = open_full_borrow_strong('b, CursorMut_fbc::<T, A>(t1, ghost_cell_id, list), qb/2);
+                        open CursorMut_fbc::<T, A>(t1, ghost_cell_id, list)();
                         close Ctx1();
                         close_full_borrow(Ctx1);
                         leak full_borrow('b, Ctx1);
                         open Nodes::<T>(?alloc_id, Some(current), ?before_current, ?tail, None, ?nodes2);
                         close Nodes::<T>(alloc_id, Some(current), before_current, tail, None, nodes2);
-                        open foreach(nodes2, elem_fbc::<T>(t));
-                        open elem_fbc::<T>(t)(current);
+                        open foreach(nodes2, elem_fbc::<T>(t1));
+                        open elem_fbc::<T>(t1)(current);
+                        produce_type_interp::<T>();
+                        if t1 != t {
+                            Send::send(t1, t, (*NonNull_ptr(current)).element);
+                        }
                         close_full_borrow_content::<T>(t, &(*NonNull_ptr(current)).element);
                         assert
                             (*list).alloc |-> ?alloc &*&
-                            Allocator::<A>(t, alloc, alloc_id) &*&
+                            Allocator::<A>(t1, alloc, alloc_id) &*&
                             (*list).head |-> ?head &*&
                             (*list).tail |-> tail &*&
                             Nodes::<T>(alloc_id, head, None, before_current, current_, ?nodes1);
                         {
                             pred Ctx() =
+                                type_interp::<T>() &*&
                                 [1/2]ghost_cell::<pair<usize, Option<NonNull<Node<T>>>>>(ghost_cell_id, pair(index, current_)) &*&
                                 (*list).alloc |-> alloc &*&
-                                Allocator::<A>(t, alloc, alloc_id) &*&
+                                Allocator::<A>(t1, alloc, alloc_id) &*&
                                 (*list).head |-> head &*&
                                 (*list).tail |-> tail &*&
                                 Nodes::<T>(alloc_id, head, None, before_current, current_, nodes1) &*&
                                 Nodes::<T>(alloc_id, current_, before_current, tail, None, nodes2) &*&
-                                foreach(nodes1, elem_fbc::<T>(t)) &*&
-                                foreach(tail(nodes2), elem_fbc::<T>(t)) &*&
+                                foreach(nodes1, elem_fbc::<T>(t1)) &*&
+                                foreach(tail(nodes2), elem_fbc::<T>(t1)) &*&
                                 (*list).len |-> length(nodes1) + length(nodes2) &*&
                                 index == length(nodes1) &*&
                                 (*list).marker |-> ?_ &*&
                                 struct_LinkedList_padding(list);
-                            produce_lem_ptr_chunk full_borrow_convert_strong(Ctx, <T>.full_borrow_content(t, &(*NonNull_ptr(current)).element), klongb2, CursorMut_fbc::<T, A>(t, ghost_cell_id, self0.list))() {
+                            produce_lem_ptr_chunk full_borrow_convert_strong(Ctx, <T>.full_borrow_content(t, &(*NonNull_ptr(current)).element), klongb2, CursorMut_fbc::<T, A>(t1, ghost_cell_id, self0.list))() {
                                 open Ctx();
                                 open_full_borrow_content::<T>(t, &(*NonNull_ptr(current)).element);
-                                close elem_fbc::<T>(t)(current);
-                                close foreach(nodes2, elem_fbc::<T>(t));
-                                close CursorMut_fbc::<T, A>(t, ghost_cell_id, self0.list)();
+                                if t1 != t {
+                                    Send::send(t, t1, (*NonNull_ptr(current)).element);
+                                }
+                                leak type_interp::<T>();
+                                close elem_fbc::<T>(t1)(current);
+                                close foreach(nodes2, elem_fbc::<T>(t1));
+                                close CursorMut_fbc::<T, A>(t1, ghost_cell_id, self0.list)();
                             } {
                                 close Ctx();
-                                close_full_borrow_strong(klongb2, CursorMut_fbc::<T, A>(t, ghost_cell_id, self0.list), <T>.full_borrow_content(t, &(*NonNull_ptr(current)).element));
+                                close_full_borrow_strong(klongb2, CursorMut_fbc::<T, A>(t1, ghost_cell_id, self0.list), <T>.full_borrow_content(t, &(*NonNull_ptr(current)).element));
                                 full_borrow_mono(klongb2, 'b, <T>.full_borrow_content(t, &(*NonNull_ptr(current)).element));
                             }
                         }
@@ -3148,22 +3186,37 @@ impl<'a, T, A: Allocator> CursorMut<'a, T, A> {
             Some(unlinked_node) => unsafe {
                 //@ open <CursorMut<'a, T, A>>.own(t, self0);
                 //@ assert [1/2]ghost_cell(?ghost_cell_id, _);
-                //@ open_full_borrow(q, 'a, CursorMut_fbc::<T, A>(t, ghost_cell_id, self0.list));
-                //@ open CursorMut_fbc::<T, A>(t, ghost_cell_id, self0.list)();
+                //@ let t1 = if is_Send(typeid(T)) && is_Send(typeid(A)) { default_tid } else { t };
+                //@ open_full_borrow(q, 'a, CursorMut_fbc::<T, A>(t1, ghost_cell_id, self0.list));
+                //@ open CursorMut_fbc::<T, A>(t1, ghost_cell_id, self0.list)();
                 //@ open Nodes::<T>(?alloc_id, self0.current, ?before_current, ?tail, None, ?nodes2);
                 
                 self.current = unlinked_node.as_ref().next;
                 //@ let current1 = (*self).current;
-                //@ open foreach(nodes2, elem_fbc::<T>(t));
-                //@ open elem_fbc::<T>(t)(unlinked_node);
+                //@ open foreach(nodes2, elem_fbc::<T>(t1));
+                //@ open elem_fbc::<T>(t1)(unlinked_node);
                 self.list.unlink_node(unlinked_node);
+                /*@
+                if t1 != t {
+                    std::alloc::Allocator_send(t, (*self0.list).alloc);
+                }
+                @*/
                 //@ std::alloc::share_allocator::<'static, A>(&(*self0.list).alloc);
                 let unlinked_node_ = Box::from_raw_in(unlinked_node.as_ptr(), &self.list.alloc);
                 let r = Some(Box::into_inner(unlinked_node_).element); // Some(unlinked_node_.element)
                 //@ std::alloc::end_share_allocator::<'static, A>();
                 //@ ghost_cell_mutate(ghost_cell_id, pair(self0.index, current1));
-                //@ close CursorMut_fbc::<T, A>(t, ghost_cell_id, self0.list)();
-                //@ close_full_borrow(CursorMut_fbc::<T, A>(t, ghost_cell_id, self0.list));
+                /*@
+                if t1 != t {
+                    std::alloc::Allocator_send(t1, (*self0.list).alloc);
+                    assert r == Option::Some(?e);
+                    produce_type_interp::<T>();
+                    Send::send(t1, t, e);
+                    leak type_interp::<T>();
+                }
+                @*/
+                //@ close CursorMut_fbc::<T, A>(t1, ghost_cell_id, self0.list)();
+                //@ close_full_borrow(CursorMut_fbc::<T, A>(t1, ghost_cell_id, self0.list));
                 //@ close <CursorMut<'a, T, A>>.own(t, *self);
                 //@ close <std::option::Option<T>>.own(t, r);
                 r
