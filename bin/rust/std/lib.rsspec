@@ -194,6 +194,10 @@ mod alloc {
         req Allocator::<A0>(?t, alloc, ?alloc_id) &*& is_subtype_of::<A0, A1>() == true;
         ens Allocator::<A1>(t, upcast(alloc), alloc_id);
     
+    lem Allocator_send<A>(t1: thread_id_t, alloc: A);
+        req Allocator::<A>(?t0, alloc, ?alloc_id) &*& is_Send(typeid(A)) == true;
+        ens Allocator::<A>(t1, alloc, alloc_id);
+    
     lem Allocator_to_own<A>(alloc: A);
         req Allocator::<A>(?t, alloc, _);
         ens <A>.own(t, alloc);

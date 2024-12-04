@@ -161,23 +161,9 @@ pred<T> <Node<T>>.own(t, node) = <T>.own(t, node.element);
 
 lem Node_drop<T>()
     req Node_own::<T>(?_t, ?_v);
-    ens <std::option::Option<std::ptr::NonNull<Node<T>>>>.own(_t, _v.next) &*& <std::option::Option<std::ptr::NonNull<Node<T>>>>.own(_t, _v.prev) &*& <T>.own(_t, _v.element);
+    ens <T>.own(_t, _v.element);
 {
     open <Node<T>>.own(_t, _v);
-    match _v.next {
-        Option::None => {}
-        Option::Some(next_) => {
-            std::ptr::close_NonNull_own(_t, next_);
-        }
-    }
-    close <std::option::Option<std::ptr::NonNull<Node<T>>>>.own(_t, _v.next);
-    match _v.prev {
-        Option::None => {}
-        Option::Some(prev_) => {
-            std::ptr::close_NonNull_own(_t, prev_);
-        }
-    }
-    close <std::option::Option<std::ptr::NonNull<Node<T>>>>.own(_t, _v.prev);
 }
 
 lem Node_own_mono<T0, T1>()
@@ -354,10 +340,32 @@ lem LinkedList_own_mono<T0, T1, A0, A1>()
 }
 
 lem LinkedList_send<T, A>(t1: thread_id_t)
-    req type_interp::<T>() &*& type_interp::<A>() &*& is_Send(typeid(A)) == true &*& LinkedList_own::<T, A>(?t0, ?v);
+    req type_interp::<T>() &*& type_interp::<A>() &*& is_Send(typeid(T)) == true &*& is_Send(typeid(A)) == true &*& LinkedList_own::<T, A>(?t0, ?v);
     ens type_interp::<T>() &*& type_interp::<A>() &*& LinkedList_own::<T, A>(t1, v);
 {
-    assume(false);
+    open <LinkedList<T, A>>.own(t0, v);
+    assert Allocator(t0, ?alloc, _);
+    std::alloc::Allocator_send(t1, alloc);
+    {
+        lem iter()
+            req foreach(?nodes, elem_fbc::<T>(t0)) &*& type_interp::<T>();
+            ens type_interp::<T>() &*& foreach(nodes, elem_fbc::<T>(t1));
+        {
+            open foreach(nodes, elem_fbc::<T>(t0));
+            match nodes {
+                nil => {}
+                cons(n, nodes0) => {
+                    open elem_fbc::<T>(t0)(n);
+                    Send::send::<T>(t0, t1, (*NonNull_ptr(n)).element);
+                    close elem_fbc::<T>(t1)(n);
+                    iter();
+                }
+            }
+            close foreach(nodes, elem_fbc::<T>(t1));
+        }
+        iter();
+    }
+    close <LinkedList<T, A>>.own(t1, v);
 }
 
 pred Nodes1<T>(alloc_id: any, n: Option<NonNull<Node<T>>>, prev: Option<NonNull<Node<T>>>, last: Option<NonNull<Node<T>>>, next: Option<NonNull<Node<T>>>, nodes: list<NonNull<Node<T>>>; prevs: list<Option<NonNull<Node<T>>>>, nexts: list<Option<NonNull<Node<T>>>>) =
@@ -578,14 +586,63 @@ lem LinkedList_share_mono<T, A>(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l
     req type_interp::<T>() &*& type_interp::<A>() &*& lifetime_inclusion(k1, k) == true &*& [_]LinkedList_share::<T, A>(k, t, l);
     ens type_interp::<T>() &*& type_interp::<A>() &*& [_]LinkedList_share::<T, A>(k1, t, l);
 {
-    assume(false);
+    open <LinkedList<T, A>>.share(k, t, l);
+    assert [_]exists(LinkedList_share_info(?alloc_id, ?head, ?tail, ?nodes, ?prevs, ?nexts));
+    close exists(LinkedList_share_info(alloc_id, head, tail, nodes, prevs, nexts));
+    frac_borrow_mono(k, k1, LinkedList_frac_borrow_content::<T, A>(alloc_id, l, head, tail, nodes, prevs, nexts));
+    {
+        lem iter()
+            req [_]foreach(?nodes1, elem_share::<T>(k, t)) &*& type_interp::<T>();
+            ens foreach(nodes1, elem_share::<T>(k1, t)) &*& type_interp::<T>();
+        {
+            open foreach(nodes1, elem_share::<T>(k, t));
+            match nodes1 {
+                nil => {
+                    open foreach(nil, _);
+                }
+                cons(n, nodes0) => {
+                    open elem_share::<T>(k, t)(n);
+                    share_mono::<T>(k, k1, t, &(*NonNull_ptr(n)).element);
+                    close elem_share::<T>(k1, t)(n);
+                    iter();
+                }
+            }
+            close foreach(nodes1, elem_share::<T>(k1, t));
+        }
+        iter();
+    }
+    close <LinkedList<T, A>>.share(k1, t, l);
+    leak <LinkedList<T, A>>.share(k1, t, l);
 }
 
 lem LinkedList_sync<T, A>(t1: thread_id_t)
-    req type_interp::<T>() &*& type_interp::<A>() &*& is_Sync(typeid(A)) == true &*& [_]LinkedList_share::<T, A>(?k, ?t0, ?l);
+    req type_interp::<T>() &*& type_interp::<A>() &*& is_Sync(typeid(T)) == true &*& is_Sync(typeid(A)) == true &*& [_]LinkedList_share::<T, A>(?k, ?t0, ?l);
     ens type_interp::<T>() &*& type_interp::<A>() &*& [_]LinkedList_share::<T, A>(k, t1, l);
 {
-    assume(false);
+    open <LinkedList<T, A>>.share(k, t0, l);
+    assert [_]exists(LinkedList_share_info(?alloc_id, ?head, ?tail, ?nodes_, ?prevs, ?nexts));
+    close exists(LinkedList_share_info(alloc_id, head, tail, nodes_, prevs, nexts));
+    {
+        lem iter()
+            req [_]foreach(?nodes, elem_share::<T>(k, t0)) &*& type_interp::<T>();
+            ens foreach(nodes, elem_share::<T>(k, t1)) &*& type_interp::<T>();
+        {
+            open foreach(nodes, elem_share::<T>(k, t0));
+            match nodes {
+                nil => {}
+                cons(n, nodes0) => {
+                    open elem_share::<T>(k, t0)(n);
+                    Sync::sync::<T>(k, t0, t1, &(*NonNull_ptr(n)).element);
+                    close elem_share::<T>(k, t1)(n);
+                    iter();
+                }
+            }
+            close foreach(nodes, elem_share::<T>(k, t1));
+        }
+        iter();
+    }
+    close <LinkedList<T, A>>.share(k, t1, l);
+    leak <LinkedList<T, A>>.share(k, t1, l);
 }
 
 @*/
@@ -649,13 +706,6 @@ pred<'a, T> <Iter<'a, T>>.own(t, iter) =
     iter.len == length(nodes) &*&
     [_]foreach(nodes, elem_share::<T>('a, t));
 
-lem Iter_drop<'a, T>()
-    req Iter_own::<'a, T>(?_t, ?_v);
-    ens <std::option::Option<std::ptr::NonNull<Node<T>>>>.own(_t, _v.head) &*& <std::option::Option<std::ptr::NonNull<Node<T>>>>.own(_t, _v.tail) &*& std::marker::PhantomData_own::<&'a Node<T>>(_t, _v.marker);
-{
-    assume(false);
-}
-
 lem Iter_own_mono<'a0, 'a1, T0, T1>()
     req type_interp::<T0>() &*& type_interp::<T1>() &*& Iter_own::<'a0, T0>(?t, ?v) &*& lifetime_inclusion('a1, 'a0) == true &*& is_subtype_of::<T0, T1>() == true;
     ens type_interp::<T0>() &*& type_interp::<T1>() &*& Iter_own::<'a1, T1>(t, Iter::<'a1, T1> { head: upcast(v.head), tail: upcast(v.tail), len: upcast(v.len), marker: upcast(v.marker) });
@@ -664,10 +714,32 @@ lem Iter_own_mono<'a0, 'a1, T0, T1>()
 }
 
 lem Iter_send<'a, T>(t1: thread_id_t)
-    req type_interp::<T>() &*& Iter_own::<'a, T>(?t0, ?v);
+    req type_interp::<T>() &*& Iter_own::<'a, T>(?t0, ?v) &*& is_Sync(typeid(T)) == true;
     ens type_interp::<T>() &*& Iter_own::<'a, T>(t1, v);
 {
-    assume(false);
+    open <Iter<'a, T>>.own(t0, v);
+    let k = 'a;
+    {
+        lem iter()
+            req [_]foreach(?nodes, elem_share::<T>(k, t0)) &*& type_interp::<T>();
+            ens foreach(nodes, elem_share::<T>(k, t1)) &*& type_interp::<T>();
+        {
+            open foreach(nodes, elem_share::<T>(k, t0));
+            match nodes {
+                nil => {}
+                cons(n, nodes0) => {
+                    open elem_share::<T>(k, t0)(n);
+                    Sync::sync::<T>(k, t0, t1, &(*NonNull_ptr(n)).element);
+                    close elem_share::<T>(k, t1)(n);
+                    iter();
+                }
+            }
+            close foreach(nodes, elem_share::<T>(k, t1));
+        }
+        iter();
+    }
+    leak foreach(_, _);
+    close <Iter<'a, T>>.own(t1, v);
 }
 
 @*/
@@ -2204,7 +2276,8 @@ lem DropGuard_own_mono<'a0, 'a1, T, A>()
     req type_interp::<T>() &*& type_interp::<A>() &*& DropGuard_own::<'a0, T, A>(?t, ?v) &*& lifetime_inclusion('a1, 'a0) == true;
     ens type_interp::<T>() &*& type_interp::<A>() &*& DropGuard_own::<'a1, T, A>(t, DropGuard::<'a1, T, A> { 0: v.0 as *_ });
 {
-    assume(false);
+    open <DropGuard<'a0, T, A>>.own(t, v);
+    close <DropGuard<'a1, T, A>>.own(t, v);
 }
 
 @*/
@@ -2520,13 +2593,6 @@ pred<'a, T, A> <CursorMut<'a, T, A>>.own(t, cursor) =
     [1/2]ghost_cell::<pair<usize, Option<NonNull<Node<T>>>>>(?ghost_cell_id, pair(cursor.index, cursor.current)) &*&
     full_borrow('a, CursorMut_fbc::<T, A>(t, ghost_cell_id, cursor.list));
 
-lem CursorMut_drop<'a, T, A>()
-    req CursorMut_own::<'a, T, A>(?_t, ?_v);
-    ens <std::option::Option<std::ptr::NonNull<Node<T>>>>.own(_t, _v.current) &*& full_borrow(lft_of(typeid('a)), LinkedList_full_borrow_content(_t, _v.list));
-{
-    assume(false);
-}
-
 lem CursorMut_own_mono<'a0, 'a1, T, A>()
     req type_interp::<T>() &*& type_interp::<A>() &*& CursorMut_own::<'a0, T, A>(?t, ?v) &*& lifetime_inclusion('a1, 'a0) == true;
     ens type_interp::<T>() &*& type_interp::<A>() &*& CursorMut_own::<'a1, T, A>(t, CursorMut::<'a1, T, A> { index: upcast(v.index), current: upcast(v.current), list: v.list as *_ });
@@ -2535,10 +2601,12 @@ lem CursorMut_own_mono<'a0, 'a1, T, A>()
 }
 
 lem CursorMut_send<'a, T, A>(t1: thread_id_t)
-    req type_interp::<T>() &*& type_interp::<A>() &*& CursorMut_own::<'a, T, A>(?t0, ?v);
+    req type_interp::<T>() &*& type_interp::<A>() &*& is_Send(typeid(T)) == true &*& is_Send(typeid(A)) == true &*& CursorMut_own::<'a, T, A>(?t0, ?v);
     ens type_interp::<T>() &*& type_interp::<A>() &*& CursorMut_own::<'a, T, A>(t1, v);
 {
+    open <CursorMut<'a, T, A>>.own(t0, v);
     assume(false);
+    //close <CursorMut<'a, T, A>>.own(t1, v);
 }
 
 @*/
@@ -3345,9 +3413,11 @@ pred<'a, T, F, A> <ExtractIf<'a, T, F, A>>.own(t, ex) =
 
 lem ExtractIf_drop<'a, T, F, A>()
     req ExtractIf_own::<'a, T, F, A>(?_t, ?_v);
-    ens full_borrow(lft_of(typeid('a)), LinkedList_full_borrow_content(_t, _v.list)) &*& <std::option::Option<std::ptr::NonNull<Node<T>>>>.own(_t, _v.it) &*& <F>.own(_t, _v.`pred`);
+    ens <F>.own(_t, _v.`pred`);
 {
-    assume(false);
+    open <ExtractIf<'a, T, F, A>>.own(_t, _v);
+    leak full_borrow(_, _);
+    leak [1/2]ghost_cell(_, _);
 }
 
 lem ExtractIf_own_mono<'a0, 'a1, T, F0, F1, A>()
