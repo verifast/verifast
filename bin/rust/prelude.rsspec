@@ -8,6 +8,7 @@ include!{"rust_belt/lem_aux.rsspec"}
 
 union std_empty_ {}
 struct std_tuple_0_ {}
+struct std_tuple_1_<T1>(T1)
 
 struct slice_ref<'a, T> { ptr: *T, len: usize }
 

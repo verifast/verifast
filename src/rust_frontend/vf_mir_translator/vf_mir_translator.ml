@@ -415,6 +415,7 @@ module Mir = struct
         variant_name : string;
         field_names : string list;
       }
+    | AggKindTuple
 
   type field_def_tr = {
     name : string;
@@ -446,25 +447,7 @@ end
 module TrTyTuple = struct
   let tuple0_name = "std_tuple_0_"
 
-  let make_tuple_type_name tys =
-    if List.length tys != 0 then
-      failwith "Todo: Tuple Ty is not implemented yet"
-    else tuple0_name
-
-  let make_tuple_type_decl name tys loc =
-    if List.length tys != 0 then
-      failwith "Todo: Tuple Ty is not implemented yet"
-    else
-      Ast.Struct
-        ( loc,
-          name,
-          [],
-          Some
-            ( (*base_spec list*) [],
-              (*field list*) [],
-              (*instance_pred_decl list*) [],
-              (*is polymorphic*) false ),
-          (*struct_attr list*) [] )
+  let make_tuple_type_name arity = Printf.sprintf "std_tuple_%d_" arity
 end
 
 module TrTyInt = struct
@@ -1066,20 +1049,43 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | Undefined _ -> Error (`TrAdtTy "Unknown ADT kind")
 
   and translate_tuple_ty (tys_cpn : TyRd.t list) (loc : Ast.loc) =
-    if not @@ ListAux.is_empty @@ tys_cpn then
-      failwith "Todo: Tuple Ty is not implemented yet"
-    else
-      let name = TrTyTuple.make_tuple_type_name [] in
-      (* TODO @Nima: std_tuple_0_ type is declared in prelude_rust_.h.
-         We should come up with a better arrangement for these auxiliary types. *)
-      let ty_info =
-        Mir.TyInfoBasic
-          {
-            vf_ty = Ast.ManifestTypeExpr (loc, Ast.StructType (name, []));
-            interp = RustBelt.emp_ty_interp loc;
-          }
-      in
-      Ok ty_info
+    let open Ast in
+    let* tys = ListAux.try_map (fun ty_cpn -> translate_ty ty_cpn loc) tys_cpn in
+    let name = TrTyTuple.make_tuple_type_name (List.length tys) in
+    let tys = List.map Mir.basic_type_of tys in
+    let vf_ty = if tys = [] then ManifestTypeExpr (loc, StructType (name, [])) else StructTypeExpr (loc, Some name, None, [], tys) in
+    let size = SizeofExpr (loc, TypeExpr vf_ty) in
+    let own t v =
+      if tys = [] then
+        Ok (True loc)
+      else
+        Ok (CallExpr (loc, name ^ "_own", tys, [], [ LitPat t; LitPat v ], Static))
+    in
+    let fbc_name = name ^ "_full_borrow_content" in
+    let full_bor_content = RustBelt.simple_fbc loc fbc_name in
+    let shr lft tid l =
+      Error
+        "Expressing shared ownership of a tuple value is not yet supported"
+    in
+    let points_to tid l vid_op =
+      let* pat = RustBelt.Aux.vid_op_to_var_pat vid_op loc in
+      Ok (PointsTo (loc, l, RegularPointsTo, pat))
+    in
+    let ty_info =
+      Mir.TyInfoBasic
+        {
+          vf_ty;
+          interp = RustBelt.{
+            size;
+            own;
+            shr;
+            full_bor_content;
+            points_to;
+            pointee_fbc = None;
+          };
+        }
+    in
+    Ok ty_info
 
   and bool_ty_info loc =
     let open Ast in
@@ -1912,11 +1918,11 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let ty =
         match ty_expr with
         | Ast.ManifestTypeExpr ((*loc*) _, ty) -> ty
-        | _ -> failwith "Todo: Unsupported type_expr"
+        | _ -> failwith ("Todo: Unsupported type_expr: " ^ Ocaml_expr_formatter.string_of_ocaml_expr false (Ocaml_expr_of_ast.of_type_expr ty_expr))
       in
       match ty with
       | Ast.StructType (st_name, _) ->
-          if st_name != TrTyTuple.make_tuple_type_name [] then
+          if st_name != TrTyTuple.make_tuple_type_name 0 then
             failwith
               ("Todo: Constants of type struct " ^ st_name
              ^ " are not supported yet")
@@ -1938,7 +1944,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           let ty =
             match ty_expr with
             | Ast.ManifestTypeExpr ((*loc*) _, ty) -> ty
-            | _ -> failwith "Todo: Unsupported type_expr"
+            | _ -> failwith ("Todo: Unsupported type_expr: " ^ Ocaml_expr_formatter.string_of_ocaml_expr false (Ocaml_expr_of_ast.of_type_expr ty_expr))
           in
           match ty with
           | Ast.FuncType _ -> Ok (`TrTypedConstantFn ty_info)
@@ -2550,7 +2556,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let open AggregateKindRd in
       match get agg_kind_cpn with
       | Array es_ty_cpn -> failwith "Todo: AggregateKind::Array"
-      | Tuple -> failwith "Todo: AggregateKind::Tuple"
+      | Tuple -> Ok Mir.AggKindTuple
       | Adt adt_data_cpn ->
           let open AdtData in
           let adt_id_cpn = adt_id_get adt_data_cpn in
@@ -2583,6 +2589,23 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let agg_kind_cpn = aggregate_kind_get agg_data_cpn in
       let* agg_kind = translate_aggregate_kind agg_kind_cpn in
       match agg_kind with
+      | AggKindTuple ->
+        let tuple_struct_name = TrTyTuple.make_tuple_type_name (List.length operands_cpn) in
+        let init_stmts_builder lhs_place =
+          let field_init_stmts =
+            List.mapi
+              (fun i init_expr ->
+                let open Ast in
+                ExprStmt
+                  (AssignExpr
+                     ( loc,
+                       Select (loc, lhs_place, string_of_int i),
+                       init_expr )))
+              operand_exprs
+          in
+          tmp_rvalue_binders @ field_init_stmts
+        in
+        Ok (`TrRvalueAggregate init_stmts_builder)
       | AggKindAdt { adt_kind; adt_name; variant_name; field_names } -> (
           match adt_kind with
           | Enum ->
