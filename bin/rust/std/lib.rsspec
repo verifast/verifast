@@ -91,12 +91,24 @@ mod mem {
     //@ req *dest |-> ?v;
     //@ ens *dest |-> src &*& result == v;
     
+    mod verifast {
+    
+        fn unfreeze<T>(ptr: *T);
+        //@ req [1/2](*ptr |-> ?v);
+        //@ ens *ptr |-> v;
+        
+        fn freeze<T>(ptr: *T);
+        //@ req *ptr |-> _;
+        //@ ens [1/2](*ptr |-> _);
+    
+    }
+    
 }
 
 mod ptr {
 
     unsafe fn drop_in_place<T>(to_drop: *mut T);
-    //@ req thread_token(?t) &*& (<T>.full_borrow_content(t, to_drop))();
+    //@ req thread_token(?t) &*& *to_drop |-> ?v &*& <T>.own(t, v);
     //@ ens thread_token(t) &*& *to_drop |-> _;
 
     struct NonNull<T>;

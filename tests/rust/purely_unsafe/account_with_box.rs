@@ -49,7 +49,6 @@ impl Account {
         let b = Box::from_raw(account);
         //@ close Account_own(t, value);
         //@ std::boxed::Box_to_own(b);
-        //@ close_full_borrow_content::<std::boxed::Box<Account, std::alloc::Global>>(t, &b);
     }
 
 }

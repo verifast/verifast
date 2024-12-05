@@ -2028,7 +2028,7 @@ and
     s = function%parser
     | [ (_, Kwd ";") ] ->
       begin match e with
-        AssignExpr (l, Operation (llhs, Mul, [Var (lt, t); e1]), rhs) -> 
+        AssignExpr (l, Operation (llhs, Mul, [Var (lt, t); e1]), _, rhs) -> 
         let rec iter te e1 =
           match e1 with
             Var (lx, x) -> register_varname x; DeclStmt (l, [l, Some te, x, Some(rhs), (ref false, ref None)])
@@ -2896,7 +2896,7 @@ and
 | [ ] -> e0
 and
   parse_assign_expr_rest e0 = function%parser
-| [ (l, Kwd "="); parse_assign_expr as e1 ] -> AssignExpr (l, e0, e1)
+| [ (l, Kwd "="); parse_assign_expr as e1 ] -> AssignExpr (l, e0, Mutation, e1)
 | [ (l, Kwd "+="); parse_assign_expr as e1 ] -> AssignOpExpr (l, e0, Add, e1, false)
 | [ (l, Kwd "-="); parse_assign_expr as e1 ] -> AssignOpExpr (l, e0, Sub, e1, false)
 | [ (l, Kwd "*="); parse_assign_expr as e1 ] -> AssignOpExpr (l, e0, Mul, e1, false)

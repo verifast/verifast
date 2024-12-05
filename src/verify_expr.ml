@@ -49,8 +49,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | TypedExpr (e, t) -> expr_assigned_variables e
     | WidenedParameterArgument e -> expr_assigned_variables e
     | AddressOf (l, e) -> expr_assigned_variables e
-    | AssignExpr (l, (Var (_, x) | WVar (_, x, _)), e) -> [x] @ expr_assigned_variables e
-    | AssignExpr (l, e1, e2) -> expr_assigned_variables e1 @ expr_assigned_variables e2
+    | AssignExpr (l, (Var (_, x) | WVar (_, x, _)), _, e) -> [x] @ expr_assigned_variables e
+    | AssignExpr (l, e1, _, e2) -> expr_assigned_variables e1 @ expr_assigned_variables e2
     | AssignOpExpr (l, (Var (_, x) | WVar (_, x, _)), op, e, _) -> [x] @ expr_assigned_variables e
     | AssignOpExpr (l, e1, op, e2, _) -> expr_assigned_variables e1 @ expr_assigned_variables e2
     | WAssignOpExpr (l, (Var (_, x) | WVar (_, x, _)), _, e, _) -> [x] @ expr_assigned_variables e
@@ -1346,7 +1346,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | ProverTypeConversion(_, _, e) ->  expr_mark_addr_taken e locals
     | Unbox (e, _) -> expr_mark_addr_taken e locals
     | ArrayTypeExpr'(_, e) ->  expr_mark_addr_taken e locals
-    | AssignExpr(_, e1, e2) ->  expr_mark_addr_taken e1 locals;  expr_mark_addr_taken e2 locals
+    | AssignExpr(_, e1, _, e2) ->  expr_mark_addr_taken e1 locals;  expr_mark_addr_taken e2 locals
     | AssignOpExpr(_, e1, _, e2, _) -> expr_mark_addr_taken e1 locals;  expr_mark_addr_taken e2 locals
     | CommaExpr (_, e1, e2) -> expr_mark_addr_taken e1 locals; expr_mark_addr_taken e2 locals
     | InitializerList(_, es) -> List.iter (fun (_, e) -> expr_mark_addr_taken e locals) es
@@ -1512,7 +1512,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | ProverTypeConversion(_, _, e) -> expr_address_taken e
     | Unbox (e, _) -> expr_address_taken e
     | ArrayTypeExpr'(_, e) -> expr_address_taken e
-    | AssignExpr(_, e1, e2) -> (expr_address_taken e1) @ (expr_address_taken e2)
+    | AssignExpr(_, e1, _, e2) -> (expr_address_taken e1) @ (expr_address_taken e2)
     | AssignOpExpr(_, e1, _, e2, _) -> (expr_address_taken e1) @ (expr_address_taken e2)
     | CommaExpr (_, e1, e2) -> expr_address_taken e1 @ expr_address_taken e2
     | InitializerList (_, es) -> flatmap (fun (_, e) -> expr_address_taken e) es
@@ -1703,7 +1703,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       begin fun cont ->
         match producePaddingChunk, padding_predsymb_opt with
         | true, Some padding_predsymb ->
-          cont (Chunk ((padding_predsymb, true), targs, real_unit, [addr], None)::h)
+          cont (Chunk ((padding_predsymb, true), targs, coef, [addr], None)::h)
         | _ ->
           cont h
       end $. fun h ->
@@ -2448,7 +2448,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         consume_c_object_core l dummypat target pointeeType h env false $. fun chunks h (Some value) ->
         cont (chunks @ h) env value
     in
-    let rec write_lvalue h env lvalue value cont =
+    let rec write_lvalue h env lvalue assignment_kind value cont =
       match lvalue with
         LValues.Var (l, x, _) ->
         check_assign l x;
@@ -2468,12 +2468,13 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             Some f_symb_ -> f_symb_
           | None -> f_symb
         in
-        consume_chunk rules h env [] env [] l (f_symb_used, true) targs real_unit real_unit_pat (Some 1) pats $. fun _ h _ _ _ _ _ _ ->
-        cont (Chunk ((f_symb, true), targs, real_unit, targets @ [value], None)::h) env
+        let coef = match assignment_kind with Mutation -> real_unit | Initialization -> real_half in
+        consume_chunk rules h env [] env [] l (f_symb_used, true) targs coef real_unit_pat (Some 1) pats $. fun _ h _ _ _ _ _ _ ->
+        cont (Chunk ((f_symb, true), targs, coef, targets @ [value], None)::h) env
       | LValues.ValueField (l, w, getter, setter, tp0, tp) ->
         read_lvalue h env w $. fun h env x ->
         let x = ctxt#mk_app setter [x; prover_convert_term value tp tp0] in
-        write_lvalue h env w x cont
+        write_lvalue h env w assignment_kind x cont
       | LValues.ArrayElement (l, arr, elem_tp, i) when language = Java ->
         has_heap_effects();
         if pure then static_error l "Cannot write in a pure context." None;
@@ -2569,15 +2570,16 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | LValues.Deref (l, target, pointeeType) ->
         has_heap_effects();
         if pure then static_error l "Cannot write in a pure context." None;
-        consume_c_object_core_core l real_unit_pat target pointeeType h env true true $. fun _ h _ ->
-        produce_c_object l real_unit target pointeeType eval_h (Term value) false true h env $. fun h env ->
+        let coefpat, coef = match assignment_kind with Mutation -> real_unit_pat, real_unit | Initialization -> TermPat real_half, real_half in
+        consume_c_object_core_core l coefpat target pointeeType h env true true $. fun _ h _ ->
+        produce_c_object l coef target pointeeType eval_h (Term value) false true h env $. fun h env ->
         cont h env
     in
     let rec execute_assign_op_expr h env lhs get_values cont =
       lhs_to_lvalue h env lhs $. fun h env lvalue ->
       read_lvalue h env lvalue $. fun h env v1 ->
       get_values h env v1 $. fun h env result_value new_value ->
-      write_lvalue h env lvalue new_value $. fun h env ->
+      write_lvalue h env lvalue Mutation new_value $. fun h env ->
       cont h env result_value
     in
     let type_of_expr = function
@@ -3071,7 +3073,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         cont h env r vrhs
       in
       execute_assign_op_expr h env lhs get_values cont
-    | AssignExpr (l, lhs, rhs) ->
+    | AssignExpr (l, lhs, kind, rhs) ->
       lhs_to_lvalue h env lhs $. fun h env lvalue ->
       let varName = match lhs with WVar (_, x, _) -> Some x | _ -> None in
       let rhsHeapReadOnly =
@@ -3085,7 +3087,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | _ -> true
       in
       verify_expr (true, rhsHeapReadOnly) h env varName rhs $. fun h env vrhs ->
-      write_lvalue h env lvalue vrhs $. fun h env ->
+      write_lvalue h env lvalue kind vrhs $. fun h env ->
       cont h env vrhs
     | CommaExpr (l, e1, e2) ->
       eval_h_core readonly h env e1 $. fun h env _ ->

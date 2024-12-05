@@ -535,7 +535,6 @@ impl<T> Deque<T> {
         //@ open elem_points_to::<T>(first, ?value);
         //@ open elem_own::<T>(_t)(value);
         //@ open Node_value(first, _);
-        //@ close_full_borrow_content::<T>(_t, &(*first).value);
         std::ptr::drop_in_place(&mut (*first).value);
         //@ open_struct(first);
         std::alloc::dealloc(first as *mut u8, std::alloc::Layout::new::<Node<T>>());

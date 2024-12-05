@@ -2509,8 +2509,10 @@ mod vf_mir_builder {
             use mir::tcx::PlaceTy;
             let local_decl_id_cpn = place_cpn.reborrow().init_local();
             Self::encode_local_decl_id(place.local, local_decl_id_cpn);
+            let decl = &enc_ctx.body().local_decls()[place.local];
+            place_cpn.set_local_is_mutable(decl.mutability == mir::Mutability::Mut);
 
-            let mut pty = PlaceTy::from_ty(enc_ctx.body().local_decls()[place.local].ty);
+            let mut pty = PlaceTy::from_ty(decl.ty);
             place_cpn.fill_projection(place.projection, |place_elm_cpn, place_elm| {
                 Self::encode_place_element(enc_ctx, pty.ty, &place_elm, place_elm_cpn);
                 pty = pty.projection_ty(enc_ctx.tcx, place_elm);

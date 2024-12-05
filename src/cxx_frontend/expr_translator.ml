@@ -94,7 +94,7 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
     | R.BinaryOpKind.LAnd -> make_op loc Ast.And lhs rhs (* && *)
     | R.BinaryOpKind.LOr -> make_op loc Ast.Or lhs rhs (* || *)
     (* regular assign *)
-    | R.BinaryOpKind.Assign -> Ast.AssignExpr (loc, lhs, rhs) (* = *)
+    | R.BinaryOpKind.Assign -> Ast.AssignExpr (loc, lhs, Mutation, rhs) (* = *)
     (* assign operator *)
     | R.BinaryOpKind.MulAssign -> make_assign loc Ast.Mul lhs rhs (* *= *)
     | R.BinaryOpKind.DivAssign -> make_assign loc Ast.Div lhs rhs (* /= *)
