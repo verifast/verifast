@@ -19,6 +19,7 @@ cd ..
 begin_parallel
 verifast -c nonnull.rs
 cd purely_unsafe
+  verifast -c -allow_should_fail -allow_dead_code nonmut_let_immut.rs
   verifast -c struct_exprs.rs
   verifast -c scalars.rs
   verifast -c alloc.rs

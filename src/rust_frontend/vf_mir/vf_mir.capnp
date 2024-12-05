@@ -428,6 +428,7 @@ struct Body {
         }
 
         local @0: LocalDeclId;
+        localIsMutable @2: Bool;
         projection @1: List(PlaceElement);
     }
 

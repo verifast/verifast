@@ -2338,12 +2338,11 @@ unsafe impl<#[may_dangle] T, A: Allocator> Drop for LinkedList<T, A> {
             let guard = DropGuard(self);
             //@ open_full_borrow_content(t, self);
             loop {
-                //@ inv thread_token(t) &*& *self |-> ?self0 &*& <LinkedList<T, A>>.own(t, self0) &*& guard.0 |-> self &*& element |-> _;
+                //@ inv thread_token(t) &*& *self |-> ?self0 &*& <LinkedList<T, A>>.own(t, self0) &*& [1/2]guard.0 |-> self &*& [1/2]element |-> _;
                 match guard.0.pop_front() {
                     None => { break; }
                     Some(element) => {
                         //@ open <std::option::Option<T>>.own(t, _);
-                        //@ close_full_borrow_content(t, &element);
                     }
                 }
             }

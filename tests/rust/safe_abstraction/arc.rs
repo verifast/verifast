@@ -393,7 +393,6 @@ impl<T: Sync + Send> Drop for Arc<T> {
             //@ Send::send::<T>(default_tid, _t, v);
             //@ leak type_interp::<T>();
             //@ open ArcInner_data(ptr, v);
-            //@ close_full_borrow_content::<T>(_t, &(*ptr).data);
             std::ptr::drop_in_place(&mut (*self.ptr.as_ptr()).data);
             //@ open_struct(ptr);
             //@ std::alloc::Layout_size__Layout_from_size_align_(std::mem::size_of::<ArcInner<T>>(), std::mem::align_of_::<ArcInner<T>>());

@@ -343,7 +343,7 @@ module Mir = struct
     mutable children : basic_block list;
   }
 
-  type fn_call_dst_data = { dst : Ast.expr; dst_bblock_id : string }
+  type fn_call_dst_data = { dst : Ast.expr * bool (* place is mutable *); dst_bblock_id : string }
   type int_ty = ISize | I8 | I16 | I32 | I64 | I128
 
   let int_ty_to_string (it : int_ty) =
@@ -1739,7 +1739,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         ( loc,
           [
             ( loc,
-              Some ty,
+              Some (match mut with Mut -> ty | Not -> ConstTypeExpr (loc, ty)),
               id,
               None,
               ( (* indicates whether address is taken *) ref false,
@@ -1770,37 +1770,43 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       | Downcast variant_index -> Downcast (Stdint.Uint32.to_int variant_index)
 
     let translate_projection (loc : Ast.loc) (elems : place_element list)
-        (e : Ast.expr) =
+        (e : Ast.expr) (e_is_mutable : bool) : (Ast.expr * bool (* result is mutable *)) =
       let rec iter elems =
         match elems with
-        | [] -> e
-        | Deref :: elems -> Ast.Deref (loc, iter elems)
+        | [] -> (e, e_is_mutable)
+        | Deref :: elems ->
+          let (e1, e1_is_mutable) = iter elems in
+          (Ast.Deref (loc, e1), true)
         | Field (_, field_idx) :: Downcast variant_idx :: elems ->
-            Ast.CallExpr
+          let (e1, e1_is_mutable) = iter elems in
+            (Ast.CallExpr
               ( loc,
                 "#inductive_projection",
                 [],
                 [],
                 [
-                  LitPat (iter elems);
+                  LitPat e1;
                   LitPat (WIntLit (loc, Big_int.big_int_of_int variant_idx));
                   LitPat (WIntLit (loc, Big_int.big_int_of_int field_idx));
                 ],
-                Static )
-        | Field (Some name, _) :: elems -> Ast.Select (loc, iter elems, name)
+                Static ), e1_is_mutable)
+        | Field (Some name, _) :: elems ->
+          let (e1, e1_is_mutable) = iter elems in
+          (Ast.Select (loc, e1, name), e1_is_mutable)
         | Field (None, _) :: _ ->
             failwith "Not yet supported: Field(None, _)::_"
         | Downcast _ :: _ -> failwith "Not yet supported: Downcast _::_"
       in
       iter elems
 
-    let translate_place (place_cpn : PlaceRd.t) (loc : Ast.loc) =
+    let translate_place (place_cpn : PlaceRd.t) (loc : Ast.loc) : (Ast.expr * bool (* the place is mutable *), _) result =
       let open PlaceRd in
       let id_cpn = local_get place_cpn in
+      let local_is_mutable = local_is_mutable_get place_cpn in
       let id = translate_local_decl_id id_cpn in
       let projection_cpn = projection_get_list place_cpn in
       let place_elems = List.map decode_place_element projection_cpn in
-      Ok (translate_projection loc (List.rev place_elems) (Ast.Var (loc, id)))
+      Ok (translate_projection loc (List.rev place_elems) (Ast.Var (loc, id)) local_is_mutable)
 
     let translate_scalar_int (si_cpn : ScalarRd.Int.t) (ty : Ast.type_expr)
         (loc : Ast.loc) =
@@ -1993,11 +1999,11 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       *)
       match get operand_cpn with
       | Copy place_cpn ->
-          let* place = translate_place place_cpn loc in
+          let* place, place_is_mutable = translate_place place_cpn loc in
           Ok (`TrOperandCopy place)
       | Move place_cpn ->
-          let* place = translate_place place_cpn loc in
-          Ok (`TrOperandMove place)
+          let* place, place_is_mutable = translate_place place_cpn loc in
+          Ok (`TrOperandMove (place, place_is_mutable))
       | Constant constant_cpn -> translate_const_operand constant_cpn
       | Undefined _ -> Error (`TrOperand "Unknown Mir Operand kind")
 
@@ -2007,7 +2013,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let translate_opr ((opr_cpn, loc) : OperandRd.t * Ast.loc) =
         let* opr = translate_operand opr_cpn loc in
         match opr with
-        | `TrOperandCopy operand_expr | `TrOperandMove operand_expr ->
+        | `TrOperandCopy operand_expr | `TrOperandMove (operand_expr, _(*place_is_mutable*)) ->
             Ok operand_expr
         | `TrTypedConstantRvalueBinderBuilder rvalue_binder_builder ->
             let tmp_var_cnt = List.length !tmp_rvalue_binders in
@@ -2068,7 +2074,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       in
       let* callee = translate_operand callee_cpn call_loc in
       match callee with
-      | `TrOperandMove (Var (_, fn_name)) ->
+      | `TrOperandMove (Var (_, fn_name), place_is_mutable) ->
           translate_regular_fn_call [] fn_name
       | `TrTypedConstantFn ty_info -> (
           match ty_info with
@@ -2229,7 +2235,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                     ( tmp_rvalue_binders
                       @ [
                           Ast.ExprStmt
-                            (AssignExpr (fn_loc, Deref (fn_loc, dst), src));
+                            (AssignExpr (fn_loc, Deref (fn_loc, dst), Mutation, src));
                         ],
                       mk_unit_expr fn_loc )
               | "std::cell::UnsafeCell::<T>::new"
@@ -2321,11 +2327,11 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         | Nothing -> (*Diverging call*) Ok (Ast.ExprStmt fn_call_rexpr, None, [])
         | Something ptr_cpn ->
             let destination_data_cpn = VfMirStub.Reader.of_pointer ptr_cpn in
-            let* { Mir.dst; Mir.dst_bblock_id } =
+            let* { Mir.dst = (dst, dst_is_mutable); Mir.dst_bblock_id } =
               translate_destination_data destination_data_cpn loc
             in
             Ok
-              ( Ast.ExprStmt (Ast.AssignExpr (loc, dst, fn_call_rexpr)),
+              ( Ast.ExprStmt (Ast.AssignExpr (loc, dst, (if dst_is_mutable then Mutation else Initialization), fn_call_rexpr)),
                 Some (Ast.GotoStmt (loc, dst_bblock_id)),
                 [ dst_bblock_id ] )
         | Undefined _ -> Error (`TrFnCall "Unknown Option kind")
@@ -2477,11 +2483,16 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       | Drop drop_data_cpn ->
           let open DropData in
           let place_cpn = place_get drop_data_cpn in
-          let* place = translate_place place_cpn loc in
+          let* place, place_is_mutable = translate_place place_cpn loc in
           let target_cpn = target_get drop_data_cpn in
           let target = translate_basic_block_id target_cpn in
+          let unfreeze_stmts, freeze_stmts =
+            if place_is_mutable then [], [] else
+              [ Ast.ExprStmt (CallExpr (loc, "std::mem::verifast::unfreeze", [], [], [ LitPat (AddressOf (loc, place)) ], Static)) ],
+              [ Ast.ExprStmt (CallExpr (loc, "std::mem::verifast::freeze", [], [], [ LitPat (AddressOf (loc, place)) ], Static)) ]
+          in
           Ok
-            ( [
+            ( unfreeze_stmts @ [
                 Ast.ExprStmt
                   (CallExpr
                      ( loc,
@@ -2489,7 +2500,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                        [],
                        [],
                        [ LitPat (AddressOf (loc, place)) ],
-                       Static ));
+                       Static )) ] @ freeze_stmts @ [
                 Ast.GotoStmt (loc, target);
               ],
               [ target ] )
@@ -2591,7 +2602,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       match agg_kind with
       | AggKindTuple ->
         let tuple_struct_name = TrTyTuple.make_tuple_type_name (List.length operands_cpn) in
-        let init_stmts_builder lhs_place =
+        let init_stmts_builder (lhs_place, lhs_place_is_mutable) =
           let field_init_stmts =
             List.mapi
               (fun i init_expr ->
@@ -2600,6 +2611,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   (AssignExpr
                      ( loc,
                        Select (loc, lhs_place, string_of_int i),
+                       (if lhs_place_is_mutable then Mutation else Initialization),
                        init_expr )))
               operand_exprs
           in
@@ -2609,13 +2621,14 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       | AggKindAdt { adt_kind; adt_name; variant_name; field_names } -> (
           match adt_kind with
           | Enum ->
-              let init_stmts_builder lhs_place =
+              let init_stmts_builder (lhs_place, lhs_place_is_mutable) =
                 let arg_pats = List.map (fun e -> Ast.LitPat e) operand_exprs in
                 let assignment =
                   Ast.ExprStmt
                     (AssignExpr
                        ( loc,
                          lhs_place,
+                         (if lhs_place_is_mutable then Mutation else Initialization),
                          CallExpr
                            ( loc,
                              adt_name ^ "::" ^ variant_name,
@@ -2635,7 +2648,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                     "The number of struct fields and initializing operands are \
                      different")
               else
-                let init_stmts_builder lhs_place =
+                let init_stmts_builder (lhs_place, lhs_place_is_mutable) =
                   let field_init_stmts =
                     List.map
                       (fun (field_name, init_expr) ->
@@ -2644,6 +2657,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                           (AssignExpr
                              ( loc,
                                Select (loc, lhs_place, field_name),
+                               (if lhs_place_is_mutable then Mutation else Initialization),
                                init_expr )))
                       (List.combine field_names operand_exprs)
                   in
@@ -2656,7 +2670,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let tr_operand operand =
         match operand with
         | `TrOperandCopy expr
-        | `TrOperandMove expr
+        | `TrOperandMove (expr, _(*place_is_mutable*))
         | `TrTypedConstantScalar expr ->
             Ok (`TrRvalueExpr expr)
         | `TrTypedConstantRvalueBinderBuilder rvalue_binder_builder ->
@@ -2673,7 +2687,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           let region_cpn = region_get ref_data_cpn in
           let bor_kind_cpn = bor_kind_get ref_data_cpn in
           let place_cpn = place_get ref_data_cpn in
-          let* place_expr = translate_place place_cpn loc in
+          let* place_expr, place_is_mutable = translate_place place_cpn loc in
           let expr = Ast.AddressOf (loc, place_expr) in
           Ok (`TrRvalueExpr expr)
           (*Todo @Nima: We might need to assert the chunk when we make a reference to it*)
@@ -2681,7 +2695,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           let open AddressOfData in
           let mut_cpn = mutability_get address_of_data_cpn in
           let place_cpn = place_get address_of_data_cpn in
-          let* place_expr = translate_place place_cpn loc in
+          let* place_expr, place_is_mutable = translate_place place_cpn loc in
           let expr = Ast.AddressOf (loc, place_expr) in
           Ok (`TrRvalueExpr expr)
       | Cast cast_data_cpn -> (
@@ -2693,7 +2707,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           let ty = Mir.basic_type_of ty_info in
           match operand with
           | `TrOperandCopy expr
-          | `TrOperandMove expr
+          | `TrOperandMove (expr, _(*place_is_mutable*))
           | `TrTypedConstantScalar expr ->
               Ok (`TrRvalueExpr (Ast.CastExpr (loc, ty, expr)))
           | `TrTypedConstantRvalueBinderBuilder rvalue_binder_builder ->
@@ -2726,7 +2740,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           Ok (`TrRvalueUnaryOp (operator, operand))
       | Aggregate agg_data_cpn -> translate_aggregate agg_data_cpn loc
       | Discriminant place_cpn ->
-          let* place_expr = translate_place place_cpn loc in
+          let* place_expr, place_is_mutable = translate_place place_cpn loc in
           Ok
             (`TrRvalueExpr
               (Ast.CallExpr
@@ -2744,13 +2758,13 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       match get statement_kind_cpn with
       | Assign assign_data_cpn -> (
           let lhs_place_cpn = AssignData.lhs_place_get assign_data_cpn in
-          let* lhs_place = translate_place lhs_place_cpn loc in
+          let* lhs_place, lhs_place_is_mutable = translate_place lhs_place_cpn loc in
           let rhs_rvalue_cpn = AssignData.rhs_rvalue_get assign_data_cpn in
           let* rhs_rvalue = translate_rvalue rhs_rvalue_cpn loc in
           match rhs_rvalue with
           | `TrRvalueExpr rhs_expr ->
               let assign_stmt =
-                Ast.ExprStmt (Ast.AssignExpr (loc, lhs_place, rhs_expr))
+                Ast.ExprStmt (Ast.AssignExpr (loc, lhs_place, (if lhs_place_is_mutable then Mutation else Initialization), rhs_expr))
               in
               Ok [ assign_stmt ]
           | `TrRvalueRvalueBinderBuilder rvalue_binder_builder ->
@@ -2759,7 +2773,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               let rvalue_binder_stmt = rvalue_binder_builder tmp_var_name in
               let assign_stmt =
                 Ast.ExprStmt
-                  (Ast.AssignExpr (loc, lhs_place, Ast.Var (loc, tmp_var_name)))
+                  (Ast.AssignExpr (loc, lhs_place, (if lhs_place_is_mutable then Mutation else Initialization), Ast.Var (loc, tmp_var_name)))
               in
               let block_stmt =
                 Ast.BlockStmt
@@ -2786,6 +2800,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   (Ast.AssignExpr
                      ( loc,
                        lhs_place,
+                       (if lhs_place_is_mutable then Mutation else Initialization),
                        Ast.Operation
                          ( loc,
                            operator,
@@ -2851,6 +2866,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   (Ast.AssignExpr
                      ( loc,
                        lhs_place,
+                       (if lhs_place_is_mutable then Mutation else Initialization),
                        Ast.Operation (loc, operator, [ exprl; exprr ]) ))
               in
               match rvalue_binder_stmts with
@@ -2866,7 +2882,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   in
                   Ok [ block_stmt ])
           | `TrRvalueAggregate init_stmts_builder ->
-              Ok (init_stmts_builder lhs_place))
+              Ok (init_stmts_builder (lhs_place, lhs_place_is_mutable)))
       | Nop -> Ok []
       | Undefined _ -> Error (`TrStatementKind "Unknown StatementKind")
 
@@ -3111,7 +3127,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let open VarDebugInfoContentsRd in
       match get vdic_cpn with
       | Place place_cpn -> (
-          let* place = translate_place place_cpn loc in
+          let* place, place_is_mutable = translate_place place_cpn loc in
           match place with
           | Ast.Var ((*loc*) _, id) -> Ok (Mir.VdiiPlace { id })
           | _ -> failwith "Todo VarDebugInfoContents Place")

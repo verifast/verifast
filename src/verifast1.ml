@@ -5026,10 +5026,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             end
         end
       end 
-    | AssignExpr (l, e1, e2) ->
+    | AssignExpr (l, e1, kind, e2) ->
       let (w1, t1, _) = check e1 in
       let w2 = checkt e2 t1 in
-      (AssignExpr (l, w1, w2), t1, None)
+      (AssignExpr (l, w1, kind, w2), t1, None)
     | AssignOpExpr (l, e1, op, e2, postOp) ->
       let (w1, t1, _) = check e1 in
       let x = next_temp_var_name () in

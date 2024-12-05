@@ -522,8 +522,8 @@ let rec sexpr_of_expr (expr : expr) : sexpression =
         build_list
           [ Symbol "expr-array-type" ]
           [ "e", sexpr_of_expr e ]
-    | AssignExpr (loc, lhs, rhs) ->
-        List [ Symbol "expr-assign"; sexpr_of_expr lhs; sexpr_of_expr rhs ]
+    | AssignExpr (loc, lhs, kind, rhs) ->
+        List [ Symbol "expr-assign"; sexpr_of_expr lhs; (match kind with Mutation -> Symbol "Mutation" | Initialization -> Symbol "Initialization"); sexpr_of_expr rhs ]
     | AssignOpExpr (loc, lhs, op, rhs, post) ->
         build_list
           [ Symbol "expr-assign-op" ]

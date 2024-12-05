@@ -491,10 +491,11 @@ and of_expr = function
   ])
 | Unbox (e, t) -> C ("Unbox", [of_expr e; of_type t])
 | ArrayTypeExpr' (l, e) -> C ("ArrayTypeExpr'", [of_loc l; of_expr e])
-| AssignExpr (l, el, er) ->
+| AssignExpr (l, el, kind, er) ->
   C ("AssignExpr", [
     of_loc l;
     of_expr el;
+    (match kind with Mutation -> c "Mutation" | Initialization -> c "Initialization");
     of_expr er
   ])
 | AssignOpExpr (l, el, op, er, isPostfix) ->
