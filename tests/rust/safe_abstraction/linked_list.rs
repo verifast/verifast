@@ -3480,13 +3480,6 @@ lem ExtractIf_own_mono<'a0, 'a1, T, F0, F1, A>()
     assume(false);
 }
 
-lem ExtractIf_send<'a, T, F, A>(t1: thread_id_t)
-    req type_interp::<T>() &*& type_interp::<F>() &*& type_interp::<A>() &*& is_Send(typeid(F)) == true &*& ExtractIf_own::<'a, T, F, A>(?t0, ?v);
-    ens type_interp::<T>() &*& type_interp::<F>() &*& type_interp::<A>() &*& ExtractIf_own::<'a, T, F, A>(t1, v);
-{
-    assume(false);
-}
-
 @*/
 
 fn call_pred<T, F: FnMut(&mut T) -> bool>(f: &mut F, element: &mut T) -> bool
