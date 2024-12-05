@@ -3188,6 +3188,17 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     in
     Ok (AstAux.list_to_sep_conj (List.map (fun asn -> (loc, asn)) ty_asns) None)
 
+  let rec type_is_trivially_droppable = function
+    | Ast.ManifestTypeExpr
+      ( _,
+        ( Int (_, _)
+        | RustRefType _ | PtrType _ | Bool | Float | Double | LongDouble ) )
+    | Ast.PtrTypeExpr (_, _) | Ast.RustRefTypeExpr (_, _, _, _) ->
+        true
+    | Ast.StructTypeExpr (_, Some ("std::ptr::NonNull"|"std::marker::PhantomData"), _, _, _) -> true
+    | Ast.ConstructedTypeExpr (_, "std::option::Option", [arg]) -> type_is_trivially_droppable arg
+    | _ -> false
+  
   let gen_adt_drop_proof_oblig (adt_defs : Mir.adt_def_tr list)
       (adt_def_loc : Ast.loc) (adt_name : string) (tparams : string list)
       (adt_fields : (Ast.loc * string * Mir.ty_info) list) =
@@ -3208,9 +3219,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       Result.get_ok
       @@ gen_own_asns adt_defs adt_def_loc
            (Var (adt_def_loc, "_t"))
-           (List.map
+           (Util.flatmap
               (fun (loc, id, ty) ->
-                (loc, Select (loc, Var (loc, "_v"), id), ty))
+                if type_is_trivially_droppable (Mir.basic_type_of ty) then []
+                else [ (loc, Select (loc, Var (loc, "_v"), id), ty) ])
               adt_fields)
     in
     let post = match post with None -> True adt_def_loc | Some post -> post in
@@ -4211,7 +4223,12 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       (fun x asn -> Ast.Sep (loc, mk_send_asn loc x, asn))
       send_tparams asn
 
-  let gen_send_proof_oblig adt_def_loc name tparams vf_tparams send_tparams =
+  let add_sync_asns loc sync_tparams asn =
+    List.fold_right
+      (fun x asn -> Ast.Sep (loc, mk_sync_asn loc x, asn))
+      sync_tparams asn
+    
+  let gen_send_proof_oblig adt_def_loc name tparams vf_tparams send_tparams sync_tparams =
     let open Ast in
     let params = [ (IdentTypeExpr (adt_def_loc, None, "thread_id_t"), "t1") ] in
     let tparams_targs =
@@ -4228,7 +4245,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     in
     let pre =
       add_type_interp_asns adt_def_loc tparams
-        (add_send_asns adt_def_loc send_tparams pre)
+        (add_send_asns adt_def_loc send_tparams (add_sync_asns adt_def_loc sync_tparams pre))
     in
     let post =
       CallExpr
@@ -4503,11 +4520,6 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             [] (*overrides*) );
       ] )
 
-  let add_sync_asns loc sync_tparams asn =
-    List.fold_right
-      (fun x asn -> Ast.Sep (loc, mk_sync_asn loc x, asn))
-      sync_tparams asn
-
   let gen_sync_proof_oblig adt_def_loc name lft_params tparams sync_tparams =
     let open Ast in
     let vf_tparams = lft_params @ tparams in
@@ -4770,7 +4782,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         let sync_pos =
           match sync_preds with
           | None -> []
-          | Some sync_tparams ->
+          | Some sync_preds ->
+              let sync_tparams = List.filter (fun x -> List.mem (x, "std::marker::Sync") sync_preds) tparams in
               [
                 gen_sync_proof_oblig adt_def_loc name lft_params tparams
                   sync_tparams;
@@ -4974,7 +4987,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                         (string_of_preds preds))
                      None
             in
-            let get_impl_preds trait_name { loc; trait_impl_cpn } =
+            let get_impl_preds { loc; trait_impl_cpn } =
               check_impl_generics_matches_adt loc trait_impl_cpn;
               let impl_preds =
                 TraitImplRd.predicates_get_list trait_impl_cpn
@@ -4982,9 +4995,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               in
               impl_preds
               |> Util.flatmap (function
-                   | `Trait (trait_name', `Type (`Param x) :: _)
-                     when trait_name' = trait_name ->
-                       [ x ]
+                   | `Trait (trait_name', `Type (`Param x) :: _) ->
+                       [ x, trait_name' ]
                    | _ -> [])
             in
             let field_types =
@@ -5012,16 +5024,18 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               | `Param x -> Some [ x ]
               | `RawPtr -> None
               | `Adt ("std::ptr::NonNull", _, _) -> None
-              | `Adt ("std::cell::UnsafeCell", _, [ `Type tp ]) ->
+              | `Adt (("std::cell::UnsafeCell"|"std::marker::PhantomData"|"std::boxed::Box"|"std::option::Option"), _, [ `Type tp ]) ->
                   send_preds_of tp
               | _ -> Some []
               (* Conservatively assume the type is always Send. TODO: Make this more precise. *)
             in
-            let sync_preds_of = function
+            let rec sync_preds_of = function
               | `Param x -> Some [ x ]
               | `RawPtr -> None
               | `Adt ("std::ptr::NonNull", _, _) -> None
               | `Adt ("std::cell::UnsafeCell", _, _) -> None
+              | `Adt (("std::marker::PhantomData"|"std::boxed::Box"|"std::option::Option"), _, [ `Type tp ]) ->
+                sync_preds_of tp
               | _ -> Some []
               (* Conservatively assume the type is always Sync. TODO: Make this more precise. *)
             in
@@ -5050,12 +5064,13 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                       (* OK, this negative impl covers all instantiations of the ADT so it cancels out the implicit send *)
                       None)
             in
+            let send_preds = send_preds |> Option.map @@ List.map @@ fun x -> (x, "std::marker::Send") in
             let send_preds =
               positive_send_impls
               |> List.fold_left
                    (fun preds trait_impl ->
                      preds_intersection preds
-                       (Some (get_impl_preds "std::marker::Send" trait_impl)))
+                       (Some (get_impl_preds trait_impl)))
                    send_preds
             in
             let variable_occurs_in_expr x e =
@@ -5100,12 +5115,13 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                       check_impl_covers_adt impl;
                       None)
             in
+            let sync_preds = sync_preds |> Option.map @@ List.map @@ fun x -> (x, "std::marker::Sync") in
             let sync_preds =
               positive_sync_impls
               |> List.fold_left
                    (fun preds trait_impl ->
                      preds_intersection preds
-                       (Some (get_impl_preds "std::marker::Sync" trait_impl)))
+                       (Some (get_impl_preds trait_impl)))
                    sync_preds
             in
             let sync_preds =
@@ -5129,12 +5145,17 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             | Some xs when user_provided_own_defs <> [] ->
                 let send_tparams =
                   List.filter
-                    (fun x -> List.mem x xs || List.mem x send_tparams)
+                    (fun x -> List.mem (x, "std::marker::Send") xs || List.mem x send_tparams)
+                    tparams
+                in
+                let sync_tparams =
+                  List.filter
+                    (fun x -> List.mem (x, "std::marker::Sync") xs)
                     tparams
                 in
                 [
                   gen_send_proof_oblig def_loc name tparams vf_tparams
-                    send_tparams;
+                    send_tparams sync_tparams;
                 ]
             | _ -> []
           in
@@ -5192,14 +5213,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               let is_trivially_droppable =
                 fds
                 |> List.for_all @@ fun (fd : Mir.field_def_tr) ->
-                   match Mir.basic_type_of fd.ty with
-                   | Ast.ManifestTypeExpr
-                       ( _,
-                         ( Int (_, _)
-                         | PtrType _ | Bool | Float | Double | LongDouble ) )
-                   | Ast.PtrTypeExpr (_, _) ->
-                       true
-                   | _ -> false
+                   type_is_trivially_droppable (Mir.basic_type_of fd.ty)
               in
               if is_trivially_droppable || implements_drop_get adt_def_cpn then
                 []
