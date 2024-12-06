@@ -1,8 +1,9 @@
-include!{"rust_belt/general.rsspec"}
 include!{"prelude_core.rsspec"}
+include!{"aliasing.rsspec"}
 include!{"ghost_cells.rsspec"}
 include!{"counting.rsspec"}
 include!{"mask.rsspec"}
+include!{"rust_belt/general.rsspec"}
 include!{"rust_belt/lifetime_logic.rsspec"}
 include!{"rust_belt/lem_aux.rsspec"}
 

@@ -467,7 +467,7 @@ lem Nodes1_to_Nodes<T>()
 
 pred_ctor LinkedList_frac_borrow_content<T, A>(alloc_id: any, l: *LinkedList<T, A>, head: Option<NonNull<Node<T>>>, tail: Option<NonNull<Node<T>>>, nodes: list<NonNull<Node<T>>>, prevs: list<Option<NonNull<Node<T>>>>, nexts: list<Option<NonNull<Node<T>>>>)(;) =
     (*l).head |-> head &*& (*l).tail |-> tail &*& Nodes1(alloc_id, head, None, tail, None, nodes, prevs, nexts) &*&
-    (*l).len |-> length(nodes);
+    (*l).len |-> length(nodes) &*& struct_LinkedList_padding(l);
 
 inductive LinkedList_share_info<T> = LinkedList_share_info(alloc_id: any, head: Option<NonNull<Node<T>>>, tail: Option<NonNull<Node<T>>>, nodes: list<NonNull<Node<T>>>, prevs: list<Option<NonNull<Node<T>>>>, nexts: list<Option<NonNull<Node<T>>>>);
 
@@ -476,7 +476,8 @@ pred_ctor elem_share<T>(k: lifetime_t, t: thread_id_t)(node: NonNull<Node<T>>) =
 pred<T, A> <LinkedList<T, A>>.share(k, t, l) =
     exists(LinkedList_share_info(?alloc_id, ?head, ?tail, ?nodes, ?prevs, ?nexts)) &*&
     [_]frac_borrow(k, LinkedList_frac_borrow_content::<T, A>(alloc_id, l, head, tail, nodes, prevs, nexts)) &*&
-    foreach(nodes, elem_share::<T>(k, t));
+    [_](<A>.share(k, t, &(*l).alloc)) &*&
+    [_]foreach(nodes, elem_share::<T>(k, t));
 
 pred True() = true;
 
@@ -520,10 +521,13 @@ lem LinkedList_share_full<T, A>(k: lifetime_t, t: thread_id_t, l: *LinkedList<T,
         iter(nodes);
     }
     close sep(LinkedList_frac_borrow_content::<T, A>(alloc_id, l, head, tail, nodes, prevs, nexts), elem_fbcs::<T>(t, nodes))();
+    std::alloc::close_Allocator_full_borrow_content_::<A>(t, &(*l).alloc);
     {
-        pred Ctx() = (*l).alloc |-> self_.alloc &*& Allocator::<A>(t, self_.alloc, alloc_id) &*& (*l).marker |-> ?_ &*& struct_LinkedList_padding::<T, A>(l);
-        produce_lem_ptr_chunk full_borrow_convert_strong(Ctx, sep(LinkedList_frac_borrow_content::<T, A>(alloc_id, l, head, tail, nodes, prevs, nexts), elem_fbcs::<T>(t, nodes)), klong, LinkedList_full_borrow_content::<T, A>(t, l))() {
+        pred Ctx() = (*l).marker |-> ?_;
+        close sep(std::alloc::Allocator_full_borrow_content_::<A>(t, &(*l).alloc, alloc_id), sep(LinkedList_frac_borrow_content::<T, A>(alloc_id, l, head, tail, nodes, prevs, nexts), elem_fbcs::<T>(t, nodes)))();
+        produce_lem_ptr_chunk full_borrow_convert_strong(Ctx, sep(std::alloc::Allocator_full_borrow_content_::<A>(t, &(*l).alloc, alloc_id), sep(LinkedList_frac_borrow_content::<T, A>(alloc_id, l, head, tail, nodes, prevs, nexts), elem_fbcs::<T>(t, nodes))), klong, LinkedList_full_borrow_content::<T, A>(t, l))() {
             open Ctx();
+            open sep(std::alloc::Allocator_full_borrow_content_::<A>(t, &(*l).alloc, alloc_id), sep(LinkedList_frac_borrow_content::<T, A>(alloc_id, l, head, tail, nodes, prevs, nexts), elem_fbcs::<T>(t, nodes)))();
             open sep(LinkedList_frac_borrow_content::<T, A>(alloc_id, l, head, tail, nodes, prevs, nexts), elem_fbcs::<T>(t, nodes))();
             open LinkedList_frac_borrow_content::<T, A>(alloc_id, l, head, tail, nodes, prevs, nexts)();
             {
@@ -545,14 +549,17 @@ lem LinkedList_share_full<T, A>(k: lifetime_t, t: thread_id_t, l: *LinkedList<T,
                 iter(nodes);
             }
             Nodes1_to_Nodes::<T>();
+            std::alloc::open_Allocator_full_borrow_content_::<A>(t, &(*l).alloc, alloc_id);
+            
             close <LinkedList<T, A>>.own(t, *l);
             close LinkedList_full_borrow_content::<T, A>(t, l)();
         } {
             close Ctx();
-            close_full_borrow_strong_m(klong, LinkedList_full_borrow_content::<T, A>(t, l), sep(LinkedList_frac_borrow_content::<T, A>(alloc_id, l, head, tail, nodes, prevs, nexts), elem_fbcs::<T>(t, nodes)));
+            close_full_borrow_strong_m(klong, LinkedList_full_borrow_content::<T, A>(t, l), sep(std::alloc::Allocator_full_borrow_content_::<A>(t, &(*l).alloc, alloc_id), sep(LinkedList_frac_borrow_content::<T, A>(alloc_id, l, head, tail, nodes, prevs, nexts), elem_fbcs::<T>(t, nodes))));
         }
     }
-    full_borrow_mono(klong, k, sep(LinkedList_frac_borrow_content::<T, A>(alloc_id, l, head, tail, nodes, prevs, nexts), elem_fbcs::<T>(t, nodes)));
+    full_borrow_mono(klong, k, sep(std::alloc::Allocator_full_borrow_content_::<A>(t, &(*l).alloc, alloc_id), sep(LinkedList_frac_borrow_content::<T, A>(alloc_id, l, head, tail, nodes, prevs, nexts), elem_fbcs::<T>(t, nodes))));
+    full_borrow_split_m(k, std::alloc::Allocator_full_borrow_content_::<A>(t, &(*l).alloc, alloc_id), sep(LinkedList_frac_borrow_content::<T, A>(alloc_id, l, head, tail, nodes, prevs, nexts), elem_fbcs::<T>(t, nodes)));
     full_borrow_split_m(k, LinkedList_frac_borrow_content::<T, A>(alloc_id, l, head, tail, nodes, prevs, nexts), elem_fbcs::<T>(t, nodes));
     full_borrow_into_frac_m(k, LinkedList_frac_borrow_content::<T, A>(alloc_id, l, head, tail, nodes, prevs, nexts));
     {
@@ -577,11 +584,13 @@ lem LinkedList_share_full<T, A>(k: lifetime_t, t: thread_id_t, l: *LinkedList<T,
         iter(nodes);
     }
     close exists(LinkedList_share_info(alloc_id, head, tail, nodes, prevs, nexts));
+    std::alloc::share_Allocator_full_borrow_content_::<A>(k, t, &(*l).alloc, alloc_id);
+    leak foreach(nodes, _);
     close <LinkedList<T, A>>.share()(k, t, l);
     leak <LinkedList<T, A>>.share(k, t, l);
 }
 
-lem LinkedList_share_mono<T, A>(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *_)
+lem LinkedList_share_mono<T, A>(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *LinkedList<T, A>)
     req type_interp::<T>() &*& type_interp::<A>() &*& lifetime_inclusion(k1, k) == true &*& [_]LinkedList_share::<T, A>(k, t, l);
     ens type_interp::<T>() &*& type_interp::<A>() &*& [_]LinkedList_share::<T, A>(k1, t, l);
 {
@@ -610,8 +619,131 @@ lem LinkedList_share_mono<T, A>(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l
         }
         iter();
     }
+    share_mono::<A>(k, k1, t, &(*l).alloc);
+    leak foreach(nodes, _);
     close <LinkedList<T, A>>.share(k1, t, l);
     leak <LinkedList<T, A>>.share(k1, t, l);
+}
+
+pred ref_end_token_Option_NonNull<T>(p: *Option<NonNull<T>>, x: *Option<NonNull<T>>, f: real, v: Option<NonNull<T>>) =
+    [f/2](*x |-> v) &*& ref_end_token(p, x, f/2) &*& (if v != Option::None { ref_end_token(std::option::Option_Some_0_ptr(p), std::option::Option_Some_0_ptr(x), f/2) } else { true });
+
+lem init_ref_Option_NonNull<T>(p: *Option<NonNull<T>>)
+    req ref_init_perm(p, ?x) &*& [?f](*x |-> ?v);
+    ens [f/2](*p |-> v) &*& ref_initialized(p) &*& ref_end_token_Option_NonNull(p, x, f, v);
+{
+    match v {
+        Option::None => {
+            std::option::init_ref_Option_None(p, 1/2);
+        }
+        Option::Some(v0) => {
+            std::option::open_points_to_Option_Some(x);
+            std::option::open_ref_init_perm_Option_Some(p);
+            std::ptr::init_ref_NonNull(std::option::Option_Some_0_ptr(p), 1/2);
+            std::option::init_ref_Option_Some(p, 1/2);
+            std::option::close_points_to_Option_Some(p);
+            std::option::close_points_to_Option_Some(x);
+        }
+    }
+    close ref_end_token_Option_NonNull(p, x, f, v);
+}
+
+lem end_ref_Option_NonNull<T>(p: *Option<NonNull<T>>)
+    req ref_initialized(p) &*& ref_end_token_Option_NonNull(p, ?x, ?f, ?v) &*& [f/2](*p |-> v);
+    ens [f](*x |-> v);
+{
+    open ref_end_token_Option_NonNull(p, x, f, v);
+    match v {
+        Option::None => {
+            std::option::end_ref_Option_None(p);
+        }
+        Option::Some(v0) => {
+            std::option::open_points_to_Option_Some(p);
+            std::option::end_ref_Option_Some(p);
+            std::ptr::end_ref_NonNull(std::option::Option_Some_0_ptr(p));
+            std::option::close_points_to_Option_Some(x);
+        }
+    }
+}
+
+lem init_ref_LinkedList<T, A>(p: *LinkedList<T, A>)
+    req type_interp::<T>() &*& type_interp::<A>() &*& atomic_mask(Nlft) &*& ref_init_perm(p, ?x) &*& [_]LinkedList_share::<T, A>(?k, ?t, x) &*& [?q]lifetime_token(k);
+    ens type_interp::<T>() &*& type_interp::<A>() &*& atomic_mask(Nlft) &*& [q]lifetime_token(k) &*& [_]LinkedList_share::<T, A>(k, t, p) &*& [_]frac_borrow(k, ref_initialized_(p));
+{
+    open <LinkedList<T, A>>.share(k, t, x);
+    assert [_]exists(LinkedList_share_info(?alloc_id, ?head, ?tail, ?nodes, ?prevs, ?nexts));
+    close exists(LinkedList_share_info(alloc_id, head, tail, nodes, prevs, nexts));
+    open_ref_init_perm_LinkedList(p);
+    leak ref_init_perm(&(*p).marker, _);
+    
+    {
+        pred R(;) = ref_initialized(&(*p).head) &*& ref_initialized(&(*p).tail) &*& ref_initialized(&(*p).len) &*& ref_padding_initialized(p);
+        {
+            let klong = open_frac_borrow_strong_m(k, LinkedList_frac_borrow_content::<T, A>(alloc_id, x, head, tail, nodes, prevs, nexts), q);
+            open [?f]LinkedList_frac_borrow_content::<T, A>(alloc_id, x, head, tail, nodes, prevs, nexts)();
+            init_ref_Option_NonNull(&(*p).head);
+            init_ref_Option_NonNull(&(*p).tail);
+            init_ref_padding_LinkedList(p, 1/2);
+            std::num::init_ref_usize(&(*p).len, 1/2);
+            close [f/2]LinkedList_frac_borrow_content::<T, A>(alloc_id, p, head, tail, nodes, prevs, nexts)();           
+            close scaledp(f/2, LinkedList_frac_borrow_content::<T, A>(alloc_id, p, head, tail, nodes, prevs, nexts))();
+            close R();
+            {
+                pred Ctx() =
+                    ref_end_token_Option_NonNull(&(*p).head, &(*x).head, f, head) &*&
+                    ref_end_token_Option_NonNull(&(*p).tail, &(*x).tail, f, tail) &*&
+                    [f/2]Nodes1(alloc_id, head, None, tail, None, nodes, prevs, nexts) &*&
+                    [f/2](*x).len |-> length(nodes) &*& ref_end_token(&(*p).len, &(*x).len, f/2) &*&
+                    [f/2]struct_LinkedList_padding(x) &*& ref_padding_end_token(p, x, f/2);
+                close Ctx();
+                close sep(scaledp(f/2, LinkedList_frac_borrow_content::<T, A>(alloc_id, p, head, tail, nodes, prevs, nexts)), R)();
+                produce_lem_ptr_chunk frac_borrow_convert_strong(Ctx, sep(scaledp(f/2, LinkedList_frac_borrow_content::<T, A>(alloc_id, p, head, tail, nodes, prevs, nexts)), R), klong, f, LinkedList_frac_borrow_content::<T, A>(alloc_id, x, head, tail, nodes, prevs, nexts))() {
+                    open Ctx();
+                    open sep(scaledp(f/2, LinkedList_frac_borrow_content::<T, A>(alloc_id, p, head, tail, nodes, prevs, nexts)), R)();
+                    open scaledp(f/2, LinkedList_frac_borrow_content::<T, A>(alloc_id, p, head, tail, nodes, prevs, nexts))();
+                    open [f/2]LinkedList_frac_borrow_content::<T, A>(alloc_id, p, head, tail, nodes, prevs, nexts)();
+                    open R();
+                    end_ref_Option_NonNull(&(*p).head);
+                    end_ref_Option_NonNull(&(*p).tail);
+                    std::num::end_ref_usize(&(*p).len);
+                    end_ref_padding_LinkedList(p);
+                    close [f]LinkedList_frac_borrow_content::<T, A>(alloc_id, x, head, tail, nodes, prevs, nexts)();
+                } {
+                    close_frac_borrow_strong_m();
+                    full_borrow_mono(klong, k, sep(scaledp(f/2, LinkedList_frac_borrow_content::<T, A>(alloc_id, p, head, tail, nodes, prevs, nexts)), R));
+                    full_borrow_split_m(k, scaledp(f/2, LinkedList_frac_borrow_content::<T, A>(alloc_id, p, head, tail, nodes, prevs, nexts)), R);
+                    full_borrow_into_frac_m(k, scaledp(f/2, LinkedList_frac_borrow_content::<T, A>(alloc_id, p, head, tail, nodes, prevs, nexts)));
+                    frac_borrow_implies_scaled(k, f/2, LinkedList_frac_borrow_content::<T, A>(alloc_id, p, head, tail, nodes, prevs, nexts));
+                    full_borrow_into_frac_m(k, R);
+                }
+            }
+        }
+    
+        init_ref_share_m::<A>(k, t, &(*p).alloc);
+        close <LinkedList<T, A>>.share(k, t, p);
+        leak <LinkedList<T, A>>.share(k, t, p);
+        
+        frac_borrow_sep(k, ref_initialized_(&(*p).alloc), R);
+        produce_lem_ptr_chunk implies_frac(sep_(ref_initialized_(&(*p).alloc), R), ref_initialized_(p))() {
+            open [?f]sep_(ref_initialized_(&(*p).alloc), R)();
+            open [f]ref_initialized_::<A>(&(*p).alloc)();
+            open [f]R();
+            std::marker::close_ref_initialized_PhantomData(&(*p).marker, f);
+            close_ref_initialized_LinkedList(p);
+            close [f]ref_initialized_::<LinkedList<T, A>>(p)();
+        } {
+            produce_lem_ptr_chunk implies_frac(ref_initialized_(p), sep_(ref_initialized_(&(*p).alloc), R))() {
+                open [?f]ref_initialized_::<LinkedList<T, A>>(p)();
+                open_ref_initialized_LinkedList(p);
+                close [f]ref_initialized_::<A>(&(*p).alloc)();
+                close [f]R();
+                close [f]sep_(ref_initialized_(&(*p).alloc), R)();
+                leak [f]ref_initialized(&(*p).marker);
+            } {
+                frac_borrow_implies(k, sep_(ref_initialized_(&(*p).alloc), R), ref_initialized_(p));
+            }
+        }
+    }
 }
 
 lem LinkedList_sync<T, A>(t1: thread_id_t)
@@ -640,6 +772,8 @@ lem LinkedList_sync<T, A>(t1: thread_id_t)
         }
         iter();
     }
+    Sync::sync::<A>(k, t0, t1, &(*l).alloc);
+    leak foreach(_, _);
     close <LinkedList<T, A>>.share(k, t1, l);
     leak <LinkedList<T, A>>.share(k, t1, l);
 }
@@ -1387,7 +1521,7 @@ impl<T, A: Allocator> LinkedList<T, A> {
         //@ close exists(Iter_info(alloc_id, head, None, None, tail, nil, nodes, nil, nil, prevs, nil, nil, nexts, nil));
         /*@
         {
-            pred R(;) = (*self).head |-> head &*& (*self).tail |-> tail &*& (*self).len |-> length(nodes);
+            pred R(;) = (*self).head |-> head &*& (*self).tail |-> tail &*& (*self).len |-> length(nodes) &*& struct_LinkedList_padding(self);
             produce_lem_ptr_chunk implies_frac(LinkedList_frac_borrow_content::<T, A>(alloc_id, self, head, tail, nodes, prevs, nexts), sep_(R, Iter_frac_borrow_content(alloc_id, head, head, None, tail, None, tail, nil, nodes, nil, nil, prevs, nil, nil, nexts, nil)))() {
                 open [?f]LinkedList_frac_borrow_content::<T, A>(alloc_id, self, head, tail, nodes, prevs, nexts)();
                 close [f]R();

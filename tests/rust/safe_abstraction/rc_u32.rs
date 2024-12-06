@@ -105,6 +105,14 @@ lem RcU32_share_full(k: lifetime_t, t: thread_id_t, l: *RcU32)
     leak exists(nnp);
     close [df]RcU32_share(k, t, l);
 }
+
+lem init_ref_RcU32(p: *RcU32)
+    req atomic_mask(Nlft) &*& ref_init_perm(p, ?x) &*& [_]RcU32_share(?k, ?t, x) &*& [?q]lifetime_token(k);
+    ens atomic_mask(Nlft) &*& [q]lifetime_token(k) &*& [_]RcU32_share(k, t, p) &*& [_]frac_borrow(k, ref_initialized_(p));
+{
+    assume(false);
+}
+
 @*/
 pub struct RcU32 {
     ptr: NonNull<RcBoxU32>,

@@ -114,6 +114,14 @@ lem Deque_share_full(k: lifetime_t, t: thread_id_t, l: *Deque)
     assert [?q_f]frac_borrow(_, _);
     close [q_f]Deque_share(k, t, l);
 }
+
+lem init_ref_Deque(p: *Deque)
+    req atomic_mask(Nlft) &*& ref_init_perm(p, ?x) &*& [_]Deque_share(?k, ?t, x) &*& [?q]lifetime_token(k);
+    ens atomic_mask(Nlft) &*& [q]lifetime_token(k) &*& [_]Deque_share(k, t, p) &*& [_]frac_borrow(k, ref_initialized_(p));
+{
+    assume(false);
+}
+
 @*/
 
 impl Deque {

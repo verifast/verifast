@@ -26,6 +26,18 @@ mod rt {
 
 mod num {
 
+    /*@
+    
+    lem init_ref_usize(p: *usize, coef: real);
+        req ref_init_perm::<usize>(p, ?x) &*& [?f](*x |-> ?v) &*& 0 < coef &*& coef < 1;
+        ens ref_initialized(p) &*& [coef*f](*p |-> v) &*& [(1 - coef)*f](*x |-> v) &*& ref_end_token(p, x, coef*f);
+    
+    lem end_ref_usize(p: *usize);
+        req ref_initialized(p) &*& ref_end_token(p, ?x, ?f) &*& [f](*p |-> ?v);
+        ens [f](*x |-> v);
+    
+    @*/
+
     impl usize {
     
         fn checked_sub(self: usize, other: usize) -> std::option::Option<usize>;
@@ -45,6 +57,10 @@ mod marker {
     lem close_PhantomData_own<T>(t: thread_id_t, marker: PhantomData<T>);
         req true;
         ens <PhantomData<T>>.own(t, marker);
+    
+    lem close_ref_initialized_PhantomData<T>(marker: *PhantomData<T>, f: real);
+        req true;
+        ens [f]ref_initialized::<PhantomData<T>>(marker);
     
     @*/
     
@@ -128,6 +144,14 @@ mod ptr {
     lem NonNull_upcast<T0, T1>(v: NonNull<T0>);
         req true;
         ens NonNull_ptr::<T1>(upcast(v)) == NonNull_ptr::<T0>(v) as *_;
+    
+    lem init_ref_NonNull<T>(p: *NonNull<T>, coef: real);
+        req ref_init_perm(p, ?x) &*& [?f](*x |-> ?v) &*& 0 < coef &*& coef < 1;
+        ens ref_initialized(p) &*& [(1 - coef)*f](*x |-> v) &*& [coef*f](*p |-> v) &*& ref_end_token(p, x, coef*f);
+    
+    lem end_ref_NonNull<T>(p: *NonNull<T>);
+        req ref_initialized(p) &*& ref_end_token(p, ?x, ?f) &*& [f](*p |-> ?v);
+        ens [f](*x |-> v);
     
     @*/
 
@@ -217,6 +241,20 @@ mod alloc {
     lem open_Allocator_own<A>(alloc: A);
         req <A>.own(?t, alloc);
         ens Allocator::<A>(t, alloc, _);
+    
+    fix Allocator_full_borrow_content_<A>(t: thread_id_t, l: *A, alloc_id: any) -> pred();
+    
+    lem close_Allocator_full_borrow_content_<A>(t: thread_id_t, l: *A);
+        req *l |-> ?alloc &*& Allocator::<A>(t, alloc, ?alloc_id);
+        ens (Allocator_full_borrow_content_::<A>(t, l, alloc_id))();
+    
+    lem open_Allocator_full_borrow_content_<A>(t: thread_id_t, l: *A, alloc_id: any);
+        req (Allocator_full_borrow_content_::<A>(t, l, alloc_id))();
+        ens *l |-> ?alloc &*& Allocator::<A>(t, alloc, alloc_id);
+    
+    lem share_Allocator_full_borrow_content_<A>(k: lifetime_t, t: thread_id_t, l: *A, alloc_id: any);
+        req type_interp::<A>() &*& atomic_mask(Nlft) &*& full_borrow(k, Allocator_full_borrow_content_::<A>(t, l, alloc_id)) &*& [?q]lifetime_token(k);
+        ens type_interp::<A>() &*& atomic_mask(Nlft) &*& [_](<A>.share(k, t, l)) &*& [q]lifetime_token(k);
     
     pred share_allocator_end_token<A>(l: *A, alloc_id: any);
     
@@ -369,6 +407,45 @@ mod option {
         None,
         Some(T),
     }
+    
+    /*@
+    
+    fix Option_Some_0_offset<T>() -> usize;
+    fix Option_Some_0_ptr<T>(ptr: *Option<T>) -> *T { field_ptr(ptr as pointer, typeid(T), Option_Some_0_offset::<T>()) as *T }
+    
+    pred Option_Some<T>(l: *Option<T>;); // Represents ownership of the discriminant
+    
+    lem open_points_to_Option_Some<T>(l: *Option<T>);
+        req [?f](*l |-> Option::Some(?v0));
+        ens [f]Option_Some(l) &*& [f](*Option_Some_0_ptr(l) |-> v0);
+    
+    lem close_points_to_Option_Some<T>(l: *Option<T>);
+        req [?f]Option_Some(l) &*& [f](*Option_Some_0_ptr(l) |-> ?v0);
+        ens [f](*l |-> Option::Some(v0));
+    
+    lem init_ref_Option_None<T>(p: *Option<T>, coef: real);
+        req ref_init_perm::<Option<T>>(p, ?x) &*& [?f](*x |-> Option::None) &*& 0 < coef &*& coef < 1;
+        ens ref_initialized::<Option<T>>(p) &*& ref_end_token(p, x, coef*f) &*& [(1-coef)*f](*x |-> Option::None) &*& [coef*f](*p |-> Option::None);
+    
+    pred init_ref_Option_Some_token<T>(p: *Option<T>, x: *Option<T>, frac: real);
+    
+    lem open_ref_init_perm_Option_Some<T>(p: *Option<T>);
+        req ref_init_perm::<Option<T>>(p, ?x) &*& [?f]Option_Some::<T>(x);
+        ens init_ref_Option_Some_token::<T>(p, x, f) &*& ref_init_perm::<T>(Option_Some_0_ptr(p), Option_Some_0_ptr(x));
+    
+    lem init_ref_Option_Some<T>(p: *Option<T>, coef: real);
+        req init_ref_Option_Some_token::<T>(p, ?x, ?f) &*& ref_initialized::<T>(Option_Some_0_ptr(p)) &*& 0 < coef &*& coef < 1;
+        ens ref_initialized::<Option<T>>(p) &*& [(1-coef)*f]Option_Some::<T>(x) &*& [coef*f]Option_Some::<T>(p) &*& ref_end_token(p, x, coef*f);
+    
+    lem end_ref_Option_None<T>(p: *Option<T>);
+        req ref_initialized::<Option<T>>(p) &*& ref_end_token(p, ?x, ?f) &*& [f](*p |-> Option::None);
+        ens [f](*x |-> Option::None);
+    
+    lem end_ref_Option_Some<T>(p: *Option<T>);
+        req ref_initialized::<Option<T>>(p) &*& ref_end_token(p, ?x, ?f) &*& [f]Option_Some::<T>(p);
+        ens [f]Option_Some::<T>(x) &*& ref_initialized::<T>(Option_Some_0_ptr(p));
+    
+    @*/
     
     impl<T> Option<T> {
     

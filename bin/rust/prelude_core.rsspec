@@ -8,6 +8,10 @@ lem assume(b: bool);
     req true;
     ens b;
 
+lem note(b: bool);
+    req b;
+    ens b;
+
 pred exists<t>(x: t;) = true;
 pred exists_np<t>(x: t) = true;
 
