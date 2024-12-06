@@ -17,7 +17,7 @@ cd unverified
   cd ..
 cd ..
 begin_parallel
-verifast -c nonnull.rs
+verifast -c -ignore_ref_creation nonnull.rs
 cd purely_unsafe
   verifast -c -allow_should_fail -allow_dead_code nonmut_let_immut.rs
   verifast -c struct_exprs.rs
@@ -39,33 +39,33 @@ cd purely_unsafe
   verifast -c pred_fam.rs
   verifast -c tree3.rs
   verifast -c generic_structs.rs
-  verifast -c str.rs
-  verifast -prover z3v4.5 -target LP64 -c -extern ../unverified/platform httpd.rs
-  verifast -prover z3v4.5 -target LP64 -c -extern ../unverified/platform httpd_vec.rs
+  verifast -c -ignore_ref_creation str.rs
+  verifast -prover z3v4.5 -target LP64 -c -ignore_ref_creation -extern ../unverified/platform httpd.rs
+  verifast -prover z3v4.5 -target LP64 -c -ignore_ref_creation -extern ../unverified/platform httpd_vec.rs
   verifast -prover z3v4.5 -c -extern ../unverified/platform mt_account_transfer.rs
-  verifast -prover z3v4.5 -target LP64 -c -extern ../unverified/platform httpd_mt.rs
+  verifast -prover z3v4.5 -target LP64 -c -ignore_ref_creation -extern ../unverified/platform httpd_mt.rs
   verifast -c my_option.rs
-  verifast -c vec_test.rs
-  verifast -target LP64 -c -extern ../unverified/platform atomics_example.rs
+  verifast -c -ignore_ref_creation vec_test.rs
+  verifast -target LP64 -c -ignore_ref_creation -extern ../unverified/platform atomics_example.rs
 cd ..
 cd safe_abstraction
   verifast -c box.rs
   verifast -c full_bor_primitive_types.rs
   verifast -c shared_primitive_types.rs
   verifast -c deque_i32.rs
-  verifast -c deque.rs
-  verifast -c cell_u32.rs
-  verifast -c cell.rs
-  verifast -c tree.rs
+  verifast -c -ignore_ref_creation deque.rs
+  verifast -c -ignore_ref_creation cell_u32.rs
+  verifast -c -ignore_ref_creation cell.rs
+  verifast -c -ignore_ref_creation tree.rs
   verifast -c -allow_should_fail -allow_dead_code drop_test.rs
-  verifast -c tparam_own.rs
-  verifast -c generic_pair.rs
-  verifast -c -extern ../unverified/sys mutex_u32.rs
-  verifast -c -extern ../unverified/sys mutex.rs
-  verifast -c rc_u32.rs
-  verifast -c rc.rs
-  verifast -c arc_u32.rs
-  verifast -c arc.rs
+  verifast -c -ignore_ref_creation tparam_own.rs
+  verifast -c -ignore_ref_creation generic_pair.rs
+  verifast -c -ignore_ref_creation -extern ../unverified/sys mutex_u32.rs
+  verifast -c -ignore_ref_creation -extern ../unverified/sys mutex.rs
+  verifast -c -ignore_ref_creation rc_u32.rs
+  verifast -c -ignore_ref_creation rc.rs
+  verifast -c -ignore_ref_creation arc_u32.rs
+  verifast -c -ignore_ref_creation arc.rs
   begin_sequential
     verifast -c -apply_quick_fix proof_obligs_quick_fix_test_result.rs proof_obligs_quick_fix_test.rs
     verifast -c proof_obligs_quick_fix_test_result.rs

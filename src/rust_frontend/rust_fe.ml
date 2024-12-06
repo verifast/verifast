@@ -5,6 +5,8 @@ module type RUST_FE_ARGS = sig
   val report_macro_call : Ast.loc0 -> Ast.loc0 -> unit
   val verbose_flags : string list
   val skip_specless_fns : bool
+  val allow_ignore_ref_creation : bool
+  val ignore_ref_creation : bool
 end
 
 module Make (Args : RUST_FE_ARGS) = struct
@@ -228,7 +230,7 @@ module Make (Args : RUST_FE_ARGS) = struct
       if pointerWidth <> 8 * (1 lsl data_model.ptr_width) then
         raise (Parser.CompilationError (Printf.sprintf "C target %s does not match rustc target %s; specify a matching C target using the -target command-line option" data_model_name targetTriple));
       (!Stats.stats)#set_success_qualifier (Printf.sprintf "target: %s (%s)" targetTriple data_model_name);
-      VfMirTr.translate_vf_mir extern_specs vf_mir_rd Args.report_should_fail Args.skip_specless_fns
+      VfMirTr.translate_vf_mir extern_specs vf_mir_rd Args.report_should_fail Args.skip_specless_fns Args.allow_ignore_ref_creation Args.ignore_ref_creation
     | Error einfo ->
         let gen_emsg = "Rust frontend failed to generate VF MIR: " in
         let desc =

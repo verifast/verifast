@@ -413,6 +413,14 @@ struct Body {
         sourceInfo @3: SourceInfo;
     }
 
+    struct PlaceKind {
+        union {
+            mutableRef @0: Void;
+            sharedRef @1: Void;
+            other @2: Void;
+        }
+    }
+
     struct Place {
         struct PlaceElement {
             struct FieldData {
@@ -430,6 +438,7 @@ struct Body {
         local @0: LocalDeclId;
         localIsMutable @2: Bool;
         projection @1: List(PlaceElement);
+        kind @3: PlaceKind;
     }
 
     struct Scalar {
@@ -555,7 +564,9 @@ struct Body {
                 }
                 region @0: Ty.Region;
                 borKind @1: BorrowKind;
+                placeTy @3: Ty;
                 place @2: Place;
+                isImplicit @4: Bool;
             }
 
             struct CastData {

@@ -1,3 +1,5 @@
+// verifast_options{ignore_ref_creation}
+
 /*@
 
 lem foreach_unappend<a>(xs1: list<a>, xs2: list<a>, p: pred(a))

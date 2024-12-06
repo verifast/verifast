@@ -1,0 +1,7 @@
+fn reborrow_ref_mut<T>(x: *T) -> *T;
+//@ req thread_token(?t) &*& full_borrow(?k, <T>.full_borrow_content(t, x)) &*& [?q]lifetime_token(k);
+//@ ens thread_token(t) &*& full_borrow(k, <T>.full_borrow_content(t, result)) &*& [q]lifetime_token(k) &*& ref_origin(result) == result;
+
+fn reborrow_ref_implicit<T>(x: *T) -> *T;
+//@ req [_]frac_borrow(?k, ref_initialized_(x)) &*& [?q]lifetime_token(k);
+//@ ens [q]lifetime_token(k) &*& result == x;

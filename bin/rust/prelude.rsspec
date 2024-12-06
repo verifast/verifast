@@ -6,6 +6,7 @@ include!{"mask.rsspec"}
 include!{"rust_belt/general.rsspec"}
 include!{"rust_belt/lifetime_logic.rsspec"}
 include!{"rust_belt/lem_aux.rsspec"}
+include!{"rust_belt/aliasing.rsspec"}
 
 union std_empty_ {}
 struct std_tuple_0_ {}

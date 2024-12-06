@@ -1,3 +1,5 @@
+// verifast_options{ignore_ref_creation}
+
 #![allow(dead_code)]
 
 pub struct Cell<T> {

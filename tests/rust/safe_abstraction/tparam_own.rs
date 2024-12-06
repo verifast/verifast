@@ -1,3 +1,5 @@
+// verifast_options{ignore_ref_creation}
+
 fn replace<'a, T>(r: &'a mut T, v: T) -> T {
     unsafe {
         //@ open_full_borrow(_q_a, 'a, (<T>.full_borrow_content)(_t, r));

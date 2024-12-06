@@ -458,7 +458,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let ts = List.map (fun (t, (tp0, tp)) -> prover_convert_term t tp0 tp) (zip2 ts (zip2 domain declared_paramtypes)) in
           let produce_post env' =
             let tpenv = zip2 tparams targs in
-            let env'' = env' @ zip2 (xs1@xs2) ts @ typeid_env_of_tpenv l env tpenv in
+            let env'' = env' @ zip2 (xs1@xs2) ts @ typeid_env_of_tpenv l typeid_env tpenv in
             with_context PushSubcontext $. fun () ->
             with_context (Executing (h, env'', l, "Applying autolemma")) $. fun () ->
             produce_asn_core_with_post typeid_env tpenv h [] env'' post real_unit size_first size_all true $. fun h_ _ _ _ ->

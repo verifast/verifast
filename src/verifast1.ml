@@ -74,6 +74,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     option_use_java_frontend=use_java_frontend;
     option_enforce_annotations=enforce_annotations;
     option_report_skipped_stmts=report_skipped_stmts;
+    option_allow_ignore_ref_creation=allow_ignore_ref_creation;
   } = options
 
   let disable_overflow_check = Vfbindings.get Vfparam_disable_overflow_check vfbindings
