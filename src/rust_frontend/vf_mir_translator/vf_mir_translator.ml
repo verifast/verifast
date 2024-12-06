@@ -4754,7 +4754,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           add_type_interp_asns adt_def_loc tparams
             (add_send_asns adt_def_loc send_tparams pre)
         in
-        let share_pred =
+        let share_pred l =
           CoefAsn
             ( adt_def_loc,
               DummyPat,
@@ -4764,14 +4764,14 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   (*type arguments*) tparams_targs,
                   (*indices*) [],
                   (*arguments*)
-                  List.map lpat_var [ "k"; "t"; "l" ],
+                  List.map lpat_var [ "k"; "t"; l ],
                   if tparams_targs = [] then PredFamCall else PredCtorCall ) )
         in
         let (Some post) =
           AstAux.list_to_sep_conj
             (List.map
                (fun asn -> (adt_def_loc, asn))
-               [ atomic_mask_token; share_pred; lft_token (lpat_var "q") ])
+               [ atomic_mask_token; share_pred "l"; lft_token (lpat_var "q") ])
             None
         in
         let post = add_type_interp_asns adt_def_loc tparams post in
@@ -4795,6 +4795,89 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               false (*virtual*),
               [] (*overrides*) )
         in
+        (* init_ref_S *)
+        let ref_init_perm = CallExpr (adt_def_loc, "ref_init_perm", [], [], [lpat_var "p"; VarPat (adt_def_loc, "x")], Static) in
+        let pre_shr_asn =
+          CoefAsn
+            ( adt_def_loc,
+              DummyPat,
+              CallExpr
+                ( adt_def_loc,
+                  name ^ "_share",
+                  (*type arguments*) tparams_targs,
+                  (*indices*) [],
+                  (*arguments*)
+                  [ VarPat (adt_def_loc, "k"); VarPat (adt_def_loc, "t"); lpat_var "x" ],
+                  if tparams_targs = [] then PredFamCall else PredCtorCall ) )
+        in
+        let (Some pre) =
+          AstAux.list_to_sep_conj
+            (List.map
+               (fun asn -> (adt_def_loc, asn))
+               [
+                 atomic_mask_token;
+                 ref_init_perm;
+                 pre_shr_asn;
+                 lft_token (VarPat (adt_def_loc, "q"));
+               ])
+            None
+        in
+        let pre =
+          add_type_interp_asns adt_def_loc tparams
+            (add_send_asns adt_def_loc send_tparams
+               pre)
+        in
+        let post_shr_asn =
+          CoefAsn
+            ( adt_def_loc,
+              DummyPat,
+              CallExpr
+                ( adt_def_loc,
+                  name ^ "_share",
+                  (*type arguments*) tparams_targs,
+                  (*indices*) [],
+                  (*arguments*)
+                  [ lpat_var "k"; lpat_var "t"; lpat_var "p" ],
+                  if tparams_targs = [] then PredFamCall else PredCtorCall ) )
+        in
+        let ref_initialized_asn =
+          CoefAsn (adt_def_loc, DummyPat, CallExpr (adt_def_loc, "frac_borrow", [], [], [lpat_var "k"; LitPat (CallExpr (adt_def_loc, "ref_initialized_", [], [], [lpat_var "p"], Static))], Static))
+        in
+        let (Some post) =
+          AstAux.list_to_sep_conj
+            (List.map
+              (fun asn -> (adt_def_loc, asn))
+              [
+                atomic_mask_token;
+                lft_token (lpat_var "q");
+                post_shr_asn;
+                ref_initialized_asn;
+              ])
+            None
+        in
+        let post =
+          add_type_interp_asns adt_def_loc tparams post
+        in
+        let init_ref_po =
+          Func
+            ( adt_def_loc,
+              Lemma
+                ( false
+                  (*indicates whether an axiom should be generated for this lemma*),
+                  None (*trigger*) ),
+              lft_params @ tparams (*type parameters*),
+              None (*return type*),
+              "init_ref_" ^ name,
+              [(PtrTypeExpr (adt_def_loc, StructTypeExpr (adt_def_loc, Some name, None, [], tparams_targs)), "p")],
+              false (*nonghost_callers_only*),
+              None
+              (*implemented function type, with function type type arguments and function type arguments*),
+              Some (pre, post) (*contract*),
+              false (*terminates*),
+              None (*body*),
+              false (*virtual*),
+              [] (*overrides*) )
+        in
         let sync_pos =
           match sync_preds with
           | None -> []
@@ -4805,7 +4888,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   sync_tparams;
               ]
         in
-        Ok ([ share_mono_po; share_po ] @ sync_pos)
+        Ok ([ share_mono_po; share_po; init_ref_po ] @ sync_pos)
 
   type trait_impl = {
     trait_impl_cpn : TraitImplRd.t;
@@ -4945,6 +5028,13 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           let user_provided_share_defs =
             user_provided_type_pred_defs_for "share"
           in
+          let field_types =
+            variants_cpn
+            |> Util.flatmap @@ fun variant_cpn ->
+               VariantDef.fields_get_list variant_cpn
+               |> List.map @@ fun field_cpn ->
+                  VariantDef.FieldDef.ty_get field_cpn |> decode_ty
+          in
           (* If send_preds = None, it means this ADT is never Send.
              If send_preds = Some xs, then xs is a list of type parameters such that if any of them are not Send, then this ADT is not Send.
              Note that Some [] is always a valid value for send_preds, and that if Some xs is a valid value, then Some (xs @ ys) is also a valid value.
@@ -5014,13 +5104,6 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                    | `Trait (trait_name', `Type (`Param x) :: _) ->
                        [ x, trait_name' ]
                    | _ -> [])
-            in
-            let field_types =
-              variants_cpn
-              |> Util.flatmap @@ fun variant_cpn ->
-                 VariantDef.fields_get_list variant_cpn
-                 |> List.map @@ fun field_cpn ->
-                    VariantDef.FieldDef.ty_get field_cpn |> decode_ty
             in
             let preds_union preds1 preds2 =
               match (preds1, preds2) with
@@ -5244,11 +5327,193 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                 ]
             else []
           in
+          let open_ref_init_perm_lemma =
+            let pre = Ast.CallExpr (def_loc, "ref_init_perm", [], [], [LitPat (Var (def_loc, "p")); VarPat (def_loc, "x")], Static) in
+            let post =
+              let fd_ref_init_perm_asns = List.combine fds field_types |>
+                Util.flatmap (fun (fd, fd_ty) ->
+                  match fd_ty with
+                    `Adt ("std::cell::UnsafeCell", _, _) -> []
+                  | _ ->
+                    [ Ast.CallExpr (def_loc, "ref_init_perm", [], [], [
+                      LitPat (AddressOf (def_loc, Select (def_loc, Deref (def_loc, Var (def_loc, "p")), (fd:Mir.field_def_tr).name)));
+                      LitPat (AddressOf (def_loc, Select (def_loc, Deref (def_loc, Var (def_loc, "x")), (fd:Mir.field_def_tr).name)));
+                      ], Static) ]
+                )
+              in
+              let ref_padding_init_perm_asn =
+                Ast.CallExpr (def_loc, "ref_padding_init_perm", [], [], [LitPat (Var (def_loc, "p")); LitPat (Var (def_loc, "x"))], Static) 
+              in
+              List.fold_right (fun a asn -> Ast.Sep (def_loc, a, asn)) fd_ref_init_perm_asns ref_padding_init_perm_asn
+            in
+            Ast.Func (
+              def_loc,
+              Lemma
+                ( false
+                  (*indicates whether an axiom should be generated for this lemma*),
+                  None (*trigger*) ),
+              lft_params @ tparams (*type parameters*),
+              None (*return type*),
+              "open_ref_init_perm_" ^ name,
+              [(PtrTypeExpr (def_loc, StructTypeExpr (def_loc, Some name, None, [], tparams_targs)), "p")],
+              false (*nonghost_callers_only*),
+              None (*implemented function type, with function type type arguments and function type arguments*),
+              Some (pre, post) (*contract*),
+              false (*terminates*),
+              Some ([ExprStmt (CallExpr (def_loc, "assume", [], [], [LitPat (False def_loc)], Static))], def_loc) (*body*),
+              false (*virtual*),
+              [] (*overrides*) )
+          in
+          let init_ref_padding_lemma =
+            let ref_padding_init_perm_asn =
+              Ast.CallExpr (def_loc, "ref_padding_init_perm", [], [], [LitPat (Var (def_loc, "p")); VarPat (def_loc, "x")], Static) 
+            in
+            let padding_asn coefpat l = Ast.CoefAsn (def_loc, coefpat, Ast.CallExpr (def_loc, "struct_" ^ name ^ "_padding", [], [], [LitPat (Var (def_loc, l))], Static)) in
+            let coef_limits =
+              Ast.ExprAsn (def_loc, Operation (def_loc, And, [
+                Ast.Operation (def_loc, Ast.Lt, [IntLit (def_loc, Big_int.zero_big_int, true, false, NoLSuffix); Var (def_loc, "coef")]);
+                Ast.Operation (def_loc, Ast.Lt, [Var (def_loc, "coef"); IntLit (def_loc, Big_int.unit_big_int, true, false, NoLSuffix)])
+              ]))
+            in
+            let pre = Ast.Sep (def_loc, ref_padding_init_perm_asn, Sep (def_loc, padding_asn (VarPat (def_loc, "f")) "x", coef_limits)) in
+            let one_minus_coef = Ast.Operation (def_loc, Sub, [IntLit (def_loc, Big_int.unit_big_int, true, false, NoLSuffix); Var (def_loc, "coef")]) in
+            let f_times_one_minus_coef = Ast.Operation (def_loc, Mul, [Var (def_loc, "f"); one_minus_coef]) in
+            let f_times_coef = Ast.Operation (def_loc, Mul, [Var (def_loc, "f"); Var (def_loc, "coef")]) in
+            let ref_padding_initialized_asn =
+              Ast.CallExpr (def_loc, "ref_padding_initialized", [], [], [LitPat (Var (def_loc, "p"))], Static)
+            in
+            let ref_padding_end_token_asn =
+              Ast.CallExpr (def_loc, "ref_padding_end_token", [], [], [LitPat (Var (def_loc, "p")); LitPat (Var (def_loc, "x")); LitPat f_times_coef], Static)
+            in
+            let post =
+              Ast.Sep (def_loc, padding_asn (LitPat f_times_one_minus_coef) "x",
+                Sep (def_loc, padding_asn (LitPat f_times_coef) "p",
+                  Sep (def_loc, ref_padding_initialized_asn,
+                    ref_padding_end_token_asn)))
+            in
+            Ast.Func (
+              def_loc,
+              Lemma
+                ( false
+                  (*indicates whether an axiom should be generated for this lemma*),
+                  None (*trigger*) ),
+              lft_params @ tparams (*type parameters*),
+              None (*return type*),
+              "init_ref_padding_" ^ name,
+              [(PtrTypeExpr (def_loc, StructTypeExpr (def_loc, Some name, None, [], tparams_targs)), "p"); (ManifestTypeExpr (def_loc, RealType), "coef")],
+              false (*nonghost_callers_only*),
+              None (*implemented function type, with function type type arguments and function type arguments*),
+              Some (pre, post) (*contract*),
+              false (*terminates*),
+              Some ([ExprStmt (CallExpr (def_loc, "assume", [], [], [LitPat (False def_loc)], Static))], def_loc) (*body*),
+              false (*virtual*),
+              [] (*overrides*) )
+          in
+          let end_ref_padding_lemma =
+            let ref_padding_initialized_asn =
+              Ast.CallExpr (def_loc, "ref_padding_initialized", [], [], [LitPat (Var (def_loc, "p"))], Static)
+            in
+            let ref_padding_end_token_asn =
+              Ast.CallExpr (def_loc, "ref_padding_end_token", [], [], [LitPat (Var (def_loc, "p")); VarPat (def_loc, "x"); VarPat (def_loc, "f")], Static)
+            in
+            let padding_asn coefpat l = Ast.CoefAsn (def_loc, coefpat, Ast.CallExpr (def_loc, "struct_" ^ name ^ "_padding", [], [], [LitPat (Var (def_loc, l))], Static)) in
+            let pre =
+              Ast.Sep (def_loc, ref_padding_initialized_asn,
+                Sep (def_loc, ref_padding_end_token_asn,
+                  padding_asn (LitPat (Var (def_loc, "f"))) "p"))
+            in
+            let post = padding_asn (LitPat (Var (def_loc, "f"))) "x" in
+            Ast.Func (
+              def_loc,
+              Lemma
+                ( false
+                  (*indicates whether an axiom should be generated for this lemma*),
+                  None (*trigger*) ),
+              lft_params @ tparams (*type parameters*),
+              None (*return type*),
+              "end_ref_padding_" ^ name,
+              [(PtrTypeExpr (def_loc, StructTypeExpr (def_loc, Some name, None, [], tparams_targs)), "p")],
+              false (*nonghost_callers_only*),
+              None (*implemented function type, with function type type arguments and function type arguments*),
+              Some (pre, post) (*contract*),
+              false (*terminates*),
+              Some ([ExprStmt (CallExpr (def_loc, "assume", [], [], [LitPat (False def_loc)], Static))], def_loc) (*body*),
+              false (*virtual*),
+              [] (*overrides*) )
+          in
+          let close_ref_initialized_lemma =
+            let pre =
+              let ref_padding_initialized_asn =
+                Ast.CoefAsn (def_loc, VarPat (def_loc, "f"), CallExpr (def_loc, "ref_padding_initialized", [], [], [LitPat (Var (def_loc, "p"))], Static))
+              in
+              let fd_ref_initialized_asns = List.combine fds field_types |>
+                Util.flatmap (fun (fd, fd_ty) ->
+                  match fd_ty with
+                    `Adt ("std::cell::UnsafeCell", _, _) -> []
+                  | _ ->
+                    [ Ast.CoefAsn (def_loc, LitPat (Var (def_loc, "f")), CallExpr (def_loc, "ref_initialized", [], [], [LitPat (AddressOf (def_loc, Select (def_loc, Deref (def_loc, Var (def_loc, "p")), (fd:Mir.field_def_tr).name)))], Static)) ]
+                )
+              in
+              Ast.Sep (def_loc, ref_padding_initialized_asn, List.fold_right (fun a asn -> Ast.Sep (def_loc, a, asn)) fd_ref_initialized_asns (EmpAsn def_loc))
+            in
+            let post = Ast.CoefAsn (def_loc, LitPat (Var (def_loc, "f")), CallExpr (def_loc, "ref_initialized", [], [], [LitPat (Var (def_loc, "p"))], Static)) in
+            Ast.Func (
+              def_loc,
+              Lemma
+                ( false
+                  (*indicates whether an axiom should be generated for this lemma*),
+                  None (*trigger*) ),
+              lft_params @ tparams (*type parameters*),
+              None (*return type*),
+              "close_ref_initialized_" ^ name,
+              [(PtrTypeExpr (def_loc, StructTypeExpr (def_loc, Some name, None, [], tparams_targs)), "p")],
+              false (*nonghost_callers_only*),
+              None (*implemented function type, with function type type arguments and function type arguments*),
+              Some (pre, post) (*contract*),
+              false (*terminates*),
+              Some ([ExprStmt (CallExpr (def_loc, "assume", [], [], [LitPat (False def_loc)], Static))], def_loc) (*body*),
+              false (*virtual*),
+              [] (*overrides*) )
+          in
+          let open_ref_initialized_lemma =
+            let pre = Ast.CoefAsn (def_loc, VarPat (def_loc, "f"), CallExpr (def_loc, "ref_initialized", [], [], [LitPat (Var (def_loc, "p"))], Static)) in
+            let post =
+              let fd_ref_initialized_asns = List.combine fds field_types |>
+                Util.flatmap (fun (fd, fd_ty) ->
+                  match fd_ty with
+                    `Adt ("std::cell::UnsafeCell", _, _) -> []
+                  | _ ->
+                    [ Ast.CoefAsn (def_loc, LitPat (Var (def_loc, "f")), CallExpr (def_loc, "ref_initialized", [], [], [LitPat (AddressOf (def_loc, Select (def_loc, Deref (def_loc, Var (def_loc, "p")), (fd:Mir.field_def_tr).name)))], Static)) ]
+                )
+              in
+              let ref_padding_initialized_asn =
+                Ast.CoefAsn (def_loc, LitPat (Var (def_loc, "f")), CallExpr (def_loc, "ref_padding_initialized", [], [], [LitPat (Var (def_loc, "p"))], Static))
+              in
+              List.fold_right (fun a asn -> Ast.Sep (def_loc, a, asn)) fd_ref_initialized_asns ref_padding_initialized_asn
+            in
+            Ast.Func (
+              def_loc,
+              Lemma
+                ( false
+                  (*indicates whether an axiom should be generated for this lemma*),
+                  None (*trigger*) ),
+              lft_params @ tparams (*type parameters*),
+              None (*return type*),
+              "open_ref_initialized_" ^ name,
+              [(PtrTypeExpr (def_loc, StructTypeExpr (def_loc, Some name, None, [], tparams_targs)), "p")],
+              false (*nonghost_callers_only*),
+              None (*implemented function type, with function type type arguments and function type arguments*),
+              Some (pre, post) (*contract*),
+              false (*terminates*),
+              Some ([ExprStmt (CallExpr (def_loc, "assume", [], [], [LitPat (False def_loc)], Static))], def_loc) (*body*),
+              false (*virtual*),
+              [] (*overrides*) )
+          in
           Ok
             ( Some full_bor_content,
               own_proof_obligs @ share_proof_obligs,
               delayed_proof_obligs,
-              upcast_lemmas @ type_pred_defs )
+              upcast_lemmas @ open_ref_init_perm_lemma :: init_ref_padding_lemma :: close_ref_initialized_lemma :: open_ref_initialized_lemma :: end_ref_padding_lemma :: type_pred_defs )
         else Ok (None, [], [], [])
       in
       Ok

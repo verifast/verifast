@@ -496,13 +496,13 @@ let rec parse_stmt = function%parser
 and parse_match_stmt_arm = function%parser
   [ parse_expr as pat; (l, Kwd "=>"); parse_block_stmt as s ] -> SwitchStmtClause (l, pat, [s])
 and parse_produce_lemma_function_pointer_chunk_stmt_function_type_clause = function%parser
-  [ [%let (li, ftn) = parse_simple_path];
+  [ [%let (li, ftn) = parse_simple_path]; [%let targs = function%parser [ parse_type_args as targs ] -> targs | [ ] -> []];
     (_, Kwd "("); [%let args = rep_comma parse_expr]; (_, Kwd ")");
     (_, Kwd "("); [%let params = rep_comma (function%parser [ (l, Ident x) ] -> (l, x))]; (_, Kwd ")");
     (openBraceLoc, Kwd "{");
     parse_stmts as ss;
     (closeBraceLoc, Kwd "}")
-  ] -> (ftn, [], args, params, openBraceLoc, ss, closeBraceLoc)
+  ] -> (ftn, targs, args, params, openBraceLoc, ss, closeBraceLoc)
 and parse_block_stmt = function%parser
   [ (l, Kwd "{");
     parse_ghost_decls as ds;

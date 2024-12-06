@@ -99,6 +99,13 @@ lem MutexU32_share_full(k: lifetime_t, t: thread_id_t, l: *MutexU32)
     }
 }
 
+lem init_ref_MutexU32(p: *MutexU32)
+    req atomic_mask(Nlft) &*& ref_init_perm(p, ?x) &*& [_]MutexU32_share(?k, ?t, x) &*& [?q]lifetime_token(k);
+    ens atomic_mask(Nlft) &*& [q]lifetime_token(k) &*& [_]MutexU32_share(k, t, p) &*& [_]frac_borrow(k, ref_initialized_(p));
+{
+    assume(false);
+}
+
 @*/
 
 unsafe impl Send for MutexU32 {}

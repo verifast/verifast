@@ -109,6 +109,13 @@ lem Arc_share_full<T>(k: lifetime_t, t: thread_id_t, l: *Arc<T>)
     leak Arc_share(k, t, l);
 }
 
+lem init_ref_Arc<T>(p: *Arc<T>)
+    req type_interp::<T>() &*& is_Send(typeid(T)) == true &*& atomic_mask(Nlft) &*& ref_init_perm(p, ?x) &*& [_]Arc_share::<T>(?k, ?t, x) &*& [?q]lifetime_token(k);
+    ens type_interp::<T>() &*& atomic_mask(Nlft) &*& [q]lifetime_token(k) &*& [_]Arc_share::<T>(k, t, p) &*& [_]frac_borrow(k, ref_initialized_(p));
+{
+    assume(false);
+}
+
 @*/
 
 unsafe impl<T: Sync + Send> Send for Arc<T> {}

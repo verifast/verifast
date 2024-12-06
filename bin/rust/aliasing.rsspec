@@ -1,0 +1,93 @@
+// See https://github.com/btj/vf-rust-aliasing/tree/master/README.md
+// VeriFast aims to soundly (but not necessarily completely) enforce the Tree Borrows aliasing restrictions model by Neven Villani and Ralf Jung.
+// The current design is highly incomplete (e.g., it does not support two-phase borrows).
+
+/*@
+
+fix is_shared_ref_provenance(prov: pointer_provenance) -> bool;
+fix is_shared_ref(x: *_) -> bool { is_shared_ref_provenance((x as pointer).provenance) }
+
+fix ref_origin_provenance(prov: pointer_provenance) -> pointer_provenance;
+fix ref_origin<t>(p: *t) -> *t { pointer_ctor(ref_origin_provenance((p as pointer).provenance), (p as pointer).address) as *t }
+
+lem_auto(ptr_provenance_min_addr(ref_origin_provenance(prov))) ref_origin_min_addr(prov: pointer_provenance);
+    req true;
+    ens ptr_provenance_min_addr(ref_origin_provenance(prov)) == ptr_provenance_min_addr(prov);
+
+lem_auto(ptr_provenance_max_addr(ref_origin_provenance(prov))) ref_origin_max_addr(prov: pointer_provenance);
+    req true;
+    ens ptr_provenance_max_addr(ref_origin_provenance(prov)) == ptr_provenance_max_addr(prov);
+
+lem_auto(ref_origin(ref_origin(p))) ref_origin_ref_origin(p: *_);
+    req true;
+    ens ref_origin(ref_origin(p)) == ref_origin(p);
+
+pred ref_mut_end_token<T>(p: *T; x: *T);
+
+pred ref_init_perm<T>(p: *T; x: *T);
+pred ref_padding_init_perm<T>(p: *T; x: *T);
+
+lem_auto ref_init_perm_inv<T>();
+    req ref_init_perm::<T>(?p, ?x);
+    ens ref_init_perm::<T>(p, x) &*& ref_origin(p) == ref_origin(x);
+
+pred ref_end_token<T>(p: *T; x: *T, frac: real);
+pred ref_padding_end_token<T>(p: *T; x: *T, frac: real);
+
+pred ref_initialized<T>(p: *T;);
+pred ref_padding_initialized<T>(p: *T;);
+
+pred_ctor ref_initialized_<T>(p: *T)(;) = ref_initialized(p);
+pred_ctor ref_padding_initialized_<T>(p: *T)(;) = ref_padding_initialized(p);
+
+@*/
+
+fn create_ref_mut<T>(x: *T) -> *T;
+//@ req *x |-> ?v;
+//@ ens *result |-> v &*& ref_mut_end_token(result, x);
+
+fn reborrow_ref_mut_implicit<T>(x: *T) -> *T;
+//@ req true;
+//@ ens result == x;
+
+/*@
+
+lem end_ref_mut<T>(p: *T);
+    req ref_mut_end_token(p, ?x) &*& *p |-> ?v;
+    ens *x |-> v;
+
+lem end_ref_mut_<t>();
+    req ref_mut_end_token::<t>(?p, ?x) &*& *p |-> ?v;
+    ens *x |-> v;
+
+pred ref_precreated_token<T>(x: *T, p: *T);
+
+lem precreate_ref<T>(x: *T) -> *T;
+   req true;
+   ens ref_precreated_token(x, result) &*& ref_init_perm(result, x);
+
+@*/
+
+fn create_ref<T>(x: *T) -> *T;
+//@ req ref_precreated_token(x, ?p) &*& [?f]ref_initialized(p);
+//@ ens [f]ref_initialized(p) &*& result == p;
+
+fn reborrow_ref<T>(x: *T) -> *T;
+//@ req [?f]ref_initialized(x);
+//@ ens [f]ref_initialized(x) &*& result == x;
+
+fn reborrow_ref_UnsafeCell(x: *_) -> *_;
+//@ req true;
+//@ ens result == x;
+
+fn create_slice_ref<T>(x: slice_ref<'static, T>) -> slice_ref<'static, T>;
+//@ req true; // TODO
+//@ ens result == x;
+
+fn reborrow_slice_ref<T>(x: slice_ref<'static, T>) -> slice_ref<'static, T>;
+//@ req true; // TODO
+//@ ens result == x;
+
+fn create_str_ref(x: str_ref<'static>) -> str_ref<'static>;
+//@ req true; // TODO
+//@ ens result == x;
