@@ -266,6 +266,16 @@ mod alloc {
         req share_allocator_end_token::<A>(?l, ?alloc_id) &*& Allocator::<&'a A>(?t, _, alloc_id);
         ens *l |-> ?alloc &*& Allocator::<A>(t, alloc, alloc_id);
     
+    pred ref_Allocator_end_token<A>(p: *A, x: *A, alloc_id: any);
+    
+    lem init_ref_Allocator<'a, A>(p: *A);
+        req ref_init_perm(p, ?x) &*& *x |-> ?alloc &*& Allocator(?t, alloc, ?alloc_id);
+        ens ref_initialized(p) &*& Allocator::<&'a A>(t, p, alloc_id) &*& ref_Allocator_end_token(p, x, alloc_id);
+    
+    lem end_ref_Allocator<'a, A>();
+        req ref_Allocator_end_token::<A>(?p, ?x, ?alloc_id) &*& ref_initialized(p) &*& Allocator::<&'a A>(?t, _, alloc_id);
+        ens *x |-> ?alloc &*& Allocator::<A>(t, alloc, alloc_id);
+    
     pred share_allocator_at_lifetime_end_token<A>(t: thread_id_t, l: *A, alloc_id: any, k: lifetime_t);
     
     lem share_allocator_at_lifetime<'a, A>(l: *A);
@@ -277,6 +287,18 @@ mod alloc {
         nonghost_callers_only
         req share_allocator_at_lifetime_end_token::<A>(?t, ?l, ?alloc_id, ?k) &*& [_]lifetime_dead_token(k);
         ens *l |-> ?alloc &*& Allocator::<A>(t, alloc, alloc_id);
+    
+    pred ref_Allocator_end_token_at_lifetime<A>(t: thread_id_t, p: *A, x: *A, alloc_id: any, k: lifetime_t);
+    
+    lem init_ref_Allocator_at_lifetime<'a, A>(p: *A);
+        nonghost_callers_only
+        req ref_init_perm(p, ?x) &*& *x |-> ?alloc &*& Allocator(?t, alloc, ?alloc_id);
+        ens ref_initialized(p) &*& Allocator::<&'a A>(t, p, alloc_id) &*& ref_Allocator_end_token_at_lifetime(t, p, x, alloc_id, 'a);
+    
+    lem end_ref_Allocator_at_lifetime<A>();
+        nonghost_callers_only
+        req ref_Allocator_end_token_at_lifetime::<A>(?t, ?p, ?x, ?alloc_id, ?k) &*& [_]lifetime_dead_token(k) &*& ref_initialized(p);
+        ens *x |-> ?alloc &*& Allocator::<A>(t, alloc, alloc_id);
     
     @*/
 

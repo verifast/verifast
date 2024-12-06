@@ -1673,7 +1673,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | Slice _ -> Ast.static_error loc "Slice types are not yet supported" None
     | Undefined _ -> Error (`TrTy "Unknown Rust type kind")
 
-  type body_tr_defs_ctx = { adt_defs : Mir.adt_def_tr list }
+  type body_tr_defs_ctx = { adt_defs : Mir.adt_def_tr list; allow_ignore_ref_creation : bool; ignore_ref_creation : bool; directives: Mir.annot list }
   type var_id_trs_entry = { id : string; internal_name : string }
   type var_id_trs_map = var_id_trs_entry list
 
@@ -2686,9 +2686,50 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           let open RefData in
           let region_cpn = region_get ref_data_cpn in
           let bor_kind_cpn = bor_kind_get ref_data_cpn in
+          let bor_kind = BorrowKind.get bor_kind_cpn in
           let place_cpn = place_get ref_data_cpn in
           let* place_expr, place_is_mutable = translate_place place_cpn loc in
-          let expr = Ast.AddressOf (loc, place_expr) in
+          let ((path, line, _), _) = Ast.lexed_loc loc in
+          let ignore_ref_creation =
+            bor_kind = Mut || (* ignore &mut E for now *)
+            if Args.body_tr_defs_ctx.ignore_ref_creation then true else
+            let directives = Util.flatmap
+                 (fun { Mir.span; raw } ->
+                   if
+                   raw = "ignore_ref_creation"
+                   && let ((path', line', _), _) = Ast.lexed_loc span in
+                      path' = path && line' = line
+                   then [span] else [])
+                 Args.body_tr_defs_ctx.directives
+            in
+            match directives with
+              directive_span::_ ->
+                if not (Args.body_tr_defs_ctx.allow_ignore_ref_creation) then
+                  Ast.static_error directive_span "Ignoring reference creation is not allowed; specify -allow_ignore_ref_creation on the command line to allow" None;
+              true
+            | [] -> false
+          in
+          if ignore_ref_creation then
+            Ok (`TrRvalueExpr (Ast.AddressOf (loc, place_expr)))
+          else
+          let place_ty = decode_ty (place_ty_get ref_data_cpn) in
+          let is_implicit = is_implicit_get ref_data_cpn in
+          let fn_name =
+            match place_ty, bor_kind, BodyRd.PlaceKind.get (BodyRd.Place.kind_get place_cpn), is_implicit with
+            | `Str, Shared, SharedRef, _ -> "reborrow_str_ref"
+            | `Str, Shared, _, _ -> "create_str_ref"
+            | `Slice _, Mut, _, _ -> "create_slice_ref_mut"
+            | `Slice _, Shared, SharedRef, _ -> "reborrow_slice_ref"
+            | `Slice _, Shared, _, _ -> "create_slice_ref"
+            | `Adt ("std::cell::UnsafeCell", _, _), Shared, SharedRef, _ -> "reborrow_ref_UnsafeCell"
+            | _, Mut, MutableRef, true -> "reborrow_ref_mut_implicit"
+            | _, Mut, MutableRef, _ -> "reborrow_ref_mut"
+            | _, Mut, _, _ -> "create_ref_mut"
+            | _, Shared, SharedRef, true -> "reborrow_ref_implicit"
+            | _, Shared, SharedRef, _ -> "reborrow_ref"
+            | _, Shared, _, _ -> "create_ref"
+          in
+          let expr = Ast.CallExpr (loc, fn_name, [], [], [LitPat (AddressOf (loc, place_expr))], Static) in
           Ok (`TrRvalueExpr expr)
           (*Todo @Nima: We might need to assert the chunk when we make a reference to it*)
       | AddressOf address_of_data_cpn ->
@@ -5741,11 +5782,12 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
 
   let translate_vf_mir (extern_specs : string list) (vf_mir_cpn : VfMirRd.t)
       (report_should_fail : string -> Ast.loc0 -> unit)
-      (skip_specless_fns : bool) =
+      (skip_specless_fns : bool) (allow_ignore_ref_creation : bool) (ignore_ref_creation : bool) =
     let job _ =
       let directives_cpn = VfMirRd.directives_get_list vf_mir_cpn in
       let* directives = ListAux.try_map translate_annotation directives_cpn in
-      directives
+      let vf_mir_translator_directives, vf_directives = directives |> List.partition (fun {Mir.raw} -> raw = "ignore_ref_creation") in
+      vf_directives
       |> List.iter (fun ({ span; raw } : Mir.annot) ->
              report_should_fail raw (Ast.lexed_loc span));
       let* module_decls =
@@ -5819,7 +5861,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             bodies_cpn
         else bodies_cpn
       in
-      let body_tr_defs_ctx = { adt_defs } in
+      let body_tr_defs_ctx = { adt_defs; allow_ignore_ref_creation; ignore_ref_creation; directives=vf_mir_translator_directives } in
       let* bodies_tr_res =
         ListAux.try_map (translate_body body_tr_defs_ctx) bodies_cpn
       in

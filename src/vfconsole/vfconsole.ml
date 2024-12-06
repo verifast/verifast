@@ -465,6 +465,7 @@ let _ =
   let emitHighlightedSourceFiles = ref false in
   let dumpPerLineStmtExecCounts = ref false in
   let allowDeadCode = ref false in
+  let allowIgnoreRefCreation = ref false in
   let readOptionsFromSourceFile = ref false in
   let exports: string list ref = ref [] in
   let outputSExpressions : string option ref = ref None in
@@ -524,6 +525,7 @@ let _ =
             ; "-focus", String (fun path_loc -> let [path; loc_string] = String.split_on_char ':' path_loc in focus := Some (path, int_of_string loc_string)), "-focus myfile.c:123 causes VeriFast to verify only the function/method/constructor/destructor at the specified source line"
             ; "-break_at_node", String (fun path -> targetPath := Some (path |> String.split_on_char ',' |> List.map int_of_string)), "Break when symbolic execution reaches the specified node in the execution tree."
             ; "-allow_should_fail", Set allowShouldFail, "Allow '//~' annotations that specify the line should fail."
+            ; "-allow_ignore_ref_creation", Set allowIgnoreRefCreation, "Allow //~ignore_ref_creation directives."
             ; "-emit_vfmanifest", Set emitManifest, " "
             ; "-check_vfmanifest", Set checkManifest, " "
             ; "-emit_dll_vfmanifest", Set emitDllManifest, " "
@@ -573,6 +575,7 @@ let _ =
           option_verbose_flags = !verbose_flags;
           option_vfbindings = vfbindings;
           option_allow_should_fail = !allowShouldFail;
+          option_allow_ignore_ref_creation = !allowIgnoreRefCreation;
           option_emit_manifest = !emitManifest;
           option_check_manifest = !checkManifest;
           option_vroots = !vroots;

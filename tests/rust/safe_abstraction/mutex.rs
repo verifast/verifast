@@ -1,4 +1,4 @@
-// verifast_options{extern:../unverified/sys}
+// verifast_options{ignore_ref_creation extern:../unverified/sys}
 
 #![feature(negative_impls)]
 #![allow(dead_code)]

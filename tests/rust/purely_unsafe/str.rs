@@ -1,3 +1,5 @@
+// verifast_options{ignore_ref_creation}
+
 unsafe fn is_hi<'a>(text: &'a str) -> bool
 //@ req [?f]text.ptr[..text.len] |-> ?cs;
 //@ ens [f]text.ptr[..text.len] |-> cs &*& result == (cs == ['H', 'i']);

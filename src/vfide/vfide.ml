@@ -1684,6 +1684,7 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
                 option_use_java_frontend = !useJavaFrontend;
                 option_enforce_annotations = enforceAnnotations;
                 option_allow_should_fail = true;
+                option_allow_ignore_ref_creation = true;
                 option_emit_manifest = false;
                 option_check_manifest = false;
                 option_vroots = [crt_vroot default_bindir];

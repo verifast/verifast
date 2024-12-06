@@ -1,3 +1,5 @@
+// verifast_options{ignore_ref_creation}
+
 pub struct Pair<A, B> {
     fst: A,
     snd: B

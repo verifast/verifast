@@ -3921,6 +3921,8 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let report_macro_call = reportMacroCall
             let verbose_flags = verbose_flags
             let skip_specless_fns = Vfbindings.get Vfparam_skip_specless_fns vfbindings
+            let allow_ignore_ref_creation = allow_ignore_ref_creation
+            let ignore_ref_creation = Vfbindings.get Vfparam_ignore_ref_creation vfbindings
           end
         )
         in

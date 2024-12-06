@@ -1,3 +1,5 @@
+// verifast_options{ignore_ref_creation}
+
 use std::process::abort;
 use std::ptr::NonNull;
 use std::sync::atomic::{AtomicUsize, Ordering};

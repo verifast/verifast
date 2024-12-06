@@ -1,3 +1,5 @@
+// verifast_options{ignore_ref_creation}
+
 /*@
 pred<T> <ptr::NonNull<T>>.own(t, nonNull;) = nonNull.pointer as usize != 0;
 

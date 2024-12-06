@@ -1,3 +1,5 @@
+// verifast_options{ignore_ref_creation}
+
 unsafe fn assert(b: bool)
 //@ req b;
 //@ ens true;
