@@ -287,13 +287,6 @@ lem frac_borrow_implies(k: lifetime_t, P: pred(;), Q: pred(;));
     req [_]frac_borrow(k, P) &*& is_implies_frac(?f, P, Q) &*& is_implies_frac(?f1, Q, P);
     ens [_]frac_borrow(k, Q) &*& is_implies_frac(f, P, Q) &*& is_implies_frac(f1, Q, P);
 
-pred_ctor sep_(P: pred(;), Q: pred(;))(;) = P() &*& Q();
-
-// Not in Rustbelt!
-lem frac_borrow_split(k: lifetime_t, P: pred(;), Q: pred(;));
-    req [_]frac_borrow(k, sep_(P, Q));
-    ens [_]frac_borrow(k, P) &*& [_]frac_borrow(k, Q);
-
 // LftL-fract-acc-atomic
 pred close_frac_borrow_token_atomic(b: bool, q: real, P: pred(;), k: lifetime_t);
 
@@ -309,6 +302,40 @@ lem close_frac_borrow_atomic(P: pred(;), k: lifetime_t);
 lem frac_borrow_lft_incl(k: lifetime_t, q: real, k1: lifetime_t);
     req [_]frac_borrow(k, lifetime_token_(q, k1));
     ens lifetime_inclusion(k, k1) == true;
+
+// Not in RustBelt; TODO: check soundness!
+
+pred_ctor sep_(P: pred(;), Q: pred(;))(;) = P() &*& Q();
+
+lem frac_borrow_split(k: lifetime_t, P: pred(;), Q: pred(;));
+    req [_]frac_borrow(k, sep_(P, Q));
+    ens [_]frac_borrow(k, P) &*& [_]frac_borrow(k, Q);
+
+lem frac_borrow_sep(k: lifetime_t, P: pred(;), Q: pred(;));
+    req [_]frac_borrow(k, P) &*& [_]frac_borrow(k, Q);
+    ens [_]frac_borrow(k, sep_(P, Q));
+
+pred_ctor scaledp(coef: real, P: pred(;))(;) = [coef]P();
+
+lem frac_borrow_implies_scaled(k: lifetime_t, coef: real, P: pred(;));
+    req [_]frac_borrow(k, scaledp(coef, P));
+    ens [_]frac_borrow(k, P);
+
+pred close_frac_borrow_token_strong(k1: lifetime_t, P: pred(;), q: real, k: lifetime_t, f: real);
+
+lem open_frac_borrow_strong(k: lifetime_t, P: pred(;), q: real) -> lifetime_t;
+    nonghost_callers_only
+    req [_]frac_borrow(k, P) &*& [q]lifetime_token(k);
+    ens lifetime_inclusion(k, result) == true &*& [?f]P() &*& close_frac_borrow_token_strong(result, P, q, k, f);
+
+lem_type frac_borrow_convert_strong(Ctx: pred(), Q: pred(), k1: lifetime_t, f: real, P: pred()) = lem();
+    req Ctx() &*& Q() &*& [_]lifetime_dead_token(k1); // Empty mask
+    ens [f]P();
+
+lem close_frac_borrow_strong(k1: lifetime_t, P: pred(;), Q: pred());
+    nonghost_callers_only
+    req close_frac_borrow_token_strong(k1, P, ?q, ?k, ?f) &*& is_frac_borrow_convert_strong(?c, ?Ctx, Q, k1, f, P) &*& Ctx() &*& Q();
+    ens full_borrow(k1, Q) &*& [q]lifetime_token(k) &*& is_frac_borrow_convert_strong(c, Ctx, Q, k1, f, P);
 
 // Mask preserving view shifts - mask aware versions. See the documentation about Iris view shifts in general.h
 // LftL-incl
@@ -406,5 +433,30 @@ lem open_frac_borrow_m(k: lifetime_t, P: pred(;), q_lft: real);
 lem close_frac_borrow_m(q_p: real, P: pred(;));
     req atomic_mask(?mask) &*& mask_le(Nlft, mask) == true &*& [q_p]P() &*& close_frac_borrow_token(q_p, P, ?q_lft, ?k);
     ens atomic_mask(mask) &*& [q_lft]lifetime_token(k);
+
+// The following do not exist in RustBelt; TODO: check soundness!
+
+lem open_frac_borrow_strong_m(k: lifetime_t, P: pred(;), q: real) -> lifetime_t;
+    req atomic_mask(?mask) &*& mask_le(Nlft, mask) == true &*& [_]frac_borrow(k, P) &*& [q]lifetime_token(k);
+    ens atomic_mask(mask) &*& lifetime_inclusion(k, result) == true &*& [?f]P() &*& close_frac_borrow_token_strong(result, P, q, k, f);
+
+lem close_frac_borrow_strong_m();
+    req atomic_mask(?mask) &*& mask_le(Nlft, mask) == true &*& close_frac_borrow_token_strong(?k1, ?P, ?q, ?k, ?f) &*& is_frac_borrow_convert_strong(?c, ?Ctx, ?Q, k1, f, P) &*& Ctx() &*& Q();
+    ens atomic_mask(mask) &*& full_borrow(k1, Q) &*& [q]lifetime_token(k) &*& is_frac_borrow_convert_strong(c, Ctx, Q, k1, f, P);
+
+// Lemmas for proving init_ref_S proof obligations. Not in RustBelt; TODO: check soundness!
+pred close_frac_borrow_for_init_ref_lemma_token(fr: real, q: real, k: lifetime_t, P: pred(;));
+
+lem open_frac_borrow_for_init_ref_lemma(P: pred(;), q: real);
+    req atomic_mask(Nlft) &*& [_]frac_borrow(?k, P) &*& [q]lifetime_token(k);
+    ens atomic_mask(Nlft) &*& [?fr]P() &*& close_frac_borrow_for_init_ref_lemma_token(fr, q, k, P);
+
+lem_type close_frac_borrow_for_init_ref_lemma_premise<T>(Ctx: pred(), fr: real, Q: pred(;), p: *T, P: pred(;)) = lem();
+    req Ctx() &*& [fr/2]Q() &*& ref_initialized::<T>(p);
+    ens [fr]P();
+
+lem close_frac_borrow_for_init_ref_lemma<T>();
+    req atomic_mask(Nlft) &*& close_frac_borrow_for_init_ref_lemma_token(?fr, ?q, ?k, ?P) &*& is_close_frac_borrow_for_init_ref_lemma_premise::<T>(?prem, ?Ctx, fr, ?Q, ?p, P) &*& Ctx() &*& [fr/2]Q() &*& ref_initialized::<T>(p);
+    ens atomic_mask(Nlft) &*& [q]lifetime_token(k) &*& [_]frac_borrow(k, Q) &*& [_]frac_borrow(k, ref_initialized_::<T>(p)) &*& is_close_frac_borrow_for_init_ref_lemma_premise::<T>(prem, Ctx, fr, Q, p, P);
 
 @*/

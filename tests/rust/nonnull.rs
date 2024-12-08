@@ -1,3 +1,5 @@
+// verifast_options{ignore_ref_creation}
+
 /*@
 pred<T> <ptr::NonNull<T>>.own(t, nonNull;) = nonNull.pointer as usize != 0;
 
@@ -42,6 +44,14 @@ lem ptr::NonNull_share_full<T>(k: lifetime_t, t: thread_id_t, l: *ptr::NonNull<T
     assert [?qf]frac_borrow(k, ptr::NonNull_frac_bc(t, l));
     close [qf]<ptr::NonNull<T>>.share(k, t, l);
 }
+
+lem init_ref_ptr::NonNull<T>(p: *ptr::NonNull<T>)
+    req type_interp::<T>() &*& atomic_mask(Nlft) &*& ref_init_perm(p, ?x) &*& [_]ptr::NonNull_share::<T>(?k, ?t, x) &*& [?q]lifetime_token(k);
+    ens type_interp::<T>() &*& atomic_mask(Nlft) &*& [q]lifetime_token(k) &*& [_]ptr::NonNull_share::<T>(k, t, p) &*& [_]frac_borrow(k, ref_initialized_(p));
+{
+    assume(false);
+}
+
 @*/
 
 pub mod ptr {

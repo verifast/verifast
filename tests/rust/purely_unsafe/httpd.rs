@@ -1,4 +1,4 @@
-// verifast_options{extern:../unverified/platform}
+// verifast_options{ignore_ref_creation extern:../unverified/platform}
 
 use std::io::Write;
 //@ use std::alloc::{alloc_block, Layout};

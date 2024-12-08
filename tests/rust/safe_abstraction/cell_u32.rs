@@ -1,3 +1,5 @@
+// verifast_options{ignore_ref_creation}
+
 #![allow(dead_code)]
 
 pub struct CellU32 {
@@ -56,6 +58,14 @@ lem CellU32_share_full(k: lifetime_t, t: thread_id_t, l: *CellU32)
   close <CellU32>.share(k, t, l);
   leak <CellU32>.share(k, t, l);
 }
+
+lem init_ref_CellU32(p: *CellU32)
+    req atomic_mask(Nlft) &*& ref_init_perm(p, ?x) &*& [_]CellU32_share(?k, ?t, x) &*& [?q]lifetime_token(k);
+    ens atomic_mask(Nlft) &*& [q]lifetime_token(k) &*& [_]CellU32_share(k, t, p) &*& [_]frac_borrow(k, ref_initialized_(p));
+{
+    assume(false);
+}
+
 @*/
 
 impl CellU32 {

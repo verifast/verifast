@@ -527,6 +527,9 @@ mod vf_mir_builder {
         visitor.submodules
     }
 
+    #[derive(Clone, Copy)]
+    enum PlaceKind { MutableRef, SharedRef, Other }
+
     enum EncKind<'tcx, 'a> {
         Body(&'a mir::Body<'tcx>),
         Adt,
@@ -1045,6 +1048,21 @@ mod vf_mir_builder {
                         Self::encode_gen_arg(enc_ctx.tcx, enc_ctx, arg, arg_cpn);
                     });
                 }
+                ty::ClauseKind::Projection(projection_pred) => {
+                    let mut proj_cpn = pred_cpn.init_projection();
+                    let mut proj_term_cpn = proj_cpn.reborrow().init_projection_term();
+                    proj_term_cpn.set_def_id(&enc_ctx.tcx.def_path_str(projection_pred.projection_term.def_id));
+                    proj_term_cpn.fill_args(projection_pred.projection_term.args, |arg_cpn, arg| {
+                        Self::encode_gen_arg(enc_ctx.tcx, enc_ctx, arg, arg_cpn);
+                    });
+                    let term_cpn = proj_cpn.reborrow().init_term();
+                    match projection_pred.term.unpack() {
+                        ty::TermKind::Ty(ty) =>
+                            Self::encode_ty(enc_ctx.tcx, enc_ctx, ty, term_cpn.init_ty()),
+                        ty::TermKind::Const(const_) =>
+                            Self::encode_typesystem_constant(enc_ctx.tcx, enc_ctx, &const_, term_cpn.init_const()),
+                    }
+                }
                 _ => pred_cpn.set_ignored(()),
             }
         }
@@ -1141,6 +1159,7 @@ mod vf_mir_builder {
             );
 
             let predicates = tcx.predicates_of(def_id).predicates;
+            trace!("Encoding predicates: {:?}", predicates);
             body_cpn
                 .reborrow()
                 .fill_predicates(predicates, |pred_cpn, pred| {
@@ -1816,7 +1835,7 @@ mod vf_mir_builder {
             let src_info_cpn = statement_cpn.reborrow().init_source_info();
             Self::encode_source_info(tcx, &statement.source_info, src_info_cpn);
             let kind_cpn = statement_cpn.init_kind();
-            Self::encode_statement_kind(tcx, enc_ctx, &statement.kind, kind_cpn);
+            Self::encode_statement_kind(tcx, enc_ctx, statement.source_info.span, &statement.kind, kind_cpn);
         }
 
         fn encode_source_info(
@@ -1833,6 +1852,7 @@ mod vf_mir_builder {
         fn encode_statement_kind(
             tcx: TyCtxt<'tcx>,
             enc_ctx: &mut EncCtx<'tcx, 'a>,
+            span: rustc_span::Span,
             statement_kind: &mir::StatementKind<'tcx>,
             mut statement_kind_cpn: statement_kind_cpn::Builder<'_>,
         ) {
@@ -1842,7 +1862,7 @@ mod vf_mir_builder {
                     let lhs_place_cpn = assign_data_cpn.reborrow().init_lhs_place();
                     Self::encode_place(enc_ctx, lhs_place, lhs_place_cpn);
                     let rhs_rvalue_cpn = assign_data_cpn.init_rhs_rvalue();
-                    Self::encode_rvalue(tcx, enc_ctx, rhs_rval, rhs_rvalue_cpn);
+                    Self::encode_rvalue(tcx, enc_ctx, span, rhs_rval, rhs_rvalue_cpn);
                 }
                 mir::StatementKind::Nop => statement_kind_cpn.set_nop(()),
                 // Todo @Nima: For now we do not support many statements and treat them as Nop
@@ -1853,6 +1873,7 @@ mod vf_mir_builder {
         fn encode_rvalue(
             tcx: TyCtxt<'tcx>,
             enc_ctx: &mut EncCtx<'tcx, 'a>,
+            span: rustc_span::Span,
             rvalue: &mir::Rvalue<'tcx>,
             rvalue_cpn: rvalue_cpn::Builder<'_>,
         ) {
@@ -1867,12 +1888,18 @@ mod vf_mir_builder {
                 // &x or &mut x
                 mir::Rvalue::Ref(region, bor_kind, place) => {
                     let mut ref_data_cpn = rvalue_cpn.init_ref();
+                    let place_ty = place.ty(&enc_ctx.body().local_decls, tcx);
+                    let place_ty_cpn = ref_data_cpn.reborrow().init_place_ty();
+                    Self::encode_ty(tcx, enc_ctx, place_ty.ty, place_ty_cpn);
                     let region_cpn = ref_data_cpn.reborrow().init_region();
                     Self::encode_region(*region, region_cpn);
                     let bor_kind_cpn = ref_data_cpn.reborrow().init_bor_kind();
                     Self::encode_borrow_kind(bor_kind, bor_kind_cpn);
-                    let place_cpn = ref_data_cpn.init_place();
+                    let place_cpn = ref_data_cpn.reborrow().init_place();
                     Self::encode_place(enc_ctx, place, place_cpn);
+                    let source_text = enc_ctx.tcx.sess.source_map().span_to_snippet(span).unwrap();
+                    let is_identifier = source_text.chars().all(|c| c.is_alphanumeric() || c == '_');
+                    ref_data_cpn.set_is_implicit(is_identifier);
                 }
                 mir::Rvalue::ThreadLocalRef(def_id) => todo!(),
                 mir::Rvalue::RawPtr(mutability, place) => {
@@ -2493,12 +2520,22 @@ mod vf_mir_builder {
             use mir::tcx::PlaceTy;
             let local_decl_id_cpn = place_cpn.reborrow().init_local();
             Self::encode_local_decl_id(place.local, local_decl_id_cpn);
+            let decl = &enc_ctx.body().local_decls()[place.local];
+            place_cpn.set_local_is_mutable(decl.mutability == mir::Mutability::Mut);
 
-            let mut pty = PlaceTy::from_ty(enc_ctx.body().local_decls()[place.local].ty);
-            place_cpn.fill_projection(place.projection, |place_elm_cpn, place_elm| {
-                Self::encode_place_element(enc_ctx, pty.ty, &place_elm, place_elm_cpn);
+            let local = &enc_ctx.body().local_decls()[place.local];
+            let mut pty = PlaceTy::from_ty(local.ty);
+            let mut kind = PlaceKind::Other;
+            place_cpn.reborrow().fill_projection(place.projection, |place_elm_cpn, place_elm| {
+                kind = Self::encode_place_element(enc_ctx, pty.ty, &place_elm, place_elm_cpn, kind);
                 pty = pty.projection_ty(enc_ctx.tcx, place_elm);
             });
+            let mut kind_cpn = place_cpn.init_kind();
+            match kind {
+                PlaceKind::MutableRef => kind_cpn.set_mutable_ref(()),
+                PlaceKind::SharedRef => kind_cpn.set_shared_ref(()),
+                PlaceKind::Other => kind_cpn.set_other(()),
+            }
         }
 
         fn encode_place_element(
@@ -2506,13 +2543,24 @@ mod vf_mir_builder {
             ty: ty::Ty<'tcx>,
             place_elm: &mir::PlaceElem<'tcx>,
             mut place_elm_cpn: place_element_cpn::Builder<'_>,
-        ) {
+            place_kind: PlaceKind
+        ) -> PlaceKind {
             debug!(
                 "Encoding place element {:?} Projecting from {:?}",
                 place_elm, ty
             );
             match place_elm {
-                mir::ProjectionElem::Deref => place_elm_cpn.set_deref(()),
+                mir::ProjectionElem::Deref => {
+                    place_elm_cpn.set_deref(());
+                    match ty.kind() {
+                        ty::TyKind::Ref(_, _, mutability) =>
+                            match mutability {
+                                ty::Mutability::Not => PlaceKind::SharedRef,
+                                ty::Mutability::Mut => PlaceKind::MutableRef,
+                            },
+                        _ => PlaceKind::Other,
+                    }
+                }
                 mir::ProjectionElem::Field(field, fty) => {
                     let mut field_data_cpn = place_elm_cpn.init_field();
                     field_data_cpn.set_index(field.as_u32());
@@ -2531,9 +2579,11 @@ mod vf_mir_builder {
                     /* Todo @Nima: When `encode_ty` becomes a method of `EncCtx` there would not be
                      * such strange arguments `enc_ctx.tcx` and `enc_tcx`
                      */
+                    PlaceKind::Other
                 }
                 mir::ProjectionElem::Downcast(symbol, variant_idx) => {
                     place_elm_cpn.set_downcast(variant_idx.as_u32());
+                    PlaceKind::Other
                 }
                 _ => todo!(),
             }

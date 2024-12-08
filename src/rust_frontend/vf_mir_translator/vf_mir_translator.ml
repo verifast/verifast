@@ -343,7 +343,7 @@ module Mir = struct
     mutable children : basic_block list;
   }
 
-  type fn_call_dst_data = { dst : Ast.expr; dst_bblock_id : string }
+  type fn_call_dst_data = { dst : Ast.expr * bool (* place is mutable *); dst_bblock_id : string }
   type int_ty = ISize | I8 | I16 | I32 | I64 | I128
 
   let int_ty_to_string (it : int_ty) =
@@ -415,6 +415,7 @@ module Mir = struct
         variant_name : string;
         field_names : string list;
       }
+    | AggKindTuple
 
   type field_def_tr = {
     name : string;
@@ -446,25 +447,7 @@ end
 module TrTyTuple = struct
   let tuple0_name = "std_tuple_0_"
 
-  let make_tuple_type_name tys =
-    if List.length tys != 0 then
-      failwith "Todo: Tuple Ty is not implemented yet"
-    else tuple0_name
-
-  let make_tuple_type_decl name tys loc =
-    if List.length tys != 0 then
-      failwith "Todo: Tuple Ty is not implemented yet"
-    else
-      Ast.Struct
-        ( loc,
-          name,
-          [],
-          Some
-            ( (*base_spec list*) [],
-              (*field list*) [],
-              (*instance_pred_decl list*) [],
-              (*is polymorphic*) false ),
-          (*struct_attr list*) [] )
+  let make_tuple_type_name arity = Printf.sprintf "std_tuple_%d_" arity
 end
 
 module TrTyInt = struct
@@ -1066,20 +1049,43 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | Undefined _ -> Error (`TrAdtTy "Unknown ADT kind")
 
   and translate_tuple_ty (tys_cpn : TyRd.t list) (loc : Ast.loc) =
-    if not @@ ListAux.is_empty @@ tys_cpn then
-      failwith "Todo: Tuple Ty is not implemented yet"
-    else
-      let name = TrTyTuple.make_tuple_type_name [] in
-      (* TODO @Nima: std_tuple_0_ type is declared in prelude_rust_.h.
-         We should come up with a better arrangement for these auxiliary types. *)
-      let ty_info =
-        Mir.TyInfoBasic
-          {
-            vf_ty = Ast.ManifestTypeExpr (loc, Ast.StructType (name, []));
-            interp = RustBelt.emp_ty_interp loc;
-          }
-      in
-      Ok ty_info
+    let open Ast in
+    let* tys = ListAux.try_map (fun ty_cpn -> translate_ty ty_cpn loc) tys_cpn in
+    let name = TrTyTuple.make_tuple_type_name (List.length tys) in
+    let tys = List.map Mir.basic_type_of tys in
+    let vf_ty = if tys = [] then ManifestTypeExpr (loc, StructType (name, [])) else StructTypeExpr (loc, Some name, None, [], tys) in
+    let size = SizeofExpr (loc, TypeExpr vf_ty) in
+    let own t v =
+      if tys = [] then
+        Ok (True loc)
+      else
+        Ok (CallExpr (loc, name ^ "_own", tys, [], [ LitPat t; LitPat v ], Static))
+    in
+    let fbc_name = name ^ "_full_borrow_content" in
+    let full_bor_content = RustBelt.simple_fbc loc fbc_name in
+    let shr lft tid l =
+      Error
+        "Expressing shared ownership of a tuple value is not yet supported"
+    in
+    let points_to tid l vid_op =
+      let* pat = RustBelt.Aux.vid_op_to_var_pat vid_op loc in
+      Ok (PointsTo (loc, l, RegularPointsTo, pat))
+    in
+    let ty_info =
+      Mir.TyInfoBasic
+        {
+          vf_ty;
+          interp = RustBelt.{
+            size;
+            own;
+            shr;
+            full_bor_content;
+            points_to;
+            pointee_fbc = None;
+          };
+        }
+    in
+    Ok ty_info
 
   and bool_ty_info loc =
     let open Ast in
@@ -1667,7 +1673,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | Slice _ -> Ast.static_error loc "Slice types are not yet supported" None
     | Undefined _ -> Error (`TrTy "Unknown Rust type kind")
 
-  type body_tr_defs_ctx = { adt_defs : Mir.adt_def_tr list }
+  type body_tr_defs_ctx = { adt_defs : Mir.adt_def_tr list; allow_ignore_ref_creation : bool; ignore_ref_creation : bool; directives: Mir.annot list }
   type var_id_trs_entry = { id : string; internal_name : string }
   type var_id_trs_map = var_id_trs_entry list
 
@@ -1733,7 +1739,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         ( loc,
           [
             ( loc,
-              Some ty,
+              Some (match mut with Mut -> ty | Not -> ConstTypeExpr (loc, ty)),
               id,
               None,
               ( (* indicates whether address is taken *) ref false,
@@ -1764,37 +1770,43 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       | Downcast variant_index -> Downcast (Stdint.Uint32.to_int variant_index)
 
     let translate_projection (loc : Ast.loc) (elems : place_element list)
-        (e : Ast.expr) =
+        (e : Ast.expr) (e_is_mutable : bool) : (Ast.expr * bool (* result is mutable *)) =
       let rec iter elems =
         match elems with
-        | [] -> e
-        | Deref :: elems -> Ast.Deref (loc, iter elems)
+        | [] -> (e, e_is_mutable)
+        | Deref :: elems ->
+          let (e1, e1_is_mutable) = iter elems in
+          (Ast.Deref (loc, e1), true)
         | Field (_, field_idx) :: Downcast variant_idx :: elems ->
-            Ast.CallExpr
+          let (e1, e1_is_mutable) = iter elems in
+            (Ast.CallExpr
               ( loc,
                 "#inductive_projection",
                 [],
                 [],
                 [
-                  LitPat (iter elems);
+                  LitPat e1;
                   LitPat (WIntLit (loc, Big_int.big_int_of_int variant_idx));
                   LitPat (WIntLit (loc, Big_int.big_int_of_int field_idx));
                 ],
-                Static )
-        | Field (Some name, _) :: elems -> Ast.Select (loc, iter elems, name)
+                Static ), e1_is_mutable)
+        | Field (Some name, _) :: elems ->
+          let (e1, e1_is_mutable) = iter elems in
+          (Ast.Select (loc, e1, name), e1_is_mutable)
         | Field (None, _) :: _ ->
             failwith "Not yet supported: Field(None, _)::_"
         | Downcast _ :: _ -> failwith "Not yet supported: Downcast _::_"
       in
       iter elems
 
-    let translate_place (place_cpn : PlaceRd.t) (loc : Ast.loc) =
+    let translate_place (place_cpn : PlaceRd.t) (loc : Ast.loc) : (Ast.expr * bool (* the place is mutable *), _) result =
       let open PlaceRd in
       let id_cpn = local_get place_cpn in
+      let local_is_mutable = local_is_mutable_get place_cpn in
       let id = translate_local_decl_id id_cpn in
       let projection_cpn = projection_get_list place_cpn in
       let place_elems = List.map decode_place_element projection_cpn in
-      Ok (translate_projection loc (List.rev place_elems) (Ast.Var (loc, id)))
+      Ok (translate_projection loc (List.rev place_elems) (Ast.Var (loc, id)) local_is_mutable)
 
     let translate_scalar_int (si_cpn : ScalarRd.Int.t) (ty : Ast.type_expr)
         (loc : Ast.loc) =
@@ -1912,11 +1924,11 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let ty =
         match ty_expr with
         | Ast.ManifestTypeExpr ((*loc*) _, ty) -> ty
-        | _ -> failwith "Todo: Unsupported type_expr"
+        | _ -> failwith ("Todo: Unsupported type_expr: " ^ Ocaml_expr_formatter.string_of_ocaml_expr false (Ocaml_expr_of_ast.of_type_expr ty_expr))
       in
       match ty with
       | Ast.StructType (st_name, _) ->
-          if st_name != TrTyTuple.make_tuple_type_name [] then
+          if st_name != TrTyTuple.make_tuple_type_name 0 then
             failwith
               ("Todo: Constants of type struct " ^ st_name
              ^ " are not supported yet")
@@ -1938,7 +1950,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           let ty =
             match ty_expr with
             | Ast.ManifestTypeExpr ((*loc*) _, ty) -> ty
-            | _ -> failwith "Todo: Unsupported type_expr"
+            | _ -> failwith ("Todo: Unsupported type_expr: " ^ Ocaml_expr_formatter.string_of_ocaml_expr false (Ocaml_expr_of_ast.of_type_expr ty_expr))
           in
           match ty with
           | Ast.FuncType _ -> Ok (`TrTypedConstantFn ty_info)
@@ -1987,11 +1999,11 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       *)
       match get operand_cpn with
       | Copy place_cpn ->
-          let* place = translate_place place_cpn loc in
+          let* place, place_is_mutable = translate_place place_cpn loc in
           Ok (`TrOperandCopy place)
       | Move place_cpn ->
-          let* place = translate_place place_cpn loc in
-          Ok (`TrOperandMove place)
+          let* place, place_is_mutable = translate_place place_cpn loc in
+          Ok (`TrOperandMove (place, place_is_mutable))
       | Constant constant_cpn -> translate_const_operand constant_cpn
       | Undefined _ -> Error (`TrOperand "Unknown Mir Operand kind")
 
@@ -2001,7 +2013,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let translate_opr ((opr_cpn, loc) : OperandRd.t * Ast.loc) =
         let* opr = translate_operand opr_cpn loc in
         match opr with
-        | `TrOperandCopy operand_expr | `TrOperandMove operand_expr ->
+        | `TrOperandCopy operand_expr | `TrOperandMove (operand_expr, _(*place_is_mutable*)) ->
             Ok operand_expr
         | `TrTypedConstantRvalueBinderBuilder rvalue_binder_builder ->
             let tmp_var_cnt = List.length !tmp_rvalue_binders in
@@ -2062,7 +2074,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       in
       let* callee = translate_operand callee_cpn call_loc in
       match callee with
-      | `TrOperandMove (Var (_, fn_name)) ->
+      | `TrOperandMove (Var (_, fn_name), place_is_mutable) ->
           translate_regular_fn_call [] fn_name
       | `TrTypedConstantFn ty_info -> (
           match ty_info with
@@ -2223,7 +2235,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                     ( tmp_rvalue_binders
                       @ [
                           Ast.ExprStmt
-                            (AssignExpr (fn_loc, Deref (fn_loc, dst), src));
+                            (AssignExpr (fn_loc, Deref (fn_loc, dst), Mutation, src));
                         ],
                       mk_unit_expr fn_loc )
               | "std::cell::UnsafeCell::<T>::new"
@@ -2315,11 +2327,11 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         | Nothing -> (*Diverging call*) Ok (Ast.ExprStmt fn_call_rexpr, None, [])
         | Something ptr_cpn ->
             let destination_data_cpn = VfMirStub.Reader.of_pointer ptr_cpn in
-            let* { Mir.dst; Mir.dst_bblock_id } =
+            let* { Mir.dst = (dst, dst_is_mutable); Mir.dst_bblock_id } =
               translate_destination_data destination_data_cpn loc
             in
             Ok
-              ( Ast.ExprStmt (Ast.AssignExpr (loc, dst, fn_call_rexpr)),
+              ( Ast.ExprStmt (Ast.AssignExpr (loc, dst, (if dst_is_mutable then Mutation else Initialization), fn_call_rexpr)),
                 Some (Ast.GotoStmt (loc, dst_bblock_id)),
                 [ dst_bblock_id ] )
         | Undefined _ -> Error (`TrFnCall "Unknown Option kind")
@@ -2471,11 +2483,16 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       | Drop drop_data_cpn ->
           let open DropData in
           let place_cpn = place_get drop_data_cpn in
-          let* place = translate_place place_cpn loc in
+          let* place, place_is_mutable = translate_place place_cpn loc in
           let target_cpn = target_get drop_data_cpn in
           let target = translate_basic_block_id target_cpn in
+          let unfreeze_stmts, freeze_stmts =
+            if place_is_mutable then [], [] else
+              [ Ast.ExprStmt (CallExpr (loc, "std::mem::verifast::unfreeze", [], [], [ LitPat (AddressOf (loc, place)) ], Static)) ],
+              [ Ast.ExprStmt (CallExpr (loc, "std::mem::verifast::freeze", [], [], [ LitPat (AddressOf (loc, place)) ], Static)) ]
+          in
           Ok
-            ( [
+            ( unfreeze_stmts @ [
                 Ast.ExprStmt
                   (CallExpr
                      ( loc,
@@ -2483,7 +2500,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                        [],
                        [],
                        [ LitPat (AddressOf (loc, place)) ],
-                       Static ));
+                       Static )) ] @ freeze_stmts @ [
                 Ast.GotoStmt (loc, target);
               ],
               [ target ] )
@@ -2550,7 +2567,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let open AggregateKindRd in
       match get agg_kind_cpn with
       | Array es_ty_cpn -> failwith "Todo: AggregateKind::Array"
-      | Tuple -> failwith "Todo: AggregateKind::Tuple"
+      | Tuple -> Ok Mir.AggKindTuple
       | Adt adt_data_cpn ->
           let open AdtData in
           let adt_id_cpn = adt_id_get adt_data_cpn in
@@ -2583,16 +2600,35 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let agg_kind_cpn = aggregate_kind_get agg_data_cpn in
       let* agg_kind = translate_aggregate_kind agg_kind_cpn in
       match agg_kind with
+      | AggKindTuple ->
+        let tuple_struct_name = TrTyTuple.make_tuple_type_name (List.length operands_cpn) in
+        let init_stmts_builder (lhs_place, lhs_place_is_mutable) =
+          let field_init_stmts =
+            List.mapi
+              (fun i init_expr ->
+                let open Ast in
+                ExprStmt
+                  (AssignExpr
+                     ( loc,
+                       Select (loc, lhs_place, string_of_int i),
+                       (if lhs_place_is_mutable then Mutation else Initialization),
+                       init_expr )))
+              operand_exprs
+          in
+          tmp_rvalue_binders @ field_init_stmts
+        in
+        Ok (`TrRvalueAggregate init_stmts_builder)
       | AggKindAdt { adt_kind; adt_name; variant_name; field_names } -> (
           match adt_kind with
           | Enum ->
-              let init_stmts_builder lhs_place =
+              let init_stmts_builder (lhs_place, lhs_place_is_mutable) =
                 let arg_pats = List.map (fun e -> Ast.LitPat e) operand_exprs in
                 let assignment =
                   Ast.ExprStmt
                     (AssignExpr
                        ( loc,
                          lhs_place,
+                         (if lhs_place_is_mutable then Mutation else Initialization),
                          CallExpr
                            ( loc,
                              adt_name ^ "::" ^ variant_name,
@@ -2612,7 +2648,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                     "The number of struct fields and initializing operands are \
                      different")
               else
-                let init_stmts_builder lhs_place =
+                let init_stmts_builder (lhs_place, lhs_place_is_mutable) =
                   let field_init_stmts =
                     List.map
                       (fun (field_name, init_expr) ->
@@ -2621,6 +2657,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                           (AssignExpr
                              ( loc,
                                Select (loc, lhs_place, field_name),
+                               (if lhs_place_is_mutable then Mutation else Initialization),
                                init_expr )))
                       (List.combine field_names operand_exprs)
                   in
@@ -2633,7 +2670,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let tr_operand operand =
         match operand with
         | `TrOperandCopy expr
-        | `TrOperandMove expr
+        | `TrOperandMove (expr, _(*place_is_mutable*))
         | `TrTypedConstantScalar expr ->
             Ok (`TrRvalueExpr expr)
         | `TrTypedConstantRvalueBinderBuilder rvalue_binder_builder ->
@@ -2649,16 +2686,57 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           let open RefData in
           let region_cpn = region_get ref_data_cpn in
           let bor_kind_cpn = bor_kind_get ref_data_cpn in
+          let bor_kind = BorrowKind.get bor_kind_cpn in
           let place_cpn = place_get ref_data_cpn in
-          let* place_expr = translate_place place_cpn loc in
-          let expr = Ast.AddressOf (loc, place_expr) in
+          let* place_expr, place_is_mutable = translate_place place_cpn loc in
+          let ((path, line, _), _) = Ast.lexed_loc loc in
+          let ignore_ref_creation =
+            bor_kind = Mut || (* ignore &mut E for now *)
+            if Args.body_tr_defs_ctx.ignore_ref_creation then true else
+            let directives = Util.flatmap
+                 (fun { Mir.span; raw } ->
+                   if
+                   raw = "ignore_ref_creation"
+                   && let ((path', line', _), _) = Ast.lexed_loc span in
+                      path' = path && line' = line
+                   then [span] else [])
+                 Args.body_tr_defs_ctx.directives
+            in
+            match directives with
+              directive_span::_ ->
+                if not (Args.body_tr_defs_ctx.allow_ignore_ref_creation) then
+                  Ast.static_error directive_span "Ignoring reference creation is not allowed; specify -allow_ignore_ref_creation on the command line to allow" None;
+              true
+            | [] -> false
+          in
+          if ignore_ref_creation then
+            Ok (`TrRvalueExpr (Ast.AddressOf (loc, place_expr)))
+          else
+          let place_ty = decode_ty (place_ty_get ref_data_cpn) in
+          let is_implicit = is_implicit_get ref_data_cpn in
+          let fn_name =
+            match place_ty, bor_kind, BodyRd.PlaceKind.get (BodyRd.Place.kind_get place_cpn), is_implicit with
+            | `Str, Shared, SharedRef, _ -> "reborrow_str_ref"
+            | `Str, Shared, _, _ -> "create_str_ref"
+            | `Slice _, Mut, _, _ -> "create_slice_ref_mut"
+            | `Slice _, Shared, SharedRef, _ -> "reborrow_slice_ref"
+            | `Slice _, Shared, _, _ -> "create_slice_ref"
+            | `Adt ("std::cell::UnsafeCell", _, _), Shared, SharedRef, _ -> "reborrow_ref_UnsafeCell"
+            | _, Mut, MutableRef, true -> "reborrow_ref_mut_implicit"
+            | _, Mut, MutableRef, _ -> "reborrow_ref_mut"
+            | _, Mut, _, _ -> "create_ref_mut"
+            | _, Shared, SharedRef, true -> "reborrow_ref_implicit"
+            | _, Shared, SharedRef, _ -> "reborrow_ref"
+            | _, Shared, _, _ -> "create_ref"
+          in
+          let expr = Ast.CallExpr (loc, fn_name, [], [], [LitPat (AddressOf (loc, place_expr))], Static) in
           Ok (`TrRvalueExpr expr)
           (*Todo @Nima: We might need to assert the chunk when we make a reference to it*)
       | AddressOf address_of_data_cpn ->
           let open AddressOfData in
           let mut_cpn = mutability_get address_of_data_cpn in
           let place_cpn = place_get address_of_data_cpn in
-          let* place_expr = translate_place place_cpn loc in
+          let* place_expr, place_is_mutable = translate_place place_cpn loc in
           let expr = Ast.AddressOf (loc, place_expr) in
           Ok (`TrRvalueExpr expr)
       | Cast cast_data_cpn -> (
@@ -2670,7 +2748,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           let ty = Mir.basic_type_of ty_info in
           match operand with
           | `TrOperandCopy expr
-          | `TrOperandMove expr
+          | `TrOperandMove (expr, _(*place_is_mutable*))
           | `TrTypedConstantScalar expr ->
               Ok (`TrRvalueExpr (Ast.CastExpr (loc, ty, expr)))
           | `TrTypedConstantRvalueBinderBuilder rvalue_binder_builder ->
@@ -2703,7 +2781,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           Ok (`TrRvalueUnaryOp (operator, operand))
       | Aggregate agg_data_cpn -> translate_aggregate agg_data_cpn loc
       | Discriminant place_cpn ->
-          let* place_expr = translate_place place_cpn loc in
+          let* place_expr, place_is_mutable = translate_place place_cpn loc in
           Ok
             (`TrRvalueExpr
               (Ast.CallExpr
@@ -2721,13 +2799,13 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       match get statement_kind_cpn with
       | Assign assign_data_cpn -> (
           let lhs_place_cpn = AssignData.lhs_place_get assign_data_cpn in
-          let* lhs_place = translate_place lhs_place_cpn loc in
+          let* lhs_place, lhs_place_is_mutable = translate_place lhs_place_cpn loc in
           let rhs_rvalue_cpn = AssignData.rhs_rvalue_get assign_data_cpn in
           let* rhs_rvalue = translate_rvalue rhs_rvalue_cpn loc in
           match rhs_rvalue with
           | `TrRvalueExpr rhs_expr ->
               let assign_stmt =
-                Ast.ExprStmt (Ast.AssignExpr (loc, lhs_place, rhs_expr))
+                Ast.ExprStmt (Ast.AssignExpr (loc, lhs_place, (if lhs_place_is_mutable then Mutation else Initialization), rhs_expr))
               in
               Ok [ assign_stmt ]
           | `TrRvalueRvalueBinderBuilder rvalue_binder_builder ->
@@ -2736,7 +2814,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               let rvalue_binder_stmt = rvalue_binder_builder tmp_var_name in
               let assign_stmt =
                 Ast.ExprStmt
-                  (Ast.AssignExpr (loc, lhs_place, Ast.Var (loc, tmp_var_name)))
+                  (Ast.AssignExpr (loc, lhs_place, (if lhs_place_is_mutable then Mutation else Initialization), Ast.Var (loc, tmp_var_name)))
               in
               let block_stmt =
                 Ast.BlockStmt
@@ -2763,6 +2841,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   (Ast.AssignExpr
                      ( loc,
                        lhs_place,
+                       (if lhs_place_is_mutable then Mutation else Initialization),
                        Ast.Operation
                          ( loc,
                            operator,
@@ -2828,6 +2907,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   (Ast.AssignExpr
                      ( loc,
                        lhs_place,
+                       (if lhs_place_is_mutable then Mutation else Initialization),
                        Ast.Operation (loc, operator, [ exprl; exprr ]) ))
               in
               match rvalue_binder_stmts with
@@ -2843,7 +2923,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   in
                   Ok [ block_stmt ])
           | `TrRvalueAggregate init_stmts_builder ->
-              Ok (init_stmts_builder lhs_place))
+              Ok (init_stmts_builder (lhs_place, lhs_place_is_mutable)))
       | Nop -> Ok []
       | Undefined _ -> Error (`TrStatementKind "Unknown StatementKind")
 
@@ -3088,7 +3168,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let open VarDebugInfoContentsRd in
       match get vdic_cpn with
       | Place place_cpn -> (
-          let* place = translate_place place_cpn loc in
+          let* place, place_is_mutable = translate_place place_cpn loc in
           match place with
           | Ast.Var ((*loc*) _, id) -> Ok (Mir.VdiiPlace { id })
           | _ -> failwith "Todo VarDebugInfoContents Place")
@@ -3165,6 +3245,17 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     in
     Ok (AstAux.list_to_sep_conj (List.map (fun asn -> (loc, asn)) ty_asns) None)
 
+  let rec type_is_trivially_droppable = function
+    | Ast.ManifestTypeExpr
+      ( _,
+        ( Int (_, _)
+        | RustRefType _ | PtrType _ | Bool | Float | Double | LongDouble ) )
+    | Ast.PtrTypeExpr (_, _) | Ast.RustRefTypeExpr (_, _, _, _) ->
+        true
+    | Ast.StructTypeExpr (_, Some ("std::ptr::NonNull"|"std::marker::PhantomData"), _, _, _) -> true
+    | Ast.ConstructedTypeExpr (_, "std::option::Option", [arg]) -> type_is_trivially_droppable arg
+    | _ -> false
+  
   let gen_adt_drop_proof_oblig (adt_defs : Mir.adt_def_tr list)
       (adt_def_loc : Ast.loc) (adt_name : string) (tparams : string list)
       (adt_fields : (Ast.loc * string * Mir.ty_info) list) =
@@ -3185,9 +3276,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       Result.get_ok
       @@ gen_own_asns adt_defs adt_def_loc
            (Var (adt_def_loc, "_t"))
-           (List.map
+           (Util.flatmap
               (fun (loc, id, ty) ->
-                (loc, Select (loc, Var (loc, "_v"), id), ty))
+                if type_is_trivially_droppable (Mir.basic_type_of ty) then []
+                else [ (loc, Select (loc, Var (loc, "_v"), id), ty) ])
               adt_fields)
     in
     let post = match post with None -> True adt_def_loc | Some post -> post in
@@ -4188,7 +4280,12 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       (fun x asn -> Ast.Sep (loc, mk_send_asn loc x, asn))
       send_tparams asn
 
-  let gen_send_proof_oblig adt_def_loc name tparams vf_tparams send_tparams =
+  let add_sync_asns loc sync_tparams asn =
+    List.fold_right
+      (fun x asn -> Ast.Sep (loc, mk_sync_asn loc x, asn))
+      sync_tparams asn
+    
+  let gen_send_proof_oblig adt_def_loc name tparams vf_tparams send_tparams sync_tparams =
     let open Ast in
     let params = [ (IdentTypeExpr (adt_def_loc, None, "thread_id_t"), "t1") ] in
     let tparams_targs =
@@ -4205,7 +4302,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     in
     let pre =
       add_type_interp_asns adt_def_loc tparams
-        (add_send_asns adt_def_loc send_tparams pre)
+        (add_send_asns adt_def_loc send_tparams (add_sync_asns adt_def_loc sync_tparams pre))
     in
     let post =
       CallExpr
@@ -4480,11 +4577,6 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             [] (*overrides*) );
       ] )
 
-  let add_sync_asns loc sync_tparams asn =
-    List.fold_right
-      (fun x asn -> Ast.Sep (loc, mk_sync_asn loc x, asn))
-      sync_tparams asn
-
   let gen_sync_proof_oblig adt_def_loc name lft_params tparams sync_tparams =
     let open Ast in
     let vf_tparams = lft_params @ tparams in
@@ -4703,7 +4795,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           add_type_interp_asns adt_def_loc tparams
             (add_send_asns adt_def_loc send_tparams pre)
         in
-        let share_pred =
+        let share_pred l =
           CoefAsn
             ( adt_def_loc,
               DummyPat,
@@ -4713,14 +4805,14 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   (*type arguments*) tparams_targs,
                   (*indices*) [],
                   (*arguments*)
-                  List.map lpat_var [ "k"; "t"; "l" ],
+                  List.map lpat_var [ "k"; "t"; l ],
                   if tparams_targs = [] then PredFamCall else PredCtorCall ) )
         in
         let (Some post) =
           AstAux.list_to_sep_conj
             (List.map
                (fun asn -> (adt_def_loc, asn))
-               [ atomic_mask_token; share_pred; lft_token (lpat_var "q") ])
+               [ atomic_mask_token; share_pred "l"; lft_token (lpat_var "q") ])
             None
         in
         let post = add_type_interp_asns adt_def_loc tparams post in
@@ -4744,16 +4836,100 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               false (*virtual*),
               [] (*overrides*) )
         in
+        (* init_ref_S *)
+        let ref_init_perm = CallExpr (adt_def_loc, "ref_init_perm", [], [], [lpat_var "p"; VarPat (adt_def_loc, "x")], Static) in
+        let pre_shr_asn =
+          CoefAsn
+            ( adt_def_loc,
+              DummyPat,
+              CallExpr
+                ( adt_def_loc,
+                  name ^ "_share",
+                  (*type arguments*) tparams_targs,
+                  (*indices*) [],
+                  (*arguments*)
+                  [ VarPat (adt_def_loc, "k"); VarPat (adt_def_loc, "t"); lpat_var "x" ],
+                  if tparams_targs = [] then PredFamCall else PredCtorCall ) )
+        in
+        let (Some pre) =
+          AstAux.list_to_sep_conj
+            (List.map
+               (fun asn -> (adt_def_loc, asn))
+               [
+                 atomic_mask_token;
+                 ref_init_perm;
+                 pre_shr_asn;
+                 lft_token (VarPat (adt_def_loc, "q"));
+               ])
+            None
+        in
+        let pre =
+          add_type_interp_asns adt_def_loc tparams
+            (add_send_asns adt_def_loc send_tparams
+               pre)
+        in
+        let post_shr_asn =
+          CoefAsn
+            ( adt_def_loc,
+              DummyPat,
+              CallExpr
+                ( adt_def_loc,
+                  name ^ "_share",
+                  (*type arguments*) tparams_targs,
+                  (*indices*) [],
+                  (*arguments*)
+                  [ lpat_var "k"; lpat_var "t"; lpat_var "p" ],
+                  if tparams_targs = [] then PredFamCall else PredCtorCall ) )
+        in
+        let ref_initialized_asn =
+          CoefAsn (adt_def_loc, DummyPat, CallExpr (adt_def_loc, "frac_borrow", [], [], [lpat_var "k"; LitPat (CallExpr (adt_def_loc, "ref_initialized_", [], [], [lpat_var "p"], Static))], Static))
+        in
+        let (Some post) =
+          AstAux.list_to_sep_conj
+            (List.map
+              (fun asn -> (adt_def_loc, asn))
+              [
+                atomic_mask_token;
+                lft_token (lpat_var "q");
+                post_shr_asn;
+                ref_initialized_asn;
+              ])
+            None
+        in
+        let post =
+          add_type_interp_asns adt_def_loc tparams post
+        in
+        let init_ref_po =
+          Func
+            ( adt_def_loc,
+              Lemma
+                ( false
+                  (*indicates whether an axiom should be generated for this lemma*),
+                  None (*trigger*) ),
+              lft_params @ tparams (*type parameters*),
+              None (*return type*),
+              "init_ref_" ^ name,
+              [(PtrTypeExpr (adt_def_loc, StructTypeExpr (adt_def_loc, Some name, None, [], tparams_targs)), "p")],
+              false (*nonghost_callers_only*),
+              None
+              (*implemented function type, with function type type arguments and function type arguments*),
+              Some (pre, post) (*contract*),
+              false (*terminates*),
+              None (*body*),
+              false (*virtual*),
+              [] (*overrides*) )
+        in
         let sync_pos =
           match sync_preds with
           | None -> []
-          | Some sync_tparams ->
+          | Some sync_preds ->
+              let sync_tparams = List.filter (fun x -> List.mem (x, "std::marker::Sync") sync_preds) tparams in
               [
                 gen_sync_proof_oblig adt_def_loc name lft_params tparams
                   sync_tparams;
               ]
         in
-        Ok ([ share_mono_po; share_po ] @ sync_pos)
+        Ok ([ share_mono_po; share_po; init_ref_po ] @ sync_pos)
 
   type trait_impl = {
     trait_impl_cpn : TraitImplRd.t;
@@ -4893,6 +5069,13 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           let user_provided_share_defs =
             user_provided_type_pred_defs_for "share"
           in
+          let field_types =
+            variants_cpn
+            |> Util.flatmap @@ fun variant_cpn ->
+               VariantDef.fields_get_list variant_cpn
+               |> List.map @@ fun field_cpn ->
+                  VariantDef.FieldDef.ty_get field_cpn |> decode_ty
+          in
           (* If send_preds = None, it means this ADT is never Send.
              If send_preds = Some xs, then xs is a list of type parameters such that if any of them are not Send, then this ADT is not Send.
              Note that Some [] is always a valid value for send_preds, and that if Some xs is a valid value, then Some (xs @ ys) is also a valid value.
@@ -4951,7 +5134,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                         (string_of_preds preds))
                      None
             in
-            let get_impl_preds trait_name { loc; trait_impl_cpn } =
+            let get_impl_preds { loc; trait_impl_cpn } =
               check_impl_generics_matches_adt loc trait_impl_cpn;
               let impl_preds =
                 TraitImplRd.predicates_get_list trait_impl_cpn
@@ -4959,17 +5142,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               in
               impl_preds
               |> Util.flatmap (function
-                   | `Trait (trait_name', `Type (`Param x) :: _)
-                     when trait_name' = trait_name ->
-                       [ x ]
+                   | `Trait (trait_name', `Type (`Param x) :: _) ->
+                       [ x, trait_name' ]
                    | _ -> [])
-            in
-            let field_types =
-              variants_cpn
-              |> Util.flatmap @@ fun variant_cpn ->
-                 VariantDef.fields_get_list variant_cpn
-                 |> List.map @@ fun field_cpn ->
-                    VariantDef.FieldDef.ty_get field_cpn |> decode_ty
             in
             let preds_union preds1 preds2 =
               match (preds1, preds2) with
@@ -4989,16 +5164,18 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               | `Param x -> Some [ x ]
               | `RawPtr -> None
               | `Adt ("std::ptr::NonNull", _, _) -> None
-              | `Adt ("std::cell::UnsafeCell", _, [ `Type tp ]) ->
+              | `Adt (("std::cell::UnsafeCell"|"std::marker::PhantomData"|"std::boxed::Box"|"std::option::Option"), _, [ `Type tp ]) ->
                   send_preds_of tp
               | _ -> Some []
               (* Conservatively assume the type is always Send. TODO: Make this more precise. *)
             in
-            let sync_preds_of = function
+            let rec sync_preds_of = function
               | `Param x -> Some [ x ]
               | `RawPtr -> None
               | `Adt ("std::ptr::NonNull", _, _) -> None
               | `Adt ("std::cell::UnsafeCell", _, _) -> None
+              | `Adt (("std::marker::PhantomData"|"std::boxed::Box"|"std::option::Option"), _, [ `Type tp ]) ->
+                sync_preds_of tp
               | _ -> Some []
               (* Conservatively assume the type is always Sync. TODO: Make this more precise. *)
             in
@@ -5027,12 +5204,13 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                       (* OK, this negative impl covers all instantiations of the ADT so it cancels out the implicit send *)
                       None)
             in
+            let send_preds = send_preds |> Option.map @@ List.map @@ fun x -> (x, "std::marker::Send") in
             let send_preds =
               positive_send_impls
               |> List.fold_left
                    (fun preds trait_impl ->
                      preds_intersection preds
-                       (Some (get_impl_preds "std::marker::Send" trait_impl)))
+                       (Some (get_impl_preds trait_impl)))
                    send_preds
             in
             let variable_occurs_in_expr x e =
@@ -5077,12 +5255,13 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                       check_impl_covers_adt impl;
                       None)
             in
+            let sync_preds = sync_preds |> Option.map @@ List.map @@ fun x -> (x, "std::marker::Sync") in
             let sync_preds =
               positive_sync_impls
               |> List.fold_left
                    (fun preds trait_impl ->
                      preds_intersection preds
-                       (Some (get_impl_preds "std::marker::Sync" trait_impl)))
+                       (Some (get_impl_preds trait_impl)))
                    sync_preds
             in
             let sync_preds =
@@ -5106,12 +5285,17 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             | Some xs when user_provided_own_defs <> [] ->
                 let send_tparams =
                   List.filter
-                    (fun x -> List.mem x xs || List.mem x send_tparams)
+                    (fun x -> List.mem (x, "std::marker::Send") xs || List.mem x send_tparams)
+                    tparams
+                in
+                let sync_tparams =
+                  List.filter
+                    (fun x -> List.mem (x, "std::marker::Sync") xs)
                     tparams
                 in
                 [
                   gen_send_proof_oblig def_loc name tparams vf_tparams
-                    send_tparams;
+                    send_tparams sync_tparams;
                 ]
             | _ -> []
           in
@@ -5169,14 +5353,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               let is_trivially_droppable =
                 fds
                 |> List.for_all @@ fun (fd : Mir.field_def_tr) ->
-                   match Mir.basic_type_of fd.ty with
-                   | Ast.ManifestTypeExpr
-                       ( _,
-                         ( Int (_, _)
-                         | PtrType _ | Bool | Float | Double | LongDouble ) )
-                   | Ast.PtrTypeExpr (_, _) ->
-                       true
-                   | _ -> false
+                   type_is_trivially_droppable (Mir.basic_type_of fd.ty)
               in
               if is_trivially_droppable || implements_drop_get adt_def_cpn then
                 []
@@ -5191,11 +5368,193 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                 ]
             else []
           in
+          let open_ref_init_perm_lemma =
+            let pre = Ast.CallExpr (def_loc, "ref_init_perm", [], [], [LitPat (Var (def_loc, "p")); VarPat (def_loc, "x")], Static) in
+            let post =
+              let fd_ref_init_perm_asns = List.combine fds field_types |>
+                Util.flatmap (fun (fd, fd_ty) ->
+                  match fd_ty with
+                    `Adt ("std::cell::UnsafeCell", _, _) -> []
+                  | _ ->
+                    [ Ast.CallExpr (def_loc, "ref_init_perm", [], [], [
+                      LitPat (AddressOf (def_loc, Select (def_loc, Deref (def_loc, Var (def_loc, "p")), (fd:Mir.field_def_tr).name)));
+                      LitPat (AddressOf (def_loc, Select (def_loc, Deref (def_loc, Var (def_loc, "x")), (fd:Mir.field_def_tr).name)));
+                      ], Static) ]
+                )
+              in
+              let ref_padding_init_perm_asn =
+                Ast.CallExpr (def_loc, "ref_padding_init_perm", [], [], [LitPat (Var (def_loc, "p")); LitPat (Var (def_loc, "x"))], Static) 
+              in
+              List.fold_right (fun a asn -> Ast.Sep (def_loc, a, asn)) fd_ref_init_perm_asns ref_padding_init_perm_asn
+            in
+            Ast.Func (
+              def_loc,
+              Lemma
+                ( false
+                  (*indicates whether an axiom should be generated for this lemma*),
+                  None (*trigger*) ),
+              lft_params @ tparams (*type parameters*),
+              None (*return type*),
+              "open_ref_init_perm_" ^ name,
+              [(PtrTypeExpr (def_loc, StructTypeExpr (def_loc, Some name, None, [], tparams_targs)), "p")],
+              false (*nonghost_callers_only*),
+              None (*implemented function type, with function type type arguments and function type arguments*),
+              Some (pre, post) (*contract*),
+              false (*terminates*),
+              Some ([ExprStmt (CallExpr (def_loc, "assume", [], [], [LitPat (False def_loc)], Static))], def_loc) (*body*),
+              false (*virtual*),
+              [] (*overrides*) )
+          in
+          let init_ref_padding_lemma =
+            let ref_padding_init_perm_asn =
+              Ast.CallExpr (def_loc, "ref_padding_init_perm", [], [], [LitPat (Var (def_loc, "p")); VarPat (def_loc, "x")], Static) 
+            in
+            let padding_asn coefpat l = Ast.CoefAsn (def_loc, coefpat, Ast.CallExpr (def_loc, "struct_" ^ name ^ "_padding", [], [], [LitPat (Var (def_loc, l))], Static)) in
+            let coef_limits =
+              Ast.ExprAsn (def_loc, Operation (def_loc, And, [
+                Ast.Operation (def_loc, Ast.Lt, [IntLit (def_loc, Big_int.zero_big_int, true, false, NoLSuffix); Var (def_loc, "coef")]);
+                Ast.Operation (def_loc, Ast.Lt, [Var (def_loc, "coef"); IntLit (def_loc, Big_int.unit_big_int, true, false, NoLSuffix)])
+              ]))
+            in
+            let pre = Ast.Sep (def_loc, ref_padding_init_perm_asn, Sep (def_loc, padding_asn (VarPat (def_loc, "f")) "x", coef_limits)) in
+            let one_minus_coef = Ast.Operation (def_loc, Sub, [IntLit (def_loc, Big_int.unit_big_int, true, false, NoLSuffix); Var (def_loc, "coef")]) in
+            let f_times_one_minus_coef = Ast.Operation (def_loc, Mul, [Var (def_loc, "f"); one_minus_coef]) in
+            let f_times_coef = Ast.Operation (def_loc, Mul, [Var (def_loc, "f"); Var (def_loc, "coef")]) in
+            let ref_padding_initialized_asn =
+              Ast.CallExpr (def_loc, "ref_padding_initialized", [], [], [LitPat (Var (def_loc, "p"))], Static)
+            in
+            let ref_padding_end_token_asn =
+              Ast.CallExpr (def_loc, "ref_padding_end_token", [], [], [LitPat (Var (def_loc, "p")); LitPat (Var (def_loc, "x")); LitPat f_times_coef], Static)
+            in
+            let post =
+              Ast.Sep (def_loc, padding_asn (LitPat f_times_one_minus_coef) "x",
+                Sep (def_loc, padding_asn (LitPat f_times_coef) "p",
+                  Sep (def_loc, ref_padding_initialized_asn,
+                    ref_padding_end_token_asn)))
+            in
+            Ast.Func (
+              def_loc,
+              Lemma
+                ( false
+                  (*indicates whether an axiom should be generated for this lemma*),
+                  None (*trigger*) ),
+              lft_params @ tparams (*type parameters*),
+              None (*return type*),
+              "init_ref_padding_" ^ name,
+              [(PtrTypeExpr (def_loc, StructTypeExpr (def_loc, Some name, None, [], tparams_targs)), "p"); (ManifestTypeExpr (def_loc, RealType), "coef")],
+              false (*nonghost_callers_only*),
+              None (*implemented function type, with function type type arguments and function type arguments*),
+              Some (pre, post) (*contract*),
+              false (*terminates*),
+              Some ([ExprStmt (CallExpr (def_loc, "assume", [], [], [LitPat (False def_loc)], Static))], def_loc) (*body*),
+              false (*virtual*),
+              [] (*overrides*) )
+          in
+          let end_ref_padding_lemma =
+            let ref_padding_initialized_asn =
+              Ast.CallExpr (def_loc, "ref_padding_initialized", [], [], [LitPat (Var (def_loc, "p"))], Static)
+            in
+            let ref_padding_end_token_asn =
+              Ast.CallExpr (def_loc, "ref_padding_end_token", [], [], [LitPat (Var (def_loc, "p")); VarPat (def_loc, "x"); VarPat (def_loc, "f")], Static)
+            in
+            let padding_asn coefpat l = Ast.CoefAsn (def_loc, coefpat, Ast.CallExpr (def_loc, "struct_" ^ name ^ "_padding", [], [], [LitPat (Var (def_loc, l))], Static)) in
+            let pre =
+              Ast.Sep (def_loc, ref_padding_initialized_asn,
+                Sep (def_loc, ref_padding_end_token_asn,
+                  padding_asn (LitPat (Var (def_loc, "f"))) "p"))
+            in
+            let post = padding_asn (LitPat (Var (def_loc, "f"))) "x" in
+            Ast.Func (
+              def_loc,
+              Lemma
+                ( false
+                  (*indicates whether an axiom should be generated for this lemma*),
+                  None (*trigger*) ),
+              lft_params @ tparams (*type parameters*),
+              None (*return type*),
+              "end_ref_padding_" ^ name,
+              [(PtrTypeExpr (def_loc, StructTypeExpr (def_loc, Some name, None, [], tparams_targs)), "p")],
+              false (*nonghost_callers_only*),
+              None (*implemented function type, with function type type arguments and function type arguments*),
+              Some (pre, post) (*contract*),
+              false (*terminates*),
+              Some ([ExprStmt (CallExpr (def_loc, "assume", [], [], [LitPat (False def_loc)], Static))], def_loc) (*body*),
+              false (*virtual*),
+              [] (*overrides*) )
+          in
+          let close_ref_initialized_lemma =
+            let pre =
+              let ref_padding_initialized_asn =
+                Ast.CoefAsn (def_loc, VarPat (def_loc, "f"), CallExpr (def_loc, "ref_padding_initialized", [], [], [LitPat (Var (def_loc, "p"))], Static))
+              in
+              let fd_ref_initialized_asns = List.combine fds field_types |>
+                Util.flatmap (fun (fd, fd_ty) ->
+                  match fd_ty with
+                    `Adt ("std::cell::UnsafeCell", _, _) -> []
+                  | _ ->
+                    [ Ast.CoefAsn (def_loc, LitPat (Var (def_loc, "f")), CallExpr (def_loc, "ref_initialized", [], [], [LitPat (AddressOf (def_loc, Select (def_loc, Deref (def_loc, Var (def_loc, "p")), (fd:Mir.field_def_tr).name)))], Static)) ]
+                )
+              in
+              Ast.Sep (def_loc, ref_padding_initialized_asn, List.fold_right (fun a asn -> Ast.Sep (def_loc, a, asn)) fd_ref_initialized_asns (EmpAsn def_loc))
+            in
+            let post = Ast.CoefAsn (def_loc, LitPat (Var (def_loc, "f")), CallExpr (def_loc, "ref_initialized", [], [], [LitPat (Var (def_loc, "p"))], Static)) in
+            Ast.Func (
+              def_loc,
+              Lemma
+                ( false
+                  (*indicates whether an axiom should be generated for this lemma*),
+                  None (*trigger*) ),
+              lft_params @ tparams (*type parameters*),
+              None (*return type*),
+              "close_ref_initialized_" ^ name,
+              [(PtrTypeExpr (def_loc, StructTypeExpr (def_loc, Some name, None, [], tparams_targs)), "p")],
+              false (*nonghost_callers_only*),
+              None (*implemented function type, with function type type arguments and function type arguments*),
+              Some (pre, post) (*contract*),
+              false (*terminates*),
+              Some ([ExprStmt (CallExpr (def_loc, "assume", [], [], [LitPat (False def_loc)], Static))], def_loc) (*body*),
+              false (*virtual*),
+              [] (*overrides*) )
+          in
+          let open_ref_initialized_lemma =
+            let pre = Ast.CoefAsn (def_loc, VarPat (def_loc, "f"), CallExpr (def_loc, "ref_initialized", [], [], [LitPat (Var (def_loc, "p"))], Static)) in
+            let post =
+              let fd_ref_initialized_asns = List.combine fds field_types |>
+                Util.flatmap (fun (fd, fd_ty) ->
+                  match fd_ty with
+                    `Adt ("std::cell::UnsafeCell", _, _) -> []
+                  | _ ->
+                    [ Ast.CoefAsn (def_loc, LitPat (Var (def_loc, "f")), CallExpr (def_loc, "ref_initialized", [], [], [LitPat (AddressOf (def_loc, Select (def_loc, Deref (def_loc, Var (def_loc, "p")), (fd:Mir.field_def_tr).name)))], Static)) ]
+                )
+              in
+              let ref_padding_initialized_asn =
+                Ast.CoefAsn (def_loc, LitPat (Var (def_loc, "f")), CallExpr (def_loc, "ref_padding_initialized", [], [], [LitPat (Var (def_loc, "p"))], Static))
+              in
+              List.fold_right (fun a asn -> Ast.Sep (def_loc, a, asn)) fd_ref_initialized_asns ref_padding_initialized_asn
+            in
+            Ast.Func (
+              def_loc,
+              Lemma
+                ( false
+                  (*indicates whether an axiom should be generated for this lemma*),
+                  None (*trigger*) ),
+              lft_params @ tparams (*type parameters*),
+              None (*return type*),
+              "open_ref_initialized_" ^ name,
+              [(PtrTypeExpr (def_loc, StructTypeExpr (def_loc, Some name, None, [], tparams_targs)), "p")],
+              false (*nonghost_callers_only*),
+              None (*implemented function type, with function type type arguments and function type arguments*),
+              Some (pre, post) (*contract*),
+              false (*terminates*),
+              Some ([ExprStmt (CallExpr (def_loc, "assume", [], [], [LitPat (False def_loc)], Static))], def_loc) (*body*),
+              false (*virtual*),
+              [] (*overrides*) )
+          in
           Ok
             ( Some full_bor_content,
               own_proof_obligs @ share_proof_obligs,
               delayed_proof_obligs,
-              upcast_lemmas @ type_pred_defs )
+              upcast_lemmas @ open_ref_init_perm_lemma :: init_ref_padding_lemma :: close_ref_initialized_lemma :: open_ref_initialized_lemma :: end_ref_padding_lemma :: type_pred_defs )
         else Ok (None, [], [], [])
       in
       Ok
@@ -5423,11 +5782,12 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
 
   let translate_vf_mir (extern_specs : string list) (vf_mir_cpn : VfMirRd.t)
       (report_should_fail : string -> Ast.loc0 -> unit)
-      (skip_specless_fns : bool) =
+      (skip_specless_fns : bool) (allow_ignore_ref_creation : bool) (ignore_ref_creation : bool) =
     let job _ =
       let directives_cpn = VfMirRd.directives_get_list vf_mir_cpn in
       let* directives = ListAux.try_map translate_annotation directives_cpn in
-      directives
+      let vf_mir_translator_directives, vf_directives = directives |> List.partition (fun {Mir.raw} -> raw = "ignore_ref_creation") in
+      vf_directives
       |> List.iter (fun ({ span; raw } : Mir.annot) ->
              report_should_fail raw (Ast.lexed_loc span));
       let* module_decls =
@@ -5501,7 +5861,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             bodies_cpn
         else bodies_cpn
       in
-      let body_tr_defs_ctx = { adt_defs } in
+      let body_tr_defs_ctx = { adt_defs; allow_ignore_ref_creation; ignore_ref_creation; directives=vf_mir_translator_directives } in
       let* bodies_tr_res =
         ListAux.try_map (translate_body body_tr_defs_ctx) bodies_cpn
       in

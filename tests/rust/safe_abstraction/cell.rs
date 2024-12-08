@@ -1,3 +1,5 @@
+// verifast_options{ignore_ref_creation}
+
 #![allow(dead_code)]
 
 pub struct Cell<T> {
@@ -65,6 +67,14 @@ lem Cell_share_full<T>(k: lifetime_t, t: thread_id_t, l: *Cell<T>)
   close Cell_share::<T>()(k, t, l);
   leak Cell_share::<T>()(k, t, l);
 }
+
+lem init_ref_Cell<T>(p: *Cell<T>)
+    req type_interp::<T>() &*& atomic_mask(Nlft) &*& ref_init_perm(p, ?x) &*& [_]Cell_share::<T>(?k, ?t, x) &*& [?q]lifetime_token(k);
+    ens type_interp::<T>() &*& atomic_mask(Nlft) &*& [q]lifetime_token(k) &*& [_]Cell_share::<T>(k, t, p) &*& [_]frac_borrow(k, ref_initialized_(p));
+{
+    assume(false); // TODO
+}
+
 @*/
 
 impl<T> Cell<T> {

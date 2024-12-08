@@ -1,13 +1,16 @@
-include!{"rust_belt/general.rsspec"}
 include!{"prelude_core.rsspec"}
+include!{"aliasing.rsspec"}
 include!{"ghost_cells.rsspec"}
 include!{"counting.rsspec"}
 include!{"mask.rsspec"}
+include!{"rust_belt/general.rsspec"}
 include!{"rust_belt/lifetime_logic.rsspec"}
 include!{"rust_belt/lem_aux.rsspec"}
+include!{"rust_belt/aliasing.rsspec"}
 
 union std_empty_ {}
 struct std_tuple_0_ {}
+struct std_tuple_1_<T1>(T1)
 
 struct slice_ref<'a, T> { ptr: *T, len: usize }
 

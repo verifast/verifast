@@ -1,3 +1,5 @@
+// verifast_options{ignore_ref_creation}
+
 /*@
 
 lem_auto bitand_zero(y: usize)

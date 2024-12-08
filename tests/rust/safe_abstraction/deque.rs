@@ -1,3 +1,5 @@
+// verifast_options{ignore_ref_creation}
+
 /*@
 
 lem foreach_unappend<a>(xs1: list<a>, xs2: list<a>, p: pred(a))
@@ -282,6 +284,13 @@ lem Deque_share_mono<T>(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *Deque
     close [q]Deque_share::<T>()(k1, t, l);
 }
 
+lem init_ref_Deque<T>(p: *Deque<T>)
+    req type_interp::<T>() &*& atomic_mask(Nlft) &*& ref_init_perm(p, ?x) &*& [_]Deque_share::<T>(?k, ?t, x) &*& [?q]lifetime_token(k);
+    ens type_interp::<T>() &*& atomic_mask(Nlft) &*& [q]lifetime_token(k) &*& [_]Deque_share::<T>(k, t, p) &*& [_]frac_borrow(k, ref_initialized_(p));
+{
+    assume(false);
+}
+
 @*/
 
 impl<T> Deque<T> {
@@ -535,7 +544,6 @@ impl<T> Deque<T> {
         //@ open elem_points_to::<T>(first, ?value);
         //@ open elem_own::<T>(_t)(value);
         //@ open Node_value(first, _);
-        //@ close_full_borrow_content::<T>(_t, &(*first).value);
         std::ptr::drop_in_place(&mut (*first).value);
         //@ open_struct(first);
         std::alloc::dealloc(first as *mut u8, std::alloc::Layout::new::<Node<T>>());

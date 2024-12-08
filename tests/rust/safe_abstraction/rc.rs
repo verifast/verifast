@@ -1,3 +1,5 @@
+// verifast_options{ignore_ref_creation}
+
 #![feature(negative_impls)]
 
 use std::{cell::UnsafeCell, process::abort, ptr::NonNull};
@@ -127,6 +129,13 @@ lem Rc_share_full<T>(k: lifetime_t, t: thread_id_t, l: *Rc<T>)
     full_borrow_into_frac_m(k, lifetime_token_(frac, dk));
     leak exists(nnp);
     close [df]Rc_share::<T>(k, t, l);
+}
+
+lem init_ref_Rc<T>(p: *Rc<T>)
+    req type_interp::<T>() &*& atomic_mask(Nlft) &*& ref_init_perm(p, ?x) &*& [_]Rc_share::<T>(?k, ?t, x) &*& [?q]lifetime_token(k);
+    ens type_interp::<T>() &*& atomic_mask(Nlft) &*& [q]lifetime_token(k) &*& [_]Rc_share::<T>(k, t, p) &*& [_]frac_borrow(k, ref_initialized_(p));
+{
+    assume(false);
 }
 
 @*/
@@ -273,6 +282,7 @@ impl<T> Drop for Rc<T> {
                 //@ close_na_inv(_t, MaskNshrSingle(ptr));
                 //@ thread_token_merge(_t, mask_diff(MaskTop, MaskNshrSingle(ptr)), MaskNshrSingle(ptr));
                 //@ close thread_token(_t);
+                //@ open_full_borrow_content::<T>(_t, &(*ptr).value);
                 std::ptr::drop_in_place(&mut (*self.ptr.as_ptr()).value as *mut T);
                 //@ close RcBox_strong_(ptr, _);
                 //@ open_struct(ptr);

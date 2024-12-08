@@ -496,13 +496,13 @@ let rec parse_stmt = function%parser
 and parse_match_stmt_arm = function%parser
   [ parse_expr as pat; (l, Kwd "=>"); parse_block_stmt as s ] -> SwitchStmtClause (l, pat, [s])
 and parse_produce_lemma_function_pointer_chunk_stmt_function_type_clause = function%parser
-  [ [%let (li, ftn) = parse_simple_path];
+  [ [%let (li, ftn) = parse_simple_path]; [%let targs = function%parser [ parse_type_args as targs ] -> targs | [ ] -> []];
     (_, Kwd "("); [%let args = rep_comma parse_expr]; (_, Kwd ")");
     (_, Kwd "("); [%let params = rep_comma (function%parser [ (l, Ident x) ] -> (l, x))]; (_, Kwd ")");
     (openBraceLoc, Kwd "{");
     parse_stmts as ss;
     (closeBraceLoc, Kwd "}")
-  ] -> (ftn, [], args, params, openBraceLoc, ss, closeBraceLoc)
+  ] -> (ftn, targs, args, params, openBraceLoc, ss, closeBraceLoc)
 and parse_block_stmt = function%parser
   [ (l, Kwd "{");
     parse_ghost_decls as ds;
@@ -780,13 +780,13 @@ let rec parse_decl = function%parser
   let prefix = x ^ (if targs = [] then "" else "::<" ^ String.concat ", " targs ^ ">") ^ "::" in
   let ds = ds |> List.flatten |> List.map (prefix_decl_name l prefix) in
   List.map (decl_add_type_params l tparams) ds
-| [ (l, Kwd "trait"); (lx, Ident x); (_, Kwd "{");
+| [ (l, Kwd "trait"); (lx, Ident x); parse_type_params as tparams; (_, Kwd "{");
     [%let ds = rep parse_decl];
     (_, Kwd "}")
   ] ->
   let prefix = x ^ "::" in
   let ds = ds |> List.flatten |> List.map (prefix_decl_name l prefix) in
-  let ds = List.map (decl_add_type_params l ["Self"]) ds in
+  let ds = List.map (decl_add_type_params l ("Self"::tparams)) ds in
   ds
 | [ (l, Kwd "mod"); (lx, Ident x); (_, Kwd "{");
     [%let ds = rep parse_decl];
@@ -802,6 +802,9 @@ let rec parse_decl = function%parser
     [%let body = function%parser
        [ (_, Kwd ";") ] -> None
      | [ (_, Kwd "{"); [%let fds = rep_comma_ parse_struct_field]; (_, Kwd "}") ] ->
+       Some ([], fds, [], false)
+     | [ (_, Kwd "("); [%let tys = rep_comma_ parse_type]; (_, Kwd ")") ] ->
+       let fds = List.mapi (fun i t -> Field (l, Real, t, string_of_int i, Instance, Public, false, None)) tys in
        Some ([], fds, [], false)
     ]
   ] ->

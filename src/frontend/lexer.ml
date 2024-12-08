@@ -162,7 +162,7 @@ type file_options = {
 exception FileOptionsError of string
 
 let default_file_options =
-  {annot_char='@'; tab_size=8; prover=None; bindings=[]}
+  {annot_char='@'; tab_size=4; prover=None; bindings=[]}
 
 let get_file_options text =
   let tokens = get_first_line_tokens text in
@@ -668,6 +668,20 @@ let make_lexer_core keywords ghostKeywords startpos text reportRange inComment i
         start_token();
         text_junk ();
         reset_buffer (); Some (String (string ()))
+    | '`' when !ghost_range_start <> None ->
+      start_token();
+      text_junk ();
+      reset_buffer ();
+      let rec iter () =
+        match text_peek () with
+          'A'..'Z'|'a'..'z'|'0'..'9'|'_' as c ->
+          text_junk ();
+          store c;
+          iter ()
+        | '`' -> text_junk (); Some (Ident (get_string ()))
+        | _ -> error "Backquote expected."
+      in
+      iter ()
     | '/' -> start_token(); text_junk (); maybe_comment ()
     | '\000' ->
       if !eof_emitted then None else begin

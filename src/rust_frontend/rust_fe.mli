@@ -6,6 +6,8 @@ module type RUST_FE_ARGS =
     val report_macro_call : Ast.loc0 -> Ast.loc0 -> unit
     val verbose_flags : string list
     val skip_specless_fns : bool
+    val allow_ignore_ref_creation : bool
+    val ignore_ref_creation : bool
   end
 module Make :
   functor (_ : RUST_FE_ARGS) ->

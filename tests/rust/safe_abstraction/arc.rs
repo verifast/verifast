@@ -1,3 +1,5 @@
+// verifast_options{ignore_ref_creation}
+
 use std::process::abort;
 use std::ptr::NonNull;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -107,6 +109,13 @@ lem Arc_share_full<T>(k: lifetime_t, t: thread_id_t, l: *Arc<T>)
     full_borrow_into_frac_m(k, lifetime_token_(frac, dk));
     close Arc_share::<T>()(k, t, l);
     leak Arc_share(k, t, l);
+}
+
+lem init_ref_Arc<T>(p: *Arc<T>)
+    req type_interp::<T>() &*& is_Send(typeid(T)) == true &*& atomic_mask(Nlft) &*& ref_init_perm(p, ?x) &*& [_]Arc_share::<T>(?k, ?t, x) &*& [?q]lifetime_token(k);
+    ens type_interp::<T>() &*& atomic_mask(Nlft) &*& [q]lifetime_token(k) &*& [_]Arc_share::<T>(k, t, p) &*& [_]frac_borrow(k, ref_initialized_(p));
+{
+    assume(false);
 }
 
 @*/
@@ -393,7 +402,6 @@ impl<T: Sync + Send> Drop for Arc<T> {
             //@ Send::send::<T>(default_tid, _t, v);
             //@ leak type_interp::<T>();
             //@ open ArcInner_data(ptr, v);
-            //@ close_full_borrow_content::<T>(_t, &(*ptr).data);
             std::ptr::drop_in_place(&mut (*self.ptr.as_ptr()).data);
             //@ open_struct(ptr);
             //@ std::alloc::Layout_size__Layout_from_size_align_(std::mem::size_of::<ArcInner<T>>(), std::mem::align_of_::<ArcInner<T>>());

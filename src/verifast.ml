@@ -150,6 +150,28 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let varargs__pred = lazy_predfamsymb "varargs_"
 
+  (** [assume_ref_params_not_null params param_terms cont] assumes {i p_term != null_pointer_term} 
+      for each {i (p, p_term)} in [param_terms] for which {i (p, RefType _)} in [params] 
+      and continues by invoking [cont ()].
+      Immediatley invokes [cont ()] if the dialect is not {i Cxx}. *)
+  let assume_ref_params_not_null params param_terms cont =
+    match dialect with 
+        | Some Cxx ->
+          let lval_ref_params = params |> List.filter_map (function (p, RefType _) -> Some p | _ -> None) in
+          let assume_ref_not_null r cont = 
+            let ref_term = List.assoc r param_terms in
+            assume_neq ref_term (null_pointer_term ()) cont
+          in
+          let rec assume_not_null params =
+            match params with
+            | [] -> cont ()
+            | param :: params -> 
+              assume_ref_not_null param @@ fun () -> 
+              assume_not_null params
+          in
+          assume_not_null lval_ref_params
+        | _ -> cont ()
+
   let rec verify_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env s tcont return_cont econt =
     let l = stmt_loc s in
     if not (is_transparent_stmt s) then begin !stats#stmtExec l; reportStmtExec l end;
@@ -264,6 +286,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           begin match resolve Real (pn,ilist) l ftn functypemap with
             None -> static_error l "No such function type" None
           | Some (ftn, (lft, gh, fttparams, rt, ftxmap, xmap, pre, post, terminates, ft_predfammaps, ft_typeid)) ->
+            reportUseSite DeclKind_FuncType lft l;
             begin match stmt_ghostness with
               Real -> if gh <> Real || (ftxmap = [] && fttparams = []) then static_error l "A produce_function_pointer_chunk statement may be used only for parameterized and type-parameterized function types." None
             | Ghost -> if gh <> Ghost then static_error l "Lemma function pointer type expected." None
@@ -3045,6 +3068,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       check_should_fail () $. fun () ->
       execute_branch $. fun () ->
       with_context (Executing ([], env, l, sprintf "Verifying function '%s'" g)) $. fun () ->
+      assume_ref_params_not_null ps penv @@ fun () ->
       begin fun cont ->
         match penv, dialect, in_pure_context with
         | ("this", this_term) :: _, Some Cxx, false ->
@@ -3251,7 +3275,8 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       check_should_fail () @@ fun () ->
       execute_branch @@ fun () ->
       with_context (Executing ([], env, loc, sprintf "Verifying constructor '%s'" g)) @@ fun () ->
-      assume_neq (mk_ptr_address this_term) int_zero_term @@ fun () ->
+      assume_neq this_term (null_pointer_term ()) @@ fun () ->
+      assume_ref_params_not_null params penv @@ fun () ->
       produce_asn env [] [] ghostenv env pre real_unit None None @@ fun h ghostenv env ->
       init_constructs this_term init_list leminfo sizemap h env ghostenv @@ fun delegated h init_list ->
       if List.exists (function ("this", _) -> true | _ -> false) init_list then assert_false h env loc "Invalid order of initialization: the base or delegating constructor should already have been handled." None;
@@ -3896,6 +3921,8 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let report_macro_call = reportMacroCall
             let verbose_flags = verbose_flags
             let skip_specless_fns = Vfbindings.get Vfparam_skip_specless_fns vfbindings
+            let allow_ignore_ref_creation = allow_ignore_ref_creation
+            let ignore_ref_creation = Vfbindings.get Vfparam_ignore_ref_creation vfbindings
           end
         )
         in

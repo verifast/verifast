@@ -1,4 +1,4 @@
-// verifast_options{extern:../unverified/sys}
+// verifast_options{ignore_ref_creation extern:../unverified/sys}
 
 #![feature(negative_impls)]
 #![allow(dead_code)]
@@ -106,6 +106,13 @@ lem Mutex_share_full<T>(k: lifetime_t, t: thread_id_t, l: *Mutex<T>)
             close [qfb]Mutex_share::<T>()(k, t, l);
         }
     }
+}
+
+lem init_ref_Mutex<T>(p: *Mutex<T>)
+    req type_interp::<T>() &*& is_Send(typeid(T)) == true &*& atomic_mask(Nlft) &*& ref_init_perm(p, ?x) &*& [_]Mutex_share::<T>(?k, ?t, x) &*& [?q]lifetime_token(k);
+    ens type_interp::<T>() &*& atomic_mask(Nlft) &*& [q]lifetime_token(k) &*& [_]Mutex_share::<T>(k, t, p) &*& [_]frac_borrow(k, ref_initialized_(p));
+{
+    assume(false);
 }
 
 @*/

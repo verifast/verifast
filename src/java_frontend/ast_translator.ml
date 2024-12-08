@@ -837,7 +837,7 @@ and translate_expression expr =
           Some op -> 
             let (_, op') = translate_bin_operator op l' in
             AssignOpExpr(l', expr_l', op', expr_r', false)
-        | _ -> AssignExpr(l', expr_l', expr_r')
+        | _ -> AssignExpr(l', expr_l', Mutation, expr_r')
       end
   | GEN.Unary(l, op, expr) -> 
       let l' = translate_location l in
