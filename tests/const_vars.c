@@ -1,3 +1,5 @@
+#include <assert.h>
+
 void ptr_set(char **p, char *msg)
 //@ requires *p |-> _;
 //@ ensures *p |-> msg;
@@ -17,7 +19,7 @@ void test()
 //@ ensures true;
 {
   char *const p = 0;
-  set_ptr(&p, "Hello"); //~should_fail
+  ptr_set((char **)&p, "Hello"); //~should_fail
 }
 
 int main(void)
@@ -27,7 +29,7 @@ int main(void)
   const char *p = 0;
   const char z = 0;
 
-  ptr_set(&p, "Hello");
+  ptr_set((char **)&p, "Hello");
   char_set((char *)&z); //~should_fail
   assert(z == 'b'); //~allow_dead_code
 
