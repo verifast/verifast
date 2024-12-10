@@ -7,6 +7,7 @@ verifast -c -allow_should_fail preprocessor_test.rs
 verifast -c -allow_should_fail preprocessor_test_crlf.rs
 verifast -c -allow_should_fail preprocessor_test_crlf_bom.rs
 verifast -c -allow_should_fail pred_arg_lft.rs
+verifast -c -allow_should_fail -allow_dead_code lemma_without_body.rs
 begin_sequential
 cd unverified
   cd platform

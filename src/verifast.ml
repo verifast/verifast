@@ -3635,6 +3635,8 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       if language = Java && not (Filename.check_suffix g_file_name ".javaspec") then
         static_error l "A lemma function outside a .javaspec file must have a body. To assume a lemma, use the body '{ assume(false); }'." None;
       let FuncInfo ([], fterm, _, k, tparams', rt, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body, virt, overrides) = List.assoc g funcmap in
+      if body = None && dialect = Some Rust && not (Filename.check_suffix g_file_name ".rsspec") then
+        static_error l "A lemma function outside a .rsspec file must have a body. To assume a lemma, use the body '{ assume(false); }'." None;
       if auto && (Filename.check_suffix g_file_name ".c" || is_import_spec || language = CLang && Filename.chop_extension (Filename.basename g_file_name) <> Filename.chop_extension (Filename.basename program_path)) then begin
         register_prototype_used l g (Some fterm);
         create_auto_lemma l (pn,ilist) g trigger pre post ps pre_tenv tparams'
