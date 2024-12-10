@@ -785,7 +785,7 @@ lem LinkedList_sync<T, A>(t1: thread_id_t)
 /// An iterator over the elements of a `LinkedList`.
 ///
 /// This `struct` is created by [`LinkedList::iter()`]. See its
-/// documentation for more. 
+/// documentation for more.
 #[must_use = "iterators are lazy and do nothing unless consumed"]
 #[stable(feature = "rust1", since = "1.0.0")]
 pub struct Iter<'a, T: 'a> {
@@ -879,21 +879,21 @@ lem Iter_send<'a, T>(t1: thread_id_t)
 
 @*/
 
-//#[stable(feature = "collection_debug", since = "1.17.0")]
-// impl<T: fmt::Debug> fmt::Debug for Iter<'_, T> {
-//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-//         f.debug_tuple("Iter")
-//             .field(&*mem::ManuallyDrop::new(LinkedList {
-//                 head: self.head,
-//                 tail: self.tail,
-//                 len: self.len,
-//                 alloc: Global,
-//                 marker: PhantomData,
-//             }))
-//             .field(&self.len)
-//             .finish()
-//     }
-// }
+#[stable(feature = "collection_debug", since = "1.17.0")]
+impl<T: fmt::Debug> fmt::Debug for Iter<'_, T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("Iter")
+            .field(&*mem::ManuallyDrop::new(LinkedList {
+                head: self.head,
+                tail: self.tail,
+                len: self.len,
+                alloc: Global,
+                marker: PhantomData,
+            }))
+            .field(&self.len)
+            .finish()
+    }
+}
 
 // FIXME(#26925) Remove in favor of `#[derive(Clone)]`
 #[stable(feature = "rust1", since = "1.0.0")]
@@ -916,21 +916,21 @@ pub struct IterMut<'a, T: 'a> {
     marker: PhantomData<&'a mut Node<T>>,
 }
 
-//#[stable(feature = "collection_debug", since = "1.17.0")]
-// impl<T: fmt::Debug> fmt::Debug for IterMut<'_, T> {
-//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-//         f.debug_tuple("IterMut")
-//             .field(&*mem::ManuallyDrop::new(LinkedList {
-//                 head: self.head,
-//                 tail: self.tail,
-//                 len: self.len,
-//                 alloc: Global,
-//                 marker: PhantomData,
-//             }))
-//             .field(&self.len)
-//             .finish()
-//     }
-// }
+#[stable(feature = "collection_debug", since = "1.17.0")]
+impl<T: fmt::Debug> fmt::Debug for IterMut<'_, T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("IterMut")
+            .field(&*mem::ManuallyDrop::new(LinkedList {
+                head: self.head,
+                tail: self.tail,
+                len: self.len,
+                alloc: Global,
+                marker: PhantomData,
+            }))
+            .field(&self.len)
+            .finish()
+    }
+}
 
 /// An owning iterator over the elements of a `LinkedList`.
 ///
@@ -948,11 +948,11 @@ pub struct IntoIter<
 }
 
 #[stable(feature = "collection_debug", since = "1.17.0")]
-// impl<T: fmt::Debug, A: Allocator> fmt::Debug for IntoIter<T, A> {
-//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-//         f.debug_tuple("IntoIter").field(&self.list).finish()
-//     }
-// }
+impl<T: fmt::Debug, A: Allocator> fmt::Debug for IntoIter<T, A> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("IntoIter").field(&self.list).finish()
+    }
+}
 
 impl<T> Node<T> {
     unsafe fn new(element: T) -> Self
