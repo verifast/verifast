@@ -4565,7 +4565,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   ExprStmt
                     (CallExpr
                        ( adt_def_loc,
-                         "assume",
+                         "#assume",
                          [],
                          [],
                          [ LitPat (False adt_def_loc) ],
@@ -5401,7 +5401,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               None (*implemented function type, with function type type arguments and function type arguments*),
               Some (pre, post) (*contract*),
               false (*terminates*),
-              Some ([ExprStmt (CallExpr (def_loc, "assume", [], [], [LitPat (False def_loc)], Static))], def_loc) (*body*),
+              Some ([ExprStmt (CallExpr (def_loc, "#assume", [], [], [LitPat (False def_loc)], Static))], def_loc) (*body*),
               false (*virtual*),
               [] (*overrides*) )
           in
@@ -5446,7 +5446,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               None (*implemented function type, with function type type arguments and function type arguments*),
               Some (pre, post) (*contract*),
               false (*terminates*),
-              Some ([ExprStmt (CallExpr (def_loc, "assume", [], [], [LitPat (False def_loc)], Static))], def_loc) (*body*),
+              Some ([ExprStmt (CallExpr (def_loc, "#assume", [], [], [LitPat (False def_loc)], Static))], def_loc) (*body*),
               false (*virtual*),
               [] (*overrides*) )
           in
@@ -5478,7 +5478,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               None (*implemented function type, with function type type arguments and function type arguments*),
               Some (pre, post) (*contract*),
               false (*terminates*),
-              Some ([ExprStmt (CallExpr (def_loc, "assume", [], [], [LitPat (False def_loc)], Static))], def_loc) (*body*),
+              Some ([ExprStmt (CallExpr (def_loc, "#assume", [], [], [LitPat (False def_loc)], Static))], def_loc) (*body*),
               false (*virtual*),
               [] (*overrides*) )
           in
@@ -5512,7 +5512,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               None (*implemented function type, with function type type arguments and function type arguments*),
               Some (pre, post) (*contract*),
               false (*terminates*),
-              Some ([ExprStmt (CallExpr (def_loc, "assume", [], [], [LitPat (False def_loc)], Static))], def_loc) (*body*),
+              Some ([ExprStmt (CallExpr (def_loc, "#assume", [], [], [LitPat (False def_loc)], Static))], def_loc) (*body*),
               false (*virtual*),
               [] (*overrides*) )
           in
@@ -5546,7 +5546,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               None (*implemented function type, with function type type arguments and function type arguments*),
               Some (pre, post) (*contract*),
               false (*terminates*),
-              Some ([ExprStmt (CallExpr (def_loc, "assume", [], [], [LitPat (False def_loc)], Static))], def_loc) (*body*),
+              Some ([ExprStmt (CallExpr (def_loc, "#assume", [], [], [LitPat (False def_loc)], Static))], def_loc) (*body*),
               false (*virtual*),
               [] (*overrides*) )
           in

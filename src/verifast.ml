@@ -546,6 +546,12 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         verify_stmt (pn,ilist) blocks_done lblenv tparams boxes false leminfo funcmap predinstmap sizemap tenv ghostenv h env s tcont return_cont econt
       else
         static_error l "Non-pure statements are not allowed here." None
+    | ExprStmt (CallExpr (l, ("assume"|"#assume" as g), [], [], [LitPat e], Static)) when dialect = Some Rust ->
+      if not options.option_allow_assume && g = "assume" then static_error l "Specify -allow_assume on the command line to enable 'assume' statements." None;
+      require_pure ();
+      let w = check_expr_t (pn,ilist) tparams tenv e Bool in
+      assume (ev w) $. fun () ->
+      cont h env
     | ExprStmt (CallExpr (l, "produce_limits", [], [], [LitPat (Var (lv, x) as e)], Static)) ->
       if not pure then static_error l "This function may be called only from a pure context." None;
       if List.mem x ghostenv then static_error l "The argument for this call must be a non-ghost variable." None;

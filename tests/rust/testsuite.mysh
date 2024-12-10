@@ -1,13 +1,15 @@
+begin_parallel
 verifast -c ghost_cmd_inj.rs
 verifast -c parser_test.rs
 verifast -c -allow_should_fail type_pred_defs_for_imported_structs.rs
 verifast -c -allow_should_fail duplicate_type_pred_defs.rs
 verifast -c -allow_should_fail public_fields.rs
-verifast -c -allow_should_fail preprocessor_test.rs
-verifast -c -allow_should_fail preprocessor_test_crlf.rs
-verifast -c -allow_should_fail preprocessor_test_crlf_bom.rs
+verifast -c -allow_should_fail -allow_assume preprocessor_test.rs
+verifast -c -allow_should_fail -allow_assume preprocessor_test_crlf.rs
+verifast -c -allow_should_fail -allow_assume preprocessor_test_crlf_bom.rs
 verifast -c -allow_should_fail pred_arg_lft.rs
 verifast -c -allow_should_fail -allow_dead_code lemma_without_body.rs
+verifast -c -allow_should_fail -allow_dead_code assume_stmt.rs
 begin_sequential
 cd unverified
   cd platform
@@ -18,7 +20,7 @@ cd unverified
   cd ..
 cd ..
 begin_parallel
-verifast -c -ignore_ref_creation nonnull.rs
+verifast -c -ignore_ref_creation -allow_assume nonnull.rs
 cd purely_unsafe
   verifast -c -allow_should_fail -allow_dead_code nonmut_let_immut.rs
   verifast -c struct_exprs.rs
@@ -31,14 +33,14 @@ cd purely_unsafe
   verifast -c account_with_box.rs
   verifast -c deque_i32.rs
   verifast -c deque.rs
-  verifast -c strlen.rs
+  verifast -c -allow_assume strlen.rs
   verifast -c tree.rs
-  verifast -c tree2.rs
+  verifast -c -allow_assume tree2.rs
   verifast -c traits0.rs
   verifast -c -allow_should_fail -allow_dead_code traits0_error.rs
   verifast -c -allow_should_fail -allow_dead_code traits0_error2.rs
   verifast -c pred_fam.rs
-  verifast -c tree3.rs
+  verifast -c -allow_assume tree3.rs
   verifast -c generic_structs.rs
   verifast -c -ignore_ref_creation str.rs
   verifast -prover z3v4.5 -target LP64 -c -ignore_ref_creation -extern ../unverified/platform httpd.rs
@@ -53,31 +55,32 @@ cd safe_abstraction
   verifast -c box.rs
   verifast -c full_bor_primitive_types.rs
   verifast -c shared_primitive_types.rs
-  verifast -c deque_i32.rs
-  verifast -c -ignore_ref_creation deque.rs
-  verifast -c -ignore_ref_creation cell_u32.rs
-  verifast -c -ignore_ref_creation cell.rs
-  verifast -c -ignore_ref_creation tree.rs
+  verifast -c -allow_assume deque_i32.rs
+  verifast -c -ignore_ref_creation -allow_assume deque.rs
+  verifast -c -ignore_ref_creation -allow_assume cell_u32.rs
+  verifast -c -ignore_ref_creation -allow_assume cell.rs
+  verifast -c -ignore_ref_creation -allow_assume tree.rs
   verifast -c -allow_should_fail -allow_dead_code drop_test.rs
   verifast -c -ignore_ref_creation tparam_own.rs
   verifast -c -ignore_ref_creation generic_pair.rs
-  verifast -c -ignore_ref_creation -extern ../unverified/sys mutex_u32.rs
-  verifast -c -ignore_ref_creation -extern ../unverified/sys mutex.rs
-  verifast -c -ignore_ref_creation rc_u32.rs
-  verifast -c -ignore_ref_creation rc.rs
-  verifast -c -ignore_ref_creation arc_u32.rs
-  verifast -c -ignore_ref_creation arc.rs
+  verifast -c -ignore_ref_creation -extern ../unverified/sys -allow_assume mutex_u32.rs
+  verifast -c -ignore_ref_creation -extern ../unverified/sys -allow_assume mutex.rs
+  verifast -c -ignore_ref_creation -allow_assume rc_u32.rs
+  verifast -c -ignore_ref_creation -allow_assume rc.rs
+  verifast -c -ignore_ref_creation -allow_assume arc_u32.rs
+  verifast -c -ignore_ref_creation -allow_assume arc.rs
   begin_sequential
     verifast -c -apply_quick_fix proof_obligs_quick_fix_test_result.rs proof_obligs_quick_fix_test.rs
-    verifast -c proof_obligs_quick_fix_test_result.rs
+    verifast -c -allow_assume proof_obligs_quick_fix_test_result.rs
     del proof_obligs_quick_fix_test_result.rs
   end_sequential
   begin_sequential
     verifast -c -apply_quick_fix proof_obligs_quick_fix_test_generic_result.rs proof_obligs_quick_fix_test_generic.rs
-    verifast -c proof_obligs_quick_fix_test_generic_result.rs
+    verifast -c -allow_assume proof_obligs_quick_fix_test_generic_result.rs
     del proof_obligs_quick_fix_test_generic_result.rs
   end_sequential
-  verifast -c -skip_specless_fns -prover z3v4.5 linked_list.rs
+  verifast -c -skip_specless_fns -prover z3v4.5 -allow_assume linked_list.rs
 cd ..
 end_parallel
 end_sequential
+end_parallel
