@@ -636,14 +636,16 @@ let _ =
   if Array.length Sys.argv = 1
   then usage cla usage_string
   else begin
+    let all_files_are_dotrs_files = ref true in
     let process_file filename =
       if !verbose = -1 then Printf.printf "\n%10.6fs: processing file %s\n" (Perf.time()) filename;
+      all_files_are_dotrs_files := !all_files_are_dotrs_files && Filename.check_suffix filename ".rs";
       let result = process_file filename in
       if !verbose = -1 then Printf.printf "%10.6fs: done with file %s\n\n" (Perf.time()) filename;
       result
     in
     parse cla process_file usage_string;
-    if not !compileOnly then
+    if not !compileOnly && not !all_files_are_dotrs_files then
       begin
         try
           print_endline "Linking...";
