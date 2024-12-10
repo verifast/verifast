@@ -1600,6 +1600,17 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let arraySize = ctxt#mk_mul (ctxt#mk_intlit elemCount) elemSize in
         ctxt#assert_term (mk_object_pointer_within_limits addr arraySize)
       end;
+      let assume_array_elem_type l env addr cont =
+        let elem_type =
+          let rec aux t =
+            match t with
+            | StaticArrayType (t, _) -> aux t
+            | _ -> t
+          in
+          aux elemTp
+        in
+        assume_has_type l env addr elem_type cont
+      in
       let produce_char_array_chunk h env addr elemCount =
         produce_char_array_chunk h env addr (ctxt#mk_mul (ctxt#mk_intlit elemCount) elemSize)
       in
@@ -1617,6 +1628,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           assume_has_type l env addr elemTp $. fun () ->
           cont (Chunk (((if produceUninitChunk then integers___symb () else integers__symb ()), true), [], coef, [addr; rank_size_term k; mk_bool (signedness = Signed); length; elems], None)::h) env
         | None ->
+          assume_array_elem_type l env addr @@ fun () ->
           (* Produce a character array of the correct size *)
           produce_char_array_chunk h env addr elemCount
       in
@@ -1628,6 +1640,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let addr = mk_ptr_add_ l env addr (ctxt#mk_intlit i) elemTp in
           match es with
             [] ->
+            assume_array_elem_type l env addr @@ fun () ->
             produce_char_array_chunk h env addr (elemCount - i)
           | (f_opt, e)::es ->
             begin match f_opt with

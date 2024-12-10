@@ -1339,18 +1339,8 @@ and
   parse_field_core gh = function%parser
 | [ parse_type as te0; 
     (l, Ident f);
-    [%l
-    te = function%parser
-    | [ (_, Kwd ";") ] -> te0
-    | [ (_, Kwd "["); 
-        (ls, Int (size, _, _, _, _)); 
-        (_, Kwd "]"); 
-        (_, Kwd ";") 
-      ] ->
-        if int_of_big_int size <= 0 then
-          raise (ParseException (ls, "Array must have size > 0."));
-        StaticArrayTypeExpr (l, te0, int_of_big_int size)
-    ]
+    [%l te = parse_array_braces te0];
+    (_, Kwd ";");
   ] -> Field (l, gh, te, f, Instance, Public, false, None)
 and
   parse_struct_attrs = function%parser (* GCC-style attributes are always in double parentheses, see https://gcc.gnu.org/onlinedocs/gcc/Variable-Attributes.html *)

@@ -86,6 +86,7 @@
 .provides ./prelude.h#int_of_chars_size
 .provides ./prelude.h#chars_of_int_char_in_bounds
 .provides ./prelude.h#chars__to_int_
+.provides ./prelude.h#chars__to_ints_
 .provides ./prelude.h#chars_to_integer
 .provides ./prelude.h#chars_to_integer_
 .provides ./prelude.h#chars_to_u_integer
