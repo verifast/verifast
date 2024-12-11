@@ -2220,13 +2220,15 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                           (*decimal*) true,
                           (*U suffix*) false,
                           (*int literal*) Ast.NoLSuffix ) )
-              | "std::ptr::read" ->
+              | "std::ptr::read"
+              | "std::ptr::mut_ptr::<impl *mut T>::read" ->
                   let [ src_cpn ] = args_cpn in
                   let* tmp_rvalue_binders, [ src ] =
                     translate_operands [ (src_cpn, fn_loc) ]
                   in
                   Ok (tmp_rvalue_binders, Ast.Deref (fn_loc, src))
-              | "std::ptr::write" ->
+              | "std::ptr::write"
+              | "std::ptr::mut_ptr::<impl *mut T>::write" ->
                   let [ dst_cpn; src_cpn ] = args_cpn in
                   let* tmp_rvalue_binders, [ dst; src ] =
                     translate_operands [ (dst_cpn, fn_loc); (src_cpn, fn_loc) ]

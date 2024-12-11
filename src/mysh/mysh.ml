@@ -271,11 +271,8 @@ let rootdir = Sys.getcwd ()
 let rec exec_cmds macros cwd parallel cmds =
   let macros = ref macros in
   let cwd = ref cwd in
-  let getcwd () =
-    match !cwd with
-      [] -> "."
-    | cs -> String.concat "/" (List.rev cs)
-  in
+  let cwdStack = ref [] in
+  let getcwd () = !cwd in
   let get_abs_path relpath = rootdir ^ "/" ^ getcwd () ^ "/" ^ relpath in
   let children_started_count = ref 0 in
   let children_finished_count = ref 0 in
@@ -320,12 +317,14 @@ let rec exec_cmds macros cwd parallel cmds =
       if s = "." then
         ()
       else if s = ".." then
-        match !cwd with
-          _::cs -> cwd := cs
+        match !cwdStack with
+          ("cd", cwd0)::stack -> cwd := cwd0; cwdStack := stack
+        | ("pushd", _)::_ -> error l "'pushd' should be matched by 'popd', not 'cd ..'"
         | [] -> error l "cd ..: already at script base directory"
       else begin
         if has_char s '/' || has_char s '\\' then error l "cd: composite paths are not supported; split into multiple cd commands";
-        push cwd s
+        push cwdStack ("cd", !cwd);
+        cwd := !cwd ^ "/" ^ s
       end
     end
   in
@@ -345,6 +344,18 @@ let rec exec_cmds macros cwd parallel cmds =
       if !verbose then print_endline line;
       match parse_cmdline line with
         ["cd"; dir] -> cd l dir
+      | ["pushd"; dir] ->
+        push cwdStack ("pushd", !cwd);
+        cwd := !cwd ^ "/" ^ dir
+      | ["popd"] ->
+        begin match !cwdStack with
+          ("pushd", cwd0)::stack ->
+          cwdStack := stack;
+          cwd := cwd0
+        | ("cd", _)::_ ->
+          error "'cd' should be matched by 'cd ..', not 'popd'"
+        | [] -> error "Nothing to pop"
+        end
       | ["del"; file] -> join_children (); Sys.remove (get_abs_path file)
       | ["ifnotmac"; line] -> if Vfconfig.platform <> MacOS then exec_line line
       | ["ifz3"; line] -> if Vfconfig.z3_present then exec_line line
@@ -439,7 +450,7 @@ let () =
   let time0 = Unix.gettimeofday() in
   let lines = read_file_lines !main_filename !main_file in
   let cmds = parse_file lines in
-  exec_cmds [] [] false cmds;
+  exec_cmds [] "." false cmds;
   let time1 = Unix.gettimeofday() in
   Printf.printf "Total execution time: %f seconds\n" (time1 -. time0);
   List.rev !failed_processes_log |> List.iter begin fun lines ->

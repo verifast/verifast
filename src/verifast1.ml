@@ -2348,7 +2348,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let isfuncs = if file_type path=Java then [] else
     flatmap (fun (ftn, (_, gh, tparams, ftps)) ->
       match (gh, tparams, ftps) with
-        (Real, [], []) ->
+        (Real, [], []) when dialect <> Some Rust ->
         let isfuncname = "is_" ^ ftn in
         let domain = [provertype_of_type (PtrType Void)] in
         let symb = mk_func_symbol isfuncname domain ProverBool Uninterp in
@@ -3201,7 +3201,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     List.map
       begin fun (g, (l, gh, tparams, rt, ftxmap, xmap, g0, pn, ilist, pre, post, terminates)) ->
         let predfammaps =
-          if gh = Ghost || ftxmap <> [] || tparams <> [] then
+          if gh = Ghost || ftxmap <> [] || tparams <> [] || dialect = Some Rust then
             let fun_ptr_type =
               if dialect = Some Rust then InlineFuncType (match rt with None -> Void | Some rt -> rt) else PtrType (FuncType g) in
             let paramtypes = fun_ptr_type::List.map snd ftxmap in
