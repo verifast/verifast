@@ -1,0 +1,20 @@
+begin_parallel
+verifast account.rs
+verifast -disable_overflow_check deposit.rs
+verifast -disable_overflow_check limit.rs
+verifast -disable_overflow_check pred.rs
+verifast stack.rs
+verifast dispose.rs
+verifast -disable_overflow_check sum.rs
+verifast -disable_overflow_check popn.rs
+verifast values.rs
+verifast fixpoints.rs
+verifast -disable_overflow_check sum_full.rs
+verifast lemma.rs
+verifast -disable_overflow_check push_all.rs
+verifast reverse.rs
+verifast filter.rs
+verifast byref.rs
+verifast -disable_overflow_check map.rs
+verifast -disable_overflow_check foreach.rs
+end_parallel

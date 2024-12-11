@@ -2781,7 +2781,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       begin
         match gh with
-          Real when ftxmap = [] && fttparams = [] ->
+          Real when ftxmap = [] && fttparams = [] && dialect <> Some Rust ->
           let (lg, _, _, _, isfuncsymb) = List.assoc ("is_" ^ ftn) purefuncmap in
           let phi = mk_app isfuncsymb [fterm] in
           assert_term phi h env l ("Could not prove is_" ^ ftn ^ "(" ^ ctxt#pprint fterm ^ ")") None;

@@ -1,4 +1,7 @@
 begin_parallel
+pushd ../../rust_tutorials/purely_unsafe/solutions
+  call verify.mysh
+popd
 verifast ghost_cmd_inj.rs
 verifast parser_test.rs
 verifast -allow_should_fail type_pred_defs_for_imported_structs.rs
