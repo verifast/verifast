@@ -408,6 +408,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let is_transparent_stmt s =
     match s with
     | Assert (_, False _) -> true
+    | ExprStmt (CallExpr (_, "std::hint::unreachable_unchecked", _, _, _, _)) -> true
     | LabelStmt _ -> true
     | PureStmt _ | NonpureStmt _ | BlockStmt _ -> true
     | _ -> false

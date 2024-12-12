@@ -697,3 +697,9 @@ mod sync {
         }
     }
 }
+
+mod thread {
+
+    struct JoinHandle<T>;
+    
+}

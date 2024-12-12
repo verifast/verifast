@@ -475,7 +475,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | ArrayType t -> ProverInt
     | StaticArrayType (t, s) -> ProverInductive
     | PtrType _ | RustRefType (_, _, _) -> ProverInductive
-    | FuncType _ | InlineFuncType _ -> ProverInt
+    | FuncType _| InlineFuncType _ -> ProverInductive
     | PredType (tparams, ts, inputParamCount, _) -> ProverInductive
     | PureFuncType _ -> ProverInductive
     | BoxIdType -> ProverInt
@@ -878,7 +878,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       * string list option (* The type is infinite if any of these type parameters are infinite; if None, it is always infinite. *)
       * int (* 0 = does not contain 'any' or predicate types; 1 = contains 'any' or predicate types, but only in positive positions; 2 = contains 'any' or predicate types in negative positions *)
       * InductiveSubtype.t
-      * symbol (* typeid function *)
+      * symbol option (* typeid function, but only if this type does not contain 'any' in negative positions, assuming that type arguments do not contain 'any' in negative positions. *)
     type pred_ctor_info =
       PredCtorInfo of
         loc
@@ -1949,6 +1949,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       end
     | ArrayType t -> ArrayType (instantiate_type tpenv t)
     | StructType (sn, targs) -> StructType (sn, List.map (instantiate_type tpenv) targs)
+    | InlineFuncType rt -> InlineFuncType (instantiate_type tpenv rt)
     | _ -> t
   
   (* Region: check_pure_type: checks validity of type expressions *)
@@ -2891,7 +2892,17 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       end
   
   let inductivemap1 = inductivemap1 |> List.map begin fun (i, (l, tparams, ctors, gets, sets, cond, containsAny, subtype)) ->
-    let type_info_func = mk_symbol (i ^ "_type_info") (List.map (fun x -> type_info_type_node) tparams) type_info_type_node Uninterp in
+    (* Since we allow predicate constructor type parameters as predicate constructor parameter types, it is crucial for soundness that
+       only types that contain 'any' only in positive positions have typeids.
+       Note that we can assume that the type arguments of this inductive type themselves contain 'any' only in positive
+       positions, since they themselves must have a typeid for the constructed type to have a typeid.
+     *)
+    let type_info_func =
+      if containsAny < 2 then
+        Some (mk_symbol (i ^ "_type_info") (List.map (fun x -> type_info_type_node) tparams) type_info_type_node Uninterp)
+      else
+        None
+    in
     (i, (l, tparams, ctors, gets, sets, cond, containsAny, subtype, type_info_func))
   end
 
@@ -3148,8 +3159,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             check_tparams_distinct xs
         in
         check_tparams_distinct tparams;
-        (* The return type cannot mention type parameters. *)
-        let rt = match rt with None -> None | Some rt -> Some (check_pure_type (pn,ilist) [] Ghost rt) in
+        (* The return type cannot mention type parameters, except in Rust. *)
+        let rt = match rt with None -> None | Some rt -> Some (check_pure_type (pn,ilist) (if dialect = Some Rust then tparams else []) Ghost rt) in
         let ftxmap =
           let rec iter xm xs =
             match xs with
@@ -3718,7 +3729,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 | _ -> ()
               end;
               let t = check_pure_type (pn,ilist) tparams Ghost te in
-              if not (type_satisfies_contains_any_constraint false true t) then static_error (type_expr_loc te) "This type cannot be used as a predicate constructor parameter type because it contains 'any' or a predicate type in a negative position." None;
+              (* We can assume type parameters contain 'any' in positive positions only because type parameters
+                 must carry typeids and therefore must be real Rust types.
+                 Real Rust types never contain 'any' in negative positions. *)
+              if not (type_satisfies_contains_any_constraint true true t) then static_error (type_expr_loc te) "This type cannot be used as a predicate constructor parameter type because it contains 'any' or a predicate type in a negative position." None;
               iter ((x, t)::pmap) ps
           in
           iter [] ps1
@@ -5853,7 +5867,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     ctxt#mk_app s (List.map (typeid_of_core_core l msg env) targs)
   | InductiveType (i, targs) ->
     let (_, _, _, _, _, _, _, _, type_id_func) = List.assoc i inductivemap in
-    ctxt#mk_app type_id_func (List.map (typeid_of_core_core l msg env) targs)
+    begin match type_id_func with
+      None -> static_error l (Printf.sprintf "Inductive type '%s' does not have a typeid since it contains 'any' in a negative position" i) None
+    | Some type_id_func ->
+      ctxt#mk_app type_id_func (List.map (typeid_of_core_core l msg env) targs)
+    end;
   | UnionType un ->
     let _, _, s = List.assoc un unionmap in
     s

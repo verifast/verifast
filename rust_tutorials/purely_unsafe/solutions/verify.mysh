@@ -17,4 +17,6 @@ verifast filter.rs
 verifast byref.rs
 verifast -disable_overflow_check map.rs
 verifast -disable_overflow_check foreach.rs
+verifast -disable_overflow_check predctors.rs
+verifast -disable_overflow_check threads0.rs
 end_parallel

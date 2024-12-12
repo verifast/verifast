@@ -165,6 +165,7 @@ pub fn preprocess(
     let mut inside_whitespace = true;
     let mut start_of_whitespace = cs.pos; // Only meaningful when inside whitespace. Note: comments
                                           // count as whitespace.
+    let mut ghost_range_seen_since_last_token = false;
     let mut start_of_block: SrcPos = cs.pos; // Only meaningful when inside a block.
     struct OpenBlock {
         start_ghost_range_index: usize, // An index into `ghost_ranges`
@@ -180,6 +181,14 @@ pub fn preprocess(
         last_token_was_fn = false;
         match cs.peek() {
             None => {
+                if !open_blocks.is_empty() {
+                    let last = open_blocks.last().unwrap();
+                    panic!(
+                        "EOF inside block starting at {}:{}",
+                        ghost_ranges[last.start_ghost_range_index].start.line,
+                        ghost_ranges[last.start_ghost_range_index].start.column
+                    );
+                }
                 output.push_str("\n\nconst fn VeriFast_ghost_command() {}\n");
                 return output;
             }
@@ -228,6 +237,7 @@ pub fn preprocess(
                                     start_of_whitespace = cs.pos;
                                     start_of_whitespace.byte_pos -= 2;
                                     start_of_whitespace.column -= 2;
+                                    ghost_range_seen_since_last_token = false;
                                 }
                                 match cs.peek() {
                                     Some('@') => {
@@ -275,6 +285,7 @@ pub fn preprocess(
                                         let is_block_decls = in_fn_body
                                             && start_of_whitespace.byte_pos
                                                 == start_of_block.byte_pos + 1
+                                            && !ghost_range_seen_since_last_token
                                             && ghost_range_contents_is_block_decls(
                                                 contents.strip_prefix("//@").unwrap(),
                                             );
@@ -298,6 +309,7 @@ pub fn preprocess(
                                             },
                                             block_end: None,
                                         }));
+                                        ghost_range_seen_since_last_token = true;
                                     }
                                     Some('~') => {
                                         cs.next();
@@ -379,6 +391,7 @@ pub fn preprocess(
                                     start_of_whitespace = cs.pos;
                                     start_of_whitespace.byte_pos -= 2;
                                     start_of_whitespace.column -= 2;
+                                    ghost_range_seen_since_last_token = false;
                                 }
                                 let mut ghost_range = Box::new(GhostRange {
                                     in_fn_body: false,
@@ -488,6 +501,7 @@ pub fn preprocess(
                                     } else if fn_body_brace_depth != -1
                                         && start_of_whitespace.byte_pos
                                             == start_of_block.byte_pos + 1
+                                        && !ghost_range_seen_since_last_token
                                         && ghost_range_contents_is_block_decls(
                                             ghost_range.contents.strip_prefix("/*@").unwrap(),
                                         )
@@ -503,6 +517,7 @@ pub fn preprocess(
                                         });
                                     }
                                     ghost_ranges.push(ghost_range);
+                                    ghost_range_seen_since_last_token = true;
                                 }
                             }
                             _ => {
@@ -667,6 +682,7 @@ pub fn preprocess(
                         inside_whitespace = true;
                         if !was_inside_whitespace {
                             start_of_whitespace = cs.pos;
+                            ghost_range_seen_since_last_token = false;
                         }
                         cs.next();
                         output.push(c);

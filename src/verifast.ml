@@ -297,6 +297,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 None -> static_error l "Incorrect number of function type type arguments." None
               | Some bs -> bs
             in
+            let rt = match rt with None -> None | Some rt -> Some (rt, instantiate_type tpenv rt) in
             let xmap = List.map (fun (x, tp0) -> let tp = instantiate_type tpenv tp0 in (x, tp, tp0)) xmap in
             let args =
               match zip ftxmap args with
@@ -391,7 +392,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 let Some (funenv1, rt1, xmap1, pre1, post1, terminates1) = funcinfo_opt in
                 begin match (rt, rt1) with
                   (None, _) -> ()
-                | (Some t, Some t1) -> expect_type_core l "Function return type: " (Some (stmt_ghostness = Ghost)) t1 t
+                | (Some (t0, t), Some t1) -> expect_type_core l "Function return type: " (Some (stmt_ghostness = Ghost)) t1 t
                 | _ -> static_error l "Return type mismatch: Function does not return a value" None
                 end;
                 if terminates && not terminates1 then static_error l "Target function should be declared 'terminates'." None;
@@ -420,7 +421,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                     let ft_env =
                       match rt with
                         None -> ft_env
-                      | Some rt -> ("result", result)::ft_env
+                      | Some (rt0, rt) -> ("result", prover_convert_term result rt rt0)::ft_env
                     in
                     let (tenv, ghostenv, env) =
                       match resultvar with

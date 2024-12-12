@@ -323,7 +323,7 @@ module Mir = struct
   type local_decl = {
     mutability : mutability;
     id : string;
-    ty : ty_info;
+    ty : ty_info Lazy.t;
     loc : Ast.loc;
   }
 
@@ -1728,12 +1728,12 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let src_info_cpn = source_info_get local_decl_cpn in
       let* { Mir.span = loc; Mir.scope } = translate_source_info src_info_cpn in
       let ty_cpn = ty_get local_decl_cpn in
-      let* ty_info = translate_ty ty_cpn loc in
+      let ty_info = lazy (match translate_ty ty_cpn loc with Ok ty -> ty | _ -> Ast.static_error loc "The type of this local variable is not yet supported" None) in
       let local_decl : Mir.local_decl = { mutability; id; ty = ty_info; loc } in
       Ok local_decl
 
     let translate_to_vf_local_decl
-        ({ mutability = mut; id; ty = ty_info; loc } : Mir.local_decl) =
+        ({ mutability = mut; id; ty = lazy ty_info; loc } : Mir.local_decl) =
       let ty = Mir.basic_type_of ty_info in
       Ast.DeclStmt
         ( loc,
@@ -3307,7 +3307,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
   let gen_contract (adt_defs : Mir.adt_def_tr list) (contract_loc : Ast.loc)
       (lft_vars : string list) (outlives_preds : (string * string) list)
       (send_tparams : string list) (sync_tparams : string list)
-      (params : Mir.local_decl list) (ret : Mir.local_decl) =
+      (params : (Ast.loc * string * Mir.ty_info) list) (ret : Ast.loc * Mir.ty_info) =
+    let (ret_loc, ret_ty) = ret in
     let open Ast in
     let bind_pat_b n = VarPat (contract_loc, n) in
     let lit_pat_b n = LitPat (Var (contract_loc, n)) in
@@ -3335,10 +3336,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         | ManifestTypeExpr (_, tp) -> check_type state tp
         | _ -> type_expr_fold_open check_type_expr state te
       in
-      check_type_expr false (Mir.basic_type_of ret.ty)
+      check_type_expr false (Mir.basic_type_of ret_ty)
     in
-    let is_in_out_param (param : Mir.local_decl) =
-      match Mir.basic_type_of param.ty with
+    let is_in_out_param (_, _, ty) =
+      match Mir.basic_type_of ty with
       | RustRefTypeExpr
           ( _,
             (IdentTypeExpr (_, _, x) | ManifestTypeExpr (_, GhostTypeParam x)),
@@ -3352,12 +3353,12 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let in_out_params, in_params = params |> List.partition is_in_out_param in
     let add_in_out_param_asns suffix asn =
       List.fold_right
-        (fun (param : Mir.local_decl) asn ->
-          let (Some pointee_fbc) = (Mir.interp_of param.ty).pointee_fbc in
+        (fun (loc, id, ty) asn ->
+          let (Some pointee_fbc) = (Mir.interp_of ty).pointee_fbc in
           let (Ok pointee_fbc) =
-            pointee_fbc (Var (param.loc, thread_id_name)) param.id suffix
+            pointee_fbc (Var (loc, thread_id_name)) id suffix
           in
-          Sep (param.loc, pointee_fbc, asn))
+          Sep (loc, pointee_fbc, asn))
         in_out_params asn
     in
     let pre_na_token = nonatomic_token_b (bind_pat_b thread_id_name) in
@@ -3411,7 +3412,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       gen_own_asns adt_defs contract_loc
         (Var (contract_loc, thread_id_name))
         (List.map
-           (fun ({ loc; id; ty } : Mir.local_decl) -> (loc, Var (loc, id), ty))
+           (fun (loc, id, ty) -> (loc, Var (loc, id), ty))
            in_params)
     in
     let pre_asn =
@@ -3428,9 +3429,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let* ret_ty_asn =
       gen_own_asn adt_defs
         (Var (contract_loc, thread_id_name))
-        ret.loc
-        (Var (ret.loc, "result"))
-        ret.ty
+        ret_loc
+        (Var (ret_loc, "result"))
+        ret_ty
     in
     let (Some post_asn) =
       AstAux.list_to_sep_conj
@@ -3735,10 +3736,11 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let contract = contract_get_list required_fn_cpn in
     let* annots = ListAux.try_map translate_annotation contract in
     let annots = List.map translate_annot_to_vf_parser_inp annots in
-    let* ( (nonghost_callers_only : bool),
+    let* ( ( (nonghost_callers_only : bool),
            (fn_type_clause : _ option),
            (pre_post : _ option),
-           (terminates : bool) ) =
+           (terminates : bool) ),
+           (assume_correct : bool) ) =
       if unsafe then Ok (VfMirAnnotParser.parse_func_contract annots)
       else (
         if contract <> [] then
@@ -3748,22 +3750,21 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                  "An explicit spec on a safe trait required function is not \
                   yet supported",
                  None ));
-        let params : Mir.local_decl list =
+        let params =
           List.combine arg_names input_infos
-          |> List.map (fun (arg_name, ty_info) : Mir.local_decl ->
-                 { id = arg_name; ty = ty_info; loc; mutability = Not })
+          |> List.map (fun (arg_name, ty_info) ->
+                 (loc, arg_name, ty_info))
         in
-        let result : Mir.local_decl =
-          { id = "result"; ty = output; loc; mutability = Not }
-        in
+        let result = (loc, output) in
         let* pre, post =
           gen_contract adt_defs loc
             (List.map TrName.lft_name_without_apostrophe
                (lifetime_params_get_list required_fn_cpn))
             [] [] [] params result
         in
-        Ok (false, None, Some (pre, post), false))
+        Ok ((false, None, Some (pre, post), false), false))
     in
+    if assume_correct then Ast.static_error loc "assume_correct does not make sense on trait required functions" None;
     let decl =
       Ast.Func
         ( loc,
@@ -3964,11 +3965,11 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         let* ret_ty_info =
           translate_ty (output_get body_cpn) ret_place_decl.loc
         in
-        let ret_place_decl = { ret_place_decl with ty = ret_ty_info } in
+        let ret_place_decl = { ret_place_decl with ty = lazy ret_ty_info } in
         let ({
                mutability = ret_mut;
                id = ret_place_id;
-               ty = ret_ty_info;
+               ty = lazy ret_ty_info;
                loc = ret_place_loc;
              }
               : Mir.local_decl) =
@@ -3986,18 +3987,15 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         in
         let param_decls =
           List.map2
-            (fun (decl : Mir.local_decl) ty -> { decl with ty })
+            (fun (decl : Mir.local_decl) ty -> (decl.loc, decl.id, ty))
             param_decls param_tys
         in
         let vf_param_decls =
           List.map
-            (fun ({ mutability; id; ty = ty_info; loc } : Mir.local_decl) ->
+            (fun (loc, id, ty_info) ->
               let ty = Mir.basic_type_of ty_info in
               (ty, id))
             param_decls
-        in
-        let vf_local_decls =
-          List.map translate_to_vf_local_decl (ret_place_decl :: local_decls)
         in
         let contract_cpn = contract_get body_cpn in
         let* contract_loc, contract_opt = translate_contract contract_cpn in
@@ -4017,7 +4015,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             (*safe function*)
             let* pre_post_template =
               if is_drop_fn_get body_cpn then
-                let ({ ty = self_ty } :: _) = param_decls in
+                let ((_, _, self_ty) :: _) = param_decls in
                 let ( PtrTypeExpr
                         ( _,
                           StructTypeExpr (_, Some self_ty, _, _, self_ty_targs)
@@ -4049,24 +4047,14 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               else
                 gen_contract body_tr_defs_ctx.adt_defs fn_sig_loc
                   lft_param_names outlives_preds send_tparams sync_tparams
-                  param_decls ret_place_decl
+                  param_decls (ret_place_loc, ret_ty_info)
             in
             let contract_template =
               (false, None, Some pre_post_template, false)
             in
             match contract_opt with
-            | None -> Ok (None, contract_template)
+            | None -> Ok (None, (contract_template, false))
             | Some contract -> Ok (Some contract_template, contract)
-        in
-        let bblocks_cpn = basic_blocks_get_list body_cpn in
-        let* bblocks =
-          ListAux.try_filter_map
-            (fun bblock_cpn -> translate_basic_block ret_place_id bblock_cpn)
-            bblocks_cpn
-        in
-        let toplevel_blocks = find_blocks bblocks in
-        let vf_bblocks =
-          Util.flatmap translate_to_vf_basic_block toplevel_blocks
         in
         let span_cpn = span_get body_cpn in
         let* loc = translate_span_data span_cpn in
@@ -4093,9 +4081,26 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               (*virtual*) false,
               (*overrides*) [] )
         in
-        let body =
-          mk_fn_decl contract
-            (Some (vf_local_decls @ vf_bblocks, closing_cbrace_loc))
+        let (contract, assume_false) = contract in
+        let* body =
+          if assume_false then
+            Ok (mk_fn_decl contract (Some ([Ast.PureStmt (loc, ExprStmt (CallExpr (loc, "assume", [], [], [LitPat (False loc)], Static)))], closing_cbrace_loc)))
+          else
+          let vf_local_decls =
+            List.map translate_to_vf_local_decl (ret_place_decl :: local_decls)
+          in
+          let bblocks_cpn = basic_blocks_get_list body_cpn in
+          let* bblocks =
+            ListAux.try_filter_map
+              (fun bblock_cpn -> translate_basic_block ret_place_id bblock_cpn)
+              bblocks_cpn
+          in
+          let toplevel_blocks = find_blocks bblocks in
+          let vf_bblocks =
+            Util.flatmap translate_to_vf_basic_block toplevel_blocks
+          in
+          Ok (mk_fn_decl contract
+            (Some (vf_local_decls @ vf_bblocks, closing_cbrace_loc)))
         in
         let body_sig_opt =
           match contract_template_opt with
