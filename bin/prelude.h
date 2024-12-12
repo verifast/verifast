@@ -884,6 +884,10 @@ lemma_auto void pointers__to_chars_(void *pp);
     requires [?f]pointers_(pp, ?n, _);
     ensures [f]chars_(pp, n * sizeof(void *), _) &*& has_type(pp, &typeid(void *)) == true;
 
+lemma_auto void chars__to_ints_(void *p, int n);
+    requires [?f]chars_(p, n * sizeof(int), _) &*& has_type(p, &typeid(int)) == true;
+    ensures [f]ints_(p, n, _);
+
 fixpoint list<void *> pointers_of_chars(list<char> cs);
 fixpoint list<char> chars_of_pointers(list<void *> ps);
 

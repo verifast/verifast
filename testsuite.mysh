@@ -532,6 +532,7 @@ cd tests
   verifast -c -allow_should_fail any_russell3.c
   verifast -c typedef_enum_with_body.c
   verifast -c -allow_should_fail noreturn.c
+  verifast -c multi_dim_array.c
   verifast_both -c redux_nonlinear_mult.c
   verifast_both -c simplex_secondary_closes.c
   verifast_both -c simplex_secondary_closes2.c

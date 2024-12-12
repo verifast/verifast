@@ -45,6 +45,7 @@
 .requires CRT/prelude.h#chars__split
 .requires CRT/prelude.h#chars__to_chars
 .requires CRT/prelude.h#chars__to_int_
+.requires CRT/prelude.h#chars__to_ints_
 .requires CRT/prelude.h#chars__to_pointers_
 .requires CRT/prelude.h#chars__to_uchars_
 .requires CRT/prelude.h#chars_chars__join
