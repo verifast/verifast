@@ -349,6 +349,18 @@ let rec parse_expr_funcs allowStructExprs =
       "isize::MIN" -> Operation (l, MinValue (Int (Signed, PtrRank)), [])
     | "isize::MAX" -> Operation (l, MaxValue (Int (Signed, PtrRank)), [])
     | "usize::MAX" -> Operation (l, MaxValue (Int (Unsigned, PtrRank)), [])
+    | "i8::MIN" -> Operation (l, MinValue (Int (Signed, FixedWidthRank 0)), [])
+    | "i8::MAX" -> Operation (l, MaxValue (Int (Signed, FixedWidthRank 0)), [])
+    | "u8::MAX" -> Operation (l, MaxValue (Int (Unsigned, FixedWidthRank 0)), [])
+    | "i16::MIN" -> Operation (l, MinValue (Int (Signed, FixedWidthRank 1)), [])
+    | "i16::MAX" -> Operation (l, MaxValue (Int (Signed, FixedWidthRank 1)), [])
+    | "u16::MAX" -> Operation (l, MaxValue (Int (Unsigned, FixedWidthRank 1)), [])
+    | "i32::MIN" -> Operation (l, MinValue (Int (Signed, FixedWidthRank 2)), [])
+    | "i32::MAX" -> Operation (l, MaxValue (Int (Signed, FixedWidthRank 2)), [])
+    | "u32::MAX" -> Operation (l, MaxValue (Int (Unsigned, FixedWidthRank 2)), [])
+    | "i64::MIN" -> Operation (l, MinValue (Int (Signed, FixedWidthRank 3)), [])
+    | "i64::MAX" -> Operation (l, MaxValue (Int (Signed, FixedWidthRank 3)), [])
+    | "u64::MAX" -> Operation (l, MaxValue (Int (Unsigned, FixedWidthRank 3)), [])
     | _ -> Var (l, x)
   and parse_block_expr = function%parser
     [ (_, Kwd "{"); parse_expr as e; (_, Kwd "}") ] -> e
@@ -371,6 +383,7 @@ let parse_coef = function%parser
 let parse_pure_spec_clause = function%parser
   [ (_, Kwd "nonghost_callers_only") ] -> NonghostCallersOnlyClause
 | [ (l, Kwd "terminates"); (_, Kwd ";") ] -> TerminatesClause l
+| [ (l, Kwd "assume_correct") ] -> AssumeCorrectClause l
 | [ (_, Kwd "req"); parse_asn as p; (_, Kwd ";") ] -> RequiresClause p
 | [ (_, Kwd "ens"); parse_asn as p; (_, Kwd ";") ] -> EnsuresClause p
 
@@ -401,8 +414,13 @@ let parse_spec_clauses = function%parser
       TerminatesClause l::cs -> true, cs
     | _ -> false, cs
   in
-  if cs <> [] then raise (Stream.Error "The number, kind, or order of specification clauses is incorrect. Expected: nonghost_callers_only clause (optional), function type clause (optional), contract (optional), terminates clause (optional).");
-  (nonghost_callers_only, ft, pre_post, terminates)
+  let assume_correct, cs =
+    match cs with
+      AssumeCorrectClause l::cs -> true, cs
+    | _ -> false, cs
+  in
+  if cs <> [] then raise (Stream.Error "The number, kind, or order of specification clauses is incorrect. Expected: nonghost_callers_only clause (optional), function type clause (optional), contract (optional), terminates clause (optional), assume_correct clause (optional).");
+  ((nonghost_callers_only, ft, pre_post, terminates), assume_correct)
 
 let parse_pred_asn = function%parser
   [ parse_expr as e ] ->
@@ -554,13 +572,17 @@ and parse_func_rest k = function%parser
   [ [%let (l, g, tparams, ps, rt) = parse_func_header k];
     [%let d = function%parser
       [ (_, Kwd ";");
-        [%let (nonghost_callers_only, ft, co, terminates) = parse_spec_clauses]
-      ] -> Func (l, k, tparams, rt, g, ps, nonghost_callers_only, ft, co, terminates, None, false, [])
-    | [ [%let (nonghost_callers_only, ft, co, terminates) = parse_spec_clauses];
+        [%let ((nonghost_callers_only, ft, co, terminates), assume_correct) = parse_spec_clauses]
+      ] ->
+      if assume_correct then raise (ParseException (l, "assume_correct clause is not allowed here."));
+      Func (l, k, tparams, rt, g, ps, nonghost_callers_only, ft, co, terminates, None, false, [])
+    | [ [%let ((nonghost_callers_only, ft, co, terminates), assume_correct) = parse_spec_clauses];
         (_, Kwd "{");
         parse_stmts as ss;
         (closeBraceLoc, Kwd "}")
-      ] -> Func (l, k, tparams, rt, g, ps, nonghost_callers_only, ft, co, terminates, Some (ss, closeBraceLoc), false, [])
+      ] ->
+      let ss = if assume_correct then [ExprStmt (CallExpr (l, "assume", [], [], [LitPat (True l)], Static))] else ss in
+      Func (l, k, tparams, rt, g, ps, nonghost_callers_only, ft, co, terminates, Some (ss, closeBraceLoc), false, [])
     ]
   ] -> d
 
@@ -672,7 +694,9 @@ and parse_ghost_decl = function%parser
             | _ -> [ReturnStmt (expr_loc e, Some e)]
         in Some (ss, closeBraceLoc))]
   ] -> [Func (l, Fixpoint, tparams, rt, g, ps, false, None, None, false, body, false, [])]
-| [ (l, Kwd "fn_type"); (lftn, Ident ftn); (_, Kwd "("); [%let ftps = rep_comma parse_param]; (_, Kwd ")"); (_, Kwd "=");
+| [ (l, Kwd "fn_type"); (lftn, Ident ftn);
+    parse_type_params as tparams;
+    (_, Kwd "("); [%let ftps = rep_comma parse_param]; (_, Kwd ")"); (_, Kwd "=");
     [%let unsafe = function%parser
        [ (_, Kwd "unsafe") ] -> true
      | [ ] -> false
@@ -689,7 +713,7 @@ and parse_ghost_decl = function%parser
        [ (_, Kwd "terminates"); (_, Kwd ";") ] -> true
      | [ ] -> false
     ]
-  ] -> [FuncTypeDecl (l, Real, rt, ftn, [], ftps, ps, (pre, post, terminates))]
+  ] -> [FuncTypeDecl (l, Real, rt, ftn, tparams, ftps, ps, (pre, post, terminates))]
 | [ (l, Kwd "lem_type"); (lftn, Ident ftn); parse_type_params as tparams; (_, Kwd "("); [%let ftps = rep_comma parse_param]; (_, Kwd ")"); (_, Kwd "=");
   (_, Kwd "lem"); (_, Kwd "("); [%let ps = rep_comma parse_param]; (_, Kwd ")"); 
   [%let rt = function%parser

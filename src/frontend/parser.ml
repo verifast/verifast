@@ -100,7 +100,7 @@ let rust_keywords = [
 ]
 
 let rust_ghost_keywords = [
-  "assert";
+  "assert"; "assume_correct";
   "pred"; "copred"; "req"; "|->"; "|-?->"; "&*&"; "inductive"; "fix";
   "ens"; "close"; "lem"; "open"; "emp"; "inv"; "lem_auto";
   "_"; "@*/"; "pred_fam"; "pred_fam_inst"; "pred_ctor"; "leak"; "@";
@@ -219,6 +219,7 @@ type spec_clause = (* ?spec_clause *)
 | RequiresClause of asn
 | EnsuresClause of asn
 | TerminatesClause of loc
+| AssumeCorrectClause of loc
 
 let next_body_rank =
   let counter = ref 0 in
