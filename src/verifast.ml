@@ -283,7 +283,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             (ftn, ft_predfammaps, fttargs, [])
           end
         | Some (ftn, fttargs, args, params, openBraceLoc, ss, closeBraceLoc) ->
-          begin match resolve Real (pn,ilist) l ftn functypemap with
+          begin match resolve Ghost (pn,ilist) l ftn functypemap with
             None -> static_error l "No such function type" None
           | Some (ftn, (lft, gh, fttparams, rt, ftxmap, xmap, pre, post, terminates, ft_predfammaps, ft_typeid)) ->
             reportUseSite DeclKind_FuncType lft l;

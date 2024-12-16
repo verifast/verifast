@@ -468,6 +468,7 @@ struct Body {
             uint @3: UInt;
             float @4: Float;
             fnDef @5: Void;
+            ptr @6: Void;
         }
     }
 

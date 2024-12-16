@@ -15,9 +15,7 @@ pred_ctor Accounts_inv(accounts: *mut Accounts)() =
     [1/2](*accounts).balance2 |-> ?balance2 &*&
     balance1 + balance2 == 2000;
 
-pred transfer_pre(data: *mut u8;) = transfer_pre0(data as *mut Accounts);
-
-pred transfer_pre0(accounts: *mut Accounts;) =
+pred transfer_pre(accounts: *mut Accounts;) =
     (*accounts).mutex |-> ?mutex &*&
     [1/2](*accounts).balance1 |-> 2000 &*&
     [1/2](*accounts).balance2 |-> 0 &*&
@@ -25,13 +23,10 @@ pred transfer_pre0(accounts: *mut Accounts;) =
 
 @*/
 
-unsafe fn transfer(data: *mut u8)
-//@ req transfer_pre(data);
+unsafe fn transfer(accounts: *mut Accounts)
+//@ req transfer_pre(accounts);
 //@ ens true;
 {
-    //@ open transfer_pre(data);
-    let accounts = data as *mut Accounts;
-    //@ open transfer_pre0(accounts);
     simple_mutex::SimpleMutex_acquire((*accounts).mutex);
     //@ open Accounts_inv(accounts)();
     (*accounts).balance1 -= 1000;
@@ -67,8 +62,8 @@ fn main() {
         //@ close exists(Accounts_inv(accounts));
         let mutex = simple_mutex::SimpleMutex_new();
         std::ptr::write(&raw mut (*accounts).mutex, mutex);
-        //@ produce_fn_ptr_chunk platform::threading::thread_run(transfer)(transfer_pre)(data) { call(); }
-        platform::threading::fork(transfer, accounts as *mut u8);
+        //@ produce_fn_ptr_chunk platform::threading::thread_run<*mut Accounts>(transfer)(transfer_pre)(data) { call(); }
+        platform::threading::fork(transfer, accounts);
         simple_mutex::SimpleMutex_acquire(mutex);
         //@ open Accounts_inv(accounts)();
         let balance1 = (*accounts).balance1;

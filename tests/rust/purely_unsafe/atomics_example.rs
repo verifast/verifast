@@ -1,6 +1,7 @@
 // verifast_options{ignore_ref_creation extern:../unverified/platform}
 
 use std::{ptr::null_mut, sync::atomic::{AtomicUsize, Ordering::SeqCst}};
+//@ use std::sync::atomic::{AtomicUsize, AtomicUsize_fetch_add_ghop, is_AtomicUsize_fetch_add_op, AtomicUsize_load_ghop, is_AtomicUsize_load_op};
 
 unsafe fn assert(b: bool)
 //@ req b;
@@ -13,32 +14,32 @@ unsafe fn assert(b: bool)
 
 /*@
 
-pred_ctor space_inv(x: *std::sync::atomic::AtomicUsize)() = [1/2]std::sync::atomic::AtomicUsize(x, ?value) &*& value == 0 || value == 1;
+pred_ctor space_inv(x: *AtomicUsize)() = [1/2]AtomicUsize(x, ?value) &*& value == 0 || value == 1;
 
-pred incrementor_pre(x: *mut u8) =
-    [_]atomic_space(MaskTop, space_inv(x as *std::sync::atomic::AtomicUsize)) &*&
-    [1/2]std::sync::atomic::AtomicUsize(x as *std::sync::atomic::AtomicUsize, 0);
+pred incrementor_pre(x: *mut AtomicUsize) =
+    [_]atomic_space(MaskTop, space_inv(x)) &*&
+    [1/2]AtomicUsize(x, 0);
 
 @*/
 
-unsafe fn incrementor(x_: *mut u8)
+unsafe fn incrementor(x_: *mut AtomicUsize)
 //@ req incrementor_pre(x_);
 //@ ens true;
 {
     //@ open incrementor_pre(x_);
-    let x = &*(x_ as *mut std::sync::atomic::AtomicUsize);
+    let x = &*x_;
     {
         /*@
-        pred pre() = [_]atomic_space(MaskTop, space_inv(x)) &*& [1/2]std::sync::atomic::AtomicUsize(x, 0);
+        pred pre() = [_]atomic_space(MaskTop, space_inv(x)) &*& [1/2]AtomicUsize(x, 0);
         pred post(result: usize) = true;
         @*/
         /*@
-        produce_lem_ptr_chunk std::sync::atomic::AtomicUsize_fetch_add_ghop(x, 1, pre, post)() {
+        produce_lem_ptr_chunk AtomicUsize_fetch_add_ghop(x, 1, pre, post)() {
             open pre();
             open_atomic_space(MaskTop, space_inv(x));
             open space_inv(x)();
-            assert std::sync::atomic::is_AtomicUsize_fetch_add_op(?op, _, _, _, _);
-            assert std::sync::atomic::AtomicUsize(x, ?value);
+            assert is_AtomicUsize_fetch_add_op(?op, _, _, _, _);
+            assert AtomicUsize(x, ?value);
             div_rem_nonneg(value + 1, usize::MAX + 1);
             if (value + 1) / (usize::MAX + 1) > 0 {
             } else {
@@ -50,7 +51,7 @@ unsafe fn incrementor(x_: *mut u8)
             close space_inv(x)();
             close_atomic_space(MaskTop);
             close post(0);
-            leak [_]std::sync::atomic::AtomicUsize(x, _);
+            leak [_]AtomicUsize(x, _);
         };
         @*/
         //@ close pre();
@@ -67,14 +68,14 @@ fn main() {
             std::alloc::handle_alloc_error(layout);
         }
         //@ from_u8s_(x_);
-        std::ptr::write(x_, std::sync::atomic::AtomicUsize::new(0));
+        std::ptr::write(x_, AtomicUsize::new(0));
         let x = &*x_;
-        //@ produce_fn_ptr_chunk platform::threading::thread_run(incrementor)(incrementor_pre)(data) { call(); }
+        //@ produce_fn_ptr_chunk platform::threading::thread_run<*mut AtomicUsize>(incrementor)(incrementor_pre)(data) { call(); }
         //@ close space_inv(x)();
         //@ create_atomic_space(MaskTop, space_inv(x));
         //@ leak atomic_space(MaskTop, space_inv(x));
-        //@ close incrementor_pre(x_ as *u8);
-        platform::threading::fork(incrementor as unsafe fn(*mut u8), x_ as *mut u8);
+        //@ close incrementor_pre(x_);
+        platform::threading::fork(incrementor, x_);
         let mut x1 = 0;
         {
             /*@
@@ -82,12 +83,12 @@ fn main() {
             pred post(result: usize) = result == 0 || result == 1;
             @*/
             /*@
-            produce_lem_ptr_chunk std::sync::atomic::AtomicUsize_load_ghop(x, pre, post)() {
+            produce_lem_ptr_chunk AtomicUsize_load_ghop(x, pre, post)() {
                 open pre();
                 open_atomic_space(MaskTop, space_inv(x));
                 open space_inv(x)();
-                assert [_]std::sync::atomic::AtomicUsize(x, ?value);
-                assert std::sync::atomic::is_AtomicUsize_load_op(?op, _, _, _);
+                assert [_]AtomicUsize(x, ?value);
+                assert is_AtomicUsize_load_op(?op, _, _, _);
                 op();
                 close space_inv(x)();
                 close_atomic_space(MaskTop);

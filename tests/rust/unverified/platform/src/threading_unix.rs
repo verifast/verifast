@@ -1,37 +1,55 @@
-use std::ptr::{self, addr_of_mut};
+use std::{mem::ManuallyDrop, ptr};
 
 #[derive(Clone, Copy)]
-struct RunClosure {
-    run: unsafe fn(*mut u8),
-    data: *mut u8
+pub struct Thread {
+    id: libc::pthread_t
+}
+
+struct RunClosure<Arg> {
+    run: unsafe fn(Arg),
+    data: Arg
 }
 
 // This function is NOT actually safe! It cannot be declared 'unsafe' because libc::pthread_create's signature is broken:
 // it wants a safe function pointer.
-extern "C" fn run_closure_run(value: *mut libc::c_void) -> *mut libc::c_void {
+extern "C" fn run_closure_run<Arg>(value: *mut libc::c_void) -> *mut libc::c_void {
     unsafe {
-        let closure = *(value as *mut RunClosure);
-        std::alloc::dealloc(value as *mut u8, std::alloc::Layout::new::<RunClosure>());
+        let closure = (value as *mut RunClosure<Arg>).read();
+        std::alloc::dealloc(value as *mut u8, std::alloc::Layout::new::<RunClosure<Arg>>());
         (closure.run)(closure.data);
         ptr::null_mut()
     }
 }
 
-pub unsafe fn fork(run: unsafe fn(data: *mut u8), data: *mut u8) {
-    let layout = std::alloc::Layout::new::<RunClosure>();
-    let run_closure = std::alloc::alloc(layout) as *mut RunClosure;
+pub unsafe fn fork_joinable<Arg>(run: unsafe fn(data: Arg), data: Arg) -> Thread {
+    let layout = std::alloc::Layout::new::<RunClosure<Arg>>();
+    let run_closure = std::alloc::alloc(layout) as *mut RunClosure<Arg>;
     if run_closure.is_null() {
         std::alloc::handle_alloc_error(layout);
     }
-    ptr::write(addr_of_mut!((*run_closure).run), run);
-    ptr::write(addr_of_mut!((*run_closure).data), data);
+    ptr::write(&raw mut (*run_closure).run, run);
+    ptr::write(&raw mut (*run_closure).data, data);
     let mut id = std::mem::MaybeUninit::<libc::pthread_t>::uninit();
-    let result = libc::pthread_create(id.as_mut_ptr(), ptr::null(), run_closure_run, run_closure as *mut libc::c_void);
+    let result = libc::pthread_create(id.as_mut_ptr(), ptr::null(), run_closure_run::<Arg>, run_closure as *mut libc::c_void);
     if result != 0 {
         eprintln!("pthread_create() returned error code {}", result);
         std::process::abort();
     }
-    libc::pthread_detach(id.assume_init());
+    Thread { id: id.assume_init() }
+}
+
+pub unsafe fn join(thread: Thread) {
+    let thread = ManuallyDrop::new(thread);
+    let result = libc::pthread_join(thread.id, ptr::null_mut());
+    if result != 0 {
+        eprintln!("pthread_join() returned error code {}", result);
+        std::process::abort();
+    }
+}
+
+pub unsafe fn fork<Arg>(run: unsafe fn(data: Arg), data: Arg) {
+    let thread = fork_joinable(run, data);
+    libc::pthread_detach(thread.id);
 }
 
 #[derive(Clone, Copy)]

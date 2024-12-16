@@ -41,15 +41,35 @@ mod threading {
 
     /*@
 
-    fn_type thread_run(pre: pred(*u8)) = unsafe fn(data: *u8);
-      req pre(data);
-      ens true;
+    fn_type thread_run<Arg>(pre: pred(Arg)) = unsafe fn(data: Arg);
+        req pre(data);
+        ens true;
 
     @*/
 
-    unsafe fn fork(run: *u8, data: *u8);
-    //@ req [_]is_thread_run(run, ?pre) &*& pre(data);
+    unsafe fn fork<Arg>(run: *u8, data: Arg);
+    //@ req [_]is_thread_run::<Arg>(run, ?pre) &*& pre(data);
     //@ ens true;
+
+    /*@
+
+    fn_type thread_run_joinable<Arg>(pre: pred(Arg, pred())) = unsafe fn(data: Arg);
+        req pre(data, ?post);
+        ens post();
+
+    @*/
+
+    struct Thread;
+
+    //@ pred Thread(thread: Thread, post: pred());
+
+    unsafe fn fork_joinable<Arg>(run: *u8, data: Arg) -> Thread;
+    //@ req [_]is_thread_run_joinable::<Arg>(run, ?pre) &*& pre(data, ?post);
+    //@ ens Thread(result, post);
+
+    unsafe fn join(thread: Thread);
+    //@ req Thread(thread, ?post);
+    //@ ens post();
 
     struct Mutex;
 
