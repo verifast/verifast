@@ -866,6 +866,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       * type_ (* return type *)
       * (string * type_) list (* parameter names (can be empty string) and types *)
       * func_symbol
+    type param_rel =
+      IsProperComponentOf (* irreflexive *)
+    | IsComponentOf (* reflexive *)
+    type pure_func_param_requires_info =
+        (int * (loc * int * param_rel * int) list) list (* parameter requires clauses. For example, 'map(f, xs)' has requires clauses [0, [0, Lt, 1]] because it only calls its first argument 'f' with a first argument that is a component of its own second argument 'xs'. *)
     type inductive_ctor_info =
         string (* fully qualified constructor name *)
       * pure_func_info
@@ -1081,6 +1086,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       * module_info map
       * inductive_info map
       * pure_func_info map
+      * pure_func_param_requires_info map
       * pred_ctor_info map
       * struct_accessor_info map
       * malloc_block_pred_info map
@@ -1251,6 +1257,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       (importmodulemap0: module_info map),
       (inductivemap0: inductive_info map),
       (purefuncmap0: pure_func_info map),
+      (purefuncparamrequiresmap0: pure_func_param_requires_info map),
       (predctormap0: pred_ctor_info map),
       (struct_accessor_map0: struct_accessor_info map),
       (malloc_block_pred_map0: malloc_block_pred_info map),
@@ -1288,8 +1295,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     let id x = x in
     let merge_maps l
-      (structmap, unionmap, enummap, globalmap, modulemap, importmodulemap, inductivemap, purefuncmap, predctormap, struct_accessor_map, malloc_block_pred_map, new_block_pred_map, field_pred_map, predfammap, predinstmap, typedefmap, functypemap, funcmap, boxmap, classmap, interfmap, classterms, interfaceterms, abstract_types_map, cxx_ctor_map, cxx_dtor_map, bases_constructed_map, cxx_vtype_map, cxx_inst_pred_map, type_pred_decl_map)
-      (structmap0, unionmap0, enummap0, globalmap0, modulemap0, importmodulemap0, inductivemap0, purefuncmap0, predctormap0, struct_accessor_map0, malloc_block_pred_map0, new_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, typedefmap0, functypemap0, funcmap0, boxmap0, classmap0, interfmap0, classterms0, interfaceterms0, abstract_types_map0, cxx_ctor_map0, cxx_dtor_map0, bases_constructed_map0, cxx_vtype_map0, cxx_inst_pred_map0, type_pred_decl_map0)
+      (structmap, unionmap, enummap, globalmap, modulemap, importmodulemap, inductivemap, purefuncmap, purefuncparamrequiresmap, predctormap, struct_accessor_map, malloc_block_pred_map, new_block_pred_map, field_pred_map, predfammap, predinstmap, typedefmap, functypemap, funcmap, boxmap, classmap, interfmap, classterms, interfaceterms, abstract_types_map, cxx_ctor_map, cxx_dtor_map, bases_constructed_map, cxx_vtype_map, cxx_inst_pred_map, type_pred_decl_map)
+      (structmap0, unionmap0, enummap0, globalmap0, modulemap0, importmodulemap0, inductivemap0, purefuncmap0, purefuncparamrequiresmap0, predctormap0, struct_accessor_map0, malloc_block_pred_map0, new_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, typedefmap0, functypemap0, funcmap0, boxmap0, classmap0, interfmap0, classterms0, interfaceterms0, abstract_types_map0, cxx_ctor_map0, cxx_dtor_map0, bases_constructed_map0, cxx_vtype_map0, cxx_inst_pred_map0, type_pred_decl_map0)
       =
       (
 (*     append_nodups structmap structmap0 id l "struct", *)
@@ -1303,6 +1310,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 (*     append_nodups importmodulemap importmodulemap0 id l "imported module", *)
        append_nodups inductivemap inductivemap0 id l "inductive datatype",
        append_nodups purefuncmap purefuncmap0 id l "pure function",
+       purefuncparamrequiresmap @ purefuncparamrequiresmap0,
        append_nodups predctormap predctormap0 id l "predicate constructor",
        struct_accessor_map @ struct_accessor_map0,
        malloc_block_pred_map @ malloc_block_pred_map0,
@@ -1404,7 +1412,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         end
     in
 
-    let maps0 = ([], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], []) in
+    let maps0 = ([], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], []) in
     
     let (maps0, headers_included) =
       if include_prelude && dialect <> Some Rust then
@@ -2121,8 +2129,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | RustRefTypeExpr (l, lft, kind, te) -> RustRefType (check lft, kind, check te)
     | PredTypeExpr (l, tes, inputParamCount) ->
       PredType ([], List.map check tes, inputParamCount, Inductiveness_Inductive)
-    | PureFuncTypeExpr (l, tes) ->
-      let ts = List.map check tes in
+    | PureFuncTypeExpr (l, ps, requires_opt) ->
+      if requires_opt <> None then static_error l "Fixpoint function type requires clauses are not supported here." None;
+      let ts = List.map (fun (tp, x_opt) -> check tp) ps in
       let rec iter ts =
         match ts with
           [t1; t2] -> PureFuncType (t1, t2)
@@ -2564,10 +2573,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     ctxt#assume_forall desc [trigger] [tt1; tp1] (ctxt#mk_eq lhs x);
     set
 
-  let (inductivemap1, purefuncmap1, fixpointmap1) =
-    let rec iter (pn,ilist) imap pfm fpm ds =
+  let (inductivemap1, purefuncmap1, purefuncparamrequiresmap1, fixpointmap1) =
+    let rec iter (pn,ilist) imap pfm pfprm fpm ds =
       match ds with
-        [] -> (imap, pfm, fpm)
+        [] -> (imap, pfm, pfprm, fpm)
       | Inductive (l, i, tparams, ctors)::ds -> let i=full_name pn i in
         check_tparams l [] tparams;
         (* Type parameters of inductive types never carry typeids. Rename any uppercase type parameters X to _X. *)
@@ -2613,7 +2622,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             (f, make_setter i tt csym subtype getters fieldnames f tp))
         | _ -> []
         in
-        iter pni ((i, (l, tparams', List.rev ctormap, getters, setters, subtype))::imap) pfm fpm ds
+        iter pni ((i, (l, tparams', List.rev ctormap, getters, setters, subtype))::imap) pfm pfprm fpm ds
       | Func (l, Fixpoint, tparams, rto, g, ps, nonghost_callers_only, functype, contract, terminates, body_opt, _, _)::ds ->
         let g = full_name pn g in
         if List.mem_assoc g pfm || List.mem_assoc g purefuncmap0 then static_error l ("Duplicate pure function name: "^g) None;
@@ -2627,16 +2636,60 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         if functype <> None then static_error l "Fixpoint functions cannot implement a function type." None;
         if contract <> None then static_error l "Fixpoint functions cannot have a contract." None;
         if terminates then static_error l "The 'terminates' clause is superfluous for fixpoint functions." None;
-        let pmap =
-          let rec iter pmap ps =
+        let pmap, param_requires_map =
+          let rec iter pmap param_requires_map i ps =
             match ps with
-              [] -> List.rev pmap
+              [] -> List.rev pmap, List.rev param_requires_map
             | (te, p)::ps ->
               let _ = if List.mem_assoc p pmap then static_error l "Duplicate parameter name." None in
+              let te, param_requires_map =
+                match te with
+                  PureFuncTypeExpr (l, ps, Some requires) ->
+                  PureFuncTypeExpr (l, ps, None), (i, (List.map snd ps, requires))::param_requires_map
+                | _ -> te, param_requires_map
+              in
               let t = check_pure_type (pn,ilist) tparams Ghost te in
-              iter ((p, t)::pmap) ps
+              iter ((p, t)::pmap) param_requires_map (i + 1) ps
           in
-          iter [] ps
+          iter [] [] 0 ps
+        in
+        let param_requires_map = param_requires_map |> List.map @@ fun (p, (ps, requires)) ->
+          let pmap' =
+            let rec iter pmap' i = function
+            | [_] -> (* Skip return type *) List.rev pmap'
+            | Some (l, p)::ps ->
+              if List.mem_assoc p pmap' then static_error l "Duplicate parameter name." None;
+              if List.mem_assoc p pmap then static_error l "Parameter parameter name hides parameter name." None;
+              iter ((p, i)::pmap') (i+1) ps
+            | None::ps -> iter pmap' (i+1) ps
+            in
+            iter [] 0 ps
+          in
+          let requires =
+            let rec iter = function
+              Operation (l, And, [x; y]) -> iter x @ iter y
+            | Operation (l, ((Lt|Le) as op), [Var (lx, x); Var (ly, y)]) ->
+              let x =
+                match try_assoc x pmap' with
+                  Some i -> i
+                | None -> static_error lx "This parameter has no such parameter" None
+              in
+              let y =
+                match try_assoc_i y pmap with
+                  None -> static_error ly "No such parameter" None
+                | Some (i, _) -> i
+              in
+              [(l, x, (match op with Lt -> IsProperComponentOf | Le -> IsComponentOf), y)]
+            | e -> static_error (expr_loc e) "This expression form is not allowed here." None
+            in
+            iter requires
+          in
+          p, requires
+        in
+        let pfprm =
+          match param_requires_map with
+            [] -> pfprm
+          | _ -> (g, param_requires_map)::pfprm
         in
         let typeid_paramtypes = tparams |> flatmap @@ fun x -> if tparam_carries_typeid x then [ProverInductive] else [] in
         let fsym_paramtypes = typeid_paramtypes @ List.map (fun (p, t) -> provertype_of_type t) pmap in
@@ -2657,24 +2710,26 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             | _ -> static_error l "Fixpoint function must switch on a parameter." None
           in
           let fsym = mk_func_symbol g fsym_paramtypes (provertype_of_type rt) (Proverapi.Fixpoint (subtype, index)) in
-          iter (pn,ilist) imap ((g, (l, tparams, rt, List.map (fun (p, t) -> p, t) pmap, fsym))::pfm) ((g, (l, tparams, rt, pmap, Some index, body, pn, ilist, fst fsym))::fpm) ds
+          iter (pn,ilist) imap ((g, (l, tparams, rt, List.map (fun (p, t) -> p, t) pmap, fsym))::pfm) pfprm ((g, (l, tparams, rt, pmap, Some index, body, pn, ilist, fst fsym))::fpm) ds
         | Some ([ReturnStmt (lr, Some e) as body], _) ->
           let fsym = mk_func_symbol g fsym_paramtypes (provertype_of_type rt) Proverapi.Uninterp in
-          iter (pn,ilist) imap ((g, (l, tparams, rt, List.map (fun (p, t) -> p, t) pmap, fsym))::pfm) ((g, (l, tparams, rt, pmap, None, body, pn, ilist, fst fsym))::fpm) ds
+          iter (pn,ilist) imap ((g, (l, tparams, rt, List.map (fun (p, t) -> p, t) pmap, fsym))::pfm) pfprm ((g, (l, tparams, rt, pmap, None, body, pn, ilist, fst fsym))::fpm) ds
         | None ->
           let fsym = mk_func_symbol g fsym_paramtypes (provertype_of_type rt) Proverapi.Uninterp in
-          iter (pn,ilist) imap ((g, (l, tparams, rt, List.map (fun (p, t) -> p, t) pmap, fsym))::pfm) fpm ds
+          iter (pn,ilist) imap ((g, (l, tparams, rt, List.map (fun (p, t) -> p, t) pmap, fsym))::pfm) pfprm fpm ds
         | _ -> static_error l "Body of fixpoint function must be switch statement or return statement." None
         end
-      | _::ds -> iter (pn,ilist) imap pfm fpm ds
+      | _::ds -> iter (pn,ilist) imap pfm pfprm fpm ds
     in
-    let rec iter' (imap,pfm,fpm) ps=
+    let rec iter' (imap,pfm,pfprm,fpm) ps=
       match ps with
-      PackageDecl(l,pn,il,ds)::rest -> iter' (iter (pn,il) imap pfm fpm ds) rest
-      | [] -> (List.rev imap, List.rev pfm, List.rev fpm)
+      PackageDecl(l,pn,il,ds)::rest -> iter' (iter (pn,il) imap pfm pfprm fpm ds) rest
+      | [] -> (List.rev imap, List.rev pfm, List.rev pfprm, List.rev fpm)
     in
-    iter' ([],isfuncs,[]) ps
+    iter' ([],isfuncs,[],[]) ps
   
+  let purefuncparamrequiresmap = purefuncparamrequiresmap1 @ purefuncparamrequiresmap0
+
   let inductivemap1 =
     (* Ranks:
        -1 = finished checking; the inductive type is well-defined
@@ -5264,6 +5319,15 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       match fpm_todo with
         [] -> List.rev fpm_done
       | (g, (l, tparams, rt, pmap, index, body, pn, ilist, fsym))::fpm_todo ->
+      let param_requires_map =
+        match try_assoc g purefuncparamrequiresmap with
+          None -> []
+        | Some map ->
+          map |> List.map @@ fun (i, reqs) ->
+            (fst (List.nth pmap i),
+             reqs |> List.map @@ fun (l, j, rel, i) ->
+               (l, j, rel, fst (List.nth pmap i)))
+      in
       match (index, body) with
         (Some index, SwitchStmt (ls, Var (lx, x), cs)) ->
         let (i, targs) =
@@ -5321,27 +5385,81 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let rec iter0 components e =
               let rec iter () e =
                 let iter1 e = iter () e in
-                match e with
-                  WPureFunCall (l, g', targs, args) ->
-                  if List.mem_assoc g' fpm_todo then static_error l "A fixpoint function cannot call a fixpoint function that appears later in the program text" None;
-                  if g' = g then begin
-                    match List.nth args index with
-                      WVar (l, x, LocalVar) when List.mem x components -> List.iter iter1 args
-                    | _ -> static_error l "Inductive argument of recursive call must be switch clause pattern variable." None
-                  end;
-                  List.iter iter1 args
-                | WPureFunValueCall (l, WVar (l', g', PureFuncName _), args) when g' = g && List.length args > index ->
-                  begin match List.nth args index with
-                    WVar (l'', x, LocalVar) when List.mem x components -> List.iter iter1 args
-                  | _ -> static_error l "Inductive argument of recursive call must be switch clause pattern variable." None
-                  end
-                | WVar (l, g', PureFuncName _) ->
-                  if List.mem_assoc g' fpm_todo then static_error l "A fixpoint function cannot mention a fixpoint function that appears later in the program text" None;
-                  if g' = g then static_error l "A fixpoint function that mentions itself is not yet supported." None
-                | WSwitchExpr (l, WVar (_, x, LocalVar), _, _, cs, def_opt, _, _) when List.mem x components ->
-                  List.iter (fun (SwitchExprClause (_, _, pats, e)) -> iter0 (pats @ components) e) cs;
-                  (match def_opt with None -> () | Some (l, e) -> iter1 e)
-                | _ -> expr_fold_open iter () e
+                let rec iter2 allowed_reqs e =
+                  let is_allowed_req j rel y =
+                    allowed_reqs |> List.exists @@ fun (j', rel', y') ->
+                      j = j' &&
+                      match rel, rel' with
+                      | IsProperComponentOf, IsComponentOf -> y = x && List.mem y' components
+                      | _, _ -> y' = y || y = x && List.mem y' components
+                  in
+                  let check_pure_func_call l g' args =
+                    if List.mem_assoc g' fpm_todo then static_error l "A fixpoint function cannot mention a fixpoint function that appears later in the program text" None;
+                    if g' = g then begin
+                      if List.length args > index then begin
+                        match List.nth args index with
+                          WVar (l'', x, LocalVar) when List.mem x components -> ()
+                        | _ -> static_error l "Inductive argument of recursive call must be switch clause pattern variable." None
+                      end else begin
+                        if not (is_allowed_req (index - List.length args) IsProperComponentOf x) then
+                          static_error l "A fixpoint function cannot mention itself unless when passed as an argument for a parameter with an appropriate requires clause" None
+                      end
+                    end;
+                    match try_assoc g' purefuncparamrequiresmap with
+                      None -> List.iter iter1 args
+                    | Some reqs ->
+                      args |> List.iteri @@ fun i arg ->
+                        let i_reqs = reqs |> flatmap (fun (i', reqs) -> if i = i' then reqs else []) in
+                        let i_reqs = i_reqs |> flatmap @@ fun (_, j, rel, i) ->
+                          if i < List.length args then begin
+                            match List.nth args i with
+                              WVar (_, y, LocalVar) -> [j, rel, y]
+                            | _ -> []
+                          end else
+                            []
+                        in
+                        iter2 i_reqs arg
+                  in
+                  let check_local_var_call l g' args =
+                    begin match try_assoc g' param_requires_map with
+                      None -> ()
+                    | Some reqs ->
+                      List.iter
+                        begin fun (lreq, j, rel, i) ->
+                          let satisfies_req =
+                            if j < List.length args then begin
+                              match List.nth args j with
+                                WVar (_, y, LocalVar) ->
+                                rel = IsComponentOf && y = i ||
+                                i = x && List.mem y components
+                              | _ -> false
+                            end else
+                              is_allowed_req (j - List.length args) rel i
+                          in
+                          if not satisfies_req then
+                            static_error l "Could not prove callee requires clause" None
+                        end
+                        reqs
+                    end;
+                    List.iter iter1 args
+                  in
+                  match e with
+                    WPureFunCall (l, g', targs, args) ->
+                    check_pure_func_call l g' args
+                  | WPureFunValueCall (l, WVar (l', g', PureFuncName _), args) ->
+                    check_pure_func_call l g' args
+                  | WPureFunValueCall (l, WVar (l', g', LocalVar), args) ->
+                    check_local_var_call l g' args
+                  | WVar (l, g', PureFuncName _) ->
+                    check_pure_func_call l g' []
+                  | WVar (l, g', LocalVar) ->
+                    check_local_var_call l g' []
+                  | WSwitchExpr (l, WVar (_, x, LocalVar), _, _, cs, def_opt, _, _) when List.mem x components ->
+                    List.iter (fun (SwitchExprClause (_, _, pats, e)) -> iter0 (pats @ components) e) cs;
+                    (match def_opt with None -> () | Some (l, e) -> iter1 e)
+                  | _ -> expr_fold_open iter () e
+                in
+                iter2 [] e
               in
               iter () e
             in

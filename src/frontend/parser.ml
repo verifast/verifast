@@ -1104,11 +1104,11 @@ and
       let gmeasure = g ^ "__measure" in
       let call g args = CallExpr (l, g, [], [], List.map (fun e -> LitPat e) args, Static) in
       [
-        Func (l, Fixpoint, tparams, Some rt, gdef, (PureFuncTypeExpr (l, List.map fst ps @ [rt]), g) :: ps, false, None, None, false, body, false, []);
+        Func (l, Fixpoint, tparams, Some rt, gdef, (PureFuncTypeExpr (l, List.map (fun (tp, x) -> (tp, None)) ps @ [(rt, None)], None), g) :: ps, false, None, None, false, body, false, []);
         Inductive (l, iargs, tparams, [Ctor (l, iargs, List.map (fun (t, x) -> (x, t)) ps)]);
-        Func (l, Fixpoint, tparams, Some rt, g_uncurry, (PureFuncTypeExpr (l, [iargsType; rt]), g) :: ps, false, None, None, false,
+        Func (l, Fixpoint, tparams, Some rt, g_uncurry, (PureFuncTypeExpr (l, [iargsType, None; rt, None], None), g) :: ps, false, None, None, false,
           Some ([ReturnStmt (l, Some (call g [call iargs (List.map (fun (t, x) -> Var (l, x)) ps)]))], l), false, []);
-        Func (l, Fixpoint, tparams, Some rt, gdef_curried, [PureFuncTypeExpr (l, [iargsType; rt]), g; iargsType, "__args"], false, None, None, false,
+        Func (l, Fixpoint, tparams, Some rt, gdef_curried, [PureFuncTypeExpr (l, [iargsType, None; rt, None], None), g; iargsType, "__args"], false, None, None, false,
           Some ([SwitchStmt (l, Var (l, "__args"), [SwitchStmtClause (l, call iargs (List.map (fun (t, x) -> Var (l, x)) ps),
             [ReturnStmt (l, Some (call gdef ([ExprCallExpr (l, Var (l, g_uncurry), [LitPat (Var (l, g))])] @ List.map (fun (t, x) -> Var (l, x)) ps)))])])], l), false, []);
         Func (l, Fixpoint, tparams, Some (ManifestTypeExpr (l, intType)), gmeasure, [iargsType, "__args"], false, None, None, false,
@@ -1484,9 +1484,10 @@ and
   ] -> begin match ts' with None -> PredTypeExpr (l, ts, None) | Some ts' -> PredTypeExpr (l, ts @ ts', Some (List.length ts)) end
 | [ (l, Kwd "fixpoint"); 
     (_, Kwd "("); 
-    [%l ts = rep_comma parse_paramtype]; 
-    (_, Kwd ")") 
-  ] -> PureFuncTypeExpr (l, ts)
+    [%l ps = rep_comma (function%parser [ parse_type as tp; [%let x_opt = opt (function%parser [ (l, Ident x) ] -> (l, x))] ] -> (tp, x_opt))];
+    (_, Kwd ")");
+    [%let requires_opt = opt (function%parser [ (_, Kwd "requires"); parse_expr as e ] -> e)]
+  ] -> PureFuncTypeExpr (l, ps, requires_opt)
 | [ (l, Kwd "box") ] -> ManifestTypeExpr (l, BoxIdType)
 | [ (l, Kwd "handle") ] -> ManifestTypeExpr (l, HandleIdType)
 | [ (l, Kwd "any") ] -> ManifestTypeExpr (l, AnyType)

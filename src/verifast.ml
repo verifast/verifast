@@ -3821,7 +3821,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       ), 
       (
         structmap1, unionmap1, enummap1, globalmap1, modulemap1, importmodulemap1, 
-        inductivemap1, purefuncmap1, predctormap1, struct_accessor_map1, malloc_block_pred_map1, new_block_pred_map1, 
+        inductivemap1, purefuncmap1, purefuncparamrequiresmap1, predctormap1, struct_accessor_map1, malloc_block_pred_map1, new_block_pred_map1, 
         field_pred_map1, predfammap1, predinstmap1, typedefmap1, functypemap1, 
         funcmap1, boxmap, classmap1, interfmap1, classterms1, interfaceterms1, 
         abstract_types_map1, cxx_ctor_map1, cxx_dtor_map1, bases_constructed_map1, cxx_vtype_map1, cxx_inst_pred_map1,

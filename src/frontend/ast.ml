@@ -334,7 +334,7 @@ type type_expr = (* ?type_expr *)
   | IdentTypeExpr of loc * string option (* package name *) * string
   | ConstructedTypeExpr of loc * string * type_expr list  (* A type of the form x<T1, T2, ...> *)
   | PredTypeExpr of loc * type_expr list * int option (* if None, not necessarily precise; if Some n, precise with n input parameters *)
-  | PureFuncTypeExpr of loc * type_expr list   (* Potentially uncurried *)
+  | PureFuncTypeExpr of loc * (type_expr * (loc * string) option) list * expr (* 'requires' clause *) option   (* Potentially uncurried *)
   | LValueRefTypeExpr of loc * type_expr
   | ConstTypeExpr of loc * type_expr
 and
@@ -1050,7 +1050,7 @@ let type_expr_loc t =
   | RustRefTypeExpr (l, _, _, _) -> l
   | ArrayTypeExpr(l, te) -> l
   | PredTypeExpr(l, te, _) -> l
-  | PureFuncTypeExpr (l, tes) -> l
+  | PureFuncTypeExpr (l, tes, _) -> l
   | FuncTypeExpr (l, _, _) -> l
   | ConstTypeExpr (l, te) -> l
 
@@ -1206,7 +1206,7 @@ let type_expr_fold_open f state te =
   | IdentTypeExpr (l, pn, x) -> state
   | ConstructedTypeExpr (l, x, targs) -> List.fold_left f state targs
   | PredTypeExpr (l, paramTps, inputParamCount) -> List.fold_left f state paramTps
-  | PureFuncTypeExpr (l, tps) -> List.fold_left f state tps
+  | PureFuncTypeExpr (l, tps, _) -> List.fold_left (fun state (tp, _) -> f state tp) state tps
   | LValueRefTypeExpr (l, tp) -> f state tp
   | ConstTypeExpr (l, tp) -> f state tp
 
