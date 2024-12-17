@@ -468,6 +468,10 @@ cd tutorial_solutions
 cd ..
 cd tests
   verifast -c -allow_should_fail const_vars.c
+  cd fixpoint_param_requires_clauses
+    verifast -c positive_test.c
+    verifast -c -allow_should_fail bad_map1.c bad_map2.c bad_map3.c
+  cd ..
   verifast -c -allow_should_fail issue601.c
   verifast -c issue536.c
   verifast -c continue.c

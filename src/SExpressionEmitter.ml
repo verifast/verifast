@@ -152,10 +152,11 @@ let rec sexpr_of_type_expr : type_expr -> sexpression = function
       build_list
         [ Symbol "type-pred-expr" ]
         [ "types", sexpr_of_list sexpr_of_type_expr targs; "precise", sexpr_of_option sexpr_of_int p ]
-  | PureFuncTypeExpr (_, exprs) ->
+  | PureFuncTypeExpr (_, params, requires_opt) ->
       build_list
         [ Symbol "type-expr-pure-func" ]
-        [ "type-exprs", sexpr_of_list sexpr_of_type_expr exprs ]
+        [ "type-exprs", sexpr_of_list (fun (tp, x_opt) -> List [sexpr_of_type_expr tp; sexpr_of_option (fun (l, x) -> Symbol x) x_opt]) params;
+          "requires", sexpr_of_option (fun e -> Symbol "(omitted)") requires_opt ]
   | LValueRefTypeExpr (_, te) -> 
       List [ Symbol "type-expr-lvalue-ref"; sexpr_of_type_expr te ]
 

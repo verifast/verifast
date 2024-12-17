@@ -26,7 +26,17 @@ let parse_right_angle_bracket stream = stream |> function%parser
   Lexer.Stream.push (Some (Lexed ((path, line, col + 1), (path', line', col')), Kwd ">")) stream
 | [ (Lexed ((path, line, col), (path', line', col')), Ident ">>>") ] ->
   Lexer.Stream.push (Some (Lexed ((path, line, col + 1), (path', line', col')), Kwd ">>")) stream
-  
+
+let parse_fix_req_rel_expr = function%parser
+  [ (lx, Ident x); (lrel, Kwd ("<"|"<=" as rel)); (ly, Ident y) ] ->
+  Operation (lrel, (match rel with "<" -> Lt | "<=" -> Le), [Var (lx, x); Var (ly, y)])
+
+let rec parse_fix_req_expr_rest e = function%parser
+  [ (l, Kwd "&&"); parse_fix_req_expr as e1 ] -> Operation (l, And, [e; e1])
+| [ ] -> e
+and parse_fix_req_expr = function%parser
+  [ parse_fix_req_rel_expr as e; [%let e = parse_fix_req_expr_rest e] ] -> e
+
 let rec parse_type = function%parser
   [ (l, Ident "i8") ] -> ManifestTypeExpr (l, Int (Signed, FixedWidthRank 0))
 | [ (l, Ident "i16") ] -> ManifestTypeExpr (l, Int (Signed, FixedWidthRank 1))
@@ -52,8 +62,23 @@ let rec parse_type = function%parser
   ] -> t
 | [ (l, PrimePrefixedIdent "static") ] -> ManifestTypeExpr (l, StaticLifetime)
 | [ (l, PrimePrefixedIdent a) ] -> IdentTypeExpr (l, None, "'" ^ a)
-| [ (l, Kwd "fix"); (_, Kwd "("); [%let ts = rep_comma parse_type_with_opt_name]; (_, Kwd ")") ] ->
-  PureFuncTypeExpr (l, List.map snd ts)
+| [ (l, Kwd "fix"); (_, Kwd "(");
+    [%let ps = rep_comma (function%parser
+       [ parse_type as tp;
+         [%let p = function%parser
+            [ (_, Kwd ":"); parse_type as tp' ] ->
+            begin match tp with
+              IdentTypeExpr (l, None, x) -> (tp', Some (l, x))
+            | _ -> raise (ParseException (type_expr_loc tp, "Identifier expected"))
+            end
+          | [ ] -> (tp, None)
+         ]
+       ] -> p)
+    ];
+    (_, Kwd ")");
+    [%let req_opt = opt (function%parser [ (_, Kwd "req"); parse_fix_req_expr as e ] -> e)]
+  ] ->
+  PureFuncTypeExpr (l, ps, req_opt)
 | [ (l, Kwd "pred"); (_, Kwd "(");
     [%let ts = rep_comma parse_type_with_opt_name];
     [%let (ts, inputParamCount) = function%parser

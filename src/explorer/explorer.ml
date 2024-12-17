@@ -283,7 +283,7 @@ let _ =
         | IdentTypeExpr(_, _, name) -> name
         | ConstructedTypeExpr(_, name, type_expr_list) -> name ^ "<" ^ string_of_type_expr_list type_expr_list ^ ">"
         | PredTypeExpr(_, type_expr_list, _) -> string_of_type_expr_list type_expr_list
-        | PureFuncTypeExpr(_, type_expr_list) -> string_of_type_expr_list type_expr_list
+        | PureFuncTypeExpr(_, params, _) -> string_of_type_expr_list (List.map fst params)
     and string_of_type_expr_list (type_expr_list: type_expr list) : string =
       match type_expr_list with
         | [] -> ""
@@ -496,10 +496,10 @@ let _ =
                 | PredTypeExpr(_, pattern_type_expr_list, _) -> check_type_expr_equal_list type_expr_list pattern_type_expr_list
                 | _ -> false
             end
-          | PureFuncTypeExpr(_, type_expr_list) ->
+          | PureFuncTypeExpr(_, params, _) ->
             begin
               match pattern_type_expr with
-                | PureFuncTypeExpr(_, pattern_type_expr_list) -> check_type_expr_equal_list type_expr_list pattern_type_expr_list
+                | PureFuncTypeExpr(_, pattern_params, _) -> check_type_expr_equal_list (List.map fst params) (List.map fst pattern_params)
                 | _ -> false
             end
       and check_type_expr_equal_list (type_expr_list: type_expr list) (pattern_type_expr_list: type_expr list) : bool =

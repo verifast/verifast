@@ -204,10 +204,11 @@ let rec of_type_expr = function
     of_list of_type_expr argTps;
     of_option i inputParamCount
   ])
-| PureFuncTypeExpr (l, tps) ->
+| PureFuncTypeExpr (l, ps, requires_opt) ->
   C ("PureFuncTypeExpr", [
     of_loc l;
-    of_list of_type_expr tps
+    of_list (fun (tp, x_opt) -> T [of_type_expr tp; of_option (fun (l, x) -> T [of_loc l; s x]) x_opt]) ps;
+    of_option of_expr requires_opt
   ])
 | LValueRefTypeExpr (l, tp) ->
   C ("LValueRefTypeExpr", [
