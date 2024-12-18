@@ -903,7 +903,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let kind = AdtKindRd.get @@ kind_get @@ adt_ty_cpn in
     let substs_cpn = substs_get_list adt_ty_cpn in
     match kind with
-    | StructKind -> (
+    | StructKind | UnionKind -> (
         match def_path with
         | "std::cell::UnsafeCell" | "std::mem::ManuallyDrop" ->
             let [ arg_cpn ] = substs_cpn in
@@ -1045,7 +1045,6 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         in
         let ty_info = Mir.TyInfoBasic { vf_ty; interp } in
         Ok ty_info
-    | UnionKind -> failwith "Todo: AdtTy::Union"
     | Undefined _ -> Error (`TrAdtTy "Unknown ADT kind")
 
   and translate_tuple_ty (tys_cpn : TyRd.t list) (loc : Ast.loc) =
