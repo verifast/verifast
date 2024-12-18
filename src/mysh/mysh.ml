@@ -357,6 +357,7 @@ let rec exec_cmds macros cwd parallel cmds =
         | [] -> error "Nothing to pop"
         end
       | ["del"; file] -> join_children (); Sys.remove (get_abs_path file)
+      | ["ifnotwindows"; line] -> if Vfconfig.platform <> Windows then exec_line line
       | ["ifnotmac"; line] -> if Vfconfig.platform <> MacOS then exec_line line
       | ["ifz3"; line] -> if Vfconfig.z3_present then exec_line line
       | ["ifz3v4.5"; line] -> if Vfconfig.z3v4dot5_present then exec_line line
