@@ -9,7 +9,15 @@ mod c {
     >;
     pub type THREAD_CREATION_FLAGS = u32;
     pub type HANDLE = *mut ::core::ffi::c_void;
-
+    pub const INFINITE: u32 = 4294967295u32;
+    pub type WAIT_EVENT = u32;
+    //pub const WAIT_ABANDONED: WAIT_EVENT = 128u32;
+    //pub const WAIT_ABANDONED_0: WAIT_EVENT = 128u32;
+    pub const WAIT_FAILED: WAIT_EVENT = 4294967295u32;
+    //pub const WAIT_IO_COMPLETION: WAIT_EVENT = 192u32;
+    //pub const WAIT_OBJECT_0: WAIT_EVENT = 0u32;
+    //pub const WAIT_TIMEOUT: WAIT_EVENT = 258u32;
+    
     #[repr(C)]
     pub struct CRITICAL_SECTION { data: [u64; 5] } // sizeof=40; alignof=8 on x86_64
     type BOOL = libc::c_int;
@@ -25,6 +33,7 @@ mod c {
             dwcreationflags: THREAD_CREATION_FLAGS,
             lpthreadid: *mut u32,
         ) -> HANDLE;
+        pub fn WaitForSingleObject(hhandle : HANDLE, dwmilliseconds : u32) -> WAIT_EVENT;
         pub fn CloseHandle(hobject: HANDLE) -> BOOL;
 
         // pub fn GetCurrentThreadId() -> u32;
@@ -38,33 +47,60 @@ mod c {
 }
 
 #[derive(Clone, Copy)]
-struct RunClosure {
-    run: unsafe fn(*mut u8),
-    data: *mut u8
+pub struct Thread {
+    handle: c::HANDLE,
 }
 
-unsafe extern "system" fn run_closure_run(value: *mut libc::c_void) -> u32 {
+struct RunClosure<Arg> {
+    run: unsafe fn(Arg),
+    data: Arg
+}
+
+unsafe extern "system" fn run_closure_run<Arg>(value: *mut libc::c_void) -> u32 {
     unsafe {
-        let closure = *(value as *mut RunClosure);
-        std::alloc::dealloc(value as *mut u8, std::alloc::Layout::new::<RunClosure>());
+        let closure = std::ptr::read(value as *mut RunClosure<Arg>);
+        std::alloc::dealloc(value as *mut u8, std::alloc::Layout::new::<RunClosure<Arg>>());
         (closure.run)(closure.data);
         0
     }
 }
 
-pub unsafe fn fork(run: unsafe fn(data: *mut u8), data: *mut u8) {
-    let layout = std::alloc::Layout::new::<RunClosure>();
-    let run_closure = std::alloc::alloc(layout) as *mut RunClosure;
+pub unsafe fn fork_joinable<Arg>(run: unsafe fn(data: Arg), data: Arg) -> Thread {
+    let layout = std::alloc::Layout::new::<RunClosure<Arg>>();
+    let run_closure = std::alloc::alloc(layout) as *mut RunClosure<Arg>;
     if run_closure.is_null() {
         std::alloc::handle_alloc_error(layout);
     }
     ptr::write(addr_of_mut!((*run_closure).run), run);
     ptr::write(addr_of_mut!((*run_closure).data), data);
-    let handle = c::CreateThread(ptr::null_mut(), 0, Some(run_closure_run), data as *mut libc::c_void, 0, ptr::null_mut());
+    let handle = c::CreateThread(ptr::null_mut(), 0, Some(run_closure_run::<Arg>), run_closure as *mut libc::c_void, 0, ptr::null_mut());
     if handle == ptr::null_mut() {
         eprintln!("CreateThread() failed; GetLastError() == {}", c::GetLastError());
         std::process::abort();
     }
+    Thread { handle }
+}
+
+pub unsafe fn join(thread: Thread) {
+    let handle = thread.handle;
+    {
+        let result = c::WaitForSingleObject(handle, c::INFINITE);
+        if result == c::WAIT_FAILED {
+            eprintln!("WaitForSingleObject() failed; GetLastError() == {}", c::GetLastError());
+            std::process::abort();
+        }
+    }
+    {
+        let result = c::CloseHandle(handle);
+        if result == 0 {
+            eprintln!("CloseHandle() failed; GetLastError() == {}", c::GetLastError());
+            std::process::abort();
+        }
+    }
+}
+
+pub unsafe fn fork<Arg>(run: unsafe fn(data: Arg), data: Arg) {
+    let Thread { handle } = fork_joinable(run, data);
     {
         let result = c::CloseHandle(handle);
         if result == 0 {

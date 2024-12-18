@@ -1897,9 +1897,10 @@ mod vf_mir_builder {
                     Self::encode_borrow_kind(bor_kind, bor_kind_cpn);
                     let place_cpn = ref_data_cpn.reborrow().init_place();
                     Self::encode_place(enc_ctx, place, place_cpn);
-                    let source_text = enc_ctx.tcx.sess.source_map().span_to_snippet(span).unwrap();
-                    let is_identifier = source_text.chars().all(|c| c.is_alphanumeric() || c == '_');
-                    ref_data_cpn.set_is_implicit(is_identifier);
+                    if let Ok(source_text) = enc_ctx.tcx.sess.source_map().span_to_snippet(span) {
+                        let is_identifier = source_text.chars().all(|c| c.is_alphanumeric() || c == '_');
+                        ref_data_cpn.set_is_implicit(is_identifier);
+                    }
                 }
                 mir::Rvalue::ThreadLocalRef(def_id) => todo!(),
                 mir::Rvalue::RawPtr(mutability, place) => {
@@ -2399,7 +2400,10 @@ mod vf_mir_builder {
                     let scalar_cpn = const_value_cpn.init_scalar();
                     Self::encode_scalar_int(tcx, ty, scalar_int, scalar_cpn);
                 }
-                CV::Scalar(rustc_middle::mir::interpret::Scalar::Ptr(_, _)) => todo!(),
+                CV::Scalar(rustc_middle::mir::interpret::Scalar::Ptr(_, _)) => {
+                    let mut scalar_con = const_value_cpn.init_scalar();
+                    scalar_con.set_ptr(());
+                }
                 CV::ZeroSized => {
                     trace!("mir::ConstValue::ZeroSized for type {:?}", ty);
                     const_value_cpn.set_zero_sized(());

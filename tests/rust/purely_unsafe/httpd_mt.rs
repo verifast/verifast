@@ -201,23 +201,19 @@ pred Connection(connection: *mut Connection;) =
     (*connection).buffer |-> ?buffer &*&
     (*connection).mutex |-> ?mutex &*& [_]simple_mutex::SimpleMutex(mutex, mutex_inv(buffer));
 
-pred handle_connection_pre(data: *mut u8;) = Connection(data as *mut Connection);
-
 @*/
 
-unsafe fn handle_connection(data: *mut u8)
-//@ req handle_connection_pre(data);
+unsafe fn handle_connection(connection: *mut Connection)
+//@ req Connection(connection);
 //@ ens true;
 {
-    //@ open handle_connection_pre(data);
-    let connection = data as *mut Connection;
     //@ open Connection(connection);
     let socket = (*connection).socket;
     let mutex = (*connection).mutex;
     let buffer = (*connection).buffer;
 
     //@ open_struct(connection);
-    std::alloc::dealloc(data, std::alloc::Layout::new::<Connection>());
+    std::alloc::dealloc(connection as *mut u8, std::alloc::Layout::new::<Connection>());
 
     let mut line_buffer = Buffer::new(1000);
 
@@ -275,8 +271,8 @@ fn main() {
             (*connection).socket = client_socket;
             (*connection).mutex = mutex;
             (*connection).buffer = &mut buffer as *mut Buffer;
-            //@ produce_fn_ptr_chunk platform::threading::thread_run(handle_connection)(handle_connection_pre)(data) { call(); }
-            platform::threading::fork(handle_connection, connection as *mut u8);
+            //@ produce_fn_ptr_chunk platform::threading::thread_run<*mut Connection>(handle_connection)(Connection)(data) { call(); }
+            platform::threading::fork(handle_connection, connection);
         }
     }
 }
