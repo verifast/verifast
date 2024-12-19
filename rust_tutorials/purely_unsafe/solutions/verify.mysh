@@ -20,4 +20,5 @@ verifast -disable_overflow_check foreach.rs
 verifast -disable_overflow_check predctors.rs
 verifast -disable_overflow_check threads0.rs
 verifast -disable_overflow_check -extern ../../../tests/rust/unverified/platform -allow_assume threads.rs
+verifast -disable_overflow_check -extern ../../../tests/rust/unverified/platform -allow_assume fractions0.rs
 end_parallel
