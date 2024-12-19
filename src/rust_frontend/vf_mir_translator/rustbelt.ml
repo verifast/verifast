@@ -17,16 +17,6 @@ type ty_interp = {
 
 let simple_fbc loc fbc_name tid l = Ok (CallExpr (loc, fbc_name, [], [], [LitPat tid; LitPat l], Static))
 
-let emp_ty_interp loc =
-  {
-    size = True loc;
-    own = (fun _ _ -> Ok (True loc));
-    shr = (fun _ _ _ -> Error "Not yet supported");
-    full_bor_content = (fun _ _ -> Error "Not yet supported");
-    points_to = (fun _ _ _ -> Ok (True loc));
-    pointee_fbc = None;
-  }
-
 module Aux = struct
   open Ast
 
@@ -38,3 +28,15 @@ module Aux = struct
 
   (* Todo @Nima: write a function to generate points_to for all types and use it in translate_T_ty functions *)
 end
+
+let emp_ty_interp loc =
+  {
+    size = True loc;
+    own = (fun _ _ -> Ok (True loc));
+    shr = (fun _ _ _ -> Error "Not yet supported");
+    full_bor_content = (fun _ _ -> Error "Not yet supported");
+    points_to = (fun t l v ->
+      Result.bind (Aux.vid_op_to_var_pat v loc) @@ fun pat ->
+      Ok (PointsTo (loc, l, RegularPointsTo, pat)));
+    pointee_fbc = None;
+  }
