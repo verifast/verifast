@@ -157,7 +157,7 @@ type type_ = (* ?type_ *)
   | PtrType of type_
   | RustRefType of type_ (*lifetime*) * rust_ref_kind * type_
   | FuncType of string   (* The name of a typedef whose body is a C function type. *)
-  | InlineFuncType of type_ (* Return type only *)
+  | InlineFuncType of type_ (* InlineFuncType rt denotes Rust type 'unsafe fn(...) -> rt'. *)
   | InductiveType of string * type_ list
   | PredType of string list * type_ list * int option * inductiveness (* if None, not necessarily precise; if Some n, precise with n input parameters *)
   | PureFuncType of type_ * type_  (* Curried *)

@@ -2981,7 +2981,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 
   let rec type_satisfies_contains_any_constraint assumeTypeParamsContainAnyPositiveOnly allowContainsAnyPositive tp =
     match unfold_inferred_type tp with
-      Bool | AbstractType _ | Int (_, _) | Float | Double | LongDouble | RealType | FuncType _ | PtrType _ | RustRefType _ | ObjType _ | ArrayType _ | BoxIdType | HandleIdType -> true
+      Bool | AbstractType _ | Int (_, _) | Float | Double | LongDouble | RealType | FuncType _ | PtrType _ | InlineFuncType _ | RustRefType _ | ObjType _ | ArrayType _ | BoxIdType | HandleIdType -> true
     | RealTypeParam _ | GhostTypeParam _ -> assumeTypeParamsContainAnyPositiveOnly
     | AnyType | PredType (_, _, _, _) -> allowContainsAnyPositive
     | StructType (_, _) -> allowContainsAnyPositive
@@ -2997,6 +2997,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | InferredType (_, stateRef) ->
       stateRef := inferred_type_constraint_meet !stateRef (ContainsAnyConstraint allowContainsAnyPositive);
       true
+    | t -> failwith ("type_satisfies_contains_any_constraint: " ^ string_of_type t)
   and type_satisfies_inferred_type_constraint cnt tp =
     match cnt with
       Unconstrained -> true
@@ -5970,6 +5971,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   | Int (Unsigned, FixedWidthRank k) -> fst exact_width_integer_typeid_terms.(k)
   | PtrType Void -> void_pointer_typeid_term
   | PtrType _ when fno_strict_aliasing -> void_pointer_typeid_term
+  | InlineFuncType _ when fno_strict_aliasing -> void_pointer_typeid_term
   | PtrType t0 -> mk_pointer_typeid (typeid_of_core_core l msg env t0)
   | RustRefType (lft, kind, t0) ->
     let lft_typeid = typeid_of_core_core l msg env lft in
