@@ -292,6 +292,7 @@ STDLIB_FILES = \
 	$(STDLIB_FILES_GEN)
 
 TOOLS_EXCEPT_VFIDE = ../bin/mysh$(DOTEXE) ../bin/verifast$(DOTEXE) \
+        ../bin/rustc-verifast$(DOTEXE) ../bin/cargo-verifast$(DOTEXE) ../bin/cargo-vfide$(DOTEXE)\
         ../bin/main_class$(DOTEXE) ../bin/java_card_applet$(DOTEXE) \
         ../bin/dlsymtool$(DOTEXE) ../bin/vfstrip$(DOTEXE) ../bin/explorer$(DOTEXE)
 
@@ -391,6 +392,23 @@ _build/default/mysh/mysh.exe: .FORCE
 
 mysh: ../bin/mysh$(DOTEXE)
 .PHONY: mysh
+
+_build/default/rustc_verifast/rustc_verifast.exe: .FORCE
+	@echo " DUNE " $@
+	dune build rustc_verifast/rustc_verifast.exe
+
+../bin/rustc-verifast$(DOTEXE): _build/default/rustc_verifast/rustc_verifast.exe
+	if [ ! -e $@ -o $< -nt $@ ]; then cp -f $< $@; fi
+
+_build/default/cargo_verifast/cargo_verifast.exe: .FORCE
+	@echo " DUNE " $@
+	dune build cargo_verifast/cargo_verifast.exe
+
+../bin/cargo-verifast$(DOTEXE): _build/default/cargo_verifast/cargo_verifast.exe
+	if [ ! -e $@ -o $< -nt $@ ]; then cp -f $< $@; fi
+
+../bin/cargo-vfide$(DOTEXE): _build/default/cargo_verifast/cargo_verifast.exe
+	if [ ! -e $@ -o $< -nt $@ ]; then cp -f $< $@; fi
 
 _build/default/dlsymtool/dlsymtool.exe: .FORCE
 	@echo "  DUNE " $@

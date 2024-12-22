@@ -81,17 +81,17 @@ impl Tree {
     }
 
     unsafe fn fold(tree: *mut Tree, f: FoldFunction, mut acc: i32) -> i32
-    //@ req Tree(tree, ?depth) &*& [_]is_FoldFunction(f);
-    //@ ens Tree(tree, depth);
+    //@ req [?frac]Tree(tree, ?depth) &*& [_]is_FoldFunction(f);
+    //@ ens [frac]Tree(tree, depth);
     {
         if tree.is_null() {
             acc
         } else {
-            //@ open Tree(tree, depth);
+            //@ open [frac]Tree(tree, depth);
             acc = Self::fold((*tree).left, f, acc);
             acc = Self::fold((*tree).right, f, acc);
             acc = f(acc, (*tree).value);
-            //@ close Tree(tree, depth);
+            //@ close [frac]Tree(tree, depth);
             acc
         }
     }
@@ -108,11 +108,11 @@ struct FoldData {
 /*@
 
 pred_ctor folder_post(data: *FoldData)() =
-    (*data).tree |-> ?tree &*& Tree(tree, _) &*&
+    (*data).tree |-> ?tree &*& [1/2]Tree(tree, _) &*&
     (*data).f |-> ?f &*& [_]is_FoldFunction(f) &*&
     (*data).acc |-> ?acc;
 pred folder_pre(data: *FoldData, post: pred()) =
-    (*data).tree |-> ?tree &*& Tree(tree, _) &*&
+    (*data).tree |-> ?tree &*& [1/2]Tree(tree, _) &*&
     (*data).f |-> ?f &*& [_]is_FoldFunction(f) &*&
     (*data).acc |-> ?acc &*&
     post == folder_post(data);
@@ -130,7 +130,7 @@ unsafe fn folder(data: *mut FoldData)
 }
 
 unsafe fn start_fold_thread(tree: *mut Tree, f: FoldFunction, acc: i32) -> *mut FoldData
-//@ req Tree(tree, _) &*& [_]is_FoldFunction(f);
+//@ req [1/2]Tree(tree, _) &*& [_]is_FoldFunction(f);
 //@ ens (*result).thread |-> ?t &*& Thread(t, folder_post(result));
 {
     let data = alloc(Layout::new::<FoldData>()) as *mut FoldData;
@@ -160,7 +160,7 @@ unsafe fn join_fold_thread(data: *mut FoldData) -> i32
     platform::threading::join((*data).thread);
     //@ open folder_post(data)();
     let result = (*data).acc;
-    //@ leak (*data).tree |-> ?tree &*& Tree(tree, _) &*& (*data).f |-> _ &*& (*data).acc |-> _ &*& (*data).thread |-> _;
+    //@ leak (*data).tree |-> ?tree &*& [_]Tree(tree, _) &*& (*data).f |-> _ &*& (*data).acc |-> _ &*& (*data).thread |-> _;
     result
 }
 
@@ -169,6 +169,13 @@ unsafe fn sum_function(acc: i32, x: i32) -> i32
 //@ ens true;
 {
     acc + fac(x)
+}
+
+unsafe fn xor_function(acc: i32, x: i32) -> i32
+//@ req true;
+//@ ens true;
+{
+    acc ^ fac(x)
 }
 
 unsafe fn print_i32(value: i32)
@@ -181,15 +188,13 @@ unsafe fn print_i32(value: i32)
 
 fn main() {
     unsafe {
-        let tree = Tree::make(22);
-        //@ open Tree(tree, _);
+        let tree = Tree::make(21);
         //@ produce_fn_ptr_chunk FoldFunction(sum_function)()(acc, x) { call(); }
-        let left_data = start_fold_thread((*tree).left, sum_function, 0);
-        let right_data = start_fold_thread((*tree).right, sum_function, 0);
-        let sum_left = join_fold_thread(left_data);
-        let sum_right = join_fold_thread(right_data);
-        let f = fac((*tree).value);
-        //@ leak (*tree).left |-> _ &*& (*tree).right |-> _ &*& (*tree).value |-> _ &*& struct_Tree_padding(tree) &*& alloc_block(tree as *u8, _);
-        print_i32(sum_left + sum_right + f);
+        let sum_data = start_fold_thread(tree, sum_function, 0);
+        //@ produce_fn_ptr_chunk FoldFunction(xor_function)()(acc, x) { call(); }
+        let xor_data = start_fold_thread(tree, xor_function, 0);
+        let sum = join_fold_thread(sum_data);
+        let xor = join_fold_thread(xor_data);
+        print_i32(sum - xor);
     }
 }

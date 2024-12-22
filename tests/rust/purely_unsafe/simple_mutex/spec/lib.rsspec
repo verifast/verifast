@@ -1,0 +1,29 @@
+struct Mutex;
+
+/*@
+
+pred Mutex(mutex: Mutex, inv_: pred(););
+
+pred Mutex_held(mutex: Mutex, inv_: pred(), owner: usize, frac: real);
+
+@*/
+
+impl Mutex {
+
+    unsafe fn new() -> Mutex;
+    //@ req exists::<pred()>(?inv_) &*& inv_();
+    //@ ens Mutex(result, inv_);
+
+    unsafe fn acquire(mutex: Mutex);
+    //@ req [?f]Mutex(mutex, ?inv_);
+    //@ ens Mutex_held(mutex, inv_, currentThread, f) &*& inv_();
+
+    unsafe fn release(mutex: Mutex);
+    //@ req Mutex_held(mutex, ?inv_, currentThread, ?f) &*& inv_();
+    //@ ens [f]Mutex(mutex, inv_);
+    
+    unsafe fn dispose(mutex: Mutex);
+    //@ req Mutex(mutex, ?inv_);
+    //@ ens inv_();
+
+}

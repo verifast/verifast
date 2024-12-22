@@ -116,6 +116,8 @@ module Make (Args : RUST_FE_ARGS) = struct
       let args = Array.of_list ([bin_path; rs_file_path; "--sysroot=" ^ tchain_root] @ rustc_args) in
       let current_env = Unix.environment () in
       let* env = add_path_to_env_var current_env (match Vfconfig.platform with MacOS -> "DYLD_LIBRARY_PATH" | Windows -> "PATH" | _ -> "LD_LIBRARY_PATH") tchain_lib in
+      (* Printf.eprintf "Running %s with arguments %s\n" bin_path (String.concat " " (List.map (Printf.sprintf "'%s'") (Array.to_list args)));
+      flush stderr; *)
       let chns = Unix.open_process_args_full bin_path args env in
       Ok chns
     with

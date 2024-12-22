@@ -636,6 +636,7 @@ and parse_lemma_keyword = function%parser
   ] -> Lemma (true, trigger)
 
 and parse_ghost_decl = function%parser
+| [ (_, Kwd "pub"); parse_ghost_decl as d ] -> d
 | [ (l, Kwd "inductive"); (li, Ident i); parse_type_params as tparams; (_, Kwd "=");
     [%let cs = function%parser
      | [ parse_ctors as cs ] -> cs
