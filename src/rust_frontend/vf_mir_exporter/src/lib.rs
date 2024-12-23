@@ -61,14 +61,24 @@ pub fn run_compiler() -> i32 {
     rustc_driver::catch_with_exit_code(move || {
         let mut rustc_args: Vec<_> = std::env::args().collect();
         rustc_args.push("-Coverflow_checks=off".to_owned());
-        // To also compile crates without a main function
-        // Todo @Nima: Should it not be passed from VeriFast?
-        rustc_args.push("--crate-type=lib".to_owned());
         // We must pass -Zpolonius so that the borrowck information is computed.
-        rustc_args.push("-Zpolonius".to_owned());
+        //rustc_args.push("-Zpolonius".to_owned());
         // To have MIR dump annotated with lifetimes
-        rustc_args.push("-Zverbose_internals".to_owned());
-        rustc_args.push("--error-format=json".to_owned());
+        //rustc_args.push("-Zverbose_internals".to_owned());
+        {
+            // Find the index of the '--vf-rust-mir-exporter:no-default-args' argument.
+            if let Some(index) = rustc_args
+                .iter()
+                .position(|arg| arg == "--vf-rust-mir-exporter:no-default-args") {
+                // Remove the argument.
+                rustc_args.remove(index);
+            } else {
+                // To also compile crates without a main function
+                // Todo @Nima: Should it not be passed from VeriFast?
+                rustc_args.push("--crate-type=lib".to_owned());
+                rustc_args.push("--error-format=json".to_owned());
+            }
+        }
 
         // Todo @Nima: Find the correct sysroot by yourself. for now we get it as an argument.
         // See filesearch::get_or_default_sysroot()

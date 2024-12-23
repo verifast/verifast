@@ -37,6 +37,11 @@ lem create_atomic_space(mask: mask_t, inv_: pred());
     req !mask_is_empty(mask) &*& inv_();
     ens atomic_space(mask, inv_);
 
+lem destroy_atomic_space(mask: mask_t, inv_: pred());
+    nonghost_callers_only
+    req atomic_space(mask, inv_);
+    ens inv_();
+
 lem open_atomic_space(spaceMask: mask_t, inv_: pred());
     req [?f]atomic_space(spaceMask, inv_) &*& atomic_mask(?currentMask) &*& mask_le(spaceMask, currentMask) == true;
     ens [f]atomic_space(spaceMask, inv_) &*& atomic_mask(mask_diff(currentMask, spaceMask))

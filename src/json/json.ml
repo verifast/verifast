@@ -13,6 +13,7 @@ type json =
 let s_value (S value) = value
 let i_value (I value) = value
 let o_assoc name (O ps) = List.assoc name ps
+let a_value (A vs) = vs
 
 let hex_char_of_int i =
   char_of_int

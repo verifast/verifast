@@ -702,4 +702,22 @@ mod thread {
 
     struct JoinHandle<T>;
     
+    fn sleep(duration: std::time::Duration);
+    //@ req true;
+    //@ ens true;
+    
+}
+
+mod time {
+
+    struct Duration;
+    
+    impl Duration {
+    
+        fn from_millis(millis: u64) -> Duration;
+        //@ req true;
+        //@ ens true;
+
+    }
+    
 }

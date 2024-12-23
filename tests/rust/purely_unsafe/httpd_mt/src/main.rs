@@ -1,9 +1,6 @@
-// verifast_options{ignore_ref_creation extern:../unverified/platform}
+// verifast_options{ignore_ref_creation extern_spec:platform=../../unverified/platform/spec/lib.rsspec extern_spec:simple_mutex=../simple_mutex/spec/lib.rsspec}
 
 use std::io::Write;
-
-#[path = "simple_mutex.rs"]
-mod simple_mutex;
 
 struct Buffer {
     buffer: *mut u8,
@@ -186,7 +183,7 @@ unsafe fn send_str<'a>(socket: platform::sockets::Socket, text: &'a str)
 
 struct Connection {
     socket: platform::sockets::Socket,
-    mutex: platform::threading::Mutex,
+    mutex: simple_mutex::Mutex,
     buffer: *mut Buffer
 }
 
@@ -199,7 +196,7 @@ pred Connection(connection: *mut Connection;) =
     struct_Connection_padding(connection) &*&
     (*connection).socket |-> ?socket &*& platform::sockets::Socket(socket) &*&
     (*connection).buffer |-> ?buffer &*&
-    (*connection).mutex |-> ?mutex &*& [_]simple_mutex::SimpleMutex(mutex, mutex_inv(buffer));
+    (*connection).mutex |-> ?mutex &*& [_]simple_mutex::Mutex(mutex, mutex_inv(buffer));
 
 @*/
 
@@ -219,12 +216,12 @@ unsafe fn handle_connection(connection: *mut Connection)
 
     read_line(socket, &mut line_buffer as *mut Buffer);
 
-    simple_mutex::SimpleMutex_acquire(mutex);
+    simple_mutex::Mutex::acquire(mutex);
     //@ open mutex_inv(buffer)();
     Buffer::push_buffer(buffer, &mut line_buffer as *mut Buffer);
     let mut buffer_copy = Buffer::clone(buffer);
     //@ close mutex_inv(buffer)();
-    simple_mutex::SimpleMutex_release(mutex);
+    simple_mutex::Mutex::release(mutex);
 
     Buffer::drop(&mut line_buffer as *mut Buffer);
 
@@ -249,7 +246,7 @@ fn main() {
     unsafe {
         let port: u16 = 10000;
         let server_socket = platform::sockets::Socket::listen(port);
-        print("Listening on port 10000...");
+        print("Listening on port 10000...\n");
         let mut buffer = Buffer::new(1000);
         //@ assert Buffer_(?buf, 1000, 0);
         //@ assert buffer.buffer |-> buf.buffer &*& buffer.size |-> 1000 &*& buffer.length |-> 0;
@@ -257,9 +254,10 @@ fn main() {
         //@ close Buffer(&buffer, _, _);
         //@ close mutex_inv(&buffer)();
         //@ close exists(mutex_inv(&buffer));
-        let mutex = simple_mutex::SimpleMutex_new();
+        let mutex = simple_mutex::Mutex::new();
+        //@ leak simple_mutex::Mutex(mutex, _);
         loop {
-            //@ inv platform::sockets::ServerSocket(server_socket) &*& [_]simple_mutex::SimpleMutex(mutex, mutex_inv(&buffer));
+            //@ inv platform::sockets::ServerSocket(server_socket) &*& [_]simple_mutex::Mutex(mutex, mutex_inv(&buffer));
             let client_socket = server_socket.accept();
 
             let connection_layout = std::alloc::Layout::new::<Connection>();
