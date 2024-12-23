@@ -1885,7 +1885,7 @@ mod vf_mir_builder {
             enc_ctx: &mut EncCtx<'tcx, 'a>,
             span: rustc_span::Span,
             rvalue: &mir::Rvalue<'tcx>,
-            rvalue_cpn: rvalue_cpn::Builder<'_>,
+            mut rvalue_cpn: rvalue_cpn::Builder<'_>,
         ) {
             debug!("Encoding Rvalue {:?}", rvalue);
             match rvalue {
@@ -1894,7 +1894,7 @@ mod vf_mir_builder {
                     Self::encode_operand(tcx, enc_ctx, operand, operand_cpn);
                 }
                 // [x; 32]
-                mir::Rvalue::Repeat(operand, ty_const) => todo!(),
+                mir::Rvalue::Repeat(operand, ty_const) => rvalue_cpn.set_repeat(()),
                 // &x or &mut x
                 mir::Rvalue::Ref(region, bor_kind, place) => {
                     let mut ref_data_cpn = rvalue_cpn.init_ref();
@@ -1912,7 +1912,7 @@ mod vf_mir_builder {
                         ref_data_cpn.set_is_implicit(is_identifier);
                     }
                 }
-                mir::Rvalue::ThreadLocalRef(def_id) => todo!(),
+                mir::Rvalue::ThreadLocalRef(def_id) => rvalue_cpn.set_thread_local_ref(()),
                 mir::Rvalue::RawPtr(mutability, place) => {
                     let mut ao_data_cpn = rvalue_cpn.init_address_of();
                     let mutability_cpn = ao_data_cpn.reborrow().init_mutability();
@@ -1920,7 +1920,7 @@ mod vf_mir_builder {
                     let place_cpn = ao_data_cpn.init_place();
                     Self::encode_place(enc_ctx, place, place_cpn);
                 }
-                mir::Rvalue::Len(place) => todo!(),
+                mir::Rvalue::Len(place) => rvalue_cpn.set_len(()),
                 mir::Rvalue::Cast(cast_kind, operand, ty) => {
                     let mut cast_data_cpn = rvalue_cpn.init_cast();
                     let operand_cpn = cast_data_cpn.reborrow().init_operand();
@@ -1937,7 +1937,7 @@ mod vf_mir_builder {
                     let operandr_cpn = bin_op_data_cpn.init_operandr();
                     Self::encode_operand(tcx, enc_ctx, operandr, operandr_cpn);
                 }
-                mir::Rvalue::NullaryOp(null_op, ty) => todo!(),
+                mir::Rvalue::NullaryOp(null_op, ty) => rvalue_cpn.set_nullary_op(()),
                 mir::Rvalue::UnaryOp(un_op, operand) => {
                     let mut un_op_data_cpn = rvalue_cpn.init_unary_op();
                     let un_op_cpn = un_op_data_cpn.reborrow().init_operator();
@@ -1975,7 +1975,7 @@ mod vf_mir_builder {
                     });
                 }
                 // Transmutes a `*mut u8` into shallow-initialized `Box<T>`.
-                mir::Rvalue::ShallowInitBox(operand, ty) => todo!(),
+                mir::Rvalue::ShallowInitBox(operand, ty) => rvalue_cpn.set_shallow_init_box(()),
                 mir::Rvalue::CopyForDeref(place) => {
                     let operand_cpn = rvalue_cpn.init_use();
                     let place_cpn = operand_cpn.init_copy();
@@ -2125,6 +2125,7 @@ mod vf_mir_builder {
                     );
                 }
                 mir::TerminatorKind::UnwindResume => terminator_kind_cpn.set_resume(()),
+                mir::TerminatorKind::UnwindTerminate(_) => terminator_kind_cpn.set_unwind_terminate(()),
                 mir::TerminatorKind::Return => terminator_kind_cpn.set_return(()),
                 mir::TerminatorKind::Unreachable => terminator_kind_cpn.set_unreachable(()),
                 mir::TerminatorKind::Call {
@@ -2158,7 +2159,12 @@ mod vf_mir_builder {
                     Self::encode_place(enc_ctx, place, drop_data_cpn.reborrow().init_place());
                     Self::encode_basic_block_id(*target, drop_data_cpn.init_target());
                 }
-                _ => todo!("Unsupported Mir terminator kind"),
+                mir::TerminatorKind::TailCall { .. } => terminator_kind_cpn.set_tail_call(()),
+                mir::TerminatorKind::Assert { .. } => terminator_kind_cpn.set_assert(()),
+                mir::TerminatorKind::Yield { .. } => terminator_kind_cpn.set_yield(()),
+                mir::TerminatorKind::CoroutineDrop { .. } => terminator_kind_cpn.set_coroutine_drop(()),
+                mir::TerminatorKind::FalseEdge { .. } => terminator_kind_cpn.set_false_edge(()),
+                mir::TerminatorKind::InlineAsm { .. } => terminator_kind_cpn.set_inline_asm(()),
             }
         }
 
@@ -2298,7 +2304,7 @@ mod vf_mir_builder {
             tcx: TyCtxt<'tcx>,
             enc_ctx: &mut EncCtx<'tcx, 'a>,
             const_: &mir::Const<'tcx>,
-            const_cpn: const_cpn::Builder<'_>,
+            mut const_cpn: const_cpn::Builder<'_>,
         ) {
             match const_ {
                 mir::Const::Ty(ty, ty_const) => {
@@ -2317,15 +2323,18 @@ mod vf_mir_builder {
                     Self::encode_ty(tcx, enc_ctx, *ty, val_cpn.init_ty());
                 }
                 mir::Const::Unevaluated(unevaluated_const, ty) => {
-                    let const_value = const_.eval(tcx, enc_ctx.body().typing_env(tcx), Span::default()).unwrap();
-                    let mut val_cpn = const_cpn.init_val();
-                    Self::encode_const_value(
-                        tcx,
-                        *ty,
-                        &const_value,
-                        val_cpn.reborrow().init_const_value(),
-                    );
-                    Self::encode_ty(tcx, enc_ctx, *ty, val_cpn.init_ty());
+                    if let Ok(const_value) = const_.eval(tcx, enc_ctx.body().typing_env(tcx), Span::default()) {
+                        let mut val_cpn = const_cpn.init_val();
+                        Self::encode_const_value(
+                            tcx,
+                            *ty,
+                            &const_value,
+                            val_cpn.reborrow().init_const_value(),
+                        );
+                        Self::encode_ty(tcx, enc_ctx, *ty, val_cpn.init_ty());
+                    } else {
+                        const_cpn.set_unevaluated(());
+                    }
                 }
             }
         }
@@ -2344,7 +2353,7 @@ mod vf_mir_builder {
         fn encode_const_kind(
             tcx: TyCtxt<'tcx>,
             const_kind: &ty::ConstKind<'tcx>,
-            const_kind_cpn: const_kind_cpn::Builder<'_>,
+            mut const_kind_cpn: const_kind_cpn::Builder<'_>,
         ) {
             use ty::ConstKind as CK;
             match const_kind {
@@ -2355,14 +2364,14 @@ mod vf_mir_builder {
                     param_const_cpn.set_name(param_const.name.as_str());
                 }
                 // Infer the value of the const.
-                CK::Infer(infer_const) => todo!(),
+                CK::Infer(infer_const) => const_kind_cpn.set_infer(()),
                 // Bound const variable, used only when preparing a trait query.
-                CK::Bound(debruijn_idx, bound_var) => todo!(),
+                CK::Bound(debruijn_idx, bound_var) => const_kind_cpn.set_bound(()),
                 // A placeholder const - universally quantified higher-ranked const.
-                CK::Placeholder(placeholder_const) => todo!(),
+                CK::Placeholder(placeholder_const) => const_kind_cpn.set_placeholder(()),
                 // Used in the HIR by using `Unevaluated` everywhere and later normalizing to one of the other
                 // variants when the code is monomorphic enough for that.
-                CK::Unevaluated(unevaluated) => todo!(),
+                CK::Unevaluated(unevaluated) => const_kind_cpn.set_unevaluated(()),
                 // Used to hold computed value.
                 CK::Value(ty, val_tree) => {
                     let const_value_cpn = const_kind_cpn.init_value();
@@ -2370,8 +2379,8 @@ mod vf_mir_builder {
                 }
                 // A placeholder for a const which could not be computed; this is
                 // propagated to avoid useless error messages.
-                CK::Error(delay_span_bug_emitted) => todo!(),
-                _ => todo!(),
+                CK::Error(delay_span_bug_emitted) => const_kind_cpn.set_error(()),
+                CK::Expr(_) => const_kind_cpn.set_expr(()),
             }
         }
 
@@ -2595,11 +2604,30 @@ mod vf_mir_builder {
                      */
                     PlaceKind::Other
                 }
+                mir::ProjectionElem::Index(_) => {
+                    place_elm_cpn.set_index(());
+                    PlaceKind::Other
+                }
+                mir::ProjectionElem::ConstantIndex{ .. } => {
+                    place_elm_cpn.set_constant_index(());
+                    PlaceKind::Other
+                }
+                mir::ProjectionElem::Subslice{ .. } => {
+                    place_elm_cpn.set_subslice(());
+                    PlaceKind::Other
+                }
                 mir::ProjectionElem::Downcast(symbol, variant_idx) => {
                     place_elm_cpn.set_downcast(variant_idx.as_u32());
                     PlaceKind::Other
                 }
-                _ => todo!(),
+                mir::ProjectionElem::OpaqueCast(_) => {
+                    place_elm_cpn.set_opaque_cast(());
+                    PlaceKind::Other
+                }
+                mir::ProjectionElem::Subtype(_) => {
+                    place_elm_cpn.set_subtype(());
+                    PlaceKind::Other
+                }
             }
         }
     }
