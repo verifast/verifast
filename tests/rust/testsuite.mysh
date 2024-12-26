@@ -91,6 +91,7 @@ cd safe_abstraction
     del proof_obligs_quick_fix_test_generic_result.rs
   end_sequential
   verifast -skip_specless_fns -prover z3v4.5 -allow_assume linked_list.rs
+  ifnotwindows rustup run nightly-2024-11-23 vf-rust-mir-exporter btree_node.rs > /dev/null 2> /dev/null
 cd ..
 end_parallel
 end_sequential

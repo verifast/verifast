@@ -164,7 +164,13 @@ struct Ty {
 
         union {
             param @0: ParamConst;
+            infer @2: Void;
+            bound @3: Void;
+            placeholder @4: Void;
+            unevaluated @5: Void;
             value @1: Body.ConstValue;
+            error @6: Void;
+            expr @7: Void;
         }
     }
 
@@ -431,7 +437,12 @@ struct Body {
             union {
                 deref @0: Void;
                 field @1: FieldData;
+                index @3: Void;
+                constantIndex @4: Void;
+                subslice @5: Void;
                 downcast @2: UInt32;
+                opaqueCast @6: Void;
+                subtype @7: Void;
             }
         }
 
@@ -492,6 +503,7 @@ struct Body {
                     constValue @1: ConstValue;
                     ty @2: Ty;
                 }
+                unevaluated @3: Void;
             }
         }
 
@@ -604,13 +616,18 @@ struct Body {
             union {
                 # Either move or copy depending on operand type
                 use @0: Operand;
+                repeat @8: Void;
                 ref @1: RefData;
+                threadLocalRef @9: Void;
                 addressOf @2: AddressOfData;
+                len @10: Void;
                 cast @3: CastData;
                 binaryOp @4: BinaryOpData;
+                nullaryOp @11: Void;
                 unaryOp @6: UnaryOpData;
                 aggregate @5: AggregateData;
                 discriminant @7: Place;
+                shallowInitBox @12: Void;
             }
         }
 
@@ -670,10 +687,17 @@ struct Body {
                     goto @0: BasicBlockId;
                     switchInt @1: SwitchIntData;
                     resume @2: Void;
+                    unwindTerminate @7: Void;
                     return @3: Void;
                     unreachable @6: Void;
                     call @4: FnCallData;
                     drop @5: DropData;
+                    tailCall @8: Void;
+                    assert @9: Void;
+                    yield @10: Void;
+                    coroutineDrop @11: Void;
+                    falseEdge @12: Void;
+                    inlineAsm @13: Void;
                 }
             }
 
