@@ -10,6 +10,7 @@ verifast -allow_should_fail -allow_assume preprocessor_test_crlf_bom.rs
 verifast -allow_should_fail pred_arg_lft.rs
 verifast -allow_should_fail -allow_dead_code lemma_without_body.rs
 verifast -allow_should_fail -allow_dead_code assume_stmt.rs
+verifast hidden_locals.rs
 begin_sequential
 cd unverified
   cd platform

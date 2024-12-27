@@ -3621,26 +3621,23 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
              let y = x + 2;
              ``
              The third `x` refers to the first x but the code might be confusing for the user *)
+          (*
           Ast.static_error loc
             (Printf.sprintf
                "This function shadows local variable name '%s'; this is not \
                 yet supported in VeriFast"
                surf_name)
             None
-      (*
-          let internal_name =
-            TrName.tag_internal surf_name ^ string_of_int !counter
-          in
-          if !counter = Int.max_int then
-            failwith "Shadowed var name counter ovf"
-          else
-            let _ = counter := succ !counter in
-            let env_entry_opt : VF0.var_debug_info option =
-              Some { internal_name; surf_name }
-            in
-            let trs_entry : var_id_trs_entry = { id; internal_name } in
-            (env_entry_opt, trs_entry, surf_names_set)
           *)
+          counter := succ !counter;
+          let internal_name =
+            (*TrName.tag_internal*) surf_name ^ "_" ^ string_of_int !counter
+          in
+          let env_entry_opt : VF0.var_debug_info option =
+            (*Some { internal_name; surf_name }*) None
+          in
+          let trs_entry : var_id_trs_entry = { id; internal_name } in
+          (env_entry_opt, trs_entry, surf_names_set)
     in
     let f_aux (env_map, trs_map, surf_names_set)
         ({ internal; surf_name } : Mir.var_debug_info) =
