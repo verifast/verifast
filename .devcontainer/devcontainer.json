@@ -2,5 +2,16 @@
   "image": "mcr.microsoft.com/devcontainers/universal:2",
   "onCreateCommand": "./setup-devcontainer.sh",
   "features": {
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ocamllabs.ocaml-platform",
+        "VeriFast.verifast"
+      ],
+      "settings": {
+        "verifast.verifastCommandPath": "/workspaces/verifast/bin/verifast"
+      }
+    }
   }
 }
