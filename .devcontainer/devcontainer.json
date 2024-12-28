@@ -1,6 +1,6 @@
 {
   "image": "mcr.microsoft.com/devcontainers/universal:2",
-  "onCreateCommand": "./setup-build.sh",
+  "onCreateCommand": "./setup-devcontainer.sh",
   "features": {
   }
 }
