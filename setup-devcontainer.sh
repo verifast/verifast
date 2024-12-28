@@ -5,6 +5,8 @@ set -x
 
 ./setup-build.sh
 
+. ~/.cargo/env
+
 # The toolchain for building VeriFast is installed by ./setup-build.sh (not using opam), but
 # we now use opam to install ocaml-lsp-server.
 sudo apt-get install -y --no-install-recommends opam
