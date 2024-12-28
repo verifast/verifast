@@ -9,8 +9,8 @@ case ":${PATH}:" in
         export PATH="/tmp/$VFDEPS_NAME/bin:$PATH"
         ;;
 esac
-case ":$WORKSPACEFOLDER/bin:" in
-    *:"/$WORKSPACEFOLDER/bin":*)
+case ":$PATH:" in
+    *:"$WORKSPACEFOLDER/bin":*)
         ;;
     *)
         export PATH="$WORKSPACEFOLDER/bin:$PATH"
