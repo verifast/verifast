@@ -18,7 +18,7 @@ dl_and_unzip() {
   filter="$4"
   curl -Lf -o "/tmp/$filename" "$url"
   echo "$hash  /tmp/$filename" | shasum -a "$sha" -c || exit 1
-  tar "x"$filter"f" "/tmp/$filename"
+  sudo tar "x"$filter"f" "/tmp/$filename"
 }
 
 dl_and_unzip_vfdeps() {
