@@ -1,5 +1,6 @@
 (library
  (name vf_mir)
+ (flags (:standard -w -55)) ; -55: inlining impossible
  (libraries stdint capnp))
 
 (rule
