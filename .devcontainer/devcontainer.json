@@ -1,8 +1,8 @@
 {
   "image": "mcr.microsoft.com/devcontainers/universal:2",
   "onCreateCommand": "./setup-devcontainer.sh",
-  "postCreateCommand": ". ./install-vfdeps.sh",
-  "postStartCommand": ". ./install-vfdeps.sh",
+  "postCreateCommand": ". ./config.sh && . ./install-vfdeps.sh",
+  "postStartCommand": ". ./config.sh && . ./install-vfdeps.sh",
   "features": {
   },
   "customizations": {
