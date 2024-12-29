@@ -18,7 +18,7 @@ dl_and_unzip() {
   filter="$4"
   curl -Lf -o "/tmp/$filename" "$url"
   echo "$hash  /tmp/$filename" | shasum -a "$sha" -c || exit 1
-  tar "x"$filter"f" "/tmp/$filename"
+  sudo tar "x"$filter"f" "/tmp/$filename"
 }
 
 dl_and_unzip_vfdeps() {
@@ -53,9 +53,10 @@ if [ $(uname -s) = "Linux" ]; then
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s - -y
   fi
 
-  cd /tmp
+  cd /
   dl_and_unzip_llvm-clang Linux f39cc6feb96ebbc5cf7cb39f304b3bf7484a32842da4859441da6f983c43f22a
   dl_and_unzip_vfdeps https://github.com/verifast/vfdeps/releases/download/23.04/$VFDEPS_NAME-linux.txz 9d108282a8a94526f8d043c3e2e4c3cac513788a42fa8d6964ee4937
+  . "$script_dir/install-vfdeps.sh"
 
   cd $script_dir/src/cxx_frontend/ast_exporter
   cmake -S . -B build -G Ninja -DLLVM_INSTALL_DIR=/tmp/vf-llvm-clang-build-$VF_LLVM_CLANG_BUILD_VERSION -DVFDEPS=/tmp/$VFDEPS_NAME -DCMAKE_BUILD_TYPE=Release
