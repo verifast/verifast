@@ -1,0 +1,8 @@
+[package]
+name = "leaks"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+platform = { path = "../../../../tests/rust/unverified/platform" }
+simple_mutex = { path = "../../../../tests/rust/purely_unsafe/simple_mutex" }

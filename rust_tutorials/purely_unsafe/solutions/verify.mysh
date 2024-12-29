@@ -25,4 +25,11 @@ verifast -disable_overflow_check -extern ../../../tests/rust/unverified/platform
 cd mutexes
   cargo verifast -allow_assume
 cd ..
+cd leaks
+  cargo verifast -allow_assume
+cd ..
+verifast -allow_assume -disable_overflow_check bytes.rs
+verifast -allow_assume -disable_overflow_check xor.rs
+verifast -allow_assume -disable_overflow_check bytes_loop.rs
+verifast -allow_assume -disable_overflow_check tuerk.rs
 end_parallel
