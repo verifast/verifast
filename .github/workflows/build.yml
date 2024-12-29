@@ -190,7 +190,8 @@ jobs:
         run: ./setup-windows.bat
 
       - name: Build
-        run: c:/cygwin64/bin/bash -lc 'cd $GITHUB_WORKSPACE/src && if [ "$GITHUB_REF_TYPE" = "tag" ]; then export VFVERSION=$GITHUB_REF_NAME; fi && make nightly VERBOSE=yes GTK=/cygdrive/c/vfdeps'
+        # Disable dune cache to work around a dune bug https://github.com/verifast/verifast/issues/612
+        run: c:/cygwin64/bin/bash -lc 'export DUNE_CACHE=disabled && cd $GITHUB_WORKSPACE/src && if [ "$GITHUB_REF_TYPE" = "tag" ]; then export VFVERSION=$GITHUB_REF_NAME; fi && make nightly VERBOSE=yes GTK=/cygdrive/c/vfdeps'
 
       - name: Rename artifact
         id: rename_artifact
