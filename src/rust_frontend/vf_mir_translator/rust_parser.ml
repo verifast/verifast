@@ -772,7 +772,7 @@ and parse_ghost_decl = function%parser
   in
   if targ_names <> tparams then raise (ParseException (lrhs, "Right-hand side type arguments must match definition type parameters"));
   [TypePredDef (l, tparams, tp, predName, Left (lrhs, rhs))]
-| [ (l, Kwd "let_lft"); (lx, PrimePrefixedIdent x); (_, Kwd "="); parse_expr as e; (_, Kwd ";") ] -> [TypeWithTypeidDecl (l, x, CallExpr (l, "typeid_of_lft", [], [], [LitPat e], Static))]
+| [ (l, Kwd "let_lft"); (lx, PrimePrefixedIdent x); (_, Kwd "="); parse_expr as e; (_, Kwd ";") ] -> [TypeWithTypeidDecl (l, "'" ^ x, CallExpr (l, "typeid_of_lft", [], [], [LitPat e], Static))]
 
 and parse_ghost_decls stream = List.flatten (rep parse_ghost_decl stream)
 

@@ -2402,14 +2402,14 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               if List.mem tn tparams || List.mem_assoc tn typedecls then static_error l "Duplicate type parameter name" None;
               let w = check_expr_t_pure tenv e voidPtrType in
               let typeid_term = eval_non_pure true h env w in
-              (lems, predinsts, localpreds, localpredinsts, ("'" ^ tn, typeid_term)::typedecls)
+              (lems, predinsts, localpreds, localpredinsts, (tn, (l, typeid_term))::typedecls)
             | _ -> static_error l "Local declarations must be lemmas or predicate family instances." None
           end
           ([], [], [], [], [])
           ds
       in
       let tparams = List.map fst typedecls @ tparams in
-      let env = List.map (fun (tn, typeid_term) -> tn ^ "_typeid", typeid_term) typedecls @ env in
+      let env = List.map (fun (tn, (l, typeid_term)) -> tn ^ "_typeid", typeid_term) typedecls @ env in
       let (lems, predinsts, localpreds, localpredinsts) = (List.rev lems, List.rev predinsts, List.rev localpreds, List.rev localpredinsts) in
       let funcnameterms' =
         List.map
@@ -2470,6 +2470,34 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | LemInfo (lems, g, indinfo, nonghost_callers_only) ->
           LemInfo (verify_lems lems, g, indinfo, nonghost_callers_only)
       in
+      begin fun cont ->
+        if typedecls = [] then
+          cont h []
+        else
+          let lifetime_token_pred_symb = get_pred_symb "lifetime_token" in
+          let lft_of_typeid_func_symb = get_pure_func_symb "lft_of" in
+          let rec consume_lifetime_tokens chunks h typedecls =
+            match typedecls with
+              [] -> cont h chunks
+            | (tn, (ltd, typeid_term))::typedecls ->
+              let lft_term = mk_app lft_of_typeid_func_symb [typeid_term] in
+              consume_chunk rules h env [] [] [] ltd (lifetime_token_pred_symb, true) [] real_unit dummypat (Some 1) [TermPat lft_term] $. fun _ h coef _ _ _ _ _ ->
+              let half_coef = ctxt#mk_mul real_half coef in
+              let half_chunk = Chunk ((lifetime_token_pred_symb, true), [], half_coef, [lft_term], None) in
+              let h = half_chunk::h in
+              consume_lifetime_tokens (half_chunk::chunks) h typedecls
+          in
+          consume_lifetime_tokens [] h typedecls
+      end @@ fun h consumed_lifetime_token_chunks ->
+      let produce_consumed_lifetime_token_chunks h cont =
+        let rec iter h = function
+          [] -> cont h
+        | Chunk (symb, targs, coef, ts, size)::chunks ->
+          produce_chunk h symb targs coef (Some 1) ts size $. fun h ->
+          iter h chunks
+        in
+        iter h consumed_lifetime_token_chunks
+      in
       check_block_declarations ss;
       let rec check_heap_targ () tp =
         match unfold_inferred_type tp with
@@ -2479,11 +2507,18 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       let cont h env =
         h |> List.iter (fun (Chunk (_, targs, _, _, _)) -> List.fold_left check_heap_targ () targs);
+        produce_consumed_lifetime_token_chunks h $. fun h ->
         cont h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env)
       in
       let cont h tenv env = free_locals closeBraceLoc h tenv env !locals_to_free cont in
-      let return_cont h tenv env retval = free_locals closeBraceLoc h tenv env !locals_to_free (fun h env -> return_cont h tenv env retval) in
-      let lblenv = List.map (fun (lbl, lblcont) -> (lbl, (fun blocksdone sizemap tenv ghostenv h env -> free_locals closeBraceLoc h tenv env !locals_to_free (fun h env -> lblcont blocksdone sizemap tenv ghostenv h env)))) lblenv in
+      let return_cont h tenv env retval =
+        produce_consumed_lifetime_token_chunks h $. fun h ->
+        free_locals closeBraceLoc h tenv env !locals_to_free (fun h env -> return_cont h tenv env retval)
+      in
+      let lblenv = List.map (fun (lbl, lblcont) -> (lbl, (fun blocksdone sizemap tenv ghostenv h env ->
+        produce_consumed_lifetime_token_chunks h $. fun h ->
+        free_locals closeBraceLoc h tenv env !locals_to_free (fun h env -> lblcont blocksdone sizemap tenv ghostenv h env)))) lblenv
+      in
       verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss (fun sizemap tenv ghostenv h env -> cont h tenv env) return_cont econt
     | PureStmt (l, s) ->
       begin
