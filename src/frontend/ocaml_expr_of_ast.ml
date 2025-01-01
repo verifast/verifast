@@ -644,7 +644,7 @@ and of_expr = function
     of_pat coef;
     of_expr a
   ])
-| EnsuresAsn (l, a) -> C ("EnsuresAsn", [of_loc l; of_expr a])
+| EnsuresAsn (l, result_var, a) -> C ("EnsuresAsn", [of_loc l; s result_var; of_expr a])
 | MatchAsn (l, e, pat) ->
   C ("MatchAsn", [
     of_loc l;
@@ -987,7 +987,7 @@ and of_decl = function
   ])
 | TypedefDecl (l, t, x, tparams) ->
   C ("TypedefDecl", [of_loc l; of_type_expr t; S x; of_list s tparams])
-| FuncTypeDecl (l, gh, rt, ftn, tparams, ftparams, params, (pre, post, terminates)) ->
+| FuncTypeDecl (l, gh, rt, ftn, tparams, ftparams, params, (pre, (result_var, post), terminates)) ->
   C ("FuncTypeDecl", [
     of_loc l;
     of_ghostness gh;
@@ -998,7 +998,7 @@ and of_decl = function
     of_list (fun (t, x) -> T [of_type_expr t; S x]) params;
     T [
       of_expr pre;
-      of_expr post;
+      T [s result_var; of_expr post];
       B terminates
     ]
   ])
@@ -1007,7 +1007,7 @@ and of_decl = function
     of_loc l;
     S mangled_name;
     of_params params;
-    of_option of_spec contract_opt;
+    of_option (fun (pre, post) -> T [of_expr pre; of_expr post]) contract_opt;
     B terminates;
     body_opt |> of_option (fun (init_list, body_ss) ->
       T [
@@ -1032,7 +1032,7 @@ and of_decl = function
   C ("CxxDtor", [
     of_loc l;
     S mangled_name;
-    of_option of_spec contract_opt;
+    of_option (fun (pre, post) -> T [of_expr pre; of_expr post]) contract_opt;
     B terminates;
     of_option of_body_ss body_opt;
     B implicit;
@@ -1090,10 +1090,10 @@ and of_body_ss (ss, close_brace_loc) =
     of_list of_stmt ss; 
     of_loc close_brace_loc
   ]
-and of_spec (pre, post) =
+and of_spec (pre, (result_var, post)) =
   T [
     of_expr pre;
-    of_expr post;
+    T [s result_var; of_expr post];
   ]
 and of_ghostness = function
   Ghost -> c "Ghost"

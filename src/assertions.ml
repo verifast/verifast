@@ -601,8 +601,8 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | CoefAsn (l, coef', body) ->
       evalpat true ghostenv env coef' RealType RealType $. fun ghostenv env coef' ->
       produce_asn_core_with_post typeid_env tpenv h ghostenv env body (real_mul l coef coef') size_first size_all assuming cont_with_post
-    | EnsuresAsn (l, body) ->
-      cont_with_post h ghostenv env (Some body)
+    | EnsuresAsn (l, result_var, body) ->
+      cont_with_post h ghostenv env (Some (result_var, body))
     | WPredExprAsn (l, e, pts, inputParamCount, pats) ->
       let symb = eval None env e in
       let pts' = instantiate_types tpenv pts in
@@ -1455,8 +1455,8 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | CoefAsn (l, coefpat, WPointsTo (_, e, tp, kind, rhs)) -> points_to l (SrcPat coefpat) e tp kind (SrcPat rhs)
     | CoefAsn (l, coefpat, WPredAsn (_, g, is_global_predref, targs, pat0, pats)) -> pred_asn l (SrcPat coefpat) g is_global_predref targs (srcpats pat0) (srcpats pats)
     | CoefAsn (l, coefpat, WInstPredAsn (_, e_opt, st, cfin, tn, g, index, pats)) -> inst_call_pred l (SrcPat coefpat) e_opt st tn g index pats
-    | EnsuresAsn (l, body) ->
-      cont_with_post [] h ghostenv env env' None (Some body)
+    | EnsuresAsn (l, result_var, body) ->
+      cont_with_post [] h ghostenv env env' None (Some (result_var, body))
     | WPredExprAsn (l, e, pts, inputParamCount, pats) -> pred_expr_asn l real_unit_pat e pts inputParamCount pats
     | CoefAsn (l, coefpat, WPredExprAsn (_, e, pts, inputParamCount, pats)) -> pred_expr_asn l (SrcPat coefpat) e pts inputParamCount pats
     )

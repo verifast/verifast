@@ -658,10 +658,11 @@ let rec sexpr_of_expr (expr : expr) : sexpression =
             "pat", sexpr_of_pat pat;
             "asn", sexpr_of_expr asn
           ]
-    | EnsuresAsn (loc, asn) ->
+    | EnsuresAsn (loc, result_var, asn) ->
         build_list
           [ Symbol "expr-ensures-asn" ]
-          [ "asn", sexpr_of_expr asn ]
+          [ "asn", sexpr_of_expr asn;
+            "result-var", Symbol result_var ]
     | MatchAsn (loc, asn, pat) ->
         build_list
           [ Symbol "expr-match-asn" ]
@@ -966,8 +967,9 @@ and sexpr_of_decl (decl : decl) : sexpression =
       let contract =
         match contract with
           | None -> []
-          | Some (pre, post) -> [ "precondition", sexpr_of_pred pre
-                                ; "postcondition", sexpr_of_pred post ]
+          | Some (pre, (result_var, post)) ->
+            [ "precondition", sexpr_of_pred pre
+            ; "postcondition", List [ Symbol result_var; sexpr_of_pred post ] ]
       in
       let kw = List.concat [ [ "kind", sexpr_of_func_kind kind
                              ; "type-parameters", List (List.map symbol tparams )

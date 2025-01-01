@@ -394,14 +394,14 @@ mysh: ../bin/mysh$(DOTEXE)
 .PHONY: mysh
 
 _build/default/rustc_verifast/rustc_verifast.exe: .FORCE
-	@echo " DUNE " $@
+	@echo "  DUNE " $@
 	dune build rustc_verifast/rustc_verifast.exe
 
 ../bin/rustc-verifast$(DOTEXE): _build/default/rustc_verifast/rustc_verifast.exe
 	if [ ! -e $@ -o $< -nt $@ ]; then cp -f $< $@; fi
 
 _build/default/cargo_verifast/cargo_verifast.exe: .FORCE
-	@echo " DUNE " $@
+	@echo "  DUNE " $@
 	dune build cargo_verifast/cargo_verifast.exe
 
 ../bin/cargo-verifast$(DOTEXE): _build/default/cargo_verifast/cargo_verifast.exe

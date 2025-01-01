@@ -382,6 +382,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   leminfo_branch funcmap predinstmap sizemap tenv ghostenv h
                   env ss_before tcont return_cont econt
               end $. fun sizemap tenv ghostenv h env ->
+              let (result_var, post) = post in
               begin fun ftcheck_cont ->
               match call_opt with
                 None ->
@@ -412,16 +413,17 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 with_context PushSubcontext $. fun () ->
                 let pre1_env = currentThreadEnv @ List.map (fun (x, x0, tp, t, t0, x1, tp1) -> (x1, t)) fparams @ funenv1 in
                 consume_asn rules [] h env [] pre1_env pre1 true real_unit $. fun _ h _ f_env _ ->
+                let (result_var1, post1) = post1 in
                 let (f_env, ft_env, tenv, ghostenv, env) =
                   match rt1 with
                     None -> (f_env, ft_env, tenv, ghostenv, env)
                   | Some rt1 ->
-                    let result = get_unique_var_symb "result" rt1 in
-                    let f_env = ("result", result)::f_env in
+                    let result = get_unique_var_symb result_var1 rt1 in
+                    let f_env = (result_var1, result)::f_env in
                     let ft_env =
                       match rt with
                         None -> ft_env
-                      | Some (rt0, rt) -> ("result", prover_convert_term result rt rt0)::ft_env
+                      | Some (rt0, rt) -> (result_var, prover_convert_term result rt rt0)::ft_env
                     in
                     let (tenv, ghostenv, env) =
                       match resultvar with
@@ -2874,7 +2876,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     add_lemma_rule q_symb rule
 
-  and create_auto_lemma l (pn,ilist) g trigger pre post ps pre_tenv tparams' =
+  and create_auto_lemma l (pn,ilist) g trigger pre (_, post) ps pre_tenv tparams' =
     match (pre, post) with
     (ExprAsn(_, pre), ExprAsn(_, post)) ->
       List.iter
@@ -3122,7 +3124,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           cont None env ghostenv
       end @@ fun this_term_opt env ghostenv -> 
       produce_asn_with_post env [] [] ghostenv env pre real_unit (Some (PredicateChunkSize 0)) None (fun h ghostenv env post' ->
-        let post =
+        let (result_var, post) =
           match post' with
             None -> post
           | Some post' ->
@@ -3143,10 +3145,10 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let return_cont h tenv2 env2 retval =
           match (rt, retval) with
             (None, None) -> do_return h env
-          | (Some tp, Some t) -> do_return h (("result", t)::env)
+          | (Some tp, Some t) -> do_return h ((result_var, t)::env)
           | (Some tp, None) when dialect = Some Cxx && g = "main" -> 
             (* implicit 'return 0' for main function in C++ *)
-            do_return h (("result", int_zero_term) :: env)
+            do_return h ((result_var, int_zero_term) :: env)
           | (None, Some _) -> assert_false h env l "Void function returns a value." None
           | (Some _, None) -> assert_false h env l "Non-void function does not return a value." None
         in
@@ -3184,7 +3186,9 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let _ = pop() in
     let _ = 
       (match k with
-        Lemma(true, trigger) -> create_auto_lemma l (pn,ilist) g trigger pre post ps pre_tenv tparams'
+        Lemma(true, trigger) ->
+        if rt <> None then static_error l "An autolemma must not return a value" None;
+        create_auto_lemma l (pn,ilist) g trigger pre post ps pre_tenv tparams'
       | _ -> ()
     ) in
     gs', lems'
@@ -3197,7 +3201,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       - Initialize fields
       - Execute body
   *)
-  let verify_cxx_ctor pn ilist gs lems boxes predinstmap funcmap (struct_name, fields, g, loc, params, init_list, pre, pre_tenv, post, terminates, ss, close_brace_loc, is_polymorphic, type_info) =
+  let verify_cxx_ctor pn ilist gs lems boxes predinstmap funcmap (struct_name, fields, g, loc, params, init_list, pre, pre_tenv, (_, post), terminates, ss, close_brace_loc, is_polymorphic, type_info) =
     let init_constructs this_term init_list leminfo sizemap h env ghostenv cont =
       let rec iter first init_list h =
         match init_list with 
@@ -3344,7 +3348,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     - Call base destructors
       * Produce vtype of base before base destructor call if base is polymorphic
   *)
-  let verify_cxx_dtor pn ilist gs lems boxes predinstmap funcmap (struct_name, bases, fields, g, loc, pre, pre_tenv, post, terminates, ss, close_brace_loc, is_polymorphic, type_info) =
+  let verify_cxx_dtor pn ilist gs lems boxes predinstmap funcmap (struct_name, bases, fields, g, loc, pre, pre_tenv, (_, post), terminates, ss, close_brace_loc, is_polymorphic, type_info) =
     let consume_fields struct_addr h env tenv ghostenv leminfo sizemap cont =
       let rec iter h fields =
         match fields with 
@@ -3554,7 +3558,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   in
                   let eval_h h env e cont = verify_expr false (pn,ilist) tparams false leminfo funcmap sizemap tenv ghostenv h env None e cont econt in
                   let pats = (List.map (fun e -> SrcPat (LitPat e)) args) in
-                  verify_call funcmap eval_h lm (pn, ilist) None None [] pats ([], None, xmap0, ["this", this], pre0, post0, Some(epost0), terminates0, false) false is_upcall (Some supercn) leminfo sizemap h [] tenv ghostenv env (fun h env _ ->
+                  verify_call funcmap eval_h lm (pn, ilist) None None [] pats ([], None, xmap0, ["this", this], pre0, ("result", post0), Some(epost0), terminates0, false) false is_upcall (Some supercn) leminfo sizemap h [] tenv ghostenv env (fun h env _ ->
                   cont h) econt
             end $. fun h ->
             let fds = get_fields (pn,ilist) cn lm in

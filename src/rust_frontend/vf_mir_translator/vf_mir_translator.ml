@@ -3329,7 +3329,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         false (*nonghost_callers_only*),
         None
         (*implemented function type, with function type type arguments and function type arguments*),
-        Some (pre, post) (*contract*),
+        Some (pre, ("result", post)) (*contract*),
         false (*terminates*),
         None (*body*),
         false (*virtual*),
@@ -3471,7 +3471,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       (*might be just True*)
     in
     let post_asn = Sep (contract_loc, post_na_token, post_asn) in
-    Ok (pre_asn, post_asn)
+    Ok (pre_asn, ("result", post_asn))
 
   let gen_drop_contract adt_defs self_ty self_ty_targs self_lft_args limpl =
     let outlives_preds = [] in
@@ -3625,7 +3625,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                        [ LitPat (Var (limpl, "self")) ],
                        Static )) )))
     in
-    Ok (pre, post)
+    Ok (pre, ("result", post))
 
   (** makes the mappings used for substituting the MIR level local declaration ids with names closer to variables surface name *)
   let make_var_id_name_maps (loc : Ast.loc) (vdis : Mir.var_debug_info list) =
@@ -3784,13 +3784,13 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                  (loc, arg_name, ty_info))
         in
         let result = (loc, output) in
-        let* pre, post =
+        let* contract =
           gen_contract adt_defs loc
             (List.map TrName.lft_name_without_apostrophe
                (lifetime_params_get_list required_fn_cpn))
             [] [] [] params result
         in
-        Ok ((false, None, Some (pre, post), false), false))
+        Ok ((false, None, Some contract, false), false))
     in
     if assume_correct then Ast.static_error loc "assume_correct does not make sense on trait required functions" None;
     let decl =
@@ -4362,7 +4362,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         false (*nonghost_callers_only*),
         None
         (*implemented function type, with function type type arguments and function type arguments*),
-        Some (pre, post) (*contract*),
+        Some (pre, ("result", post)) (*contract*),
         false (*terminates*),
         None (*body*),
         false (*virtual*),
@@ -4568,7 +4568,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             false (*nonghost_callers_only*),
             None
             (*implemented function type, with function type type arguments and function type arguments*),
-            Some (pre, post) (*contract*),
+            Some (pre, ("result", post)) (*contract*),
             false (*terminates*),
             None (*body*),
             false (*virtual*),
@@ -4593,7 +4593,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             false (*nonghost_callers_only*),
             None
             (*implemented function type, with function type type arguments and function type arguments*),
-            Some (EmpAsn adt_def_loc, post) (*contract*),
+            Some (EmpAsn adt_def_loc, ("result", post)) (*contract*),
             false (*terminates*),
             Some
               ( [
@@ -4669,7 +4669,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         false (*nonghost_callers_only*),
         None
         (*implemented function type, with function type type arguments and function type arguments*),
-        Some (pre, post) (*contract*),
+        Some (pre, ("result", post)) (*contract*),
         false (*terminates*),
         None (*body*),
         false (*virtual*),
@@ -4761,7 +4761,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               false (*nonghost_callers_only*),
               None
               (*implemented function type, with function type type arguments and function type arguments*),
-              Some (pre, post) (*contract*),
+              Some (pre, ("result", post)) (*contract*),
               false (*terminates*),
               None (*body*),
               false (*virtual*),
@@ -4865,7 +4865,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               false (*nonghost_callers_only*),
               None
               (*implemented function type, with function type type arguments and function type arguments*),
-              Some (pre, post) (*contract*),
+              Some (pre, ("result", post)) (*contract*),
               false (*terminates*),
               None (*body*),
               false (*virtual*),
@@ -4948,7 +4948,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               false (*nonghost_callers_only*),
               None
               (*implemented function type, with function type type arguments and function type arguments*),
-              Some (pre, post) (*contract*),
+              Some (pre, ("result", post)) (*contract*),
               false (*terminates*),
               None (*body*),
               false (*virtual*),
@@ -5434,7 +5434,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               [(PtrTypeExpr (def_loc, StructTypeExpr (def_loc, Some name, None, [], tparams_targs)), "p")],
               false (*nonghost_callers_only*),
               None (*implemented function type, with function type type arguments and function type arguments*),
-              Some (pre, post) (*contract*),
+              Some (pre, ("result", post)) (*contract*),
               false (*terminates*),
               Some ([ExprStmt (CallExpr (def_loc, "#assume", [], [], [LitPat (False def_loc)], Static))], def_loc) (*body*),
               false (*virtual*),
@@ -5479,7 +5479,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               [(PtrTypeExpr (def_loc, StructTypeExpr (def_loc, Some name, None, [], tparams_targs)), "p"); (ManifestTypeExpr (def_loc, RealType), "coef")],
               false (*nonghost_callers_only*),
               None (*implemented function type, with function type type arguments and function type arguments*),
-              Some (pre, post) (*contract*),
+              Some (pre, ("result", post)) (*contract*),
               false (*terminates*),
               Some ([ExprStmt (CallExpr (def_loc, "#assume", [], [], [LitPat (False def_loc)], Static))], def_loc) (*body*),
               false (*virtual*),
@@ -5511,7 +5511,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               [(PtrTypeExpr (def_loc, StructTypeExpr (def_loc, Some name, None, [], tparams_targs)), "p")],
               false (*nonghost_callers_only*),
               None (*implemented function type, with function type type arguments and function type arguments*),
-              Some (pre, post) (*contract*),
+              Some (pre, ("result", post)) (*contract*),
               false (*terminates*),
               Some ([ExprStmt (CallExpr (def_loc, "#assume", [], [], [LitPat (False def_loc)], Static))], def_loc) (*body*),
               false (*virtual*),
@@ -5545,7 +5545,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               [(PtrTypeExpr (def_loc, StructTypeExpr (def_loc, Some name, None, [], tparams_targs)), "p")],
               false (*nonghost_callers_only*),
               None (*implemented function type, with function type type arguments and function type arguments*),
-              Some (pre, post) (*contract*),
+              Some (pre, ("result", post)) (*contract*),
               false (*terminates*),
               Some ([ExprStmt (CallExpr (def_loc, "#assume", [], [], [LitPat (False def_loc)], Static))], def_loc) (*body*),
               false (*virtual*),
@@ -5579,7 +5579,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               [(PtrTypeExpr (def_loc, StructTypeExpr (def_loc, Some name, None, [], tparams_targs)), "p")],
               false (*nonghost_callers_only*),
               None (*implemented function type, with function type type arguments and function type arguments*),
-              Some (pre, post) (*contract*),
+              Some (pre, ("result", post)) (*contract*),
               false (*terminates*),
               Some ([ExprStmt (CallExpr (def_loc, "#assume", [], [], [LitPat (False def_loc)], Static))], def_loc) (*body*),
               false (*virtual*),
@@ -5711,7 +5711,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                                  ps,
                                  false,
                                  None,
-                                 Some (pre, post),
+                                 Some (pre, (result_var, post)),
                                  terminates,
                                  body,
                                  false,
@@ -5736,7 +5736,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                                              self_ty_typeid,
                                              VarPat (lf, "Self_typeid") ),
                                          Ast.Sep
-                                           (lf, pre, Ast.EnsuresAsn (lf, post))
+                                           (lf, pre, Ast.EnsuresAsn (lf, result_var, post))
                                        ) )
                                in
                                let post = Ast.EmpAsn lf in
@@ -5750,7 +5750,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                                       ps,
                                       false,
                                       None,
-                                      Some (pre, post),
+                                      Some (pre, ("result", post)),
                                       terminates,
                                       None,
                                       false,
