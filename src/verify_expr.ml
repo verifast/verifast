@@ -121,12 +121,12 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let rec iter functypemap ds =
       match ds with
         [] -> List.rev functypemap
-      | (ftn, (l, gh, tparams, rt, ftxmap, xmap, pn, ilist, pre, post, terminates, predfammaps, typeid))::ds ->
+      | (ftn, (l, gh, tparams, rt, ftxmap, xmap, pn, ilist, pre, (result_var, post), terminates, predfammaps, typeid))::ds ->
         let (pre, post) =
           let (wpre, tenv) = check_asn (pn,ilist) tparams (ftxmap @ xmap @ [("this", PtrType Void); (current_thread_name, current_thread_type)]) pre in
-          let postmap = match rt with None -> tenv | Some rt -> ("result", rt)::tenv in
+          let postmap = match rt with None -> tenv | Some rt -> (result_var, rt)::tenv in
           let (wpost, tenv) = check_asn (pn,ilist) tparams postmap post in
-          (wpre, wpost)
+          (wpre, (result_var, wpost))
         in
         iter ((ftn, (l, gh, tparams, rt, ftxmap, xmap, pre, post, terminates, predfammaps, typeid))::functypemap) ds
     in
@@ -222,7 +222,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let currentThreadEnv = [(current_thread_name, get_unique_var_symb current_thread_name current_thread_type)] in
     let env0 = tparam_typeid_env @ currentThreadEnv @ env0_0 @ cenv0 in
     produce_asn_with_post tparam_typeid_env tpenv0 [] [] env0 pre0 real_unit None None (fun h _ env0 post0_opt ->
-      let post0 = match post0_opt with Some post0 -> post0 | None -> post0 in
+      let (result_var0, post0) = match post0_opt with Some post0 -> post0 | None -> post0 in
       let bs = zip2 xmap env0_0 in
       let env = tparam_typeid_env @ currentThreadEnv @ List.map (fun ((p, _), (p0, v)) -> (p, v)) bs @ env00 in
       begin match pre with
@@ -231,11 +231,11 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | _ -> ()
       end;
       consume_asn_with_post rules tpenv h tparam_typeid_env [] env pre true real_unit (fun _ h _ env _ post_opt ->
-        let post = match post_opt with Some post -> post | None -> post in
+        let (result_var, post) = match post_opt with Some post -> post | None -> post in
         let (env, env0) =
           match rt with
             None -> (env, env0)
-          | Some t -> let result = get_unique_var_symb "result" t in (("result", result)::env, ("result", result)::env0)
+          | Some t -> let result = get_unique_var_symb result_var t in ((result_var, result)::env, (result_var0, result)::env0)
         in
         execute_branch begin fun () ->
           produce_asn tparam_typeid_env tpenv h [] env post real_unit None None (fun h _ _ ->
@@ -321,20 +321,20 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let (pre, pre_tenv, post) =
       match contract_opt with
         None -> static_error l "Non-fixpoint function must have contract." None
-      | Some (pre, post) ->
+      | Some (pre, (result_var, post)) ->
         let (wpre, pre_tenv) = check_asn (pn,ilist) tparams1 tenv pre in
         let pre_tenv = List.remove_assoc "#pre" pre_tenv in
         let postmap = 
           match rt, dialect with
           | Some ((StructType _) as rt), Some Cxx ->
-            ("result", RefType rt) :: pre_tenv
+            (result_var, RefType rt) :: pre_tenv
           | Some rt, _ ->
-            ("result", rt) :: pre_tenv
+            (result_var, rt) :: pre_tenv
           | None, _ ->
             pre_tenv
         in
         let (wpost, tenv) = check_asn (pn,ilist) tparams1 postmap post in
-        (wpre, pre_tenv, wpost)
+        (wpre, pre_tenv, (result_var, wpost))
     in
     if nonghost_callers_only then begin
       match k with
@@ -518,6 +518,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         if report_skipped_stmts || match contract_opt with Some ((False _ | ExprAsn (_, False _)), _) -> false | _ -> true then begin match body_opt with None -> () | Some (_, (ss, _)) -> reportStmts ss end;
         let this_type = PtrType (StructType (struct_name, [])) in
         let thisType_type = PtrType (StructType ("std::type_info", [])) in
+        let contract_opt = Option.map (fun (pre, post) -> (pre, ("result", post))) contract_opt in
         let None, xmap, None, pre, pre_tenv, post =
           check_func_header pn ilist [] ["this", this_type; "thisType", thisType_type] [] loc Regular [] None struct_name None params false None contract_opt terminates body_opt
         in
@@ -595,6 +596,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         if report_skipped_stmts || match contract_opt with Some ((False _ | ExprAsn (_, False _)), _) -> false | _ -> true then begin match body_opt with None -> () | Some (ss, _) -> reportStmts ss end;
         let this_type = PtrType (StructType (struct_name, [])) in
         let thisType_type = PtrType (StructType ("std::type_info", [])) in
+        let contract_opt = Option.map (fun (pre, post) -> (pre, ("result", post))) contract_opt in
         let None, [], None, pre, pre_tenv, post =
           check_func_header pn ilist [] ["this", this_type; "thisType", thisType_type] [] loc Regular [] None struct_name None [] false None contract_opt terminates body_opt
         in
@@ -728,7 +730,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               None-> static_error l1 (".java file does not correctly implement .javaspec file: interface does not declare method " ^ string_of_sign sign) None
             | Some (ItfMethodInfo (lm1, gh1, rt1, xmap1, pre1, pre_tenv1, post1, epost1, terminates1, v1, abstract1, mtparams1)) ->
               let (mn, _) = sign in
-              check_func_header_compat lm1 ("Method '" ^ mn ^ "'") "Method specification check" [] (func_kind_of_ghostness gh1,[],rt1, xmap1,false, pre1, post1, epost1, terminates1) (func_kind_of_ghostness gh0, [], rt0, xmap0, false, [], [], pre0, post0, epost0, terminates1);
+              check_func_header_compat lm1 ("Method '" ^ mn ^ "'") "Method specification check" [] (func_kind_of_ghostness gh1,[],rt1, xmap1,false, pre1, ("result", post1), epost1, terminates1) (func_kind_of_ghostness gh0, [], rt0, xmap0, false, [], [], pre0, ("result", post0), epost0, terminates1);
               match_meths meths0 (List.remove_assoc sign meths1)
         in
         match_fields fields0 fields1;
@@ -783,8 +785,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let thisTerm = get_unique_var_symb "this" thisType in
             let (mn, _) = sign in
             check_func_header_compat l ("Method '" ^ mn ^ "'") "Method specification check" [("this", thisTerm)]
-              (Regular, [], rt, xmap, false, pre, post, epost, terminates)
-              (Regular, [], rt', xmap', false, [], [("this", thisTerm)], pre', post', epost', terminates');
+              (Regular, [], rt, xmap, false, pre, ("result", post), epost, terminates)
+              (Regular, [], rt', xmap', false, [], [("this", thisTerm)], pre', ("result", post'), epost', terminates');
             pop();
             end
           ) superspecs;
@@ -913,8 +915,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   let thisTerm = get_unique_var_symb "this" thisType in
                   assume (ctxt#mk_eq (ctxt#mk_app get_class_symbol [thisTerm]) (List.assoc cn classterms)) (fun _ ->
                     check_func_header_compat l ("Method '" ^ n ^ "'") "Method specification check" [("this", thisTerm)]
-                      (Regular, [], rt, xmap, false, pre, post, epost, terminates)
-                      (Regular, [], rt', xmap', false, [], [("this", thisTerm)], pre', post', epost', terminates');
+                      (Regular, [], rt, xmap, false, pre, ("result", post), epost, terminates)
+                      (Regular, [], rt', xmap', false, [], [("this", thisTerm)], pre', ("result", post'), epost', terminates');
                     success()
                   )
                   end
@@ -1085,8 +1087,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   let epost1: (type_ * asn) list = epost1 in
                   let (mn, _) = sign0 in
                   check_func_header_compat lm1 ("Method '" ^ mn ^ "'") "Method implementation check" []
-                    (func_kind_of_ghostness gh1,[], rt1, xmap1,false, pre1, post1, epost1, terminates1)
-                    (func_kind_of_ghostness gh0, [], rt0, xmap0, false, [], [], pre0, post0, epost0, terminates0);
+                    (func_kind_of_ghostness gh1,[], rt1, xmap1,false, pre1, ("result", post1), epost1, terminates1)
+                    (func_kind_of_ghostness gh0, [], rt0, xmap0, false, [], [], pre0, ("result", post0), epost0, terminates0);
                   if ss0=None then meths_impl:=(fst sign0,lm0)::!meths_impl;
                   iter rest meths1
             in
@@ -1104,8 +1106,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   let epost1: (type_ * asn) list = epost1 in
                   let rt= None in
                   check_func_header_compat lm1 ("Class '" ^ cn ^ "'") "Constructor implementation check" []
-                    (Regular, [], rt, ("this", ObjType (cn, []))::xmap1, false, pre1, post1, epost1, terminates1)
-                    (Regular, [], rt, ("this", ObjType (cn, []))::xmap0, false, [], [], pre0, post0, epost0, terminates0);
+                    (Regular, [], rt, ("this", ObjType (cn, []))::xmap1, false, pre1, ("result", post1), epost1, terminates1)
+                    (Regular, [], rt, ("this", ObjType (cn, []))::xmap0, false, [], [], pre0, ("result", post0), epost0, terminates0);
                   if ss0=None then cons_impl:=(cn,lm0)::!cons_impl;
                   iter rest constr1
             in
@@ -1361,7 +1363,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | CxxLValueToRValue (_, e) -> expr_mark_addr_taken e locals
     | CxxDerivedToBase (_, e, _) -> expr_mark_addr_taken e locals
     | Sep (_, e1, e2) -> expr_mark_addr_taken e1 locals; expr_mark_addr_taken e2 locals
-    | EnsuresAsn (_, e) -> expr_mark_addr_taken e locals
+    | EnsuresAsn (_, result_var, e) -> expr_mark_addr_taken e locals
     | TypeExpr _ -> ()
     | Typeid (_, e) -> expr_mark_addr_taken e locals
     | TypePredExpr (_, _, _) | WTypePredExpr (_, _, _) -> ()
@@ -2148,7 +2150,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           cont h
       end $. fun h ->
       consume_asn_with_post rules tpenv h env ghostenv cenv pre true real_unit (fun _ h ghostenv' env' chunk_size post' ->
-        let post =
+        let (result_var, post) =
           match post' with
             None -> post
           | Some post' -> post'
@@ -2222,12 +2224,12 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           | Some t0 ->
             let symbol_name =
               match xo with
-                None -> "result"
+                None -> result_var
               | Some x -> x
             in
             let t = instantiate_type tpenv t0 in
             let r = get_unique_var_symb_ symbol_name t pure in
-            let env'' = update env' "result" (prover_convert_term r t t0) in
+            let env'' = update env' result_var (prover_convert_term r t t0) in
             r, env''
         in
         execute_branch begin fun () ->
@@ -2318,7 +2320,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | EmpAsn _ -> false
     | ForallAsn (_, _, _, _) -> false
     | CoefAsn (l, DummyPat, a) -> false (* TODO: Support more coefpats *)
-    | EnsuresAsn (l, _) -> false
+    | EnsuresAsn (l, result_var, _) -> false
     | WMatchAsn (_, _, _, _) -> false
     | LetTypeAsn (_, _, _, a) -> asserts_exclusive_ownership a
     | _ -> true
@@ -2898,7 +2900,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let Some targEnv = zip ctpenv targtps in
             List.map (fun (name,tp) -> (name, replace_type l targEnv tp)) xmap 
         in
-        check_correct h None None [] args (lm, [], None, xmap, ["this", obj], pre, post, Some(epost), terminates, false) is_upcall (Some cn) (fun h env _ -> cont h env obj)
+        check_correct h None None [] args (lm, [], None, xmap, ["this", obj], pre, ("result", post), Some(epost), terminates, false) is_upcall (Some cn) (fun h env _ -> cont h env obj)
       | _ -> static_error l "Multiple matching overloads" None
       end
     | WMethodCall (l, tn, m, pts, args, fb, tpenv) when m <> "getClass" ->
@@ -2927,7 +2929,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         if not pure then static_error l "A lemma method call is not allowed in a non-pure context." None;
         if leminfo_is_lemma leminfo then static_error l "Lemma method calls in lemmas are currently not supported (for termination reasons)." None
       end;
-      check_correct h xo None mtargs args (lm, mtparams, rt, xmap, [], pre, post, Some epost, terminates, true) is_upcall target_class cont
+      check_correct h xo None mtargs args (lm, mtparams, rt, xmap, [], pre, ("result", post), Some epost, terminates, true) is_upcall target_class cont
     | WSuperMethodCall(l, supercn, m, args, (lm, gh, rt, xmap, pre, post, epost, terminates, rank, v)) ->
       if gh = Real && pure then static_error l "Method call is not allowed in a pure context" None;
       if gh = Ghost then begin
@@ -2939,7 +2941,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           Some rank, RealMethodInfo (Some rank0) -> rank < rank0
         | _ -> true
       in
-      check_correct h None None [] args (lm, [], rt, xmap, [], pre, post, Some epost, terminates, false) is_upcall (Some supercn) cont
+      check_correct h None None [] args (lm, [], rt, xmap, [], pre, ("result", post), Some epost, terminates, false) is_upcall (Some supercn) cont
     | WFunCall (l, g, targs, es, binding) ->
       let FuncInfo (funenv, fterm, lg, k, tparams, tr, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body, is_virt, overrides) = List.assoc g funcmap in
       if heapReadonly && not assume_left_to_right_evaluation && not (startswith g "vf__") && asserts_exclusive_ownership pre then has_heap_effects ();

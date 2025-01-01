@@ -431,7 +431,7 @@ let parse_spec_clauses = function%parser
   in
   let pre_post, cs =
     match cs with
-      RequiresClause pre::EnsuresClause post::cs -> Some (pre, post), cs
+      RequiresClause pre::EnsuresClause post::cs -> Some (pre, ("result", post)), cs
     | _ -> None, cs
   in
   let terminates, cs =
@@ -739,7 +739,7 @@ and parse_ghost_decl = function%parser
        [ (_, Kwd "terminates"); (_, Kwd ";") ] -> true
      | [ ] -> false
     ]
-  ] -> [FuncTypeDecl (l, Real, rt, ftn, tparams, ftps, ps, (pre, post, terminates))]
+  ] -> [FuncTypeDecl (l, Real, rt, ftn, tparams, ftps, ps, (pre, ("result", post), terminates))]
 | [ (l, Kwd "lem_type"); (lftn, Ident ftn); parse_type_params as tparams; (_, Kwd "("); [%let ftps = rep_comma parse_param]; (_, Kwd ")"); (_, Kwd "=");
   (_, Kwd "lem"); (_, Kwd "("); [%let ps = rep_comma parse_param]; (_, Kwd ")"); 
   [%let rt = function%parser
@@ -749,7 +749,7 @@ and parse_ghost_decl = function%parser
   (_, Kwd ";");
   (_, Kwd "req"); parse_asn as pre; (_, Kwd ";");
   (_, Kwd "ens"); parse_asn as post; (_, Kwd ";")
-] -> [FuncTypeDecl (l, Ghost, rt, ftn, tparams, ftps, ps, (pre, post, false))]
+] -> [FuncTypeDecl (l, Ghost, rt, ftn, tparams, ftps, ps, (pre, ("result", post), false))]
 | [ (l, Kwd "abstract_type"); (_, Ident tn); (_, Kwd ";") ] -> [AbstractTypeDecl (l, tn)]
 | [ (l, Kwd "type_pred_decl"); (_, Kwd "<"); (_, Kwd "Self"); (_, Kwd ">"); (_, Kwd "."); (_, Ident predName); (_, Kwd ":"); parse_type as te; (_, Kwd ";") ] ->
   [TypePredDecl (l, te, "Self", predName)]

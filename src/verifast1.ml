@@ -820,14 +820,14 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       * type_ map (* params *)
       * asn (* pre *)
       * type_ map (* tenv after pre *)
-      * asn (* post *)
+      * (string (* result variable *) * asn) (* post *)
       * bool (* terminates *)
       * ((string * (expr * bool (* is written *)) option) list (* init list *) * (stmt list * loc)) option option
     type cxx_dtor_info =
         loc 
       * asn (* pre *)
       * type_ map (* tenv after pre *)
-      * asn (* post *)
+      * (string (* result variable *) * asn) (* post *)
       * bool (* terminates *)
       * (stmt list * loc) option option
       * bool (* is_virtual *)
@@ -942,7 +942,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       * bool (* nonghost_callers_only *)
       * asn (* precondition *)
       * (string * type_) list (* type environment after precondition *)
-      * asn (* postcondition *)
+      * (string (* result variable *) * asn) (* postcondition *)
       * bool  (* terminates *)
       * (string * pred_fam_info map * type_ list * (loc * string) list) option (* implemented function type, with function type type arguments and function type arguments *)
       * (stmt list * loc (* closing brace *) ) option option (* body; None if prototype; Some None if ? *)
@@ -956,7 +956,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       * type_ map (* parameters of the function type *)
       * type_ map (* parameters of the function *)
       * asn (* precondition *)
-      * asn (* postcondition *)
+      * (string (* result variable *) * asn) (* postcondition *)
       * bool (* terminates *)
       * pred_fam_info map (* the is_xyz predicate, if any *)
       * termnode (* typeid *)
@@ -6694,14 +6694,14 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let (wbody, tenv, infTps) = check_asn tenv body in
           (CoefAsn (l, wcoef, wbody), merge_tenvs l tenv' tenv, infTps)
         end
-      | EnsuresAsn (l, body) ->
+      | EnsuresAsn (l, result_var, body) ->
         begin match try_assoc "#pre" tenv with
           None -> static_error l "Ensures clause not allowed here." None
         | Some rt ->
           let tenv = List.remove_assoc "#pre" tenv in
-          let tenv = if rt = Void then tenv else ("result", rt)::tenv in
+          let tenv = if rt = Void then tenv else (result_var, rt)::tenv in
           let (wbody, tenv, infTps) = check_asn tenv body in
-          (EnsuresAsn (l, wbody), tenv, infTps)
+          (EnsuresAsn (l, result_var, wbody), tenv, infTps)
         end
       | e ->
         let a =

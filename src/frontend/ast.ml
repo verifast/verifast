@@ -599,7 +599,7 @@ and
       loc *
       pat *
       asn
-  | EnsuresAsn of loc * asn
+  | EnsuresAsn of loc * string (* result variable *) * asn
   | MatchAsn of loc * expr * pat
   | WMatchAsn of loc * expr * pat * type_
   | LetTypeAsn of loc * string * type_ * asn (* `let_type U = T in A` means A with type T substituted for type parameter U *)
@@ -916,7 +916,7 @@ and
       (type_expr * string) list *  (* parameters *)
       bool (* nonghost_callers_only *) *
       (string * type_expr list * (loc * string) list) option (* implemented function type, with function type type arguments and function type arguments *) *
-      (asn * asn) option *  (* contract *)
+      (asn * (string (* result variable *) * asn)) option *  (* contract *)
       bool *  (* terminates *)
       (stmt list * loc (* Close brace *)) option *  (* body *)
       bool * (* virtual *)
@@ -958,7 +958,7 @@ and
       string list * (* type parameters *)
       (type_expr * string) list *
       (type_expr * string) list *
-      (asn * asn * bool) (* precondition, postcondition, terminates *)
+      (asn * (string (* result variable *) * asn) * bool) (* precondition, postcondition, terminates *)
   | BoxClassDecl of
       loc *
       string *
@@ -1144,7 +1144,7 @@ let rec expr_loc e =
   | EmpAsn l -> l
   | ForallAsn (l, tp, i, e) -> l
   | CoefAsn (l, coef, body) -> l
-  | EnsuresAsn (l, body) -> l
+  | EnsuresAsn (l, result_var, body) -> l
   | CxxNew (l, _, _)
   | WCxxNew (l, _, _) -> l
   | CxxDelete (l, _) -> l
@@ -1393,7 +1393,7 @@ let expr_fold_open iter state e =
   | EmpAsn l -> state
   | ForallAsn (l, tp, i, e) -> iter state e
   | CoefAsn (l, coef, body) -> iter (iterpat state coef) body
-  | EnsuresAsn (l, body) -> iter state body
+  | EnsuresAsn (l, result_var, body) -> iter state body
   | _ -> static_error (expr_loc e) "This expression form is not allowed in this position." None
 
 (* Postfix fold *)
