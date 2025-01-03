@@ -120,7 +120,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     if assume_no_provenance && not fno_strict_aliasing then
       static_error (Lexed ((path, 1, 1), (path, 1, 1))) "Command-line option -assume_no_provenance is allowed only in combination with -fno_strict_aliasing" None
 
-  let assume_left_to_right_evaluation = assume_left_to_right_evaluation || language <> CLang
+  let assume_left_to_right_evaluation = assume_left_to_right_evaluation || language <> CLang || dialect = Some Rust
 
   let {reportRange; reportUseSite; reportExecutionForest; reportStmt; reportStmtExec; reportDirective} = callbacks
 

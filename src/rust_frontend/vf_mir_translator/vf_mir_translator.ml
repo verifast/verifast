@@ -1372,7 +1372,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     Ok
       (Mir.TyInfoBasic
          {
-           vf_ty = FuncTypeExpr (loc, output_ty, []);
+           vf_ty = FuncTypeExpr (loc, ConstructedTypeExpr (loc, "fn_outcome", [output_ty]), []);
            (* Only the return type matters *)
            interp = RustBelt.emp_ty_interp loc;
          })
@@ -2027,6 +2027,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let ggal = translate_annot_to_vf_parser_inp ggal in
       Ok (VfMirAnnotParser.parse_ghost_generic_arg_list ggal)
 
+    type fn_call_result =
+      | FnCallResult of Ast.expr
+      | FnCallOutcome of Ast.expr (* 'returning(result)' or 'unwinding' *)
+
     let translate_fn_call_rexpr (callee_cpn : OperandRd.t)
         (args_cpn : OperandRd.t list) (call_loc : Ast.loc) (fn_loc : Ast.loc)
         (ghost_generic_arg_list_opt_cpn : OptionRd.t) =
@@ -2061,7 +2065,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               args,
               Ast.Static (*method_binding*) )
         in
-        Ok (tmp_rvalue_binders, call_expr)
+        Ok (tmp_rvalue_binders, FnCallOutcome call_expr)
       in
       let* callee = translate_operand callee_cpn call_loc in
       match callee with
@@ -2091,18 +2095,19 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                       in
                       Ok
                         ( tmp_rvalue_binders,
-                          Ast.Operation
-                            ( fn_loc,
-                              Ast.Eq,
-                              [
-                                arg;
-                                IntLit
-                                  ( fn_loc,
-                                    Big_int.zero_big_int,
-                                    (*decimal*) true,
-                                    (*U suffix*) false,
-                                    (*int literal*) Ast.NoLSuffix );
-                              ] ) )
+                          FnCallResult (
+                            Ast.Operation
+                              ( fn_loc,
+                                Ast.Eq,
+                                [
+                                  arg;
+                                  IntLit
+                                    ( fn_loc,
+                                      Big_int.zero_big_int,
+                                      (*decimal*) true,
+                                      (*U suffix*) false,
+                                      (*int literal*) Ast.NoLSuffix );
+                                ] ) ) )
                   | _ ->
                       Error
                         (`TrFnCallRExpr
@@ -2119,7 +2124,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                       in
                       Ok
                         ( tmp_rvalue_binders,
-                          Ast.Operation (fn_loc, Ast.Add, [ arg1; arg2 ]) )
+                          FnCallResult (Ast.Operation (fn_loc, Ast.Add, [ arg1; arg2 ])) )
                   | _ ->
                       Error
                         (`TrFnCallRExpr
@@ -2136,13 +2141,14 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                       in
                       Ok
                         ( tmp_rvalue_binders,
-                          Ast.CallExpr
-                            ( fn_loc,
-                              "std::intrinsics::ptr_offset_from",
-                              [ Mir.basic_type_of gen_arg_ty_info ],
-                              [],
-                              [ LitPat arg1; LitPat arg2 ],
-                              Static ) )
+                          FnCallOutcome (
+                            Ast.CallExpr
+                              ( fn_loc,
+                                "std::intrinsics::ptr_offset_from",
+                                [ Mir.basic_type_of gen_arg_ty_info ],
+                                [],
+                                [ LitPat arg1; LitPat arg2 ],
+                                Static ) ) )
                   | _ ->
                       Error
                         (`TrFnCallRExpr
@@ -2159,17 +2165,18 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                       in
                       Ok
                         ( tmp_rvalue_binders,
-                          Ast.Operation
-                            ( fn_loc,
-                              Ast.Add,
-                              [
-                                arg1;
-                                CastExpr
-                                  ( fn_loc,
-                                    ManifestTypeExpr
-                                      (fn_loc, Int (Signed, PtrRank)),
-                                    arg2 );
-                              ] ) )
+                          FnCallResult (
+                            Ast.Operation
+                              ( fn_loc,
+                                Ast.Add,
+                                [
+                                  arg1;
+                                  CastExpr
+                                    ( fn_loc,
+                                      ManifestTypeExpr
+                                        (fn_loc, Int (Signed, PtrRank)),
+                                      arg2 );
+                                ] ) ) )
                   | _ ->
                       Error
                         (`TrFnCallRExpr
@@ -2186,17 +2193,18 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                       in
                       Ok
                         ( tmp_rvalue_binders,
-                          Ast.Operation
-                            ( fn_loc,
-                              Ast.Sub,
-                              [
-                                arg1;
-                                CastExpr
-                                  ( fn_loc,
-                                    ManifestTypeExpr
-                                      (fn_loc, Int (Signed, PtrRank)),
-                                    arg2 );
-                              ] ) )
+                          FnCallResult (
+                            Ast.Operation
+                              ( fn_loc,
+                                Ast.Sub,
+                                [
+                                  arg1;
+                                  CastExpr
+                                    ( fn_loc,
+                                      ManifestTypeExpr
+                                        (fn_loc, Int (Signed, PtrRank)),
+                                      arg2 );
+                                ] ) ) )
                   | _ ->
                       Error
                         (`TrFnCallRExpr
@@ -2205,19 +2213,20 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               | "std::ptr::null_mut" ->
                   Ok
                     ( [],
-                      IntLit
-                        ( fn_loc,
-                          Big_int.zero_big_int,
-                          (*decimal*) true,
-                          (*U suffix*) false,
-                          (*int literal*) Ast.NoLSuffix ) )
+                      FnCallResult (
+                        IntLit
+                          ( fn_loc,
+                            Big_int.zero_big_int,
+                            (*decimal*) true,
+                            (*U suffix*) false,
+                            (*int literal*) Ast.NoLSuffix ) ) )
               | "std::ptr::read"
               | "std::ptr::mut_ptr::<impl *mut T>::read" ->
                   let [ src_cpn ] = args_cpn in
                   let* tmp_rvalue_binders, [ src ] =
                     translate_operands [ (src_cpn, fn_loc) ]
                   in
-                  Ok (tmp_rvalue_binders, Ast.Deref (fn_loc, src))
+                  Ok (tmp_rvalue_binders, FnCallResult (Ast.Deref (fn_loc, src)))
               | "std::ptr::write"
               | "std::ptr::mut_ptr::<impl *mut T>::write" ->
                   let [ dst_cpn; src_cpn ] = args_cpn in
@@ -2230,7 +2239,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                           Ast.ExprStmt
                             (AssignExpr (fn_loc, Deref (fn_loc, dst), Mutation, src));
                         ],
-                      mk_unit_expr fn_loc )
+                      FnCallResult (mk_unit_expr fn_loc) )
               | "std::cell::UnsafeCell::<T>::new"
               | "std::cell::UnsafeCell::<T>::get"
               | "std::mem::ManuallyDrop::<T>::new"
@@ -2240,20 +2249,20 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   let* tmp_rvalue_binders, [ arg ] =
                     translate_operands [ (arg_cpn, fn_loc) ]
                   in
-                  Ok (tmp_rvalue_binders, arg)
+                  Ok (tmp_rvalue_binders, FnCallResult arg)
               | "core::str::<impl str>::as_ptr"
               | "core::slice::<impl [T]>::as_ptr" ->
                   let [ arg_cpn ] = args_cpn in
                   let* tmp_rvalue_binders, [ arg ] =
                     translate_operands [ (arg_cpn, fn_loc) ]
                   in
-                  Ok (tmp_rvalue_binders, Ast.Select (fn_loc, arg, "ptr"))
+                  Ok (tmp_rvalue_binders, FnCallResult (Ast.Select (fn_loc, arg, "ptr")))
               | "core::str::<impl str>::len" | "core::slice::<impl [T]>::len" ->
                   let [ arg_cpn ] = args_cpn in
                   let* tmp_rvalue_binders, [ arg ] =
                     translate_operands [ (arg_cpn, fn_loc) ]
                   in
-                  Ok (tmp_rvalue_binders, Ast.Select (fn_loc, arg, "len"))
+                  Ok (tmp_rvalue_binders, FnCallResult (Ast.Select (fn_loc, arg, "len")))
               | "core::str::<impl str>::as_bytes" ->
                   let [ arg_cpn ] = args_cpn in
                   let* tmp_rvalue_binders, [ arg ] =
@@ -2273,15 +2282,16 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   in
                   Ok
                     ( tmp_rvalue_binders,
-                      Ast.CastExpr
-                        ( fn_loc,
-                          slice_u8_ref_ty,
-                          InitializerList
-                            ( fn_loc,
-                              [
-                                (None, Select (fn_loc, arg, "ptr"));
-                                (None, Select (fn_loc, arg, "len"));
-                              ] ) ) )
+                      FnCallResult (
+                        Ast.CastExpr
+                          ( fn_loc,
+                            slice_u8_ref_ty,
+                            InitializerList
+                              ( fn_loc,
+                                [
+                                  (None, Select (fn_loc, arg, "ptr"));
+                                  (None, Select (fn_loc, arg, "len"));
+                                ] ) ) ) )
               | _ -> translate_regular_fn_call substs fn_name)
           | _ ->
               Error
@@ -2301,6 +2311,19 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let dst_data : Mir.fn_call_dst_data = { dst; dst_bblock_id } in
       Ok dst_data
 
+    let translate_unwind_action (unwind_action_cpn : UnwindActionRd.t) (loc : Ast.loc) =
+      let open UnwindActionRd in
+      match get unwind_action_cpn with
+      | Continue ->
+        [Ast.ReturnStmt (loc, Some (Ast.CallExpr (loc, "unwinding", [], [], [], Static)))], []
+      | Unreachable ->
+        [Ast.Assert (loc, Ast.False loc)], []
+      | Terminate ->
+        [Ast.ExprStmt (CallExpr (loc, "std::process::abort", [], [], [], Static))], []
+      | Cleanup bblock_id_cpn ->
+        let bblock_id = translate_basic_block_id bblock_id_cpn in
+        [Ast.GotoStmt (loc, bblock_id)], [bblock_id]
+    
     let translate_fn_call (fn_call_data_cpn : FnCallDataRd.t) (loc : Ast.loc) =
       let open FnCallDataRd in
       let func_cpn = func_get fn_call_data_cpn in
@@ -2310,34 +2333,55 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let ghost_generic_arg_list_opt_cpn =
         ghost_generic_arg_list_get fn_call_data_cpn
       in
+      let unwind_stmts, unwind_targets = translate_unwind_action (unwind_action_get fn_call_data_cpn) loc in
       let* fn_call_tmp_rval_ctx, fn_call_rexpr =
         translate_fn_call_rexpr func_cpn args_cpn loc fn_loc
           ghost_generic_arg_list_opt_cpn
       in
       let destination_cpn = destination_get fn_call_data_cpn in
-      let* call_stmt, terminator, targets =
+      let* call_stmts, terminator, targets =
         match OptionRd.get destination_cpn with
-        | Nothing -> (*Diverging call*) Ok (Ast.ExprStmt fn_call_rexpr, Mir.EncodedTerminator, [])
+        | Nothing ->
+          (*Diverging call*)
+          let call_expr =
+            match fn_call_rexpr with
+              FnCallResult e -> e
+            | FnCallOutcome e -> e
+          in
+          Ok ([Ast.ExprStmt call_expr] @ unwind_stmts, Mir.EncodedTerminator, [])
         | Something ptr_cpn ->
             let destination_data_cpn = VfMirStub.Reader.of_pointer ptr_cpn in
             let* { Mir.dst = (dst, dst_is_mutable); Mir.dst_bblock_id } =
               translate_destination_data destination_data_cpn loc
             in
+            let assignment e =
+              Ast.ExprStmt (Ast.AssignExpr (loc, dst, (if dst_is_mutable then Mutation else Initialization), e))
+            in
+            let call_stmt =
+              match fn_call_rexpr with
+                FnCallResult e -> assignment e
+              | FnCallOutcome e ->
+                Ast.SwitchStmt (loc, e, [
+                  Ast.SwitchStmtClause (loc, CallExpr (loc, "returning", [], [], [LitPat (Var (loc, "__result"))], Static), [assignment (Ast.Var (loc, "__result"))]);
+                  Ast.SwitchStmtClause (loc, CallExpr (loc, "unwinding", [], [], [], Static), unwind_stmts)
+                ])
+            in
             Ok
-              ( Ast.ExprStmt (Ast.AssignExpr (loc, dst, (if dst_is_mutable then Mutation else Initialization), fn_call_rexpr)),
+              ( [call_stmt],
                 Mir.GotoTerminator (loc, dst_bblock_id),
                 [ dst_bblock_id ] )
         | Undefined _ -> Error (`TrFnCall "Unknown Option kind")
       in
-      let full_call_stmt =
+      let full_call_stmts =
         match fn_call_rexpr with
-        | Ast.CallExpr
-            ( call_loc,
-              "VeriFast_ghost_command",
-              [] (*type arguments*),
-              [] (*indices, in case this is really a predicate assertion*),
-              [],
-              Ast.Static (*method_binding*) ) ->
+        | FnCallOutcome (
+            Ast.CallExpr
+              ( call_loc,
+                "VeriFast_ghost_command",
+                [] (*type arguments*),
+                [] (*indices, in case this is really a predicate assertion*),
+                [],
+                Ast.Static (*method_binding*) ) ) ->
             let get_start_loc loc =
               let (_, ln, col), _ = loc in
               (ln, col)
@@ -2351,18 +2395,18 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   gsl_l = phl_l)
                 !State.ghost_stmts
             in
-            ghost_stmt
+            [ghost_stmt]
         | _ ->
-            if ListAux.is_empty fn_call_tmp_rval_ctx then call_stmt
+            if ListAux.is_empty fn_call_tmp_rval_ctx then call_stmts
             else
-              Ast.BlockStmt
+              [Ast.BlockStmt
                 ( loc,
                   (*decl list*) [],
-                  fn_call_tmp_rval_ctx @ [ call_stmt ],
+                  fn_call_tmp_rval_ctx @ call_stmts,
                   loc,
-                  ref [] )
+                  ref [] )]
       in
-      Ok ([ full_call_stmt ], terminator, targets)
+      Ok (full_call_stmts, terminator, targets)
 
     let translate_sw_targets_branch (br_cpn : SwitchTargetsBranchRd.t) =
       let open SwitchTargetsBranchRd in
@@ -2465,9 +2509,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       | SwitchInt sw_int_data_cpn ->
           let* sw_stmt, targets = translate_sw_int sw_int_data_cpn loc in
           Ok ([ sw_stmt ], Mir.EncodedTerminator, targets)
-      | Resume -> failwith "Todo: Terminatorkind::Resume"
       | Return ->
-          Ok ([ Ast.ReturnStmt (loc, Some (Ast.Var (loc, ret_place_id))) ], EncodedTerminator, [])
+          Ok ([ Ast.ReturnStmt (loc, Some (Ast.CallExpr (loc, "returning", [], [], [LitPat (Ast.Var (loc, ret_place_id))], Static))) ], EncodedTerminator, [])
       | Unreachable -> Ok ([ Ast.Assert (loc, False loc) ], EncodedTerminator, [])
       | Call fn_call_data_cpn -> translate_fn_call fn_call_data_cpn loc
       | Drop drop_data_cpn ->
@@ -2493,7 +2536,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                        Static )) ] @ freeze_stmts,
               Mir.GotoTerminator (loc, target),
               [ target ] )
-      | Undefined _ -> Error (`TrTerminatorKind "Unknown Mir terminator kind")
+      | UnwindResume ->
+          Ok ([ Ast.ReturnStmt (loc, Some (Ast.CallExpr (loc, "unwinding", [], [], [], Static))) ], EncodedTerminator, [])
+      | UnwindTerminate ->
+          Ok ([ Ast.ExprStmt (CallExpr (loc, "std::process::abort", [], [], [], Static)) ], EncodedTerminator, [])
 
     let translate_terminator (ret_place_id : string)
         (terminator_cpn : TerminatorRd.t) =
@@ -2719,9 +2765,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             | _, Shared, SharedRef, _ -> "reborrow_ref"
             | _, Shared, _, _ -> "create_ref"
           in
-          let expr = Ast.CallExpr (loc, fn_name, [], [], [LitPat (AddressOf (loc, place_expr))], Static) in
+          let expr = Ast.CallExpr (loc, "fn_outcome_result", [], [], [LitPat (Ast.CallExpr (loc, fn_name, [], [], [LitPat (AddressOf (loc, place_expr))], Static))], Static) in
           Ok (`TrRvalueExpr expr)
-          (*Todo @Nima: We might need to assert the chunk when we make a reference to it*)
       | AddressOf address_of_data_cpn ->
           let open AddressOfData in
           let mut_cpn = mutability_get address_of_data_cpn in
@@ -2939,7 +2984,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let open BasicBlockRd in
       let id_cpn = id_get bblock_cpn in
       let id = translate_basic_block_id id_cpn in
-      if is_cleanup_get bblock_cpn then
+      if is_cleanup_get bblock_cpn && false then
         (* Todo @Nima: For now we are ignoring cleanup basic-blocks *)
         Ok None
       else
@@ -3471,7 +3516,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       (*might be just True*)
     in
     let post_asn = Sep (contract_loc, post_na_token, post_asn) in
-    Ok (pre_asn, ("result", post_asn))
+    Ok (pre_asn, Rust_parser.mk_outcome_post post_asn)
 
   let gen_drop_contract adt_defs self_ty self_ty_targs self_lft_args limpl =
     let outlives_preds = [] in
@@ -3798,7 +3843,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         ( loc,
           Ast.Regular,
           (*type params*) [ "Self" ] @ lifetime_params_get_list required_fn_cpn,
-          Some ret_ty,
+          Some (Ast.ConstructedTypeExpr (Ast.type_expr_loc ret_ty, "fn_outcome", [ret_ty])),
           Printf.sprintf "%s::%s" trait_name name,
           vf_param_decls,
           nonghost_callers_only,
@@ -4098,7 +4143,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             ( loc,
               Ast.Regular,
               (*type params*) vf_tparams,
-              Some ret_ty,
+              Some (Ast.ConstructedTypeExpr (Ast.type_expr_loc ret_ty, "fn_outcome", [ret_ty])),
               name,
               vf_param_decls,
               nonghost_callers_only,

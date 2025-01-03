@@ -446,6 +446,7 @@ mod vf_mir_builder {
     use rustc_interface::interface::Compiler;
     use rustc_middle::bug;
     use rustc_middle::mir::interpret::AllocRange;
+    use rustc_middle::mir::UnwindAction;
     use rustc_middle::ty;
     use rustc_middle::ty::GenericParamDef;
     use rustc_middle::ty::GenericParamDefKind;
@@ -463,6 +464,7 @@ mod vf_mir_builder {
     use switch_int_data_cpn::switch_targets as switch_targets_cpn;
     use terminator_cpn::terminator_kind as terminator_kind_cpn;
     use terminator_kind_cpn::fn_call_data as fn_call_data_cpn;
+    use terminator_kind_cpn::unwind_action as unwind_action_cpn;
     use terminator_kind_cpn::switch_int_data as switch_int_data_cpn;
     use tracing::{debug, trace};
     use ty_cpn::adt_def as adt_def_cpn;
@@ -2124,7 +2126,7 @@ mod vf_mir_builder {
                         switch_int_data_cpn,
                     );
                 }
-                mir::TerminatorKind::UnwindResume => terminator_kind_cpn.set_resume(()),
+                mir::TerminatorKind::UnwindResume => terminator_kind_cpn.set_unwind_resume(()),
                 mir::TerminatorKind::UnwindTerminate(_) => terminator_kind_cpn.set_unwind_terminate(()),
                 mir::TerminatorKind::Return => terminator_kind_cpn.set_return(()),
                 mir::TerminatorKind::Unreachable => terminator_kind_cpn.set_unreachable(()),
@@ -2145,6 +2147,7 @@ mod vf_mir_builder {
                         args,
                         destination,
                         target,
+                        unwind,
                         fn_span,
                         fn_call_data_cpn,
                     );
@@ -2157,7 +2160,8 @@ mod vf_mir_builder {
                 } => {
                     let mut drop_data_cpn = terminator_kind_cpn.init_drop();
                     Self::encode_place(enc_ctx, place, drop_data_cpn.reborrow().init_place());
-                    Self::encode_basic_block_id(*target, drop_data_cpn.init_target());
+                    Self::encode_basic_block_id(*target, drop_data_cpn.reborrow().init_target());
+                    Self::encode_unwind_action(unwind, drop_data_cpn.reborrow().init_unwind_action());
                 }
                 mir::TerminatorKind::TailCall { .. } => terminator_kind_cpn.set_tail_call(()),
                 mir::TerminatorKind::Assert { .. } => terminator_kind_cpn.set_assert(()),
@@ -2210,6 +2214,21 @@ mod vf_mir_builder {
             Self::encode_basic_block_id(targets.otherwise(), target_cpn);
         }
 
+        fn encode_unwind_action(
+            unwind: &UnwindAction,
+            mut unwind_action_cpn: unwind_action_cpn::Builder<'_>,
+        ) {
+            match unwind {
+                UnwindAction::Continue => unwind_action_cpn.set_continue(()),
+                UnwindAction::Unreachable => unwind_action_cpn.set_unreachable(()),
+                UnwindAction::Terminate(_) => unwind_action_cpn.set_terminate(()),
+                UnwindAction::Cleanup(basic_block) => {
+                    let cleanup_cpn = unwind_action_cpn.init_cleanup();
+                    Self::encode_basic_block_id(*basic_block, cleanup_cpn);
+                }
+            }
+        }
+
         fn encode_fn_call_data(
             tcx: TyCtxt<'tcx>,
             enc_ctx: &mut EncCtx<'tcx, 'a>,
@@ -2217,6 +2236,7 @@ mod vf_mir_builder {
             args: &Box<[Spanned<mir::Operand<'tcx>>]>,
             destination: &mir::Place<'tcx>,
             target: &Option<mir::BasicBlock>,
+            unwind: &UnwindAction,
             fn_span: &rustc_span::Span,
             mut fn_call_data_cpn: fn_call_data_cpn::Builder<'_>,
         ) {
@@ -2240,6 +2260,8 @@ mod vf_mir_builder {
                     Self::encode_basic_block_id(*dest_bblock_id, basic_block_id_cpn);
                 }
             }
+
+            Self::encode_unwind_action(unwind, fn_call_data_cpn.reborrow().init_unwind_action());
 
             let call_span_data_cpn = fn_call_data_cpn.reborrow().init_call_span();
             Self::encode_span_data(tcx, &fn_span.data(), call_span_data_cpn);
