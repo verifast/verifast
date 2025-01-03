@@ -51,7 +51,7 @@ module Make (Args : VF_MIR_ANNOT_PARSER_ARGS) = struct
     let loc, tk_stream = token_stream_from_annots annots in
     let tk_stream = Parser.noop_preprocessor tk_stream in
     try
-      parse_fully Rust_parser.parse_spec_clauses tk_stream
+      parse_fully (Rust_parser.parse_spec_clauses Regular) tk_stream
     with
       Lexer.Stream.Error msg -> raise (Lexer.ParseException (Lexed (loc()), msg))
     | Lexer.Stream.Failure -> raise (Lexer.ParseException (Lexed (loc()), "Parse error"))

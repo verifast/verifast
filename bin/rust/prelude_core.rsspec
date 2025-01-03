@@ -4,6 +4,15 @@ include!{"listex.rsspec"}
 
 /*@
 
+inductive fn_outcome<T> = returning(result: T) | unwinding;
+
+fix fn_outcome_result<t>(outcome: fn_outcome<t>) -> t {
+    match outcome {
+        returning(result) => result,
+        unwinding => default_value,
+    }
+}
+
 lem assume(b: bool);
     req true;
     ens b;
