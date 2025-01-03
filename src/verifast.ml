@@ -1130,7 +1130,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   if List.mem_assoc pat tenv then static_error lc ("Pattern variable '" ^ pat ^ "' hides existing local variable '" ^ pat ^ "'.") None;
                   if List.mem_assoc pat ptenv then static_error lc "Duplicate pattern variable." None;
                   let tp' = instantiate_type tpenv tp in
-                  let term = get_unique_var_symb pat tp' in
+                  let term = get_unique_var_symb_ pat tp' pure in
                   let term' =
                     match unfold_inferred_type tp with
                       GhostTypeParam x -> convert_provertype term (provertype_of_type tp') ProverInductive
@@ -1149,7 +1149,8 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               | Some(t, k) -> List.map (fun (x, tx) -> (tx, (t, k - 1))) xenv @ sizemap
             in
             assume_eq v (mk_app ctorsym xterms) @@ fun () ->
-            verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap (ptenv @ tenv) (pats @ ghostenv) h (xenv @ env) ss tcont return_cont econt
+            let ghostenv = if pure then pats @ ghostenv else ghostenv in
+            verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap (ptenv @ tenv) ghostenv h (xenv @ env) ss tcont return_cont econt
             in
             branch'
               verify_branch
@@ -2412,6 +2413,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       let tparams = List.map fst typedecls @ tparams in
       let env = List.map (fun (tn, (l, typeid_term)) -> tn ^ "_typeid", typeid_term) typedecls @ env in
+      let tenv = List.map (fun (tn, (l, typeid_term)) -> tn ^ "_typeid", voidPtrType) typedecls @ tenv in
       let (lems, predinsts, localpreds, localpredinsts) = (List.rev lems, List.rev predinsts, List.rev localpreds, List.rev localpredinsts) in
       let funcnameterms' =
         List.map

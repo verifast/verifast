@@ -417,7 +417,11 @@ let parse_spec_clause = function%parser
     [ parse_pure_spec_clause as c; (_, Kwd "@*/") ] -> c ] ] -> c
 | [ parse_pure_spec_clause as c ] -> c
 
-let parse_spec_clauses = function%parser
+let mk_outcome_post post =
+  let l = expr_loc post in
+  ("outcome", Sep (l, Operation (l, Eq, [Var (l, "outcome"); CallExpr (l, "returning", [], [], [VarPat (l, "result")], Static)]), post))
+
+let parse_spec_clauses func_kind = function%parser
   [ [%let cs = rep parse_spec_clause ] ] ->
   let nonghost_callers_only, cs =
     match cs with
@@ -431,7 +435,15 @@ let parse_spec_clauses = function%parser
   in
   let pre_post, cs =
     match cs with
-      RequiresClause pre::EnsuresClause post::cs -> Some (pre, ("result", post)), cs
+      RequiresClause pre::EnsuresClause post::cs ->
+      let post =
+        match func_kind with
+          Regular ->
+          mk_outcome_post post
+        | _ ->
+          ("result", post)
+      in
+      Some (pre, post), cs
     | _ -> None, cs
   in
   let terminates, cs =
@@ -591,17 +603,19 @@ and parse_func_header k = function%parser
       [ (_, Kwd "->"); parse_type as t ] -> Some t
     | [ ] -> if k = Regular then Some (StructTypeExpr (l, Some "std_tuple_0_", None, [], [])) else None
     ]
-  ] -> (l, g, tparams, ps, rt)
+  ] ->
+  let rt = Option.map (fun rt -> match k with Regular -> ConstructedTypeExpr (type_expr_loc rt, "fn_outcome", [rt]) | _ -> rt) rt in
+  (l, g, tparams, ps, rt)
 
 and parse_func_rest k = function%parser
   [ [%let (l, g, tparams, ps, rt) = parse_func_header k];
     [%let d = function%parser
       [ (_, Kwd ";");
-        [%let ((nonghost_callers_only, ft, co, terminates), assume_correct) = parse_spec_clauses]
+        [%let ((nonghost_callers_only, ft, co, terminates), assume_correct) = parse_spec_clauses k]
       ] ->
       if assume_correct then raise (ParseException (l, "assume_correct clause is not allowed here."));
       Func (l, k, tparams, rt, g, ps, nonghost_callers_only, ft, co, terminates, None, false, [])
-    | [ [%let ((nonghost_callers_only, ft, co, terminates), assume_correct) = parse_spec_clauses];
+    | [ [%let ((nonghost_callers_only, ft, co, terminates), assume_correct) = parse_spec_clauses k];
         (_, Kwd "{");
         parse_stmts as ss;
         (closeBraceLoc, Kwd "}")
@@ -739,7 +753,10 @@ and parse_ghost_decl = function%parser
        [ (_, Kwd "terminates"); (_, Kwd ";") ] -> true
      | [ ] -> false
     ]
-  ] -> [FuncTypeDecl (l, Real, rt, ftn, tparams, ftps, ps, (pre, ("result", post), terminates))]
+  ] ->
+    let rt = Option.map (fun rt -> ConstructedTypeExpr (l, "fn_outcome", [rt])) rt in
+    let post = mk_outcome_post post in
+    [FuncTypeDecl (l, Real, rt, ftn, tparams, ftps, ps, (pre, post, terminates))]
 | [ (l, Kwd "lem_type"); (lftn, Ident ftn); parse_type_params as tparams; (_, Kwd "("); [%let ftps = rep_comma parse_param]; (_, Kwd ")"); (_, Kwd "=");
   (_, Kwd "lem"); (_, Kwd "("); [%let ps = rep_comma parse_param]; (_, Kwd ")"); 
   [%let rt = function%parser
