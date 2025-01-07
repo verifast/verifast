@@ -176,6 +176,91 @@ jobs:
               tag: 'nightly'
             });
 
+  build_macos_aarch:
+    runs-on: macos-14
+    permissions: {}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Remove conflicting Python file (issue 223)
+        run: rm /usr/local/bin/2to3
+
+      - name: Build setup
+        run: ./setup-build.sh
+
+      - name: Build
+        run: |
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            export VFVERSION=$GITHUB_REF_NAME
+          fi
+          ./build.sh
+
+      - name: Rename artifact
+        id: rename_artifact
+        run: |
+          cd upload
+          ARTIFACT_NAME=verifast-$VFVERSION-macos-aarch.tar.gz
+          mv verifast-nightly-osx.tar.gz $ARTIFACT_NAME
+          echo "artifact_name=$ARTIFACT_NAME" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: binary-package-macos-aarch
+          path: upload
+
+    outputs:
+      artifact_name: ${{ steps.rename_artifact.outputs.artifact_name }}
+
+  # Upload in a separate job to limit the code that has write access to repo contents
+  upload_macos_aarch:
+    if: github.repository == 'verifast/verifast' && github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref_type == 'tag')
+    needs:
+      - build_macos_aarch
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      attestations: write
+      contents: write
+    
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Set and push nightly tag
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
+        run: git tag -f nightly && git push -f origin nightly:refs/tags/nightly
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: binary-package-macos
+
+      - uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: ${{ needs.build_macos_aarch.outputs.artifact_name }}
+
+      - name: Upload binary package as nightly release asset
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
+        uses: actions/github-script@v6
+        env:
+          ARTIFACT_NAME: ${{ needs.build_macos_aarch.outputs.artifact_name }}
+        with:
+          script: |
+            await require('./upload-release-asset.js')({
+              github,
+              context,
+              core,
+              assetName: process.env.ARTIFACT_NAME,
+              assetPath: process.env.ARTIFACT_NAME,
+              assetsToDeleteRegex: /-macos-aarch\.tar\.gz$/,
+              tag: 'nightly'
+            });
+
   build_windows:
     runs-on: windows-2019
     permissions: {}
