@@ -26,6 +26,7 @@ pred <RcU32>.own(t, rcU32) =
     [_]exists(?dk) &*& [_]exists(?gid) &*& [_]na_inv(t, MaskNshrSingle(std::ptr::NonNull_ptr(rcU32.ptr)), rc_na_inv(dk, gid, std::ptr::NonNull_ptr(rcU32.ptr), t)) &*&
     ticket(dlft_pred(dk), gid, ?frac) &*& [frac]dlft_pred(dk)(gid, false) &*&
     [_]frac_borrow(dk, u32_full_borrow_content(t, &(*std::ptr::NonNull_ptr::<RcBoxU32>(rcU32.ptr)).value)) &*&
+    pointer_within_limits(&(*std::ptr::NonNull_ptr::<RcBoxU32>(rcU32.ptr)).strong) == true &*&
     pointer_within_limits(&(*std::ptr::NonNull_ptr::<RcBoxU32>(rcU32.ptr)).value) == true;
 
 pred_ctor Rc_frac_bc(l: *RcU32, nnp: std::ptr::NonNull<RcBoxU32>)(;) = (*l).ptr |-> nnp;
@@ -35,6 +36,7 @@ pred <RcU32>.share(k, t, l) =
     [_]exists(?dk) &*& [_]exists(?gid) &*& [_]na_inv(t, MaskNshrSingle(std::ptr::NonNull_ptr(nnp)), rc_na_inv(dk, gid, std::ptr::NonNull_ptr(nnp), t)) &*&
     [_]exists(?frac) &*& [_]frac_borrow(k, ticket_(dk, gid, frac)) &*& [_]frac_borrow(k, lifetime_token_(frac, dk)) &*&
     [_]frac_borrow(dk, u32_full_borrow_content(t, &(*std::ptr::NonNull_ptr::<RcBoxU32>(nnp)).value)) &*&
+    pointer_within_limits(&(*std::ptr::NonNull_ptr::<RcBoxU32>(nnp)).strong) == true &*&
     pointer_within_limits(&(*std::ptr::NonNull_ptr::<RcBoxU32>(nnp)).value) == true;
 
 lem RcU32_share_mono(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *RcU32)
@@ -63,6 +65,7 @@ lem RcU32_fbor_split(t: thread_id_t, l: *RcU32) -> std::ptr::NonNull<RcBoxU32> /
         [_]na_inv(t, MaskNshrSingle(std::ptr::NonNull_ptr(result)), rc_na_inv(dk, gid, std::ptr::NonNull_ptr(result), t)) &*&
         [_]exists(?frac) &*& full_borrow(k, ticket_(dk, gid, frac)) &*& full_borrow(k, lifetime_token_(frac, dk)) &*&
         [_]frac_borrow(dk, u32_full_borrow_content(t, &(*std::ptr::NonNull_ptr::<RcBoxU32>(result)).value)) &*&
+        pointer_within_limits(&(*std::ptr::NonNull_ptr::<RcBoxU32>(result)).strong) == true &*&
         pointer_within_limits(&(*std::ptr::NonNull_ptr::<RcBoxU32>(result)).value) == true &*&
         [q]lifetime_token(k);
 {
@@ -200,7 +203,7 @@ impl Clone for RcU32 {
             //@ assert [_]exists::<std::ptr::NonNull<RcBoxU32>>(?nnp);
             //@ open_frac_borrow('a, Rc_frac_bc(self, nnp), _q_a/2);
             //@ open [?qp]Rc_frac_bc(self, nnp)();
-            let strong = self.ptr.as_ref().strong.get(); //TODO: Why do we not get pointer_within_limits req here?
+            let strong = self.ptr.as_ref().strong.get();
             //@ assert [_]exists::<lifetime_t>(?dk) &*& [_]exists::<usize>(?gid) &*& [?df]exists::<real>(?frac);
             //@ open_frac_borrow('a, ticket_(dk, gid, frac), _q_a/4);
             //@ open [?qp_t]ticket_(dk, gid, frac)();
@@ -237,8 +240,8 @@ impl Drop for RcU32 {
     {
         unsafe {
             //@ open RcU32_full_borrow_content(_t, self)();
-            let strong = self.ptr.as_ref().strong.get();
             //@ open RcU32_own(_t, ?rcU32);
+            let strong = self.ptr.as_ref().strong.get();
             //@ let nnp = rcU32.ptr;
             //@ assert [_]exists::<lifetime_t>(?dk) &*& [_]exists::<usize>(?gid);
             //@ let ptr = std::ptr::NonNull_ptr::<RcBoxU32>(nnp);

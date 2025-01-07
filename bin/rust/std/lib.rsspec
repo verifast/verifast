@@ -4,6 +4,14 @@ abstract_type type_info;
 
 @*/
 
+mod hint {
+
+    fn assert_unchecked(b: bool);
+    //@ req b;
+    //@ ens true;
+
+}
+
 mod ops {
 
     trait FnMut<Output, Args> {
