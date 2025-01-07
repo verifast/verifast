@@ -38,6 +38,7 @@ lem Pair_send<A, B>(t1: thread_id_t)
 }
 
 pred<A, B> <Pair<A, B>>.share(k, t, l) =
+    pointer_within_limits(&(*l).fst) == true &*&
     [_](<A>.share)(k, t, &(*l).fst) &*&
     pointer_within_limits(&(*l).snd) == true &*&
     [_](<B>.share)(k, t, &(*l).snd) &*&
@@ -70,6 +71,7 @@ lem Pair_split_full_borrow_m<A, B>(k: lifetime_t, t: thread_id_t, l: *Pair<A, B>
         full_borrow(k, <B>.full_borrow_content(t, &(*l).snd)) &*&
         full_borrow(k, struct_Pair_padding_(l)) &*&
         [q]lifetime_token(k) &*&
+        pointer_within_limits(&(*l).fst) == true &*&
         pointer_within_limits(&(*l).snd) == true;
 {
     let klong = open_full_borrow_strong_m(k, Pair_full_borrow_content::<A, B>(t, l), q);
@@ -110,6 +112,7 @@ lem Pair_split_full_borrow<A, B>(k: lifetime_t, t: thread_id_t, l: *Pair<A, B>) 
         full_borrow(k, <A>.full_borrow_content(t, &(*l).fst)) &*&
         full_borrow(k, <B>.full_borrow_content(t, &(*l).snd)) &*&
         [q]lifetime_token(k) &*&
+        pointer_within_limits(&(*l).fst) == true &*&
         pointer_within_limits(&(*l).snd) == true;
 {
     produce_type_interp::<A>();
@@ -197,6 +200,7 @@ lem init_ref_Pair<A, B>(p: *Pair<A, B>)
     
     init_ref_share_m(k, t, &(*p).fst);
     init_ref_share_m(k, t, &(*p).snd);
+    note(pointer_within_limits(ref_origin(&(*p).fst)));
     note(pointer_within_limits(ref_origin(&(*p).snd)));
     close Pair_share::<A, B>(k, t, p);
     leak Pair_share(k, t, p);

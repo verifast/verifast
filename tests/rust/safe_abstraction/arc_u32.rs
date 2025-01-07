@@ -30,7 +30,7 @@ pred_ctor Arc_inv(dk: lifetime_t, gid: isize, ptr: *ArcInnerU32)() = counting(dl
 
 pred <ArcU32>.own(t, arcU32) = [_]std::ptr::NonNull_own(default_tid, arcU32.ptr) &*& [_]exists(?ptr) &*& std::ptr::NonNull_ptr::<ArcInnerU32>(arcU32.ptr) == ptr &*&
     [_]exists(?dk) &*& [_]exists(?gid) &*& [_]atomic_space(Marc, Arc_inv(dk, gid, ptr)) &*& ticket(dlft_pred(dk), gid, ?frac) &*& [frac]dlft_pred(dk)(gid, false) &*&
-    [_]u32_share(dk, default_tid, &(*ptr).data) &*& pointer_within_limits(&(*ptr).data) == true;
+    [_]u32_share(dk, default_tid, &(*ptr).data) &*& pointer_within_limits(&(*ptr).strong) == true &*& pointer_within_limits(&(*ptr).data) == true;
 
 pred_ctor Arc_frac_bc(l: *ArcU32, nnp: std::ptr::NonNull<ArcInnerU32>)(;) = (*l).ptr |-> nnp;
 pred_ctor ticket_(dk: lifetime_t, gid: isize, frac: real)(;) = ticket(dlft_pred(dk), gid, frac) &*& [frac]ghost_cell(gid, false);
@@ -38,6 +38,7 @@ pred_ctor ticket_(dk: lifetime_t, gid: isize, frac: real)(;) = ticket(dlft_pred(
 pred <ArcU32>.share(k, t, l) = [_]exists(?nnp) &*& [_]frac_borrow(k, Arc_frac_bc(l, nnp)) &*& [_]std::ptr::NonNull_own(default_tid, nnp) &*&
     [_]exists(?ptr) &*& std::ptr::NonNull_ptr::<ArcInnerU32>(nnp) == ptr &*& [_]exists(?dk) &*& [_]exists(?gid) &*& [_]atomic_space(Marc, Arc_inv(dk, gid, ptr)) &*&
     [_]exists(?frac) &*& [_]frac_borrow(k, ticket_(dk, gid, frac)) &*& [_]frac_borrow(k, lifetime_token_(frac, dk)) &*& [_]u32_share(dk, default_tid, &(*ptr).data) &*&
+    pointer_within_limits(&(*ptr).strong) == true &*&
     pointer_within_limits(&(*ptr).data) == true;
 
 lem ArcU32_share_mono(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *ArcU32)
@@ -63,6 +64,7 @@ lem ArcU32_fbor_split(k: lifetime_t, t: thread_id_t, l: *ArcU32)
         [_]exists(?nnp) &*& full_borrow(k, Arc_frac_bc(l, nnp)) &*& [_]std::ptr::NonNull_own(default_tid, nnp) &*&
         [_]exists(?ptr) &*& std::ptr::NonNull_ptr::<ArcInnerU32>(nnp) == ptr &*& [_]exists(?dk) &*& [_]exists(?gid) &*& [_]atomic_space(Marc, Arc_inv(dk, gid, ptr)) &*&
         [_]exists(?frac) &*& full_borrow(k, ticket_(dk, gid, frac)) &*& full_borrow(k, lifetime_token_(frac, dk)) &*& [_]u32_share(dk, default_tid, &(*ptr).data) &*&
+        pointer_within_limits(&(*ptr).strong) == true &*&
         pointer_within_limits(&(*ptr).data) == true;
 {
     let klong = open_full_borrow_strong_m(k, ArcU32_full_borrow_content(t, l), qk);
@@ -190,6 +192,7 @@ impl ArcU32 {
 
     unsafe fn strong_count_inner<'a>(ptr: &'a ArcInnerU32) -> usize
     /*@ req [?qa]lifetime_token(?a) &*& [_]exists(?dk) &*& [_]exists(?gid) &*& [_]atomic_space(Marc, Arc_inv(dk, gid, ptr)) &*&
+        pointer_within_limits(&(*ptr).strong) == true &*&
         [_]exists(?frac) &*& [_]frac_borrow(a, ticket_(dk, gid, frac)) &*& [_]frac_borrow(a, lifetime_token_(frac, dk));
     @*/
     //@ ens [qa]lifetime_token(a);
@@ -237,6 +240,7 @@ impl ArcU32 {
 
     unsafe fn clone_inner<'a>(ptr: &'a ArcInnerU32)
     /*@ req [?qa]lifetime_token(?a) &*& [_]exists(?dk) &*& [_]exists(?gid) &*& [_]atomic_space(Marc, Arc_inv(dk, gid, ptr)) &*&
+        pointer_within_limits(&(*ptr).strong) == true &*&
         [_]exists(?frac) &*& [_]frac_borrow(a, ticket_(dk, gid, frac)) &*& [_]frac_borrow(a, lifetime_token_(frac, dk)); @*/
     //@ ens [qa]lifetime_token(a) &*& ticket(dlft_pred(dk), gid, ?frac1) &*& [frac1]dlft_pred(dk)(gid, false);
     {

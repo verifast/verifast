@@ -36,6 +36,7 @@ pred_ctor MutexU32_frac_borrow_content(kfcc: lifetime_t, l: *MutexU32)(;) =
     SysMutex_share(&(*l).inner, full_borrow_(kfcc, u32_full_borrow_content(t0, &(*l).data))) &*& struct_MutexU32_padding(l);
 
 pred <MutexU32>.share(k, t, l) =
+    pointer_within_limits(&(*l).inner) == true &*&
     exists_np(?kfcc) &*& lifetime_inclusion(k, kfcc) == true &*& frac_borrow(k, MutexU32_frac_borrow_content(kfcc, l));
 
 lem MutexU32_share_mono(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *MutexU32)
@@ -84,6 +85,7 @@ lem MutexU32_share_full(k: lifetime_t, t: thread_id_t, l: *MutexU32)
         }{
             open MutexU32_fbc_inner(l)();
             assert (*l).inner |-> ?inner;
+            points_to_limits(&(*l).inner);
             close full_borrow_(k, u32_full_borrow_content(t0, &(*l).data))();
             SysMutex_renew(inner, full_borrow_(k, u32_full_borrow_content(t0, &(*l).data)));
             SysMutex_share_full(&(*l).inner);
@@ -185,6 +187,7 @@ lem MutexGuardU32_sync(km: lifetime_t, t: thread_id_t, t1: thread_id_t)
 /*@
 // TODO: Is this extra lifetime `klong` necessary here?
 pred_ctor MutexGuardU32_own_(km: lifetime_t)(t: thread_id_t, lock: *MutexU32) =
+    pointer_within_limits(&(*lock).inner) == true &*&
     [_]exists_np(?klong) &*& lifetime_inclusion(km, klong) == true &*& [_]frac_borrow(km, MutexU32_frac_borrow_content(klong, lock))
     &*& SysMutex_locked(&(*lock).inner, full_borrow_(klong, u32_full_borrow_content(t0, &(*lock).data)), t)
     &*& full_borrow(klong, u32_full_borrow_content(t0, &(*lock).data));
@@ -220,6 +223,7 @@ impl MutexGuardU32 {
     unsafe fn new<'a>(lock: &'a MutexU32) -> MutexGuardU32
     /*@ req thread_token(?t) &*& [?qa]lifetime_token(?a) &*& [_]exists_np(?km) &*& lifetime_inclusion(a, km) == true
         &*& [_]frac_borrow(a, MutexU32_frac_borrow_content(km, lock))
+        &*& pointer_within_limits(&(*lock).inner) == true
         &*& SysMutex_locked(&(*lock).inner, full_borrow_(km, u32_full_borrow_content(t0, &(*lock).data)), t)
         &*& full_borrow(km, u32_full_borrow_content(t0, &(*lock).data));
     @*/

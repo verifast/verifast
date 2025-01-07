@@ -35,6 +35,7 @@ pred_ctor Mutex_frac_borrow_content<T>(kfcc: lifetime_t, l: *Mutex<T>)(;) =
     sys::locks::SysMutex_share(&(*l).inner, full_borrow_(kfcc, <T>.full_borrow_content(t0, &(*l).data))) &*& struct_Mutex_padding(l);
 
 pred<T> <Mutex<T>>.share(k, t, l) =
+    pointer_within_limits(&(*l).inner) == true &*&
     exists_np(?kfcc) &*& lifetime_inclusion(k, kfcc) == true &*& frac_borrow(k, Mutex_frac_borrow_content::<T>(kfcc, l));
 
 lem Mutex_share_mono<T>(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *Mutex<T>)
@@ -91,6 +92,7 @@ lem Mutex_share_full<T>(k: lifetime_t, t: thread_id_t, l: *Mutex<T>)
             close Mutex_fbc_inner::<T>(l)();
         }{
             open Mutex_fbc_inner::<T>(l)();
+            points_to_limits(&(*l).inner);
             assert (*l).inner |-> ?inner;
             close full_borrow_(k, <T>.full_borrow_content(t0, &(*l).data))();
             sys::locks::SysMutex_renew(inner, full_borrow_(k, <T>.full_borrow_content(t0, &(*l).data)));
@@ -142,6 +144,7 @@ pub struct MutexGuard<'a, T: Send> {
 
 // TODO: Is this extra lifetime `klong` necessary here?
 pred<'a, T> <MutexGuard<'a, T>>.own(t, mutexGuard) =
+    pointer_within_limits(&(*mutexGuard.lock).inner) == true &*&
     [_]exists_np(?klong) &*& lifetime_inclusion('a, klong) == true &*& [_]frac_borrow('a, Mutex_frac_borrow_content(klong, mutexGuard.lock))
     &*& sys::locks::SysMutex_locked(&(*mutexGuard.lock).inner, full_borrow_(klong, <T>.full_borrow_content(t0, &(*mutexGuard.lock).data)), t)
     &*& full_borrow(klong, <T>.full_borrow_content(t0, &(*mutexGuard.lock).data));
