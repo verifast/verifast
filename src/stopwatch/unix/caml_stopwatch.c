@@ -1,6 +1,10 @@
 #define _GNU_SOURCE
 #include <sched.h>
-#include <x86intrin.h>
+#if __aarch64__
+    #include <time.h>
+#else
+    #include <x86intrin.h>
+#endif
 #include <caml/mlvalues.h>
 #include <caml/alloc.h>
 #include <unistd.h>
@@ -20,8 +24,16 @@ value caml_lock_process_to_processor_1() {
     return Val_unit;
 }
 
+static unsigned long long get_processor_ticks() {
+#if __aarch64__
+    return clock_gettime_nsec_np(CLOCK_UPTIME_RAW);
+#else
+    return __rdtsc();
+#endif
+}
+
 value caml_stopwatch_processor_ticks() {
-    return caml_copy_int64(__rdtsc());
+    return caml_copy_int64(get_processor_ticks());
 }
 
 struct stopwatch {
@@ -40,13 +52,13 @@ value caml_stopwatch_create() {
 
 value caml_stopwatch_start(value stopwatch) {
     struct stopwatch *s = (void *)stopwatch;
-    s->startTimestamp = __rdtsc();
+    s->startTimestamp = get_processor_ticks();
     return Val_unit;
 }
 
 value caml_stopwatch_stop(value stopwatch) {
     struct stopwatch *s = (void *)stopwatch;
-    unsigned long long tsc = __rdtsc();
+    unsigned long long tsc = get_processor_ticks();
     s->counter += tsc - s->startTimestamp;
     s->startTimestamp = NO_TIMESTAMP;
     return Val_unit;
