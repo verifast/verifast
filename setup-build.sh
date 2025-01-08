@@ -30,7 +30,7 @@ dl_and_unzip_vfdeps() {
 dl_and_unzip_llvm-clang() {
   platform="$1"
   hash="$2"
-  dl_and_unzip "https://github.com/NielsMommen/vf-llvm-clang-build/releases/download/v2.0.3/vf-llvm-clang-build-$VF_LLVM_CLANG_BUILD_VERSION-$platform.tar.gz" $hash 256 z
+  dl_and_unzip "https://github.com/verifast/vf-llvm-clang-build/releases/download/v2.0.4/vf-llvm-clang-build-$VF_LLVM_CLANG_BUILD_VERSION-$platform.tar.gz" $hash 256 z
 }
 
 script_dir=$(pwd)
@@ -95,7 +95,11 @@ elif [ $(uname -s) = "Darwin" ]; then
   fi
 
   cd /usr/local
-  dl_and_unzip_llvm-clang MacOS 77474d414aa7ddc4e68bc00525a8dccec284c9936c45f6241157070dc5dfdfd6
+  if [ "$(uname -p)" = arm64 ]; then
+    dl_and_unzip_llvm-clang MacOS-aarch64 b7dc4af0fbe3526814e798e5de4abd4972f7bd174de4b80d1dcb1a25c7a4947e
+  else
+    dl_and_unzip_llvm-clang MacOS d41910103a003e7e501d736e6ee4e382ac18d71d9c868a8a585bcf5cbb7a0397
+  fi
   dl_and_unzip_vfdeps https://github.com/verifast/vfdeps/releases/download/23.04/$VFDEPS_NAME-macos.txz a43ad92202761103a03400d78679a94838eaad44567c69b94eedd10d
 
   cd $script_dir/src/cxx_frontend/ast_exporter
