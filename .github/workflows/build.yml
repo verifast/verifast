@@ -122,7 +122,6 @@ jobs:
           path: upload
 
       - uses: actions/upload-artifact@v4
-        if: ${{ always() }}
         with:
           name: vfide_libraries
           path: src/vfide-libraries.log
@@ -211,6 +210,11 @@ jobs:
         with:
           name: binary-package-macos-aarch
           path: upload
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vfide_libraries_aarch64
+          path: src/vfide-libraries.log
 
     outputs:
       artifact_name: ${{ steps.rename_artifact.outputs.artifact_name }}
