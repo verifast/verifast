@@ -154,7 +154,11 @@ clean::
 
 ../lib/libgtksourceview-2.0.0.dylib:
 	mkdir -p ../lib
+ifeq ($(shell uname -p), arm)
+	for i in $$( cat vfide-osx-local-dlls.txt ); do cp /opt/homebrew/$${i#/usr/local/} ../lib; done
+else
 	for i in $$( cat vfide-osx-local-dlls.txt ); do cp $$i ../lib; done
+endif
 	mkdir -p ../lib/gdk-pixbuf-2.0/2.10.0
 	echo > ../lib/gdk-pixbuf-2.0/2.10.0/loaders.cache
 
