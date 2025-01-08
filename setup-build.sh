@@ -54,7 +54,7 @@ if [ $(uname -s) = "Linux" ]; then
   fi
 
   cd /
-  dl_and_unzip_llvm-clang Linux f39cc6feb96ebbc5cf7cb39f304b3bf7484a32842da4859441da6f983c43f22a
+  dl_and_unzip_llvm-clang Linux 876fbdf13af19e22f13b776a53a19b14d897f36227c5f2f94d16f6fb04454cb2
   dl_and_unzip_vfdeps https://github.com/verifast/vfdeps/releases/download/23.04/$VFDEPS_NAME-linux.txz 9d108282a8a94526f8d043c3e2e4c3cac513788a42fa8d6964ee4937
   . "$script_dir/install-vfdeps.sh"
 
@@ -95,7 +95,7 @@ elif [ $(uname -s) = "Darwin" ]; then
   fi
 
   cd /usr/local
-  if [ "$(uname -p)" = arm64 ]; then
+  if [ "$(uname -p)" = arm ]; then
     dl_and_unzip_llvm-clang MacOS-aarch64 b7dc4af0fbe3526814e798e5de4abd4972f7bd174de4b80d1dcb1a25c7a4947e
   else
     dl_and_unzip_llvm-clang MacOS d41910103a003e7e501d736e6ee4e382ac18d71d9c868a8a585bcf5cbb7a0397
