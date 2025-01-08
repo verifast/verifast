@@ -30,7 +30,7 @@ dl_and_unzip_vfdeps() {
 dl_and_unzip_llvm-clang() {
   platform="$1"
   hash="$2"
-  dl_and_unzip "https://github.com/verifast/vf-llvm-clang-build/releases/download/v2.0.4/vf-llvm-clang-build-$VF_LLVM_CLANG_BUILD_VERSION-$platform.tar.gz" $hash 256 z
+  dl_and_unzip "https://github.com/verifast/vf-llvm-clang-build/releases/download/v2.0.5/vf-llvm-clang-build-$VF_LLVM_CLANG_BUILD_VERSION-$platform.tar.gz" $hash 256 z
 }
 
 script_dir=$(pwd)
@@ -54,7 +54,7 @@ if [ $(uname -s) = "Linux" ]; then
   fi
 
   cd /
-  dl_and_unzip_llvm-clang Linux 876fbdf13af19e22f13b776a53a19b14d897f36227c5f2f94d16f6fb04454cb2
+  dl_and_unzip_llvm-clang Linux 835a0da7ae9b237844d5dc9f3aa69cf76df08c7fa07dd1834850fd69c114011e
   dl_and_unzip_vfdeps https://github.com/verifast/vfdeps/releases/download/23.04/$VFDEPS_NAME-linux.txz 9d108282a8a94526f8d043c3e2e4c3cac513788a42fa8d6964ee4937
   . "$script_dir/install-vfdeps.sh"
 
@@ -96,9 +96,9 @@ elif [ $(uname -s) = "Darwin" ]; then
 
   cd /usr/local
   if [ "$(uname -p)" = arm ]; then
-    dl_and_unzip_llvm-clang MacOS-aarch64 b7dc4af0fbe3526814e798e5de4abd4972f7bd174de4b80d1dcb1a25c7a4947e
+    dl_and_unzip_llvm-clang MacOS-aarch64 e56dee8f06c1bef9ee22f8d70b0ef4b4ddb9bca2590c706afa553bbfd72d3d49
   else
-    dl_and_unzip_llvm-clang MacOS d41910103a003e7e501d736e6ee4e382ac18d71d9c868a8a585bcf5cbb7a0397
+    dl_and_unzip_llvm-clang MacOS ceec6ba6f1b5694fae15b28bf20b33e08dbd6dce11fefe954a5659eb7ba32156
   fi
   dl_and_unzip_vfdeps https://github.com/verifast/vfdeps/releases/download/23.04/$VFDEPS_NAME-macos.txz a43ad92202761103a03400d78679a94838eaad44567c69b94eedd10d
 
