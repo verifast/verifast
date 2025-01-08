@@ -38,6 +38,7 @@ pred<T> <Rc<T>>.own(t, rc) =
     [_]exists(?dk) &*& [_]exists(?gid) &*& [_]na_inv(t, MaskNshrSingle(ptr), rc_na_inv(dk, gid, ptr, t)) &*&
     ticket(dlft_pred(dk), gid, ?frac) &*& [frac]dlft_pred(dk)(gid, false) &*&
     [_](<T>.share(dk, t, &(*ptr).value)) &*&
+    pointer_within_limits(&(*ptr).strong) == true &*&
     pointer_within_limits(&(*ptr).value) == true;
 
 lem Rc_own_mono<T0, T1>()
@@ -57,6 +58,7 @@ pred<T> <Rc<T>>.share(k, t, l) =
     [_]exists(?dk) &*& [_]exists(?gid) &*& [_]na_inv(t, MaskNshrSingle(ptr), rc_na_inv(dk, gid, ptr, t)) &*&
     [_]exists(?frac) &*& [_]frac_borrow(k, ticket_(dk, gid, frac)) &*& [_]frac_borrow(k, lifetime_token_(frac, dk)) &*&
     [_](<T>.share(dk, t, &(*ptr).value)) &*&
+    pointer_within_limits(&(*ptr).strong) == true &*&
     pointer_within_limits(&(*ptr).value) == true;
 
 lem Rc_share_mono<T>(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *Rc<T>)
@@ -80,6 +82,7 @@ lem Rc_fbor_split<T>(t: thread_id_t, l: *Rc<T>) -> std::ptr::NonNull<RcBox<T>> /
         [_]na_inv(t, MaskNshrSingle(std::ptr::NonNull_ptr(result)), rc_na_inv(dk, gid, std::ptr::NonNull_ptr(result), t)) &*&
         [_]exists(?frac) &*& full_borrow(k, ticket_(dk, gid, frac)) &*& full_borrow(k, lifetime_token_(frac, dk)) &*&
         [_](<T>.share(dk, t, &(*std::ptr::NonNull_ptr::<RcBox<T>>(result)).value)) &*&
+        pointer_within_limits(&(*std::ptr::NonNull_ptr::<RcBox<T>>(result)).strong) == true &*&
         pointer_within_limits(&(*std::ptr::NonNull_ptr::<RcBox<T>>(result)).value) == true &*&
         [q]lifetime_token(k);
 {
@@ -221,7 +224,7 @@ impl<T> Clone for Rc<T> {
             //@ assert [_]exists::<std::ptr::NonNull<RcBox<T>>>(?nnp);
             //@ open_frac_borrow('a, Rc_frac_bc(self, nnp), _q_a/2);
             //@ open [?qp]Rc_frac_bc::<T>(self, nnp)();
-            let strong = self.ptr.as_ref().strong.get(); //TODO: Why do we not get pointer_within_limits req here?
+            let strong = self.ptr.as_ref().strong.get();
             //@ assert [_]exists::<lifetime_t>(?dk) &*& [_]exists::<usize>(?gid) &*& [?df]exists::<real>(?frac);
             //@ open_frac_borrow('a, ticket_(dk, gid, frac), _q_a/4);
             //@ open [?qp_t]ticket_(dk, gid, frac)();
@@ -259,8 +262,8 @@ impl<T> Drop for Rc<T> {
     fn drop<'a>(&'a mut self) {
         unsafe {
             //@ open Rc_full_borrow_content::<T>(_t, self)();
-            let strong = (*self.ptr.as_ptr()).strong.get();
             //@ open Rc_own::<T>(_t, ?rc);
+            let strong = (*self.ptr.as_ptr()).strong.get();
             //@ let nnp = rc.ptr;
             //@ assert [_]exists::<lifetime_t>(?dk) &*& [_]exists::<usize>(?gid);
             //@ let ptr = std::ptr::NonNull_ptr::<RcBox<T>>(nnp);

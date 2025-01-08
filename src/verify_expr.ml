@@ -1740,6 +1740,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           match t with
             StaticArrayType (_, _) | StructType _ | UnionType _ ->
             produce_c_object l coef (field_address l env addr sn targs f) t eval_h init allowGhostFields true h env $. fun h env ->
+            let Some offsetFunc = offset in
+            assume (mk_field_pointer_within_limits addr (ctxt#mk_app offsetFunc (List.map (typeid_of_core l env) targs))) $. fun () ->
             iter h env fields inits
           | _ ->
             begin fun cont ->
