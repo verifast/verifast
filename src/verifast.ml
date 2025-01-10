@@ -3973,6 +3973,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let skip_specless_fns = Vfbindings.get Vfparam_skip_specless_fns vfbindings
             let allow_ignore_ref_creation = allow_ignore_ref_creation
             let ignore_ref_creation = Vfbindings.get Vfparam_ignore_ref_creation vfbindings
+            let ignore_unwind_paths = Vfbindings.get Vfparam_ignore_unwind_paths vfbindings
           end
         )
         in

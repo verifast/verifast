@@ -178,8 +178,6 @@ pred<T> <Deque<T>>.share(k, t, l) =
 pred_ctor elems_fbc<T>(t: thread_id_t, nodes: list<*Node<T>>)() =
     foreachp2(nodes, elem_points_to::<T>, ?elems) &*& foreach(elems, elem_own::<T>(t));
 
-pred True(;) = true;
-
 lem elems_share_full<T>(t: thread_id_t, nodes: list<*Node<T>>)
     req type_interp::<T>() &*& atomic_mask(Nlft) &*& full_borrow(?k, elems_fbc(t, nodes)) &*& [?q]lifetime_token(k);
     ens type_interp::<T>() &*& atomic_mask(Nlft) &*& foreach(nodes, elem_share::<T>(k, t)) &*& [q]lifetime_token(k);

@@ -518,6 +518,11 @@ module type VF_MIR_TRANSLATOR_ARGS = sig
   val report_should_fail : string -> Ast.loc0 -> unit
   val report_range : Lexer.range_kind -> Ast.loc0 -> unit
   val report_macro_call : Ast.loc0 -> Ast.loc0 -> unit
+  val verbose_flags : string list
+  val skip_specless_fns : bool
+  val allow_ignore_ref_creation : bool
+  val ignore_ref_creation : bool
+  val ignore_unwind_paths : bool
 end
 
 module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
@@ -698,7 +703,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       else
         let* annots = ListAux.try_map translate_annotation annots_cpn in
         let annots = List.map translate_annot_to_vf_parser_inp annots in
-        Ok (Some (VfMirAnnotParser.parse_func_contract annots))
+        Ok (Some (VfMirAnnotParser.parse_func_contract loc annots))
     in
     Ok (loc, contract_opt)
 
@@ -720,6 +725,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let gh_decl_b_parser_input = translate_annot_to_vf_parser_inp gh_decl_b in
     let ghost_decls =
       VfMirAnnotParser.parse_ghost_decl_batch gh_decl_b_parser_input
+    in
+    let ghost_decls =
+      if Args.ignore_unwind_paths then List.map Rust_parser.result_decl_of_outcome_decl ghost_decls
+      else ghost_decls
     in
     let* closeBraceSpan = translate_span_data (close_brace_span_get gdb_cpn) in
     let ghost_decl_block =
@@ -1369,10 +1378,11 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let open FnPtrTyRd in
     let output_cpn = output_get fn_ptr_ty_cpn in
     let* (TyInfoBasic { vf_ty = output_ty }) = translate_ty output_cpn loc in
+    let rt = if Args.ignore_unwind_paths then output_ty else ConstructedTypeExpr (loc, "fn_outcome", [output_ty]) in
     Ok
       (Mir.TyInfoBasic
          {
-           vf_ty = FuncTypeExpr (loc, ConstructedTypeExpr (loc, "fn_outcome", [output_ty]), []);
+           vf_ty = FuncTypeExpr (loc, rt, []);
            (* Only the return type matters *)
            interp = RustBelt.emp_ty_interp loc;
          })
@@ -1679,10 +1689,11 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | Slice _ -> Ast.static_error loc "Slice types are not yet supported" None
     | Undefined _ -> Error (`TrTy "Unknown Rust type kind")
 
-  type body_tr_defs_ctx = { adt_defs : Mir.adt_def_tr list; allow_ignore_ref_creation : bool; ignore_ref_creation : bool; directives: Mir.annot list }
+  type body_tr_defs_ctx = { adt_defs : Mir.adt_def_tr list; directives: Mir.annot list }
   type var_id_trs_entry = { id : string; internal_name : string }
   type var_id_trs_map = var_id_trs_entry list
 
+  module TranslatorArgs = Args
   module TrBody (Args : sig
     val var_id_trs_map_ref : var_id_trs_map ref
     val ghost_stmts : Ast.stmt list
@@ -2333,7 +2344,12 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let ghost_generic_arg_list_opt_cpn =
         ghost_generic_arg_list_get fn_call_data_cpn
       in
-      let unwind_stmts, unwind_targets = translate_unwind_action (unwind_action_get fn_call_data_cpn) loc in
+      let unwind_stmts, unwind_targets =
+        if TranslatorArgs.ignore_unwind_paths then
+          [], []
+        else
+          translate_unwind_action (unwind_action_get fn_call_data_cpn) loc
+      in
       let* fn_call_tmp_rval_ctx, fn_call_rexpr =
         translate_fn_call_rexpr func_cpn args_cpn loc fn_loc
           ghost_generic_arg_list_opt_cpn
@@ -2361,10 +2377,13 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               match fn_call_rexpr with
                 FnCallResult e -> assignment e
               | FnCallOutcome e ->
-                Ast.SwitchStmt (loc, e, [
-                  Ast.SwitchStmtClause (loc, CallExpr (loc, "returning", [], [], [LitPat (Var (loc, "__result"))], Static), [assignment (Ast.Var (loc, "__result"))]);
-                  Ast.SwitchStmtClause (loc, CallExpr (loc, "unwinding", [], [], [], Static), unwind_stmts)
-                ])
+                if TranslatorArgs.ignore_unwind_paths then
+                  assignment e
+                else
+                  Ast.SwitchStmt (loc, e, [
+                    Ast.SwitchStmtClause (loc, CallExpr (loc, "returning", [], [], [LitPat (Var (loc, "__result"))], Static), [assignment (Ast.Var (loc, "__result"))]);
+                    Ast.SwitchStmtClause (loc, CallExpr (loc, "unwinding", [], [], [], Static), unwind_stmts)
+                  ])
             in
             Ok
               ( [call_stmt],
@@ -2372,7 +2391,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                 [ dst_bblock_id ] )
         | Undefined _ -> Error (`TrFnCall "Unknown Option kind")
       in
-      let full_call_stmts =
+      let full_call_stmts, targets =
         match fn_call_rexpr with
         | FnCallOutcome (
             Ast.CallExpr
@@ -2395,16 +2414,16 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   gsl_l = phl_l)
                 !State.ghost_stmts
             in
-            [ghost_stmt]
+            [ghost_stmt], targets
         | _ ->
-            if ListAux.is_empty fn_call_tmp_rval_ctx then call_stmts
+            (if ListAux.is_empty fn_call_tmp_rval_ctx then call_stmts
             else
               [Ast.BlockStmt
                 ( loc,
                   (*decl list*) [],
                   fn_call_tmp_rval_ctx @ call_stmts,
                   loc,
-                  ref [] )]
+                  ref [] )]), targets @ unwind_targets
       in
       Ok (full_call_stmts, terminator, targets)
 
@@ -2510,7 +2529,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           let* sw_stmt, targets = translate_sw_int sw_int_data_cpn loc in
           Ok ([ sw_stmt ], Mir.EncodedTerminator, targets)
       | Return ->
-          Ok ([ Ast.ReturnStmt (loc, Some (Ast.CallExpr (loc, "returning", [], [], [LitPat (Ast.Var (loc, ret_place_id))], Static))) ], EncodedTerminator, [])
+          let result = Ast.Var (loc, ret_place_id) in
+          let result = if TranslatorArgs.ignore_unwind_paths then result else Ast.CallExpr (loc, "returning", [], [], [LitPat result], Static) in
+          Ok ([ Ast.ReturnStmt (loc, Some result) ], EncodedTerminator, [])
       | Unreachable -> Ok ([ Ast.Assert (loc, False loc) ], EncodedTerminator, [])
       | Call fn_call_data_cpn -> translate_fn_call fn_call_data_cpn loc
       | Drop drop_data_cpn ->
@@ -2728,7 +2749,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           let ((path, line, _), _) = Ast.lexed_loc loc in
           let ignore_ref_creation =
             bor_kind = Mut || (* ignore &mut E for now *)
-            if Args.body_tr_defs_ctx.ignore_ref_creation then true else
+            if TranslatorArgs.ignore_ref_creation then true else
             let directives = Util.flatmap
                  (fun { Mir.span; raw } ->
                    if
@@ -2740,7 +2761,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             in
             match directives with
               directive_span::_ ->
-                if not (Args.body_tr_defs_ctx.allow_ignore_ref_creation) then
+                if not (TranslatorArgs.allow_ignore_ref_creation) then
                   Ast.static_error directive_span "Ignoring reference creation is not allowed; specify -allow_ignore_ref_creation on the command line to allow" None;
               true
             | [] -> false
@@ -2765,7 +2786,11 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             | _, Shared, SharedRef, _ -> "reborrow_ref"
             | _, Shared, _, _ -> "create_ref"
           in
-          let expr = Ast.CallExpr (loc, "fn_outcome_result", [], [], [LitPat (Ast.CallExpr (loc, fn_name, [], [], [LitPat (AddressOf (loc, place_expr))], Static))], Static) in
+          let expr = Ast.CallExpr (loc, fn_name, [], [], [LitPat (AddressOf (loc, place_expr))], Static) in
+          let expr =
+            if TranslatorArgs.ignore_unwind_paths then expr
+            else Ast.CallExpr (loc, "fn_outcome_result", [], [], [LitPat expr], Static)
+          in
           Ok (`TrRvalueExpr expr)
       | AddressOf address_of_data_cpn ->
           let open AddressOfData in
@@ -2984,7 +3009,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let open BasicBlockRd in
       let id_cpn = id_get bblock_cpn in
       let id = translate_basic_block_id id_cpn in
-      if is_cleanup_get bblock_cpn && false then
+      if is_cleanup_get bblock_cpn && TranslatorArgs.ignore_unwind_paths then
         (* Todo @Nima: For now we are ignoring cleanup basic-blocks *)
         Ok None
       else
@@ -3516,7 +3541,14 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       (*might be just True*)
     in
     let post_asn = Sep (contract_loc, post_na_token, post_asn) in
-    Ok (pre_asn, Rust_parser.mk_outcome_post post_asn)
+    let (Some unwind_post_asn) =
+      AstAux.list_to_sep_conj
+        (List.map (fun asn -> (contract_loc, asn)) post_lft_tks)
+        (Some (add_in_out_param_asns "1" (EmpAsn contract_loc)))
+      (*might be just True*)
+    in
+    let unwind_post_asn = Sep (contract_loc, post_na_token, unwind_post_asn) in
+    Ok (pre_asn, Rust_parser.mk_outcome_post contract_loc post_asn unwind_post_asn)
 
   let gen_drop_contract adt_defs self_ty self_ty_targs self_lft_args limpl =
     let outlives_preds = [] in
@@ -3670,7 +3702,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                        [ LitPat (Var (limpl, "self")) ],
                        Static )) )))
     in
-    Ok (pre, ("result", post))
+    Ok (pre, Rust_parser.mk_outcome_post limpl post post)
 
   (** makes the mappings used for substituting the MIR level local declaration ids with names closer to variables surface name *)
   let make_var_id_name_maps (loc : Ast.loc) (vdis : Mir.var_debug_info list) =
@@ -3814,7 +3846,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
            (pre_post : _ option),
            (terminates : bool) ),
            (assume_correct : bool) ) =
-      if unsafe then Ok (VfMirAnnotParser.parse_func_contract annots)
+      if unsafe then Ok (VfMirAnnotParser.parse_func_contract loc annots)
       else (
         if contract <> [] then
           raise
@@ -3838,12 +3870,18 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         Ok ((false, None, Some contract, false), false))
     in
     if assume_correct then Ast.static_error loc "assume_correct does not make sense on trait required functions" None;
+    let ret_ty, pre_post =
+      if Args.ignore_unwind_paths then
+        ret_ty, Option.map Rust_parser.result_spec_of_outcome_spec pre_post
+      else
+        Ast.ConstructedTypeExpr (Ast.type_expr_loc ret_ty, "fn_outcome", [ret_ty]), pre_post
+    in
     let decl =
       Ast.Func
         ( loc,
           Ast.Regular,
           (*type params*) [ "Self" ] @ lifetime_params_get_list required_fn_cpn,
-          Some (Ast.ConstructedTypeExpr (Ast.type_expr_loc ret_ty, "fn_outcome", [ret_ty])),
+          Some ret_ty,
           Printf.sprintf "%s::%s" trait_name name,
           vf_param_decls,
           nonghost_callers_only,
@@ -4143,12 +4181,12 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             ( loc,
               Ast.Regular,
               (*type params*) vf_tparams,
-              Some (Ast.ConstructedTypeExpr (Ast.type_expr_loc ret_ty, "fn_outcome", [ret_ty])),
+              Some (if TranslatorArgs.ignore_unwind_paths then ret_ty else Ast.ConstructedTypeExpr (Ast.type_expr_loc ret_ty, "fn_outcome", [ret_ty])),
               name,
               vf_param_decls,
               nonghost_callers_only,
               fn_type_clause,
-              pre_post,
+              (if TranslatorArgs.ignore_unwind_paths then Option.map Rust_parser.result_spec_of_outcome_spec pre_post else pre_post),
               terminates,
               body,
               (*virtual*) false,
@@ -5818,9 +5856,11 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         (ghost_decl_batches_get_list module_cpn)
     in
     let imports, decls = List.partition_map (fun x -> x) ghost_decl_batches in
+    let decls = List.flatten decls in
+    let decls = if Args.ignore_unwind_paths then List.map Rust_parser.result_decl_of_outcome_decl decls else decls in
     Ok
       (Ast.ModuleDecl
-         (loc, name, List.flatten imports, submodules @ List.flatten decls))
+         (loc, name, List.flatten imports, submodules @ decls))
 
   let modularize_decl (d : Ast.decl) : Ast.decl =
     match AstAux.decl_loc_name_and_name_setter d with
@@ -5860,16 +5900,14 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       iter segments
     else d
 
-  let translate_vf_mir (extern_specs : string list) (vf_mir_cpn : VfMirRd.t)
-      (report_should_fail : string -> Ast.loc0 -> unit)
-      (skip_specless_fns : bool) (allow_ignore_ref_creation : bool) (ignore_ref_creation : bool) =
+  let translate_vf_mir (extern_specs : string list) (vf_mir_cpn : VfMirRd.t) =
     let job _ =
       let directives_cpn = VfMirRd.directives_get_list vf_mir_cpn in
       let* directives = ListAux.try_map translate_annotation directives_cpn in
       let vf_mir_translator_directives, vf_directives = directives |> List.partition (fun {Mir.raw} -> raw = "ignore_ref_creation") in
       vf_directives
       |> List.iter (fun ({ span; raw } : Mir.annot) ->
-             report_should_fail raw (Ast.lexed_loc span));
+             Args.report_should_fail raw (Ast.lexed_loc span));
       let* module_decls =
         ListAux.try_map translate_module (VfMirRd.modules_get_list vf_mir_cpn)
       in
@@ -5882,7 +5920,13 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let ghost_imports, ghost_decl_batches =
         List.partition_map (fun x -> x) ghost_decl_batches
       in
-      let ghost_decls = module_decls @ List.flatten ghost_decl_batches in
+      let ghost_decl_batches = List.flatten ghost_decl_batches in
+      let ghost_decl_batches =
+        if Args.ignore_unwind_paths then
+          List.map Rust_parser.result_decl_of_outcome_decl ghost_decl_batches
+        else ghost_decl_batches
+      in
+      let ghost_decls = module_decls @ ghost_decl_batches in
       let ghost_decl_map = AstAux.decl_map_of ghost_decls in
       let* trait_impls =
         translate_trait_impls (VfMirRd.trait_impls_get_list vf_mir_cpn)
@@ -5927,12 +5971,12 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         CapnpAux.ind_list_get_list (VfMirRd.traits_get vf_mir_cpn)
       in
       let* traits_decls =
-        ListAux.try_map (translate_trait adt_defs skip_specless_fns) traits_cpn
+        ListAux.try_map (translate_trait adt_defs Args.skip_specless_fns) traits_cpn
       in
       let traits_decls = List.flatten traits_decls in
       let bodies_cpn = VfMirRd.bodies_get_list vf_mir_cpn in
       let bodies_cpn =
-        if skip_specless_fns then
+        if Args.skip_specless_fns then
           List.filter
             (fun body_cpn ->
               not
@@ -5941,7 +5985,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             bodies_cpn
         else bodies_cpn
       in
-      let body_tr_defs_ctx = { adt_defs; allow_ignore_ref_creation; ignore_ref_creation; directives=vf_mir_translator_directives } in
+      let body_tr_defs_ctx = { adt_defs; directives=vf_mir_translator_directives } in
       let* bodies_tr_res =
         ListAux.try_map (translate_body body_tr_defs_ctx) bodies_cpn
       in
@@ -5993,12 +6037,16 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         @ extern_header_names
       in
       let headers =
+        parse_prelude () @
         Util.flatmap
           (fun (crateName, header_path) -> parse_header crateName header_path)
           header_names
       in
+      let headers =
+        if TranslatorArgs.ignore_unwind_paths then List.map Rust_parser.result_header_of_outcome_header headers else headers
+      in
       Ok
-        ( parse_prelude () @ headers,
+        ( headers,
           Rust_parser.flatten_module_decls Ast.dummy_loc
             (List.flatten ghost_imports)
             decls,
