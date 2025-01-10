@@ -51,8 +51,12 @@ fn main() {
         produce_fn_ptr_chunk FuncOnce<i32, i32>(increment)(pre, post)(arg) {
             open pre(arg);
             let outcome = call();
-            assert outcome == returning(?res);
-            close post(arg, res);
+            match outcome {
+                returning(res) => {
+                    close post(arg, res);
+                }
+                unwinding => {}
+            }
         }
         @*/
         //@ close pre(42);

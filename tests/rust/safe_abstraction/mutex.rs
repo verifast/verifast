@@ -15,7 +15,6 @@ pub struct Mutex<T: Send> {
 
 /*@
 
-pred True(;) = true;
 pred<T> <Mutex<T>>.own(t, mutex) =
     sys::locks::SysMutex(mutex.inner, True) &*& <T>.own(t, mutex.data);
 

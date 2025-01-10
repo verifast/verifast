@@ -17,7 +17,6 @@ pub struct MutexU32 {
 
 /*@
 
-pred True(;) = true;
 pred <MutexU32>.own(t, mutexU32) = SysMutex(mutexU32.inner, True);
 
 lem MutexU32_drop()

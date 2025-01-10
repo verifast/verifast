@@ -1,6 +1,7 @@
 fn bool_set<'a>(x: &'a mut bool, y: bool)
 //@ req thread_token(?t) &*& [?q]lifetime_token(?a) &*& full_borrow(a, bool_full_borrow_content(t, x));
 //@ ens thread_token(t) &*& [q]lifetime_token(a);
+//@ on_unwind_ens false;
 {
     //@ open_full_borrow(q, a, bool_full_borrow_content(t, x));
     //@ open bool_full_borrow_content(t, x)();
@@ -15,6 +16,7 @@ fn char_set<'a>(x: &'a mut char, y: char)
     &*& char_own(t, y);
 @*/
 //@ ens thread_token(t) &*& [q]lifetime_token(a);
+//@ on_unwind_ens false;
 {
     //@ open_full_borrow(q, a, char_full_borrow_content(t, x));
     //@ open char_full_borrow_content(t, x)();
@@ -37,6 +39,7 @@ fn raw_ptr_set<'a>(x: &'a mut *mut i32, y: *mut i32) {
 fn i8_set<'a>(x: &'a mut i8, y: i8)
 //@ req thread_token(?t) &*& [?q]lifetime_token(?a) &*& full_borrow(a, i8_full_borrow_content(t, x));
 //@ ens thread_token(t) &*& [q]lifetime_token(a);
+//@ on_unwind_ens false;
 {
     //@ open_full_borrow(q, a, i8_full_borrow_content(t, x));
     //@ open i8_full_borrow_content(t, x)();

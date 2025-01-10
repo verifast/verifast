@@ -1,35 +1,36 @@
 begin_parallel
-verifast account.rs
+verifast -ignore_unwind_paths account.rs
+verifast account_unwind.rs
 verifast -disable_overflow_check deposit.rs
 verifast -disable_overflow_check limit.rs
 verifast -disable_overflow_check pred.rs
-verifast stack.rs
-verifast dispose.rs
-verifast -disable_overflow_check sum.rs
-verifast -disable_overflow_check popn.rs
-verifast values.rs
-verifast fixpoints.rs
-verifast -disable_overflow_check sum_full.rs
+verifast -ignore_unwind_paths stack.rs
+verifast -ignore_unwind_paths dispose.rs
+verifast -ignore_unwind_paths -disable_overflow_check sum.rs
+verifast -ignore_unwind_paths -disable_overflow_check popn.rs
+verifast -ignore_unwind_paths values.rs
+verifast -ignore_unwind_paths fixpoints.rs
+verifast -ignore_unwind_paths -disable_overflow_check sum_full.rs
 verifast lemma.rs
-verifast -disable_overflow_check push_all.rs
-verifast reverse.rs
-verifast filter.rs
-verifast byref.rs
-verifast -disable_overflow_check map.rs
-verifast -disable_overflow_check foreach.rs
-verifast -disable_overflow_check predctors.rs
-verifast -disable_overflow_check threads0.rs
-verifast -disable_overflow_check -extern ../../../tests/rust/unverified/platform -allow_assume threads.rs
-verifast -disable_overflow_check -extern ../../../tests/rust/unverified/platform -allow_assume fractions0.rs
-verifast -disable_overflow_check -extern ../../../tests/rust/unverified/platform -allow_assume fractions.rs
+verifast -ignore_unwind_paths -disable_overflow_check push_all.rs
+verifast -ignore_unwind_paths reverse.rs
+verifast -ignore_unwind_paths filter.rs
+verifast -ignore_unwind_paths byref.rs
+verifast -ignore_unwind_paths -disable_overflow_check map.rs
+verifast -ignore_unwind_paths -disable_overflow_check foreach.rs
+verifast -ignore_unwind_paths -disable_overflow_check predctors.rs
+verifast -ignore_unwind_paths -disable_overflow_check threads0.rs
+verifast -ignore_unwind_paths -disable_overflow_check -extern ../../../tests/rust/unverified/platform -allow_assume threads.rs
+verifast -ignore_unwind_paths -disable_overflow_check -extern ../../../tests/rust/unverified/platform -allow_assume fractions0.rs
+verifast -ignore_unwind_paths -disable_overflow_check -extern ../../../tests/rust/unverified/platform -allow_assume fractions.rs
 cd mutexes
-  cargo verifast -allow_assume
+  cargo verifast -ignore_unwind_paths -allow_assume
 cd ..
 cd leaks
-  cargo verifast -allow_assume
+  cargo verifast -ignore_unwind_paths -allow_assume
 cd ..
-verifast -allow_assume -disable_overflow_check bytes.rs
-verifast -allow_assume -disable_overflow_check xor.rs
-verifast -allow_assume -disable_overflow_check bytes_loop.rs
-verifast -allow_assume -disable_overflow_check tuerk.rs
+verifast -ignore_unwind_paths -allow_assume -disable_overflow_check bytes.rs
+verifast -ignore_unwind_paths -allow_assume -disable_overflow_check xor.rs
+verifast -ignore_unwind_paths -allow_assume -disable_overflow_check bytes_loop.rs
+verifast -ignore_unwind_paths -allow_assume -disable_overflow_check tuerk.rs
 end_parallel
