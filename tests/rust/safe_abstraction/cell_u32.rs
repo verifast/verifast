@@ -96,6 +96,7 @@ impl CellU32 {
     pub fn set<'a>(&'a self, u: u32)
     //@ req thread_token(?t) &*& [?q]lifetime_token(?a) &*& [_]CellU32_share(a, t, self);
     //@ ens thread_token(t) &*& [q]lifetime_token(a);
+    //@ on_unwind_ens false;
     {
         let p = self.v.get();
         //@ open <CellU32>.share(a, t, self);

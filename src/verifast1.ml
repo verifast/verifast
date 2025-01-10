@@ -120,7 +120,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     if assume_no_provenance && not fno_strict_aliasing then
       static_error (Lexed ((path, 1, 1), (path, 1, 1))) "Command-line option -assume_no_provenance is allowed only in combination with -fno_strict_aliasing" None
 
-  let assume_left_to_right_evaluation = assume_left_to_right_evaluation || language <> CLang
+  let assume_left_to_right_evaluation = assume_left_to_right_evaluation || language <> CLang || dialect = Some Rust
 
   let {reportRange; reportUseSite; reportExecutionForest; reportStmt; reportStmtExec; reportDirective} = callbacks
 
@@ -5920,6 +5920,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let get_pred_symb_from_map p m = let _, (_, _, _, _, symb, _, _) = List.assoc p m in symb
   let try_get_pred_symb_from_map p m = try_assoc p m |> option_map @@ fun (_, (_, _, _, _, symb, _, _)) -> symb
   
+  let () =
+    if Vfbindings.get Vfparam_ignore_unwind_paths vfbindings then
+      ctxt#assert_term (mk_app (get_pure_func_symb "ignore_unwind_paths") [])
+
   let lazy_value f =
     let cell = ref None in
     fun () ->

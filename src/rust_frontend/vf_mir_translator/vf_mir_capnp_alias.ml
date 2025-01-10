@@ -44,6 +44,7 @@ module BasicBlockRd = BodyRd.BasicBlock
 module BasicBlockIdRd = BodyRd.BasicBlockId
 module TerminatorRd = BasicBlockRd.Terminator
 module TerminatorKindRd = TerminatorRd.TerminatorKind
+module UnwindActionRd = TerminatorKindRd.UnwindAction
 module FnCallDataRd = TerminatorKindRd.FnCallData
 module OperandRd = BasicBlockRd.Operand
 module ConstOperandRd = BodyRd.ConstOperand

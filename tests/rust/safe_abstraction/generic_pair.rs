@@ -58,8 +58,6 @@ lem Pair_share_mono<A, B>(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *Pai
 
 pred_ctor struct_Pair_padding_<A, B>(l: *Pair<A, B>)(;) = struct_Pair_padding(l);
 
-pred True(;) = true;
-
 lem Pair_split_full_borrow_m<A, B>(k: lifetime_t, t: thread_id_t, l: *Pair<A, B>)
     req
         atomic_mask(?mask) &*& mask_le(Nlft, mask) == true &*&

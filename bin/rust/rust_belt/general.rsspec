@@ -235,4 +235,15 @@ lem own_mono<T0, T1>(t: thread_id_t, v: T0);
     req type_interp::<T0>() &*& type_interp::<T1>() &*& <T0>.own(t, v) &*& is_subtype_of::<T0, T1>() == true;
     ens type_interp::<T0>() &*& type_interp::<T1>() &*& <T1>.own(t, upcast::<T0, T1>(v));
 
+lem_type to_own<T>(R: pred(), t: thread_id_t, x: T) = lem();
+    req R();
+    ens <T>.own(t, x);
+
+pred drop_perm<T>(charged: bool, R: pred(), t: thread_id_t, x: T) =
+    if charged {
+        R() &*& is_to_own::<T>(_, R, t, x)
+    } else {
+        ignore_unwind_paths
+    };
+
 @*/

@@ -411,13 +411,39 @@ let parse_pure_spec_clause = function%parser
 | [ (l, Kwd "assume_correct") ] -> AssumeCorrectClause l
 | [ (_, Kwd "req"); parse_asn as p; (_, Kwd ";") ] -> RequiresClause p
 | [ (_, Kwd "ens"); parse_asn as p; (_, Kwd ";") ] -> EnsuresClause p
+| [ (_, Kwd "on_unwind_ens"); parse_asn as p; (_, Kwd ";") ] -> OnUnwindEnsuresClause p
 
 let parse_spec_clause = function%parser
   [ [%let c = peek_in_ghost_range @@ function%parser
     [ parse_pure_spec_clause as c; (_, Kwd "@*/") ] -> c ] ] -> c
 | [ parse_pure_spec_clause as c ] -> c
 
-let parse_spec_clauses = function%parser
+let mk_outcome_post l post unwind_post =
+  "outcome",
+  SwitchExpr (l, Var (l, "outcome"), [
+    SwitchExprClause (expr_loc post, "returning", ["result"], post);
+    SwitchExprClause (expr_loc unwind_post, "unwinding", [], unwind_post)
+  ], None) 
+
+let result_post_of_outcome_post ("outcome", SwitchExpr (_, _, [SwitchExprClause (_, "returning", ["result"], post); _], _)) = ("result", post)
+
+let result_spec_of_outcome_spec (pre, post) = (pre, result_post_of_outcome_post post)
+
+let result_decl_of_outcome_decl = function
+  Func (l, Regular, tparams, rt, g, ps, nonghost_callers_only, ft, pre_post, terminates, body, is_virtual, overrides) ->
+  let rt = Option.map (fun (ConstructedTypeExpr (_, "fn_outcome", [rt])) -> rt) rt in
+  Func (l, Regular, tparams, rt, g, ps, nonghost_callers_only, ft, Option.map result_spec_of_outcome_spec pre_post, terminates, body, is_virtual, overrides)
+| FuncTypeDecl (l, Real, rt, ftn, tparams, ftps, ps, (pre, post, terminates)) ->
+  let rt = Option.map (fun (ConstructedTypeExpr (_, "fn_outcome", [rt])) -> rt) rt in
+  FuncTypeDecl (l, Real, rt, ftn, tparams, ftps, ps, (pre, result_post_of_outcome_post post, terminates))
+| d -> d
+
+let result_package_of_outcome_package (PackageDecl (l, pn, ilist, ds)) =
+  PackageDecl (l, pn, ilist, List.map result_decl_of_outcome_decl ds)
+
+let result_header_of_outcome_header (l, incl, incls, ps) = (l, incl, incls, List.map result_package_of_outcome_package ps)
+
+let parse_spec_clauses l k = function%parser
   [ [%let cs = rep parse_spec_clause ] ] ->
   let nonghost_callers_only, cs =
     match cs with
@@ -431,7 +457,17 @@ let parse_spec_clauses = function%parser
   in
   let pre_post, cs =
     match cs with
-      RequiresClause pre::EnsuresClause post::cs -> Some (pre, ("result", post)), cs
+      RequiresClause pre::EnsuresClause post::OnUnwindEnsuresClause unwind_post::cs ->
+      if k <> Regular then raise (ParseException (expr_loc unwind_post, "An on_unwind_ens clause is not allowed here."));
+      Some (pre, mk_outcome_post l post unwind_post), cs
+    | RequiresClause pre::EnsuresClause post::cs ->
+      let post =
+        if k = Regular then
+          mk_outcome_post l post (EmpAsn l)
+        else
+          "result", post
+      in
+      Some (pre, post), cs
     | _ -> None, cs
   in
   let terminates, cs =
@@ -444,7 +480,7 @@ let parse_spec_clauses = function%parser
       AssumeCorrectClause l::cs -> true, cs
     | _ -> false, cs
   in
-  if cs <> [] then raise (Stream.Error "The number, kind, or order of specification clauses is incorrect. Expected: nonghost_callers_only clause (optional), function type clause (optional), contract (optional), terminates clause (optional), assume_correct clause (optional).");
+  if cs <> [] then raise (Stream.Error "The number, kind, or order of specification clauses is incorrect. Expected: nonghost_callers_only clause (optional), function type clause (optional), 'req', 'ens', and 'on_unwind_ens' clauses (optional), terminates clause (optional), assume_correct clause (optional).");
   ((nonghost_callers_only, ft, pre_post, terminates), assume_correct)
 
 let parse_pred_asn = function%parser
@@ -591,17 +627,19 @@ and parse_func_header k = function%parser
       [ (_, Kwd "->"); parse_type as t ] -> Some t
     | [ ] -> if k = Regular then Some (StructTypeExpr (l, Some "std_tuple_0_", None, [], [])) else None
     ]
-  ] -> (l, g, tparams, ps, rt)
+  ] ->
+  let rt = Option.map (fun rt -> match k with Regular -> ConstructedTypeExpr (type_expr_loc rt, "fn_outcome", [rt]) | _ -> rt) rt in
+  (l, g, tparams, ps, rt)
 
 and parse_func_rest k = function%parser
   [ [%let (l, g, tparams, ps, rt) = parse_func_header k];
     [%let d = function%parser
       [ (_, Kwd ";");
-        [%let ((nonghost_callers_only, ft, co, terminates), assume_correct) = parse_spec_clauses]
+        [%let ((nonghost_callers_only, ft, co, terminates), assume_correct) = parse_spec_clauses l k]
       ] ->
       if assume_correct then raise (ParseException (l, "assume_correct clause is not allowed here."));
       Func (l, k, tparams, rt, g, ps, nonghost_callers_only, ft, co, terminates, None, false, [])
-    | [ [%let ((nonghost_callers_only, ft, co, terminates), assume_correct) = parse_spec_clauses];
+    | [ [%let ((nonghost_callers_only, ft, co, terminates), assume_correct) = parse_spec_clauses l k];
         (_, Kwd "{");
         parse_stmts as ss;
         (closeBraceLoc, Kwd "}")
@@ -735,11 +773,18 @@ and parse_ghost_decl = function%parser
     (_, Kwd ";");
     (_, Kwd "req"); parse_asn as pre; (_, Kwd ";");
     (_, Kwd "ens"); parse_asn as post; (_, Kwd ";");
+    [%let unwind_post = function%parser
+       [ (_, Kwd "on_unwind_ens"); parse_asn as unwind_post; (_, Kwd ";") ] -> unwind_post
+     | [ ] -> EmpAsn l
+    ];
     [%let terminates = function%parser
        [ (_, Kwd "terminates"); (_, Kwd ";") ] -> true
      | [ ] -> false
     ]
-  ] -> [FuncTypeDecl (l, Real, rt, ftn, tparams, ftps, ps, (pre, ("result", post), terminates))]
+  ] ->
+    let rt = Option.map (fun rt -> ConstructedTypeExpr (l, "fn_outcome", [rt])) rt in
+    let post = mk_outcome_post l post unwind_post in
+    [FuncTypeDecl (l, Real, rt, ftn, tparams, ftps, ps, (pre, post, terminates))]
 | [ (l, Kwd "lem_type"); (lftn, Ident ftn); parse_type_params as tparams; (_, Kwd "("); [%let ftps = rep_comma parse_param]; (_, Kwd ")"); (_, Kwd "=");
   (_, Kwd "lem"); (_, Kwd "("); [%let ps = rep_comma parse_param]; (_, Kwd ")"); 
   [%let rt = function%parser
