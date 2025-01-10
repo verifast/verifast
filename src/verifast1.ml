@@ -5619,6 +5619,14 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   (* Region: Computing constant field values *)
   
+  let truncate_big_int n (Int (Signed, k)) =
+    let LitWidth k = width_of_rank k in
+    let n = extract_big_int n 0 (8 * (1 lsl k)) in
+    if le_big_int n (max_signed_big_int k) then
+      n
+    else
+      sub_big_int n (succ_big_int (max_unsigned_big_int k))
+
   let () =
     let string_of_const v =
       match v with
@@ -5633,21 +5641,21 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         True l -> BoolConst true
       | False l -> BoolConst false
       | Null l -> NullConst
-      | WOperation (l, Add, [e1; e2], _) ->
+      | WOperation (l, Add, [e1; e2], tp) ->
         begin match (ev e1, ev e2) with
-          (IntConst n1, IntConst n2) -> IntConst (add_big_int n1 n2)
+          (IntConst n1, IntConst n2) -> IntConst (truncate_big_int (add_big_int n1 n2) tp)
         | (StringConst s1, v) -> StringConst (s1 ^ string_of_const v)
         | (v, StringConst s2) -> StringConst (string_of_const v ^ s2)
         | _ -> raise NotAConstant
         end
-      | WOperation (l, Sub, [e1; e2], _) ->
+      | WOperation (l, Sub, [e1; e2], tp) ->
         begin match (ev e1, ev e2) with
-          (IntConst n1, IntConst n2) -> IntConst (sub_big_int n1 n2)
+          (IntConst n1, IntConst n2) -> IntConst (truncate_big_int (sub_big_int n1 n2) tp)
         | _ -> raise NotAConstant
         end
-      | WOperation (l, Mul, [e1; e2], _) ->
+      | WOperation (l, Mul, [e1; e2], tp) ->
         begin match (ev e1, ev e2) with
-          (IntConst n1, IntConst n2) -> IntConst (mult_big_int n1 n2)
+          (IntConst n1, IntConst n2) -> IntConst (truncate_big_int (mult_big_int n1 n2) tp)
         | _ -> raise NotAConstant
         end
       | WIntLit (l, n) -> IntConst n

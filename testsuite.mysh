@@ -340,6 +340,8 @@ cd examples
     verifast_both -c -disable_overflow_check ArraysManual.java
     verifast_both -c -disable_overflow_check Automation.java
     verifast -c Bag.java
+    verifast -c CoincidenceCount.java
+    verifast -c ConstOverflow.java
     verifast -c -disable_overflow_check Comprehensions.java
     verifast_both -c Constants.java
     verifast_both -c FieldInitializers.java
