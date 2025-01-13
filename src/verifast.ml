@@ -1300,10 +1300,10 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           match try_assoc' Ghost (pn,ilist) g predctormap with
             None ->
             begin match try_assoc "this" tenv with
-              None -> static_error l "No such predicate instance." None
             | Some (ObjType (target_tn, _) | PtrType (StructType (target_tn, _))) ->
               let this = List.assoc "this" env in
               open_instance_predicate this target_tn
+            | _ -> static_error l "No such predicate instance." None
             end
           | Some (PredCtorInfo (lp, predctor_tparams, ps1, ps2, inputParamCount, body, funcsym)) ->
             reportUseSite DeclKind_Predicate lp l;
