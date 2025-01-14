@@ -1,0 +1,36 @@
+on:
+  push:
+    branches:
+    - master
+
+jobs:
+  build-rust-reference:
+    name: Build the VeriFast for Rust Reference
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install mdbook
+      run: mkdir $HOME/mdbook && curl -sSL https://github.com/rust-lang/mdBook/releases/download/v0.4.43/mdbook-v0.4.43-x86_64-unknown-linux-gnu.tar.gz | tar -xz --directory=$HOME/mdbook
+
+    - name: Build the book
+      run: cd docs/rust-reference && $HOME/mdbook build
+
+    - name: Deploy the book to GitHub Pages
+      if: github.repository == 'btj/verifast' && github.event_name == 'push' && github.ref == 'refs/heads/master'
+      run: |
+        mkdir gh-pages
+        cp -R docs/rust-reference/book gh-pages/rust-reference
+        cd gh-pages
+        git init
+        git config --global user.name "$GITHUB_REPOSITORY GitHub Actions runner"
+        git config --global user.email "no@email"
+        git add .
+        git commit -m "Built from $GITHUB_SHA"
+        git remote add origin $GITHUB_SERVER_URL/$GITHUB_REPOSITORY
+        git checkout -b gh-pages
+        gh auth setup-git
+        git push -f origin gh-pages
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
