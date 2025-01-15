@@ -1,4 +1,4 @@
-// tab_size:2
+// tab_size:2 verifast_options{I:../..}
 
 // Justus Fasse and Bart Jacobs. Expressive modular verification of termination for busy-waiting programs. 2023.
 

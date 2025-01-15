@@ -2709,7 +2709,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               end
             | _ -> static_error l "Fixpoint function must switch on a parameter." None
           in
-          let fsym = mk_func_symbol g fsym_paramtypes (provertype_of_type rt) (Proverapi.Fixpoint (subtype, index)) in
+          let fsym = mk_func_symbol g fsym_paramtypes (provertype_of_type rt) (Proverapi.Fixpoint (subtype, List.length typeid_paramtypes + index)) in
           iter (pn,ilist) imap ((g, (l, tparams, rt, List.map (fun (p, t) -> p, t) pmap, fsym))::pfm) pfprm ((g, (l, tparams, rt, pmap, Some index, body, pn, ilist, fst fsym))::fpm) ds
         | Some ([ReturnStmt (lr, Some e) as body], _) ->
           let fsym = mk_func_symbol g fsym_paramtypes (provertype_of_type rt) Proverapi.Uninterp in

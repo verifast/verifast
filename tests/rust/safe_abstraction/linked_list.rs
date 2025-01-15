@@ -1,4 +1,4 @@
-// verifast_options{prover:z3v4.5 skip_specless_fns}
+// verifast_options{skip_specless_fns}
 
 //! A doubly-linked list with owned nodes.
 //!
