@@ -572,19 +572,21 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
   let prelude_path =
     Filename.concat (Filename.dirname Sys.executable_name) "rust/prelude.rsspec"
 
-  let parse_prelude () =
-    let prelude_name = Filename.basename prelude_path in
+  let interlude_path =
+    Filename.concat
+      (Filename.dirname Sys.executable_name)
+      "rust/interlude.rsspec"
+
+  let parse_lude (path : string) (headers : string list) =
+    let name = Filename.basename path in
     let decls =
-      let ds = VfMirAnnotParser.parse_rsspec_file prelude_path in
-      let pos = (prelude_path, 1, 1) in
+      let ds = VfMirAnnotParser.parse_rsspec_file path in
+      let pos = (path, 1, 1) in
       let loc = Ast.Lexed (pos, pos) in
       [ Ast.PackageDecl (loc, "", [], ds) ]
     in
     let header =
-      ( Ast.dummy_loc,
-        (Lexer.AngleBracketInclude, prelude_name, prelude_path),
-        [],
-        decls )
+      (Ast.dummy_loc, (Lexer.AngleBracketInclude, name, path), headers, decls)
     in
     [ header ]
 
@@ -6509,22 +6511,23 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                      `crateName=path/to/spec_file.rsspec`"
                     extern_spec)
       in
-      let header_names =
+      let default_header_names =
         [
           ( "std",
             Filename.concat
               (Filename.dirname Sys.executable_name)
               "rust/std/lib.rsspec" );
         ]
-        @ extern_header_names
       in
+      let header_names = default_header_names @ extern_header_names in
       let headers =
         Util.flatmap
           (fun (crateName, header_path) -> parse_header crateName header_path)
           header_names
       in
       Ok
-        ( parse_prelude () @ headers,
+        ( parse_lude prelude_path [] @ headers
+          @ parse_lude interlude_path (List.map snd default_header_names),
           Rust_parser.flatten_module_decls Ast.dummy_loc
             (List.flatten ghost_imports)
             decls,
