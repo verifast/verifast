@@ -7,7 +7,7 @@ pub struct BoxU8 {
 impl BoxU8 {
     pub unsafe fn new(v: u8) -> BoxU8
     //@ req true;
-    //@ ens *result.ptr |-> v &*& std::alloc::alloc_block(result.ptr, std::alloc::Layout::new_::<u8>());
+    //@ ens *result.ptr |-> v &*& alloc_block(result.ptr);
     {
         let l = Layout::new::<u8>();
         let p = alloc(l);
