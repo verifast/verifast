@@ -72,6 +72,7 @@ pub mod ptr {
         pub unsafe fn new_unchecked(ptr: *mut T) -> Self
             //@ req true;
             //@ ens result.pointer == ptr;
+            //@ on_unwind_ens false;
         {
             NonNull { pointer: ptr }
         }
@@ -80,6 +81,7 @@ pub mod ptr {
         pub unsafe fn as_ref<'a>(&'a self) -> &'a T
             //@ req [?q](*self).pointer |-> ?p;
             //@ ens [q](*self).pointer |-> p;
+            //@ on_unwind_ens false;
         {
             &*self.pointer
         }

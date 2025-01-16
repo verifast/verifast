@@ -4,6 +4,17 @@ include!{"listex.rsspec"}
 
 /*@
 
+inductive fn_outcome<T> = returning(result: T) | unwinding;
+
+fix fn_outcome_result<t>(outcome: fn_outcome<t>) -> t {
+    match outcome {
+        returning(result) => result,
+        unwinding => default_value,
+    }
+}
+
+fix ignore_unwind_paths() -> bool;
+
 lem assume(b: bool);
     req true;
     ens b;
@@ -11,6 +22,8 @@ lem assume(b: bool);
 lem note(b: bool);
     req b;
     ens b;
+
+pred True(;) = true;
 
 pred exists<t>(x: t;) = true;
 pred exists_np<t>(x: t) = true;

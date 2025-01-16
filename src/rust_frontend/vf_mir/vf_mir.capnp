@@ -665,6 +665,15 @@ struct Body {
                     targets @2: SwitchTargets;
                 }
 
+                struct UnwindAction {
+                    union {
+                        continue @0: Void;
+                        unreachable @1: Void;
+                        terminate @2: Void;
+                        cleanup @3: BasicBlockId;
+                    }
+                }
+
                 struct FnCallData {
                     struct DestinationData {
                         place @0: Place;
@@ -673,6 +682,7 @@ struct Body {
                     func @0: Operand;
                     args @1: List(Operand);
                     destination @2: Option(DestinationData);
+                    unwindAction @5: UnwindAction;
                     # The span of the call, without the dot and receiver e.g. `foo(a, b)` in `x.foo(a, b)`
                     callSpan @3: SpanData;
                     ghostGenericArgList @4: Option(Annotation);
@@ -681,12 +691,13 @@ struct Body {
                 struct DropData {
                     place @0: Place;
                     target @1: BasicBlockId;
+                    unwindAction @2: UnwindAction;
                 }
 
                 union {
                     goto @0: BasicBlockId;
                     switchInt @1: SwitchIntData;
-                    resume @2: Void;
+                    unwindResume @2: Void;
                     unwindTerminate @7: Void;
                     return @3: Void;
                     unreachable @6: Void;

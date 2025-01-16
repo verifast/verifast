@@ -1,5 +1,3 @@
-// verifast_options{ignore_unwind_paths}
-
 use std::alloc::{Layout, alloc, handle_alloc_error, dealloc};
 //@ use std::alloc::{alloc_block, Layout};
 
@@ -25,6 +23,7 @@ impl Account {
     unsafe fn set_balance(my_account: *mut Account, newBalance: i32)
     //@ req Account_balance(my_account, _);
     //@ ens Account_balance(my_account, newBalance);
+    //@ on_unwind_ens false;
     {
         (*my_account).balance = newBalance;
     }

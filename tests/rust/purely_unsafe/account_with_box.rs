@@ -1,3 +1,5 @@
+// verifast_options{ignore_unwind_paths}
+
 unsafe fn assert(b: bool)
 //@ req b;
 //@ ens true;
@@ -20,10 +22,14 @@ pred <Account>.own(t, account) = true;
 impl Account {
 
     unsafe fn new() -> *mut Account
-    //@ req true;
-    //@ ens Account(result, 0);
+    //@ req thread_token(?t);
+    //@ ens thread_token(t) &*& Account(result, 0);
     {
-        Box::into_raw(Box::new(Account { balance: 0 }))
+        let account = Account { balance: 0 };
+        //@ close drop_perm::<Account>(false, True, t, account);
+        let result = Box::into_raw(Box::new(account));
+        //@ open drop_perm(_, _, _, _);
+        result
     }
 
     unsafe fn get_balance(account: *mut Account) -> i32

@@ -1,4 +1,4 @@
-// verifast_options{ignore_ref_creation}
+// verifast_options{ignore_unwind_paths ignore_ref_creation}
 
 /*@
 
@@ -177,8 +177,6 @@ pred<T> <Deque<T>>.share(k, t, l) =
 
 pred_ctor elems_fbc<T>(t: thread_id_t, nodes: list<*Node<T>>)() =
     foreachp2(nodes, elem_points_to::<T>, ?elems) &*& foreach(elems, elem_own::<T>(t));
-
-pred True(;) = true;
 
 lem elems_share_full<T>(t: thread_id_t, nodes: list<*Node<T>>)
     req type_interp::<T>() &*& atomic_mask(Nlft) &*& full_borrow(?k, elems_fbc(t, nodes)) &*& [?q]lifetime_token(k);

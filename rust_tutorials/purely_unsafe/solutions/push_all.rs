@@ -1,3 +1,5 @@
+// verifast_options{ignore_unwind_paths disable_overflow_check}
+
 use std::alloc::{Layout, alloc, handle_alloc_error, dealloc};
 //@ use std::alloc::{Layout, alloc_block};
 

@@ -1,4 +1,4 @@
-// verifast_options{ignore_ref_creation extern:../unverified/sys}
+// verifast_options{ignore_unwind_paths ignore_ref_creation extern:../unverified/sys}
 
 #![feature(negative_impls)]
 #![allow(dead_code)]
@@ -15,7 +15,6 @@ pub struct Mutex<T: Send> {
 
 /*@
 
-pred True(;) = true;
 pred<T> <Mutex<T>>.own(t, mutex) =
     sys::locks::SysMutex(mutex.inner, True) &*& <T>.own(t, mutex.data);
 

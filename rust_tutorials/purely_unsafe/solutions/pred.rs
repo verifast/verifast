@@ -1,3 +1,5 @@
+// verifast_options{disable_overflow_check}
+
 use std::alloc::{Layout, alloc, handle_alloc_error, dealloc};
 //@ use std::alloc::{alloc_block, Layout};
 

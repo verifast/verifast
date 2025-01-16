@@ -1,3 +1,5 @@
+// verifast_options{ignore_unwind_paths}
+
 use std::alloc::{alloc, Layout, handle_alloc_error, dealloc};
 
 unsafe fn assert(b: bool)

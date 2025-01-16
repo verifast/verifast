@@ -1,4 +1,4 @@
-// verifast_options{ignore_ref_creation extern:../unverified/sys}
+// verifast_options{ignore_unwind_paths ignore_ref_creation extern:../unverified/sys}
 
 #![feature(negative_impls)]
 #![allow(dead_code)]
@@ -17,7 +17,6 @@ pub struct MutexU32 {
 
 /*@
 
-pred True(;) = true;
 pred <MutexU32>.own(t, mutexU32) = SysMutex(mutexU32.inner, True);
 
 lem MutexU32_drop()

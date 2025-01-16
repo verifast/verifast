@@ -13,7 +13,7 @@ A ghost declarations annotation may appear anywhere a Rust item may appear, exce
 > &nbsp;&nbsp; | `pred_ctor` IDENTIFIER _GenericParams_ <sup>?</sup> `(` _Params_ `)` `(` ( _Params_ `;` )<sup>?</sup> _Params_ `)` `=` _Assertion_ `;`\
 > &nbsp;&nbsp; | `pred` _GenericParams_ <sup>?</sup> `<` _Type_ `>` `.` IDENTIFIER `(` ( _ParamNames_ `;` )<sup>?</sup> _ParamNames_ `)` `=` _Assertion_ `;`\
 > &nbsp;&nbsp; | `lem` IDENTIFIER _GenericParams_ <sup>?</sup> `(` _Params_ `)` ( `->` _Type_ )<sup>?</sup> _LemmaRest_\
-> &nbsp;&nbsp; | `fn_type` IDENTIFIER _GenericParams_ <sup>?</sup> `(` _Params_ `)` `=` `unsafe` `fn` `(` _Params_ `)` ( `->` _Type_ )<sup>?</sup> `;` `req` _Assertion_ `;` `ens` _Assertion_ `;`\
+> &nbsp;&nbsp; | `fn_type` IDENTIFIER _GenericParams_ <sup>?</sup> `(` _Params_ `)` `=` `unsafe` `fn` `(` _Params_ `)` ( `->` _Type_ )<sup>?</sup> `;` `req` _Assertion_ `;` `ens` _Assertion_ `;` `on_unwind_ens` _Assertion_ `;`\
 > &nbsp;&nbsp; | `lem_type` IDENTIFIER _GenericParams_ <sup>?</sup> `(` _Params_ `)` `=` `lem` `(` _Params_ `)` ( `->` _Type_ )<sup>?</sup> `;` `req` _Assertion_ `;` `ens` _Assertion_ `;`\
 > &nbsp;&nbsp; | `let_lft` _Lifetime_ `=` _Expression_ `;`\
 > &nbsp;&nbsp; | `abstract_type` IDENTIFIER `;`

@@ -8,6 +8,7 @@ module type RUST_FE_ARGS =
     val skip_specless_fns : bool
     val allow_ignore_ref_creation : bool
     val ignore_ref_creation : bool
+    val ignore_unwind_paths : bool
   end
 module Make :
   functor (_ : RUST_FE_ARGS) ->

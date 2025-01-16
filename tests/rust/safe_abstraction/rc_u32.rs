@@ -1,4 +1,4 @@
-// verifast_options{ignore_ref_creation}
+// verifast_options{ignore_unwind_paths ignore_ref_creation}
 
 #![feature(negative_impls)]
 use std::{cell::UnsafeCell, process::abort, ptr::NonNull};

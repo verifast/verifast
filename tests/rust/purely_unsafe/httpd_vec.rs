@@ -1,4 +1,4 @@
-// verifast_options{ignore_ref_creation extern:../unverified/platform}
+// verifast_options{ignore_unwind_paths ignore_ref_creation extern:../unverified/platform}
 
 use std::io::Write;
 

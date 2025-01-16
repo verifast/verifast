@@ -1,3 +1,5 @@
+// verifast_options{ignore_unwind_paths}
+
 /*@
 
 lem_auto bitand_zero(y: usize)

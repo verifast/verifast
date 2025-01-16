@@ -1,4 +1,4 @@
-// verifast_options{extern:../../../tests/rust/unverified/platform disable_overflow_check}
+// verifast_options{ignore_unwind_paths extern:../../../tests/rust/unverified/platform disable_overflow_check}
 
 use std::alloc::{Layout, alloc, handle_alloc_error};
 //use platform::threading::Thread;

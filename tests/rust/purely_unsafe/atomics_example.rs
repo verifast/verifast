@@ -1,4 +1,4 @@
-// verifast_options{ignore_ref_creation extern:../unverified/platform}
+// verifast_options{ignore_unwind_paths ignore_ref_creation extern:../unverified/platform}
 
 use std::{ptr::null_mut, sync::atomic::{AtomicUsize, Ordering::SeqCst}};
 //@ use std::sync::atomic::{AtomicUsize, AtomicUsize_fetch_add_ghop, is_AtomicUsize_fetch_add_op, AtomicUsize_load_ghop, is_AtomicUsize_load_op};

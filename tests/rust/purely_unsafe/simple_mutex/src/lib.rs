@@ -1,4 +1,4 @@
-// verifast_options{extern_spec:platform=../../unverified/platform/spec/lib.rsspec}
+// verifast_options{ignore_unwind_paths extern_spec:platform=../../unverified/platform/spec/lib.rsspec}
 
 pub struct Mutex {
     mutex: platform::threading::Mutex,
