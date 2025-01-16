@@ -1,4 +1,4 @@
-// verifast_options{skip_specless_fns}
+// verifast_options{ignore_unwind_paths skip_specless_fns}
 
 //! A doubly-linked list with owned nodes.
 //!

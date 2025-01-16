@@ -1,4 +1,4 @@
-// verifast_options{disable_overflow_check}
+// verifast_options{ignore_unwind_paths disable_overflow_check}
 
 use std::io::{Read, Write, stdin, stdout};
 

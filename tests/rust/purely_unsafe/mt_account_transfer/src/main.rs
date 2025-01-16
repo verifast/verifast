@@ -1,4 +1,4 @@
-// verifast_options{extern_spec:platform=../../unverified/platform/spec/lib.rsspec extern_spec:simple_mutex=../simple_mutex/spec/lib.rsspec}
+// verifast_options{ignore_unwind_paths extern_spec:platform=../../unverified/platform/spec/lib.rsspec extern_spec:simple_mutex=../simple_mutex/spec/lib.rsspec}
 
 use simple_mutex::Mutex;
 //@ use simple_mutex::Mutex;

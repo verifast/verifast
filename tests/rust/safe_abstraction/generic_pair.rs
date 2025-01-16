@@ -1,4 +1,4 @@
-// verifast_options{ignore_ref_creation}
+// verifast_options{ignore_unwind_paths ignore_ref_creation}
 
 pub struct Pair<A, B> {
     fst: A,

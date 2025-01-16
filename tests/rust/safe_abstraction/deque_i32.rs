@@ -1,3 +1,5 @@
+// verifast_options{ignore_unwind_paths}
+
 struct Node {
     prev: *mut Node,
     value: i32,

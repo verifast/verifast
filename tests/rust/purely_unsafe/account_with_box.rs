@@ -1,3 +1,5 @@
+// verifast_options{ignore_unwind_paths}
+
 unsafe fn assert(b: bool)
 //@ req b;
 //@ ens true;

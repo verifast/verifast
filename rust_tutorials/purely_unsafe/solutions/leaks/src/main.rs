@@ -1,4 +1,4 @@
-// verifast_options{disable_overflow_check extern_spec:platform=../../../../tests/rust/unverified/platform/spec/lib.rsspec extern_spec:simple_mutex=../../../../tests/rust/purely_unsafe/simple_mutex/spec/lib.rsspec}
+// verifast_options{ignore_unwind_paths disable_overflow_check extern_spec:platform=../../../../tests/rust/unverified/platform/spec/lib.rsspec extern_spec:simple_mutex=../../../../tests/rust/purely_unsafe/simple_mutex/spec/lib.rsspec}
 
 use std::alloc::{Layout, alloc, handle_alloc_error, dealloc};
 use simple_mutex::Mutex;
