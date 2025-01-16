@@ -1,9 +1,6 @@
 use std::alloc::{alloc, dealloc, handle_alloc_error, Layout};
 
-unsafe fn main()
-//@ req true;
-//@ ens true;
-{
+unsafe fn main() {
     let l = Layout::new::<u8>();
     let p = alloc(l);
     if p.is_null() {
