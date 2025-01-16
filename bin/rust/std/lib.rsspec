@@ -1,7 +1,7 @@
 /*@
 
 abstract_type type_info;
-
+pred alloc_block_<T>(l: *T;) = std::alloc::alloc_block(l as *u8, std::alloc::Layout::new_::<T>());
 @*/
 
 mod hint {
