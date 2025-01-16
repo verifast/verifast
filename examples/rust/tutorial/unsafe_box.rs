@@ -28,7 +28,6 @@ impl<T> Box<T> {
     //@ ens thread_token(t);
     {
         //@ open Box(t, this, _);
-        //@ close_full_borrow_content::<T>(t, this.ptr);
         std::ptr::drop_in_place(this.ptr);
         //@ to_u8s_(this.ptr);
         dealloc(this.ptr as *mut u8, Layout::new::<T>());
