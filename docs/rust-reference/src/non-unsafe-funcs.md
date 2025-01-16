@@ -33,6 +33,10 @@ ens thread_token(_t) &*&
     [_q_a]lifetime_token('a) &*&
     [_q_b]lifetime_token('b) &*&
     <U>.own(_t, result);
+on_unwind_ens
+    thread_token(_t) &*&
+    [_q_a]lifetime_token('a) &*&
+    [_q_b]lifetime_token('b);
 ```
 
 ### Drop functions
@@ -43,6 +47,12 @@ req thread_token(?_t) &*&
     [?_q_a]lifetime_token('a) &*&
     <S>.full_borrow_content(_t, self);
 ens thread_token(_t) &*&
+    [_q_a]lifetime_token('a) &*&
+    <T1>.full_borrow_content(_t, &(*self).f1) &*&
+    ...
+    <TN>.full_borrow_content(_t, &(*self).fN);
+on_unwind_ens
+    thread_token(_t) &*&
     [_q_a]lifetime_token('a) &*&
     <T1>.full_borrow_content(_t, &(*self).f1) &*&
     ...
