@@ -57,6 +57,13 @@ lem Box_share_full<T>(k: lifetime_t, t: thread_id_t, l: *Box<T>)
     close <Box<T>>.share(k, t, l);
     leak <Box<T>>.share(k, t, l);
 }
+
+lem init_ref_Box<T>(p: *Box<T>)
+    req type_interp::<T>() &*& atomic_mask(Nlft) &*& ref_init_perm(p, ?x) &*& [_]Box_share::<T>(?k, ?t, x) &*& [?q]lifetime_token(k);
+    ens type_interp::<T>() &*& atomic_mask(Nlft) &*& [q]lifetime_token(k) &*& [_]Box_share::<T>(k, t, p) &*& [_]frac_borrow(k, ref_initialized_(p));
+{
+    assume(false); // TODO
+}
 @*/
 
 impl<T> Box<T> {
@@ -87,7 +94,6 @@ impl<T> Drop for Box<T> {
         unsafe {
             //@ open <Box<T>>.full_borrow_content(t, self)();
             //@ open <Box<T>>.own(t, *self);
-            //@ close_full_borrow_content::<T>(t, (*self).ptr);
             std::ptr::drop_in_place(self.ptr);
             //@ to_u8s_((*self).ptr);
             dealloc(self.ptr as *mut u8, Layout::new::<T>());

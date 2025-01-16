@@ -46,6 +46,13 @@ lem BoxU8_share_full(k: lifetime_t, t: thread_id_t, l: *BoxU8)
     close BoxU8_share(k, t, l);
     leak BoxU8_share(k, t, l);
 }
+
+lem init_ref_BoxU8(p: *BoxU8)
+    req atomic_mask(Nlft) &*& ref_init_perm(p, ?x) &*& [_]BoxU8_share(?k, ?t, x) &*& [?q]lifetime_token(k);
+    ens atomic_mask(Nlft) &*& [q]lifetime_token(k) &*& [_]BoxU8_share(k, t, p) &*& [_]frac_borrow(k, ref_initialized_(p));
+{
+    assume(false); // TODO
+}
 @*/
 
 impl BoxU8 {
