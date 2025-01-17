@@ -167,11 +167,11 @@ pred array<T>(p: *T, count: i32; values: list<T>) =
 
 lem_auto array__inv<T>();
     req [?f]array_::<T>(?p, ?count, ?elems);
-    ens [f]array_::<T>(p, count, elems) &*& count == length(elems) &*& pointer_within_limits(p) == true &*& pointer_within_limits(p + count) == true;
+    ens [f]array_::<T>(p, count, elems) &*& count == length(elems) &*& count * std::mem::size_of::<T>() <= isize::MAX &*& pointer_within_limits(p) == true &*& pointer_within_limits(p + count) == true;
     
 lem_auto array_inv<T>();
     req [?f]array::<T>(?p, ?count, ?elems);
-    ens [f]array::<T>(p, count, elems) &*& count == length(elems) &*& pointer_within_limits(p) == true &*& pointer_within_limits(p + count) == true;
+    ens [f]array::<T>(p, count, elems) &*& count == length(elems) &*& count * std::mem::size_of::<T>() <= isize::MAX &*& pointer_within_limits(p) == true &*& pointer_within_limits(p + count) == true;
 
 
 lem array_split<T>(p: *T, offset: i32);
