@@ -147,7 +147,7 @@ pred points_to<t>(p: *t; v: t) = points_to_::<t>(p, some(v));
 
 lem points_to_limits<T>(p: *T);
     req [?f]points_to(p, ?v);
-    ens [f]points_to(p, v) &*& object_pointer_within_limits(p, std::mem::size_of::<T>()) == true;
+    ens [f]points_to(p, v) &*& f <= 1 &*& object_pointer_within_limits(p, std::mem::size_of::<T>()) == true;
 
 pred array_<T>(p: *T, count: i32; values: list<option<T>>) =
     pointer_within_limits(p) == true &*&
