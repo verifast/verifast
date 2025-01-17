@@ -908,6 +908,36 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       Some symb -> symb
     | None -> static_error l ("Dereferencing pointers of type " ^ string_of_type pointeeType ^ " is not yet supported.") None
   
+  let read_generic_array h env l a i tp =
+    let array_symb = array_symb () in
+    let slices =
+      head_flatmap
+        begin function
+          Chunk (g, [tp'], coef, [a'; n'; vs'], _)
+            when
+              predname_eq g (array_symb, true) &&
+              unify tp' tp &&
+              definitely_equal a' a &&
+              ctxt#query (ctxt#mk_and (ctxt#mk_le (ctxt#mk_intlit 0) i) (ctxt#mk_lt i n')) ->
+            [mk_nth tp i vs']
+        | _ -> []
+        end
+        h
+    in
+    match slices with
+      None ->
+        begin match lookup_points_to_chunk_core h (generic_points_to_symb ()) [tp] (mk_ptr_add_ l env a i tp) with
+          None ->
+          assert_false h env l
+            (sprintf "No matching array chunk: array::<%s>(%s, 0<=%s<n, _)"
+                (string_of_type tp)
+                (ctxt#pprint a)
+                (ctxt#pprint i))
+            None
+        | Some v -> v
+        end
+    | Some v -> v
+
   let read_integer__array h env l a i tp =
     let (k, signedness) =
       match int_rank_and_signedness tp with
@@ -949,6 +979,9 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | Some v -> v
 
   let read_c_array h env l a i tp =
+    match dialect with
+      Some Rust -> read_generic_array h env l a i tp
+    | _ ->
     match try_pointee_pred_symb0 tp with
       None -> read_integer__array h env l a i tp
     | Some (_, predsym, _, array_predsym, _, _, _, _, _, _, _, _) ->

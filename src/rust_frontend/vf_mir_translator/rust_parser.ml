@@ -155,7 +155,7 @@ let rec parse_expr_funcs allowStructExprs =
       ]
     ] -> e
   and parse_pointsto_expr = function%parser
-    [ parse_disj_expr as e;
+    [ parse_assign_expr as e;
       [%let e = match e with
         CallExpr (l, "#list", [], [], [coefPat], Static) ->
         begin function%parser
@@ -171,6 +171,11 @@ let rec parse_expr_funcs allowStructExprs =
         end
       ]
     ] -> e
+  and parse_assign_expr = function%parser
+    [ parse_disj_expr as e; [%let e = parse_assign_expr_rest e] ] -> e
+  and parse_assign_expr_rest e = function%parser
+    [ (l, Kwd "="); parse_assign_expr as e1 ] -> AssignExpr (l, e, Mutation, e1)
+  | [ ] -> e
   and parse_disj_expr = function%parser
     [ parse_conj_expr as e; [%let e = parse_disj_rest e ] ] -> e
   and parse_disj_rest e = function%parser
