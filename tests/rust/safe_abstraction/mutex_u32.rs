@@ -143,7 +143,7 @@ impl MutexU32 {
     */
     // TODO: remove keyword `unsafe`
     pub unsafe fn lock<'a>(&'a self) -> MutexGuardU32
-    //@ req thread_token(?t) &*& [?qa]lifetime_token(?a) &*& [_]MutexU32_share(a, t, self);
+    //@ req thread_token(?t) &*& t == currentThread &*& [?qa]lifetime_token(?a) &*& [_]MutexU32_share(a, t, self);
     //@ ens thread_token(t) &*& [qa]lifetime_token(a) &*& MutexGuardU32_own_(a)(t, result.lock);
     {
         unsafe {
@@ -305,7 +305,7 @@ impl MutexGuardU32 {
 
     // TODO: It should be an `impl` of `Drop` and a safe function
     unsafe fn drop<'a>(&'a mut self)
-    //@ req thread_token(?t) &*& exists(?km) &*& [?qkm]lifetime_token(km) &*& MutexGuardU32_full_borrow_content0(km, t, self)();
+    //@ req thread_token(?t) &*& t == currentThread &*& exists(?km) &*& [?qkm]lifetime_token(km) &*& MutexGuardU32_full_borrow_content0(km, t, self)();
     //@ ens thread_token(t) &*& [qkm]lifetime_token(km) &*& (*self).lock |-> ?lock &*& [_]MutexU32_share(km, t, lock);
     {
         //@ open MutexGuardU32_full_borrow_content0(km, t, self)();

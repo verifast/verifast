@@ -812,14 +812,14 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       result
   and lookup_integer__chunk h0 env l tp t =
     match int_rank_and_signedness tp with
-      Some (k, signedness) ->
+      Some (k, signedness) when match dialect with Some Rust -> false | _ -> true ->
       begin match lookup_integer__chunk_core h0 t k signedness with
         None -> assert_false h0 env l ("No matching points-to chunk: integer_(" ^ ctxt#pprint t ^ ", " ^ ctxt#pprint (rank_size_term k) ^ ", " ^ (if signedness = Signed then "true" else "false") ^ ", _)") None
       | Some v ->
         assert_has_type env t tp h0 env l "This read might violate C's effective types rules" None;
         v
       end
-    | None ->
+    | _ ->
     match tp with
       StructType (sn, targs) ->
       let (_, tparams, body, _, structTypeidFunc) = List.assoc sn structmap in

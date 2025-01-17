@@ -21,8 +21,8 @@ struct str_ref<'a> { ptr: *u8, len: usize }
 pred junk();
 
 fn_type main_full(mainModule: i32) = fn();
-    req thread_token(?_t);
-    ens thread_token(_t) &*& junk();
-    on_unwind_ens thread_token(_t);
+    req thread_token(currentThread);
+    ens thread_token(currentThread) &*& junk();
+    on_unwind_ens thread_token(currentThread);
 
 @*/

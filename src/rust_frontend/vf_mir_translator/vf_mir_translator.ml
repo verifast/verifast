@@ -3462,7 +3462,12 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           Sep (loc, pointee_fbc, asn))
         in_out_params asn
     in
-    let pre_na_token = nonatomic_token_b (bind_pat_b thread_id_name) in
+    let pre_na_token =
+      Sep
+        ( contract_loc,
+          nonatomic_token_b (bind_pat_b thread_id_name),
+          Operation ( contract_loc, Eq, [ Var (contract_loc, "_t"); Var (contract_loc, "currentThread") ] ) )
+    in
     let post_na_token = nonatomic_token_b (lit_pat_b thread_id_name) in
     let lft_token_b q_pat_b n =
       let coef_n = "_q_" ^ n in
@@ -3573,7 +3578,12 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           Static )
     in
     let thread_id_name = "_t" in
-    let pre_na_token = nonatomic_token_b (bind_pat_b thread_id_name) in
+    let pre_na_token =
+      Sep
+        ( limpl,
+          nonatomic_token_b (bind_pat_b thread_id_name),
+          Operation ( limpl, Eq, [ Var (limpl, "_t"); Var (limpl, "currentThread") ] ) )
+    in
     let post_na_token = nonatomic_token_b (lit_pat_b thread_id_name) in
     let lft_token_b q_pat_b n =
       let coef_n = "_q_" ^ n in
@@ -3622,8 +3632,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         (Some
            (Ast.Sep
               ( ls,
-                Ast.CallExpr
-                  (ls, "thread_token", [], [], [ VarPat (ls, "_t") ], Static),
+                pre_na_token,
                 Ast.CallExpr
                   ( ls,
                     self_ty ^ "_full_borrow_content",
@@ -3664,13 +3673,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         (Some
            (Ast.Sep
               ( ls,
-                Ast.CallExpr
-                  ( ls,
-                    "thread_token",
-                    [],
-                    [],
-                    [ LitPat (Var (ls, "_t")) ],
-                    Static ),
+                post_na_token,
                 List.fold_right
                   (fun ({ name; ty; loc } : Mir.field_def_tr) asn ->
                     match
