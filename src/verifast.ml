@@ -1024,7 +1024,8 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             if !address_taken then begin
               let addr = get_unique_var_symb_non_ghost (x ^ "_addr") (PtrType t) in
               if pure then static_error l "Taking the address of a ghost variable is not allowed." None;
-              produce_points_to_chunk l h t (if is_const_var then real_half else real_unit) addr v $. fun h ->
+              let v = if e = None then None else Some v in
+              produce_points_to_chunk_ l h t (if is_const_var then real_half else real_unit) addr RegularPointsTo v $. fun h ->
               iter h ((x, RefType(t)) :: tenv) ghostenv ((x, addr)::env) xs
             end else begin
               if e = None && not pure then
