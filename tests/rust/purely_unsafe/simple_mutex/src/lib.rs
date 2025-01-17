@@ -31,7 +31,7 @@ pub pred Mutex(mutex: Mutex, inv_: pred();) =
     ghost_cell::<unit>(held_token, unit) &*&
     atomic_space(MaskTop, Mutex_inv(mutex.mutex, held_token, held_frac_cell, inv_));
 
-pub pred Mutex_held(mutex: Mutex, inv_: pred(), owner: usize, frac: real) =
+pub pred Mutex_held(mutex: Mutex, inv_: pred(), owner: thread_id_t, frac: real) =
     [frac]platform::threading::Mutex(mutex.mutex, ?ghost_cell_id) &*&
     [frac]ghost_cell::<i32>(ghost_cell_id, ?ghost_cell0_id) &*&
     [frac]ghost_cell::<pair<i32, i32>>(ghost_cell0_id, pair(?held_token, ?held_frac_cell)) &*&

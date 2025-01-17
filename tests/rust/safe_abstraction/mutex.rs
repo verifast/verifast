@@ -187,7 +187,7 @@ impl<T: Send> Mutex<T> {
     Note that in either case it is not undefined behaviour.
     */
     pub fn lock<'a>(&'a self) -> MutexGuard<'a, T>
-    //@ req thread_token(?t) &*& [?qa]lifetime_token('a) &*& [_]Mutex_share('a, t, self);
+    //@ req thread_token(?t) &*& t == currentThread &*& [?qa]lifetime_token('a) &*& [_]Mutex_share('a, t, self);
     //@ ens thread_token(t) &*& [qa]lifetime_token('a) &*& MutexGuard_own::<'a, T>(t, result);
     {
         unsafe {
@@ -300,7 +300,7 @@ impl<'b, T: Send> DerefMut for MutexGuard<'b, T> {
 impl<'a, T: Send> Drop for MutexGuard<'a, T> {
 
     fn drop<'b>(self: &'b mut MutexGuard<'a, T>)
-    //@ req thread_token(?t) &*& [?qa]lifetime_token('a) &*& MutexGuard_full_borrow_content::<'a, T>(t, self)();
+    //@ req thread_token(?t) &*& t == currentThread &*& [?qa]lifetime_token('a) &*& MutexGuard_full_borrow_content::<'a, T>(t, self)();
     //@ ens thread_token(t) &*& [qa]lifetime_token('a) &*& (*self).lock |-> ?lock &*& [_]Mutex_share('a, t, lock) &*& struct_MutexGuard_padding(self);
     {
         //@ open MutexGuard_full_borrow_content::<'a, T>(t, self)();

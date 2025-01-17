@@ -113,7 +113,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     cont h coef value
 
   let current_thread_name = "currentThread"
-  let current_thread_type = intType
+  let current_thread_type = match dialect with Some Rust -> AbstractType "thread_id_t" | _ -> intType
   
   (* Region: function contracts *)
   

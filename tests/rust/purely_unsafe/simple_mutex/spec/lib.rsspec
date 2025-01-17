@@ -4,7 +4,7 @@ struct Mutex;
 
 pred Mutex(mutex: Mutex, inv_: pred(););
 
-pred Mutex_held(mutex: Mutex, inv_: pred(), owner: usize, frac: real);
+pred Mutex_held(mutex: Mutex, inv_: pred(), owner: thread_id_t, frac: real);
 
 @*/
 
