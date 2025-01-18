@@ -284,6 +284,10 @@ lemma void integer_unique(int *p);
     requires [?f]integer(p, ?v);
     ensures [f]integer(p, v) &*& f <= 1;
 
+lemma void int__unique(int *p);
+    requires [?f]int_(p, ?v);
+    ensures [f]int_(p, v) &*& f <= 1;
+
 lemma void integer_limits(int *p);
     requires [?f]integer(p, ?v);
     ensures [f]integer(p, v) &*& object_pointer_within_limits(p, sizeof(int)) == true &*& INT_MIN <= v &*& v <= INT_MAX;

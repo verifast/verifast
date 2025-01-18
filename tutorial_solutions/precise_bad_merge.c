@@ -2,7 +2,7 @@
 
 predicate foo(bool b) = true;
 
-predicate bar(int *x, int *y) = foo(?b) &*& b ? integer(x, _) : integer(y, _);
+predicate bar(int *x, int *y) = foo(?b) &*& b ? *x |-> _ : *y |-> _;
 
 lemma void merge_bar() // This lemma is false!
     requires [?f1]bar(?x, ?y) &*& [?f2]bar(x, y);
@@ -25,6 +25,6 @@ int main()
     //@ merge_bar();
     //@ open bar(&x, &y);
     //@ assert foo(?b);
-    //@ if (b) integer_unique(&x); else integer_unique(&y);
+    //@ if (b) int__unique(&x); else int__unique(&y);
     assert(false);
 }

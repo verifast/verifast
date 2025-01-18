@@ -146,7 +146,7 @@ int pk_encrypt(pk_context *ctx, const char *input, size_t ilen, char *output,
                   ilen >= MINIMAL_STRING_SIZE &*&
                   // encrypted message can not be bigger than key
                   ilen * 8 <= nbits &*&
-                *olen |-> ?_ &*&
+                *olen |-> _ &*&
                 chars_(output, osize, _) &*&
                 random_state_predicate(?state_pred) &*&
                 [_]is_random_function(f_rng, state_pred) &*&
@@ -178,7 +178,7 @@ int pk_decrypt(pk_context *ctx, const char *input, size_t ilen, char *output,
                   // message to decrypt can not be bigger than key
                   ilen * 8 <= nbits &*&
                 // output
-                *olen |-> ?_ &*&
+                *olen |-> _ &*&
                 chars_(output, osize, _) &*&
                 // entropy
                 random_permission(p1, ?c1) &*& 
@@ -213,7 +213,7 @@ int pk_sign(pk_context *ctx, int md_alg, const char *hash, size_t hash_len,
                   hash_len >= MINIMAL_STRING_SIZE &*&
                   // hash to sign can not be bigger than key
                   hash_len * 8 <= nbits &*&
-                *sig_len |-> ?_ &*&
+                *sig_len |-> _ &*&
                 chars_(sig, ?out_len, _) &*& 8 * out_len >= nbits &*&
                 random_state_predicate(?state_pred) &*&
                 [_]is_random_function(f_rng, state_pred) &*&

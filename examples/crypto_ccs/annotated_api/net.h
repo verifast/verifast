@@ -17,7 +17,7 @@ predicate net_status(int socket, list<char> socket_ip,
 @*/
 
 int net_connect(int *fd, const char *host, int port);
-  //@ requires integer(fd, _) &*& [?f]option_string(host, ?s_ip);
+  //@ requires *fd |-> _ &*& [?f]option_string(host, ?s_ip);
   /*@ ensures  integer(fd, ?s_fd) &*& [f]option_string(host, s_ip) &*&
                result == 0 ?
                    net_status(s_fd, s_ip, port, connection_init) 
@@ -32,7 +32,7 @@ int net_set_block(int fd);
                  true; @*/
 
 int net_bind(int *fd, const char *bind_ip, int port);
-  //@ requires integer(fd, _) &*& [?f]option_string(bind_ip, ?s_ip);
+  //@ requires *fd |-> _ &*& [?f]option_string(bind_ip, ?s_ip);
   /*@ ensures  integer(fd, ?s_fd) &*& [f]option_string(bind_ip, s_ip) &*&
                result == 0 ? 
                  net_status(s_fd, s_ip, port, bound_to_port) 
@@ -40,7 +40,7 @@ int net_bind(int *fd, const char *bind_ip, int port);
                  true; @*/
 
 int net_accept(int bind_fd, int *client_fd, void *client_ip);
-  /*@ requires integer(client_fd, _) &*& option_string(client_ip, ?c_ip) &*&
+  /*@ requires *client_fd |-> _ &*& option_string(client_ip, ?c_ip) &*&
                net_status(bind_fd, ?ip, ?port, bound_to_port); @*/
   /*@ ensures  integer(client_fd, ?c_fd) &*& option_string(client_ip, c_ip) &*& 
                net_status(bind_fd, ip, port, bound_to_port) &*&

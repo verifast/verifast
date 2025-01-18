@@ -42,8 +42,8 @@ typedef lemma void stack_pop_lemma(predicate(list<void*> vs) I)();
 @*/
 
 bool stack_pop(struct stack* s, struct stack_client* client, void** out);
-  //@ requires stack_client(s, ?f, ?I, client) &*& pointer(out, ?initial) &*& is_stack_pop_lemma(?lem, I) &*& stack_pop_pre(lem)();
-  //@ ensures stack_client(s, f, I, client) &*& pointer(out, ?res) &*& stack_pop_post(lem)(result, ?pst) &*& result ? pst == res : true;
+  //@ requires stack_client(s, ?f, ?I, client) &*& *out |-> _ &*& is_stack_pop_lemma(?lem, I) &*& stack_pop_pre(lem)();
+  //@ ensures stack_client(s, f, I, client) &*& stack_pop_post(lem)(result, ?pst) &*& result ? *out |-> pst : *out |-> _;
 
 void stack_dipose(struct stack* s);
   //@ requires stack(s, ?I);

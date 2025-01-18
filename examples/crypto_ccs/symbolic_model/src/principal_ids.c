@@ -43,7 +43,7 @@ lemma void principals_finalize()
 
 int create_principal(struct keypair** keypair)
   /*@ requires world(?pub, ?key_clsfy) &*&
-               pointer(keypair, _) &*&
+               *keypair |-> _ &*&
                principals_created(?count); @*/
   /*@ ensures  world(pub, key_clsfy) &*&
                principals_created(result) &*&
