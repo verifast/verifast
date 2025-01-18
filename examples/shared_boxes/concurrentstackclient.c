@@ -76,8 +76,8 @@ void consumer(struct stack* s, struct stack_client* client)
   //@ close stack_pop_pre(my_pop_lemma)();
     void* x1, x2;
     bool success = stack_pop(s, client, &x1);
-    void* y = x1;
     if(! success) consumer(s, client);
+    void *y = x1;
     //@ open stack_pop_post(my_pop_lemma)(_, _);
     {
     /*@

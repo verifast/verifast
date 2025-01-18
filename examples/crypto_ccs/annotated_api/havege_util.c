@@ -42,7 +42,7 @@ void r_int_with_bounds(struct havege_state* state, int* i,
                random_permission(?principal, ?count1) &*&
                havege_util(pub, ?proof_pred, principal) &*&
                0 <= l_bound &*& l_bound < u_bound &*& 
-               integer(i, _); @*/
+               *i |-> _; @*/
   /*@ ensures  [f]havege_state_initialized(state) &*&
                random_permission(principal, ?count2) &*&
                havege_util(pub, proof_pred, principal) &*&
@@ -93,7 +93,7 @@ void r_u_int_with_bounds(struct havege_state* state, unsigned int* i,
                random_permission(?principal, ?count1) &*&
                havege_util(pub, ?proof_pred, principal) &*&
                l_bound < u_bound &*& u_bound <= INT_MAX &*& 
-               u_integer(i, _); @*/
+               *i |-> _; @*/
   /*@ ensures  [f]havege_state_initialized(state) &*&
                random_permission(principal, ?count2) &*&
                havege_util(pub, proof_pred, principal) &*&

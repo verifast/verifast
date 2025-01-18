@@ -72,7 +72,7 @@ int main()
     //@ requires true;
     //@ ensures true;
 {
-    int x;
+    int x = 0;
     //@ create_box id = incr_box(&x);
     //@ leak incr_box(id, &x);
     //@ close thread_run_data(inc)(&x);

@@ -1421,13 +1421,13 @@ void retire_node(struct stack* s, struct stack_client* client, struct node* n)
 
 
 bool stack_pop(struct stack* s, struct stack_client* client, void** out)
-  //@ requires stack_client(s, ?f, ?I, client) &*& pointer(out, ?initial) &*& is_stack_pop_lemma(?lem, I) &*& stack_pop_pre(lem)();
-  //@ ensures stack_client(s, f, I, client) &*& pointer(out, ?res) &*& stack_pop_post(lem)(result, ?pst) &*& result ? pst == res : true;
+  //@ requires stack_client(s, ?f, ?I, client) &*& *out |-> _ &*& is_stack_pop_lemma(?lem, I) &*& stack_pop_pre(lem)();
+  //@ ensures stack_client(s, f, I, client) &*& stack_pop_post(lem)(result, ?pst) &*& result ? *out |-> pst : *out |-> _;
 {
   struct node* t, n, tmp, old;
   void* data;
   while(true)
-    //@ invariant stack_client(s, f, I, client) &*& pointer(out, initial) &*& is_stack_pop_lemma(lem, I) &*& stack_pop_pre(lem)();
+    //@ invariant stack_client(s, f, I, client) &*& *out |-> _ &*& is_stack_pop_lemma(lem, I) &*& stack_pop_pre(lem)();
   {
     //@ open stack_client(s, f, I, client);
     /*@

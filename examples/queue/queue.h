@@ -64,13 +64,13 @@ bool queue_try_dequeue(struct queue *queue, void **pvalue);
     requires
         [?f]atomic_space(?inv) &*&
         is_queue_try_dequeue_context(?ctxt, inv, queue, ?pre, ?post) &*& pre() &*&
-        queue_consumer(queue) &*& *pvalue |-> ?_;
+        queue_consumer(queue) &*& *pvalue |-> _;
     @*/
     /*@
     ensures
         [f]atomic_space(inv) &*&
         is_queue_try_dequeue_context(ctxt, inv, queue, pre, post) &*& post(result, ?value0) &*&
-        *pvalue |-> ?value &*& queue_consumer(queue) &*& result ? value0 == value : true;
+        queue_consumer(queue) &*& result ? *pvalue |-> value0 : *pvalue |-> _;
     @*/
 
 void queue_dispose(struct queue *queue);

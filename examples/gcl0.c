@@ -732,7 +732,7 @@ struct cons *create_cons(struct object *head, struct object *tail)
 }
 
 void destruct_cons(struct object *object, struct object **head, struct object **tail)
-    //@ requires globals(?objects, ?roots) &*& mem(object, objects) == true &*& pointer(head, _) &*& pointer(tail, _);
+    //@ requires globals(?objects, ?roots) &*& mem(object, objects) == true &*& *head |-> _ &*& *tail |-> _;
     //@ ensures globals(objects, roots) &*& pointer(head, ?h) &*& mem(h, objects) == true &*& pointer(tail, ?t) &*& mem(t, objects) == true;
 {
     //@ open globals(_, _);

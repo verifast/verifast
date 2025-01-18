@@ -61,7 +61,7 @@ void consumer(struct queue* q) //@: thread_run_joinable
   //@ open thread_run_pre(consumer)(q, info);
   int x;
   while(true)
-    //@ invariant [1/2]queue(q, queue_inv) &*& integer(&x, _);
+    //@ invariant [1/2]queue(q, queue_inv) &*& x |-> _;
   {
     /*@
     predicate_family_instance try_dequeue_pre(try_dequeue_lemma)() = true;

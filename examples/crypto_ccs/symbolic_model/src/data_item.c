@@ -69,7 +69,7 @@ struct item *create_data_item_from_int(int i)
 
 int item_get_data(struct item *item, char** data)
   /*@ requires [?f]world(?pub, ?key_clsfy) &*& item(item, ?i, pub) &*&
-               i == data_item(?cs0) &*& pointer(data, _); @*/
+               i == data_item(?cs0) &*& *data |-> _; @*/
   /*@ ensures  [f]world(pub, key_clsfy) &*& item(item, i, pub) &*& pointer(data, ?p) &*&
                chars(p, result, ?cs1) &*& malloc_block(p, result) &*&
                col || cs0 == cs1; @*/
