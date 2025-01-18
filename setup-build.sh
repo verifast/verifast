@@ -93,7 +93,6 @@ elif [ $(uname -s) = "Darwin" ]; then
   export PKG_CONFIG_PATH=/opt/X11/lib/pkgconfig
   sudo mkdir /usr/local/$VFDEPS_NAME
   sudo mkdir /usr/local/vf-llvm-clang-build-$VF_LLVM_CLANG_BUILD_VERSION
-  sudo chown -R $(whoami):admin /usr/local/*
 
   if ! rustup show home; then
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s - -y
