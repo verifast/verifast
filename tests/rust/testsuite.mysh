@@ -34,6 +34,7 @@ cd purely_unsafe
   verifast scalars.rs
   verifast -ignore_unwind_paths alloc.rs
   verifast -ignore_unwind_paths reverse.rs
+  verifast simple_reverse.rs
   verifast -ignore_unwind_paths account.rs
   verifast -ignore_unwind_paths account_value.rs
   verifast -ignore_unwind_paths point_value.rs
