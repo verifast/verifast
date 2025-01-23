@@ -1568,6 +1568,10 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   type c_object_value = Unspecified | Default | Expr of expr | Term of termnode
 
+  let type_definitely_has_nonzero_size = function
+    Bool | Int _ | Float | Double | LongDouble | PtrType _ | RustRefType _ -> true
+  | _ -> false
+
   (** Used to produce malloc'ed, global, local, or nested C variables/objects.
     * If [tp] is a struct type, [producePaddingChunk] says whether the padding chunk for the outermost struct should be produced.
     * (A padding chunk is always produced for nested structs.)
@@ -1723,12 +1727,18 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | _ ->
           cont h
       end $. fun h ->
-      let rec iter h env fields inits =
+      let rec iter h env has_nonempty_field fields inits =
         match fields with
-          [] -> cont h env
+          [] ->
+          if has_nonempty_field then
+            assume_neq (mk_ptr_address addr) int_zero_term $. fun () ->
+            cont h env
+          else
+            cont h env
         | (f, (lf, gh, t0, offset, finit))::fields ->
           if gh = Ghost && not allowGhostFields then static_error l "Cannot produce a struct instance with ghost fields in this context." None;
           let t = instantiate_type tpenv t0 in
+          let has_nonempty_field = has_nonempty_field || type_definitely_has_nonzero_size t in
           let init, inits =
             if gh = Ghost then Unspecified, inits else
             match inits with
@@ -1742,7 +1752,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             produce_c_object l coef (field_address l env addr sn targs f) t eval_h init allowGhostFields true h env $. fun h env ->
             let Some offsetFunc = offset in
             assume (mk_field_pointer_within_limits addr (ctxt#mk_app offsetFunc (List.map (typeid_of_core l env) targs))) $. fun () ->
-            iter h env fields inits
+            iter h env has_nonempty_field fields inits
           | _ ->
             begin fun cont ->
               match init with
@@ -1763,9 +1773,9 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               | Unspecified -> cont h env (match gh with Ghost -> Some (get_unique_var_symb_ "value" t true) | Real -> None)
             end $. fun h env value ->
             assume_field h env sn tparams f t0 targs gh addr RegularPointsTo value coef $. fun h ->
-            iter h env fields inits
+            iter h env has_nonempty_field fields inits
       in
-      iter h env fields inits
+      iter h env false fields inits
     | _ ->
       produce_points_to ()
   
