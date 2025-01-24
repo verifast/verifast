@@ -35,6 +35,7 @@ let rec of_type = function
   Bool -> c "Bool"
 | Void -> c "Void"
 | Int (s, r) -> C ("Int", [of_signedness s; of_int_rank r])
+| RustChar -> c "RustChar"
 | RealType -> c "RealType"
 | Float -> c "Float"
 | Double -> c "Double"

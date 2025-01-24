@@ -51,6 +51,7 @@ let rec parse_type = function%parser
 | [ (l, Ident "u128") ] -> ManifestTypeExpr (l, Int (Unsigned, FixedWidthRank 4))
 | [ (l, Ident "usize") ] -> ManifestTypeExpr (l, Int (Unsigned, PtrRank))
 | [ (l, Ident "bool") ] -> ManifestTypeExpr (l, Bool)
+| [ (l, Ident "char") ] -> ManifestTypeExpr (l, RustChar)
 | [ (l, Ident "f32" ) ] -> ManifestTypeExpr (l, Float)
 | [ (l, Ident "f64" ) ] -> ManifestTypeExpr (l, Double)
 | [ (l, Ident "real" ) ] -> ManifestTypeExpr (l, RealType)

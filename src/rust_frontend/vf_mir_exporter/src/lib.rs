@@ -473,6 +473,8 @@ mod vf_mir_builder {
     use ty_cpn::adt_ty as adt_ty_cpn;
     use ty_cpn::const_ as ty_const_cpn;
     use ty_cpn::const_kind as const_kind_cpn;
+    use const_kind_cpn::val_tree as val_tree_cpn;
+    use ty_cpn::scalar_int as scalar_int_cpn;
     use ty_cpn::fn_def_ty as fn_def_ty_cpn;
     use ty_cpn::gen_arg as gen_arg_cpn;
     use ty_cpn::int_ty as int_ty_cpn;
@@ -2369,11 +2371,12 @@ mod vf_mir_builder {
         ) {
             debug!("Encoding typesystem constant {:?}", ty_const);
             let kind_cpn = ty_const_cpn.init_kind();
-            Self::encode_const_kind(tcx, &ty_const.kind(), kind_cpn);
+            Self::encode_const_kind(tcx, enc_ctx, &ty_const.kind(), kind_cpn);
         }
 
         fn encode_const_kind(
             tcx: TyCtxt<'tcx>,
+            enc_ctx: &mut EncCtx<'tcx, 'a>,
             const_kind: &ty::ConstKind<'tcx>,
             mut const_kind_cpn: const_kind_cpn::Builder<'_>,
         ) {
@@ -2396,8 +2399,9 @@ mod vf_mir_builder {
                 CK::Unevaluated(unevaluated) => const_kind_cpn.set_unevaluated(()),
                 // Used to hold computed value.
                 CK::Value(ty, val_tree) => {
-                    let const_value_cpn = const_kind_cpn.init_value();
-                    Self::encode_val_tree(tcx, *ty, val_tree, const_value_cpn);
+                    let mut value_cpn = const_kind_cpn.init_value();
+                    Self::encode_ty(tcx, enc_ctx, *ty, value_cpn.reborrow().init_ty());
+                    Self::encode_val_tree(tcx, val_tree, value_cpn.init_val_tree());
                 }
                 // A placeholder for a const which could not be computed; this is
                 // propagated to avoid useless error messages.
@@ -2408,18 +2412,15 @@ mod vf_mir_builder {
 
         fn encode_val_tree(
             tcx: TyCtxt<'tcx>,
-            ty: ty::Ty<'tcx>,
             val_tree: &ty::ValTree<'tcx>,
-            const_value_cpn: const_value_cpn::Builder<'_>,
+            val_tree_cpn: val_tree_cpn::Builder<'_>,
         ) {
             use ty::ValTree as VT;
             match val_tree {
                 // Used only for types with `layout::abi::Scalar` ABI and ZSTs.
                 VT::Leaf(scalar_int) => {
-                    // `Scalar`s are a limited number of primitives.
-                    // It is easier to encode the value itself instead of its internal representation in the compiler
-                    let scalar_cpn = const_value_cpn.init_scalar();
-                    Self::encode_scalar_int(tcx, ty, scalar_int, scalar_cpn);
+                    let scalar_int_cpn = val_tree_cpn.init_leaf();
+                    Self::encode_scalar_int(tcx, scalar_int, scalar_int_cpn);
                 }
                 // Used only for `&[u8]` and `&str`
                 VT::Branch(_) => todo!(),
@@ -2439,7 +2440,8 @@ mod vf_mir_builder {
                     // `Scalar`s are a limited number of primitives.
                     // It is easier to encode the value itself instead of its internal representation in the compiler
                     let scalar_cpn = const_value_cpn.init_scalar();
-                    Self::encode_scalar_int(tcx, ty, scalar_int, scalar_cpn);
+                    let scalar_int_cpn = scalar_cpn.init_int();
+                    Self::encode_scalar_int(tcx, scalar_int, scalar_int_cpn);
                 }
                 CV::Scalar(rustc_middle::mir::interpret::Scalar::Ptr(_, _)) => {
                     let mut scalar_con = const_value_cpn.init_scalar();
@@ -2464,97 +2466,11 @@ mod vf_mir_builder {
 
         fn encode_scalar_int(
             tcx: TyCtxt<'tcx>,
-            ty: ty::Ty<'tcx>,
-            scalar: &rustc_middle::ty::ScalarInt,
-            mut scalar_cpn: scalar_cpn::Builder<'_>,
+            scalar_int: &rustc_middle::ty::ScalarInt,
+            mut scalar_int_cpn: scalar_int_cpn::Builder<'_>,
         ) {
-            let gen_err_msg = "Failed to encode scalar";
-            let err_msg = &format!(
-                "{}. Cannot make a {:?} value out of the scalar {:?}",
-                gen_err_msg, ty, scalar
-            );
-            match ty.kind() {
-                ty::TyKind::Bool => {
-                    let bv = scalar.try_to_bool().expect(err_msg);
-                    scalar_cpn.set_bool(bv);
-                }
-                ty::TyKind::Char => {
-                    let cv = scalar.to_u32();
-                    scalar_cpn.set_char(cv as u32);
-                }
-                ty::TyKind::Int(int_ty) => {
-                    let mut int_val_cpn = scalar_cpn.init_int();
-                    match int_ty {
-                        ty::IntTy::Isize => {
-                            let visz = scalar.to_i64();
-                            capnp_utils::encode_int128(
-                                visz.try_into().unwrap(),
-                                int_val_cpn.init_isize(),
-                            );
-                        }
-                        ty::IntTy::I8 => {
-                            let vi8 = scalar.to_i8();
-                            int_val_cpn.set_i8(vi8);
-                        }
-                        ty::IntTy::I16 => {
-                            let vi16 = scalar.to_i16();
-                            int_val_cpn.set_i16(vi16);
-                        }
-                        ty::IntTy::I32 => {
-                            let vi32 = scalar.to_i32();
-                            int_val_cpn.set_i32(vi32);
-                        }
-                        ty::IntTy::I64 => {
-                            let vi64 = scalar.to_i64();
-                            int_val_cpn.set_i64(vi64);
-                        }
-                        ty::IntTy::I128 => {
-                            let vi128 = scalar.to_i128();
-                            capnp_utils::encode_int128(vi128, int_val_cpn.init_i128());
-                        }
-                    }
-                }
-                ty::TyKind::Uint(uint_ty) => {
-                    let mut uint_val_cpn = scalar_cpn.init_uint();
-                    match uint_ty {
-                        ty::UintTy::Usize => {
-                            let vusz = scalar.to_u64();
-                            capnp_utils::encode_u_int128(
-                                vusz.try_into().unwrap(),
-                                uint_val_cpn.init_usize(),
-                            );
-                        }
-                        ty::UintTy::U8 => {
-                            let vu8 = scalar.to_u8();
-                            uint_val_cpn.set_u8(vu8);
-                        }
-                        ty::UintTy::U16 => {
-                            let vu16 = scalar.to_u16();
-                            uint_val_cpn.set_u16(vu16);
-                        }
-                        ty::UintTy::U32 => {
-                            let vu32 = scalar.to_u32();
-                            uint_val_cpn.set_u32(vu32);
-                        }
-                        ty::UintTy::U64 => {
-                            let vu64 = scalar.to_u64();
-                            uint_val_cpn.set_u64(vu64);
-                        }
-                        ty::UintTy::U128 => {
-                            let vu128 = scalar.to_u128();
-                            capnp_utils::encode_u_int128(vu128, uint_val_cpn.init_u128());
-                        }
-                    }
-                }
-                ty::TyKind::Float(float_ty) => todo!(),
-                ty::TyKind::FnDef(def_id, substs) => scalar_cpn.set_fn_def(()),
-                ty::TyKind::Tuple(substs) => {
-                    for ty in ty.tuple_fields() {
-                        todo!();
-                    }
-                }
-                _ => panic!("{}. Type {:?} is not a scalar type.", gen_err_msg, ty),
-            }
+            capnp_utils::encode_u_int128(scalar_int.to_bits_unchecked(), scalar_int_cpn.reborrow().init_data());
+            scalar_int_cpn.set_size(scalar_int.size().bytes().try_into().unwrap());
         }
 
         fn encode_place(

@@ -422,6 +422,7 @@ module Mir = struct
     | _ -> failwith "decl_mir_adt_kind: Not an ADT"
 
   type aggregate_kind =
+    | AggKindArray of ty_info
     | AggKindAdt of {
         adt_kind : adt_kind;
         adt_name : string;
@@ -914,6 +915,43 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     in
     Ok ty_info
 
+  let translate_scalar_int (scalar_int_cpn : TyRd.ScalarInt.t)
+      (ty : Ast.type_expr) (loc : Ast.loc) =
+    let open TyRd.ScalarInt in
+    let value =
+      IntAux.Uint128.to_big_int (CapnpAux.uint128_get (data_get scalar_int_cpn))
+    in
+    let mk_const v =
+      let open Ast in
+      let lit =
+        IntLit (loc, v, (*decimal*) true, (*U suffix*) false, LLSuffix)
+      in
+      Ok (CastExpr (loc, ty, lit))
+    in
+    let mk_signed_const width =
+      let v =
+        if Big_int.sign_big_int value >= 0 then value
+        else
+          Big_int.sub_big_int value
+            (Big_int.shift_left_big_int Big_int.unit_big_int (8 * width))
+      in
+      mk_const v
+    in
+    match (ty, size_get scalar_int_cpn) with
+    | ManifestTypeExpr (_, Bool), _ ->
+        Ok
+          (if Big_int.sign_big_int value <> 0 then Ast.True loc
+           else Ast.False loc)
+    | ManifestTypeExpr (_, RustChar), 4 ->
+        let open Ast in
+        Ok
+          (CastExpr
+             ( loc,
+               ManifestTypeExpr (loc, RustChar),
+               IntLit (loc, value, true, true, LLSuffix) ))
+    | ManifestTypeExpr (_, Ast.Int (Signed, _)), size -> mk_signed_const size
+    | ManifestTypeExpr (_, Ast.Int (Unsigned, _)), size -> mk_const value
+
   let translate_adt_def_id (adt_def_id_cpn : AdtDefIdRd.t) =
     AdtDefIdRd.name_get adt_def_id_cpn
 
@@ -1142,7 +1180,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
   and char_ty_info loc =
     let open Ast in
     let vf_ty =
-      ManifestTypeExpr (loc, Int (Unsigned, FixedWidthRank 2))
+      ManifestTypeExpr (loc, RustChar)
       (* https://doc.rust-lang.org/reference/types/textual.html *)
     in
     let size = SizeofExpr (loc, TypeExpr vf_ty) in
@@ -1615,6 +1653,111 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
              (extract_implicit_outlives_preds_from_generic_arg regions)
     | _ -> []
 
+  and translate_param_ty (name : string) (loc : Ast.loc) =
+    let open Ast in
+    let vf_ty = ManifestTypeExpr (loc, GhostTypeParam name) in
+    let interp : RustBelt.ty_interp =
+      {
+        size = SizeofExpr (loc, TypeExpr vf_ty);
+        own =
+          (fun t v ->
+            Ok
+              (Ast.ExprCallExpr
+                 ( loc,
+                   TypePredExpr (loc, IdentTypeExpr (loc, None, name), "own"),
+                   [ LitPat t; LitPat v ] )));
+        shr =
+          (fun k t l ->
+            Ok
+              (CoefAsn
+                 ( loc,
+                   DummyPat,
+                   ExprCallExpr
+                     ( loc,
+                       TypePredExpr
+                         (loc, IdentTypeExpr (loc, None, name), "share"),
+                       [ LitPat k; LitPat t; LitPat l ] ) )));
+        full_bor_content =
+          (fun tid l ->
+            Ok
+              (ExprCallExpr
+                 ( loc,
+                   TypePredExpr
+                     ( loc,
+                       IdentTypeExpr (loc, None, name),
+                       "full_borrow_content" ),
+                   [ LitPat tid; LitPat l ] )));
+        points_to =
+          (fun t l vid ->
+            let rhs =
+              match vid with None -> DummyPat | Some vid -> VarPat (loc, vid)
+            in
+            Ok (Ast.PointsTo (loc, l, RegularPointsTo, rhs)));
+        pointee_fbc = None;
+      }
+    in
+    Ok (Mir.TyInfoBasic { vf_ty; interp })
+
+  and translate_ty_const_kind (ck_cpn : TyRd.ConstKind.t) (loc : Ast.loc) =
+    let open TyRd.ConstKind in
+    match get ck_cpn with
+    | Param _ -> failwith "Todo: ConstKind::Param"
+    | Value v_cpn -> (
+        let open Value in
+        let* ty = translate_ty (ty_get v_cpn) loc in
+        let val_tree = val_tree_get v_cpn in
+        let open ValTree in
+        match get val_tree with
+        | Leaf scalar_int_cpn ->
+            translate_scalar_int scalar_int_cpn (Mir.basic_type_of ty) loc
+        | Branch -> failwith "Todo: ConstKind::ValTree::Branch")
+    | Undefined _ -> Error (`TrTyConstKind "Unknown ConstKind")
+
+  and translate_ty_const (ty_const_cpn : TyRd.Const.t) (loc : Ast.loc) =
+    let open TyRd.Const in
+    translate_ty_const_kind (kind_get ty_const_cpn) loc
+
+  and translate_array_ty (array_ty_cpn : TyRd.ArrayTy.t) (loc : Ast.loc) =
+    let open TyRd.ArrayTy in
+    let elem_ty_cpn = elem_ty_get array_ty_cpn in
+    let* elem_ty_info = translate_ty elem_ty_cpn loc in
+    let elem_ty = Mir.basic_type_of elem_ty_info in
+    let len_cpn = size_get array_ty_cpn in
+    let* (CastExpr (_, _, IntLit (_, len, _, _, _))) =
+      translate_ty_const len_cpn loc
+    in
+    let vf_ty =
+      Ast.StaticArrayTypeExpr (loc, elem_ty, Big_int.int_of_big_int len)
+    in
+    let size = Ast.SizeofExpr (loc, TypeExpr vf_ty) in
+    let own tid vs =
+      Error "Expressing ownership of an array is not yet supported"
+    in
+    let full_bor_content t l =
+      Error
+        "Expressing the full borrow content of an array is not yet supported"
+    in
+    let points_to tid l vid_op =
+      let* pat = RustBelt.Aux.vid_op_to_var_pat vid_op loc in
+      Ok (Ast.PointsTo (loc, l, RegularPointsTo, pat))
+    in
+    let interp =
+      RustBelt.
+        {
+          size;
+          own;
+          shr =
+            (fun k t l ->
+              Error
+                "Expressing the shared ownership of an array is not yet \
+                 supported");
+          full_bor_content;
+          points_to;
+          pointee_fbc = None;
+        }
+    in
+    Ok (Mir.TyInfoBasic { vf_ty; interp })
+
   and translate_ty (ty_cpn : TyRd.t) (loc : Ast.loc) =
     let open Ast in
     let open TyRd in
@@ -1647,58 +1790,14 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         let tys_cpn = Capnp.Array.to_list tys_cpn in
         translate_tuple_ty tys_cpn loc
     | Alias _ -> Ast.static_error loc "Alias types are not yet supported" None
-    | Param name ->
-        let vf_ty = ManifestTypeExpr (loc, GhostTypeParam name) in
-        let interp : RustBelt.ty_interp =
-          {
-            size = SizeofExpr (loc, TypeExpr vf_ty);
-            own =
-              (fun t v ->
-                Ok
-                  (Ast.ExprCallExpr
-                     ( loc,
-                       TypePredExpr (loc, IdentTypeExpr (loc, None, name), "own"),
-                       [ LitPat t; LitPat v ] )));
-            shr =
-              (fun k t l ->
-                Ok
-                  (CoefAsn
-                     ( loc,
-                       DummyPat,
-                       ExprCallExpr
-                         ( loc,
-                           TypePredExpr
-                             (loc, IdentTypeExpr (loc, None, name), "share"),
-                           [ LitPat k; LitPat t; LitPat l ] ) )));
-            full_bor_content =
-              (fun tid l ->
-                Ok
-                  (ExprCallExpr
-                     ( loc,
-                       TypePredExpr
-                         ( loc,
-                           IdentTypeExpr (loc, None, name),
-                           "full_borrow_content" ),
-                       [ LitPat tid; LitPat l ] )));
-            points_to =
-              (fun t l vid ->
-                let rhs =
-                  match vid with
-                  | None -> DummyPat
-                  | Some vid -> VarPat (loc, vid)
-                in
-                Ok (Ast.PointsTo (loc, l, RegularPointsTo, rhs)));
-            pointee_fbc = None;
-          }
-        in
-        Ok (Mir.TyInfoBasic { vf_ty; interp })
+    | Param name -> translate_param_ty name loc
     | Bound -> Ast.static_error loc "Bound types are not yet supported" None
     | Placeholder ->
         Ast.static_error loc "Placeholder types are not yet supported" None
     | Infer -> Ast.static_error loc "Infer types are not yet supported" None
     | Error -> Ast.static_error loc "Error types are not yet supported" None
     | Str -> Ast.static_error loc "Str types are not yet supported" None
-    | Array _ -> Ast.static_error loc "Array types are not yet supported" None
+    | Array array_ty_cpn -> translate_array_ty array_ty_cpn loc
     | Pattern -> Ast.static_error loc "Pattern types are not yet supported" None
     | Slice _ -> Ast.static_error loc "Slice types are not yet supported" None
     | Undefined _ -> Error (`TrTy "Unknown Rust type kind")
@@ -1857,64 +1956,12 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
            (Ast.Var (loc, id))
            local_is_mutable)
 
-    let translate_scalar_int (si_cpn : ScalarRd.Int.t) (ty : Ast.type_expr)
-        (loc : Ast.loc) =
-      let mk_const v =
-        let open Ast in
-        let lit =
-          IntLit (loc, v, (*decimal*) true, (*U suffix*) false, LLSuffix)
-        in
-        Ok (CastExpr (loc, ty, lit))
-      in
-      let open ScalarRd.Int in
-      let open IntAux in
-      match get si_cpn with
-      | Isize v_cpn | I128 v_cpn ->
-          let vi128 = Int128.to_big_int (CapnpAux.int128_get v_cpn) in
-          mk_const vi128
-      | I8 v | I16 v -> mk_const (Big_int.big_int_of_int v)
-      | I32 vi32 -> mk_const (Int32.to_big_int vi32)
-      | I64 vi64 -> mk_const (Int64.to_big_int vi64)
-      | Undefined _ -> Error (`TrScalarInt "Unknown Int type")
-
-    let translate_scalar_u_int (sui_cpn : ScalarRd.UInt.t) (ty : Ast.type_expr)
-        (loc : Ast.loc) =
-      let mk_const v =
-        let open Ast in
-        let lit =
-          IntLit (loc, v, (*decimal*) true, (*U suffix*) true, LLSuffix)
-        in
-        Ok (CastExpr (loc, ty, lit))
-      in
-      let open ScalarRd.UInt in
-      let open IntAux in
-      match get sui_cpn with
-      | Usize v_cpn | U128 v_cpn ->
-          let vui128 = Uint128.to_big_int (CapnpAux.uint128_get v_cpn) in
-          mk_const vui128
-      | U8 v | U16 v -> mk_const (Big_int.big_int_of_int v)
-      | U32 vu32 -> mk_const (Uint32.to_big_int vu32)
-      | U64 vu64 -> mk_const (Uint64.to_big_int vu64)
-      | Undefined _ -> Error (`TrScalarUint "Unknown Uint type")
-
     let translate_scalar (s_cpn : ScalarRd.t) (ty : Ast.type_expr)
         (loc : Ast.loc) =
       let open ScalarRd in
       match get s_cpn with
-      | Bool b -> Ok (if b then Ast.True loc else Ast.False loc)
-      | Char code ->
-          let open Ast in
-          Ok
-            (CastExpr
-               ( loc,
-                 ManifestTypeExpr (loc, Int (Unsigned, FixedWidthRank 2)),
-                 IntLit
-                   (loc, IntAux.Uint32.to_big_int code, true, true, LLSuffix) ))
-      | Int int_cpn -> translate_scalar_int int_cpn ty loc
-      | Uint u_int_cpn -> translate_scalar_u_int u_int_cpn ty loc
-      | Float float_cpn -> failwith "Todo: Scalar::Float"
-      | FnDef -> failwith "Todo: Scalar::FnDef"
-      | Undefined _ -> Error (`TrScalar "Unknown Scalar kind")
+      | Int scalar_int_cpn -> translate_scalar_int scalar_int_cpn ty loc
+      | Ptr -> failwith "Todo: Scalar::Ptr"
 
     let mk_unit_expr loc =
       Ast.CastExpr
@@ -1940,17 +1987,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       | Slice _ -> failwith "Todo: ConstValue::Slice"
       | Undefined _ -> Error (`TrConstValue "Unknown ConstValue")
 
-    let translate_ty_const_kind (ck_cpn : TyConstKindRd.t) (ty : Ast.type_expr)
+    let translate_mir_ty_const (ty_const_cpn : ConstOperandRd.Const.TyConst.t)
         (loc : Ast.loc) =
-      let open TyConstKindRd in
-      match get ck_cpn with
-      | Param _ -> failwith "Todo: ConstKind::Param"
-      | Value v_cpn -> translate_const_value v_cpn ty loc
-      | Undefined _ -> Error (`TrTyConstKind "Unknown ConstKind")
-
-    let translate_typed_constant (ty_const_cpn : ConstRd.TyConst.t)
-        (loc : Ast.loc) =
-      let open ConstRd.TyConst in
+      let open ConstOperandRd.Const.TyConst in
       let ty_cpn = ty_get ty_const_cpn in
       let* ty_info = translate_ty ty_cpn loc in
       let ty_expr = Mir.raw_type_of ty_info in
@@ -1972,16 +2011,18 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           else translate_unit_constant loc
       | Ast.FuncType _ -> Ok (`TrTypedConstantFn ty_info)
       | Ast.Int (_, _) | Ast.Bool ->
-          let kind_cpn = TyConstRd.kind_get (const_get ty_const_cpn) in
-          translate_ty_const_kind kind_cpn ty_expr loc
+          let const_cpn = const_get ty_const_cpn in
+          let* e = translate_ty_const const_cpn loc in
+          Ok (`TrTypedConstantScalar e)
       | _ -> failwith "Todo: Constant of unsupported type"
 
-    let translate_const (constant_kind_cpn : ConstRd.t) (loc : Ast.loc) =
-      let open ConstRd in
+    let translate_mir_const (constant_kind_cpn : ConstOperandRd.Const.t)
+        (loc : Ast.loc) =
+      let open ConstOperandRd.Const in
       match get constant_kind_cpn with
-      | Ty ty_const_cpn -> translate_typed_constant ty_const_cpn loc
+      | Ty ty_const_cpn -> translate_mir_ty_const ty_const_cpn loc
       | Val val_cpn -> (
-          let open ConstRd.Val in
+          let open ConstOperandRd.Const.Val in
           let* ty_info = translate_ty (ty_get val_cpn) loc in
           let ty_expr = Mir.raw_type_of ty_info in
           let ty =
@@ -2030,7 +2071,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let span_cpn = span_get constant_cpn in
       let* loc = translate_span_data span_cpn in
       let const_cpn = const_get constant_cpn in
-      translate_const const_cpn loc
+      translate_mir_const const_cpn loc
 
     let translate_operand (operand_cpn : OperandRd.t) (loc : Ast.loc) =
       let open OperandRd in
@@ -2735,10 +2776,13 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let* operand = translate_operand operand_cpn loc in
       Ok (operator, operand)
 
-    let translate_aggregate_kind (agg_kind_cpn : AggregateKindRd.t) =
+    let translate_aggregate_kind (agg_kind_cpn : AggregateKindRd.t)
+        (loc : Ast.loc) =
       let open AggregateKindRd in
       match get agg_kind_cpn with
-      | Array es_ty_cpn -> failwith "Todo: AggregateKind::Array"
+      | Array es_ty_cpn ->
+          let* elem_ty = translate_ty es_ty_cpn loc in
+          Ok (Mir.AggKindArray elem_ty)
       | Tuple -> Ok Mir.AggKindTuple
       | Adt adt_data_cpn ->
           let open AdtData in
@@ -2770,8 +2814,31 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         translate_operands operands_cpn
       in
       let agg_kind_cpn = aggregate_kind_get agg_data_cpn in
-      let* agg_kind = translate_aggregate_kind agg_kind_cpn in
+      let* agg_kind = translate_aggregate_kind agg_kind_cpn loc in
       match agg_kind with
+      | AggKindArray elem_ty ->
+          let init_stmts_builder (lhs_place, lhs_place_is_mutable) =
+            List.mapi
+              (fun i operand_expr ->
+                let open Ast in
+                ExprStmt
+                  (AssignExpr
+                     ( loc,
+                       ReadArray
+                         ( loc,
+                           lhs_place,
+                           IntLit
+                             ( loc,
+                               Big_int.big_int_of_int i,
+                               true,
+                               false,
+                               NoLSuffix ) ),
+                       (if lhs_place_is_mutable then Mutation
+                        else Initialization),
+                       operand_expr )))
+              operand_exprs
+          in
+          Ok (`TrRvalueAggregate init_stmts_builder)
       | AggKindTuple ->
           let tuple_struct_name =
             TrTyTuple.make_tuple_type_name (List.length operands_cpn)

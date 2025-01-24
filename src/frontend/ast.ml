@@ -148,6 +148,7 @@ type type_ = (* ?type_ *)
     Bool
   | Void
   | Int of signedness * int_rank
+  | RustChar
   | RealType  (* Mathematical real numbers. Used for fractional permission coefficients. Also used for reasoning about floating-point code. *)
   | Float
   | Double
@@ -182,7 +183,7 @@ and inferred_type_state =
   | EqConstraint of type_
 
 let type_fold_open state f = function
-  Bool | Void | Int (_, _) | RealType | Float | Double | LongDouble -> state
+  Bool | Void | Int (_, _) | RustChar | RealType | Float | Double | LongDouble -> state
 | StructType (sn, targs) -> List.fold_left f state targs
 | UnionType _ -> state
 | PtrType tp -> f state tp
