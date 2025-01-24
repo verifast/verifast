@@ -155,11 +155,28 @@ enum Variance {
 
 struct Ty {
 
+    struct ScalarInt {
+        data @0: UInt128;
+        size @1: UInt8;
+    }
+
     struct ConstKind {
 
         struct ParamConst {
             index @0: UInt32;
             name @1: Text;
+        }
+
+        struct ValTree {
+            union {
+                leaf @0: ScalarInt;
+                branch @1: Void;
+            }
+        }
+
+        struct Value {
+            ty @0: Ty;
+            valTree @1: ValTree;
         }
 
         union {
@@ -168,7 +185,7 @@ struct Ty {
             bound @3: Void;
             placeholder @4: Void;
             unevaluated @5: Void;
-            value @1: Body.ConstValue;
+            value @1: Value;
             error @6: Void;
             expr @7: Void;
         }
@@ -453,33 +470,9 @@ struct Body {
     }
 
     struct Scalar {
-        struct Int { union {
-            isize @0: BigInt;
-            i8 @1: Int8;
-            i16 @2: Int16;
-            i32 @3: Int32;
-            i64 @4: Int64;
-            i128 @5: Int128;
-        }}
-        struct UInt { union {
-            usize @0: BigUInt;
-            u8 @1: UInt8;
-            u16 @2: UInt16;
-            u32 @3: UInt32;
-            u64 @4: UInt64;
-            u128 @5: UInt128;
-        }}
-        struct Float {
-            # Todo
-        }
         union {
-            bool @0: Bool;
-            char @1: UInt32;
-            int @2: Int;
-            uint @3: UInt;
-            float @4: Float;
-            fnDef @5: Void;
-            ptr @6: Void;
+            int @0: Ty.ScalarInt;
+            ptr @1: Void;
         }
     }
 

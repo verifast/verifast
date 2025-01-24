@@ -210,6 +210,7 @@ let rec rust_string_of_type t =
   | Int (Unsigned, PtrRank) -> "usize"
   | Int (Signed, FixedWidthRank k) -> "i" ^ string_of_int ((1 lsl k) * 8)
   | Int (Unsigned, FixedWidthRank k) -> "u" ^ string_of_int ((1 lsl k) * 8)
+  | RustChar -> "char"
   | Float -> "f32"
   | Double -> "f64"
   | LongDouble -> "std::ffi::c_longdouble"

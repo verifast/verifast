@@ -1621,7 +1621,13 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let produce_char_array_chunk h env addr elemCount =
         produce_char_array_chunk h env addr (ctxt#mk_mul (ctxt#mk_intlit elemCount) elemSize)
       in
-      let produce_array_chunk h env produceUninitChunk addr elems elemCount =
+      let produce_array_chunk h env produceUninitChunk elemTp addr elems elemCount =
+        match dialect with
+          Some Rust ->
+          let length = ctxt#mk_intlit elemCount in
+          assume_eq (mk_length elems) length $. fun () ->
+          cont (Chunk (((if produceUninitChunk then array__symb () else array_symb ()), true), [elemTp], coef, [addr; length; elems], None)::h) env
+        | _ ->
         match try_pointee_pred_symb0 elemTp with
           Some (_, _, _, arrayPredSymb, _, _, _, _, _, _, _, uninitArrayPredSymb) ->
           let length = ctxt#mk_intlit elemCount in
@@ -1641,7 +1647,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       begin match elemTp, init with
         Int (Signed, CharRank), Expr (StringLit (_, s)) ->
-        produce_array_chunk h env false addr (mk_char_list_of_c_string elemCount s) elemCount
+        produce_array_chunk h env false elemTp addr (mk_char_list_of_c_string elemCount s) elemCount
       | (UnionType _ | StructType _ | StaticArrayType (_, _)), Expr (InitializerList (ll, es)) ->
         let rec iter h env i es =
           let addr = mk_ptr_add_ l env addr (ctxt#mk_intlit i) elemTp in
@@ -1672,7 +1678,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             cont h env (mk_cons elemTp elem elems)
         in
         iter h env elemCount es $. fun h env elems ->
-        produce_array_chunk h env false addr elems elemCount
+        produce_array_chunk h env false elemTp addr elems elemCount
       | _ ->
         let elems = get_unique_var_symb "elems" (list_type (if init = Unspecified then option_type elemTp else elemTp)) in
         begin fun cont ->
@@ -1684,7 +1690,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           | _ ->
             cont ()
         end $. fun () ->
-        produce_array_chunk h env (init = Unspecified) addr elems elemCount
+        produce_array_chunk h env (init = Unspecified) elemTp addr elems elemCount
       end
     | UnionType un -> begin
       match language, dialect, List.assoc_opt un unionmap with
@@ -1791,7 +1797,13 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in  
     match tp with
       StaticArrayType (elemTp, elemCount) ->
-      begin match try_pointee_pred_symb0 elemTp with
+      begin match dialect with
+        Some Rust ->
+        let pats = [TermPat addr; TermPat (ctxt#mk_intlit elemCount); dummypat] in
+        consume_chunk rules h typeid_env [] [] [] l ((if consumeUninitChunk then array__symb () else array_symb ()), true) [elemTp] real_unit coefpat (Some 2) pats $. fun chunk h _ [_; _; elems] _ _ _ _ ->
+        cont [chunk] h (Some elems)
+      | _ ->
+      match try_pointee_pred_symb0 elemTp with
         Some (_, _, _, arrayPredSymb, _, _, _, _, _, _, _, uninitArrayPredSymb) ->
         let pats = [TermPat addr; TermPat (ctxt#mk_intlit elemCount); dummypat] in
         consume_chunk rules h typeid_env [] [] [] l ((if consumeUninitChunk then uninitArrayPredSymb else arrayPredSymb), true) [] real_unit coefpat (Some 2) pats $. fun chunk h _ [_; _; elems] _ _ _ _ ->
@@ -2519,8 +2531,9 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         if pure then static_error l "Cannot write in a pure context." None;
         let consume_elem () =
           let target = mk_ptr_add_ l env arr i elem_tp in
-          consume_points_to_chunk_ rules h env [] env [] l elem_tp real_unit real_unit_pat target RegularPointsTo dummypat true $. fun _ h _ _ _ _ _ ->
-          produce_points_to_chunk l h elem_tp real_unit target value $. fun h ->
+          let coefpat, coef = match assignment_kind with Mutation -> real_unit_pat, real_unit | Initialization -> TermPat real_half, real_half in
+          consume_points_to_chunk_ rules h env [] env [] l elem_tp real_unit coefpat target RegularPointsTo dummypat true $. fun _ h _ _ _ _ _ ->
+          produce_points_to_chunk l h elem_tp coef target value $. fun h ->
           cont h env
         in
         let write_integer__array_element () =

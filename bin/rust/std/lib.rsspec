@@ -9,6 +9,7 @@ mod hint {
     fn assert_unchecked(b: bool);
     //@ req b;
     //@ ens true;
+    //@ on_unwind_ens false;
 
 }
 

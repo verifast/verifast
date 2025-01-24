@@ -464,6 +464,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     match t with
       Bool -> ProverBool
     | Int (_, _) -> ProverInt
+    | RustChar -> ProverInt
     | Float -> ProverInductive
     | Double -> ProverInductive
     | LongDouble -> ProverInductive
@@ -547,7 +548,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 
   let mk_typeid_term name = get_unique_var_symb (name ^ "_typeid") (PtrType Void)
   
-  let char_typeid_term = mk_typeid_term "char"
+  let char_typeid_term = mk_typeid_term (match dialect with Some Rust -> "c_char" | _ -> "char")
   let uchar_typeid_term = mk_typeid_term "unsigned_char"
   let short_typeid_term = mk_typeid_term "short"
   let ushort_typeid_term = mk_typeid_term "ushort"
@@ -564,6 +565,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     mk_typeid_term ("uint" ^ string_of_int ((1 lsl k) * 8) ^ "_t"),
     mk_typeid_term ("int" ^ string_of_int ((1 lsl k) * 8) ^ "_t")
   end
+
+  let rust_char_typeid_term = mk_typeid_term (match dialect with Some Rust -> "char" | _ -> "rust_char")
 
   let pointer_typeid_func_symb = mk_symbol "pointer_typeid" [type_info_type_node] type_info_type_node Uninterp
   let mk_pointer_typeid pointee_typeid = ctxt#mk_app pointer_typeid_func_symb [pointee_typeid]
@@ -1823,7 +1826,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | t -> t
 
   let is_primitive_type t = match t with
-    Void | Bool | Int _ | Float | Double -> true
+    Void | Bool | Int _ | RustChar | Float | Double -> true
   | _ -> false
 
   (* Region: interfdeclmap, classmap1 *)
@@ -2418,7 +2421,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let rec proper_type t = match t with
       ObjType (t, targs) -> List.for_all proper_type targs
     | ArrayType t -> proper_type t
-    | Bool | Int _ | Double | Float -> true
+    | Bool | Int _ | RustChar | Double | Float -> true
     | GhostTypeParam _ -> true
     | InferredRealType _ -> false
     | RealTypeParam _ -> true
@@ -2796,7 +2799,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let rec check_ctor (ctorname, (_, (_, _, _, parameter_names_and_types, _))) =
           let rec check_type negative pt =
             match pt with
-            | Bool | Void | Int (_, _) | RealType | PtrType _ | RustRefType _ | ObjType _ | ArrayType _ | BoxIdType | HandleIdType | AbstractType _ | Float | Double | LongDouble -> ()
+            | Bool | Void | Int (_, _) | RustChar | RealType | PtrType _ | RustRefType _ | ObjType _ | ArrayType _ | BoxIdType | HandleIdType | AbstractType _ | Float | Double | LongDouble -> ()
             | AnyType -> ec_contains_any ptr negative
             | GhostTypeParam _ -> if negative then static_error l "A type parameter may not appear in a negative position in an inductive datatype definition." None
             | InductiveType (i0, tps) ->
@@ -2860,7 +2863,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let (_, pts) = List.split pts in
             let rec type_is_inhabited tp =
               match tp with
-                Bool | Int (_, _) | RealType | PtrType _ | RustRefType _ | ObjType _ | ArrayType _ | BoxIdType | HandleIdType | AnyType | AbstractType _ -> true
+                Bool | Int (_, _) | RustChar | RealType | PtrType _ | RustRefType _ | ObjType _ | ArrayType _ | BoxIdType | HandleIdType | AnyType | AbstractType _ -> true
               | GhostTypeParam _ -> true  (* Should be checked at instantiation site. *)
               | PredType (tps, pts, _, _) -> true
               | PureFuncType (t1, t2) -> type_is_inhabited t2
@@ -2904,7 +2907,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             match tp with
               Bool -> Some []
             | GhostTypeParam x -> Some [x]
-            | Int (_, _) | RealType | PtrType _ | RustRefType _ | PredType (_, _, _, _) | ObjType _ | ArrayType _ | BoxIdType | HandleIdType | AnyType | AbstractType _ -> None
+            | Int (_, _) | RustChar | RealType | PtrType _ | RustRefType _ | PredType (_, _, _, _) | ObjType _ | ArrayType _ | BoxIdType | HandleIdType | AnyType | AbstractType _ -> None
             | PureFuncType (_, _) -> None (* CAVEAT: This assumes we do *not* have extensionality *)
             | InductiveType (i0, targs) ->
               begin match try_assoc i0 infinite_map with
@@ -2981,7 +2984,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 
   let rec type_satisfies_contains_any_constraint assumeTypeParamsContainAnyPositiveOnly allowContainsAnyPositive tp =
     match unfold_inferred_type tp with
-      Bool | AbstractType _ | Int (_, _) | Float | Double | LongDouble | RealType | FuncType _ | PtrType _ | InlineFuncType _ | RustRefType _ | ObjType _ | ArrayType _ | BoxIdType | HandleIdType -> true
+      Bool | AbstractType _ | Int (_, _) | RustChar | Float | Double | LongDouble | RealType | FuncType _ | PtrType _ | InlineFuncType _ | RustRefType _ | ObjType _ | ArrayType _ | BoxIdType | HandleIdType -> true
     | RealTypeParam _ | GhostTypeParam _ -> assumeTypeParamsContainAnyPositiveOnly
     | AnyType | PredType (_, _, _, _) -> allowContainsAnyPositive
     | StructType (_, _) -> allowContainsAnyPositive
@@ -3149,6 +3152,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | (Int (Unsigned, m), Int (Unsigned, n)) when definitely_width_le (width_of_rank m) (width_of_rank n) -> ()
     | (Int (Unsigned, m), Int (Signed, n)) when definitely_width_lt (width_of_rank m) (width_of_rank n) -> ()
     | (Int (_, _), Int (_, _)) when inAnnotation = Some true -> ()
+    | (Int (_, _), RustChar)| (RustChar, Int (_, _)) -> ()
     | (ObjType (x, _), ObjType (y, _)) when is_subtype_of x y -> ()
     | PtrType (StructType (derived, [])), PtrType (StructType (base, [])) when dialect = Some Cxx && is_derived_of_base derived base -> ()
     | StructType (derived, []), StructType (base, []) when dialect = Some Cxx && is_derived_of_base derived base -> ()
@@ -3192,7 +3196,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     match tp with
       Bool | AbstractType _ -> false
     | GhostTypeParam x | RealTypeParam x -> true
-    | Int (_, _) | RealType | PtrType _ | RustRefType _ | PredType (_, _, _, _) | ObjType _ | ArrayType _ | BoxIdType | HandleIdType | AnyType -> true
+    | Int (_, _) | RustChar | RealType | PtrType _ | RustRefType _ | PredType (_, _, _, _) | ObjType _ | ArrayType _ | BoxIdType | HandleIdType | AnyType -> true
     | PureFuncType (t1, t2) -> is_universal_type t1 && is_universal_type t2
     | InductiveType (i0, targs) ->
       let (_, _, _, _, _, cond, _, _, _) = List.assoc i0 inductivemap in
@@ -4658,7 +4662,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | AddressOf (l, Var(l2, x)) when List.mem_assoc x tenv ->
       let pointeeType =
         match List.assoc x tenv with
-          RefType(t) -> t
+          RefType t | (StaticArrayType (_, _) as t) -> t
         | _ -> static_error l "Taking the address of this expression is not supported." None
       in
       (WVar (l2, x, LocalVar), PtrType pointeeType, None)
@@ -5981,6 +5985,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   | Int (Unsigned, LongLongRank) -> ullong_typeid_term
   | Int (Unsigned, PtrRank) -> uintptr_typeid_term
   | Int (Unsigned, FixedWidthRank k) -> fst exact_width_integer_typeid_terms.(k)
+  | RustChar -> rust_char_typeid_term
   | PtrType Void -> void_pointer_typeid_term
   | PtrType _ when fno_strict_aliasing -> void_pointer_typeid_term
   | InlineFuncType _ when fno_strict_aliasing -> void_pointer_typeid_term
@@ -6036,6 +6041,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       Void -> ctxt#mk_intlit 1
     | Bool -> rank_size_term CharRank
     | Int (_, k) -> rank_size_term k
+    | RustChar -> width_size_term_ 2
     (* Assume IEEE-754 *)
     | Float -> width_size_term (LitWidth 2)
     | Double -> width_size_term (LitWidth 3)

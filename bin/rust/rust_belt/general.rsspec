@@ -105,7 +105,7 @@ lem close_na_inv_m(t: thread_id_t, m: mask_t);
 /*@
 
 pred bool_own(t: thread_id_t, v: bool;) = true;
-pred char_own(t: thread_id_t, v: u32;) = 0 <= v && v <= 0xD7FF || 0xE000 <= v && v <= 0x10FFFF;
+pred char_own(t: thread_id_t, v: char;) = 0 <= v as u32 && v as u32 <= 0xD7FF || 0xE000 <= v as u32 && v as u32 <= 0x10FFFF;
 pred raw_ptr_own(t: thread_id_t, v: *_;) = true;
 
 pred i8_own(t: thread_id_t, v: i8;) = true;
@@ -123,7 +123,7 @@ pred u128_own(t: thread_id_t, v: u128;) = true;
 pred usize_own(t: thread_id_t, v: usize;) = true;
 
 pred_ctor bool_full_borrow_content(t: thread_id_t, l: *bool)(;) = *l |-> ?_;
-pred_ctor char_full_borrow_content(t: thread_id_t, l: *u32)(;) = *l |-> ?c &*& char_own(t, c);
+pred_ctor char_full_borrow_content(t: thread_id_t, l: *char)(;) = *l |-> ?c &*& char_own(t, c);
 pred_ctor raw_ptr_full_borrow_content(t: thread_id_t, l: **_)(;) = *l |-> ?_;
 
 pred_ctor i8_full_borrow_content(t: thread_id_t, l: *i8)(;) = *l |-> ?_;
