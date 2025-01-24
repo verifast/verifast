@@ -1,5 +1,7 @@
 // tab_size:2
 
+// Justus Fasse and Bart Jacobs. Expressive modular verification of termination for busy-waiting programs. 2024
+
 /*@
 
 fixpoint level L(int k) { return level(Client.class, {1 + Spinlock_level_nb_dims, k}); }

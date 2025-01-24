@@ -6216,7 +6216,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       Int (_, _) ->
       let min, max = limits_of_type tp in
       ctxt#assert_term (ctxt#mk_and (ctxt#mk_le min term) (ctxt#mk_le term max))
-    | PtrType _ | RustRefType _ ->
+    | PtrType _ | RustRefType _ when language <> Java ->
       ctxt#assert_term (mk_pointer_within_limits term)
     | _ -> ()
   
