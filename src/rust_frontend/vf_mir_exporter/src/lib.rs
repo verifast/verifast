@@ -2370,6 +2370,13 @@ mod vf_mir_builder {
             ty_const_cpn: ty_const_cpn::Builder<'_>,
         ) {
             debug!("Encoding typesystem constant {:?}", ty_const);
+            let mut ty_const = *ty_const;
+            if let ty::ConstKind::Unevaluated(_) = ty_const.kind() {
+                let typing_env = ty::TypingEnv { typing_mode: ty::TypingMode::PostAnalysis, param_env: ty::ParamEnv::empty() };
+                if let Ok(ty_const_normalized) = tcx.try_normalize_erasing_regions(typing_env, ty_const) {
+                    ty_const = ty_const_normalized;
+                }
+            }
             let kind_cpn = ty_const_cpn.init_kind();
             Self::encode_const_kind(tcx, enc_ctx, &ty_const.kind(), kind_cpn);
         }
