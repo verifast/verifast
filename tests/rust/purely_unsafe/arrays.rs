@@ -1,6 +1,8 @@
+const N: usize = 1;
+
 fn main() {
     unsafe {
-        let xs: [i32; 3] = [10, 20, 30];
+        let xs: [i32; 2 * N + 1] = [10, 20, 30];
         let mut sum = 0;
         let mut p: *const i32 = &raw const xs as *const i32;
         sum += *p;

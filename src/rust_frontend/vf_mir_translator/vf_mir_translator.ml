@@ -1620,17 +1620,30 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | Int int_ty_cpn -> `Int
     | UInt u_int_ty_cpn -> `Uint
     | Char -> `Char
+    | Float -> `Float
     | Adt adt_ty_cpn -> `Adt (decode_adt_ty adt_ty_cpn)
+    | Foreign -> `Foreign
     | RawPtr raw_ptr_ty_cpn -> `RawPtr
     | Ref ref_ty_cpn -> `Ref (decode_ref_ty ref_ty_cpn)
     | FnDef fn_def_ty_cpn -> `FnDef
     | FnPtr fn_ptr_ty_cpn -> `FnPtr
+    | Dynamic -> `Dynamic
+    | Closure -> `Closure
+    | CoroutineClosure -> `CoroutineClosure
+    | Coroutine -> `Coroutine
+    | CoroutineWitness -> `CoroutineWitness
     | Never -> `Never
     | Tuple substs_cpn -> `Tuple
+    | Alias _ -> `Alias
     | Param name -> `Param name
+    | Bound -> `Bound
+    | Placeholder -> `Placeholder
+    | Infer -> `Infer
+    | Error -> `Error
     | Str -> `Str
+    | Array array_ty_cpn -> `Array
+    | Pattern -> `Pattern
     | Slice elem_ty_cpn -> `Slice (decode_ty elem_ty_cpn)
-    | Undefined _ -> `Undefined
 
   and string_of_decoded_type ty =
     match ty with
@@ -1701,7 +1714,11 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
   and translate_ty_const_kind (ck_cpn : TyRd.ConstKind.t) (loc : Ast.loc) =
     let open TyRd.ConstKind in
     match get ck_cpn with
-    | Param _ -> failwith "Todo: ConstKind::Param"
+    | Param _ -> Ast.static_error loc "Todo: ConstKind::Param" None
+    | Infer -> Ast.static_error loc "Todo: ConstKind::Infer" None
+    | Bound -> Ast.static_error loc "Todo: ConstKind::Bound" None
+    | Placeholder -> Ast.static_error loc "Todo: ConstKind::Placeholder" None
+    | Unevaluated -> Ast.static_error loc "Todo: ConstKind::Unevaluated" None
     | Value v_cpn -> (
         let open Value in
         let* ty = translate_ty (ty_get v_cpn) loc in
@@ -1711,7 +1728,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         | Leaf scalar_int_cpn ->
             translate_scalar_int scalar_int_cpn (Mir.basic_type_of ty) loc
         | Branch -> failwith "Todo: ConstKind::ValTree::Branch")
-    | Undefined _ -> Error (`TrTyConstKind "Unknown ConstKind")
+    | Error -> Ast.static_error loc "Todo: ConstKind::Error" None
+    | Expr -> Ast.static_error loc "Todo: ConstKind::Expr" None
 
   and translate_ty_const (ty_const_cpn : TyRd.Const.t) (loc : Ast.loc) =
     let open TyRd.Const in
