@@ -45,6 +45,29 @@ This reference defines the syntax of the various kinds of annotations, and
 describes VeriFast's symbolic execution algorithm and the various checks that
 VeriFast performs.
 
+## Soundness of VeriFast
+
+We aim for VeriFast to be *sound*, i.e. that if VeriFast reports "0 errors
+found", then indeed each function not marked as `unsafe` in the crate under
+verification is semantically well-typed, which for parameterless non-`unsafe`
+functions like `main` implies that no execution of the function has undefined
+behavior. However, in contrast to some other tools such as
+[RefinedRust](https://plv.mpi-sws.org/refinedrust/), VeriFast itself has not
+been formally verified, so unknown bugs are almost certainly present in the tool
+that may cause the tool to report "0 errors found" incorrectly in some cases.
+There may also be known unsoundnesses; these should all be recorded as
+[issues](https://github.com/verifast/verifast/issues?q=is%3Aissue+is%3Aopen+label%3Aunsoundness)
+with label `unsoundness`. Also, when using command-line flags like
+`-disable_overflow_check`, `-ignore_ref_creation`, `-allow_assume`, and
+`-ignore_unwind_paths`, the soundness property can only be expected to hold
+under the assumption that the program does not perform arithmetic overflow,
+complies with the pointer aliasing rules, does not violate any of the `assume`
+ghost commands present in the program, and does not violate semantic
+well-typedness due to unwinding, respectively. Finally, note that since VeriFast
+for Rust uses the rustc frontend, which assumes a particular compilation target
+architecture, VeriFast for Rust's result will only hold for the current target
+architecture.
+
 ## The state of VeriFast
 
 VeriFast has been developed by Bart Jacobs, Jan Smans, and Frank Piessens at KU
