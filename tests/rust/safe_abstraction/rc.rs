@@ -33,7 +33,7 @@ pred_ctor rc_na_inv<T>(dk: lifetime_t, gid: usize, ptr: *RcBox<T>, t: thread_id_
 inductive wrap<t> = wrap(t);
 
 pred<T> <Rc<T>>.own(t, rc) =
-    wrap::<*RcBox<T>>(std::ptr::NonNull_ptr(rc.ptr)) == wrap(?ptr) &*&
+    wrap::<*RcBox<T>>(std::ptr::NonNull_ptr(rc.ptr)) == wrap(?ptr) &*& ref_origin(ptr) == ptr &*&
     ptr as usize != 0 &*&
     [_]exists(?dk) &*& [_]exists(?gid) &*& [_]na_inv(t, MaskNshrSingle(ptr), rc_na_inv(dk, gid, ptr, t)) &*&
     ticket(dlft_pred(dk), gid, ?frac) &*& [frac]dlft_pred(dk)(gid, false) &*&
@@ -54,7 +54,7 @@ pred_ctor ticket_(dk: lifetime_t, gid: usize, frac: real)(;) = ticket(dlft_pred(
 
 pred<T> <Rc<T>>.share(k, t, l) =
     [_]exists(?nnp) &*& [_]frac_borrow(k, Rc_frac_bc(l, nnp)) &*&
-    wrap::<*RcBox<T>>(std::ptr::NonNull_ptr(nnp)) == wrap(?ptr) &*& ptr as usize != 0 &*&
+    wrap::<*RcBox<T>>(std::ptr::NonNull_ptr(nnp)) == wrap(?ptr) &*& ptr as usize != 0 &*& ref_origin(ptr) == ptr &*&
     [_]exists(?dk) &*& [_]exists(?gid) &*& [_]na_inv(t, MaskNshrSingle(ptr), rc_na_inv(dk, gid, ptr, t)) &*&
     [_]exists(?frac) &*& [_]frac_borrow(k, ticket_(dk, gid, frac)) &*& [_]frac_borrow(k, lifetime_token_(frac, dk)) &*&
     [_](<T>.share(dk, t, &(*ptr).value)) &*&
@@ -78,6 +78,7 @@ lem Rc_fbor_split<T>(t: thread_id_t, l: *Rc<T>) -> std::ptr::NonNull<RcBox<T>> /
         full_borrow(?k, Rc_full_borrow_content::<T>(t, l)) &*& [?q]lifetime_token(k);
     ens atomic_mask(m) &*&
         full_borrow(k, Rc_frac_bc(l, result)) &*& std::ptr::NonNull_ptr(result) as usize != 0 &*&
+        ref_origin(std::ptr::NonNull_ptr(result)) == std::ptr::NonNull_ptr(result) &*&
         [_]exists(?dk) &*& [_]exists(?gid) &*&
         [_]na_inv(t, MaskNshrSingle(std::ptr::NonNull_ptr(result)), rc_na_inv(dk, gid, std::ptr::NonNull_ptr(result), t)) &*&
         [_]exists(?frac) &*& full_borrow(k, ticket_(dk, gid, frac)) &*& full_borrow(k, lifetime_token_(frac, dk)) &*&
@@ -122,8 +123,8 @@ lem Rc_fbor_split<T>(t: thread_id_t, l: *Rc<T>) -> std::ptr::NonNull<RcBox<T>> /
 }
 
 lem Rc_share_full<T>(k: lifetime_t, t: thread_id_t, l: *Rc<T>)
-    req atomic_mask(Nlft) &*& full_borrow(k, Rc_full_borrow_content::<T>(t, l)) &*& [?q]lifetime_token(k);
-    ens atomic_mask(Nlft) &*& [_]Rc_share::<T>(k, t, l) &*& [q]lifetime_token(k);
+    req atomic_mask(MaskTop) &*& full_borrow(k, Rc_full_borrow_content::<T>(t, l)) &*& [?q]lifetime_token(k);
+    ens atomic_mask(MaskTop) &*& [_]Rc_share::<T>(k, t, l) &*& [q]lifetime_token(k);
 {
     let nnp = Rc_fbor_split::<T>(t, l);
     full_borrow_into_frac_m(k, Rc_frac_bc(l, nnp));

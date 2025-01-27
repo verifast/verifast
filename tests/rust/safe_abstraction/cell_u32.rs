@@ -25,7 +25,7 @@ pred_ctor CellU32_nonatomic_borrow_content(l: *CellU32, t: thread_id_t)(;) =
 
 // `SHR` for Cell<u32>
 pred <CellU32>.share(k, t, l) =
-  [_]nonatomic_borrow(k, t, MaskNshrSingle(l), CellU32_nonatomic_borrow_content(l, t));
+  [_]nonatomic_borrow(k, t, MaskNshrSingle(l), CellU32_nonatomic_borrow_content(ref_origin(l), t));
 
 // Proof obligations
 lem CellU32_share_mono(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *CellU32)
@@ -34,14 +34,14 @@ lem CellU32_share_mono(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *CellU3
 {
   open <CellU32>.share(k, t, l);
   assert [_]nonatomic_borrow(k, t, ?m, _);
-  nonatomic_borrow_mono(k, k1, t, m, CellU32_nonatomic_borrow_content(l, t));
+  nonatomic_borrow_mono(k, k1, t, m, CellU32_nonatomic_borrow_content(ref_origin(l), t));
   close <CellU32>.share(k1, t, l);
   leak <CellU32>.share(k1, t, l);
 }
 
 lem CellU32_share_full(k: lifetime_t, t: thread_id_t, l: *CellU32)
-  req atomic_mask(Nlft) &*& full_borrow(k, CellU32_full_borrow_content(t, l)) &*& [?q]lifetime_token(k);
-  ens atomic_mask(Nlft) &*& [_]CellU32_share(k, t, l) &*& [q]lifetime_token(k);
+  req atomic_mask(MaskTop) &*& full_borrow(k, CellU32_full_borrow_content(t, l)) &*& [?q]lifetime_token(k) &*& ref_origin(l) == l;
+  ens atomic_mask(MaskTop) &*& [_]CellU32_share(k, t, l) &*& [q]lifetime_token(k);
 {
   produce_lem_ptr_chunk implies(CellU32_full_borrow_content(t, l), CellU32_nonatomic_borrow_content(l, t))() {
     open <CellU32>.full_borrow_content(t, l)();
@@ -118,8 +118,8 @@ impl CellU32 {
         if self as *const CellU32 == other as *const CellU32 {
             return;
         }
-        //@ assert [_]nonatomic_borrow('a, _t, ?ms, CellU32_nonatomic_borrow_content(self, _t));
-        //@ assert [_]nonatomic_borrow('a, _t, ?mo, CellU32_nonatomic_borrow_content(other, _t));
+        //@ assert [_]nonatomic_borrow('a, _t, ?ms, CellU32_nonatomic_borrow_content(ref_origin(self), _t));
+        //@ assert [_]nonatomic_borrow('a, _t, ?mo, CellU32_nonatomic_borrow_content(ref_origin(other), _t));
         //@ open thread_token(_t);
         //@ thread_token_split(_t, MaskTop, ms);
         //@ thread_token_split(_t, mask_diff(MaskTop, ms), mo);

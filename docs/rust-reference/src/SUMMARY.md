@@ -10,4 +10,5 @@
     - [Function specifications](func-specs.md)
     - [Function body annotations](func-body-annots.md)
     - [Ghost declarations](ghost-decls.md)
+- [Verifying compliance with Rust's pointer aliasing rules](rusts-aliasing-rules.md)
 - [Verifying non-\`unsafe\` functions](non-unsafe-funcs.md)

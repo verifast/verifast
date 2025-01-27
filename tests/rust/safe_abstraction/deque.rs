@@ -179,8 +179,8 @@ pred_ctor elems_fbc<T>(t: thread_id_t, nodes: list<*Node<T>>)() =
     foreachp2(nodes, elem_points_to::<T>, ?elems) &*& foreach(elems, elem_own::<T>(t));
 
 lem elems_share_full<T>(t: thread_id_t, nodes: list<*Node<T>>)
-    req type_interp::<T>() &*& atomic_mask(Nlft) &*& full_borrow(?k, elems_fbc(t, nodes)) &*& [?q]lifetime_token(k);
-    ens type_interp::<T>() &*& atomic_mask(Nlft) &*& foreach(nodes, elem_share::<T>(k, t)) &*& [q]lifetime_token(k);
+    req type_interp::<T>() &*& atomic_mask(MaskTop) &*& full_borrow(?k, elems_fbc(t, nodes)) &*& [?q]lifetime_token(k);
+    ens type_interp::<T>() &*& atomic_mask(MaskTop) &*& foreach(nodes, elem_share::<T>(k, t)) &*& [q]lifetime_token(k);
 {
     match nodes {
         nil => {
@@ -223,8 +223,8 @@ lem elems_share_full<T>(t: thread_id_t, nodes: list<*Node<T>>)
 }
 
 lem Deque_share_full<T>(k: lifetime_t, t: thread_id_t, l: *Deque<T>)
-    req type_interp::<T>() &*& atomic_mask(Nlft) &*& full_borrow(k, Deque_full_borrow_content(t, l)) &*& [?q]lifetime_token(k);
-    ens type_interp::<T>() &*& atomic_mask(Nlft) &*& [_]Deque_share(k, t, l) &*& [q]lifetime_token(k);
+    req type_interp::<T>() &*& atomic_mask(MaskTop) &*& full_borrow(k, Deque_full_borrow_content(t, l)) &*& [?q]lifetime_token(k);
+    ens type_interp::<T>() &*& atomic_mask(MaskTop) &*& [_]Deque_share(k, t, l) &*& [q]lifetime_token(k);
 {
     let klong = open_full_borrow_strong_m(k, Deque_full_borrow_content(t, l), q);
     open Deque_full_borrow_content::<T>(t, l)();

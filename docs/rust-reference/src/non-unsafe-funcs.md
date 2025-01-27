@@ -98,8 +98,8 @@ If a crate defines a struct S as well as a custom definition of `<S>.share`, the
 
 ```
 lem S_share_full(k: lifetime_t, t: thread_id_t, l: *S)
-    req atomic_mask(Nlft) &*& [?q]lifetime_token(k) &*& full_borrow(k, S_full_borrow_content(t, l));
-    ens atomic_mask(Nlft) &*& [q]lifetime_token(k) &*& [_]S_share(k, t, l);
+    req atomic_mask(MaskTop) &*& [?q]lifetime_token(k) &*& full_borrow(k, S_full_borrow_content(t, l)) &*& ref_origin(l) == l;
+    ens atomic_mask(MaskTop) &*& [q]lifetime_token(k) &*& [_]S_share(k, t, l);
 
 lem S_share_mono(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *S)
     req lifetime_inclusion(k1, k) == true &*& [_]S_share(k, t, l);

@@ -26,8 +26,8 @@ lem ptr::NonNull_share_mono<T>(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l:
 }
 
 lem ptr::NonNull_share_full<T>(k: lifetime_t, t: thread_id_t, l: *ptr::NonNull<T>)
-    req atomic_mask(Nlft) &*& full_borrow(k, ptr::NonNull_full_borrow_content(t, l)) &*& [?q]lifetime_token(k);
-    ens atomic_mask(Nlft) &*& [_]ptr::NonNull_share(k, t, l) &*& [q]lifetime_token(k);
+    req atomic_mask(MaskTop) &*& full_borrow(k, ptr::NonNull_full_borrow_content(t, l)) &*& [?q]lifetime_token(k);
+    ens atomic_mask(MaskTop) &*& [_]ptr::NonNull_share(k, t, l) &*& [q]lifetime_token(k);
 {
     produce_lem_ptr_chunk implies(ptr::NonNull_frac_bc(t, l), ptr::NonNull_full_borrow_content(t, l))(){
         open ptr::NonNull_frac_bc::<T>(t, l)();

@@ -148,8 +148,8 @@ lem Pair_split_full_borrow<A, B>(k: lifetime_t, t: thread_id_t, l: *Pair<A, B>) 
 }
 
 lem Pair_share_full<A, B>(k: lifetime_t, t: thread_id_t, l: *Pair<A, B>)
-    req atomic_mask(Nlft) &*& type_interp::<A>() &*& type_interp::<B>() &*& full_borrow(k, Pair_full_borrow_content::<A, B>(t, l)) &*& [?q]lifetime_token(k);
-    ens atomic_mask(Nlft) &*& type_interp::<A>() &*& type_interp::<B>() &*& [_]Pair_share::<A, B>(k, t, l) &*& [q]lifetime_token(k);
+    req atomic_mask(MaskTop) &*& type_interp::<A>() &*& type_interp::<B>() &*& full_borrow(k, Pair_full_borrow_content::<A, B>(t, l)) &*& [?q]lifetime_token(k);
+    ens atomic_mask(MaskTop) &*& type_interp::<A>() &*& type_interp::<B>() &*& [_]Pair_share::<A, B>(k, t, l) &*& [q]lifetime_token(k);
 {
     Pair_split_full_borrow_m(k, t, l);
     share_full_borrow_m::<A>(k, t, &(*l).fst);

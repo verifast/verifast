@@ -489,8 +489,8 @@ fix elem_fbcs<T>(t: thread_id_t, nodes: list<NonNull<Node<T>>>) -> pred() {
 }
 
 lem LinkedList_share_full<T, A>(k: lifetime_t, t: thread_id_t, l: *LinkedList<T, A>)
-    req type_interp::<T>() &*& type_interp::<A>() &*& atomic_mask(Nlft) &*& full_borrow(k, LinkedList_full_borrow_content::<T, A>(t, l)) &*& [?q]lifetime_token(k);
-    ens type_interp::<T>() &*& type_interp::<A>() &*& atomic_mask(Nlft) &*& [_]LinkedList_share::<T, A>(k, t, l) &*& [q]lifetime_token(k);
+    req type_interp::<T>() &*& type_interp::<A>() &*& atomic_mask(MaskTop) &*& full_borrow(k, LinkedList_full_borrow_content::<T, A>(t, l)) &*& [?q]lifetime_token(k);
+    ens type_interp::<T>() &*& type_interp::<A>() &*& atomic_mask(MaskTop) &*& [_]LinkedList_share::<T, A>(k, t, l) &*& [q]lifetime_token(k);
 {
     let klong = open_full_borrow_strong_m(k, LinkedList_full_borrow_content::<T, A>(t, l), q);
     open LinkedList_full_borrow_content::<T, A>(t, l)();
@@ -564,8 +564,8 @@ lem LinkedList_share_full<T, A>(k: lifetime_t, t: thread_id_t, l: *LinkedList<T,
     full_borrow_into_frac_m(k, LinkedList_frac_borrow_content::<T, A>(alloc_id, l, head, tail, nodes, prevs, nexts));
     {
         lem iter(nodes_left: list<NonNull<Node<T>>>)
-            req type_interp::<T>() &*& atomic_mask(Nlft) &*& [q]lifetime_token(k) &*& full_borrow(k, elem_fbcs::<T>(t, nodes_left));
-            ens type_interp::<T>() &*& atomic_mask(Nlft) &*& [q]lifetime_token(k) &*& foreach(nodes_left, elem_share::<T>(k, t));
+            req type_interp::<T>() &*& atomic_mask(MaskTop) &*& [q]lifetime_token(k) &*& full_borrow(k, elem_fbcs::<T>(t, nodes_left));
+            ens type_interp::<T>() &*& atomic_mask(MaskTop) &*& [q]lifetime_token(k) &*& foreach(nodes_left, elem_share::<T>(k, t));
         {
             match nodes_left {
                 nil => {

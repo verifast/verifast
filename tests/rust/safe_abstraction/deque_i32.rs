@@ -100,8 +100,8 @@ lem Deque_share_mono(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *Deque)
 }
 
 lem Deque_share_full(k: lifetime_t, t: thread_id_t, l: *Deque)
-    req atomic_mask(Nlft) &*& full_borrow(k, Deque_full_borrow_content(t, l)) &*& [?q]lifetime_token(k);
-    ens atomic_mask(Nlft) &*& [_]Deque_share(k, t, l) &*& [q]lifetime_token(k);
+    req atomic_mask(MaskTop) &*& full_borrow(k, Deque_full_borrow_content(t, l)) &*& [?q]lifetime_token(k);
+    ens atomic_mask(MaskTop) &*& [_]Deque_share(k, t, l) &*& [q]lifetime_token(k);
 {
     produce_lem_ptr_chunk implies(Deque_full_borrow_content(t, l), Deque_frac_borrow_content(t, l))() {
         open Deque_full_borrow_content(t, l)();

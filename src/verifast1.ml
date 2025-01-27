@@ -82,7 +82,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let fno_strict_aliasing = Vfbindings.get Vfparam_fno_strict_aliasing vfbindings || dialect = Some Rust
   let assume_left_to_right_evaluation = Vfbindings.get Vfparam_assume_left_to_right_evaluation vfbindings
   let assume_no_provenance = Vfbindings.get Vfparam_assume_no_provenance vfbindings
-  let assume_no_subobject_provenance = Vfbindings.get Vfparam_assume_no_subobject_provenance vfbindings
+  let assume_no_subobject_provenance = Vfbindings.get Vfparam_assume_no_subobject_provenance vfbindings || dialect = Some Rust
   let include_paths = Vfbindings.get Vfparam_include_paths vfbindings
   let option_allow_undeclared_struct_types = Vfbindings.get Vfparam_allow_undeclared_struct_types vfbindings
   let data_model = Vfbindings.get Vfparam_data_model vfbindings
@@ -6185,6 +6185,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     ctxt#assume_forall "field_ptr_eq_ptr_add" [fp] [ctxt#type_inductive; ctxt#type_inductive; ctxt#type_int] eq
     end;
 
+    if dialect <> Some Rust then
     begin
     ctxt#begin_formal;
     let p = ctxt#mk_bound 0 ctxt#type_inductive in

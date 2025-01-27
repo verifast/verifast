@@ -95,6 +95,53 @@ mod intrinsics {
     //@ ens result == ptr as usize - base as usize;
     //@ on_unwind_ens false;
     
+    // atomic_points_to(p, v) is like points_to(p, v) but additionally, it guarantees that place *p is not accessed
+    // with non-read-only mixed-size accesses since converting from points_to to atomic_points_to is possible only
+    // at top mask, which means the conversion can be thought of as happening in a separate machine step.
+    // Furthermore, it guarantees that p is properly aligned for atomic accesses at type T.
+    
+    // Note: these specs are sufficient to prove semantic well-typedness of the sync::atomic API, but are not
+    // sufficient to prove arbitrary functional correctness properties. TODO: Extend these specs to also support the latter.
+    
+    /*@
+    
+    fix atomic_align_of<T>() -> usize;
+    
+    lem_auto atomic_align_of_u8();
+        req true;
+        ens atomic_align_of::<u8>() == 1;
+    
+    lem_auto atomic_align_of_usize();
+        req true;
+        ens atomic_align_of::<usize>() == std::mem::size_of::<usize>();
+    
+    pred atomic_points_to<T>(p: *T, frac: real, inv_: fix(T, bool););
+    
+    lem close_atomic_points_to_m<T>(p: *T, inv_: fix(T, bool));
+        req atomic_mask(MaskTop) &*& [?f](*p |-> ?v) &*& p as usize % atomic_align_of::<T>() == 0 &*& inv_(v) == true;
+        ens atomic_mask(MaskTop) &*& atomic_points_to(p, f, inv_);
+    
+    lem open_atomic_points_to<T>(p: *T);
+        req atomic_points_to(p, ?f, ?inv_);
+        ens [f](*p |-> ?v) &*& inv_(v) == true;
+    
+    @*/
+    
+    unsafe fn atomic_store_relaxed<T>(dst: *mut T, val: T);
+    //@ req [?f]atomic_points_to(dst, 1, ?inv_) &*& inv_(val) == true;
+    //@ ens [f]atomic_points_to(dst, 1, inv_);
+    //@ on_unwind_ens false;
+    
+    unsafe fn atomic_store_release<T>(dst: *mut T, val: T);
+    //@ req [?f]atomic_points_to(dst, 1, ?inv_) &*& inv_(val) == true;
+    //@ ens [f]atomic_points_to(dst, 1, inv_);
+    //@ on_unwind_ens false;
+    
+    unsafe fn atomic_store_seqcst<T>(dst: *mut T, val: T);
+    //@ req [?f]atomic_points_to(dst, 1, ?inv_) &*& inv_(val) == true;
+    //@ ens [f]atomic_points_to(dst, 1, inv_);
+    //@ on_unwind_ens false;
+    
 }
 
 mod mem {
@@ -247,7 +294,7 @@ mod alloc {
     
     lem alloc_aligned(ptr: *mut u8);
         req [?f]alloc_block(ptr, ?layout);
-        ens [f]alloc_block(ptr, layout) &*& (ptr as usize) % Layout::align_(layout) == 0;
+        ens [f]alloc_block(ptr, layout) &*& (ptr as usize) % Layout::align_(layout) == 0 &*& ref_origin(ptr) == ptr;
     
     @*/
     
@@ -282,8 +329,8 @@ mod alloc {
         ens *l |-> ?alloc &*& Allocator::<A>(t, alloc, alloc_id);
     
     lem share_Allocator_full_borrow_content_<A>(k: lifetime_t, t: thread_id_t, l: *A, alloc_id: any);
-        req type_interp::<A>() &*& atomic_mask(Nlft) &*& full_borrow(k, Allocator_full_borrow_content_::<A>(t, l, alloc_id)) &*& [?q]lifetime_token(k);
-        ens type_interp::<A>() &*& atomic_mask(Nlft) &*& [_](<A>.share(k, t, l)) &*& [q]lifetime_token(k);
+        req type_interp::<A>() &*& atomic_mask(MaskTop) &*& full_borrow(k, Allocator_full_borrow_content_::<A>(t, l, alloc_id)) &*& [?q]lifetime_token(k);
+        ens type_interp::<A>() &*& atomic_mask(MaskTop) &*& [_](<A>.share(k, t, l)) &*& [q]lifetime_token(k);
     
     pred share_allocator_end_token<A>(l: *A, alloc_id: any);
     
@@ -338,6 +385,7 @@ mod alloc {
         if result == 0 {
             true
         } else {
+            ref_origin(result) == result &*&
             result[..Layout::size_(layout)] |-> _ &*& alloc_block(result, layout) &*&
             result as usize % Layout::align_(layout) == 0 &*&
             object_pointer_within_limits(result, Layout::size_(layout)) == true
