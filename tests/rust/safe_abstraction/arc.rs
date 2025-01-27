@@ -65,8 +65,8 @@ pred_ctor Ctx<T>(nnp: std::ptr::NonNull<ArcInner<T>>, dk: lifetime_t, gid: isize
     [_](<T>.share)(dk, default_tid, &(*ptr).data) &*& struct_Arc_padding(l);
 
 lem Arc_fbor_split<T>(k: lifetime_t, t: thread_id_t, l: *Arc<T>)
-    req atomic_mask(Nlft) &*& [?qk]lifetime_token(k) &*& full_borrow(k, Arc_full_borrow_content(t, l));
-    ens atomic_mask(Nlft) &*& [qk]lifetime_token(k) &*&
+    req atomic_mask(MaskTop) &*& [?qk]lifetime_token(k) &*& full_borrow(k, Arc_full_borrow_content(t, l));
+    ens atomic_mask(MaskTop) &*& [qk]lifetime_token(k) &*&
         [_]exists(?nnp) &*& full_borrow(k, Arc_frac_bc(l, nnp)) &*& [_]std::ptr::NonNull_own(default_tid, nnp) &*&
         [_]exists(?ptr) &*& std::ptr::NonNull_ptr::<ArcInner<T>>(nnp) == ptr &*& [_]exists(?dk) &*& [_]exists(?gid) &*& [_]atomic_space(Marc, Arc_inv(dk, gid, ptr)) &*&
         [_]exists(?frac) &*& full_borrow(k, ticket_(dk, gid, frac)) &*& full_borrow(k, lifetime_token_(frac, dk)) &*& [_](<T>.share)(dk, default_tid, &(*ptr).data) &*&
@@ -102,8 +102,8 @@ lem Arc_fbor_split<T>(k: lifetime_t, t: thread_id_t, l: *Arc<T>)
 }
 
 lem Arc_share_full<T>(k: lifetime_t, t: thread_id_t, l: *Arc<T>)
-    req atomic_mask(Nlft) &*& [?q]lifetime_token(k) &*& full_borrow(k, Arc_full_borrow_content(t, l));
-    ens atomic_mask(Nlft) &*& [q]lifetime_token(k) &*& [_]Arc_share(k, t, l);
+    req atomic_mask(MaskTop) &*& [?q]lifetime_token(k) &*& full_borrow(k, Arc_full_borrow_content(t, l));
+    ens atomic_mask(MaskTop) &*& [q]lifetime_token(k) &*& [_]Arc_share(k, t, l);
 {
     Arc_fbor_split(k, t, l);
     assert [_]exists::<std::ptr::NonNull<ArcInner<T>>>(?nnp) &*& [_]exists::<lifetime_t>(?dk) &*& [_]exists::<isize>(?gid) &*& [_]exists::<real>(?frac);

@@ -196,8 +196,8 @@ lem share_full_borrow<T>(k: lifetime_t, t: thread_id_t, l: *_);
     ens [_](<T>.share)(k, t, l) &*& [q]lifetime_token(k);
 
 lem share_full_borrow_m<T>(k: lifetime_t, t: thread_id_t, l: *_);
-    req type_interp::<T>() &*& atomic_mask(?mask) &*& mask_le(Nlft, mask) == true &*& full_borrow(k, (<T>.full_borrow_content)(t, l)) &*& [?q]lifetime_token(k);
-    ens type_interp::<T>() &*& atomic_mask(mask) &*& [_](<T>.share)(k, t, l) &*& [q]lifetime_token(k);
+    req type_interp::<T>() &*& atomic_mask(MaskTop) &*& full_borrow(k, (<T>.full_borrow_content)(t, l)) &*& [?q]lifetime_token(k);
+    ens type_interp::<T>() &*& atomic_mask(MaskTop) &*& [_](<T>.share)(k, t, l) &*& [q]lifetime_token(k);
 
 lem init_ref_share<T>(k: lifetime_t, t: thread_id_t, p: *T);
     nonghost_callers_only

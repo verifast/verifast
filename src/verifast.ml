@@ -708,13 +708,14 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       cont (chunk::h) env
     | ExprStmt (CallExpr (l, "produce_type_interp", targs, indices, args, Static)) when dialect = Some Rust ->
-      let x =
+      let tp =
         match targs, indices, args with
-          [IdentTypeExpr (_, None, x)], [], [] when List.mem x tparams && tparam_carries_typeid x ->
-          x
+          [tp], [], [] ->
+          tp
         | _ ->
           static_error l "Syntax error: produce_type_interp<T>() expected" None
       in
+      let tp = check_pure_type (pn,ilist) tparams Ghost tp in
       begin
         (* Keep this ghost command from being used in the proof of x's proof obligations! *)
         match leminfo with
@@ -723,7 +724,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           | RealFuncInfo (_, _, _) | RealMethodInfo _ -> ()
       end;
       let type_interp_pred_symb = get_pred_symb "type_interp" in
-      let type_interp_chunk = Chunk ((type_interp_pred_symb, true), [GhostTypeParam x], real_unit, [], None) in
+      let type_interp_chunk = Chunk ((type_interp_pred_symb, true), [tp], real_unit, [], None) in
       cont (type_interp_chunk::h) env
     | ExprStmt (CallExpr (l, "free", [], [], args,Static) as e) ->
       let args = List.map (function LitPat e -> e | _ -> static_error l "No patterns allowed here" None ) args in

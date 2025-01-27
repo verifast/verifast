@@ -23,6 +23,7 @@ pred_ctor rc_na_inv(dk: lifetime_t, gid: usize, ptr: *RcBoxU32, t: thread_id_t)(
 // TODO: Add the following syntax to parser: `let ptr = std::ptr::NonNull_ptr(nnp);`
 pred <RcU32>.own(t, rcU32) =
     std::ptr::NonNull_ptr(rcU32.ptr) as usize != 0 &*&
+    ref_origin(std::ptr::NonNull_ptr::<RcBoxU32>(rcU32.ptr)) == std::ptr::NonNull_ptr::<RcBoxU32>(rcU32.ptr) &*&
     [_]exists(?dk) &*& [_]exists(?gid) &*& [_]na_inv(t, MaskNshrSingle(std::ptr::NonNull_ptr(rcU32.ptr)), rc_na_inv(dk, gid, std::ptr::NonNull_ptr(rcU32.ptr), t)) &*&
     ticket(dlft_pred(dk), gid, ?frac) &*& [frac]dlft_pred(dk)(gid, false) &*&
     [_]frac_borrow(dk, u32_full_borrow_content(t, &(*std::ptr::NonNull_ptr::<RcBoxU32>(rcU32.ptr)).value)) &*&
@@ -33,6 +34,7 @@ pred_ctor Rc_frac_bc(l: *RcU32, nnp: std::ptr::NonNull<RcBoxU32>)(;) = (*l).ptr 
 pred_ctor ticket_(dk: lifetime_t, gid: usize, frac: real)(;) = ticket(dlft_pred(dk), gid, frac) &*& [frac]ghost_cell(gid, false);
 pred <RcU32>.share(k, t, l) =
     [_]exists(?nnp) &*& [_]frac_borrow(k, Rc_frac_bc(l, nnp)) &*& std::ptr::NonNull_ptr(nnp) as usize != 0 &*&
+    ref_origin(std::ptr::NonNull_ptr::<RcBoxU32>(nnp)) == std::ptr::NonNull_ptr::<RcBoxU32>(nnp) &*&
     [_]exists(?dk) &*& [_]exists(?gid) &*& [_]na_inv(t, MaskNshrSingle(std::ptr::NonNull_ptr(nnp)), rc_na_inv(dk, gid, std::ptr::NonNull_ptr(nnp), t)) &*&
     [_]exists(?frac) &*& [_]frac_borrow(k, ticket_(dk, gid, frac)) &*& [_]frac_borrow(k, lifetime_token_(frac, dk)) &*&
     [_]frac_borrow(dk, u32_full_borrow_content(t, &(*std::ptr::NonNull_ptr::<RcBoxU32>(nnp)).value)) &*&
@@ -61,6 +63,7 @@ lem RcU32_fbor_split(t: thread_id_t, l: *RcU32) -> std::ptr::NonNull<RcBoxU32> /
         full_borrow(?k, RcU32_full_borrow_content(t, l)) &*& [?q]lifetime_token(k);
     ens atomic_mask(m) &*&
         full_borrow(k, Rc_frac_bc(l, result)) &*& std::ptr::NonNull_ptr(result) as usize != 0 &*&
+        ref_origin(std::ptr::NonNull_ptr(result)) == std::ptr::NonNull_ptr(result) &*&
         [_]exists(?dk) &*& [_]exists(?gid) &*&
         [_]na_inv(t, MaskNshrSingle(std::ptr::NonNull_ptr(result)), rc_na_inv(dk, gid, std::ptr::NonNull_ptr(result), t)) &*&
         [_]exists(?frac) &*& full_borrow(k, ticket_(dk, gid, frac)) &*& full_borrow(k, lifetime_token_(frac, dk)) &*&
@@ -99,8 +102,8 @@ lem RcU32_fbor_split(t: thread_id_t, l: *RcU32) -> std::ptr::NonNull<RcBoxU32> /
 }
 
 lem RcU32_share_full(k: lifetime_t, t: thread_id_t, l: *RcU32)
-    req atomic_mask(Nlft) &*& full_borrow(k, RcU32_full_borrow_content(t, l)) &*& [?q]lifetime_token(k);
-    ens atomic_mask(Nlft) &*& [_]RcU32_share(k, t, l) &*& [q]lifetime_token(k);
+    req atomic_mask(MaskTop) &*& full_borrow(k, RcU32_full_borrow_content(t, l)) &*& [?q]lifetime_token(k);
+    ens atomic_mask(MaskTop) &*& [_]RcU32_share(k, t, l) &*& [q]lifetime_token(k);
 {
     let nnp = RcU32_fbor_split(t, l);
     full_borrow_into_frac_m(k, Rc_frac_bc(l, nnp));

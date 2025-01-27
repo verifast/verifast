@@ -2223,6 +2223,22 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                         (`TrFnCallRExpr
                           "Invalid (generic) arg(s) for \
                            std::ptr::mut_ptr::<impl *mut T>::is_null"))
+              | "std::ptr::mut_ptr::<impl *const T>::cast"
+              | "std::ptr::mut_ptr::<impl *mut T>::cast" ->
+                  let [ _; Mir.GenArgType gen_arg_ty_info ], [ arg_cpn ] =
+                    (substs, args_cpn)
+                  in
+                  let* tmp_rvalue_binders, [ arg ] =
+                    translate_operands [ (arg_cpn, fn_loc) ]
+                  in
+                  Ok
+                    ( tmp_rvalue_binders,
+                      FnCallResult
+                        (Ast.CastExpr
+                           ( fn_loc,
+                             PtrTypeExpr
+                               (fn_loc, Mir.basic_type_of gen_arg_ty_info),
+                             arg )) )
               | "std::ptr::const_ptr::<impl *const T>::offset"
               | "std::ptr::mut_ptr::<impl *mut T>::offset" -> (
                   match (substs, args_cpn) with
@@ -2351,7 +2367,6 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                         ],
                       FnCallResult (mk_unit_expr fn_loc) )
               | "std::cell::UnsafeCell::<T>::new"
-              | "std::cell::UnsafeCell::<T>::get"
               | "std::mem::ManuallyDrop::<T>::new"
               | "std::mem::ManuallyDrop::deref"
               | "std::mem::ManuallyDrop::deref_mut" ->
@@ -2360,6 +2375,17 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                     translate_operands [ (arg_cpn, fn_loc) ]
                   in
                   Ok (tmp_rvalue_binders, FnCallResult arg)
+              | "std::cell::UnsafeCell::<T>::get" ->
+                  let [ arg_cpn ] = args_cpn in
+                  let* tmp_rvalue_binders, [ arg ] =
+                    translate_operands [ (arg_cpn, fn_loc) ]
+                  in
+                  Ok
+                    ( tmp_rvalue_binders,
+                      FnCallResult
+                        (CallExpr
+                           (fn_loc, "ref_origin", [], [], [ LitPat arg ], Static))
+                    )
               | "core::str::<impl str>::as_ptr"
               | "core::slice::<impl [T]>::as_ptr" ->
                   let [ arg_cpn ] = args_cpn in
@@ -2986,11 +3012,20 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           else
             let place_ty = decode_ty (place_ty_get ref_data_cpn) in
             let is_implicit = is_implicit_get ref_data_cpn in
+            let place_kind = BodyRd.PlaceKind.get (BodyRd.Place.kind_get place_cpn) in
+            (*
+            Printf.printf "ref creation at %s: place_ty=%s, bor_kind=%s, place_kind=%s, is_implicit=%b\n"
+              (Ast.string_of_loc loc)
+              (string_of_decoded_type place_ty)
+              (match bor_kind with Mut -> "Mut" | Shared -> "Shared")
+              (match place_kind with MutableRef -> "MutableRef" | SharedRef -> "SharedRef" | _ -> "Other")
+              is_implicit;
+            *)
             let fn_name =
               match
                 ( place_ty,
                   bor_kind,
-                  BodyRd.PlaceKind.get (BodyRd.Place.kind_get place_cpn),
+                  place_kind,
                   is_implicit )
               with
               | `Str, Shared, SharedRef, _ -> "reborrow_str_ref"
@@ -2998,8 +3033,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               | `Slice _, Mut, _, _ -> "create_slice_ref_mut"
               | `Slice _, Shared, SharedRef, _ -> "reborrow_slice_ref"
               | `Slice _, Shared, _, _ -> "create_slice_ref"
-              | `Adt ("std::cell::UnsafeCell", _, _), Shared, SharedRef, _ ->
-                  "reborrow_ref_UnsafeCell"
+              | `Adt ("std::cell::UnsafeCell", _, _), Shared, _, _ ->
+                  "create_ref_UnsafeCell"
               | _, Mut, MutableRef, true -> "reborrow_ref_mut_implicit"
               | _, Mut, MutableRef, _ -> "reborrow_ref_mut"
               | _, Mut, _, _ -> "create_ref_mut"
@@ -5168,14 +5203,14 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         let params =
           [ lft_param "k"; thread_id_param "t"; void_ptr_param "l" ]
         in
-        let atomic_mask_token =
+        let atomic_mask_token mask =
           CallExpr
             ( adt_def_loc,
               "atomic_mask",
               (*type arguments*) [],
               (*indices*) [],
               (*arguments*)
-              [ lpat_var "Nlft" ],
+              [ lpat_var mask ],
               Static )
         in
         let fbor_pred =
@@ -5217,9 +5252,22 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             (List.map
                (fun asn -> (adt_def_loc, asn))
                [
-                 atomic_mask_token;
+                 atomic_mask_token "MaskTop";
                  fbor_pred;
                  lft_token (VarPat (adt_def_loc, "q"));
+                 Operation
+                   ( adt_def_loc,
+                     Eq,
+                     [
+                       CallExpr
+                         ( adt_def_loc,
+                           "ref_origin",
+                           [],
+                           [],
+                           [ LitPat (Var (adt_def_loc, "l")) ],
+                           Static );
+                       Var (adt_def_loc, "l");
+                     ] );
                ])
             None
         in
@@ -5244,7 +5292,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           AstAux.list_to_sep_conj
             (List.map
                (fun asn -> (adt_def_loc, asn))
-               [ atomic_mask_token; share_pred "l"; lft_token (lpat_var "q") ])
+               [ atomic_mask_token "MaskTop"; share_pred "l"; lft_token (lpat_var "q") ])
             None
         in
         let post = add_type_interp_asns adt_def_loc tparams post in
@@ -5300,7 +5348,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             (List.map
                (fun asn -> (adt_def_loc, asn))
                [
-                 atomic_mask_token;
+                 atomic_mask_token "Nlft";
                  ref_init_perm;
                  pre_shr_asn;
                  lft_token (VarPat (adt_def_loc, "q"));
@@ -5351,7 +5399,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             (List.map
                (fun asn -> (adt_def_loc, asn))
                [
-                 atomic_mask_token;
+                 atomic_mask_token "Nlft";
                  lft_token (lpat_var "q");
                  post_shr_asn;
                  ref_initialized_asn;

@@ -1,3 +1,5 @@
+// verifast_options{skip_specless_fns}
+
 //! Atomic types
 //!
 //! Atomic types provide primitive shared-memory communication between
@@ -255,6 +257,8 @@ use std::hint::spin_loop;
 use std::{fmt, intrinsics};
 use std::ptr as ptr;
 
+//@ use std::intrinsics;
+
 // Some architectures don't have byte-sized atomics, which results in LLVM
 // emulating them using a LL/SC loop. However for AtomicBool we can take
 // advantage of the fact that it only ever contains 0 or 1 and use atomic OR/AND
@@ -279,6 +283,75 @@ const EMULATE_ATOMIC_BOOL: bool =
 pub struct AtomicBool {
     v: UnsafeCell<u8>,
 }
+/*@
+
+pred <AtomicBool>.own(t, b) = b.v == 0 || b.v == 1;
+
+fix AtomicBool_inv(v: u8) -> bool { v == 0 || v == 1 }
+
+pred_ctor AtomicBool_frac_borrow_content(l: *AtomicBool)(;) = intrinsics::atomic_points_to::<u8>(&(*l).v, 1, AtomicBool_inv);
+
+pred <AtomicBool>.share(k, t, l) = [_]frac_borrow(k, AtomicBool_frac_borrow_content(ref_origin(l)));
+
+lem AtomicBool_share_full(k: lifetime_t, t: thread_id_t, l: *AtomicBool)
+    req atomic_mask(MaskTop) &*& full_borrow(k, AtomicBool_full_borrow_content(t, l)) &*& [?q]lifetime_token(k) &*& ref_origin(l) == l;
+    ens atomic_mask(MaskTop) &*& [_]AtomicBool_share(k, t, l) &*& [q]lifetime_token(k);
+{
+    let kl = open_full_borrow_strong_m(k, AtomicBool_full_borrow_content(t, l), q);
+    open AtomicBool_full_borrow_content(t, l)();
+    open AtomicBool_own(t, _);
+    open AtomicBool_v(l, _);
+    points_to_limits(&(*l).v);
+    div_rem_nonneg(&(*l).v as usize, 1);
+    intrinsics::close_atomic_points_to_m::<u8>(&(*l).v, AtomicBool_inv);
+    {
+        pred Ctx() = true;
+        produce_lem_ptr_chunk full_borrow_convert_strong(Ctx, AtomicBool_frac_borrow_content(l), kl, AtomicBool_full_borrow_content(t, l))() {
+            open Ctx();
+            open AtomicBool_frac_borrow_content(l)();
+            intrinsics::open_atomic_points_to(&(*l).v);
+            close_points_to(l);
+            close AtomicBool_own(t, *l);
+            close AtomicBool_full_borrow_content(t, l)();
+        } {
+            close Ctx();
+            close_full_borrow_strong_m(kl, AtomicBool_full_borrow_content(t, l), AtomicBool_frac_borrow_content(l));
+            full_borrow_mono(kl, k, AtomicBool_frac_borrow_content(l));
+        }
+    }
+    full_borrow_into_frac_m(k, AtomicBool_frac_borrow_content(l));
+    close <AtomicBool>.share(k, t, l);
+    leak AtomicBool_share(k, t, l);
+}
+
+lem AtomicBool_share_mono(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *_)
+    req lifetime_inclusion(k1, k) == true &*& [_]AtomicBool_share(k, t, l);
+    ens [_]AtomicBool_share(k1, t, l);
+{
+    open AtomicBool_share(k, t, l);
+    frac_borrow_mono(k, k1, AtomicBool_frac_borrow_content(ref_origin(l)));
+    close AtomicBool_share(k1, t, l);
+    leak AtomicBool_share(k1, t, l);
+}
+
+lem init_ref_AtomicBool(p: *AtomicBool)
+    req atomic_mask(Nlft) &*& ref_init_perm(p, ?x) &*& [_]AtomicBool_share(?k, ?t, x) &*& [?q]lifetime_token(k);
+    ens atomic_mask(Nlft) &*& [q]lifetime_token(k) &*& [_]AtomicBool_share(k, t, p) &*& [_]frac_borrow(k, ref_initialized_(p));
+{
+    open AtomicBool_share(k, t, x);
+    open_ref_init_perm_AtomicBool(p);
+    init_ref_padding_AtomicBool(p, 1/2);
+    close_ref_initialized_AtomicBool(p);
+    close AtomicBool_share(k, t, p);
+    leak AtomicBool_share(k, t, p);
+    close ref_initialized_::<AtomicBool>(p)();
+    borrow_m(k, ref_initialized_(p));
+    full_borrow_into_frac_m(k, ref_initialized_(p));
+    leak ref_padding_end_token(_, _, _) &*& borrow_end_token(_, _);
+}
+
+@*/
+
 
 #[cfg(target_has_atomic_load_store = "8")]
 #[stable(feature = "rust1", since = "1.0.0")]
@@ -434,7 +507,11 @@ impl AtomicBool {
     #[stable(feature = "rust1", since = "1.0.0")]
     #[rustc_const_stable(feature = "const_atomic_new", since = "1.24.0")]
     #[must_use]
-    pub const fn new(v: bool) -> AtomicBool {
+    pub const fn new(v: bool) -> AtomicBool
+    //@ req true;
+    //@ ens <AtomicBool>.own(currentThread, result);
+    {
+        //@ close <AtomicBool>.own(currentThread, AtomicBool { v });
         AtomicBool { v: UnsafeCell::new(v as u8) }
     }
 
@@ -479,9 +556,47 @@ impl AtomicBool {
     /// [Memory model for atomic accesses]: self#memory-model-for-atomic-accesses
     #[stable(feature = "atomic_from_ptr", since = "1.75.0")]
     #[rustc_const_stable(feature = "const_atomic_from_ptr", since = "CURRENT_RUSTC_VERSION")]
-    pub const unsafe fn from_ptr<'a>(ptr: *mut bool) -> &'a AtomicBool {
+    pub const unsafe fn from_ptr<'a>(ptr: *mut bool) -> &'a AtomicBool
+    //@ req [?q]lifetime_token('a) &*& full_borrow('a, bool_full_borrow_content(currentThread, ptr)) &*& ref_origin(ptr) == ptr;
+    //@ ens [q]lifetime_token('a) &*& [_](<AtomicBool>.share('a, currentThread, result));
+    //@ on_unwind_ens false;
+    {
         // SAFETY: guaranteed by the caller
-        unsafe { &*ptr.cast() }
+        unsafe {
+            //@ let klong = open_full_borrow_strong('a, bool_full_borrow_content(currentThread, ptr), q);
+            //@ points_to_bool_to_u8(ptr);
+            //@ let t = currentThread;
+            //@ close <AtomicBool>.own(t, *(ptr as *AtomicBool));
+            //@ close AtomicBool_full_borrow_content(t, ptr as *AtomicBool)();
+            /*@
+            {
+                pred Ctx() = true;
+                produce_lem_ptr_chunk full_borrow_convert_strong(Ctx, AtomicBool_full_borrow_content(currentThread, ptr as *AtomicBool), klong, bool_full_borrow_content(currentThread, ptr))() {
+                    open Ctx();
+                    open AtomicBool_full_borrow_content(t, ptr as *AtomicBool)();
+                    open <AtomicBool>.own(t, _);
+                    points_to_u8_to_bool(ptr as *u8);
+                    close bool_full_borrow_content(t, ptr)();
+                } {
+                    close Ctx();
+                    close_full_borrow_strong(klong, bool_full_borrow_content(t, ptr), AtomicBool_full_borrow_content(t, ptr as *AtomicBool));
+                    full_borrow_mono(klong, 'a, AtomicBool_full_borrow_content(t, ptr as *AtomicBool));
+                }
+            }
+            @*/
+            //@ produce_type_interp::<AtomicBool>();
+            //@ share_full_borrow::<AtomicBool>('a, t, ptr as *AtomicBool);
+            //@ let p = precreate_ref(ptr as *AtomicBool);
+            //@ init_ref_share('a, t, p);
+            //@ leak type_interp::<AtomicBool>();
+            
+            //@ open_frac_borrow('a, ref_initialized_(p), q);
+            //@ open [?f]ref_initialized_::<AtomicBool>(p)();
+            let r = &*ptr.cast();
+            //@ close [f]ref_initialized_::<AtomicBool>(p)();
+            //@ close_frac_borrow(f, ref_initialized_(p));
+            r
+        }
     }
 
     /// Returns a mutable reference to the underlying [`bool`].
@@ -657,11 +772,22 @@ impl AtomicBool {
     #[inline]
     #[stable(feature = "rust1", since = "1.0.0")]
     #[cfg_attr(miri, track_caller)] // even without panics, this helps for Miri backtraces
-    pub fn store(&self, val: bool, order: Ordering) {
+    pub fn store<'a>(&'a self, val: bool, order: Ordering)
+    //@ req [?q]lifetime_token('a) &*& [_](<AtomicBool>.share('a, currentThread, self)) &*& <Ordering>.own(currentThread, order);
+    //@ ens [q]lifetime_token('a);
+    //@ on_unwind_ens [q]lifetime_token('a);
+    {
         // SAFETY: any data races are prevented by atomic intrinsics and the raw
         // pointer passed in is valid because we got it from a reference.
         unsafe {
-            atomic_store(self.v.get(), val as u8, order);
+            //@ leak <Ordering>.own(_, _);
+            let ptr = self.v.get();
+            //@ open AtomicBool_share('a, currentThread, self);
+            //@ open_frac_borrow('a, AtomicBool_frac_borrow_content(ref_origin(self)), q);
+            //@ open [?f]AtomicBool_frac_borrow_content(ref_origin(self))();
+            atomic_store(ptr, val as u8, order);
+            //@ close [f]AtomicBool_frac_borrow_content(ref_origin(self))();
+            //@ close_frac_borrow(f, AtomicBool_frac_borrow_content(ref_origin(self)));
         }
     }
 
@@ -3329,7 +3455,11 @@ fn strongest_failure_ordering(order: Ordering) -> Ordering {
 
 #[inline]
 #[cfg_attr(miri, track_caller)] // even without panics, this helps for Miri backtraces
-unsafe fn atomic_store<T: Copy>(dst: *mut T, val: T, order: Ordering) {
+unsafe fn atomic_store<T: Copy>(dst: *mut T, val: T, order: Ordering)
+//@ req [?f]intrinsics::atomic_points_to(dst, 1, ?inv_) &*& inv_(val) == true;
+//@ ens [f]intrinsics::atomic_points_to(dst, 1, inv_);
+//@ on_unwind_ens [f]intrinsics::atomic_points_to(dst, 1, inv_);
+{
     // SAFETY: the caller must uphold the safety contract for `atomic_store`.
     unsafe {
         match order {

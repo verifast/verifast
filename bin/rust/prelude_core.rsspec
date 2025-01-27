@@ -145,6 +145,14 @@ fix ptr_add_(p: pointer, offset: i32, elemTypeid: *_) -> pointer {
 pred points_to_<t>(p: *t; v: option<t>);
 pred points_to<t>(p: *t; v: t) = points_to_::<t>(p, some(v));
 
+lem points_to_bool_to_u8(p: *bool);
+    req *p |-> ?b;
+    ens *(p as *u8) |-> b;
+
+lem points_to_u8_to_bool(p: *u8);
+    req *p |-> ?v &*& v == 0 || v == 1;
+    ens *(p as *bool) |-> v == 1;
+
 lem points_to_limits<T>(p: *T);
     req [?f]points_to(p, ?v);
     ens [f]points_to(p, v) &*& f <= 1 &*& object_pointer_within_limits(p, std::mem::size_of::<T>()) == true;
