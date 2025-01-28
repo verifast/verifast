@@ -657,6 +657,43 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       with_context (Executing (h, env, l, "Consuming object")) $. fun () ->
       consume_c_object_core_core l real_unit_pat pointerTerm pointeeType h env true false $. fun _ h (Some value) ->
       cont (Chunk ((generic_points_to_symb (), true), [pointeeType], real_unit, [pointerTerm; value], None)::h) env
+    | ExprStmt (CallExpr (l, "open_malloc_block", targs, [], args, Static)) when language = CLang ->
+      require_pure ();
+      let e = match (targs, args) with ([], [LitPat e]) -> e | _ -> static_error l "open_malloc_block expects no type arguments and one argument." None in
+      let (w, tp) = check_expr (pn,ilist) tparams tenv e in
+      let sn, targs = match tp with PtrType (StructType (sn, targs)) -> sn, targs | _ -> static_error l "The argument of open_malloc_block must be of type pointer-to-struct." None in
+      let _, _, body_opt, Some padding_pred_symb, _ = List.assoc sn structmap in
+      eval_h h env w @@ fun h env pointer_term ->
+      let _, (_, _, _, _, malloc_block_symb, _, _) = List.assoc sn malloc_block_pred_map in
+      begin match body_opt with
+      | Some (_, fields_map, _) when fields_map |> List.exists (function (_, (_, Ghost, _, _, _)) -> true | _ -> false) -> 
+        static_error l "open_malloc_block cannot be used for structs with ghost fields." None
+      | _ -> ()
+      end;
+      consume_chunk rules h env [] [] [] l (malloc_block_symb, true) targs real_unit real_unit_pat (Some 1) [TermPat pointer_term] @@ fun _ h _ _ _ _ _ _ ->
+      produce_chunk h (padding_pred_symb, true) targs real_unit None [pointer_term] None @@ fun h ->
+      let size = struct_size l env sn targs in
+      let malloc_pred_symb = get_pred_symb "malloc_block" in
+      produce_chunk h (malloc_pred_symb, true) targs real_unit None [pointer_term; size] None @@ fun h ->
+      cont h env
+    | ExprStmt (CallExpr (l, "close_malloc_block", targs, [], args, static)) when language = CLang ->
+      require_pure ();
+      let e = match (targs, args) with ([], [LitPat e]) -> e | _ -> static_error l "close_malloc_block expects no type arguments and one argument." None in
+      let (w, tp) = check_expr (pn,ilist) tparams tenv e in
+      let sn, targs = match tp with PtrType (StructType (sn, targs)) -> sn, targs | _ -> static_error l "The argument of close_malloc_block must be of type pointer-to-struct." None in
+      let _, _, body_opt, Some padding_pred_symb, _ = List.assoc sn structmap in
+      eval_h h env w @@ fun h env pointer_term ->
+      let _, (_, _, _, _, malloc_block_symb, _, _) = List.assoc sn malloc_block_pred_map in
+      begin match body_opt with
+      | Some (_, fields_map, _) when fields_map |> List.exists (function (_, (_, Ghost, _, _, _)) -> true | _ -> false) -> 
+        static_error l "close_malloc_block cannot be used for structs with ghost fields." None
+      | _ -> ()
+      end;
+      let size = struct_size l env sn targs in
+      consume_chunk rules h env [] [] [] l (get_pred_symb "malloc_block", true) targs real_unit real_unit_pat (Some 1) [TermPat pointer_term; TermPat size] @@ fun _ h _ _ _ _ _ _ ->
+      consume_chunk rules h env [] [] [] l (padding_pred_symb, true) targs real_unit real_unit_pat (Some 1) [TermPat pointer_term] @@ fun _ h _ _ _ _ _ _ ->
+      produce_chunk h (malloc_block_symb, true) targs real_unit None [pointer_term] None @@ fun h ->
+      cont h env
     | ExprStmt (CallExpr (l, ("close_struct" | "close_struct_zero" as name), targs, [], args, Static)) when language = CLang ->
       require_pure ();
       let e = match (targs, args) with ([], [LitPat e]) -> e | _ -> static_error l "close_struct expects no type arguments and one argument." None in
@@ -665,7 +702,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       eval_h h env w $. fun h env pointerTerm ->
       assert_has_type env pointerTerm (StructType (sn, targs)) h env l "Cannot prove consistency with C's effective types rules" None;
       begin fun cont ->
-      match dialect with
+        match dialect with
         Some Rust ->
         with_context (Executing (h, env, l, "Consuming u8 array")) $. fun () ->
         consume_chunk rules h env ghostenv [] [] l ((if name = "close_struct" then array__symb () else array_symb ()), true) [u8Type] real_unit dummypat (Some 2) [TermPat pointerTerm; TermPat (struct_size l env sn targs); SrcPat DummyPat] $. fun _ h coef [_; _; elems] _ _ _ _ ->
@@ -679,7 +716,15 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       end $. fun h elems ->
       let init =
         match name with
-          "close_struct" -> Unspecified
+        | "close_struct" ->
+          begin match List.assoc sn structmap with
+          | _, _, Some (_, fields_map, _), _, _ -> 
+            let of_bytes_symb = get_pure_func_symb (match dialect with Some Rust -> "of_u8s_" | _ -> "of_chars_") in
+            let (_, _, _, _, csym_opt) = List.assoc sn struct_accessor_map in
+            let terms = [typeid_of_core l env (StructType (sn, targs)); elems] in
+            MaybeUninitTerm (mk_app of_bytes_symb terms)
+          | _ -> Unspecified
+          end
         | "close_struct_zero" ->
           let cond = mk_all_eq charType elems (ctxt#mk_intlit 0) in
           if not (ctxt#query cond) then assert_false h env l ("Could not prove condition " ^ ctxt#pprint cond) None;
@@ -693,18 +738,22 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let (w, tp) = check_expr (pn,ilist) tparams tenv e in
       let sn, targs = match tp with PtrType (StructType (sn, targs)) -> sn, targs | _ -> static_error l "The argument of open_struct must be of type pointer-to-struct." None in
       eval_h h env w $. fun h env pointerTerm ->
-      consume_c_object_core_core l real_unit_pat pointerTerm (StructType (sn, targs)) h env true true $. fun _ h _ ->
-      assume_has_type l env pointerTerm (StructType (sn, targs)) $. fun () ->
-      let cs = get_unique_var_symb "cs" (list_type (option_type charType)) in
-      let Some (_, _, _, _, length_symb) = try_assoc' Ghost (pn,ilist) "length" purefuncmap in
+      consume_c_object_core_core l real_unit_pat pointerTerm (StructType (sn, targs)) h env true true @@ fun _ h (Some struct_value) ->
+      assume_has_type l env pointerTerm (StructType (sn, targs)) @@ fun () ->
+      let bytes_of_struct_term = 
+        let bytes_of_symb = get_pure_func_symb (match dialect with Some Rust -> "u8s__of" | _ -> "chars__of") in
+        let terms = [typeid_of_core l env (StructType (sn, targs)); struct_value] in
+        mk_app bytes_of_symb terms 
+      in
+      let length_symb = get_pure_func_symb "length" in
       let size = struct_size l env sn targs in
-      assume (ctxt#mk_eq (mk_app length_symb [cs]) size) $. fun () ->
+      assume (ctxt#mk_eq (mk_app length_symb [bytes_of_struct_term]) size) $. fun () ->
       let chunk =
         match dialect with
           Some Rust ->
-          Chunk ((array__symb (), true), [u8Type], real_unit, [pointerTerm; size; cs], None)
+          Chunk ((array__symb (), true), [u8Type], real_unit, [pointerTerm; size; bytes_of_struct_term], None)
         | _ ->
-          Chunk ((chars__pred_symb (), true), [], real_unit, [pointerTerm; size; cs], None)
+          Chunk ((chars__pred_symb (), true), [], real_unit, [pointerTerm; size; bytes_of_struct_term], None)
       in
       cont (chunk::h) env
     | ExprStmt (CallExpr (l, "produce_type_interp", targs, indices, args, Static)) when dialect = Some Rust ->
@@ -997,7 +1046,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 let rec iter h env vs bs =
                   match bs with
                     [] ->
-                    let (_, csym, _, _) = List.assoc sn struct_accessor_map in
+                    let (_, csym, _, _, _) = List.assoc sn struct_accessor_map in
                     cont h env (ctxt#mk_app csym (List.rev vs))
                   | ((f, (_, _, tp, _, _)), (f_opt, e))::bs ->
                     begin match f_opt with
@@ -2901,12 +2950,14 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         end
         ps;
       ctxt#begin_formal;
-      let xs = Array.init (List.length ps) (fun j -> ctxt#mk_bound j (typenode_of_type (snd (List.nth ps j)))) in
-      let xs = Array.to_list xs in
-      let Some(env) = zip (List.map fst ps) xs in
+      let typeid_tparams = tparams' |> List.filter tparam_carries_typeid in
+      let typeid_env = typeid_tparams |> List.map @@ fun x -> (x ^ "_typeid", ctxt#type_inductive) in 
+      let ps_env = ps |> List.map @@ fun (x, tp) -> (x, typenode_of_type tp) in
+      let tn_env = typeid_env @ ps_env in
+      let env = tn_env |> List.mapi @@ fun i (x, tn) -> (x, ctxt#mk_bound i tn) in
       let t_pre = eval None env pre in
       let t_post = eval None env post in
-      let tps = (List.map (fun (x, t) -> (typenode_of_type t)) ps) in
+      let tps = List.map snd tn_env in
       let trigger = (
       match trigger with
         None -> []

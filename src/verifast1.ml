@@ -909,6 +909,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       * symbol                 (* constructor function *)
       * (string * symbol) list (* getter function for each field *)
       * (string * symbol) list (* setter function for each field *)
+      * symbol                 (* constructor.opt function *)
     type malloc_block_pred_info =
         string (* predicate name *)
       * pred_fam_info
@@ -3300,15 +3301,22 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | None -> []
         | Some (_, fds, _) ->
           let cname = "mk_" ^ sn in
-          let field_types = fds |> List.map (fun (f, (_, _, t, _, _)) -> (f, t)) in
-          let fieldnames = List.map fst field_types in
+          let field_gh_types = fds |> List.map (fun (f, (_, gh, t, _, _)) -> (f, gh, t)) in
+          let field_names = List.map (fun (f, _, _) -> f) field_gh_types in
           let tt = StructType (sn, tparams_as_targs tparams) in
           let subtype = InductiveSubtype.alloc () in
-          let (csym, _) = mk_func_symbol cname (List.map (fun (x, t) -> provertype_of_type t) field_types) ProverInductive (Proverapi.Ctor (CtorByOrdinal (subtype, 0))) in
-          let getters = field_types |> List.map (fun (f, t) -> (f, make_getter sn tt csym subtype fieldnames f t)) in
-          let setters = field_types |> List.map (fun (f, t) -> (f, make_setter sn tt csym subtype getters fieldnames f t)) in
+          let subtype_opt = InductiveSubtype.alloc () in
+          let (csym, _) = mk_func_symbol cname (List.map (fun (x, _, t) -> provertype_of_type t) field_gh_types) ProverInductive (Proverapi.Ctor (CtorByOrdinal (subtype, 0))) in
+          let (csym_opt, _) = mk_func_symbol (cname ^ ".opt") (field_gh_types |> 
+            List.map (function 
+              | (f, Ghost, t) -> provertype_of_type t
+              | (f, Real, t) -> provertype_of_type (InductiveType ("option", [t])))) 
+            ProverInductive (Proverapi.Ctor (CtorByOrdinal (subtype_opt, 0))) 
+          in
+          let getters = field_gh_types |> List.map (fun (f, _, t) -> (f, make_getter sn tt csym subtype field_names f t)) in
+          let setters = field_gh_types |> List.map (fun (f, _, t) -> (f, make_setter sn tt csym subtype getters field_names f t)) in
           (* Axiom: forall s, mk_s (get_f1 s) ... (get_fN s) == s *)
-          if field_types <> [] then begin
+          if field_gh_types <> [] then begin
             ctxt#begin_formal;
             let s = ctxt#mk_bound 0 ctxt#type_inductive in
             let mk_term = ctxt#mk_app csym (List.map (fun (_, getter) -> ctxt#mk_app getter [s]) getters) in
@@ -3316,7 +3324,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             ctxt#end_formal;
             ctxt#assume_forall (sn ^ "_injectiveness") [mk_term] [ctxt#type_inductive] fact
           end;
-          [(sn, (l, csym, getters, setters))]
+          [(sn, (l, csym, getters, setters, csym_opt))]
         end
     )
 
@@ -8066,7 +8074,7 @@ let check_if_list_is_defined () =
           prover_convert_term v tp' tp
         end
       in
-      let (_, csym, _, _) = List.assoc sn struct_accessor_map in
+      let (_, csym, _, _, _) = List.assoc sn struct_accessor_map in
       cont state (ctxt#mk_app csym vs_boxed)
     | TruncatingExpr (l, CastExpr (lc, ManifestTypeExpr (_, t), e)) ->
       begin
@@ -8295,7 +8303,7 @@ let check_if_list_is_defined () =
     | WSelect(l, e, fparent, tparams, fname, frange, targs) ->
       let tpenv = List.combine tparams targs in
       let frange' = instantiate_type tpenv frange in
-      let (_, _, getters, _) = List.assoc fparent struct_accessor_map in
+      let (_, _, getters, _, _) = List.assoc fparent struct_accessor_map in
       let getter = List.assoc fname getters in
       ev state e $. fun state v ->
       cont state (prover_convert_term (ctxt#mk_app getter [v]) frange frange')
