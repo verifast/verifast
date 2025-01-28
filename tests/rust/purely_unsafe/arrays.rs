@@ -38,7 +38,7 @@ fn test2() {
         sum += *p;
         sum += *p.add(1);
         sum += *p.add(2);
-        assert!(sum == 60);
+        std::hint::assert_unchecked(sum == 60);
         //@ close array_(p + 2, 1, _);
         //@ close array_(p + 1, 2, _);
         //@ close array_(p, 3, _);
