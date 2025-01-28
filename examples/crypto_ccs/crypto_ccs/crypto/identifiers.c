@@ -49,6 +49,7 @@ void write_identifier(char *array, int id)
   /*@ cs_to_ccs_append(chars_of_int(id_val),
                        append(chars_of_int(id_val), chars_of_int(id_val))); @*/
   //@ public_cs(identifier(id_val));
+  //@ chars_to_integer(&id);
 }
 
 void check_identifier(char *array, int id)
