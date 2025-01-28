@@ -271,6 +271,7 @@ struct Ty {
         variances @10: List(Variance); # One for each generic lifetime or type parameter
         predicates @7: List(Predicate);
         implementsDrop @8: Bool;
+        isReprC @11: Bool;
     }
 
     struct AdtTy {

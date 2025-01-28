@@ -5605,7 +5605,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                       (*field list*) field_defs,
                       (*instance_pred_decl list*) [],
                       (*is polymorphic*) false ),
-                  (*struct_attr list*) [] )
+                  (*struct_attr list*)
+                  if is_repr_c_get adt_def_cpn then [ ReprC ] else [] )
             in
             let struct_typedef_aux =
               Ast.TypedefDecl

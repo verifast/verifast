@@ -979,6 +979,7 @@ mod vf_mir_builder {
                 Self::encode_predicate(enc_ctx, pred, pred_cpn);
             });
             adt_def_cpn.set_implements_drop(adt_def.has_dtor(tcx));
+            adt_def_cpn.set_is_repr_c(adt_def.repr().c());
         }
 
         fn encode_adt_kind(adt_kind: ty::AdtKind, mut adt_kind_cpn: adt_kind_cpn::Builder<'_>) {
