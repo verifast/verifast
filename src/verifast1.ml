@@ -4132,7 +4132,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let t = unfold_inferred_type t in
     let t =
       match t with
-        StaticArrayType (elemTp, s) -> PtrType elemTp
+        StaticArrayType (elemTp, s) when match dialect with Some Rust -> false | _ -> true -> PtrType elemTp
       | _ -> t
     in
     (w, t, v)
