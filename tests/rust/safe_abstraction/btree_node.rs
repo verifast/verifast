@@ -1,3 +1,5 @@
+// verifast_options{skip_specless_fns}
+
 #![feature(allocator_api)]
 #![feature(core_intrinsics)]
 #![feature(maybe_uninit_slice)]
@@ -58,7 +60,7 @@ mod btree_mem {
     /// If a panic occurs in the `change` closure, the entire process will be aborted.
     #[allow(dead_code)] // keep as illustration and for future use
     #[inline]
-    pub fn take_mut<T>(v: &mut T, change: impl FnOnce(T) -> T) {
+    pub fn take_mut<T, F: FnOnce(T) -> T>(v: &mut T, change: F) {
         replace(v, |value| (change(value), ()))
     }
 
@@ -254,11 +256,12 @@ impl<'a, K: 'a, V: 'a, Type> Clone for NodeRef<marker::Immut<'a>, K, V, Type> {
 
 unsafe impl<BorrowType, K: Sync, V: Sync, Type> Sync for NodeRef<BorrowType, K, V, Type> {}
 
-unsafe impl<K: Sync, V: Sync, Type> Send for NodeRef<marker::Immut<'_>, K, V, Type> {}
-unsafe impl<K: Send, V: Send, Type> Send for NodeRef<marker::Mut<'_>, K, V, Type> {}
-unsafe impl<K: Send, V: Send, Type> Send for NodeRef<marker::ValMut<'_>, K, V, Type> {}
-unsafe impl<K: Send, V: Send, Type> Send for NodeRef<marker::Owned, K, V, Type> {}
-unsafe impl<K: Send, V: Send, Type> Send for NodeRef<marker::Dying, K, V, Type> {}
+// TODO!!!
+// unsafe impl<K: Sync, V: Sync, Type> Send for NodeRef<marker::Immut<'_>, K, V, Type> {}
+// unsafe impl<K: Send, V: Send, Type> Send for NodeRef<marker::Mut<'_>, K, V, Type> {}
+// unsafe impl<K: Send, V: Send, Type> Send for NodeRef<marker::ValMut<'_>, K, V, Type> {}
+// unsafe impl<K: Send, V: Send, Type> Send for NodeRef<marker::Owned, K, V, Type> {}
+// unsafe impl<K: Send, V: Send, Type> Send for NodeRef<marker::Dying, K, V, Type> {}
 
 impl<K, V> NodeRef<marker::Owned, K, V, marker::Leaf> {
     pub fn new_leaf<A: Allocator + Clone>(alloc: A) -> Self {

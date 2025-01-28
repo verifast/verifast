@@ -1127,7 +1127,14 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let fbc_name = name ^ "_full_borrow_content" in
     let full_bor_content = RustBelt.simple_fbc loc fbc_name in
     let shr lft tid l =
-      Error "Expressing shared ownership of a tuple value is not yet supported"
+      Ok
+        (CallExpr
+           ( loc,
+             name ^ "_share",
+             tys,
+             [],
+             [ LitPat lft; LitPat tid; LitPat l ],
+             Static ))
     in
     let points_to tid l vid_op =
       let* pat = RustBelt.Aux.vid_op_to_var_pat vid_op loc in
@@ -5610,14 +5617,17 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             Ok (Mir.Struct, fds, struct_decl, [ struct_typedef_aux ])
         | EnumKind ->
             let ctors =
-              variants
-              |> List.map @@ fun Mir.{ loc; name = variant_name; fields } ->
-                 let ps =
-                   fields
-                   |> List.map @@ fun Mir.{ name; ty } ->
-                      (name, Mir.basic_type_of ty)
-                 in
-                 Ast.Ctor (loc, name ^ "::" ^ variant_name, ps)
+              (* VeriFast does not support zero-ctor inductives, so add a dummy ctor. *)
+              if variants = [] then [ Ast.Ctor (def_loc, name ^ "::Dummy", []) ]
+              else
+                variants
+                |> List.map @@ fun Mir.{ loc; name = variant_name; fields } ->
+                   let ps =
+                     fields
+                     |> List.map @@ fun Mir.{ name; ty } ->
+                        (name, Mir.basic_type_of ty)
+                   in
+                   Ast.Ctor (loc, name ^ "::" ^ variant_name, ps)
             in
             let decl = Ast.Inductive (def_loc, name, tparams, ctors) in
             Ok (Mir.Enum, [], decl, [])

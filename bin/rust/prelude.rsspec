@@ -11,6 +11,9 @@ include!{"rust_belt/aliasing.rsspec"}
 union std_empty_ {}
 struct std_tuple_0_ {}
 struct std_tuple_1_<T1>(T1)
+struct std_tuple_2_<T1, T2>(T1, T2)
+
+//@ pred<T1, T2> <(T1, T2)>.share(k, t, l) = <T1>.share(k, t, &(*l).0) &*& <T2>.share(k, t, &(*l).1);
 
 struct slice_ref<'a, T> { ptr: *T, len: usize }
 

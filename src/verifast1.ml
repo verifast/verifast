@@ -2470,6 +2470,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 
   (* Region: modulemap *)
 
+  let modulemap1 = [(current_module_name, current_module_term)]
+
   let modulemap1 = 
     let rec iter mm ds = 
       match ds with
@@ -2484,8 +2486,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | _ :: ds -> iter mm ds
     in
     match ps with
-      [PackageDecl(_,"",[],ds)] -> iter [(current_module_name, current_module_term)] ds
-    | _ when file_type path=Java || dialect <> None -> []
+      [PackageDecl(_,"",[],ds)] -> iter modulemap1 ds
+    | _ when file_type path=Java || dialect <> None -> modulemap1
 
   let modulemap = modulemap1 @ modulemap0
 
