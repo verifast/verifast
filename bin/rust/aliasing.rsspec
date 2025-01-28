@@ -82,7 +82,7 @@ fn reborrow_ref<T>(x: *T) -> *T;
 
 fn create_ref_UnsafeCell(x: *_) -> *_;
 //@ req true;
-//@ ens result == x;
+//@ ens ref_origin(result) == ref_origin(x);
 //@ on_unwind_ens false;
 
 fn create_slice_ref<T>(x: slice_ref<'static, T>) -> slice_ref<'static, T>;
