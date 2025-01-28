@@ -4,7 +4,6 @@ verifast ghost_cmd_inj.rs
 verifast parser_test.rs
 verifast -allow_should_fail type_pred_defs_for_imported_structs.rs
 verifast -allow_should_fail duplicate_type_pred_defs.rs
-verifast -allow_should_fail public_fields.rs
 verifast -allow_should_fail -allow_assume preprocessor_test.rs
 verifast -allow_should_fail -allow_assume preprocessor_test_crlf.rs
 verifast -allow_should_fail -allow_assume preprocessor_test_crlf_bom.rs
@@ -68,6 +67,7 @@ cd purely_unsafe
   verifast -ignore_unwind_paths -target LP64 -ignore_ref_creation -extern ../unverified/platform atomics_example.rs
 cd ..
 cd safe_abstraction
+  verifast -allow_should_fail public_fields.rs
   verifast box.rs
   verifast full_bor_primitive_types.rs
   verifast shared_primitive_types.rs

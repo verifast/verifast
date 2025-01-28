@@ -3012,7 +3012,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           else
             let place_ty = decode_ty (place_ty_get ref_data_cpn) in
             let is_implicit = is_implicit_get ref_data_cpn in
-            let place_kind = BodyRd.PlaceKind.get (BodyRd.Place.kind_get place_cpn) in
+            let place_kind =
+              BodyRd.PlaceKind.get (BodyRd.Place.kind_get place_cpn)
+            in
             (*
             Printf.printf "ref creation at %s: place_ty=%s, bor_kind=%s, place_kind=%s, is_implicit=%b\n"
               (Ast.string_of_loc loc)
@@ -3022,12 +3024,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               is_implicit;
             *)
             let fn_name =
-              match
-                ( place_ty,
-                  bor_kind,
-                  place_kind,
-                  is_implicit )
-              with
+              match (place_ty, bor_kind, place_kind, is_implicit) with
               | `Str, Shared, SharedRef, _ -> "reborrow_str_ref"
               | `Str, Shared, _, _ -> "create_str_ref"
               | `Slice _, Mut, _, _ -> "create_slice_ref_mut"
@@ -4592,8 +4589,6 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let* ty_info = translate_ty ty_cpn loc in
     let vis_cpn = vis_get fdef_cpn in
     let* vis = translate_visibility vis_cpn in
-    if vis = Public then
-      raise (Ast.StaticError (loc, "Public fields are not yet supported", None));
     Ok Mir.{ name; ty = ty_info; vis; loc }
 
   let translate_to_vf_field_def
@@ -5292,7 +5287,11 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           AstAux.list_to_sep_conj
             (List.map
                (fun asn -> (adt_def_loc, asn))
-               [ atomic_mask_token "MaskTop"; share_pred "l"; lft_token (lpat_var "q") ])
+               [
+                 atomic_mask_token "MaskTop";
+                 share_pred "l";
+                 lft_token (lpat_var "q");
+               ])
             None
         in
         let post = add_type_interp_asns adt_def_loc tparams post in
@@ -5459,6 +5458,63 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     items : string list;
   }
 
+  let sep loc = function
+    | [] -> Ast.True loc
+    | x :: xs -> List.fold_left (fun a1 a2 -> Ast.Sep (loc, a1, a2)) x xs
+
+  let default_struct_own (loc : Ast.loc) (fds : Mir.field_def_tr list)
+      (t : string) (v : string) =
+    let field_own_asns =
+      fds
+      |> List.map @@ fun (fd : Mir.field_def_tr) ->
+         let interp = Mir.interp_of fd.ty in
+         match
+           interp.own
+             (Ast.Var (loc, "t"))
+             (Ast.Select (loc, Ast.Var (loc, "v"), fd.name))
+         with
+         | Ok asn -> asn
+         | Error msg ->
+             Ast.static_error loc
+               (Printf.sprintf
+                  "Error while building default .own predicate conjunct for \
+                   field %s: %s"
+                  fd.name msg)
+               None
+    in
+    sep loc field_own_asns
+
+  let pointer_within_limits_asn loc l =
+    Ast.Operation
+      ( loc,
+        Eq,
+        [
+          Ast.CallExpr
+            (loc, "pointer_within_limits", [], [], [ Ast.LitPat l ], Ast.Static);
+          Ast.True loc;
+        ] )
+
+  let default_struct_share (loc : Ast.loc) (fds : Mir.field_def_tr list)
+      (k : string) (t : string) (l : string) =
+    let field_share_asns =
+      fds
+      |> List.map @@ fun (fd : Mir.field_def_tr) ->
+         let interp = Mir.interp_of fd.ty in
+         let lf =
+           Ast.AddressOf (loc, Read (loc, Ast.Var (loc, "l"), fd.name))
+         in
+         match interp.shr (Ast.Var (loc, "k")) (Ast.Var (loc, "t")) lf with
+         | Ok asn -> Ast.Sep (loc, pointer_within_limits_asn loc lf, asn)
+         | Error msg ->
+             Ast.static_error loc
+               (Printf.sprintf
+                  "Error while building default .share predicate conjunct for \
+                   field %s: %s"
+                  fd.name msg)
+               None
+    in
+    sep loc field_share_asns
+
   let translate_adt_def (ghost_decl_map : (string * Ast.decl) list)
       (ghost_decls : Ast.decl list) (trait_impls : trait_impl list)
       (adt_def_cpn : AdtDefRd.t) =
@@ -5582,11 +5638,22 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
            | _ -> []
       in
       let* full_bor_content, proof_obligs, delayed_proof_obligs, aux_decls' =
-        if is_local && AdtKindRd.get kind_cpn = StructKind then
+        if is_local && AdtKindRd.get kind_cpn = StructKind then (
           let user_provided_own_defs = user_provided_type_pred_defs_for "own" in
           let user_provided_share_defs =
             user_provided_type_pred_defs_for "share"
           in
+          let has_public_fields =
+            List.exists (fun x -> x.Mir.vis = Public) fds
+          in
+          if
+            has_public_fields
+            && (user_provided_own_defs <> [] || user_provided_share_defs <> [])
+          then
+            Ast.static_error def_loc
+              "User-provided .own or .share predicates for structs with public \
+               fields are not yet supported"
+              None;
           let field_types =
             variants_cpn
             |> Util.flatmap @@ fun variant_cpn ->
@@ -5853,12 +5920,18 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             (if user_provided_own_defs <> [] then []
              else
                [
-                 Ast.TypePredDef
-                   ( def_loc,
-                     vf_tparams,
-                     StructTypeExpr (def_loc, Some name, None, [], tparams_targs),
-                     "own",
-                     Right ([ "t"; "v" ], Some 2, False def_loc) );
+                 (let inputParamCount, body =
+                    if has_public_fields then
+                      (None, default_struct_own def_loc fds "t" "v")
+                    else (Some 2, False def_loc)
+                  in
+                  Ast.TypePredDef
+                    ( def_loc,
+                      vf_tparams,
+                      StructTypeExpr
+                        (def_loc, Some name, None, [], tparams_targs),
+                      "own",
+                      Right ([ "t"; "v" ], inputParamCount, body) ));
                ])
             @ [
                 Ast.TypePredDef
@@ -5872,12 +5945,17 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             if user_provided_share_defs <> [] then []
             else
               [
-                Ast.TypePredDef
-                  ( def_loc,
-                    vf_tparams,
-                    StructTypeExpr (def_loc, Some name, None, [], tparams_targs),
-                    "share",
-                    Right ([ "k"; "t"; "l" ], Some 3, True def_loc) );
+                (let inputParamCount, body =
+                   if has_public_fields then
+                     (None, default_struct_share def_loc fds "k" "t" "v")
+                   else (Some 3, True def_loc)
+                 in
+                 Ast.TypePredDef
+                   ( def_loc,
+                     vf_tparams,
+                     StructTypeExpr (def_loc, Some name, None, [], tparams_targs),
+                     "share",
+                     Right ([ "k"; "t"; "l" ], inputParamCount, body) ));
               ]
           in
           let delayed_proof_obligs =
@@ -6430,7 +6508,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               upcast_lemmas
               @ open_ref_init_perm_lemma :: init_ref_padding_lemma
                 :: close_ref_initialized_lemma :: open_ref_initialized_lemma
-                :: end_ref_padding_lemma :: type_pred_defs )
+                :: end_ref_padding_lemma :: type_pred_defs ))
         else Ok (None, [], [], [])
       in
       Ok

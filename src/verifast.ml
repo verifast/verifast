@@ -3005,7 +3005,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     match ps with
       [] -> cont h
     | (_, x, t, addr) :: ps ->
-      consume_points_to_chunk rules h env [] [] [] l t real_unit real_unit_pat addr RegularPointsTo dummypat $. fun chunk h _ value _ _ _ ->
+      consume_points_to_chunk_ rules h env [] [] [] l t real_unit real_unit_pat addr RegularPointsTo dummypat true $. fun chunk h _ value _ _ _ ->
       cleanup_heapy_locals_core (pn, ilist) l h env ps cont
     in
     match ps, varargsLastParam with
