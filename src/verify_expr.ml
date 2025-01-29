@@ -1566,7 +1566,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     eval_core assert_term (Some read_field) env e
   
-  type c_object_value = Unspecified | Default | Expr of expr | Term of termnode
+  type c_object_value = Unspecified | Default | Expr of expr | Term of termnode | MaybeUninitTerm of termnode
 
   let type_definitely_has_nonzero_size = function
     Bool | Int _ | Float | Double | LongDouble | PtrType _ | RustRefType _ -> true
@@ -1594,7 +1594,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         match init with
           Default -> cont h env (Some (match tp with PtrType _ -> null_pointer_term () | Bool -> false_term | _ -> ctxt#mk_intlit 0))
         | Expr e -> eval_h h env e $. fun h env value -> cont h env (Some value)
-        | Unspecified -> cont h env None
+        | Unspecified | MaybeUninitTerm _ -> cont h env None
         | Term t -> cont h env (Some t)
       end $. fun h env value ->
       produce_points_to_chunk_ l h tp coef addr RegularPointsTo value $. fun h ->
@@ -1679,6 +1679,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         in
         iter h env elemCount es $. fun h env elems ->
         produce_array_chunk h env false elemTp addr elems elemCount
+      | _, MaybeUninitTerm term ->
+          produce_array_chunk h env true elemTp addr term elemCount
       | _ ->
         let elems = get_unique_var_symb "elems" (list_type (if init = Unspecified then option_type elemTp else elemTp)) in
         begin fun cont ->
@@ -1706,7 +1708,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let tpenv = List.combine tparams targs in
       let producePaddingChunk = match language, dialect, fields with CLang, Some Rust, [] -> false | _ -> producePaddingChunk in
       let field_values_of_struct_as_value v =
-        let (_, csym, getters, _) = List.assoc sn struct_accessor_map in
+        let (_, csym, getters, _, _) = List.assoc sn struct_accessor_map in
         if getters = [] then ctxt#assert_term (ctxt#mk_eq v (ctxt#mk_app csym []));
         List.combine getters fields |> List.map begin fun ((_, getter), (f, (lf, gh, t, offset, finit))) ->
           prover_convert_term (ctxt#mk_app getter [v]) t (instantiate_type tpenv t)
@@ -1725,6 +1727,16 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | Term t -> cont h env (Some (Some (`Terms (field_values_of_struct_as_value t))))
         | Default -> cont h env (Some None) (* Initialize to default value (= zero) *)
         | Unspecified -> cont h env None (* Do not initialize; i.e. arbitrary initial value *)
+        | MaybeUninitTerm term ->
+          let (_, _, _, _, csym_opt) = List.assoc sn struct_accessor_map in
+          let _, _, Some (_, fields_map, _), _, _ = List.assoc sn structmap in
+          let field_terms = fields_map |> List.map (fun (field_name, (_, gh, field_type, _, _)) -> 
+            match gh with
+            | Real -> get_unique_var_symb_non_ghost field_name (option_type field_type)
+            | Ghost -> get_unique_var_symb_ field_name field_type true) 
+          in
+          assume_eq (ctxt#mk_app csym_opt field_terms) term @@ fun () ->
+          cont h env (Some (Some (`MaybeUninitTerms field_terms)))
       end $. fun h env inits ->
       begin fun cont ->
         match producePaddingChunk, padding_predsymb_opt with
@@ -1744,12 +1756,14 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | (f, (lf, gh, t0, offset, finit))::fields ->
           if gh = Ghost && not allowGhostFields then static_error l "Cannot produce a struct instance with ghost fields in this context." None;
           let t = instantiate_type tpenv t0 in
+          let pointsto_kind = match init with MaybeUninitTerm _ -> MaybeUninit | _ -> RegularPointsTo in 
           let has_nonempty_field = has_nonempty_field || type_definitely_has_nonzero_size t in
           let init, inits =
             if gh = Ghost then Unspecified, inits else
             match inits with
               Some (Some (`Exprs (e::es))) -> Expr e, Some (Some (`Exprs es))
             | Some (Some (`Terms (t::ts))) -> Term t, Some (Some (`Terms ts))
+            | Some (Some (`MaybeUninitTerms (t :: ts))) -> MaybeUninitTerm t, Some (Some (`MaybeUninitTerms ts))
             | Some (None | Some (`Exprs [] | `Terms [])) -> Default, Some None
             | _ -> Unspecified, None
           in
@@ -1776,9 +1790,12 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 end
               | Expr e -> eval_h h env e (fun h env v -> cont h env (Some v))
               | Term t -> cont h env (Some t)
+              | MaybeUninitTerm t -> 
+                let t = prover_convert_term t t0 (instantiate_type tpenv t0) in
+                cont h env (Some t)
               | Unspecified -> cont h env (match gh with Ghost -> Some (get_unique_var_symb_ "value" t true) | Real -> None)
             end $. fun h env value ->
-            assume_field h env sn tparams f t0 targs gh addr RegularPointsTo value coef $. fun h ->
+            assume_field h env sn tparams f t0 targs gh addr pointsto_kind value coef $. fun h ->
             iter h env has_nonempty_field fields inits
       in
       iter h env false fields inits
@@ -1841,30 +1858,33 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let rec iter chunks vs h fields =
         match fields with
           [] ->
-          let (_, csym, _, _) = List.assoc sn struct_accessor_map in
-          cont chunks h (Some (if consumeUninitChunk then real_unit (* dummy term; should never be used *) else ctxt#mk_app csym (List.rev vs)))
+          let (_, csym, _, _, csym_opt) = List.assoc sn struct_accessor_map in
+          let csym_symb = if consumeUninitChunk then csym_opt else csym in
+          let struct_val = ctxt#mk_app csym_symb (List.rev vs) in
+          cont chunks h (Some struct_val)
         | (f, (lf, gh, t0, offset, finit))::fields ->
           let t = instantiate_type tpenv t0 in
           match t with
             StaticArrayType (_, _) | StructType _ | UnionType _ ->
             consume_c_object_core_core l coefpat (field_address l typeid_env addr sn targs f) t h typeid_env true consumeUninitChunk $. fun chunks' h (Some value) ->
-            let value =
-              if consumeUninitChunk then value else prover_convert_term value t t0
-            in
+            let value = if consumeUninitChunk then value else prover_convert_term value t t0 in
             iter (chunks' @ chunks) (value::vs) h fields
           | _ ->
-             let (_, (_, _, _, _, f_symb, _, _)), p__opt = List.assoc (sn, f) field_pred_map in
-             let f_symb_used =
-               match consumeUninitChunk, p__opt with
-                 true, Some (_, (_, _, _, _, f_symb_, _, _)) ->
-                 f_symb_
-               | _ -> f_symb
-             in
-             consume_chunk rules h typeid_env [] [] [] l (f_symb_used, true) targs real_unit coefpat (Some 1) [TermPat addr; dummypat] $. fun chunk h coef [_; value] size ghostenv env env' ->
-             let value =
-               if consumeUninitChunk then value else prover_convert_term value t t0
-             in
-             iter (chunk::chunks) (value::vs) h fields
+            let (_, (_, _, _, _, f_symb, _, _)), p__opt = List.assoc (sn, f) field_pred_map in
+            let f_symb_is_maybe_uninit, f_symb_used =
+              match consumeUninitChunk, p__opt with
+                true, Some (_, (_, _, _, _, f_symb_, _, _)) ->
+                true, f_symb_
+              | _ -> false, f_symb
+            in
+            consume_chunk rules h typeid_env [] [] [] l (f_symb_used, true) targs real_unit coefpat (Some 1) [TermPat addr; dummypat] $. fun chunk h coef [_; value] size ghostenv env env' ->
+            let value =
+              match consumeUninitChunk, f_symb_is_maybe_uninit, gh with
+              | true, true, Real -> value
+              | true, false, Real -> mk_some t value
+              | _ -> prover_convert_term value t t0
+            in
+            iter (chunk::chunks) (value::vs) h fields
       in
       iter chunks [] h fields
     | _ ->
@@ -2442,7 +2462,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | WSelect (l, w, fparent, tparams, fname, tp, targs) ->
         let tpenv = List.combine tparams targs in
         let tp' = instantiate_type tpenv tp in
-        let (_, _, getters, setters) = List.assoc fparent struct_accessor_map in
+        let (_, _, getters, setters, _) = List.assoc fparent struct_accessor_map in
         let getter = List.assoc fname getters in
         let setter = List.assoc fname setters in
         lhs_to_lvalue h env w $. fun h env w ->

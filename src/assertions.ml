@@ -139,10 +139,10 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let ((_, (_, _, _, _, symb, _, _)), p__opt) = List.assoc (fparent, fname) field_pred_map in
     let tpenv = List.combine tparams targs in
     let frange = instantiate_type tpenv frange in
-    if fghost = Real then begin
-      match tv with
-        Some tv -> assume_bounds tv frange
-      | None -> ()
+    begin match fghost, tv, kind with
+    | Real, Some tv, RegularPointsTo -> assume_bounds tv frange
+    | Real, Some tv, MaybeUninit -> assume_bounds tv (option_type frange)
+    | _ -> ()
     end;
     (* automatic generation of t1 != t2 if t1.f |-> _ &*& t2.f |-> _ *)
     begin fun cont ->
@@ -846,7 +846,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             in
             prover_convert_term v tp' tp
           in
-          let (_, csym, _, _) = List.assoc sn struct_accessor_map in
+          let (_, csym, _, _, _) = List.assoc sn struct_accessor_map in
           ctxt#mk_app csym vs
       end
     | _ ->
@@ -2275,7 +2275,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           None -> cont None
         | Some ((coef, v), h) ->
           let tpenv = List.combine tparams wanted_targs in
-          let (_, _, getters, _) = List.assoc sn struct_accessor_map in
+          let (_, _, getters, _, _) = List.assoc sn struct_accessor_map in
           let chunks = List.map2 begin fun (fn', (_, Real, ft', _, _)) (_, getter) ->
             let fv = prover_convert_term (ctxt#mk_app getter [v]) ft' (instantiate_type tpenv ft') in
             let ((_, (_, _, _, _, symb', _, _)), _) = List.assoc (sn, fn') field_pred_map in
@@ -2359,7 +2359,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             with
               None -> cont None
             | Some ((coef, v), h) ->
-              let (_, csym, _, _) = List.assoc sn struct_accessor_map in
+              let (_, csym, _, _, _) = List.assoc sn struct_accessor_map in
               cont (Some (Chunk ((generic_points_to_symb (), true), [wanted_targ], coef, [structPointerTerm; ctxt#mk_app csym [v]], None)::h))
             end
           | _ ->
@@ -2374,7 +2374,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             | Some (coef, h) ->
               let rec iter h vs = function
                 [] ->
-                let (_, csym, _, _) = List.assoc sn struct_accessor_map in
+                let (_, csym, _, _, _) = List.assoc sn struct_accessor_map in
                 cont (Some (Chunk ((generic_points_to_symb (), true), [wanted_targ], coef, [structPointerTerm; ctxt#mk_app csym (List.rev vs)], None)::h))
               | (fn, (_, Real, ft, _, _))::fds ->
                 let ((_, (_, _, _, _, symb, _, _)), _) = List.assoc (sn, fn) field_pred_map in

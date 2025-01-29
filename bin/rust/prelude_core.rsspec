@@ -140,7 +140,14 @@ fix has_type(p: *_, typeid_: *_) -> bool;
 
 fix ptr_add_(p: pointer, offset: i32, elemTypeid: *_) -> pointer {
     ptr_add(p, offset * std::mem::size_of(elemTypeid))
-}   
+}
+
+fix u8s__of<T>(v: T) -> list<option<u8>>;
+fix of_u8s_<T>(cs: list<option<u8>>) -> T;
+
+lem_auto(of_u8s_::<T>(u8s__of::<T>(v as T))) of_u8s__u8s__of<T>(v: T);
+req true;
+ens of_u8s_::<T>(u8s__of::<T>(v)) == v;
 
 pred points_to_<t>(p: *t; v: option<t>);
 pred points_to<t>(p: *t; v: t) = points_to_::<t>(p, some(v));

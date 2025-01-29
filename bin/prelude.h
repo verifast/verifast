@@ -360,6 +360,13 @@ predicate chars(char *array, int count; list<char> cs) =
     :
         character(array, ?c) &*& chars(array + 1, count - 1, ?cs0) &*& cs == cons(c, cs0);
 
+fixpoint list<option<char> > chars__of<t>(void *typeId, t v);
+fixpoint t of_chars_<t>(void *typeId, list<option<char> > cs);
+
+lemma_auto(of_chars_<t>(typeId, chars__of<t>(typeId, v))) void of_chars__chars__of<t>(void *typeId, t v);
+requires true;
+ensures of_chars_<t>(typeId, chars__of<t>(typeId, v)) == v;
+
 lemma_auto void chars_to_chars_(char *array);
     requires [?f]chars(array, ?count, ?cs);
     ensures [f]chars_(array, count, map(some, cs));
