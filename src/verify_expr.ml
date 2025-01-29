@@ -1777,7 +1777,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             begin fun cont ->
               match init with
                 Default ->
-                cont h env t0 begin Some
+                cont h env begin Some
                 begin match provertype_of_type t with
                   ProverBool -> ctxt#mk_false
                 | ProverInt -> ctxt#mk_intlit 0
@@ -1788,13 +1788,13 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   | _ -> get_unique_var_symb_ "value" t (gh = Ghost)
                 end
                 end
-              | Expr e -> eval_h h env e (fun h env v -> cont h env t0 (Some v))
-              | Term t -> cont h env t0 (Some t)
+              | Expr e -> eval_h h env e (fun h env v -> cont h env (Some v))
+              | Term t -> cont h env (Some t)
               | MaybeUninitTerm t -> 
                 let t = prover_convert_term t t0 (instantiate_type tpenv t0) in
-                cont h env (option_type t0) (Some t)
-              | Unspecified -> cont h env t0 (match gh with Ghost -> Some (get_unique_var_symb_ "value" t true) | Real -> None)
-            end $. fun h env t0 value ->
+                cont h env (Some t)
+              | Unspecified -> cont h env (match gh with Ghost -> Some (get_unique_var_symb_ "value" t true) | Real -> None)
+            end $. fun h env value ->
             assume_field h env sn tparams f t0 targs gh addr pointsto_kind value coef $. fun h ->
             iter h env has_nonempty_field fields inits
       in
@@ -1867,7 +1867,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           match t with
             StaticArrayType (_, _) | StructType _ | UnionType _ ->
             consume_c_object_core_core l coefpat (field_address l typeid_env addr sn targs f) t h typeid_env true consumeUninitChunk $. fun chunks' h (Some value) ->
-            let value = prover_convert_term value t t0 in
+            let value = if consumeUninitChunk then value else prover_convert_term value t t0 in
             iter (chunks' @ chunks) (value::vs) h fields
           | _ ->
             let (_, (_, _, _, _, f_symb, _, _)), p__opt = List.assoc (sn, f) field_pred_map in
