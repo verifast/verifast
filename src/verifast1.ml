@@ -6079,6 +6079,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       end
     in
     let packed = List.mem Packed attrs in
+    let repr_c = dialect <> Some Rust || List.mem ReprC attrs in
     assume_axiom (fun _ _ s -> (sn ^ "_size_limits", s, ctxt#mk_and (ctxt#mk_lt (ctxt#mk_intlit 0) s) (ctxt#mk_le s max_uintptr_term)));
     match body_opt with
     | Some (_, fmap, _) ->
@@ -6086,7 +6087,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         begin match fields with
         | [] -> if packed then assume_axiom (fun targs_env targs s -> (sn ^ "_packed_size", s, ctxt#mk_eq s (current targs_env)))
         | (f, (lf, Real, t, Some offset_func, init))::fs ->
-          if is_first && (fs = [] || dialect <> Some Rust) || packed then
+          if is_first && (fs = [] || repr_c) || packed then
             assume_axiom begin fun targs_env targs s ->
               let offset = ctxt#mk_app offset_func targs in
               (sn ^ "_" ^ f ^ "_packed_offset", offset, ctxt#mk_eq offset (current targs_env))

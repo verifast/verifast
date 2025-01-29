@@ -1026,6 +1026,7 @@ and
 and
   struct_attr =
   | Packed
+  | ReprC
 and constant_value = (* ?constant_value *)
   IntConst of big_int
 | BoolConst of bool
