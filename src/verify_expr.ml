@@ -1594,8 +1594,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         match init with
           Default -> cont h env (Some (match tp with PtrType _ -> null_pointer_term () | Bool -> false_term | _ -> ctxt#mk_intlit 0))
         | Expr e -> eval_h h env e $. fun h env value -> cont h env (Some value)
-        | Unspecified -> cont h env None
-        | Term t | MaybeUninitTerm t -> cont h env (Some t)
+        | Unspecified | MaybeUninitTerm _ -> cont h env None
+        | Term t -> cont h env (Some t)
       end $. fun h env value ->
       produce_points_to_chunk_ l h tp coef addr RegularPointsTo value $. fun h ->
       cont h env
