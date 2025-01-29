@@ -139,10 +139,10 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let ((_, (_, _, _, _, symb, _, _)), p__opt) = List.assoc (fparent, fname) field_pred_map in
     let tpenv = List.combine tparams targs in
     let frange = instantiate_type tpenv frange in
-    if fghost = Real then begin
-      match tv with
-        Some tv -> assume_bounds tv frange
-      | None -> ()
+    begin match fghost, tv, kind with
+    | Real, Some tv, RegularPointsTo -> assume_bounds tv frange
+    | Real, Some tv, MaybeUninit -> assume_bounds tv (option_type frange)
+    | _ -> ()
     end;
     (* automatic generation of t1 != t2 if t1.f |-> _ &*& t2.f |-> _ *)
     begin fun cont ->

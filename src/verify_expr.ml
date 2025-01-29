@@ -1864,16 +1864,10 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           cont chunks h (Some struct_val)
         | (f, (lf, gh, t0, offset, finit))::fields ->
           let t = instantiate_type tpenv t0 in
-          let prover_convert_term_as_option_types term =
-            prover_convert_term term (option_type t) (option_type t0) 
-          in
           match t with
             StaticArrayType (_, _) | StructType _ | UnionType _ ->
             consume_c_object_core_core l coefpat (field_address l typeid_env addr sn targs f) t h typeid_env true consumeUninitChunk $. fun chunks' h (Some value) ->
-            let value =
-              if consumeUninitChunk then prover_convert_term_as_option_types value
-              else prover_convert_term value t t0
-            in
+            let value = prover_convert_term value t t0 in
             iter (chunks' @ chunks) (value::vs) h fields
           | _ ->
             let (_, (_, _, _, _, f_symb, _, _)), p__opt = List.assoc (sn, f) field_pred_map in
@@ -1886,10 +1880,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             consume_chunk rules h typeid_env [] [] [] l (f_symb_used, true) targs real_unit coefpat (Some 1) [TermPat addr; dummypat] $. fun chunk h coef [_; value] size ghostenv env env' ->
             let value =
               match consumeUninitChunk, f_symb_is_maybe_uninit, gh with
-              | true, true, Real -> prover_convert_term_as_option_types value
-              | true, false, Real -> 
-                let some_value = mk_some t value in
-                prover_convert_term_as_option_types some_value
+              | true, true, Real -> value
+              | true, false, Real -> mk_some t value
               | _ -> prover_convert_term value t t0
             in
             iter (chunk::chunks) (value::vs) h fields
