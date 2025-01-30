@@ -12,7 +12,6 @@ alloc_block_(result); @*/
         handle_alloc_error(l);
     }
     *p = v;
-    //@ open array_(_, _, _);
     p
 }
 
