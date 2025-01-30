@@ -176,6 +176,9 @@ mod mem {
     
     struct MaybeUninit<T>;
     
+    //@ fix MaybeUninit::inner<T>(v: MaybeUninit<T>) -> option<T>;
+    //@ fix MaybeUninit::new_<T>(v: T) -> MaybeUninit<T>;
+    
     mod verifast {
     
         fn unfreeze<T>(ptr: *T);
@@ -212,6 +215,13 @@ mod ptr {
         ens NonNull_ptr(v) as usize != 0;
         
     fix NonNull_ptr<_T>(v: NonNull<_T>) -> *_T;
+    
+    // If ptr is 0, the result of NonNull::new_ is unspecified. (It is never the case that NonNull_ptr(nnp) == 0.)
+    fix NonNull::new_<T>(ptr: *T) -> NonNull<T>;
+    
+    lem NonNull_ptr_new<T>(ptr: *T);
+        req ptr != 0;
+        ens NonNull_ptr(NonNull::new_(ptr)) == ptr;
     
     lem NonNull_upcast<T0, T1>(v: NonNull<T0>);
         req true;

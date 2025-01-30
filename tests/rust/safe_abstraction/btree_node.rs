@@ -48,6 +48,11 @@ use core::slice::SliceIndex;
 use core::alloc::{Allocator, Layout};
 use core::boxed::Box;
 
+//@ use std::ptr::{NonNull, NonNull_ptr, NonNull_new_};
+//@ use std::option::Option;
+//@ use std::mem::{MaybeUninit, MaybeUninit_inner};
+//@ use std::alloc::{Layout, alloc_block_in};
+
 mod btree_mem {
 
     use core::intrinsics;
@@ -95,6 +100,9 @@ pub const MIN_LEN_AFTER_SPLIT: usize = B - 1;
 const KV_IDX_CENTER: usize = B - 1;
 const EDGE_IDX_LEFT_OF_CENTER: usize = B - 1;
 const EDGE_IDX_RIGHT_OF_CENTER: usize = B;
+
+//@ fix B() -> usize { 6 }
+//@ fix CAPACITY() -> usize { 2*B - 1 }
 
 /// The underlying representation of leaf nodes and part of the representation of internal nodes.
 struct LeafNode<K, V> {
@@ -178,6 +186,150 @@ impl<K, V> InternalNode<K, V> {
 /// is not a separate type and has no destructor.
 type BoxedNode<K, V> = NonNull<LeafNode<K, V>>;
 
+/*@
+
+inductive tree<K, V> =
+    empty
+  | tree(root: *LeafNode<K, V>, children: list<tree<K, V>>);
+
+fix kv_ptrs_of_children<K, V>(kv_ptrs_of_subtree: fix(child: tree<K, V>, list<pair<*K, *V>>) req child < children, node: *LeafNode<K, V>, idx: u16, children: list<tree<K, V>>) -> list<pair<*K, *V>> {
+    match children {
+        nil => [],
+        cons(child, children0) =>
+            cons(pair(&(*node).keys[idx] as *K, &(*node).vals[idx] as *V), append(kv_ptrs_of_subtree(child), kv_ptrs_of_children(kv_ptrs_of_subtree, node, idx + 1, children0)))
+    }
+}
+
+fix kv_ptrs_of_subtree<K, V>(tree: tree<K, V>) -> list<pair<*K, *V>> {
+    match tree {
+        empty => [],
+        tree(node, children) =>
+            match children {
+                nil => [],
+                cons(child, children0) =>
+                    append(kv_ptrs_of_subtree(child), kv_ptrs_of_children(kv_ptrs_of_subtree, node, 0, children0))
+            }
+    }
+}
+
+// Asserts ownership of the subtree rooted in the given node, minus the memory storing the (initialized) keys and values.
+pred subtree<K, V>(
+    alloc_id: any,
+    root: *LeafNode<K, V>,
+    height: usize;
+    tree: tree<K, V>,
+    parent: Option<NonNull<InternalNode<K, V>>>,
+    parent_idx: MaybeUninit<u16>
+) =
+    (*root).parent |-> parent &*&
+    (*root).parent_idx |-> parent_idx &*&
+    (*root).len |-> ?len &*& len <= CAPACITY &*&
+    (*root).keys[len..CAPACITY] |-> _ &*&
+    (*root).vals[len..CAPACITY] |-> _ &*&
+    struct_LeafNode_padding(root) &*&
+    if height == 0 {
+        tree == tree(root, repeat(nat_of_int(len + 1), empty)) &*&
+        alloc_block_in(alloc_id, root as *u8, Layout::new_::<LeafNode<K, V>>())
+    } else {
+        1 <= height &*&
+        (*(root as *InternalNode<K, V>)).edges[..len + 1] |-> ?edges &*&
+        (*(root as *InternalNode<K, V>)).edges[len + 1..2*B] |-> _ &*&
+        edges(alloc_id, root as *InternalNode<K, V>, height, 0, edges, ?children) &*&
+        tree == tree(root, children) &*&
+        struct_InternalNode_padding(root as *InternalNode<K, V>) &*&
+        alloc_block_in(alloc_id, root as *u8, Layout::new_::<InternalNode<K, V>>())
+    };
+
+pred edges<K, V>(
+    alloc_id: any,
+    root: *InternalNode<K, V>,
+    height: usize,
+    idx: u16,
+    edges: list<MaybeUninit<NonNull<LeafNode<K, V>>>>;
+    children: list<tree<K, V>>
+) =
+    match edges {
+        nil => children == nil,
+        cons(edge, edges0) =>
+            MaybeUninit::inner(edge) == some(?edge_nnp) &*& wrap(NonNull_ptr(edge_nnp)) == wrap(?edge_ptr) &*&
+            subtree(alloc_id, edge_ptr, height - 1, ?child, Option::Some(NonNull::new_(root)), MaybeUninit::new_(idx)) &*&
+            edges(alloc_id, root, height, idx + 1, edges0, ?children0) &*&
+            children == cons(child, children0)
+    };
+
+inductive context<K, V> =
+    root_ctx
+  | child_ctx(parent: *InternalNode<K, V>, parent_ctx: context<K, V>, left_siblings: list<tree<K, V>>, right_siblings: list<tree<K, V>>);
+
+fix left_kv_ptrs_of_ctx<K, V>(ctx: context<K, V>) -> list<pair<*K, *V>> {
+    match ctx {
+        root_ctx => [],
+        child_ctx(parent, parent_ctx, left_siblings, right_siblings) =>
+            append(left_kv_ptrs_of_ctx(parent_ctx),
+                match left_siblings {
+                    nil => [],
+                    cons(left_sibling, left_siblings0) =>
+                        append(kv_ptrs_of_subtree(left_sibling),
+                            append(kv_ptrs_of_children(kv_ptrs_of_subtree, parent as *LeafNode<K, V>, 0, left_siblings0),
+                                [pair(&(*parent).data.keys[length(left_siblings0)] as *K, &(*parent).data.vals[length(left_siblings0)] as *V)]))
+                })
+    }
+}
+
+fix right_kv_ptrs_of_ctx<K, V>(ctx: context<K, V>) -> list<pair<*K, *V>> {
+    match ctx {
+        root_ctx => [],
+        child_ctx(parent, parent_ctx, left_siblings, right_siblings) =>
+            append(
+                kv_ptrs_of_children(kv_ptrs_of_subtree, parent as *LeafNode<K, V>, length(left_siblings), right_siblings),
+                right_kv_ptrs_of_ctx(parent_ctx))
+    }
+}
+
+fix kv_ptrs_of_tree<K, V>(subtree: tree<K, V>, ctx: context<K, V>) -> list<pair<*K, *V>> {
+    append(left_kv_ptrs_of_ctx(ctx), append(kv_ptrs_of_subtree(subtree), right_kv_ptrs_of_ctx(ctx)))
+}
+
+// Asserts ownership of the node context (= a tree minus some subtree) reachable from the given parent pointer,
+// minus the memory storing the (initialized) keys and values.
+pred context<K, V>(alloc_id: any, node: *LeafNode<K, V>, height: usize, parent: Option<NonNull<InternalNode<K, V>>>, parent_idx: MaybeUninit<u16>; ctx: context<K, V>) =
+    match parent {
+        Option::None => ctx == root_ctx,
+        Option::Some(parent_nnp) =>
+            MaybeUninit::inner(parent_idx) == some(?idx) &*&
+            wrap(NonNull_ptr(parent_nnp)) == wrap(?parent_ptr) &*&
+            (*parent_ptr).data.parent |-> ?grandparent &*&
+            (*parent_ptr).data.parent_idx |-> ?grandparent_idx &*&
+            (*parent_ptr).data.len |-> ?len &*& len <= CAPACITY &*&
+            (*parent_ptr).data.keys[len..CAPACITY] |-> _ &*&
+            (*parent_ptr).data.vals[len..CAPACITY] |-> _ &*&
+            struct_LeafNode_padding(&(*parent_ptr).data) &*&
+            idx <= len &*&
+            (*parent_ptr).edges[..idx] |-> ?leftEdges &*&
+            (*parent_ptr).edges[idx] |-> ?node_edge &*&
+            MaybeUninit::inner(node_edge) == some(?node_nnp) &*&
+            node == NonNull_ptr(node_nnp) &*&
+            (*parent_ptr).edges[idx + 1..len + 1] |-> ?rightEdges &*&
+            (*parent_ptr).edges[len + 1..2*B] |-> _ &*&
+            struct_InternalNode_padding(parent_ptr) &*&
+            alloc_block_in(alloc_id, parent_ptr as *u8, Layout::new_::<InternalNode<K, V>>()) &*&
+            edges(alloc_id, parent_ptr, height + 1, 0, leftEdges, ?leftSiblings) &*&
+            edges(alloc_id, parent_ptr, height + 1, idx + 1, rightEdges, ?rightSiblings) &*&
+            context(alloc_id, &(*parent_ptr).data, height + 1, grandparent, grandparent_idx, ?parent_ctx) &*&
+            ctx == child_ctx(parent_ptr, parent_ctx, leftSiblings, rightSiblings)
+    };
+
+// Asserts ownership of the entire tree to which given node belongs,
+// minus the memory storing the (initialized) keys and values.
+pred tree<K, V>(alloc_id: any, node: *LeafNode<K, V>, height: usize; subtree: tree<K, V>, ctx: context<K, V>) =
+    subtree(alloc_id, node, height, subtree, ?parent, ?parent_idx) &*&
+    context(alloc_id, node, height, parent, parent_idx, ctx);
+
+pred_ctor tree_frac_borrow_content<K, V>(alloc_id: any, node: *LeafNode<K, V>, height: usize, subtree: tree<K, V>, ctx: context<K, V>)(;) =
+    tree(alloc_id, node, height, subtree, ctx);
+
+@*/
+
 // N.B. `NodeRef` is always covariant in `K` and `V`, even when the `BorrowType`
 // is `Mut`. This is technically wrong, but cannot result in any unsafety due to
 // internal use of `NodeRef` because we stay completely generic over `K` and `V`.
@@ -241,6 +393,76 @@ pub struct NodeRef<BorrowType, K, V, Type> {
     node: NonNull<LeafNode<K, V>>,
     _marker: PhantomData<(BorrowType, Type)>,
 }
+
+/*@
+
+inductive node_borrow_type =
+    immut(lifetime_t)
+  | val_mut(lifetime_t)
+  | mut_(lifetime_t)
+  | owned
+  | dying
+  | dormant_mut;
+
+fix borrow_type_of<T>() -> node_borrow_type;
+
+lem_auto borrow_type_of_Immut<'a>()
+    req true;
+    ens borrow_type_of::<marker::Immut<'a>>() == immut('a);
+{ assume(false); }
+
+lem_auto borrow_type_of_val_mut<'a>()
+    req true;
+    ens borrow_type_of::<marker::ValMut<'a>>() == val_mut('a);
+{ assume(false); }
+
+lem_auto borrow_type_of_mut<'a>()
+    req true;
+    ens borrow_type_of::<marker::Mut<'a>>() == mut_('a);
+{ assume(false); }
+
+lem_auto borrow_type_of_owned()
+    req true;
+    ens borrow_type_of::<marker::Owned>() == owned;
+{ assume(false); }
+
+lem_auto borrow_type_of_dying()
+    req true;
+    ens borrow_type_of::<marker::Dying>() == dying;
+{ assume(false); }
+
+lem_auto borrow_type_of_dormant()
+    req true;
+    ens borrow_type_of::<marker::DormantMut>() == dormant_mut;
+{ assume(false); }
+
+pred_ctor share_<T>(k: lifetime_t, t: thread_id_t)(l: *T) = [_](<T>.share(k, t, l));
+pred_ctor full_borrow__<T>(k: lifetime_t, t: thread_id_t)(l: *T) = full_borrow(k, <T>.full_borrow_content(t, l));
+
+pred NodeRef<BorrowType, K, V, Type>(t: thread_id_t, alloc_id: any, r: NodeRef<BorrowType, K, V, Type>, subtree: tree<K, V>, ctx: context<K, V>, values_borrowed: list<*V>) =
+    match borrow_type_of::<BorrowType>() {
+        immut(k) =>
+            values_borrowed == [] &*&
+            [_]frac_borrow(k, tree_frac_borrow_content(alloc_id, NonNull_ptr(r.node), r.height, subtree, ctx)) &*&
+            foreach(map(fst, kv_ptrs_of_tree(subtree, ctx)), share_(k, t)) &*&
+            foreach(map(snd, kv_ptrs_of_tree(subtree, ctx)), share_(k, t)),
+        val_mut(k) =>
+            [_]frac_borrow(k, tree_frac_borrow_content(alloc_id, NonNull_ptr(r.node), r.height, subtree, ctx)) &*&
+            foreach(map(fst, kv_ptrs_of_tree(subtree, ctx)), share_(k, t)) &*&
+            foreach(remove_all(values_borrowed, map(snd, kv_ptrs_of_tree(subtree, ctx))), full_borrow__(k, t)),
+        mut_(k) =>
+            values_borrowed == [] &*&
+            full_borrow(k, tree_frac_borrow_content(alloc_id, NonNull_ptr(r.node), r.height, subtree, ctx)) &*&
+            foreach(map(fst, kv_ptrs_of_tree(subtree, ctx)), full_borrow__(k, t)) &*&
+            foreach(map(snd, kv_ptrs_of_tree(subtree, ctx)), full_borrow__(k, t)),
+        owned =>
+            values_borrowed == [] &*&
+            tree(alloc_id, NonNull_ptr(r.node), r.height, subtree, ctx),
+        dying => false, // TODO
+        dormant_mut => false,
+    };           
+
+@*/
 
 /// The root node of an owned tree.
 ///

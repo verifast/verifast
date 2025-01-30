@@ -181,4 +181,12 @@ lem foreach_append<t>(xs: list<t>, ys: list<t>);
     req foreach(xs, ?p) &*& foreach(ys, p);
     ens foreach(append(xs, ys), p);
 
+// Removes the first occurrence of x from xs.
+fix remove<t>(x: t, xs: list<t>) -> list<t> {
+    match xs {
+        nil => nil,
+        cons(x0, xs0) => if x0 == x { xs0 } else { cons(x0, remove(x, xs0)) }
+    }
+}
+
 @*/
