@@ -1,5 +1,6 @@
 include!{"prelude_core_core.rsspec"}
 include!{"list.rsspec"}
+include!{"nat.rsspec"}
 include!{"listex.rsspec"}
 
 /*@

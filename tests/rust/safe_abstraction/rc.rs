@@ -30,8 +30,6 @@ pred_ctor rc_na_inv<T>(dk: lifetime_t, gid: usize, ptr: *RcBox<T>, t: thread_id_
         borrow_end_token(dk, <T>.full_borrow_content(t, &(*ptr).value))
     };
 
-inductive wrap<t> = wrap(t);
-
 pred<T> <Rc<T>>.own(t, rc) =
     wrap::<*RcBox<T>>(std::ptr::NonNull_ptr(rc.ptr)) == wrap(?ptr) &*& ref_origin(ptr) == ptr &*&
     ptr as usize != 0 &*&

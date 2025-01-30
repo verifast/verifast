@@ -11,4 +11,18 @@ fix fold_left<a, b>(x0: a, f: fix(a, b, a), xs: list<b>) -> a {
     }
 }
 
+fix remove_all<t>(xs: list<t>, ys: list<t>) -> list<t> {
+    match xs {
+        nil => ys,
+        cons(x, xs0) => remove(x, remove_all(xs0, ys))
+    }
+}
+
+fix repeat<t>(n: nat, x: t) -> list<t> {
+    match n {
+        zero => nil,
+        succ(n0) => cons(x, repeat(n0, x))
+    }
+}
+
 @*/
