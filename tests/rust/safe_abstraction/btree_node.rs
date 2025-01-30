@@ -192,32 +192,62 @@ inductive tree<K, V> =
     empty
   | tree(root: *LeafNode<K, V>, children: list<tree<K, V>>);
 
-fix kv_ptrs_of_children<K, V>(kv_ptrs_of_subtree: fix(child: tree<K, V>, list<pair<*K, *V>>) req child < children, node: *LeafNode<K, V>, idx: u16, children: list<tree<K, V>>) -> list<pair<*K, *V>> {
+fix kv_ptrs_of_children<K, V>(
+    kv_ptrs_of_subtree: fix(child: tree<K, V>, range_start_: list<u16>, range_end_: list<u16>, list<pair<*K, *V>>) req child < children,
+    node: *LeafNode<K, V>,
+    idx: u16,
+    children: list<tree<K, V>>,
+    start_idx: u16,
+    range_start: list<u16>,
+    end_idx: u16,
+    range_end: list<u16>
+) -> list<pair<*K, *V>> {
     match children {
         nil => [],
         cons(child, children0) =>
-            cons(pair(&(*node).keys[idx] as *K, &(*node).vals[idx] as *V), append(kv_ptrs_of_subtree(child), kv_ptrs_of_children(kv_ptrs_of_subtree, node, idx + 1, children0)))
-    }
-}
-
-fix kv_ptrs_of_subtree<K, V>(tree: tree<K, V>) -> list<pair<*K, *V>> {
-    match tree {
-        empty => [],
-        tree(node, children) =>
-            match children {
-                nil => [],
-                cons(child, children0) =>
-                    append(kv_ptrs_of_subtree(child), kv_ptrs_of_children(kv_ptrs_of_subtree, node, 0, children0))
+            if idx < start_idx {
+                kv_ptrs_of_children(kv_ptrs_of_subtree, node, idx + 1, children0, start_idx, range_start, end_idx, range_end)
+            } else if idx <= end_idx {
+                append(
+                    kv_ptrs_of_subtree(child, if idx == start_idx { range_start } else { [] }, if idx == end_idx { range_end } else { [] }),
+                    if idx < end_idx {
+                        cons(
+                            pair(&(*node).keys[idx] as *K, &(*node).vals[idx] as *V),
+                            kv_ptrs_of_children(kv_ptrs_of_subtree, node, idx + 1, children0, start_idx, range_start, end_idx, range_end))
+                    } else {
+                        []
+                    })
+            } else {
+                []
             }
     }
 }
 
+fix kv_ptrs_of_subtree<K, V>(
+    tree: tree<K, V>,
+    range_start: list<u16>,
+    range_end: list<u16>
+) -> list<pair<*K, *V>> {
+    match tree {
+        empty => [],
+        tree(node, children) =>
+            kv_ptrs_of_children(kv_ptrs_of_subtree, node, 0, children,
+                if range_start == [] { 0 } else { head(range_start) },
+                tail(range_start),
+                if range_end == [] { length(children) - 1 } else { head(range_end) },
+                tail(range_end))
+    }
+}
+
 // Asserts ownership of the subtree rooted in the given node, minus the memory storing the (initialized) keys and values.
+// Asserts ownership only of the descendant nodes between `range_start` and `range_end`.
 pred subtree<K, V>(
     alloc_id: any,
     root: *LeafNode<K, V>,
-    height: usize;
+    height: usize,
     tree: tree<K, V>,
+    range_start: list<u16>,
+    range_end: list<u16>;
     parent: Option<NonNull<InternalNode<K, V>>>,
     parent_idx: MaybeUninit<u16>
 ) =
@@ -234,8 +264,20 @@ pred subtree<K, V>(
         1 <= height &*&
         (*(root as *InternalNode<K, V>)).edges[..len + 1] |-> ?edges &*&
         (*(root as *InternalNode<K, V>)).edges[len + 1..2*B] |-> _ &*&
-        edges(alloc_id, root as *InternalNode<K, V>, height, 0, edges, ?children) &*&
-        tree == tree(root, children) &*&
+        match tree {
+            empty => false,
+            tree(root0, children) =>
+                root0 == root &*&
+                match range_start {
+                    nil => pair(0, []),
+                    cons(start_idx, range_start0) => pair(start_idx, range_start0)
+                } == pair(?start_idx, ?range_start0) &*&
+                match range_end {
+                    nil => pair(len, []),
+                    cons(end_idx, range_end0) => pair(end_idx, range_end0)
+                } == pair(?end_idx, ?range_end0) &*&
+                edges(alloc_id, root as *InternalNode<K, V>, height, 0, edges, children, start_idx, range_start0, end_idx, range_end0)
+        } &*&
         struct_InternalNode_padding(root as *InternalNode<K, V>) &*&
         alloc_block_in(alloc_id, root as *u8, Layout::new_::<InternalNode<K, V>>())
     };
@@ -245,59 +287,145 @@ pred edges<K, V>(
     root: *InternalNode<K, V>,
     height: usize,
     idx: u16,
-    edges: list<MaybeUninit<NonNull<LeafNode<K, V>>>>;
-    children: list<tree<K, V>>
+    edges: list<MaybeUninit<NonNull<LeafNode<K, V>>>>,
+    children: list<tree<K, V>>,
+    start_idx: u16,
+    range_start0: list<u16>,
+    end_idx: u16,
+    range_end0: list<u16>;
 ) =
     match edges {
         nil => children == nil,
         cons(edge, edges0) =>
-            MaybeUninit::inner(edge) == some(?edge_nnp) &*& wrap(NonNull_ptr(edge_nnp)) == wrap(?edge_ptr) &*&
-            subtree(alloc_id, edge_ptr, height - 1, ?child, Option::Some(NonNull::new_(root)), MaybeUninit::new_(idx)) &*&
-            edges(alloc_id, root, height, idx + 1, edges0, ?children0) &*&
-            children == cons(child, children0)
+            children == cons(?child, ?children0) &*&
+            edges(alloc_id, root, height, idx + 1, edges0, children0, start_idx, range_start0, end_idx, range_end0) &*&
+            if idx < start_idx {
+                true
+            } else if idx <= end_idx {
+                MaybeUninit::inner(edge) == some(?edge_nnp) &*& wrap(NonNull_ptr(edge_nnp)) == wrap(?edge_ptr) &*&
+                subtree(alloc_id, edge_ptr, height - 1, child,
+                    if idx == start_idx { range_start0 } else { [] },
+                    if idx == end_idx { range_end0 } else { [] },
+                    Option::Some(NonNull::new_(root)), MaybeUninit::new_(idx))
+            } else {
+                true
+            }
     };
 
 inductive context<K, V> =
     root_ctx
   | child_ctx(parent: *InternalNode<K, V>, parent_ctx: context<K, V>, left_siblings: list<tree<K, V>>, right_siblings: list<tree<K, V>>);
 
-fix left_kv_ptrs_of_ctx<K, V>(ctx: context<K, V>) -> list<pair<*K, *V>> {
+fix context_height<K, V>(ctx: context<K, V>) -> usize {
     match ctx {
-        root_ctx => [],
-        child_ctx(parent, parent_ctx, left_siblings, right_siblings) =>
-            append(left_kv_ptrs_of_ctx(parent_ctx),
-                match left_siblings {
-                    nil => [],
-                    cons(left_sibling, left_siblings0) =>
-                        append(kv_ptrs_of_subtree(left_sibling),
-                            append(kv_ptrs_of_children(kv_ptrs_of_subtree, parent as *LeafNode<K, V>, 0, left_siblings0),
-                                [pair(&(*parent).data.keys[length(left_siblings0)] as *K, &(*parent).data.vals[length(left_siblings0)] as *V)]))
-                })
+        root_ctx => 0,
+        child_ctx(parent, parent_ctx, left_siblings, right_siblings) => context_height(parent_ctx) + 1
     }
 }
 
-fix right_kv_ptrs_of_ctx<K, V>(ctx: context<K, V>) -> list<pair<*K, *V>> {
+fix left_kv_ptrs_of_ctx<K, V>(
+    ctx: context<K, V>,
+    range_start_up: usize,
+    range_start_down: list<u16>
+) -> list<pair<*K, *V>> {
     match ctx {
         root_ctx => [],
         child_ctx(parent, parent_ctx, left_siblings, right_siblings) =>
             append(
-                kv_ptrs_of_children(kv_ptrs_of_subtree, parent as *LeafNode<K, V>, length(left_siblings), right_siblings),
-                right_kv_ptrs_of_ctx(parent_ctx))
+                left_kv_ptrs_of_ctx(
+                    parent_ctx,
+                    if range_start_up == 0 { 0 } else { range_start_up - 1 },
+                    if range_start_up == 0 { cons(length(left_siblings), range_start_down) } else { range_start_down }),
+                if left_siblings == [] {
+                    []
+                } else {
+                    append(
+                        kv_ptrs_of_children(
+                            kv_ptrs_of_subtree,
+                            parent as *LeafNode<K, V>,
+                            0,
+                            left_siblings,
+                            if range_start_up == 0 { length(left_siblings) } else if range_start_up == 1 { head(range_start_down) } else { 0 },
+                            if range_start_up == 0 { range_start_down } else if range_start_up == 1 { tail(range_start_down) } else { [] },
+                            length(left_siblings),
+                            []),
+                        [pair(&(*parent).data.keys[length(left_siblings) - 1] as *K, &(*parent).data.vals[length(left_siblings) - 1] as *V)])
+                })
     }
 }
 
-fix kv_ptrs_of_tree<K, V>(subtree: tree<K, V>, ctx: context<K, V>) -> list<pair<*K, *V>> {
-    append(left_kv_ptrs_of_ctx(ctx), append(kv_ptrs_of_subtree(subtree), right_kv_ptrs_of_ctx(ctx)))
+fix right_kv_ptrs_of_ctx<K, V>(
+    ctx: context<K, V>,
+    range_end_up: usize,
+    range_end_down: list<u16>
+) -> list<pair<*K, *V>> {
+    match ctx {
+        root_ctx => [],
+        child_ctx(parent, parent_ctx, left_siblings, right_siblings) =>
+            append(
+                if right_siblings == [] {
+                    []
+                } else {
+                    append(
+                        [pair(&(*parent).data.keys[length(left_siblings)] as *K, &(*parent).data.vals[length(left_siblings)] as *V)],
+                        kv_ptrs_of_children(
+                            kv_ptrs_of_subtree,
+                            parent as *LeafNode<K, V>,
+                            length(left_siblings) + 1,
+                            right_siblings,
+                            0,
+                            [],
+                            if range_end_up == 0 { length(left_siblings) } else if range_end_up == 1 { head(range_end_down) } else { 0 },
+                            if range_end_up == 0 { range_end_down } else if range_end_up == 1 { tail(range_end_down) } else { [] }))
+                },
+                right_kv_ptrs_of_ctx(
+                    parent_ctx,
+                    if range_end_up == 0 { 0 } else { range_end_up - 1 },
+                    if range_end_up == 0 { cons(length(left_siblings), range_end_down) } else { range_end_down }))
+    }
+}
+
+fix kv_ptrs_of_tree<K, V>(
+    subtree: tree<K, V>,
+    ctx: context<K, V>,
+    range_start_up: usize,
+    range_start_down: list<u16>,
+    range_end_up: usize,
+    range_end_down: list<u16>
+) -> list<pair<*K, *V>> {
+    append(
+        left_kv_ptrs_of_ctx(ctx, range_start_up, range_start_down),
+        append(
+            kv_ptrs_of_subtree(
+                subtree,
+                if range_start_up == 0 { range_start_down } else { [] },
+                if range_end_up == 0 { range_end_down } else { [] }),
+            right_kv_ptrs_of_ctx(ctx, range_end_up, range_end_down)))
 }
 
 // Asserts ownership of the node context (= a tree minus some subtree) reachable from the given parent pointer,
 // minus the memory storing the (initialized) keys and values.
-pred context<K, V>(alloc_id: any, node: *LeafNode<K, V>, height: usize, parent: Option<NonNull<InternalNode<K, V>>>, parent_idx: MaybeUninit<u16>; ctx: context<K, V>) =
+// Asserts ownership only of the nodes between two leaf edges of the tree.
+// To arrive at the first leaf edge from `node`, you need to ascend towards the root `range_start_up` hops, and then descend along path `range_start_down`.
+
+pred context<K, V>(
+    alloc_id: any,
+    node: *LeafNode<K, V>,
+    height: usize,
+    parent: Option<NonNull<InternalNode<K, V>>>,
+    parent_idx: MaybeUninit<u16>,
+    ctx: context<K, V>,
+    range_start_up: usize,
+    range_start_down: list<u16>,
+    range_end_up: usize,
+    range_end_down: list<u16>;
+) =
     match parent {
         Option::None => ctx == root_ctx,
         Option::Some(parent_nnp) =>
+            ctx == child_ctx(?parent_ptr, ?parent_ctx, ?leftSiblings, ?rightSiblings) &*&
             MaybeUninit::inner(parent_idx) == some(?idx) &*&
-            wrap(NonNull_ptr(parent_nnp)) == wrap(?parent_ptr) &*&
+            NonNull_ptr(parent_nnp) == parent_ptr &*&
             (*parent_ptr).data.parent |-> ?grandparent &*&
             (*parent_ptr).data.parent_idx |-> ?grandparent_idx &*&
             (*parent_ptr).data.len |-> ?len &*& len <= CAPACITY &*&
@@ -313,20 +441,65 @@ pred context<K, V>(alloc_id: any, node: *LeafNode<K, V>, height: usize, parent: 
             (*parent_ptr).edges[len + 1..2*B] |-> _ &*&
             struct_InternalNode_padding(parent_ptr) &*&
             alloc_block_in(alloc_id, parent_ptr as *u8, Layout::new_::<InternalNode<K, V>>()) &*&
-            edges(alloc_id, parent_ptr, height + 1, 0, leftEdges, ?leftSiblings) &*&
-            edges(alloc_id, parent_ptr, height + 1, idx + 1, rightEdges, ?rightSiblings) &*&
-            context(alloc_id, &(*parent_ptr).data, height + 1, grandparent, grandparent_idx, ?parent_ctx) &*&
-            ctx == child_ctx(parent_ptr, parent_ctx, leftSiblings, rightSiblings)
+            if range_start_up == 0 { pair(0, cons(idx, range_start_down)) } else { pair(range_start_up - 1, range_start_down) } == pair(?range_start_up1, ?range_start_down1) &*&
+            if range_end_up == 0 { pair(0, cons(idx, range_end_down)) } else { pair(range_end_up - 1, range_end_down) } == pair(?range_end_up1, ?range_end_down1) &*&
+            if range_start_up1 == 0 {
+                match range_start_down {
+                    nil => pair(0, []),
+                    cons(start_idx, range_start_down0) => pair(start_idx, range_start_down0)
+                }
+            } else {
+                pair(0, [])
+            } == pair(?start_idx, ?range_start0) &*&
+            if range_end_up1 == 0 {
+                match range_end_down {
+                    nil => pair(0, []),
+                    cons(end_idx, range_end_down0) => pair(end_idx, range_end_down0)
+                }
+            } else {
+                pair(0, [])
+            } == pair(?end_idx, ?range_end0) &*&
+            edges(alloc_id, parent_ptr, height + 1, 0, leftEdges, leftSiblings, start_idx, range_start0, idx, []) &*&
+            edges(alloc_id, parent_ptr, height + 1, idx + 1, rightEdges, rightSiblings, 0, [], end_idx, range_end0) &*&
+            context(alloc_id, &(*parent_ptr).data, height + 1, grandparent, grandparent_idx, parent_ctx, range_start_up1, range_start_down1, range_end_up1, range_end_down1)
     };
 
 // Asserts ownership of the entire tree to which given node belongs,
 // minus the memory storing the (initialized) keys and values.
-pred tree<K, V>(alloc_id: any, node: *LeafNode<K, V>, height: usize; subtree: tree<K, V>, ctx: context<K, V>) =
-    subtree(alloc_id, node, height, subtree, ?parent, ?parent_idx) &*&
-    context(alloc_id, node, height, parent, parent_idx, ctx);
+pred tree<K, V>(
+    alloc_id: any,
+    node: *LeafNode<K, V>,
+    height: usize,
+    subtree: tree<K, V>,
+    ctx: context<K, V>,
+    range_start_up: usize,
+    range_start_down: list<u16>,
+    range_end_up: usize,
+    range_end_down: list<u16>;
+) =
+    subtree(
+        alloc_id,
+        node,
+        height,
+        subtree,
+        if range_start_up == 0 { range_start_down } else { [] },
+        if range_end_up == 0 { range_end_down } else { [] },
+        ?parent,
+        ?parent_idx) &*&
+    context(alloc_id, node, height, parent, parent_idx, ctx, range_start_up, range_start_down, range_end_up, range_end_down);
 
-pred_ctor tree_frac_borrow_content<K, V>(alloc_id: any, node: *LeafNode<K, V>, height: usize, subtree: tree<K, V>, ctx: context<K, V>)(;) =
-    tree(alloc_id, node, height, subtree, ctx);
+pred_ctor tree_<K, V>(
+    alloc_id: any,
+    node: *LeafNode<K, V>,
+    height: usize,
+    subtree: tree<K, V>,
+    ctx: context<K, V>,
+    range_start_up: usize,
+    range_start_down: list<u16>,
+    range_end_up: usize,
+    range_end_down: list<u16>
+)(;) =
+    tree(alloc_id, node, height, subtree, ctx, range_start_up, range_start_down, range_end_up, range_end_down);
 
 @*/
 
@@ -438,29 +611,54 @@ lem_auto borrow_type_of_dormant()
 
 pred_ctor share_<T>(k: lifetime_t, t: thread_id_t)(l: *T) = [_](<T>.share(k, t, l));
 pred_ctor full_borrow__<T>(k: lifetime_t, t: thread_id_t)(l: *T) = full_borrow(k, <T>.full_borrow_content(t, l));
+pred_ctor full_borrow_content_<T>(t: thread_id_t)(l: *T) = <T>.full_borrow_content(t, l)();
 
-pred NodeRef<BorrowType, K, V, Type>(t: thread_id_t, alloc_id: any, r: NodeRef<BorrowType, K, V, Type>, subtree: tree<K, V>, ctx: context<K, V>, values_borrowed: list<*V>) =
+// ValMut and Dying references own only a part of the tree.
+// Specifically, they own the nodes and key-value pairs between a start leaf edge and an end leaf edge.
+// If path `range_start` ends at a non-leaf edge, it denotes the first leaf edge of that subtree.
+// If path `range_end` ends at a non-leaf edge, it denotes the last leaf edge of that subtree.
+// Here, a "leaf edge" is an edge leading to an empty subtree (`tree` value `empty`).
+
+pred NodeRef<BorrowType, K, V, Type>(
+    t: thread_id_t,
+    alloc_id: any,
+    r: NodeRef<BorrowType, K, V, Type>,
+    subtree: tree<K, V>,
+    ctx: context<K, V>,
+    range_start_up: usize,
+    range_start_down: list<u16>,
+    range_end_up: usize,
+    range_end_down: list<u16>
+) =
     match borrow_type_of::<BorrowType>() {
         immut(k) =>
-            values_borrowed == [] &*&
-            [_]frac_borrow(k, tree_frac_borrow_content(alloc_id, NonNull_ptr(r.node), r.height, subtree, ctx)) &*&
-            foreach(map(fst, kv_ptrs_of_tree(subtree, ctx)), share_(k, t)) &*&
-            foreach(map(snd, kv_ptrs_of_tree(subtree, ctx)), share_(k, t)),
+            range_start_up == context_height(ctx) &*& range_start_down == [] &*&
+            range_end_up == context_height(ctx) &*& range_end_down == [] &*&
+            [_]frac_borrow(k, tree_(alloc_id, NonNull_ptr(r.node), r.height, subtree, ctx, range_start_up, range_start_down, range_end_up, range_end_down)) &*&
+            foreach(map(fst, kv_ptrs_of_tree(subtree, ctx, range_start_up, range_start_down, range_end_up, range_end_down)), share_(k, t)) &*&
+            foreach(map(snd, kv_ptrs_of_tree(subtree, ctx, range_start_up, range_start_down, range_end_up, range_end_down)), share_(k, t)),
         val_mut(k) =>
-            [_]frac_borrow(k, tree_frac_borrow_content(alloc_id, NonNull_ptr(r.node), r.height, subtree, ctx)) &*&
-            foreach(map(fst, kv_ptrs_of_tree(subtree, ctx)), share_(k, t)) &*&
-            foreach(remove_all(values_borrowed, map(snd, kv_ptrs_of_tree(subtree, ctx))), full_borrow__(k, t)),
+            full_borrow(k, tree_(alloc_id, NonNull_ptr(r.node), r.height, subtree, ctx, range_start_up, range_start_down, range_end_up, range_end_down)) &*&
+            foreach(map(fst, kv_ptrs_of_tree(subtree, ctx, range_start_up, range_start_down, range_end_up, range_end_down)), full_borrow__(k, t)) &*&
+            foreach(map(snd, kv_ptrs_of_tree(subtree, ctx, range_start_up, range_start_down, range_end_up, range_end_down)), full_borrow__(k, t)),
         mut_(k) =>
-            values_borrowed == [] &*&
-            full_borrow(k, tree_frac_borrow_content(alloc_id, NonNull_ptr(r.node), r.height, subtree, ctx)) &*&
-            foreach(map(fst, kv_ptrs_of_tree(subtree, ctx)), full_borrow__(k, t)) &*&
-            foreach(map(snd, kv_ptrs_of_tree(subtree, ctx)), full_borrow__(k, t)),
+            range_start_up == context_height(ctx) &*& range_start_down == [] &*&
+            range_end_up == context_height(ctx) &*& range_end_down == [] &*&
+            full_borrow(k, tree_(alloc_id, NonNull_ptr(r.node), r.height, subtree, ctx, range_start_up, range_start_down, range_end_up, range_end_down)) &*&
+            foreach(map(fst, kv_ptrs_of_tree(subtree, ctx, range_start_up, range_start_down, range_end_up, range_end_down)), full_borrow__(k, t)) &*&
+            foreach(map(snd, kv_ptrs_of_tree(subtree, ctx, range_start_up, range_start_down, range_end_up, range_end_down)), full_borrow__(k, t)),
         owned =>
-            values_borrowed == [] &*&
-            tree(alloc_id, NonNull_ptr(r.node), r.height, subtree, ctx),
-        dying => false, // TODO
-        dormant_mut => false,
-    };           
+            range_start_up == context_height(ctx) &*& range_start_down == [] &*&
+            range_end_up == context_height(ctx) &*& range_end_down == [] &*&
+            tree(alloc_id, NonNull_ptr(r.node), r.height, subtree, ctx, range_start_up, range_start_down, range_end_up, range_end_down) &*&
+            foreach(map(fst, kv_ptrs_of_tree(subtree, ctx, range_start_up, range_start_down, range_end_up, range_end_down)), full_borrow_content_(t)) &*&
+            foreach(map(snd, kv_ptrs_of_tree(subtree, ctx, range_start_up, range_start_down, range_end_up, range_end_down)), full_borrow_content_(t)),
+        dying =>
+            tree(alloc_id, NonNull_ptr(r.node), r.height, subtree, ctx, range_start_up, range_start_down, range_end_up, range_end_down) &*&
+            foreach(map(fst, kv_ptrs_of_tree(subtree, ctx, range_start_up, range_start_down, range_end_up, range_end_down)), full_borrow_content_(t)) &*&
+            foreach(map(snd, kv_ptrs_of_tree(subtree, ctx, range_start_up, range_start_down, range_end_up, range_end_down)), full_borrow_content_(t)),
+        dormant_mut => false, // It seems that a DormantMut NodeRef should not be a NodeRef at all; none of the polymorphic methods are called on it?
+    };
 
 @*/
 

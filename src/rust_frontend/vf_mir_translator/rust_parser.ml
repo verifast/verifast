@@ -290,6 +290,16 @@ let rec parse_expr_funcs allowStructExprs =
     | _ -> raise (ParseException (expr_loc e, "This expression form is not supported in this position"))
     end
   | [ ] -> e
+  and parse_if_expr = function%parser
+    [ (l, Kwd "if");
+      parse_expr_no_struct_expr as cond;
+      parse_block_expr as trueBranch;
+      (_, Kwd "else");
+      [%let falseBranch = function%parser
+         [ parse_if_expr as e ] -> e
+       | [ parse_block_expr as e ] -> e
+      ]
+    ] -> IfExpr (l, cond, trueBranch, falseBranch)
   and parse_primary_expr = function%parser
     [ (l, Ident x); [%let e = parse_path_rest l x];
       [%let e = parse_struct_expr_rest e] ] -> e
@@ -298,12 +308,7 @@ let rec parse_expr_funcs allowStructExprs =
   | [ (l, String s) ] -> StringLit (l, s)
   | [ (l, Kwd "true") ] -> True l
   | [ (l, Kwd "false") ] -> False l
-  | [ (l, Kwd "if");
-      parse_expr_no_struct_expr as cond;
-      parse_block_expr as trueBranch;
-      (_, Kwd "else");
-      parse_block_expr as falseBranch;
-    ] -> IfExpr (l, cond, trueBranch, falseBranch)
+  | [ parse_if_expr as e ] -> e
   | [ (l, Kwd "match");
       parse_expr_no_struct_expr as scrutinee;
       (_, Kwd "{");
@@ -536,14 +541,7 @@ let rec parse_stmt = function%parser
   Close (l, target, g, targs, es1, es2, coef)
 | [ (l, Kwd "let"); (lx, Ident x); (_, Kwd "="); parse_expr as e; (_, Kwd ";") ] ->
   DeclStmt (l, [lx, None, x, Some e, (ref false, ref None)])
-| [ (l, Kwd "if"); parse_expr_no_struct_expr as e; parse_block_stmt as s1;
-    [%let s = function%parser
-      [ (_, Kwd "else");
-        parse_block_stmt as s2
-      ] -> IfStmt (l, e, [s1], [s2])
-    | [] -> IfStmt (l, e, [s1], [])
-    ]
-  ] -> s
+| [ parse_if_stmt as s ] -> s
 | [ (l, Kwd "match"); parse_expr_no_struct_expr as e; (_, Kwd "{");
     [%let cs = rep parse_match_stmt_arm];
     (_, Kwd "}")
@@ -594,6 +592,18 @@ and parse_block_stmt = function%parser
     parse_stmts as ss;
     (closeBraceLoc, Kwd "}")
   ] -> BlockStmt (l, ds, ss, closeBraceLoc, ref [])
+and parse_if_stmt = function%parser
+  [ (l, Kwd "if"); parse_expr_no_struct_expr as e; parse_block_stmt as s1;
+    [%let s = function%parser
+      [ (_, Kwd "else");
+        [%let s2 = function%parser
+           [ parse_if_stmt as s2 ] -> s2
+         | [ parse_block_stmt as s2 ] -> s2
+        ]
+      ] -> IfStmt (l, e, [s1], [s2])
+    | [] -> IfStmt (l, e, [s1], [])
+    ]
+  ] -> s
 and parse_stmts stream = rep parse_stmt stream
 
 and parse_param = function%parser
