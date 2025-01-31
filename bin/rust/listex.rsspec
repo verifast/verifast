@@ -25,4 +25,11 @@ fix repeat<t>(n: nat, x: t) -> list<t> {
     }
 }
 
+fix head_or_else<t>(xs: list<t>, default: t) -> t {
+    match xs {
+        nil => default,
+        cons(x0, xs0) => x0
+    }
+}
+
 @*/

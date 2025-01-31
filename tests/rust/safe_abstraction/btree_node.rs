@@ -609,6 +609,25 @@ lem_auto borrow_type_of_dormant()
     ens borrow_type_of::<marker::DormantMut>() == dormant_mut;
 { assume(false); }
 
+inductive node_type = node_type_leaf | node_type_internal | node_type_leaf_or_internal;
+
+fix node_type_of<T>() -> node_type;
+
+lem_auto node_type_of_leaf()
+    req true;
+    ens node_type_of::<marker::Leaf>() == node_type_leaf;
+{ assume(false); }
+
+lem_auto node_type_of_internal()
+    req true;
+    ens node_type_of::<marker::Internal>() == node_type_internal;
+{ assume(false); }
+
+lem_auto node_type_of_leaf_or_internal()
+    req true;
+    ens node_type_of::<marker::LeafOrInternal>() == node_type_leaf_or_internal;
+{ assume(false); }
+
 pred_ctor share_<T>(k: lifetime_t, t: thread_id_t)(l: *T) = [_](<T>.share(k, t, l));
 pred_ctor full_borrow__<T>(k: lifetime_t, t: thread_id_t)(l: *T) = full_borrow(k, <T>.full_borrow_content(t, l));
 pred_ctor full_borrow_content_<T>(t: thread_id_t)(l: *T) = <T>.full_borrow_content(t, l)();
@@ -658,6 +677,11 @@ pred NodeRef<BorrowType, K, V, Type>(
             foreach(map(fst, kv_ptrs_of_tree(subtree, ctx, range_start_up, range_start_down, range_end_up, range_end_down)), full_borrow_content_(t)) &*&
             foreach(map(snd, kv_ptrs_of_tree(subtree, ctx, range_start_up, range_start_down, range_end_up, range_end_down)), full_borrow_content_(t)),
         dormant_mut => false, // It seems that a DormantMut NodeRef should not be a NodeRef at all; none of the polymorphic methods are called on it?
+    } &*&
+    match node_type_of::<Type>() {
+        node_type_leaf => r.height == 0,
+        node_type_internal => r.height > 0,
+        node_type_leaf_or_internal => true
     };
 
 @*/
@@ -1235,6 +1259,47 @@ pub struct Handle<Node, Type> {
     idx: usize,
     _marker: PhantomData<Type>,
 }
+
+/*@
+
+inductive handle_type = handle_type_kv | handle_type_edge;
+
+fix handle_type_of<T>() -> handle_type;
+
+lem_auto handle_type_of_kv()
+    req true;
+    ens handle_type_of::<marker::KV>() == handle_type_kv;
+{ assume(false); }
+
+lem_auto handle_type_of_edge()
+    req true;
+    ens handle_type_of::<marker::Edge>() == handle_type_edge;
+{ assume(false); }
+
+pred Handle<BorrowType, K, V, NodeType, Type>(
+    t: thread_id_t,
+    alloc_id: any,
+    h: Handle<NodeRef<BorrowType, K, V, NodeType>, Type>,
+    subtree: tree<K, V>,
+    ctx: context<K, V>,
+    range_start_up: usize,
+    range_start_down: list<u16>,
+    range_end_up: usize,
+    range_end_down: list<u16>
+) =
+    NodeRef::<BorrowType, K, V, NodeType>(t, alloc_id, h.node, subtree, ctx, range_start_up, range_start_down, range_end_up, range_end_down) &*&
+    match subtree {
+        empty => false,
+        tree(node, children) =>
+            if range_start_up == 0 { head_or_else(range_start_down, 0) } else { 0 } <= h.idx &*&
+            wrap(if range_end_up == 0 { head_or_else(range_end_down, length(children) - 1) } else { length(children) - 1 }) == wrap(?end_idx) &*&
+            match handle_type_of::<Type>() {
+                handle_type_kv => h.idx + 1 <= end_idx,
+                handle_type_edge => h.idx <= end_idx
+            }
+    };
+
+@*/
 
 impl<Node: Copy, Type> Copy for Handle<Node, Type> {}
 // We don't need the full generality of `#[derive(Clone)]`, as the only time `Node` will be
