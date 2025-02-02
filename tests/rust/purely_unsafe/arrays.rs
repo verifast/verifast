@@ -47,6 +47,20 @@ fn test2() {
     }
 }
 
+unsafe fn test3(xs: *mut [i32; 3])
+//@ req *xs |-> Array_of_elems::<i32, 3>([10, 20, 30]);
+//@ ens *xs |-> Array_of_elems::<i32, 3>([30, 20, 10]);
+{
+    //@ Array_to_array(xs);
+    let p = xs as *mut i32;
+    *p = 30;
+    *p.add(1) = 20;
+    *p.add(2) = 10;
+    //@ open array(p + 3, 0, _);
+    //@ close array(p + 3, 0, []);
+    //@ array_to_Array(xs);
+}
+
 fn main() {
     test1();
     test2();

@@ -61,6 +61,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let path = program_path
   
   let language, dialect = file_specs path
+  let is_rust = dialect = Some Rust
 
   let string_of_type = string_of_type language dialect
   
@@ -1960,6 +1961,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | _ -> assert false
       end
     | ArrayType t -> ArrayType (instantiate_type tpenv t)
+    | StaticArrayType (t, n) -> StaticArrayType (instantiate_type tpenv t, instantiate_type tpenv n)
     | StructType (sn, targs) -> StructType (sn, List.map (instantiate_type tpenv) targs)
     | InlineFuncType rt -> InlineFuncType (instantiate_type tpenv rt)
     | _ -> t
@@ -1975,7 +1977,15 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         ArrayType(tp)
     | StaticArrayTypeExpr (l, t, s) ->
         let tp = check t in
+        let s = check s in
         StaticArrayType(tp, s)
+    | LiteralConstTypeExpr (l, n) ->
+      if n < 0 then static_error l "Const generic argument must be nonnegative" None;
+      begin match ptr_width with
+        LitWidth k -> if lt_big_int (max_unsigned_big_int k) (big_int_of_int n) then static_error l "Const generic argument must be within limits of type 'usize'" None
+      | _ -> if 65535 < n then static_error l "Const generic argument must be within limits of type 'usize' on all supported targets, i.e. it must be at most 65535" None
+      end;
+      LiteralConstType n
     | IdentTypeExpr (l, None, id) ->
       begin
       if List.mem id tpenv then begin match envType with
@@ -3028,7 +3038,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let rec normalize_pointee_type t =
     match t with
-      StaticArrayType (t, _) -> normalize_pointee_type t
+      StaticArrayType (t, _) when not is_rust -> normalize_pointee_type t
     | _ -> t
 
   let rec compatible_pointees t t0 =
@@ -3058,6 +3068,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | (PredType ([], ts1, inputParamCount1, inductiveness1), PredType ([], ts2, inputParamCount2, inductiveness2)) ->
       for_all2 unify_relaxed ts1 ts2 && inputParamCount1 = inputParamCount2 && inductiveness1 = inductiveness2
     | (ArrayType t1, ArrayType t2) -> unify_relaxed t1 t2
+    | (StaticArrayType (t1, n1), StaticArrayType (t2, n2)) -> unify_relaxed t1 t2 && unify_relaxed n1 n2
     | ((PtrType t1 | RustRefType (_, _, t1)), (PtrType t2 | RustRefType (_, _, t2))) -> compatible_pointees t1 t2
     | (InlineFuncType _, PtrType _) -> true
     | (PtrType _, InlineFuncType _) -> true
@@ -3089,6 +3100,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | (PredType ([], ts1, inputParamCount1, inductiveness1), PredType ([], ts2, inputParamCount2, inductiveness2)) ->
       for_all2 unify_strict ts1 ts2 && inputParamCount1 = inputParamCount2 && inductiveness1 = inductiveness2
     | (ArrayType t1, ArrayType t2) -> unify_strict t1 t2
+    | (StaticArrayType (t1, n1), StaticArrayType (t2, n2)) -> unify_strict t1 t2 && unify_strict n1 n2
     | (PtrType t1, PtrType t2) -> if fno_strict_aliasing then compatible_pointees t1 t2 else unify_strict t1 t2
     | (RustRefType (lft1, mut1, t1), RustRefType (lft2, mut2, t2)) -> unify_strict lft1 lft2 && mut1 = mut2 && unify_strict t1 t2
     | (InlineFuncType _, PtrType _) -> true
@@ -3150,7 +3162,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     (* Note that in Java short[] is not assignable to int[] *)
     | (ArrayType et, ArrayType et0) when et = et0 -> ()
     | (ArrayType (ObjType(t0, ts0)), ArrayType (ObjType(t1, ts1))) -> expect_type_core l msg None (ObjType (t0, ts0)) (ObjType(t1, ts1))
-    | (StaticArrayType (elemTp, _), PtrType elemTp0) when compatible_pointees elemTp elemTp0 -> ()
+    | (StaticArrayType (elemTp, _), PtrType elemTp0) when not is_rust && compatible_pointees elemTp elemTp0 -> ()
     | (Int (Signed, m), Int (Signed, n)) when definitely_width_le (width_of_rank m) (width_of_rank n) -> ()
     | (Int (Unsigned, m), Int (Unsigned, n)) when definitely_width_le (width_of_rank m) (width_of_rank n) -> ()
     | (Int (Unsigned, m), Int (Signed, n)) when definitely_width_lt (width_of_rank m) (width_of_rank n) -> ()
@@ -4142,7 +4154,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let t = unfold_inferred_type t in
     let t =
       match t with
-        StaticArrayType (elemTp, s) when match dialect with Some Rust -> false | _ -> true -> PtrType elemTp
+        StaticArrayType (elemTp, s) when not is_rust -> PtrType elemTp
       | _ -> t
     in
     (w, t, v)
@@ -4665,7 +4677,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         match t with
           PtrType Void -> static_error l "Cannot dereference a void pointer" None
         | PtrType (FuncType _) -> (w, t, v)
-        | PtrType (StaticArrayType (elemTp, elemCount)) -> (w, PtrType elemTp, v)
+        | PtrType (StaticArrayType (elemTp, elemCount)) when not is_rust -> (w, PtrType elemTp, v)
         | PtrType t0 | RustRefType (_, _, t0) -> (WDeref (l, w, t0), t0, None)
         | _ -> static_error l "Operand must be pointer." None
       end
@@ -4687,7 +4699,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let (w, t, v) = check_expr_core_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv inAnnotation e in
       let t = unfold_inferred_type t in
       begin match t, w with
-        StaticArrayType (elemTp, _), _ ->
+        StaticArrayType (elemTp, _), _ when not is_rust ->
         (w, PtrType elemTp, None)
       | _, WVar (_, x, FuncName) ->
         (w, t, None)
@@ -5585,10 +5597,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let check_c_initializer check_expr_t (pn,ilist) tparams tenv e tp =
     let rec check e tp =
     match tp, e with
-    | StaticArrayType (Int (Signed, CharRank), n), StringLit (ls, s) ->
+    | StaticArrayType (Int (Signed, CharRank), LiteralConstType n), StringLit (ls, s) ->
       if String.length s + 1 > n then static_error ls "String literal does not fit inside character array." None;
       e
-    | StaticArrayType (elemTp, elemCount), InitializerList (ll, es) ->
+    | StaticArrayType (elemTp, LiteralConstType elemCount), InitializerList (ll, es) ->
       let rec iter n es =
         match es with
           [] -> []
@@ -5979,6 +5991,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let tparam_typeid_varname tn = tn ^ "_typeid"
 
+  let usize_of_const_symb = lazy_purefuncsymb "usize_of_const"
+  let const_of_usize_symb = lazy_purefuncsymb "const_of_usize"
+
   let rec typeid_of_core_core l msg env t =
   match unfold_inferred_type t with
     Int (Signed, CharRank) -> char_typeid_term
@@ -6004,7 +6019,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let lft_typeid = typeid_of_core_core l msg env lft in
     let t0_typeid = typeid_of_core_core l msg env t0 in
     mk_rust_ref_typeid lft_typeid kind t0_typeid
-  | StaticArrayType (elemTp, n) -> mk_array_typeid (typeid_of_core_core l msg env elemTp) (ctxt#mk_intlit n)
+  | StaticArrayType (elemTp, n) -> mk_array_typeid (typeid_of_core_core l msg env elemTp) (eval_const_type_core l msg env n)
+  | LiteralConstType n -> mk_app (const_of_usize_symb ()) [ctxt#mk_intlit n]
   | Bool -> bool_typeid_term
   | Float -> float_typeid_term
   | Double -> double_typeid_term
@@ -6040,10 +6056,15 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   end
   | InferredType _ -> static_error l (Printf.sprintf "%sA type argument for a type parameter that carries a typeid could not be inferred; specify the type argument explicitly" (msg ())) None
   | tp -> static_error l (Printf.sprintf "%sTaking the typeid of type '%s' is not yet supported" (msg ()) (string_of_type tp)) None
+  and eval_const_type_core l msg env t =
+    match t with
+      LiteralConstType n -> ctxt#mk_intlit n
+    | _ -> mk_app (usize_of_const_symb ()) [typeid_of_core_core l msg env t]
 
   let no_msg _ = ""
   let typeid_of_core l env t = typeid_of_core_core l no_msg env t
-
+  let eval_const_type l env t = eval_const_type_core l no_msg env t
+  
   let typeid_of l t = typeid_of_core l [] t
 
   let rec sizeof_core l env t =
@@ -6058,7 +6079,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | PtrType _ | RustRefType _ -> width_size_term ptr_width
     | StructType (sn, targs) -> mk_sizeof (typeid_of_core l env t)
     | UnionType un -> union_size_partial unionmap l un
-    | StaticArrayType (elemTp, elemCount) -> ctxt#mk_mul (sizeof_core l env elemTp) (ctxt#mk_intlit elemCount)
+    | StaticArrayType (elemTp, elemCount) -> ctxt#mk_mul (sizeof_core l env elemTp) (eval_const_type l env elemCount)
     | GhostTypeParam x -> mk_sizeof (typeid_of_core l env t)
     | _ -> static_error l ("Taking the size of type " ^ string_of_type t ^ " is not yet supported.") None
   
@@ -6130,7 +6151,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       Void|Int (_, CharRank) ->
       mk_app (ptr_add_symb ()) [p; off]
     | StaticArrayType (elemTp, elemCount) ->
-      mk_ptr_add_ l env p (ctxt#mk_mul off (ctxt#mk_intlit elemCount)) elemTp
+      mk_ptr_add_ l env p (ctxt#mk_mul off (eval_const_type l env elemCount)) elemTp
     | _ ->
       mk_app (ptr_add__symb ()) [p; off; typeid_of_core l env elemType]
   let mk_field_ptr p structTypeid off = mk_app (field_ptr_symb ()) [p; structTypeid; off]
@@ -6386,7 +6407,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 [] -> elemtype, 1
               | (lslice, wstart, wend)::wslices ->
                 match elemtype with
-                  StaticArrayType (elemtype, elemCount) ->
+                  StaticArrayType (elemtype, LiteralConstType elemCount) ->
                   begin match wstart with
                     None -> ()
                   | Some (LitPat (WIntLit (_, n))) when eq_big_int n zero_big_int -> ()

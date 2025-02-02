@@ -56,7 +56,8 @@ let rec of_type = function
 | PureFuncType (at, rt) -> C ("PureFuncType", [of_type at; of_type rt])
 | ObjType (cn, ts) -> C ("ObjType", [S cn; of_list of_type ts])
 | ArrayType t -> C ("ArrayType", [of_type t])
-| StaticArrayType (t, n) -> C ("StaticArrayType", [of_type t; I n])
+| StaticArrayType (t, n) -> C ("StaticArrayType", [of_type t; of_type n])
+| LiteralConstType n -> C ("LiteralConstType", [I n])
 | BoxIdType -> c "BoxIdType"
 | HandleIdType -> c "HandleIdType"
 | AnyType -> c "AnyType"
@@ -174,8 +175,9 @@ let rec of_type_expr = function
   C ("StaticArrayTypeExpr", [
     of_loc l;
     of_type_expr elemTp;
-    I nbElems
+    of_type_expr nbElems
   ])
+| LiteralConstTypeExpr (l, n) -> C ("LiteralConstTypeExpr", [of_loc l; I n])
 | FuncTypeExpr (l, retTp, params) ->
   C ("FuncTypeExpr", [
     of_loc l;

@@ -164,7 +164,8 @@ type type_ = (* ?type_ *)
   | PureFuncType of type_ * type_  (* Curried *)
   | ObjType of string * type_ list (* type arguments *)
   | ArrayType of type_
-  | StaticArrayType of type_ * int (* for array declarations in C *)
+  | StaticArrayType of type_ (* element type *) * type_ (* size; in C this is always a LiteralConstType *) (* C array type T[N]; Rust array type [T; N] *)
+  | LiteralConstType of int (* Rust const generic argument *)
   | BoxIdType (* box type, for shared boxes *)
   | HandleIdType (* handle type, for shared boxes *)
   | AnyType (* supertype of all inductive datatypes; useful in combination with predicate families *)
@@ -195,7 +196,8 @@ let type_fold_open state f = function
 | PureFuncType (tp1, tp2) -> f (f state tp1) tp2
 | ObjType (_, targs) -> List.fold_left f state targs
 | ArrayType tp -> f state tp
-| StaticArrayType (tp, _) -> f state tp
+| StaticArrayType (elem_tp, size) -> f (f state elem_tp) size
+| LiteralConstType _ -> state
 | BoxIdType | HandleIdType | AnyType | RealTypeParam _ | InferredRealType _ | GhostTypeParam _ | InferredType (_, _) | ClassOrInterfaceName _ | PackageName _ -> state
 | RefType tp -> f state tp
 | AbstractType _ | StaticLifetime -> state
@@ -329,7 +331,8 @@ type type_expr = (* ?type_expr *)
   | PtrTypeExpr of loc * type_expr
   | RustRefTypeExpr of loc * type_expr * rust_ref_kind * type_expr
   | ArrayTypeExpr of loc * type_expr
-  | StaticArrayTypeExpr of loc * type_expr (* type *) * int (* number of elements*)
+  | StaticArrayTypeExpr of loc * type_expr (* type *) * type_expr (* number of elements; in C this is always a LiteralConstTypeExpr *)
+  | LiteralConstTypeExpr of loc * int
   | FuncTypeExpr of loc * type_expr (* return type *) * (type_expr * string) list (* parameters *)
   | ManifestTypeExpr of loc * type_  (* A type expression that is obviously a given type. *)
   | IdentTypeExpr of loc * string option (* package name *) * string
@@ -1202,7 +1205,8 @@ let type_expr_fold_open f state te =
   | PtrTypeExpr (l, te) -> f state te
   | RustRefTypeExpr (l, lft, kind, te) -> f (f state lft) te
   | ArrayTypeExpr (l, te) -> f state te
-  | StaticArrayTypeExpr (l, elemTp, n) -> f state elemTp
+  | StaticArrayTypeExpr (l, elemTp, size) -> f (f state elemTp) size
+  | LiteralConstTypeExpr _ -> state
   | FuncTypeExpr (l, retTp, ps) -> List.fold_left f (f state retTp) (List.map fst ps)
   | ManifestTypeExpr (l, tp) -> state
   | IdentTypeExpr (l, pn, x) -> state
