@@ -1752,7 +1752,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       translate_ty_const len_cpn loc
     in
     let vf_ty =
-      Ast.StaticArrayTypeExpr (loc, elem_ty, Big_int.int_of_big_int len)
+      Ast.StaticArrayTypeExpr (loc, elem_ty, LiteralConstTypeExpr (loc, Big_int.int_of_big_int len))
     in
     let size = Ast.SizeofExpr (loc, TypeExpr vf_ty) in
     let own tid vs =

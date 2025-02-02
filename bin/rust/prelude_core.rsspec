@@ -161,6 +161,10 @@ lem points_to_u8_to_bool(p: *u8);
     req *p |-> ?v &*& v == 0 || v == 1;
     ens *(p as *bool) |-> v == 1;
 
+lem points_to__limits<T>(p: *T);
+    req [?f]points_to_(p, ?v);
+    ens [f]points_to_(p, v) &*& f <= 1 &*& object_pointer_within_limits(p, std::mem::size_of::<T>()) == true;
+
 lem points_to_limits<T>(p: *T);
     req [?f]points_to(p, ?v);
     ens [f]points_to(p, v) &*& f <= 1 &*& object_pointer_within_limits(p, std::mem::size_of::<T>()) == true;
@@ -218,6 +222,29 @@ lem array__join<T>(p: *T);
 lem array_to_array_<T>(p: *T);
     req [?f]array(p, ?count, ?vs);
     ens [f]array_(p, count, map(some, vs));
+
+fix const_of_usize(n: usize) -> *_;
+fix usize_of_const(type_id: *_) -> usize;
+
+lem_auto usize_of_const_of_usize(n: usize);
+    req true;
+    ens usize_of_const(const_of_usize(n)) == n;
+
+fix Array_elems<T, N>(array: [T; N]) -> list<T>;
+// If `length(elems)` is not `usize_of_const(typeid(N))` then the result is unspecified.
+fix Array_of_elems<T, N>(elems: list<T>) -> [T; N];
+
+lem Array__to_array_<T, N>(p: *[T; N]);
+    req [?f](*p |-?-> ?array_);
+    ens [f](p as *T)[..usize_of_const(typeid(N))] |-?-> match array_ { none => repeat(nat_of_int(usize_of_const(typeid(N))), none), some(array) => map(some, Array_elems(array)) };
+
+lem Array_to_array<T, N>(p: *[T; N]);
+    req [?f](*p |-> ?array);
+    ens [f](p as *T)[..usize_of_const(typeid(N))] |-> Array_elems(array);
+
+lem array_to_Array<T, N>(p: *[T; N]);
+    req [?f](p as *T)[..usize_of_const(typeid(N))] |-> ?elems;
+    ens [f](*p |-> Array_of_elems(elems));
 
 lem from_u8s_<T>(p: *T);
     req [?f](p as *u8)[..std::mem::size_of::<T>()] |-> _ &*& p as usize % std::mem::align_of::<T>() == 0;

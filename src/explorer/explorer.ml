@@ -258,7 +258,8 @@ let _ =
         | PureFuncType(type_1, type_2) -> "(" ^ string_of_type_ type_1 ^ ", " ^ string_of_type_ type_2 ^ ")"
         | ObjType(name, _) -> name
         | ArrayType(type_in) -> string_of_type_ type_in ^ "[]"
-        | StaticArrayType(type_in, nb_elems) -> string_of_type_ type_in ^ "[" ^ string_of_int nb_elems ^ "]"
+        | StaticArrayType(type_in, nb_elems) -> string_of_type_ type_in ^ "[" ^ string_of_type_ nb_elems ^ "]"
+        | LiteralConstType n -> string_of_int n
         | GhostTypeParam(name) -> name
         | RealTypeParam(name) -> name
         | PackageName(name) -> name
@@ -278,7 +279,8 @@ let _ =
         | EnumTypeExpr(_, name_opt, _) -> (match name_opt with Some name -> name | _ -> "")
         | PtrTypeExpr(_, type_expr_in) -> string_of_type_expr type_expr_in ^ " *"
         | ArrayTypeExpr(_, type_expr_in) -> string_of_type_expr type_expr_in ^ "[]"
-        | StaticArrayTypeExpr(_, type_expr_in, nb_elems) -> string_of_type_expr type_expr_in ^ "[" ^ string_of_int nb_elems ^ "]"
+        | StaticArrayTypeExpr(_, type_expr_in, nb_elems) -> string_of_type_expr type_expr_in ^ "[" ^ string_of_type_expr nb_elems ^ "]"
+        | LiteralConstTypeExpr (_, n) -> string_of_int n
         | ManifestTypeExpr(_, type_) -> string_of_type_ type_
         | IdentTypeExpr(_, _, name) -> name
         | ConstructedTypeExpr(_, name, type_expr_list) -> name ^ "<" ^ string_of_type_expr_list type_expr_list ^ ">"

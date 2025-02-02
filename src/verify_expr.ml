@@ -310,7 +310,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let t = check_pure_type (pn,ilist) tparams1 Ghost te in
           let t =
             match t with
-              ArrayType elemType | StaticArrayType (elemType, _) when language = CLang -> PtrType elemType
+              ArrayType elemType | StaticArrayType (elemType, _) when language = CLang && not is_rust -> PtrType elemType
             | _ -> t
           in
           iter ((x, t)::xm) xs
@@ -1603,10 +1603,9 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     match tp with
       StaticArrayType (elemTp, elemCount) ->
       let elemSize = sizeof_core l env elemTp in
-      if elemCount > 0 then begin
-        let arraySize = ctxt#mk_mul (ctxt#mk_intlit elemCount) elemSize in
-        ctxt#assert_term (mk_object_pointer_within_limits addr arraySize)
-      end;
+      let elemCountTerm = eval_const_type l env elemCount in
+      let arraySize = ctxt#mk_mul elemCountTerm elemSize in
+      ctxt#assert_term (mk_object_pointer_within_limits addr arraySize); (* Is this okay when arraySize == 0? *)
       let assume_array_elem_type l env addr cont =
         let elem_type =
           let rec aux t =
@@ -1619,24 +1618,24 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         assume_has_type l env addr elem_type cont
       in
       let produce_char_array_chunk h env addr elemCount =
-        produce_char_array_chunk h env addr (ctxt#mk_mul (ctxt#mk_intlit elemCount) elemSize)
+        produce_char_array_chunk h env addr (ctxt#mk_mul elemCount elemSize)
       in
       let produce_array_chunk h env produceUninitChunk elemTp addr elems elemCount =
         match dialect with
           Some Rust ->
-          let length = ctxt#mk_intlit elemCount in
+          let length = elemCount in
           assume_eq (mk_length elems) length $. fun () ->
           cont (Chunk (((if produceUninitChunk then array__symb () else array_symb ()), true), [elemTp], coef, [addr; length; elems], None)::h) env
         | _ ->
         match try_pointee_pred_symb0 elemTp with
           Some (_, _, _, arrayPredSymb, _, _, _, _, _, _, _, uninitArrayPredSymb) ->
-          let length = ctxt#mk_intlit elemCount in
+          let length = elemCount in
           assume_eq (mk_length elems) length $. fun () ->
           cont (Chunk (((if produceUninitChunk then uninitArrayPredSymb else arrayPredSymb), true), [], coef, [addr; length; elems], None)::h) env
         | None ->
         match integer__chunk_args elemTp with
           Some (k, signedness) ->
-          let length = ctxt#mk_intlit elemCount in
+          let length = elemCount in
           assume_eq (mk_length elems) length $. fun () ->
           assume_has_type l env addr elemTp $. fun () ->
           cont (Chunk (((if produceUninitChunk then integers___symb () else integers__symb ()), true), [], coef, [addr; rank_size_term k; mk_bool (signedness = Signed); length; elems], None)::h) env
@@ -1647,14 +1646,19 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       begin match elemTp, init with
         Int (Signed, CharRank), Expr (StringLit (_, s)) ->
-        produce_array_chunk h env false elemTp addr (mk_char_list_of_c_string elemCount s) elemCount
+        let elemCount =
+          match elemCount with
+            LiteralConstType n -> n
+          | _ -> static_error l "String literals in array initializers are only supported for arrays with a known size." None
+        in
+        produce_array_chunk h env false elemTp addr (mk_char_list_of_c_string elemCount s) elemCountTerm
       | (UnionType _ | StructType _ | StaticArrayType (_, _)), Expr (InitializerList (ll, es)) ->
         let rec iter h env i es =
           let addr = mk_ptr_add_ l env addr (ctxt#mk_intlit i) elemTp in
           match es with
             [] ->
             assume_array_elem_type l env addr @@ fun () ->
-            produce_char_array_chunk h env addr (elemCount - i)
+            produce_char_array_chunk h env addr (ctxt#mk_sub elemCountTerm (ctxt#mk_intlit i))
           | (f_opt, e)::es ->
             begin match f_opt with
               None -> ()
@@ -1665,6 +1669,11 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         in
         iter h env 0 es
       | _, Expr (InitializerList (ll, es)) ->
+        let elemCount =
+          match elemCount with
+            LiteralConstType n -> n
+          | _ -> static_error l "Array initializers are only supported for arrays with a known size." None
+        in
         let rec iter h env n es cont =
           match es with
             [] -> cont h env (mk_zero_list n)
@@ -1678,9 +1687,9 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             cont h env (mk_cons elemTp elem elems)
         in
         iter h env elemCount es $. fun h env elems ->
-        produce_array_chunk h env false elemTp addr elems elemCount
+        produce_array_chunk h env false elemTp addr elems elemCountTerm
       | _, MaybeUninitTerm term ->
-          produce_array_chunk h env true elemTp addr term elemCount
+        produce_array_chunk h env true elemTp addr term elemCountTerm
       | _ ->
         let elems = get_unique_var_symb "elems" (list_type (if init = Unspecified then option_type elemTp else elemTp)) in
         begin fun cont ->
@@ -1692,7 +1701,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           | _ ->
             cont ()
         end $. fun () ->
-        produce_array_chunk h env (init = Unspecified) elemTp addr elems elemCount
+        produce_array_chunk h env (init = Unspecified) elemTp addr elems elemCountTerm
       end
     | UnionType un -> begin
       match language, dialect, List.assoc_opt un unionmap with
@@ -1814,21 +1823,22 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in  
     match tp with
       StaticArrayType (elemTp, elemCount) ->
+      let elemCountTerm = eval_const_type l typeid_env elemCount in
       begin match dialect with
         Some Rust ->
-        let pats = [TermPat addr; TermPat (ctxt#mk_intlit elemCount); dummypat] in
+        let pats = [TermPat addr; TermPat (elemCountTerm); dummypat] in
         consume_chunk rules h typeid_env [] [] [] l ((if consumeUninitChunk then array__symb () else array_symb ()), true) [elemTp] real_unit coefpat (Some 2) pats $. fun chunk h _ [_; _; elems] _ _ _ _ ->
         cont [chunk] h (Some elems)
       | _ ->
       match try_pointee_pred_symb0 elemTp with
         Some (_, _, _, arrayPredSymb, _, _, _, _, _, _, _, uninitArrayPredSymb) ->
-        let pats = [TermPat addr; TermPat (ctxt#mk_intlit elemCount); dummypat] in
+        let pats = [TermPat addr; TermPat (elemCountTerm); dummypat] in
         consume_chunk rules h typeid_env [] [] [] l ((if consumeUninitChunk then uninitArrayPredSymb else arrayPredSymb), true) [] real_unit coefpat (Some 2) pats $. fun chunk h _ [_; _; elems] _ _ _ _ ->
         cont [chunk] h (Some elems)
       | None ->
       match integer__chunk_args elemTp with
         Some (k, signedness) ->
-        let pats = [TermPat addr; TermPat (rank_size_term k); TermPat (mk_bool (signedness = Signed)); TermPat (ctxt#mk_intlit elemCount); dummypat] in
+        let pats = [TermPat addr; TermPat (rank_size_term k); TermPat (mk_bool (signedness = Signed)); TermPat (elemCountTerm); dummypat] in
         consume_chunk rules h typeid_env [] [] [] l ((if consumeUninitChunk then integers___symb () else integers__symb ()), true) [] real_unit coefpat (Some 4) pats $. fun chunk h _ [_; _; _; _; elems] _ _ _ _ ->
         cont [chunk] h (Some elems)
       | None ->

@@ -159,6 +159,7 @@ pub fn preprocess(
     let mut output = String::new();
     let mut inside_word = false;
     let mut brace_depth = 0;
+    let mut bracket_depth = 0;
     let mut last_token_was_fn = false;
     let mut next_block_is_fn_body = false;
     let mut fn_body_brace_depth = -1;
@@ -197,7 +198,9 @@ pub fn preprocess(
                     ';' => {
                         cs.next();
                         output.push(c);
-                        next_block_is_fn_body = false;
+                        if bracket_depth == 0 { // We are not inside an array type [T; N].
+                            next_block_is_fn_body = false;
+                        }
                     }
                     '{' => {
                         start_of_block = cs.pos;
@@ -225,6 +228,16 @@ pub fn preprocess(
                             fn_body_brace_depth = -1;
                         }
                         output.push('}');
+                    }
+                    '[' => {
+                        cs.next();
+                        output.push('[');
+                        bracket_depth += 1;
+                    }
+                    ']' => {
+                        cs.next();
+                        output.push(']');
+                        bracket_depth -= 1;
                     }
                     '/' => {
                         cs.next();

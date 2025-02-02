@@ -128,6 +128,8 @@ let rec parse_type = function%parser
        ] -> tp
     ]
     ] -> tp
+| [ (l, Kwd "["); parse_type as elemTp; (_, Kwd ";"); parse_type as size; (_, Kwd "]") ] -> StaticArrayTypeExpr (l, elemTp, size)
+| [ (l, Int (n, _, _, _, _)) ] -> LiteralConstTypeExpr (l, int_of_big_int n)
 and parse_type_with_opt_name = function%parser
   [ parse_type as t;
     [%let (x, t) = function%parser
