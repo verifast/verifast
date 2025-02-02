@@ -18,7 +18,9 @@ An axiomatisation of the lifetime logic into VeriFast's logic and some further R
 
 ## Semantic well-typedness of functions in VeriFast
 
-If a crate under verification defines a function not marked as `unsafe`, VeriFast generates a specification for that function that expresses the function's semantic well-typedness. If the function is annotated with an explicit specification as well, VeriFast first verifies that the explicit specification implies the generated one, and then verifies the function body against the explicit specification; otherwise, VeriFast verifies the function body against the generated specification.
+If a crate under verification defines a function not marked as `unsafe`, VeriFast generates a specification for that function that expresses the function's semantic well-typedness. If the function is annotated with an explicit specification as well, VeriFast first verifies that the explicit specification implies[^spec-implies] the generated one, and then verifies the function body against the explicit specification; otherwise, VeriFast verifies the function body against the generated specification.
+
+[^spec-implies]: By "specification S1 implies specification S2" we mean that every function that satisfies S1 also satisfies S2. VeriFast checks this through symbolic execution, by producing the precondition of S2, then consuming the precondition of S1, then producing the postcondition of S1, and then consuming the postcondition of S2. This corresponds to checking that an implementation of S2 that just calls an implementation of S1 would be correct. For this check to succeed, it is sufficient (but not necessary) that the precondition of S2 implies the precondition of S1 and the postcondition of S1 implies the postcondition of S2.
 
 For a function `fn f<'a, 'b : 'a, T, U>(x1: T1, ..., xN: TN) -> U`, the generated specification is as follows:
 ```
