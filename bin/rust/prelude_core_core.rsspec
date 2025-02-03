@@ -6,6 +6,13 @@ inductive unit = unit;
 
 inductive option<t> = none | some(t);
 
+fix unwrap_or_else<t>(default: t, v_: option<t>) -> t {
+    match v_ {
+        none => default,
+        some(v) => v
+    }
+}
+
 inductive wrap<t> = wrap(t);
 
 inductive pair<a, b> = pair(a, b);

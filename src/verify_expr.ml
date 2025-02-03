@@ -1566,7 +1566,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     eval_core assert_term (Some read_field) env e
   
-  type c_object_value = Unspecified | Default | Expr of expr | Term of termnode | MaybeUninitTerm of termnode
+  type c_object_value = Uninitialized | Default | Expr of expr | Term of termnode | MaybeUninitTerm of termnode
 
   let type_definitely_has_nonzero_size = function
     Bool | Int _ | Float | Double | LongDouble | PtrType _ | RustRefType _ -> true
@@ -1594,7 +1594,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         match init with
           Default -> cont h env (Some (match tp with PtrType _ -> null_pointer_term () | Bool -> false_term | _ -> ctxt#mk_intlit 0))
         | Expr e -> eval_h h env e $. fun h env value -> cont h env (Some value)
-        | Unspecified | MaybeUninitTerm _ -> cont h env None
+        | Uninitialized | MaybeUninitTerm _ -> cont h env None
         | Term t -> cont h env (Some t)
       end $. fun h env value ->
       produce_points_to_chunk_ l h tp coef addr RegularPointsTo value $. fun h ->
@@ -1691,7 +1691,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | _, MaybeUninitTerm term ->
         produce_array_chunk h env true elemTp addr term elemCountTerm
       | _ ->
-        let elems = get_unique_var_symb "elems" (list_type (if init = Unspecified then option_type elemTp else elemTp)) in
+        let elems = get_unique_var_symb "elems" (list_type (if init = Uninitialized then option_type elemTp else elemTp)) in
         begin fun cont ->
           match init, elemTp with
             Default, (Int (_, _)) ->
@@ -1701,7 +1701,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           | _ ->
             cont ()
         end $. fun () ->
-        produce_array_chunk h env (init = Unspecified) elemTp addr elems elemCountTerm
+        produce_array_chunk h env (init = Uninitialized) elemTp addr elems elemCountTerm
       end
     | UnionType un -> begin
       match language, dialect, List.assoc_opt un unionmap with
@@ -1735,7 +1735,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | Expr e -> eval_h h env e $. fun h env v -> cont h env (Some (Some (`Terms (field_values_of_struct_as_value v))))
         | Term t -> cont h env (Some (Some (`Terms (field_values_of_struct_as_value t))))
         | Default -> cont h env (Some None) (* Initialize to default value (= zero) *)
-        | Unspecified -> cont h env None (* Do not initialize; i.e. arbitrary initial value *)
+        | Uninitialized -> cont h env None (* Do not initialize *)
         | MaybeUninitTerm term ->
           let (_, _, _, _, csym_opt) = List.assoc sn struct_accessor_map in
           let _, _, Some (_, fields_map, _), _, _ = List.assoc sn structmap in
@@ -1768,13 +1768,13 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let pointsto_kind = match init with MaybeUninitTerm _ -> MaybeUninit | _ -> RegularPointsTo in 
           let has_nonempty_field = has_nonempty_field || type_definitely_has_nonzero_size t in
           let init, inits =
-            if gh = Ghost then Unspecified, inits else
+            if gh = Ghost then Uninitialized, inits else
             match inits with
               Some (Some (`Exprs (e::es))) -> Expr e, Some (Some (`Exprs es))
             | Some (Some (`Terms (t::ts))) -> Term t, Some (Some (`Terms ts))
             | Some (Some (`MaybeUninitTerms (t :: ts))) -> MaybeUninitTerm t, Some (Some (`MaybeUninitTerms ts))
             | Some (None | Some (`Exprs [] | `Terms [])) -> Default, Some None
-            | _ -> Unspecified, None
+            | _ -> Uninitialized, None
           in
           match t with
             StaticArrayType (_, _) | StructType _ | UnionType _ ->
@@ -1802,7 +1802,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               | MaybeUninitTerm t -> 
                 let t = prover_convert_term t t0 (instantiate_type tpenv t0) in
                 cont h env (Some t)
-              | Unspecified -> cont h env (match gh with Ghost -> Some (get_unique_var_symb_ "value" t true) | Real -> None)
+              | Uninitialized -> cont h env (match gh with Ghost -> Some (get_unique_var_symb_ "value" t true) | Real -> None)
             end $. fun h env value ->
             assume_field h env sn tparams f t0 targs gh addr pointsto_kind value coef $. fun h ->
             iter h env has_nonempty_field fields inits
@@ -2440,7 +2440,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         if isActivating then
           let pats = [TermPat target; TermPat (sizeof_core l env memberType); dummypat] in
           consume_chunk rules h env [] [] [] l (chars__pred_symb(), true) [] real_unit real_unit_pat (Some 2) pats $. fun _ h _ [_; _; cs] _ _ _ _ ->
-          produce_c_object l real_unit vp memberType eval_h Unspecified false true h env $. fun h env ->
+          produce_c_object l real_unit vp memberType eval_h Uninitialized false true h env $. fun h env ->
           cont h env vp
         else
           cont h env vp
@@ -2735,7 +2735,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         end
         begin fun () ->
           assume_neq (mk_ptr_address result) int_zero_term $. fun () ->
-          produce_c_object l real_unit result t eval_h (if g = "calloc" then Default else Unspecified) true false h env $. fun h env ->
+          produce_c_object l real_unit result t eval_h (if g = "calloc" then Default else Uninitialized) true false h env $. fun h env ->
           match t with
             StructType (sn, targs) ->
             let (_, (_, _, _, _, malloc_block_symb, _, _)) = List.assoc sn malloc_block_pred_map in
@@ -2888,7 +2888,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let cont h = cont h env result in
       let init = 
         match expr_opt with 
-        | None -> Unspecified
+        | None -> Uninitialized
         | Some e -> Expr e 
       in 
       let verify_call loc args params pre post terminates h env target_struct cont = verify_call funcmap eval_h loc (pn, ilist) xo None [] args ([], None, params, ["this", result], pre, post, None, terminates, false) false false (Some target_struct) leminfo sizemap h [] tenv ghostenv env cont @@ fun _ _ _ _ _ -> assert false in

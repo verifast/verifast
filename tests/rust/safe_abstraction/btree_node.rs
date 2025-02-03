@@ -154,7 +154,7 @@ impl<K, V> LeafNode<K, V> {
             //@ let contents_ptr = std::boxed::Box_separate_contents(leaf_ref);
             //@ std::mem::open_MaybeUninit(contents_ptr);
             //@ let contents_ptr_ = contents_ptr as *LeafNode<K, V>;
-            LeafNode::init(Box::as_mut_ptr(&mut leaf) as *mut LeafNode<K, V>);
+            LeafNode::init(Box::as_mut_ptr(leaf_ref) as *mut LeafNode<K, V>);
             //@ std::mem::MaybeUninit__to_MaybeUninit(&(*contents_ptr_).parent_idx);
             //@ open LeafNode_keys_(contents_ptr_, _);
             //@ std::mem::Array__MaybeUninit_to_Array_MaybeUninit(&(*contents_ptr_).keys);
@@ -190,11 +190,26 @@ impl<K, V> InternalNode<K, V> {
     /// An invariant of internal nodes is that they have at least one
     /// initialized and valid edge. This function does not set up
     /// such an edge.
-    unsafe fn new<A: Allocator + Clone>(alloc: A) -> Box<Self, A> {
+    unsafe fn new<A: Allocator + Clone>(alloc: A) -> Box<Self, A>
+    //@ req thread_token(?t) &*& Allocator(t, alloc, ?alloc_id);
+    //@ ens thread_token(t) &*& Box_in(t, result, alloc_id, ?node) &*& node.data.parent == Option::None &*& node.data.len == 0;
+    {
         unsafe {
             let mut node = Box::<Self, _>::new_uninit_in(alloc);
+            let node_ref = &mut node;
+            //@ let contents_ptr = std::boxed::Box_separate_contents(node_ref);
+            //@ std::mem::open_MaybeUninit(contents_ptr);
+            //@ let contents_ptr_ = contents_ptr as *InternalNode<K, V>;
+            //@ open_points_to_(contents_ptr_);
             // We only need to initialize the data; the edges are MaybeUninit.
-            LeafNode::init(ptr::addr_of_mut!((*node.as_mut_ptr()).data));
+            LeafNode::init(Box::as_mut_ptr(node_ref) as *mut LeafNode<K, V>);
+            //@ std::mem::MaybeUninit__to_MaybeUninit(&(*contents_ptr_).data.parent_idx);
+            //@ std::mem::array__MaybeUninit_to_array_MaybeUninit(&(*contents_ptr_).data.keys as *MaybeUninit<K>);
+            //@ std::mem::array__MaybeUninit_to_array_MaybeUninit(&(*contents_ptr_).data.vals as *MaybeUninit<V>);
+            //@ std::mem::array__MaybeUninit_to_array_MaybeUninit(&(*contents_ptr_).edges as *MaybeUninit<NonNull<LeafNode<K, V>>>);
+            //@ close_points_to(contents_ptr_);
+            //@ std::mem::close_MaybeUninit(contents_ptr);
+            //@ std::boxed::Box_unseparate_contents(node_ref);
             node.assume_init()
         }
     }
