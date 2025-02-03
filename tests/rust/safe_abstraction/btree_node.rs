@@ -745,16 +745,18 @@ unsafe impl<BorrowType, K: Sync, V: Sync, Type> Sync for NodeRef<BorrowType, K, 
 // unsafe impl<K: Send, V: Send, Type> Send for NodeRef<marker::Dying, K, V, Type> {}
 
 impl<K, V> NodeRef<marker::Owned, K, V, marker::Leaf> {
-    pub /*VF*/unsafe fn new_leaf<A: Allocator + Clone>(alloc: A) -> Self {
+    pub /*VF*/unsafe fn new_leaf<A: Allocator + Clone>(alloc: A) -> Self
+    //@ req thread_token(?t) &*& Allocator(t, alloc, ?alloc_id);
+    //@ ens thread_token(t) &*& NodeRef(t, alloc_id, result, tree(_, [empty]), root_ctx, 0, [], 0, []) &*& Allocator::<A>(t, _, alloc_id);
+    {
         Self::from_new_leaf(LeafNode::new(alloc))
     }
 
     /*VF*/unsafe fn from_new_leaf<A: Allocator + Clone>(leaf: Box<LeafNode<K, V>, A>) -> Self
     //@ req Box_in(?t, leaf, ?alloc_id, ?leafNode) &*& leafNode.parent == Option::None &*& leafNode.len == 0;
-    //@ ens NodeRef(t, alloc_id, result, tree(_, [empty]), root_ctx, 0, [], 0, []);
+    //@ ens NodeRef(t, alloc_id, result, tree(_, [empty]), root_ctx, 0, [], 0, []) &*& Allocator::<A>(t, _, alloc_id);
     {
         let leaf_ptr = Box::leak(leaf) as *mut LeafNode<K, V>;
-        //@ leak Allocator(t, _, alloc_id);
         //@ open_points_to(leaf_ptr);
         let r = NodeRef { height: 0, node: NonNull::new_unchecked(leaf_ptr), _marker: PhantomData };
         //@ array_to_array_(&(*leaf_ptr).keys as *MaybeUninit<K>);
@@ -780,9 +782,20 @@ impl<K, V> NodeRef<marker::Owned, K, V, marker::Internal> {
     unsafe fn from_new_internal<A: Allocator + Clone>(
         internal: Box<InternalNode<K, V>, A>,
         height: usize,
-    ) -> Self {
+    ) -> Self
+    /*
+    req Box_in(?t, internal, ?alloc_id, ?node_) &*&
+        node_.data.parent == Option::None &*&
+        node_.data.len == 0 &*&
+        Array_elems(node_.edges) == cons(?edge, nil) &*&
+        MaybeUninit::inner(edge) == some(?edge_nnp) &*&
+        wrap(NonNull_ptr(edge_nnp)) == wrap(?edge_ptr) &*&
+        subtree(alloc_id, edge_ptr, height - 1, tree(edge_ptr, ?children), [], [], _, _);
+    */
+    // ens NodeRef(t, alloc_id, result, tree(_, [tree(edge_ptr, children)]), root_ctx, 0, [], 0, []);
+    {
         debug_assert!(height > 0);
-        let node = NonNull::from(Box::leak(internal)).cast();
+        let node = NonNull::new_unchecked(Box::leak(internal)).cast();
         let mut this = NodeRef { height, node, _marker: PhantomData };
         this.borrow_mut().correct_all_childrens_parent_links();
         this
