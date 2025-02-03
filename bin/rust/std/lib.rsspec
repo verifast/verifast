@@ -215,6 +215,10 @@ mod mem {
         req *self |-?-> ?value_;
         ens *self |-> match value_ { none => Array_of_elems(repeat(nat_of_int(usize_of_const(typeid(N))), MaybeUninit::uninit_())), some(value) => value };
     
+    lem array__MaybeUninit_to_array_MaybeUninit<T>(self: *MaybeUninit<T>);
+        req self[..?n] |-?-> ?elems_;
+        ens self[..n] |-> map((unwrap_or_else)(MaybeUninit::uninit_), elems_);
+    
     @*/
     
     mod verifast {

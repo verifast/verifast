@@ -648,6 +648,15 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       with_context (Executing (h, env, l, "Consuming points_to chunk")) $. fun () ->
       consume_chunk rules h env ghostenv [] [] l (generic_points_to_symb (), true) [pointeeType] real_unit dummypat (Some 1) [TermPat pointerTerm; SrcPat DummyPat] $. fun _ h coef [_; value] _ _ _ _ ->
       produce_c_object l coef pointerTerm pointeeType eval_h (Term value) false true h env cont
+    | ExprStmt (CallExpr (l, "open_points_to_", targs, [], args, Static)) when language = CLang ->
+      require_pure();
+      let e = match (targs, args) with ([], [LitPat e]) -> e | _ -> static_error l "open_points_to_ expects no type argument and one argument." None in
+      let (w, tp) = check_expr (pn,ilist) tparams tenv e in
+      let pointeeType = match tp with PtrType tp | RustRefType (_, _, tp) -> tp | _ -> static_error l "The argument of open_points_to must be a pointer." None in
+      eval_h h env w $. fun h env pointerTerm ->
+      with_context (Executing (h, env, l, "Consuming points_to_ chunk")) $. fun () ->
+      consume_chunk rules h env ghostenv [] [] l (generic_points_to__symb (), true) [pointeeType] real_unit dummypat (Some 1) [TermPat pointerTerm; SrcPat DummyPat] $. fun _ h coef _ _ _ _ _ ->
+      produce_c_object l coef pointerTerm pointeeType eval_h Uninitialized false true h env cont
     | ExprStmt (CallExpr (l, "close_points_to", targs, [], args, Static)) when language = CLang ->
       require_pure();
       let e = match (targs, args) with ([], [LitPat e]) -> e | _ -> static_error l "close_points_to expects no type argument and one argument." None in
@@ -722,7 +731,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let of_bytes_symb = get_pure_func_symb (match dialect with Some Rust -> "of_u8s_" | _ -> "of_chars_") in
             let terms = [typeid_of_core l env (StructType (sn, targs)); elems] in
             MaybeUninitTerm (mk_app of_bytes_symb terms)
-          | _ -> Unspecified
+          | _ -> Uninitialized
           end
         | "close_struct_zero" ->
           let cond = mk_all_eq charType elems (ctxt#mk_intlit 0) in
@@ -997,7 +1006,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             | _ ->
               let init =
                 match e with
-                | None -> Unspecified
+                | None -> Uninitialized
                 | Some e -> Expr (check_c_initializer check_expr_t (pn,ilist) tparams tenv e t)
               in
               let verify_ctor_call = verify_ctor_call (pn, ilist) leminfo funcmap predinstmap sizemap tenv ghostenv h env addr (Some addr_name) in
