@@ -221,7 +221,7 @@ let rec rust_string_of_type t =
   | InductiveType (i, targs) -> i ^ "<" ^ String.concat ", " (List.map rust_string_of_type targs) ^ ">"
   | ObjType (l, []) -> "class " ^ l
   | ObjType (l, targs) -> "class " ^ l ^ "<" ^ String.concat ", " (List.map rust_string_of_type targs) ^ ">"
-  | StructType (sn, targs) -> "struct " ^ sn ^ (match targs with [] -> "" | _ -> "<" ^ String.concat ", " (List.map rust_string_of_type targs) ^ ">")
+  | StructType (sn, targs) -> sn ^ (match targs with [] -> "" | _ -> "<" ^ String.concat ", " (List.map rust_string_of_type targs) ^ ">")
   | UnionType un -> "union " ^ un
   | PtrType Void -> "*_"
   | PtrType t -> "*" ^ rust_string_of_type t
@@ -258,7 +258,7 @@ let rec rust_string_of_type t =
   | InferredRealType x -> x ^ "?"
   | InferredType (_, t) -> begin match !t with EqConstraint t -> rust_string_of_type t | _ -> "?" end
   | ArrayType(t) -> (rust_string_of_type t) ^ "[]"
-  | StaticArrayType(t, s) -> rust_string_of_type t ^ "[" ^ rust_string_of_type s ^ "]"
+  | StaticArrayType(t, s) -> Printf.sprintf "[%s; %s]" (rust_string_of_type t) (rust_string_of_type s)
   | LiteralConstType n -> string_of_int n
   | ClassOrInterfaceName(n) -> n (* not a real type; used only during type checking *)
   | PackageName(n) -> n (* not a real type; used only during type checking *)

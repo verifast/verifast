@@ -594,7 +594,7 @@ let _ =
             | Some (allASTs, noLocs, target_file) ->
               if allASTs then begin
                 if not (Sys.file_exists target_file) then Sys.mkdir target_file 0o700;
-                let target_file = Filename.concat target_file (String.map (function '/'|'\\' -> '-' | c -> c) (smart_compose dir path)) ^ ".ast.ml" in
+                let target_file = Filename.concat target_file (String.map (function '/'|'\\'|':' -> '-' | c -> c) (smart_compose dir path)) ^ ".ast.ml" in
                 Ocaml_expr_formatter.print_ocaml_expr_to_file noLocs target_file (Ocaml_expr_of_ast.of_list Ocaml_expr_of_ast.of_package packages)
               end else if path = filename && dir = Filename.dirname filename then
                 Ocaml_expr_formatter.print_ocaml_expr_to_file noLocs target_file (Ocaml_expr_of_ast.of_list Ocaml_expr_of_ast.of_package packages)

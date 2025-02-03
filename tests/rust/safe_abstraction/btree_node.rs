@@ -1,9 +1,10 @@
-// verifast_options{skip_specless_fns}
+// verifast_options{ignore_unwind_paths skip_specless_fns}
 
 #![feature(allocator_api)]
 #![feature(core_intrinsics)]
 #![feature(maybe_uninit_slice)]
 #![feature(slice_ptr_get)]
+#![feature(box_as_ptr)]
 
 // This is an attempt at an implementation following the ideal
 //
@@ -51,7 +52,8 @@ use core::boxed::Box;
 //@ use std::ptr::{NonNull, NonNull_ptr, NonNull_new_};
 //@ use std::option::Option;
 //@ use std::mem::{MaybeUninit, MaybeUninit_inner};
-//@ use std::alloc::{Layout, alloc_block_in};
+//@ use std::alloc::{Layout, alloc_block_in, Allocator};
+//@ use std::boxed::{Box_in};
 
 mod btree_mem {
 
@@ -125,7 +127,10 @@ struct LeafNode<K, V> {
 
 impl<K, V> LeafNode<K, V> {
     /// Initializes a new `LeafNode` in-place.
-    unsafe fn init(this: *mut Self) {
+    unsafe fn init(this: *mut Self)
+    //@ req (*this).parent |-> _ &*& (*this).len |-> _;
+    //@ ens (*this).parent |-> Option::None &*& (*this).len |-> 0;
+    {
         // As a general policy, we leave fields uninitialized if they can be, as this should
         // be both slightly faster and easier to track in Valgrind.
         unsafe {
@@ -134,12 +139,29 @@ impl<K, V> LeafNode<K, V> {
             ptr::addr_of_mut!((*this).len).write(0);
         }
     }
+    
+    // BJ: `/*VF*/unsafe` means I added the `unsafe` keyword; it was not present orginally.
+    // TODO: Prove (some kind of) semantic well-typedness?? (The BTreeMap client code uses lots of `unsafe` blocks so it's not clear to me that that would be a meaningful execise.)
 
     /// Creates a new boxed `LeafNode`.
-    fn new<A: Allocator + Clone>(alloc: A) -> Box<Self, A> {
+    /*VF*/unsafe fn new<A: Allocator + Clone>(alloc: A) -> Box<Self, A>
+    //@ req thread_token(?t) &*& Allocator(t, alloc, ?alloc_id);
+    //@ ens thread_token(t) &*& Box_in(t, result, alloc_id, ?leafNode) &*& leafNode.parent == Option::None &*& leafNode.len == 0;
+    {
         unsafe {
             let mut leaf = Box::new_uninit_in(alloc);
-            LeafNode::init(leaf.as_mut_ptr());
+            let leaf_ref = &mut leaf;
+            //@ let contents_ptr = std::boxed::Box_separate_contents(leaf_ref);
+            //@ std::mem::open_MaybeUninit(contents_ptr);
+            //@ let contents_ptr_ = contents_ptr as *LeafNode<K, V>;
+            LeafNode::init(Box::as_mut_ptr(&mut leaf) as *mut LeafNode<K, V>);
+            //@ std::mem::MaybeUninit__to_MaybeUninit(&(*contents_ptr_).parent_idx);
+            //@ open LeafNode_keys_(contents_ptr_, _);
+            //@ std::mem::Array__MaybeUninit_to_Array_MaybeUninit(&(*contents_ptr_).keys);
+            //@ open LeafNode_vals_(contents_ptr_, _);
+            //@ std::mem::Array__MaybeUninit_to_Array_MaybeUninit(&(*contents_ptr_).vals);
+            //@ std::mem::close_MaybeUninit(contents_ptr);
+            //@ std::boxed::Box_unseparate_contents(leaf_ref);
             leaf.assume_init()
         }
     }
@@ -708,7 +730,7 @@ unsafe impl<BorrowType, K: Sync, V: Sync, Type> Sync for NodeRef<BorrowType, K, 
 // unsafe impl<K: Send, V: Send, Type> Send for NodeRef<marker::Dying, K, V, Type> {}
 
 impl<K, V> NodeRef<marker::Owned, K, V, marker::Leaf> {
-    pub fn new_leaf<A: Allocator + Clone>(alloc: A) -> Self {
+    pub /*VF*/unsafe fn new_leaf<A: Allocator + Clone>(alloc: A) -> Self {
         Self::from_new_leaf(LeafNode::new(alloc))
     }
 
@@ -1075,7 +1097,7 @@ impl<K, V> NodeRef<marker::Owned, K, V, marker::LeafOrInternal> {
 
 impl<K, V> NodeRef<marker::Owned, K, V, marker::LeafOrInternal> {
     /// Returns a new owned tree, with its own root node that is initially empty.
-    pub fn new<A: Allocator + Clone>(alloc: A) -> Self {
+    pub /*VF*/unsafe fn new<A: Allocator + Clone>(alloc: A) -> Self {
         NodeRef::new_leaf(alloc).forget_type()
     }
 
@@ -1467,7 +1489,7 @@ impl<'a, K: 'a, V: 'a> Handle<NodeRef<marker::Mut<'a>, K, V, marker::Leaf>, mark
     ///
     /// Returns a dormant handle to the inserted node which can be reawakened
     /// once splitting is complete.
-    fn insert<A: Allocator + Clone>(
+    /*VF*/unsafe fn insert<A: Allocator + Clone>(
         self,
         key: K,
         val: V,
@@ -1572,7 +1594,7 @@ impl<'a, K: 'a, V: 'a> Handle<NodeRef<marker::Mut<'a>, K, V, marker::Leaf>, mark
     /// If the returned result is some `SplitResult`, the `left` field will be the root node.
     /// The returned pointer points to the inserted value, which in the case of `SplitResult`
     /// is in the `left` or `right` tree.
-    pub fn insert_recursing<A: Allocator + Clone>(
+    pub /*VF*/unsafe fn insert_recursing<A: Allocator + Clone>(
         self,
         key: K,
         value: V,
@@ -1753,7 +1775,7 @@ impl<'a, K: 'a, V: 'a> Handle<NodeRef<marker::Mut<'a>, K, V, marker::Leaf>, mark
     /// - The key and value pointed to by this handle are extracted.
     /// - All the key-value pairs to the right of this handle are put into a newly
     ///   allocated node.
-    pub fn split<A: Allocator + Clone>(mut self, alloc: A) -> SplitResult<'a, K, V, marker::Leaf> {
+    pub /*VF*/unsafe fn split<A: Allocator + Clone>(mut self, alloc: A) -> SplitResult<'a, K, V, marker::Leaf> {
         let mut new_node = LeafNode::new(alloc);
 
         let kv = self.split_leaf_data(&mut new_node);

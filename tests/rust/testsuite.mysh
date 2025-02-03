@@ -96,7 +96,7 @@ cd safe_abstraction
     del proof_obligs_quick_fix_test_generic_result.rs
   end_sequential
   verifast -ignore_unwind_paths -skip_specless_fns -allow_assume linked_list.rs
-  verifast -skip_specless_fns -allow_assume btree_node.rs
+  verifast -ignore_unwind_paths -skip_specless_fns -allow_assume btree_node.rs
   verifast -skip_specless_fns -ignore_unwind_paths atomic.rs
 cd ..
 end_parallel
