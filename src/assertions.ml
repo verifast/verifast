@@ -542,7 +542,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let (_, tparams, ctormap, _, _, _, _, _, _) = List.assoc i inductivemap in
       let rec iter cs =
         match cs with
-          WSwitchAsnClause (lc, cn, pats, patsInfo, p)::cs ->
+          WSwitchAsnClause (lc, cn, full_cn, pats, patsInfo, p)::cs ->
           branch
             (fun _ ->
                let (_, (_, tparams, _, tps, cs)) = List.assoc cn ctormap in
@@ -1441,7 +1441,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let (_, tparams, ctormap, _, _, _, _, _, _) = List.assoc i inductivemap in
       let rec iter cs =
         match cs with
-          WSwitchAsnClause (lc, cn, pats, patsInfo, p)::cs ->
+          WSwitchAsnClause (lc, cn, full_cn, pats, patsInfo, p)::cs ->
           let (_, (_, tparams, _, tps, ctorsym)) = List.assoc cn ctormap in
           let Some pts = zip pats tps in
           let (xs, xenv) =
@@ -1553,9 +1553,9 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             (*| ForallAsn _ -> cont conds*)
             | WSwitchAsn(_, e, i, cases) when expr_is_fixed inputVars e ->
               flatmap 
-                (fun (WSwitchAsnClause (l, casename, args, boxinginfo, asn)) ->
+                (fun (WSwitchAsnClause (l, ctorname, full_ctorname, args, boxinginfo, asn)) ->
                   if (List.length args) = 0 then
-                    let cond = WOperation (l, Eq, [e; WVar (l, casename, PureFuncName [])], AnyType) in
+                    let cond = WOperation (l, Eq, [e; WVar (l, full_ctorname, PureFuncName [])], AnyType) in
                     iter (cond :: conds) asn cont
                   else 
                    []

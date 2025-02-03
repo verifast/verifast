@@ -6685,13 +6685,13 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 [] ->
                 if ctormap = [] && wcdef <> None then static_error l "Superfluous default clause" None;
                 let default_wcs = 
-                  ctormap |> List.map @@ fun (cn, (_, (_, _, _, param_names_types, _))) ->
+                  ctormap |> List.map @@ fun (cn, (full_cn, (_, _, _, param_names_types, _))) ->
                     let (_, ts) = List.split param_names_types in
                     let xsInfo = ts |> List.map (fun t -> match unfold_inferred_type t with GhostTypeParam x -> Some (provertype_of_type (List.assoc x tpenv)) | _ -> None) in
                     match wcdef with
                       None -> static_error l (Printf.sprintf "A clause for constructor '%s' is missing" cn) None
                     | Some (lcdef, (wcdef, _, clauseInfTps)) ->
-                      WSwitchAsnClause (lcdef, cn, List.map (fun _ -> None) param_names_types, xsInfo, wcdef)
+                      WSwitchAsnClause (lcdef, cn, full_cn, List.map (fun _ -> None) param_names_types, xsInfo, wcdef)
                 in
                 let cdefInfTps = match wcdef with None -> [] | Some (_, (_, _, cdefInfTps)) -> cdefInfTps in
                 (WSwitchAsn (l, w, i, List.rev default_wcs @ wcs), tenv, cdefInfTps @ infTps)
@@ -6699,7 +6699,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 begin
                 match try_assoc cn ctormap with
                   None -> static_error lc "No such constructor." None
-                | Some (_, (_, _, _, param_names_types, _)) ->
+                | Some (full_cn, (_, _, _, param_names_types, _)) ->
                   let (_, ts) = List.split param_names_types in
                   let (xmap, xsInfo) =
                     let rec iter xmap xsInfo ts xs =
@@ -6718,7 +6718,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   let tenv = xmap @ tenv in
                   let (wbody, _, clauseInfTps) = check_asn tenv body in
                   let xs = List.map (fun x -> Some x) xs in
-                  iter (WSwitchAsnClause (lc, cn, xs, xsInfo, wbody)::wcs) (List.remove_assoc cn ctormap) cs (clauseInfTps @ infTps)
+                  iter (WSwitchAsnClause (lc, cn, full_cn, xs, xsInfo, wbody)::wcs) (List.remove_assoc cn ctormap) cs (clauseInfTps @ infTps)
                 end
             in
             iter [] ctormap cs []
@@ -6944,7 +6944,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let rec iter fixed' cs =
         match cs with
           [] -> get fixed'
-        | WSwitchAsnClause (l, c, xs, _, p)::cs ->
+        | WSwitchAsnClause (l, c, full_cn, xs, _, p)::cs ->
           let xs = flatmap (function None -> [] | Some x -> [x]) xs in
           let fixed = check_pred_precise (xs@fixed) p in
           iter (Some (match fixed' with None -> fixed | Some fixed' -> intersect fixed' fixed)) cs

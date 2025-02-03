@@ -811,9 +811,9 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let rec iter cs =
         match cs with
           [] -> cs
-        | WSwitchAsnClause (l, ctor, pats, info, body) as c::cs0 ->
+        | WSwitchAsnClause (l, ctor, full_ctor, pats, info, body) as c::cs0 ->
           let body' = dynamic_of body in
-          let c' = if body' == body then c else WSwitchAsnClause (l, ctor, pats, info, body') in
+          let c' = if body' == body then c else WSwitchAsnClause (l, ctor, full_ctor, pats, info, body') in
           let cs0' = iter cs0 in
           if c' == c && cs0' == cs0 then cs else c'::cs0'
       in
@@ -1388,7 +1388,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | SwitchExpr(_, e, cls, None) -> expr_mark_addr_taken e locals;
         List.iter (fun (SwitchExprClause(_, _, _, a)) -> ass_mark_addr_taken a locals) cls;
     | WSwitchAsn(_, e, i, cls) -> expr_mark_addr_taken e locals;
-        List.iter (fun (WSwitchAsnClause(_, _, _, _, a)) -> ass_mark_addr_taken a locals) cls;
+        List.iter (fun (WSwitchAsnClause(_, _, _, _, _, a)) -> ass_mark_addr_taken a locals) cls;
     | EmpAsn _ -> ()
     | ForallAsn (l, tp, i, e) -> expr_mark_addr_taken e locals; 
     | CoefAsn(_, pat, a) -> pat_expr_mark_addr_taken pat locals; ass_mark_addr_taken a locals
@@ -2370,7 +2370,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | Sep (l, a1, a2) -> asserts_exclusive_ownership a1 || asserts_exclusive_ownership a2
     | IfAsn (l, e, a1, a2) -> asserts_exclusive_ownership a1 || asserts_exclusive_ownership a2
     | WSwitchAsn (l, e, i, cs) ->
-      List.exists (function WSwitchAsnClause (l, c, xs, _, a) -> asserts_exclusive_ownership a) cs
+      List.exists (function WSwitchAsnClause (l, c, c_full, xs, _, a) -> asserts_exclusive_ownership a) cs
     | EmpAsn _ -> false
     | ForallAsn (_, _, _, _) -> false
     | CoefAsn (l, DummyPat, a) -> false (* TODO: Support more coefpats *)
