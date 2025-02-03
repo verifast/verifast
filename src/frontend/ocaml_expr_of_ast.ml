@@ -685,10 +685,11 @@ and of_pat = function
     of_option of_expr e
   ])
 and of_wswitch_asn_clause = function
-  WSwitchAsnClause (l, cn, xs, pts, a) ->
+  WSwitchAsnClause (l, cn, full_cn, xs, pts, a) ->
   C ("WSwitchAsnClause", [
     of_loc l;
     S cn;
+    S full_cn;
     of_list (of_option s) xs;
     of_list (of_option of_prover_type) pts;
     of_expr a

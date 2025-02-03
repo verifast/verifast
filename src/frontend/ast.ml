@@ -623,7 +623,8 @@ and
   wswitch_asn_clause = (* ?switch_asn_clause *)
   | WSwitchAsnClause of
       loc * 
-      string * 
+      string (* ctor name *) *
+      string (* full ctor name *) *
       string option list (* pattern variables, or None if _ *) *
       prover_type option list (* Boxing info *) *
       asn
@@ -1393,7 +1394,7 @@ let expr_fold_open iter state e =
   | WSwitchAsn (l, e, i, sacs) ->
     let rec iter' state = function
       [] -> state
-    | WSwitchAsnClause (l, _, _, _, a)::sacs -> iter' (iter state e) sacs
+    | WSwitchAsnClause (l, _, _, _, _, a)::sacs -> iter' (iter state e) sacs
     in
     iter' (iter state e) sacs
   | EmpAsn l -> state

@@ -720,11 +720,12 @@ and sexpr_of_switch_clause (c : switch_expr_clause) : sexpression =
 
 and sexpr_of_wswitch_asn_clause (c: wswitch_asn_clause) : sexpression =
   match c with
-    | WSwitchAsnClause (loc, name, l, ptypes, expr) ->
+    | WSwitchAsnClause (loc, name, full_name, l, ptypes, expr) ->
         build_list
           [ Symbol "w-switch-asn-clause" ]
           [
             "name", Symbol name;
+            "full_name", Symbol full_name;
             "l", sexpr_of_list (sexpr_of_option (fun x -> Symbol x)) l;
             "ptypes", sexpr_of_list (sexpr_of_option sexpr_of_prover_type) ptypes;
             "expr", sexpr_of_expr expr

@@ -749,8 +749,22 @@ impl<K, V> NodeRef<marker::Owned, K, V, marker::Leaf> {
         Self::from_new_leaf(LeafNode::new(alloc))
     }
 
-    fn from_new_leaf<A: Allocator + Clone>(leaf: Box<LeafNode<K, V>, A>) -> Self {
-        NodeRef { height: 0, node: NonNull::from(Box::leak(leaf)), _marker: PhantomData }
+    /*VF*/unsafe fn from_new_leaf<A: Allocator + Clone>(leaf: Box<LeafNode<K, V>, A>) -> Self
+    //@ req Box_in(?t, leaf, ?alloc_id, ?leafNode) &*& leafNode.parent == Option::None &*& leafNode.len == 0;
+    //@ ens NodeRef(t, alloc_id, result, tree(_, [empty]), root_ctx, 0, [], 0, []);
+    {
+        let leaf_ptr = Box::leak(leaf) as *mut LeafNode<K, V>;
+        //@ leak Allocator(t, _, alloc_id);
+        //@ open_points_to(leaf_ptr);
+        let r = NodeRef { height: 0, node: NonNull::new_unchecked(leaf_ptr), _marker: PhantomData };
+        //@ array_to_array_(&(*leaf_ptr).keys as *MaybeUninit<K>);
+        //@ array_to_array_(&(*leaf_ptr).vals as *MaybeUninit<V>);
+        //@ close subtree(alloc_id, leaf_ptr, 0, tree(leaf_ptr, [empty]), [], [], _, _);
+        //@ close tree(alloc_id, leaf_ptr, 0, tree(leaf_ptr, [empty]), root_ctx, 0, [], 0, []);
+        //@ close foreach(nil, full_borrow_content_::<K>(t));
+        //@ close foreach(nil, full_borrow_content_::<V>(t));
+        //@ close NodeRef(t, alloc_id, r, tree(leaf_ptr, [empty]), root_ctx, 0, [], 0, []);
+        r
     }
 }
 
