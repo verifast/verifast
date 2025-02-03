@@ -883,11 +883,12 @@ let rec parse_decl = function%parser
     | IdentTypeExpr (lx, None, x) -> (lx, x, [])
     | ManifestTypeExpr (lx, tp) -> (lx, Printf.sprintf "<impl %s>" (Verifast0.rust_string_of_type tp), [])
     | ConstructedTypeExpr (lx, x, targs) ->
-      let targs = targs |> List.map @@ function
-          IdentTypeExpr (ltarg, None, x) -> x
-        | targ -> static_error (type_expr_loc targ) "This form of type is not yet supported here" None
+      let rec string_of_type_expr = function
+        IdentTypeExpr (_, None, x) -> x
+      | ConstructedTypeExpr (_, x, targs) -> Printf.sprintf "%s<%s>" x (String.concat ", " (List.map string_of_type_expr targs))
+      | tp -> static_error (type_expr_loc tp) "This form of type is not supported here" None
       in
-      (lx, x, targs)
+      (lx, x, List.map string_of_type_expr targs)
     | _ -> static_error (type_expr_loc tp) "This form of type is not supported here" None
   in
   let prefix = x ^ (if targs = [] then "" else "::<" ^ String.concat ", " targs ^ ">") ^ "::" in
