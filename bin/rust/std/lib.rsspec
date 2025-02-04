@@ -28,10 +28,19 @@ mod ops {
 
     trait FnMut<Args> {
     
-        fn call_mut<'a>(self: &'a mut Self, args: Args) -> <Self as FnMut<Args>>::Output;
+        fn call_mut<'a>(self: &'a mut Self, args: Args) -> <Self as std::ops::FnOnce<Args>>::Output;
         //@ req thread_token(?t) &*& *self |-> ?self0 &*& <Self>.own(t, self0) &*& <Args>.own(t, args);
-        //@ ens thread_token(t) &*& *self |-> ?self1 &*& <Self>.own(t, self1) &*& < <Self as FnMut<Args>>::Output>.own(t, result);
+        //@ ens thread_token(t) &*& *self |-> ?self1 &*& <Self>.own(t, self1) &*& < <Self as std::ops::FnOnce<Args>>::Output>.own(t, result);
         //@ on_unwind_ens thread_token(t) &*& *self |-> ?self1 &*& <Self>.own(t, self1);
+        
+    }
+    
+    trait Fn<Args> {
+    
+        fn call<'a>(self: &'a Self, args: Args) -> <Self as std::ops::FnOnce<Args>>::Output;
+        //@ req thread_token(?t) &*& [?q]lifetime_token('a) &*& [_](<Self>.share('a, t, self)) &*& <Args>.own(t, args);
+        //@ ens thread_token(t) &*& [q]lifetime_token('a) &*& < <Self as std::ops::FnOnce<Args>>::Output>.own(t, result);
+        //@ on_unwind_ens thread_token(t) &*& [q]lifetime_token('a);
         
     }
     
@@ -933,6 +942,21 @@ mod time {
         //@ ens true;
         //@ on_unwind_ens true;
 
+    }
+    
+}
+
+mod iter {
+
+    trait Iterator {
+        
+        type Item;
+        
+        fn next<'a>(self: &'a mut Self) -> std::option::Option< <Self as std::iter::Iterator>::Item>;
+        //@ req thread_token(?t) &*& *self |-> ?self0 &*& <Self>.own(t, self0);
+        //@ ens thread_token(t) &*& *self |-> ?self1 &*& <Self>.own(t, self1) &*& <std::option::Option< <Self as std::iter::Iterator>::Item>>.own(t, result);
+        //@ on_unwind_ens thread_token(t) &*& *self |-> ?self1 &*& <Self>.own(t, self1);
+        
     }
     
 }
