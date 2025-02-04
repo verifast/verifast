@@ -765,7 +765,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
   let vf_ty_arg_of_region loc (reg : string) =
     match reg with
     | "'static" | "'<erased>" -> Ast.ManifestTypeExpr (loc, StaticLifetime)
-    | x -> Ast.ManifestTypeExpr (loc, GhostTypeParam x)
+    | x -> Ast.IdentTypeExpr (loc, None, x)
 
   let translate_region_expr loc (reg_cpn : RegionRd.t) =
     vf_ty_arg_of_region loc (RegionRd.id_get reg_cpn)
@@ -1266,8 +1266,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let open Ast in
     if mut <> Mir.Not then
       static_error loc "Mutable string references are not yet supported" None;
-    let (ManifestTypeExpr (_, lft)) = lft in
-    let vf_ty = ManifestTypeExpr (loc, StructType ("str_ref", [ lft ])) in
+    let vf_ty = StructTypeExpr (loc, Some "str_ref", None, [], [ lft ]) in
     let size = SizeofExpr (loc, TypeExpr vf_ty) in
     let own tid vs =
       Error "Expressing ownership of &str values is not yet supported"
@@ -1675,7 +1674,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
 
   and translate_param_ty (name : string) (loc : Ast.loc) =
     let open Ast in
-    let vf_ty = ManifestTypeExpr (loc, GhostTypeParam name) in
+    let vf_ty = IdentTypeExpr (loc, None, name) in
     let interp : RustBelt.ty_interp =
       {
         size = SizeofExpr (loc, TypeExpr vf_ty);
@@ -1752,7 +1751,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       translate_ty_const len_cpn loc
     in
     let vf_ty =
-      Ast.StaticArrayTypeExpr (loc, elem_ty, LiteralConstTypeExpr (loc, Big_int.int_of_big_int len))
+      Ast.StaticArrayTypeExpr
+        (loc, elem_ty, LiteralConstTypeExpr (loc, Big_int.int_of_big_int len))
     in
     let size = Ast.SizeofExpr (loc, TypeExpr vf_ty) in
     let own tid vs =
@@ -2050,18 +2050,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           let open ConstOperandRd.Const.Val in
           let* ty_info = translate_ty (ty_get val_cpn) loc in
           let ty_expr = Mir.raw_type_of ty_info in
-          let ty =
-            match ty_expr with
-            | Ast.ManifestTypeExpr ((*loc*) _, ty) -> ty
-            | _ ->
-                failwith
-                  ("Todo: Unsupported type_expr: "
-                  ^ Ocaml_expr_formatter.string_of_ocaml_expr false
-                      (Ocaml_expr_of_ast.of_type_expr ty_expr))
-          in
-          match ty with
-          | Ast.FuncType _ -> Ok (`TrTypedConstantFn ty_info)
-          | StructType ("str_ref", [ lft ]) -> (
+          match ty_expr with
+          | Ast.ManifestTypeExpr (_, Ast.FuncType _) ->
+              Ok (`TrTypedConstantFn ty_info)
+          | Ast.StructTypeExpr (_, Some "str_ref", _, _, [ lft ]) -> (
               match ConstValueRd.get @@ const_value_get val_cpn with
               | Slice bytes ->
                   Ok
@@ -3741,26 +3733,17 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     in
     let thread_id_name = "_t" in
     let ret_ty_has_elided_lifetimes =
-      let rec check_type state tp =
-        match tp with
-        | GhostTypeParam x when String.starts_with ~prefix:"'_" x -> true
-        | _ -> type_fold_open state check_type tp
-      in
       let rec check_type_expr state te =
         match te with
         | IdentTypeExpr (_, _, x) when String.starts_with ~prefix:"'_" x -> true
-        | ManifestTypeExpr (_, tp) -> check_type state tp
+        | ManifestTypeExpr (_, tp) -> false
         | _ -> type_expr_fold_open check_type_expr state te
       in
       check_type_expr false (Mir.basic_type_of ret_ty)
     in
     let is_in_out_param (_, _, ty) =
       match Mir.basic_type_of ty with
-      | RustRefTypeExpr
-          ( _,
-            (IdentTypeExpr (_, _, x) | ManifestTypeExpr (_, GhostTypeParam x)),
-            Mutable,
-            _ )
+      | RustRefTypeExpr (_, IdentTypeExpr (_, _, x), Mutable, _)
         when (not ret_ty_has_elided_lifetimes)
              && String.starts_with ~prefix:"'_" x ->
           true
@@ -3967,7 +3950,6 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       (fun targ tparam ->
         match targ with
         | Ast.IdentTypeExpr (_, None, x) when x = tparam -> ()
-        | Ast.ManifestTypeExpr (_, GhostTypeParam x) when x = tparam -> ()
         | _ ->
             raise
               (Ast.StaticError
@@ -4251,6 +4233,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           args_get_list trait_pred_cpn |> List.map decode_generic_arg
         in
         `Trait (def_id_get trait_pred_cpn, args)
+    | Projection proj_pred_cpn -> `Projection proj_pred_cpn
     | _ -> `Ignored
 
   let string_of_predicate pred =
@@ -4275,6 +4258,52 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     |> Util.flatmap (function
          | `Trait ("std::marker::Sync", [ `Type (`Param tparam) ]) -> [ tparam ]
          | _ -> [])
+
+  let translate_projection_pred (loc : Ast.loc)
+      (proj_pred_cpn : VfMirStub.Reader.Predicate.Projection.t) =
+    let open VfMirStub.Reader.Predicate.Projection in
+    let* assoc_type_def_id, tparam :: trait_args =
+      let projection_term_cpn = projection_term_get proj_pred_cpn in
+      let open AliasTerm in
+      let* trait_args =
+        args_get_list projection_term_cpn
+        |> ListAux.try_map (fun genarg_cpn ->
+               let* arg = translate_generic_arg genarg_cpn loc in
+               match arg with
+               | Mir.GenArgLifetime _ -> assert false
+               | Mir.GenArgType ty -> Ok (Mir.basic_type_of ty)
+               | Mir.GenArgConst -> assert false)
+      in
+      Ok (def_id_get projection_term_cpn, trait_args)
+    in
+    let trait_name, assoc_type_name =
+      String.rindex assoc_type_def_id ':' |> fun i ->
+      ( String.sub assoc_type_def_id 0 (i - 1),
+        String.sub assoc_type_def_id (i + 1)
+          (String.length assoc_type_def_id - i - 1) )
+    in
+    let* rhs =
+      let term = term_get proj_pred_cpn in
+      let open Term in
+      match get term with
+      | Ty ty_cpn ->
+          let* ty = translate_ty ty_cpn loc in
+          Ok (Mir.basic_type_of ty)
+      | Const const_cpn -> assert false
+    in
+    Ok
+      (Ast.ExprStmt
+         (CallExpr
+            ( loc,
+              "#register_type_projection_equality",
+              [
+                ProjectionTypeExpr
+                  (loc, tparam, trait_name, trait_args, assoc_type_name);
+                rhs;
+              ],
+              [],
+              [],
+              Static )))
 
   let translate_body (body_tr_defs_ctx : body_tr_defs_ctx) (body_cpn : BodyRd.t)
       =
@@ -4377,6 +4406,17 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         let preds =
           impl_block_predicates_get_list body_cpn @ predicates_get_list body_cpn
           |> List.map decode_predicate
+        in
+        let projection_preds =
+          preds
+          |> Util.flatmap (function
+               | `Projection proj_pred_cpn -> [ proj_pred_cpn ]
+               | _ -> [])
+        in
+        let* projection_pred_stmts =
+          ListAux.try_map
+            (translate_projection_pred fn_sig_loc)
+            projection_preds
         in
         let outlives_preds =
           preds
@@ -4562,7 +4602,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             in
             Ok
               (mk_fn_decl contract
-                 (Some (vf_local_decls @ vf_bblocks, closing_cbrace_loc)))
+                 (Some
+                    ( projection_pred_stmts @ vf_local_decls @ vf_bblocks,
+                      closing_cbrace_loc )))
         in
         let body_sig_opt =
           match contract_template_opt with
@@ -4634,12 +4676,16 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           [
             ( IdentTypeExpr (adt_def_loc, None (*package name*), "thread_id_t"),
               tid_param_name );
-            ( ManifestTypeExpr
+            ( PtrTypeExpr
                 ( adt_def_loc,
-                  PtrType
-                    (StructType
-                       (name, List.map (fun x -> GhostTypeParam x) vf_tparams))
-                ),
+                  StructTypeExpr
+                    ( adt_def_loc,
+                      Some name,
+                      None,
+                      [],
+                      List.map
+                        (fun x -> IdentTypeExpr (adt_def_loc, None, x))
+                        vf_tparams ) ),
               ptr_param_name );
           ]
         in

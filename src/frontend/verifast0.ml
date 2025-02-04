@@ -255,6 +255,11 @@ let rec rust_string_of_type t =
   | AnyType -> "any"
   | RealTypeParam x -> "<" ^ x ^ ">"
   | GhostTypeParam x -> x
+  | GhostTypeParamWithEqs (x, eqs) ->
+    let string_of_eq ((traitName, traitArgs, assocTypeName), t) =
+      Printf.sprintf "%s<%s>" traitName (String.concat ", " (List.map rust_string_of_type traitArgs @ [Printf.sprintf "%s = %s" assocTypeName (rust_string_of_type t)]))
+    in
+    x ^ ": " ^ String.concat ", " (List.map string_of_eq eqs)
   | InferredRealType x -> x ^ "?"
   | InferredType (_, t) -> begin match !t with EqConstraint t -> rust_string_of_type t | _ -> "?" end
   | ArrayType(t) -> (rust_string_of_type t) ^ "[]"
@@ -265,6 +270,7 @@ let rec rust_string_of_type t =
   | RefType(t) -> "ref " ^ (rust_string_of_type t)
   | AbstractType x -> x
   | StaticLifetime -> "'static"
+  | ProjectionType (t, traitName, traitArgs, assocTypeName) -> Printf.sprintf "<%s as %s<%s>>::%s" (rust_string_of_type t) traitName (String.concat ", " (List.map rust_string_of_type traitArgs)) assocTypeName
 
 let string_of_type lang dialect =
   match lang, dialect with

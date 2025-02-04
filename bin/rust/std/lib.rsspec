@@ -15,11 +15,22 @@ mod hint {
 
 mod ops {
 
-    trait FnMut<Output, Args> {
+    trait FnOnce<Args> {
+
+        type Output;
     
-        fn call_mut<'a>(self: &'a mut Self, args: Args) -> Output;
+        fn call_once(self: Self, args: Args) -> <Self as std::ops::FnOnce<Args>>::Output;
+        //@ req thread_token(?t) &*& <Self>.own(t, self) &*& <Args>.own(t, args);
+        //@ ens thread_token(t) &*& < <Self as std::ops::FnOnce<Args>>::Output>.own(t, result);
+        //@ on_unwind_ens thread_token(t);
+        
+    }
+
+    trait FnMut<Args> {
+    
+        fn call_mut<'a>(self: &'a mut Self, args: Args) -> <Self as FnMut<Args>>::Output;
         //@ req thread_token(?t) &*& *self |-> ?self0 &*& <Self>.own(t, self0) &*& <Args>.own(t, args);
-        //@ ens thread_token(t) &*& *self |-> ?self1 &*& <Self>.own(t, self1) &*& <Output>.own(t, result);
+        //@ ens thread_token(t) &*& *self |-> ?self1 &*& <Self>.own(t, self1) &*& < <Self as FnMut<Args>>::Output>.own(t, result);
         //@ on_unwind_ens thread_token(t) &*& *self |-> ?self1 &*& <Self>.own(t, self1);
         
     }

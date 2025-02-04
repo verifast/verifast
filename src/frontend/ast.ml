@@ -172,12 +172,16 @@ type type_ = (* ?type_ *)
   | RealTypeParam of string (* a reference to a type parameter declared in the enclosing Real code *)
   | InferredRealType of string
   | GhostTypeParam of string (* a reference to a type parameter declared in the ghost code *)
+  | GhostTypeParamWithEqs of (* a reference to a type parameter declared in the ghost code *)
+      string *
+      ((string * type_ list * string) * type_) list (* type projection equalities: TraitName<TraitArgs>::AssocTypeName == T *)
   | InferredType of < > * inferred_type_state ref (* inferred type, is unified during type checking. '< >' is the type of objects with no methods. This hack is used to prevent types from incorrectly comparing equal, as in InferredType (ref Unconstrained) = InferredType (ref Unconstrained). Yes, ref Unconstrained = ref Unconstrained. But object end <> object end. *)
   | ClassOrInterfaceName of string (* not a real type; used only during type checking *)
   | PackageName of string (* not a real type; used only during type checking *)
   | RefType of type_ (* not a real type; used only for locals whose address is taken *)
   | AbstractType of string
   | StaticLifetime (* 'static in Rust *)
+  | ProjectionType of type_ * string (* trait name *) * type_ list (* trait generic args *) * string (* associated type name *) (* In Rust: <T as X<GArgs>>::Y *)
 and inferred_type_state =
     Unconstrained
   | ContainsAnyConstraint of bool (* allow the type to contain 'any' in positive positions *)
@@ -201,6 +205,8 @@ let type_fold_open state f = function
 | BoxIdType | HandleIdType | AnyType | RealTypeParam _ | InferredRealType _ | GhostTypeParam _ | InferredType (_, _) | ClassOrInterfaceName _ | PackageName _ -> state
 | RefType tp -> f state tp
 | AbstractType _ | StaticLifetime -> state
+| GhostTypeParamWithEqs (tp, eqs) -> List.fold_left (fun state (_, tp) -> f state tp) state eqs
+| ProjectionType (tp, _, targs, _) -> List.fold_left f (f state tp) targs
 
 let is_ptr_type tp =
   match tp with
@@ -341,6 +347,7 @@ type type_expr = (* ?type_expr *)
   | PureFuncTypeExpr of loc * (type_expr * (loc * string) option) list * expr (* 'requires' clause *) option   (* Potentially uncurried *)
   | LValueRefTypeExpr of loc * type_expr
   | ConstTypeExpr of loc * type_expr
+  | ProjectionTypeExpr of loc * type_expr * string (* trait name *) * type_expr list (* trait generic args *) * string (* associated type name *) (* In Rust: <T as X<GArgs>>::Y *)
 and
   operator =  (* ?operator *)
   | Add | Sub | PtrDiff | Le | Ge | Lt | Gt | Eq | Neq | And | Or | Xor | Not | Mul | Div | Mod | BitNot | BitAnd | BitXor | BitOr | ShiftLeft | ShiftRight
@@ -1059,6 +1066,7 @@ let type_expr_loc t =
   | PureFuncTypeExpr (l, tes, _) -> l
   | FuncTypeExpr (l, _, _) -> l
   | ConstTypeExpr (l, te) -> l
+  | ProjectionTypeExpr (l, te, _, _, _) -> l
 
 let string_of_func_kind f=
   match f with
@@ -1216,6 +1224,7 @@ let type_expr_fold_open f state te =
   | PureFuncTypeExpr (l, tps, _) -> List.fold_left (fun state (tp, _) -> f state tp) state tps
   | LValueRefTypeExpr (l, tp) -> f state tp
   | ConstTypeExpr (l, tp) -> f state tp
+  | ProjectionTypeExpr (l, tp, traitName, traitGenericArgs, assocTypeName) -> List.fold_left f (f state tp) traitGenericArgs
 
 let stmt_fold_open f state s =
   match s with

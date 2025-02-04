@@ -289,6 +289,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let functypes_implemented = ref []
   
   let check_func_header pn ilist tparams0 tenv0 env0 l k tparams rt fn fterm xs nonghost_callers_only functype_opt contract_opt terminates body =
+    push_tparam_eqs_table ();
     if terminates && k <> Regular then static_error l "Terminates clause not allowed here." None;
     check_tparams l tparams0 tparams;
     let tparam_typeid_tenv = tparams |> flatmap @@ fun x ->
@@ -299,6 +300,19 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         []
     in
     let tparams1 = tparams0 @ tparams in
+    begin match body with
+      Some (ss, closeBraceLoc) ->
+      let rec iter = function
+        ExprStmt (CallExpr (_, "#register_type_projection_equality", [ProjectionTypeExpr (_, IdentTypeExpr (_, None, x), traitName, traitArgs, assocTypeName); rhs], _, _, _))::ss ->
+        let traitArgs = List.map (check_pure_type (pn,ilist) tparams1 Ghost) traitArgs in
+        let rhs = check_pure_type (pn,ilist) tparams1 Ghost rhs in
+        register_tparam_eq x ((traitName, traitArgs, assocTypeName), rhs);
+        iter ss
+      | ss -> ()
+      in
+      iter ss
+    | None -> ()
+    end;
     let rt = match rt with None -> None | Some rt -> Some (check_pure_type (pn,ilist) tparams1 Ghost rt) in
     let xmap =
       let rec iter xm xs =
@@ -403,6 +417,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             Some (ftn, ft_predfammaps, fttargs, ftargs)
         end
     in
+    pop_tparam_eqs_table ();
     (rt, xmap, functype_opt, pre, pre_tenv, post)
   
   let is_transparent_stmt s =
@@ -520,7 +535,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let thisType_type = PtrType (StructType ("std::type_info", [])) in
         let contract_opt = Option.map (fun (pre, post) -> (pre, ("result", post))) contract_opt in
         let None, xmap, None, pre, pre_tenv, post =
-          check_func_header pn ilist [] ["this", this_type; "thisType", thisType_type] [] loc Regular [] None struct_name None params false None contract_opt terminates body_opt
+          check_func_header pn ilist [] ["this", this_type; "thisType", thisType_type] [] loc Regular [] None struct_name None params false None contract_opt terminates (if body_opt = None then None else Some ([], dummy_loc))
         in
         begin
           match try_assoc2 mangled_name ctor_map cxx_ctor_map0 with 

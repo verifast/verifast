@@ -555,6 +555,12 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let w = check_expr_t (pn,ilist) tparams tenv e Bool in
       assume (ev w) $. fun () ->
       cont h env
+    | ExprStmt (CallExpr (l, "#register_type_projection_equality", [ProjectionTypeExpr (_, IdentTypeExpr (_, _, x), traitName, traitArgs, assocTypeName); tp], [], [], Static)) when dialect = Some Rust ->
+      let tp = check_pure_type (pn,ilist) tparams Real tp in
+      let traitArgs = List.map (check_pure_type (pn,ilist) tparams Real) traitArgs in
+      ctxt#assert_term (ctxt#mk_eq (typeid_of_type_projection traitName (List.map (typeid_of_core l env) traitArgs) assocTypeName (List.assoc (x ^ "_typeid") env)) (typeid_of_core l env tp));
+      register_tparam_eq x ((traitName, traitArgs, assocTypeName), tp);
+      cont h env
     | ExprStmt (CallExpr (l, "produce_limits", [], [], [LitPat (Var (lv, x) as e)], Static)) ->
       if not pure then static_error l "This function may be called only from a pure context." None;
       if List.mem x ghostenv then static_error l "The argument for this call must be a non-ghost variable." None;
@@ -3144,6 +3150,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   and verify_func pn ilist gs lems boxes predinstmap funcmap tparams env l k tparams' rt g ps nonghost_callers_only pre pre_tenv post terminates ss closeBraceLoc =
     if startswith g "vf__" then static_error l "The name of a user-defined function must not start with 'vf__'." None;
     let tparams = tparams' @ tparams in
+    push_tparam_eqs_table ();
     let _ = push() in
     let tparam_typeid_env = tparams' |> flatmap @@ fun x ->
       if tparam_carries_typeid x then
@@ -3247,6 +3254,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       )
     in
     let _ = pop() in
+    pop_tparam_eqs_table ();
     let _ = 
       (match k with
         Lemma(true, trigger) ->

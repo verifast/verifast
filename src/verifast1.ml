@@ -485,6 +485,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | AnyType -> ProverInductive
     | RealTypeParam _ -> ProverInt
     | GhostTypeParam _ -> ProverInductive
+    | GhostTypeParamWithEqs _ -> ProverInductive
+    | ProjectionType _ -> ProverInductive
     | Void -> ProverInductive
     | InferredType (_, t) -> begin match !t with EqConstraint t -> provertype_of_type t | _ -> t := EqConstraint (InductiveType ("unit", [])); ProverInductive end
     | AbstractType _ -> ProverInductive
@@ -1948,7 +1950,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let rec instantiate_type tpenv t =
     if tpenv = [] then t else
     match t with
-      RealTypeParam x | GhostTypeParam x -> (try List.assoc x tpenv  with _ -> failwith 
+      RealTypeParam x | GhostTypeParam x | GhostTypeParamWithEqs (x, _) -> (try List.assoc x tpenv  with _ -> failwith 
         (Printf.sprintf "not found! looking for %s in env %s" x (String.concat ", " (List.map (fun (a,b) -> a ^ "->" ^ (string_of_type b)) tpenv))))
     | PtrType t -> PtrType (instantiate_type tpenv t)
     | RustRefType (lft, kind, t) -> RustRefType (instantiate_type tpenv lft, kind, instantiate_type tpenv t)
@@ -1964,7 +1966,35 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | StaticArrayType (t, n) -> StaticArrayType (instantiate_type tpenv t, instantiate_type tpenv n)
     | StructType (sn, targs) -> StructType (sn, List.map (instantiate_type tpenv) targs)
     | InlineFuncType rt -> InlineFuncType (instantiate_type tpenv rt)
+    | ProjectionType (t, traitName, traitArgs, assocTypeName) ->
+      let t = instantiate_type tpenv t in
+      let traitArgs = List.map (instantiate_type tpenv) traitArgs in
+      begin match t with
+        GhostTypeParamWithEqs (x, eqs) ->
+        begin match try_assoc (traitName, traitArgs, assocTypeName) eqs with
+          Some t -> t
+        | None -> ProjectionType (t, traitName, traitArgs, assocTypeName)
+        end
+      | _ -> ProjectionType (t, traitName, traitArgs, assocTypeName)
+      end
     | _ -> t
+  
+  let tparam_eqs_table = ref []
+  let tparam_eqs_tables_stack = ref []
+
+  let push_tparam_eqs_table () =
+    tparam_eqs_tables_stack := !tparam_eqs_table :: !tparam_eqs_tables_stack
+
+  let pop_tparam_eqs_table () =
+    let t::ts = !tparam_eqs_tables_stack in
+    tparam_eqs_table := t;
+    tparam_eqs_tables_stack := ts
+  
+  let register_tparam_eq x eq =
+    tparam_eqs_table := (x, eq)::!tparam_eqs_table
+  
+  let lookup_tparam_eqs x =
+    flatmap (fun (y, eq) -> if y = x then [eq] else []) !tparam_eqs_table
   
   (* Region: check_pure_type: checks validity of type expressions *)
   let check_pure_type_core typedefmap1 (pn,ilist) tpenv te envType =
@@ -1990,7 +2020,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       begin
       if List.mem id tpenv then begin match envType with
       | Real when language = Java -> RealTypeParam id
-      | _ -> GhostTypeParam id
+      | _ -> let eqs = lookup_tparam_eqs id in if eqs = [] then GhostTypeParam id else GhostTypeParamWithEqs (id, eqs)
       end
       else
       match resolve2' Ghost (pn,ilist) l id typedefmap0 typedefmap1 with
@@ -2155,6 +2185,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       iter ts
     | LValueRefTypeExpr (l, te) -> RefType (check te)
     | ConstTypeExpr (l, te) -> check te
+    | ProjectionTypeExpr (l, te, traitName, traitArgs, assocTypeName) ->
+      let t = check te in
+      let traitArgs = List.map check traitArgs in
+      ProjectionType (t, traitName, traitArgs, assocTypeName)
     in
     check te
   
@@ -5994,6 +6028,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let usize_of_const_symb = lazy_purefuncsymb "usize_of_const"
   let const_of_usize_symb = lazy_purefuncsymb "const_of_usize"
 
+  let typeid_of_type_projection traitName traitArg_typeids assocTypeName t0_typeid =
+    let g = Printf.sprintf "%s::%s_typeid" traitName assocTypeName in
+    mk_app (get_pure_func_symb g) (traitArg_typeids @ [t0_typeid])
+
   let rec typeid_of_core_core l msg env t =
   match unfold_inferred_type t with
     Int (Signed, CharRank) -> char_typeid_term
@@ -6047,13 +6085,15 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       ft_typeid
     end
   | StaticLifetime -> static_lifetime_typeid_term
-  | GhostTypeParam tn | RealTypeParam tn  ->
+  | GhostTypeParam tn | GhostTypeParamWithEqs (tn, _) | RealTypeParam tn  ->
     let x = tparam_typeid_varname tn in
     begin try
       List.assoc x env
     with
       Not_found -> static_error l (Printf.sprintf "%sUnbound variable '%s'" (msg ()) x) None
-  end
+    end
+  | ProjectionType (t0, traitName, traitArgs, assocTypeName) ->
+    typeid_of_type_projection traitName (List.map (typeid_of_core_core l msg env) traitArgs) assocTypeName (typeid_of_core_core l msg env t0)
   | InferredType _ -> static_error l (Printf.sprintf "%sA type argument for a type parameter that carries a typeid could not be inferred; specify the type argument explicitly" (msg ())) None
   | tp -> static_error l (Printf.sprintf "%sTaking the typeid of type '%s' is not yet supported" (msg ()) (string_of_type tp)) None
   and eval_const_type_core l msg env t =
