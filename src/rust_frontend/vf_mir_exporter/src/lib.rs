@@ -1050,20 +1050,20 @@ mod vf_mir_builder {
             pred: &(ty::Clause<'tcx>, rustc_span::Span),
             mut pred_cpn: predicate_cpn::Builder<'_>,
         ) {
-            match pred.0.kind().skip_binder() {
-                ty::ClauseKind::RegionOutlives(outlives_pred) => {
+            match pred.0.kind().no_bound_vars() {
+                Some(ty::ClauseKind::RegionOutlives(outlives_pred)) => {
                     let mut outlives_cpn = pred_cpn.init_outlives();
                     Self::encode_region(outlives_pred.0, outlives_cpn.reborrow().init_region1());
                     Self::encode_region(outlives_pred.1, outlives_cpn.reborrow().init_region2());
                 }
-                ty::ClauseKind::Trait(trait_pred) => {
+                Some(ty::ClauseKind::Trait(trait_pred)) => {
                     let mut trait_cpn = pred_cpn.init_trait();
                     trait_cpn.set_def_id(&enc_ctx.tcx.def_path_str(trait_pred.trait_ref.def_id));
                     trait_cpn.fill_args(trait_pred.trait_ref.args, |arg_cpn, arg| {
                         Self::encode_gen_arg(enc_ctx.tcx, enc_ctx, arg, arg_cpn);
                     });
                 }
-                ty::ClauseKind::Projection(projection_pred) => {
+                Some(ty::ClauseKind::Projection(projection_pred)) => {
                     let mut proj_cpn = pred_cpn.init_projection();
                     let mut proj_term_cpn = proj_cpn.reborrow().init_projection_term();
                     proj_term_cpn.set_def_id(&enc_ctx.tcx.def_path_str(projection_pred.projection_term.def_id));

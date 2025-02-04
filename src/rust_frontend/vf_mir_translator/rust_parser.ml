@@ -130,6 +130,14 @@ let rec parse_type = function%parser
     ] -> tp
 | [ (l, Kwd "["); parse_type as elemTp; (_, Kwd ";"); parse_type as size; (_, Kwd "]") ] -> StaticArrayTypeExpr (l, elemTp, size)
 | [ (l, Int (n, _, _, _, _)) ] -> LiteralConstTypeExpr (l, int_of_big_int n)
+| [ (l, Kwd "<"); parse_type as t; (_, Kwd "as"); parse_type as trait; (_, Kwd ">"); (l, Kwd "::"); (_, Ident x) ] ->
+  begin match trait with
+    IdentTypeExpr (ltrait, None, trait_name) ->
+    ProjectionTypeExpr (l, t, trait_name, [], x)
+  | ConstructedTypeExpr (ltrait, trait_name, trait_targs) ->
+    ProjectionTypeExpr (l, t, trait_name, trait_targs, x)
+  | _ -> raise (ParseException (type_expr_loc trait, "Trait name expected"))
+  end
 and parse_type_with_opt_name = function%parser
   [ parse_type as t;
     [%let (x, t) = function%parser
@@ -908,8 +916,12 @@ let rec parse_decl = function%parser
   ] -> [ModuleDecl (l, x, [], List.flatten ds)]
 | [ (l, Ident "include"); (_, Kwd "!"); (_, Kwd "{"); (ls, String path); (_, Kwd "}") ] ->
   parse_rsspec_file ls path
-| [ (l, Kwd "type"); (lx, Ident x); parse_type_params as tparams; (_, Kwd "="); parse_type as tp; (_, Kwd ";") ] ->
-  [TypedefDecl (l, tp, x, tparams)]
+| [ (l, Kwd "type"); (lx, Ident x); parse_type_params as tparams;
+    [%let ds = function%parser
+       [ (_, Kwd "="); parse_type as tp; (_, Kwd ";") ] -> [TypedefDecl (l, tp, x, tparams)]
+     | [ (_, Kwd ";") ] -> [Func (l, Fixpoint, [], Some (PtrTypeExpr (l, ManifestTypeExpr (l, Void))), x ^ "_typeid", [], false, None, None, false, None, false, [])]
+    ]
+  ] -> ds
 | [ (l, Kwd "fn"); [%let d = parse_func_rest Regular] ] -> [d]
 | [ (_, Kwd "unsafe"); (l, Kwd "fn"); [%let d = parse_func_rest Regular] ] -> [d]
 | [ (_, Kwd "struct"); (l, Ident sn); parse_type_params as tparams;

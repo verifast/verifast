@@ -64,6 +64,11 @@ let rec of_type = function
 | RealTypeParam x -> C ("RealTypeParam", [S x])
 | InferredRealType x -> C ("InferredRealType", [S x])
 | GhostTypeParam x -> C ("GhostTypeParam", [S x])
+| GhostTypeParamWithEqs (x, eqs) ->
+  C ("GhostTypeParamWithEqs", [
+    S x;
+    of_list (fun ((traitName, traitArgs, assocTypeName), tp) -> T [T [S traitName; of_list of_type traitArgs; S assocTypeName]; of_type tp]) eqs
+  ])
 | InferredType (o, r) -> C ("InferredType", [I (Oo.id o); of_ref of_inferred_type_state r])
 | ClassOrInterfaceName x -> C ("ClassOrInterfaceName", [S x])
 | PackageName p -> C ("PackageName", [S p])
