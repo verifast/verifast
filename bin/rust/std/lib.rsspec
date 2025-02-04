@@ -304,6 +304,10 @@ mod ptr {
         //@ req true;
         //@ ens result == NonNull_ptr(self);
         //@ on_unwind_ens false;
+        
+        fn cast<U>(self:  NonNull<T>) -> NonNull<U>;
+        //@ req true;
+        //@ ens result == NonNull::new_(NonNull_ptr(self) as *U);
     }
 }
 
