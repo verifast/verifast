@@ -3,4 +3,6 @@ begin_parallel
   refinement-checker basic_orig.rs basic_verified.rs
   !refinement-checker basic_orig.rs basic_verified_bad1.rs
   !refinement-checker basic_orig.rs basic_verified_bad2.rs
+  refinement-checker loop_orig.rs loop_verified.rs
+  !refinement-checker loop_orig.rs loop_verified_bad.rs
 end_parallel

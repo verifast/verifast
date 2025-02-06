@@ -160,6 +160,9 @@ let fresh_symbol () =
   next_symbol_id := id + 1;
   Symbol id
 
+let string_of_env env =
+  String.concat "; " (List.map (fun (x, v) -> Printf.sprintf "%s: %s" x (string_of_term v)) env)
+
 let eval_operand env operand =
   match VfMirRd.Body.BasicBlock.Operand.get operand with
     Move place | Copy place ->
@@ -188,6 +191,8 @@ let eval_operand env operand =
           end
         | Unevaluated -> failwith "Unevaluated constant operands are not yet supported"
 
+let update_env x v env = (x, v) :: List.remove_assoc x env
+
 let rec process_assignments bblocks env i_bb i_s =
   let bb = Capnp.Array.get bblocks i_bb in
   let stmts = VfMirRd.Body.BasicBlock.statements_get bb in
@@ -215,7 +220,7 @@ let rec process_assignments bblocks env i_bb i_s =
                   else
                     let placeLocalId = VfMirRd.Body.Place.local_get place in
                     let placeLocalName = VfMirRd.Body.LocalDeclId.name_get placeLocalId in
-                    let env = (lhsLocalName, List.assoc placeLocalName env) :: env in
+                    let env = update_env lhsLocalName (List.assoc placeLocalName env) env in
                     process_assignments bblocks env i_bb (i_s + 1)
               | Constant constant ->
                   (env, i_bb, i_s)
@@ -225,6 +230,16 @@ let rec process_assignments bblocks env i_bb i_s =
     | Nop -> process_assignments bblocks env i_bb (i_s + 1)
 
 let values_equal (v0: term) (v1: term) = v0 = v1
+
+type basic_block_status =
+  NotSeen
+| Checking of int (* i_bb1 *) * (string * string list) list (* Candidate loop invariant: for each local of the verified program, a list of the locals of the original program that have the same value at each iteration *)
+| Checked of int (* i_bb1 *) * (string * string list) list (* Loop invariant that was used to verify this loop. *)
+
+exception RecheckLoop of int (* i_bb0 *) (* When this is raised, the specified basic block's status has already been updated with a weakened candidate loop invariant *)
+
+let string_of_loop_inv loopInv =
+  String.concat "; " (List.map (fun (x, ys) -> Printf.sprintf "%s: [%s]" x (String.concat ", " ys)) loopInv)
 
 let check_body_refines_body def_path body0 body1 =
   Printf.printf "Checking function body %s\n" def_path;
@@ -238,8 +253,64 @@ let check_body_refines_body def_path body0 body1 =
   let env1 = List.mapi (fun i v -> (VfMirRd.Body.LocalDeclId.name_get @@ VfMirRd.Body.LocalDecl.id_get (Capnp.Array.get locals1 (i + 1)), v)) inputs in
   let bblocks0 = VfMirRd.Body.basic_blocks_get body0 in
   let bblocks1 = VfMirRd.Body.basic_blocks_get body1 in
+  let bblocks0_statuses = Array.make (Capnp.Array.length bblocks0) NotSeen in
+  let rec check_basic_block_refines_basic_block env0 i_bb0 env1 i_bb1 =
+    Printf.printf "INFO: In function %s, checking basic block %d against basic block %d, with env0 = [%s] and env1 = [%s]\n" def_path i_bb0 i_bb1 (string_of_env env0) (string_of_env env1);
+    match bblocks0_statuses.(i_bb0) with
+      NotSeen ->
+        let loopInv = env1 |> List.map (fun (x, v1) -> (x, env0 |> List.concat_map (fun (y, v0) -> if v1 = v0 then [y] else []) )) in
+        bblocks0_statuses.(i_bb0) <- Checking (i_bb1, loopInv);
+        let rec iter loopInv =
+          try
+            Printf.printf "Loop invariant = [%s]\n" (string_of_loop_inv loopInv);
+            (* Havoc all locals of the verified crate that are not known to be equal to any locals of the original crate *)
+            let env1 = List.map2 (fun (x, v) (x, ys) -> (x, if ys = [] then fresh_symbol () else v)) env1 loopInv in
+            Printf.printf "INFO: In function %s, checking loop body at basic block %d against basic block %d, with env0 = [%s] and env1 = [%s]\n" def_path i_bb0 i_bb1 (string_of_env env0) (string_of_env env1);
+            check_codepos_refines_codepos env0 i_bb0 0 env1 i_bb1 0;
+            let Checking (i_bb1, loopInv) = bblocks0_statuses.(i_bb0) in
+            bblocks0_statuses.(i_bb0) <- Checked (i_bb1, loopInv)
+          with RecheckLoop i_bb0' as e ->
+            if i_bb0' <> i_bb0 then begin
+              bblocks0_statuses.(i_bb0) <- NotSeen;
+              raise e
+            end else
+              let Checking (i_bb1', loopInv) = bblocks0_statuses.(i_bb0) in
+              iter loopInv
+        in
+        iter loopInv
+    | Checking (i_bb1', loopInv) ->
+      Printf.printf "INFO: In function %s, loop detected with head = basic block %d\n" def_path i_bb0;
+      if i_bb1' <> i_bb1 then failwith (Printf.sprintf "In function %s, loop head %d in the original crate is being checked for refinement against basic block %d in the verified crate, but it is already being checked for refinement against loop head %d in the verified crate" def_path i_bb0 i_bb1 i_bb1');
+      if loopInv |> List.for_all @@ fun (x, ys) ->
+        let v = List.assoc x env1 in
+        ys |> List.for_all @@ fun y -> List.assoc y env0 = v
+      then begin
+        Printf.printf "Loop with head %d verified, with loop invariant %s!\n" i_bb0 (string_of_loop_inv loopInv);
+        () (* Use the induction hypothesis; this path is done. *)
+      end else begin
+        Printf.printf "Loop with head %d failed to verify; trying again with weaker invariant\n" i_bb0;
+        (* Forget about the earlier result; try from scratch *)
+        let loopInv = loopInv |> List.map @@ fun (x, ys) ->
+          let v = List.assoc x env1 in
+          (x, ys |> List.filter @@ fun y -> List.assoc y env0 = v)
+        in
+        bblocks0_statuses.(i_bb0) <- Checking (i_bb1, loopInv); (* Weaken the candidate loop invariant *)
+        raise (RecheckLoop i_bb0)
+      end
+    | Checked (i_bb1', loopInv) ->
+      if i_bb1' = i_bb1 && loopInv |> List.for_all @@ fun (x, ys) ->
+        let v = List.assoc x env1 in
+        ys |> List.for_all @@ fun y -> List.assoc y env0 = v
+      then begin
+        Printf.printf "Re-reached loop with head %d, that was already verified; path is done.\n" i_bb0;
+        () (* Use the induction hypothesis; this path is done. *)
+      end else begin
+        (* Forget about the earlier result; try from scratch *)
+        bblocks0_statuses.(i_bb0) <- NotSeen;
+        check_basic_block_refines_basic_block env0 i_bb0 env1 i_bb1
+      end
   (* Checks whether for each behavior of code position (bb0, s0), code position (bb1, s1) has a matching behavior *)
-  let rec check_codepos_refines_codepos env0 i_bb0 i_s0 env1 i_bb1 i_s1 =
+  and check_codepos_refines_codepos env0 i_bb0 i_s0 env1 i_bb1 i_s1 =
     let (env0, i_bb0, i_s0) = process_assignments bblocks0 env0 i_bb0 i_s0 in
     let (env1, i_bb1, i_s1) = process_assignments bblocks1 env1 i_bb1 i_s1 in
     let bb0 = Capnp.Array.get bblocks0 i_bb0 in
@@ -253,7 +324,7 @@ let check_body_refines_body def_path body0 body1 =
         (Goto bb_id0, Goto bb_id1) ->
           let bb_idx0 = Stdint.Uint32.to_int @@ VfMirRd.Body.BasicBlockId.index_get bb_id0 in
           let bb_idx1 = Stdint.Uint32.to_int @@ VfMirRd.Body.BasicBlockId.index_get bb_id1 in
-          check_codepos_refines_codepos env0 bb_idx0 0 env1 bb_idx1 0
+          check_basic_block_refines_basic_block env0 bb_idx0 env1 bb_idx1
       | (Return, Return) ->
           let retVal0 = List.assoc (VfMirRd.Body.LocalDeclId.name_get (VfMirRd.Body.LocalDecl.id_get (Capnp.Array.get locals0 0))) env0 in
           let retVal1 = List.assoc (VfMirRd.Body.LocalDeclId.name_get (VfMirRd.Body.LocalDecl.id_get (Capnp.Array.get locals1 0))) env1 in
@@ -270,6 +341,7 @@ let check_body_refines_body def_path body0 body1 =
         let args1 = VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.FnCallData.args_get_list call1 in
         let args0 = List.map (eval_operand env0) args0 in
         let args1 = List.map (eval_operand env1) args1 in
+        Printf.printf "INFO: In function %s, checking call of %s with args [%s] against call with args [%s]\n" def_path (string_of_term func0) (String.concat ", " (List.map string_of_term args0)) (String.concat ", " (List.map string_of_term args1));
         if not (List.for_all2 values_equal args0 args1) then
           failwith (Printf.sprintf "In function %s, at basic block %d in the original crate and basic block %d in the verified crate, the arguments of the function calls of %s are not equal: [%s] versus [%s]" def_path i_bb0 i_bb1 (string_of_term func0) (String.concat ", " (List.map string_of_term args0)) (String.concat ", " (List.map string_of_term args1)));
         let dest0 = VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.FnCallData.destination_get call0 in
@@ -296,9 +368,9 @@ let check_body_refines_body def_path body0 body1 =
           let dest0bbidx = Stdint.Uint32.to_int @@ VfMirRd.Body.BasicBlockId.index_get dest0bbid in
           let dest1bbidx = Stdint.Uint32.to_int @@ VfMirRd.Body.BasicBlockId.index_get dest1bbid in
           let result = fresh_symbol () in
-          let env0 = (dest0LocalName, result) :: env0 in
-          let env1 = (dest1LocalName, result) :: env1 in
-          check_codepos_refines_codepos env0 dest0bbidx 0 env1 dest1bbidx 0
+          let env0 = update_env dest0LocalName result env0 in
+          let env1 = update_env dest1LocalName result env1 in
+          check_basic_block_refines_basic_block env0 dest0bbidx env1 dest1bbidx
         end
       | _ -> failwith "Unsupported terminator kind"
     in
@@ -330,8 +402,8 @@ let check_body_refines_body def_path body0 body1 =
               (* Will not happen, because these kinds of statements are processed beforehand. *)
               let v0 = eval_operand env0 operand0 in
               let v1 = eval_operand env1 operand1 in
-              let env0 = (lhsLocalName0, v0) :: env0 in
-              let env1 = (lhsLocalName1, v1) :: env1 in
+              let env0 = update_env lhsLocalName0 v0 env0 in
+              let env1 = update_env lhsLocalName1 v1 env1 in
               check_codepos_refines_codepos env0 i_bb0 (i_s0 + 1) env1 i_bb1 (i_s1 + 1)
           | _ -> failwith "Rvalue not supported"
           end
@@ -349,4 +421,4 @@ let check_body_refines_body def_path body0 body1 =
       else
         check_statement_refines_statement ()
   in
-  check_codepos_refines_codepos env0 0 0 env1 0 0
+  check_basic_block_refines_basic_block env0 0 env1 0
