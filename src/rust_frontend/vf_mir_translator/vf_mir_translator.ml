@@ -2438,7 +2438,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       | _ -> Error (`TrFnCall "Invalid callee operand for function call")
 
     let translate_basic_block_id (bblock_id_cpn : BasicBlockIdRd.t) =
-      BasicBlockIdRd.name_get bblock_id_cpn
+      Stdint.Uint32.to_string (BasicBlockIdRd.index_get bblock_id_cpn)
 
     let translate_destination_data (dst_data_cpn : DestinationDataRd.t)
         (loc : Ast.loc) =

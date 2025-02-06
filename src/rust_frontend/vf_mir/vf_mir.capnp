@@ -506,7 +506,7 @@ struct Body {
     }
 
     struct BasicBlockId {
-        name @0: Text;
+        index @0: UInt32;
     }
 
     struct BasicBlock {

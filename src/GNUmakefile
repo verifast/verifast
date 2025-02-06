@@ -298,7 +298,7 @@ STDLIB_FILES = \
 TOOLS_EXCEPT_VFIDE = ../bin/mysh$(DOTEXE) ../bin/verifast$(DOTEXE) \
         ../bin/rustc-verifast$(DOTEXE) ../bin/cargo-verifast$(DOTEXE) ../bin/cargo-vfide$(DOTEXE)\
         ../bin/main_class$(DOTEXE) ../bin/java_card_applet$(DOTEXE) \
-        ../bin/dlsymtool$(DOTEXE) ../bin/vfstrip$(DOTEXE) ../bin/explorer$(DOTEXE)
+        ../bin/dlsymtool$(DOTEXE) ../bin/vfstrip$(DOTEXE) ../bin/explorer$(DOTEXE) ../bin/refinement-checker$(DOTEXE)
 
 TOOLS_EXCEPT_VFIDE += ../bin/vf-cxx-ast-exporter$(DOTEXE) build-vf-rust-mir-exporter
 
@@ -551,6 +551,13 @@ _build/default/explorer/explorer.exe: .FORCE
 	dune build $@
 
 ../bin/explorer$(DOTEXE): _build/default/explorer/explorer.exe
+	if [ ! -e $@ -o $< -nt $@ ]; then cp -f $< $@; fi
+
+_build/default/refinement_checker/main.exe: .FORCE
+	@echo "  DUNE " $@
+	dune build $@
+
+../bin/refinement-checker$(DOTEXE): _build/default/refinement_checker/main.exe
 	if [ ! -e $@ -o $< -nt $@ ]; then cp -f $< $@; fi
 
 verifast: ../bin/verifast$(DOTEXE) $(STDLIB)

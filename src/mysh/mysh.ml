@@ -385,6 +385,12 @@ let rec exec_cmds macros cwd parallel cmds =
         let line' = if cwd = "." then line else cwd ^ "$ " ^ line in
         Mutex.lock global_mutex;
         Sys.chdir (get_abs_path ".");
+        let negate_exit_status, line =
+          if line <> "" && line.[0] = '!' then
+            true, String.sub line 1 (String.length line - 1)
+          else
+            false, line
+        in
         let cin = Unix.open_process_in (line ^ " 2>&1") in
         Mutex.unlock global_mutex;
         let current_alarm = ref None in
@@ -417,7 +423,12 @@ let rec exec_cmds macros cwd parallel cmds =
             if !verbose then print_endline (Printf.sprintf "[%d]%f seconds\n" pid (time1 -. time0));
             let Some alarm = !current_alarm in
             cancel_alarm alarm;
-            if status <> Unix.WEXITED 0 then begin
+            let success =
+              match status with
+                Unix.WEXITED n -> (n = 0) <> negate_exit_status
+              | _ -> false
+            in
+            if not success then begin
               let msg =
                 if !verbose then
                   Printf.sprintf "=== Process %d %s ===" pid (string_of_status status)
