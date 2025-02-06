@@ -100,6 +100,9 @@ cd safe_abstraction
   verifast -ignore_unwind_paths -skip_specless_fns -allow_assume btree_node.rs
   verifast -skip_specless_fns -ignore_unwind_paths atomic.rs
 cd ..
+cd refinement_checker
+  call testsuite.mysh
+cd ..
 end_parallel
 end_sequential
 end_parallel

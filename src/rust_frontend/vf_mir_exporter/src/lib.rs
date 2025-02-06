@@ -1838,7 +1838,7 @@ mod vf_mir_builder {
             basic_block_idx: mir::BasicBlock,
             mut basic_block_id_cpn: basic_block_id_cpn::Builder<'_>,
         ) {
-            basic_block_id_cpn.set_name(&format!("{:?}", basic_block_idx));
+            basic_block_id_cpn.set_index(basic_block_idx.as_u32());
         }
 
         fn encode_statement(
