@@ -5,6 +5,31 @@ let error msg =
   Printf.printf "ERROR: %s\n" msg;
   exit 1
 
+let decode_path path =
+  let name = VfMirRd.SpanData.Loc.SourceFile.name_get path in
+  match VfMirRd.SpanData.Loc.SourceFile.FileName.get name with
+  | Real real_file_name -> (
+      match
+        VfMirRd.SpanData.Loc.SourceFile.FileName.RealFileName.get real_file_name
+      with
+      | LocalPath path -> path
+      | Remapped _ -> failwith "Remapped file names are not yet supported")
+  | QuoteExpansion _ -> failwith "Quote expansions are not yet supported"
+
+let decode_loc loc =
+  let path = decode_path @@ VfMirRd.SpanData.Loc.file_get loc in
+  let line = Stdint.Uint64.to_int @@ VfMirRd.SpanData.Loc.line_get loc in
+  let col =
+    Stdint.Uint64.to_int @@ VfMirRd.SpanData.Loc.CharPos.pos_get
+    @@ VfMirRd.SpanData.Loc.col_get loc
+  in
+  (path, line, col)
+
+let decode_span span =
+  let lo = VfMirRd.SpanData.lo_get span in
+  let hi = VfMirRd.SpanData.hi_get span in
+  (decode_loc lo, decode_loc hi)
+
 type int_width = FixedWidth of int (* log2 of width in bytes *) | PtrWidth
 
 type literal_const_expr =
