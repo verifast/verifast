@@ -65,6 +65,11 @@ pub fn run_compiler() -> i32 {
         //rustc_args.push("-Zpolonius".to_owned());
         // To have MIR dump annotated with lifetimes
         //rustc_args.push("-Zverbose_internals".to_owned());
+        let mut preprocess = true;
+        if let Some(index) = rustc_args.iter().position(|arg| arg == "--vf-rust-mir-exporter:no-preprocess") {
+            preprocess = false;
+            rustc_args.remove(index);
+        }
         {
             // Find the index of the '--vf-rust-mir-exporter:no-default-args' argument.
             if let Some(index) = rustc_args
@@ -85,6 +90,7 @@ pub fn run_compiler() -> i32 {
 
         let mut callbacks = CompilerCalls {
             source_files: Box::leak(Box::new(std::sync::Mutex::new(SourceFiles::new()))),
+            preprocess,
         };
         // Call the Rust compiler with our callbacks.
         trace!("Calling the Rust Compiler with args: {:?}", rustc_args);
@@ -177,6 +183,7 @@ impl rustc_span::source_map::FileLoader for FileLoader {
 
 struct CompilerCalls {
     source_files: &'static std::sync::Mutex<SourceFiles>,
+    preprocess: bool,
 }
 
 impl rustc_driver::Callbacks for CompilerCalls {
@@ -186,9 +193,11 @@ impl rustc_driver::Callbacks for CompilerCalls {
             None => {}
             Some(loader) => todo!(),
         }
-        config.file_loader = Some(Box::from(FileLoader {
-            source_files: self.source_files,
-        }));
+        if self.preprocess {
+            config.file_loader = Some(Box::from(FileLoader {
+                source_files: self.source_files,
+            }));
+        }
 
         // assert!(config.override_queries.is_none());
         // config.override_queries = Some(override_queries);
