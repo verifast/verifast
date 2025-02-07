@@ -461,6 +461,7 @@ mod vf_mir_builder {
     use span_data_cpn::loc as loc_cpn;
     use statement_cpn::statement_kind as statement_kind_cpn;
     use std::collections::LinkedList;
+    use std::sync::Arc;
     use switch_int_data_cpn::switch_targets as switch_targets_cpn;
     use terminator_cpn::terminator_kind as terminator_kind_cpn;
     use terminator_kind_cpn::fn_call_data as fn_call_data_cpn;
@@ -513,7 +514,11 @@ mod vf_mir_builder {
                 n: rustc_hir::HirId,
             ) {
                 let name = self.tcx.hir().ident(n).as_str().into();
-                let body_span = m.spans.inner_span;
+                let mut body_span = m.spans.inner_span;
+                if Arc::as_ptr(&self.tcx.sess.source_map().lookup_source_file(header_span.lo())) ==
+                    Arc::as_ptr(&self.tcx.sess.source_map().lookup_source_file(body_span.lo())) {
+                    body_span = header_span.to(body_span);
+                }
                 let mut mod_annots: LinkedList<Box<GhostRange>> = self
                     .annots
                     .extract_if(|annot| body_span.contains(annot.span().unwrap()))
