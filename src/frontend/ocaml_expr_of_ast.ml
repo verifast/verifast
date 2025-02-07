@@ -228,6 +228,14 @@ let rec of_type_expr = function
     of_loc l;
     of_type_expr tp
   ])
+| ProjectionTypeExpr (l, tp, traitName, traitArgs, assocTypeName) ->
+  C ("ProjectionTypeExpr", [
+    of_loc l;
+    of_type_expr tp;
+    S traitName;
+    of_list of_type_expr traitArgs;
+    S assocTypeName
+  ])
 and of_operator = function
   MinValue t -> C ("MinValue", [of_type t])
 | MaxValue t -> C ("MaxValue", [of_type t])

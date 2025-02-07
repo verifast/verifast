@@ -2230,6 +2230,14 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let typepreddeclmap = typepreddeclmap1 @ typepreddeclmap0
 
+  let split_item_name n =
+    match String.rindex_opt n item_path_separator.[0] with
+      None -> ("", n)
+    | Some i ->
+      let pac = String.sub n 0 (i + 1 - String.length item_path_separator) in
+      let item = String.sub n (i + 1) (String.length n - i - 1) in
+      (pac, item)
+  
   let ps =
     let extra_ps =
       ps |> flatmap @@ function PackageDecl (lp, pn, ilist, ds) ->
@@ -2243,6 +2251,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             begin match List.assoc_opt tpn typepreddeclmap with
               None -> static_error l "No such type predicate" None
             | Some (_, selfTypeName, PredType ([], pts, inputParamCount', inductiveness), _) ->
+              let spn, simple_sn = split_item_name sn in
+              let sn = if spn = pn then simple_sn else begin assert (pn = ""); sn end in
               let g = Printf.sprintf "%s_%s" sn tpn in
               let tpenv = [selfTypeName, tp] in
               let ps =
@@ -2341,6 +2351,13 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 
   (* Region: structmap1 *)
 
+  let padding_pred_name sn =
+    let package, name = split_item_name sn in
+    if package = "" then
+      "struct_" ^ name ^ "_padding"
+    else
+      package ^ item_path_separator ^ "struct_" ^ name ^ "_padding"
+  
   let structmap1: struct_info map =
     let rec iter (smap: struct_info map) (smapwith0: struct_info map) remaining =
       match remaining with
@@ -2355,7 +2372,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               if packed || has_ghost_fields then
                 None
               else
-                Some (get_unique_var_symb ("struct_" ^ sn ^ "_padding") (PredType ([], [PtrType (StructType (sn, []))], Some 1, Inductiveness_Inductive)))
+                Some (get_unique_var_symb (padding_pred_name sn) (PredType ([], [PtrType (StructType (sn, []))], Some 1, Inductiveness_Inductive)))
             in
             let fmap = List.rev fmap in
             let base_map = bases |> List.map @@ fun (CxxBaseSpec (l, base, is_virtual)) -> 
@@ -3313,7 +3330,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     flatmap
       (function
          (sn, (l, tparams, body_opt, Some padding_predsymb, _)) ->
-          [("struct_" ^ sn ^ "_padding", (l, tparams, 0, [PtrType (StructType (sn, tparams_as_targs tparams))], padding_predsymb, Some 1, Inductiveness_Inductive))]
+          [(padding_pred_name sn, (l, tparams, 0, [PtrType (StructType (sn, tparams_as_targs tparams))], padding_predsymb, Some 1, Inductiveness_Inductive))]
        | _ -> [])
       structmap1
   
@@ -6574,13 +6591,13 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             | _ ->
               begin match
                 if binding <> Static && binding <> PredCtorCall then None else
-                match try_assoc p purefuncmap with
-                  Some (lp, tparams, PredType ([], ps2, inputParamCount, Inductiveness_Inductive), ps1, funcsym) ->
+                match resolve Ghost (pn,ilist) l p purefuncmap with
+                  Some (p, (lp, tparams, PredType ([], ps2, inputParamCount, Inductiveness_Inductive), ps1, funcsym)) ->
                   reportUseSite DeclKind_Predicate lp l;
-                  Some (tparams, ps1, ps2, inputParamCount)
+                  Some (p, tparams, ps1, ps2, inputParamCount)
                 | _ -> None
               with
-                Some (tparams, ps1, ps2, inputParamCount) ->
+                Some (p, tparams, ps1, ps2, inputParamCount) ->
                 cont (PredCtor p, true, tparams, List.map snd ps1, ps2, inputParamCount)
               | None ->
                 let error () = 
@@ -7012,7 +7029,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           begin match padding_symb_opt, fmap with
           | Some symb, [_] ->
             (* Single-field structs have no padding *)
-            [("struct_" ^ sn ^ "_padding", []),
+            [(padding_pred_name sn, []),
              ([], lsn, tparams, [sn, PtrType (StructType (sn, targs))], symb, Some 1,
               EmpAsn lsn)]
           | _ -> []

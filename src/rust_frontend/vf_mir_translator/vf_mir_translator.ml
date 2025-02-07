@@ -519,6 +519,21 @@ module TrName = struct
     (mod_path, rel_def_path)
 end
 
+let split_item_name n =
+  match String.rindex_opt n ':' with
+  | None -> ("", n)
+  | Some i ->
+      let pac = String.sub n 0 (i - 1) in
+      let item = String.sub n (i + 1) (String.length n - i - 1) in
+      (pac, item)
+
+let qualified_derived_name format name =
+  let package, name = split_item_name name in
+  if package = "" then Printf.sprintf format name
+  else package ^ "::" ^ Printf.sprintf format name
+
+let padding_pred_name sn = qualified_derived_name "struct_%s_padding" sn
+
 module type VF_MIR_TRANSLATOR_ARGS = sig
   val data_model_opt : Ast.data_model option
   val report_should_fail : string -> Ast.loc0 -> unit
@@ -952,8 +967,13 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | ManifestTypeExpr (_, Ast.Int (Signed, _)), size -> mk_signed_const size
     | ManifestTypeExpr (_, Ast.Int (Unsigned, _)), size -> mk_const value
 
+  let canonicalize_item_name (name : string) =
+    if String.starts_with ~prefix:"core::" name then
+      "std::" ^ String.sub name 6 (String.length name - 6)
+    else name
+
   let translate_adt_def_id (adt_def_id_cpn : AdtDefIdRd.t) =
-    AdtDefIdRd.name_get adt_def_id_cpn
+    canonicalize_item_name @@ AdtDefIdRd.name_get adt_def_id_cpn
 
   let rec translate_adt_ty (adt_ty_cpn : AdtTyRd.t) (loc : Ast.loc) =
     let open AdtTyRd in
@@ -1601,7 +1621,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
 
   and decode_adt_ty (adt_ty_cpn : AdtTyRd.t) =
     let open AdtTyRd in
-    let def_path = AdtDefIdRd.name_get @@ id_get @@ adt_ty_cpn in
+    let def_path = translate_adt_def_id @@ id_get @@ adt_ty_cpn in
     let kind = AdtKindRd.get @@ kind_get @@ adt_ty_cpn in
     let substs_cpn = substs_get_list adt_ty_cpn in
     (def_path, kind, List.map decode_generic_arg substs_cpn)
@@ -1986,7 +2006,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let open ScalarRd in
       match get s_cpn with
       | Int scalar_int_cpn -> translate_scalar_int scalar_int_cpn ty loc
-      | Ptr -> failwith "Todo: Scalar::Ptr"
+      | Ptr ->
+          Ast.static_error loc "Pointer constants are not yet supported" None
 
     let mk_unit_expr loc =
       Ast.CastExpr
@@ -4001,7 +4022,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   fds
                   (Ast.CallExpr
                      ( limpl,
-                       "struct_" ^ self_ty ^ "_padding",
+                       padding_pred_name self_ty,
                        self_ty_targs,
                        [],
                        [ LitPat (Var (limpl, "self")) ],
@@ -4748,7 +4769,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         let padding_pred =
           CallExpr
             ( adt_def_loc,
-              Printf.sprintf "struct_%s_padding" name,
+              padding_pred_name name,
               List.map
                 (fun x -> IdentTypeExpr (adt_def_loc, None, x))
                 vf_tparams,
@@ -5468,7 +5489,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   None (*trigger*) ),
               lft_params @ tparams (*type parameters*),
               None (*return type*),
-              "init_ref_" ^ name,
+              qualified_derived_name "init_ref_%s" name,
               [
                 ( PtrTypeExpr
                     ( adt_def_loc,
@@ -5682,17 +5703,32 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         | Undefined _ -> Error (`TrAdtDef "Unknown ADT kind")
       in
       let user_provided_type_pred_defs_for p =
-        ghost_decls
-        |> Util.flatmap @@ function
-           | Ast.TypePredDef
-               ( _,
-                 _,
-                 (IdentTypeExpr (_, None, sn) | ConstructedTypeExpr (_, sn, _)),
-                 p',
-                 body )
-             when sn = name && p' = p ->
-               [ body ]
-           | _ -> []
+        let rec iter modulePath decls =
+          if not (String.starts_with ~prefix:modulePath name) then []
+          else
+            decls
+            |> Util.flatmap @@ function
+               | Ast.TypePredDef
+                   ( _,
+                     _,
+                     ( IdentTypeExpr (_, None, sn)
+                     | ConstructedTypeExpr (_, sn, _) ),
+                     p',
+                     body )
+                 when String.ends_with ~suffix:sn name
+                      && (if modulePath = "" then sn else modulePath ^ "::" ^ sn)
+                         = name
+                      && p' = p ->
+                   [ body ]
+               | ModuleDecl (loc, moduleName, _, decls') ->
+                   let modulePath =
+                     if modulePath = "" then moduleName
+                     else modulePath ^ "::" ^ moduleName
+                   in
+                   iter modulePath decls'
+               | _ -> []
+        in
+        iter "" ghost_decls
       in
       let* full_bor_content, proof_obligs, delayed_proof_obligs, aux_decls' =
         if is_local && AdtKindRd.get kind_cpn = StructKind then (
@@ -6098,7 +6134,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                     None (*trigger*) ),
                 lft_params @ tparams (*type parameters*),
                 None (*return type*),
-                "open_ref_init_perm_" ^ name,
+                qualified_derived_name "open_ref_init_perm_%s" name,
                 [
                   ( PtrTypeExpr
                       ( def_loc,
@@ -6143,7 +6179,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   coefpat,
                   Ast.CallExpr
                     ( def_loc,
-                      "struct_" ^ name ^ "_padding",
+                      padding_pred_name name,
                       [],
                       [],
                       [ LitPat (Var (def_loc, l)) ],
@@ -6251,7 +6287,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                     None (*trigger*) ),
                 lft_params @ tparams (*type parameters*),
                 None (*return type*),
-                "init_ref_padding_" ^ name,
+                qualified_derived_name "init_ref_padding_%s" name,
                 [
                   ( PtrTypeExpr
                       ( def_loc,
@@ -6310,7 +6346,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   coefpat,
                   Ast.CallExpr
                     ( def_loc,
-                      "struct_" ^ name ^ "_padding",
+                      padding_pred_name name,
                       [],
                       [],
                       [ LitPat (Var (def_loc, l)) ],
@@ -6334,7 +6370,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                     None (*trigger*) ),
                 lft_params @ tparams (*type parameters*),
                 None (*return type*),
-                "end_ref_padding_" ^ name,
+                qualified_derived_name "end_ref_padding_%s" name,
                 [
                   ( PtrTypeExpr
                       ( def_loc,
@@ -6433,7 +6469,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                     None (*trigger*) ),
                 lft_params @ tparams (*type parameters*),
                 None (*return type*),
-                "close_ref_initialized_" ^ name,
+                qualified_derived_name "close_ref_initialized_%s" name,
                 [
                   ( PtrTypeExpr
                       ( def_loc,
@@ -6529,7 +6565,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                     None (*trigger*) ),
                 lft_params @ tparams (*type parameters*),
                 None (*return type*),
-                "open_ref_initialized_" ^ name,
+                qualified_derived_name "open_ref_initialized_%s" name,
                 [
                   ( PtrTypeExpr
                       ( def_loc,
@@ -6759,36 +6795,51 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     in
     Ok (Ast.ModuleDecl (loc, name, List.flatten imports, submodules @ decls))
 
-  let modularize_decl (d : Ast.decl) : Ast.decl =
+  let modularize_decl module_imports_map (d : Ast.decl) : Ast.decl =
     match AstAux.decl_loc_name_and_name_setter d with
     | None -> d
     | Some (l, name, name_setter) ->
         if String.contains name ':' then
           let segments = String.split_on_char ':' name in
-          let rec iter = function
+          let rec iter segs = function
             | segment :: "" :: segments ->
-                Ast.ModuleDecl (l, segment, [], [ iter segments ])
+                let segs = segment :: segs in
+                let imports =
+                  match segments with
+                  | [ _ ] -> (
+                      let moduleName = String.concat "::" (List.rev segs) in
+                      match List.assoc_opt moduleName module_imports_map with
+                      | None -> []
+                      | Some imports -> imports)
+                  | _ -> []
+                in
+                Ast.ModuleDecl (l, segment, imports, [ iter segs segments ])
             | [ segment ] -> name_setter segment
             | _ ->
                 failwith
                   (Printf.sprintf "Unexpected shape of Rust item name: '%s'"
                      name)
           in
-          iter segments
+          iter [] segments
         else d
 
-  let modularize_fn_decl
+  let modularize_fn_decl module_imports_map
       (((moduleName : string), (fnName : string)), (d : Ast.decl)) : Ast.decl =
     let (Some (l, name, name_setter)) =
       AstAux.decl_loc_name_and_name_setter d
     in
     if moduleName <> "" then
+      let imports =
+        match List.assoc_opt moduleName module_imports_map with
+        | None -> []
+        | Some imports -> imports
+      in
       let d = name_setter fnName in
       let segments = String.split_on_char ':' moduleName in
       let rec iter = function
         | segment :: "" :: segments ->
             Ast.ModuleDecl (l, segment, [], [ iter segments ])
-        | [ segment ] -> Ast.ModuleDecl (l, segment, [], [ d ])
+        | [ segment ] -> Ast.ModuleDecl (l, segment, imports, [ d ])
         | _ ->
             failwith
               (Printf.sprintf "Unexpected shape of Rust module name: '%s'"
@@ -6810,6 +6861,20 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
              Args.report_should_fail raw (Ast.lexed_loc span));
       let* module_decls =
         ListAux.try_map translate_module (VfMirRd.modules_get_list vf_mir_cpn)
+      in
+      let module_imports_map =
+        let rec iter moduleName module_decls =
+          List.concat_map
+            (function
+              | Ast.ModuleDecl (_, name, imports, submodules) ->
+                  let name =
+                    if moduleName = "" then name else moduleName ^ "::" ^ name
+                  in
+                  (name, imports) :: iter name submodules
+              | _ -> [])
+            module_decls
+        in
+        iter "" module_decls
       in
       let ghost_decl_batches_cpn =
         VfMirRd.ghost_decl_batches_get_list vf_mir_cpn
@@ -6912,11 +6977,14 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
          they need to be inside appropriate `ModuleDecl`s. `modularize_decl` does this. TODO: Generate the declarations inside the right
          module declarations from the start. This will become necessary once we want to take real `use` items into account inside annotations.*)
       let decls =
-        List.map modularize_decl
+        List.map
+          (modularize_decl module_imports_map)
           (traits_decls @ trait_impl_prototypes @ adt_decls @ aux_decls
          @ adts_full_bor_content_preds @ adts_proof_obligs)
         @ ghost_decls
-        @ List.map modularize_fn_decl (body_sigs @ body_decls)
+        @ List.map
+            (modularize_fn_decl module_imports_map)
+            (body_sigs @ body_decls)
       in
       (* Todo @Nima: we should add necessary inclusions during translation *)
       let extern_header_names =
