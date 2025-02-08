@@ -5,4 +5,6 @@ begin_parallel
   !refinement-checker basic_orig.rs basic_verified_bad2.rs
   refinement-checker loop_orig.rs loop_verified.rs
   !refinement-checker loop_orig.rs loop_verified_bad.rs
+  refinement-checker identical_orig.rs identical_verified.rs
+  !refinement-checker identical_orig.rs identical_verified_bad.rs
 end_parallel
