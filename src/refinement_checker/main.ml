@@ -11,25 +11,36 @@ let memoize f =
         y
 
 let push xs_ref x = xs_ref := x :: !xs_ref
+let rustc_args = ref [ "--vf-rust-mir-exporter:no-preprocess" ]
 
 let original_path, verified_path =
-  match Sys.argv with
-  | [| _; original_path; verified_path |] -> (original_path, verified_path)
-  | _ ->
-      print_endline
-        "Usage: refinement_checker <original_path> <verified_path>\n\n\
-         Checks that each behavior of each function in the original path is \
-         also exhibited by the corresponding function in the verified path";
-      exit 1
+  let rec process_args = function
+    | flag :: args when String.starts_with ~prefix:"--" flag -> (
+        match flag :: args with
+        | "--" :: [ original_path; verified_path ] ->
+            (original_path, verified_path)
+        | "--rustc-args" :: value :: args ->
+            rustc_args := !rustc_args @ String.split_on_char ' ' value;
+            process_args args
+        | _ -> failwith ("No such flag: " ^ flag))
+    | [ original_path; verified_path ] -> (original_path, verified_path)
+    | _ ->
+        print_endline
+          "Usage: refinement_checker [--rustc-args ARGS] [--] <original_path> \
+           <verified_path>\n\n\
+           Checks that each behavior of each function in the original path is \
+           also exhibited by the corresponding function in the verified path";
+        exit 1
+  in
+  process_args (List.tl (Array.to_list Sys.argv))
 
 let () = Perf.init_windows_error_mode ()
-let rustc_args = [ "--vf-rust-mir-exporter:no-preprocess" ]
 
 let original_vf_mir =
-  VfMirRd.VfMir.of_message @@ Frontend.get_vf_mir rustc_args original_path
+  VfMirRd.VfMir.of_message @@ Frontend.get_vf_mir !rustc_args original_path
 
 let verified_vf_mir =
-  VfMirRd.VfMir.of_message @@ Frontend.get_vf_mir rustc_args verified_path
+  VfMirRd.VfMir.of_message @@ Frontend.get_vf_mir !rustc_args verified_path
 
 (* Check, for each function body in original_vf_mir, that there is a matching function body in verified_vf_mir *)
 let original_bodies = VfMirRd.VfMir.bodies_get_list original_vf_mir
@@ -204,8 +215,10 @@ let check_files_match (path0, path1) =
             else (
               if contents0.[offset0] <> contents1.[offset1] then
                 failwith
-                  (Printf.sprintf "Comparing %s to %s: Mismatch at offset %d/%d: %c vs %c"
-                     path0 path1 offset0 offset1 contents0.[offset0] contents1.[offset1]);
+                  (Printf.sprintf
+                     "Comparing %s to %s: Mismatch at offset %d/%d: %c vs %c"
+                     path0 path1 offset0 offset1 contents0.[offset0]
+                     contents1.[offset1]);
               iter (offset0 + 1) (offset1 + 1) checked_ranges0 checked_ranges1))
   in
   iter 0 0 checked_ranges0 checked_ranges1
@@ -213,8 +226,8 @@ let check_files_match (path0, path1) =
 let check_files_match = memoize check_files_match
 
 let rec check_module module0 module1 =
-  let ((path0, _, _), _) = decode_span @@ VfMirRd.Module.body_span_get module0 in
-  let ((path1, _, _), _) = decode_span @@ VfMirRd.Module.body_span_get module1 in
+  let (path0, _, _), _ = decode_span @@ VfMirRd.Module.body_span_get module0 in
+  let (path1, _, _), _ = decode_span @@ VfMirRd.Module.body_span_get module1 in
   check_files_match (path0, path1);
   let submodules0 = VfMirRd.Module.submodules_get_list module0 in
   let submodules1 = VfMirRd.Module.submodules_get_list module1 in
