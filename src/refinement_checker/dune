@@ -1,3 +1,3 @@
 (executable
  (name main)
- (libraries stdint threads vfconfig capnp capnp.unix vf_mir perf))
+ (libraries json stdint threads vfconfig capnp capnp.unix vf_mir perf))

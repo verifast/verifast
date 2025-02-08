@@ -30,6 +30,14 @@ let decode_span span =
   let hi = VfMirRd.SpanData.hi_get span in
   (decode_loc lo, decode_loc hi)
 
+let string_of_span span =
+  let ((path_lo, line_lo, col_lo), (path_hi, line_hi, col_hi)) = decode_span span in
+  assert (path_hi = path_lo);
+  if line_lo = line_hi then
+    Printf.sprintf "%s:%d:%d-%d" path_lo line_lo (col_lo + 1) (col_hi + 1)
+  else
+    Printf.sprintf "%s:%d:%d-%d:%d" path_lo line_lo (col_lo + 1) line_hi (col_hi + 1)
+
 type int_width = FixedWidth of int (* log2 of width in bytes *) | PtrWidth
 
 type literal_const_expr =
@@ -185,36 +193,35 @@ let fresh_symbol () =
   next_symbol_id := id + 1;
   Symbol id
 
-let string_of_env env =
-  String.concat "; " (List.map (fun (x, v) -> Printf.sprintf "%s: %s" x (string_of_term v)) env)
+type local_var_state =
+  Value of term (* This local has not (yet) had its address taken. The term denote the value of the local. *)
+| Address of term (* This local has its address taken somewhere in this function. The term denotes the address of the local. *)
 
-let eval_operand env operand =
-  match VfMirRd.Body.BasicBlock.Operand.get operand with
-    Move place | Copy place ->
-      let placeProjection = VfMirRd.Body.Place.projection_get place in
-      if Capnp.Array.length placeProjection <> 0 then
-        failwith "Place projections are not yet supported";
-      let placeLocalId = VfMirRd.Body.Place.local_get place in
-      let placeLocalName = VfMirRd.Body.LocalDeclId.name_get placeLocalId in
-      List.assoc placeLocalName env
-    | Constant const_operand_cpn ->
-        let mir_const_cpn = VfMirRd.Body.ConstOperand.const_get const_operand_cpn in
-        match VfMirRd.Body.ConstOperand.Const.get mir_const_cpn with
-          Ty mir_ty_const_cpn -> failwith "Using typesystem constant expressions as MIR constant operands is not yet supported"
-        | Val mir_val_const_cpn ->
-          let ty = decode_ty (VfMirRd.Body.ConstOperand.Const.Val.ty_get mir_val_const_cpn) in
-          let mir_const_value_cpn = VfMirRd.Body.ConstOperand.Const.Val.const_value_get mir_val_const_cpn in
-          begin match VfMirRd.Body.ConstValue.get mir_const_value_cpn with
-            Scalar scalar_cpn -> failwith "MIR scalar constants are not yet supported"
-          | ZeroSized ->
-            begin match ty with
-              Tuple [] -> Tuple []
-            | FnDef (fn, genArgs) -> FnDef (fn, genArgs)
-            | _ -> failwith "Zero-sized constants are not yet supported"
-            end
-          | Slice slice_cpn -> failwith "MIR slice constants are not yet supported"
-          end
-        | Unevaluated -> failwith "Unevaluated constant operands are not yet supported"
+let string_of_local_var_state = function
+  Value v -> Printf.sprintf "Value %s" (string_of_term v)
+| Address v -> Printf.sprintf "Address %s" (string_of_term v)
+
+let string_of_env env =
+  String.concat "; " (List.map (fun (x, v) -> Printf.sprintf "%s: %s" x (string_of_local_var_state v)) env)
+
+let eval_const_operand const_operand_cpn =
+  let mir_const_cpn = VfMirRd.Body.ConstOperand.const_get const_operand_cpn in
+  match VfMirRd.Body.ConstOperand.Const.get mir_const_cpn with
+    Ty mir_ty_const_cpn -> failwith "Using typesystem constant expressions as MIR constant operands is not yet supported"
+  | Val mir_val_const_cpn ->
+    let ty = decode_ty (VfMirRd.Body.ConstOperand.Const.Val.ty_get mir_val_const_cpn) in
+    let mir_const_value_cpn = VfMirRd.Body.ConstOperand.Const.Val.const_value_get mir_val_const_cpn in
+    begin match VfMirRd.Body.ConstValue.get mir_const_value_cpn with
+      Scalar scalar_cpn -> failwith "MIR scalar constants are not yet supported"
+    | ZeroSized ->
+      begin match ty with
+        Tuple [] -> Tuple []
+      | FnDef (fn, genArgs) -> FnDef (fn, genArgs)
+      | _ -> failwith "Zero-sized constants are not yet supported"
+      end
+    | Slice slice_cpn -> failwith "MIR slice constants are not yet supported"
+    end
+  | Unevaluated -> failwith "Unevaluated constant operands are not yet supported"
 
 let update_env x v env = (x, v) :: List.remove_assoc x env
 
@@ -245,8 +252,16 @@ let rec process_assignments bblocks env i_bb i_s =
                   else
                     let placeLocalId = VfMirRd.Body.Place.local_get place in
                     let placeLocalName = VfMirRd.Body.LocalDeclId.name_get placeLocalId in
-                    let env = update_env lhsLocalName (List.assoc placeLocalName env) env in
-                    process_assignments bblocks env i_bb (i_s + 1)
+                    begin match List.assoc placeLocalName env with
+                      Value placeValue ->
+                        begin match List.assoc_opt lhsLocalName env with
+                          Some (Address _) -> (env, i_bb, i_s)
+                        | _ ->
+                          let env = update_env lhsLocalName (Value placeValue) env in
+                          process_assignments bblocks env i_bb (i_s + 1)
+                        end
+                    | _ -> (env, i_bb, i_s)
+                      end
               | Constant constant ->
                   (env, i_bb, i_s)
               end
@@ -255,6 +270,78 @@ let rec process_assignments bblocks env i_bb i_s =
     | Nop -> process_assignments bblocks env i_bb (i_s + 1)
 
 let values_equal (v0: term) (v1: term) = v0 = v1
+
+type place =
+  Local of string (* This place is a local variable whose address is never taken in this function *)
+| Nonlocal (* A "nonlocal place" is a plcae that is disjoint from all local variables whose address is never taken in this function *)
+
+(* Checks that the place expressions either both evaluate to a local whose address is never taken, or both evaluate to *the same* "nonlocal place" (see definition above). *)
+let check_place_refines_place env0 place0 env1 place1 =
+  let placeProjection0 = VfMirRd.Body.Place.projection_get place0 in
+  let placeProjection1 = VfMirRd.Body.Place.projection_get place1 in
+  if Capnp.Array.length placeProjection0 <> 0 then
+    failwith "Place projections are not yet supported";
+  if Capnp.Array.length placeProjection1 <> 0 then
+    failwith "Place projections are not yet supported";
+  let placeLocalId0 = VfMirRd.Body.Place.local_get place0 in
+  let placeLocalName0 = VfMirRd.Body.LocalDeclId.name_get placeLocalId0 in
+  let placeLocalId1 = VfMirRd.Body.Place.local_get place1 in
+  let placeLocalName1 = VfMirRd.Body.LocalDeclId.name_get placeLocalId1 in
+  match List.assoc_opt placeLocalName0 env0, List.assoc_opt placeLocalName1 env1 with
+    Some (Address a1), Some (Address a2) when values_equal a1 a2 -> Nonlocal, Nonlocal
+  | (Some (Address _), _) | (_, Some (Address _)) -> failwith "Place expressions do not match"
+  | _ ->
+    (* OK, neither local has its address taken *) Local placeLocalName0, Local placeLocalName1
+
+(* When this is raised, both variables did not yet have their address taken *)
+exception LocalAddressTaken of string (* x0 *) * string (* x1 *)
+
+let check_operand_refines_operand env0 span0 operand0 env1 span1 operand1 =
+  match VfMirRd.Body.BasicBlock.Operand.get operand0, VfMirRd.Body.BasicBlock.Operand.get operand1 with
+    (Move placeExpr0, Move placeExpr1) | (Copy placeExpr0, Copy placeExpr1) ->
+      begin match check_place_refines_place env0 placeExpr0 env1 placeExpr1 with
+        Local x0, Local x1 ->
+          begin match List.assoc x0 env0, List.assoc x1 env1 with
+            Value v0, Value v1 -> if not (values_equal v0 v1) then failwith (Printf.sprintf "The values of %s and %s are not equal" (string_of_span span0) (string_of_span span1))
+          | Address a1, Address a2 -> if not (values_equal a1 a2) then failwith (Printf.sprintf "The addresses of %s and %s are not equal" (string_of_span span0) (string_of_span span1))
+          | _ -> failwith "Operand mismatch"
+          end
+      | Nonlocal, Nonlocal -> ()
+        end
+  | Constant const_operand_cpn0, Constant const_operand_cpn1 ->
+    if eval_const_operand const_operand_cpn0 <> eval_const_operand const_operand_cpn1 then failwith (Printf.sprintf "The constants %s and %s are not equal" (string_of_span span0) (string_of_span span1))
+
+(* Checks that the two rvalues evaluate to the same value *)
+let check_rvalue_refines_rvalue env0 span0 rhsRvalue0 env1 span1 rhsRvalue1 =
+  match VfMirRd.Body.BasicBlock.Rvalue.get rhsRvalue0, VfMirRd.Body.BasicBlock.Rvalue.get rhsRvalue1 with
+  Use operand0, Use operand1 ->
+    check_operand_refines_operand env0 span0 operand0 env1 span1 operand1
+| Repeat, Repeat -> failwith "Rvalue::Repeat not supported"
+| Ref ref_data_cpn0, Ref ref_data_cpn1 ->
+  (* We ignore the region because it does not affect the run-time behavior *)
+  let borKind0 = VfMirRd.Body.BasicBlock.Rvalue.RefData.bor_kind_get ref_data_cpn0 in
+  let borKind1 = VfMirRd.Body.BasicBlock.Rvalue.RefData.bor_kind_get ref_data_cpn1 in
+  begin match VfMirRd.Body.BasicBlock.Rvalue.RefData.BorrowKind.get borKind0, VfMirRd.Body.BasicBlock.Rvalue.RefData.BorrowKind.get borKind1 with
+    | Shared, Shared -> ()
+    | Mut, Mut -> ()
+    | _ -> failwith "Rvalue::Ref: borrow kinds do not match"
+  end;
+  let placeExpr0 = VfMirRd.Body.BasicBlock.Rvalue.RefData.place_get ref_data_cpn0 in
+  let placeExpr1 = VfMirRd.Body.BasicBlock.Rvalue.RefData.place_get ref_data_cpn1 in
+  begin match check_place_refines_place env0 placeExpr0 env1 placeExpr1 with
+    Local x0, Local x1 -> raise (LocalAddressTaken (x0, x1))
+  | Nonlocal, Nonlocal -> ()
+  end
+| ThreadLocalRef, ThreadLocalRef -> failwith "Rvalue::ThreadLocalRef not supported"
+| AddressOf address_of_data_cpn0, AddressOf address_of_data_cpn1 -> failwith "Rvalue::AddressOf not supported"
+| Len, Len -> failwith "Rvalue::Len not supported"
+| Cast cast_data_cpn0, Cast cast_data_cpn1 -> failwith "Rvalue::Cast not supported"
+| BinaryOp binary_op_data_cpn0, BinaryOp binary_op_data_cpn1 -> failwith "Rvalue::BinaryOp not supported"
+| NullaryOp, NullaryOp -> failwith "Rvalue::NullaryOp not supported"
+| UnaryOp unary_op_data_cpn0, UnaryOp unary_op_data_cpn1 -> failwith "Rvalue::UnaryOp not supported"
+| Aggregate aggregate_data_cpn0, Aggregate aggregate_data_cpn1 -> failwith "Rvalue::Aggregate not supported"
+| Discriminant place_cpn0, Discriminant place_cpn1 -> failwith "Rvalue::Discriminant not supported"
+| ShallowInitBox, ShallowInitBox -> failwith "Rvalue::ShallowInitBox not supported"
 
 type basic_block_status =
   NotSeen
@@ -266,184 +353,220 @@ exception RecheckLoop of int (* i_bb0 *) (* When this is raised, the specified b
 let string_of_loop_inv loopInv =
   String.concat "; " (List.map (fun (x, ys) -> Printf.sprintf "%s: [%s]" x (String.concat ", " ys)) loopInv)
 
+let local_name locals i = VfMirRd.Body.LocalDeclId.name_get @@ VfMirRd.Body.LocalDecl.id_get (Capnp.Array.get locals i)
+
+let havoc_local_var_state = function
+  Value _ -> Value (fresh_symbol ())
+| Address _ -> Address (fresh_symbol ())
+
+type unification_variable = {mutable unified_with: unification_variable option; mutable value: local_var_state}
+
+let rec unwrap_unif_var x =
+  match x.unified_with with
+    None -> x
+  | Some y -> unwrap_unif_var y
+
+let unify v v' =
+  let v = unwrap_unif_var v in
+  let v' = unwrap_unif_var v' in
+  if v != v' then v.unified_with <- Some v'
+
+(* Produce an environment for the product program that satisfies only the equalities implied by the loop invariant. *)
+let produce_loop_inv env0 env1 loopInv =
+  let env0 = List.map (fun (x, v) -> (x, {unified_with=None; value=havoc_local_var_state v})) env0 in
+  (* Havoc all locals of the verified crate that are not known to be equal to any locals of the original crate *)
+  let env1 = List.map2 (fun (x, v) (x, ys) -> (x, let v = {unified_with=None; value=havoc_local_var_state v} in List.iter (fun y -> unify v (List.assoc y env0)) ys; v)) env1 loopInv in
+  let env0 = List.map (fun (x, v) -> (x, (unwrap_unif_var v).value)) env0 in
+  let env1 = List.map (fun (x, v) -> (x, (unwrap_unif_var v).value)) env1 in
+  env0, env1
+
+(*
+
+Perform a simple dataflow analysis to check refinement. We establish a
+one-to-one correspondence between local variables in both programs whose address
+is taken. Since the execution of the verified program is angelic, we choose the
+addresses of these variables to be the same as in the original program, and
+similarly for global and heap-allocated variables. We check that the values
+of all corresponding nonlocal (i.e. global or heap-allocated) variables, and the
+values of corresponding locals whose address is taken, are equal at all times.
+We don't attempt to track the specific values. Only for locals whose address is
+not taken, we track the values.
+
+*)
+
 let check_body_refines_body def_path body0 body1 =
   Printf.printf "Checking function body %s\n" def_path;
   let inputs0 = VfMirRd.Body.inputs_get_list body0 in
   let inputs1 = VfMirRd.Body.inputs_get_list body1 in
-  let inputs = List.map (fun _ -> fresh_symbol ()) inputs0 in
-  (* TODO: Check that inputs0 and inputs1 match *)
   let locals0 = VfMirRd.Body.local_decls_get body0 in
   let locals1 = VfMirRd.Body.local_decls_get body1 in
-  let env0 = List.mapi (fun i v -> (VfMirRd.Body.LocalDeclId.name_get @@ VfMirRd.Body.LocalDecl.id_get (Capnp.Array.get locals0 (i + 1)), v)) inputs in
-  let env1 = List.mapi (fun i v -> (VfMirRd.Body.LocalDeclId.name_get @@ VfMirRd.Body.LocalDecl.id_get (Capnp.Array.get locals1 (i + 1)), v)) inputs in
   let bblocks0 = VfMirRd.Body.basic_blocks_get body0 in
   let bblocks1 = VfMirRd.Body.basic_blocks_get body1 in
-  let bblocks0_statuses = Array.make (Capnp.Array.length bblocks0) NotSeen in
-  let rec check_basic_block_refines_basic_block env0 i_bb0 env1 i_bb1 =
-    Printf.printf "INFO: In function %s, checking basic block %d against basic block %d, with env0 = [%s] and env1 = [%s]\n" def_path i_bb0 i_bb1 (string_of_env env0) (string_of_env env1);
-    match bblocks0_statuses.(i_bb0) with
-      NotSeen ->
-        let loopInv = env1 |> List.map (fun (x, v1) -> (x, env0 |> List.concat_map (fun (y, v0) -> if v1 = v0 then [y] else []) )) in
-        bblocks0_statuses.(i_bb0) <- Checking (i_bb1, loopInv);
-        let rec iter loopInv =
-          try
-            Printf.printf "Loop invariant = [%s]\n" (string_of_loop_inv loopInv);
-            (* Havoc all locals of the verified crate that are not known to be equal to any locals of the original crate *)
-            let env1 = List.map2 (fun (x, v) (x, ys) -> (x, if ys = [] then fresh_symbol () else v)) env1 loopInv in
-            Printf.printf "INFO: In function %s, checking loop body at basic block %d against basic block %d, with env0 = [%s] and env1 = [%s]\n" def_path i_bb0 i_bb1 (string_of_env env0) (string_of_env env1);
-            check_codepos_refines_codepos env0 i_bb0 0 env1 i_bb1 0;
-            let Checking (i_bb1, loopInv) = bblocks0_statuses.(i_bb0) in
-            bblocks0_statuses.(i_bb0) <- Checked (i_bb1, loopInv)
-          with RecheckLoop i_bb0' as e ->
-            if i_bb0' <> i_bb0 then begin
-              bblocks0_statuses.(i_bb0) <- NotSeen;
-              raise e
-            end else
-              let Checking (i_bb1', loopInv) = bblocks0_statuses.(i_bb0) in
-              iter loopInv
-        in
-        iter loopInv
-    | Checking (i_bb1', loopInv) ->
-      Printf.printf "INFO: In function %s, loop detected with head = basic block %d\n" def_path i_bb0;
-      if i_bb1' <> i_bb1 then failwith (Printf.sprintf "In function %s, loop head %d in the original crate is being checked for refinement against basic block %d in the verified crate, but it is already being checked for refinement against loop head %d in the verified crate" def_path i_bb0 i_bb1 i_bb1');
-      if loopInv |> List.for_all @@ fun (x, ys) ->
-        let v = List.assoc x env1 in
-        ys |> List.for_all @@ fun y -> List.assoc y env0 = v
-      then begin
-        Printf.printf "Loop with head %d verified, with loop invariant %s!\n" i_bb0 (string_of_loop_inv loopInv);
-        () (* Use the induction hypothesis; this path is done. *)
-      end else begin
-        Printf.printf "Loop with head %d failed to verify; trying again with weaker invariant\n" i_bb0;
-        (* Forget about the earlier result; try from scratch *)
-        let loopInv = loopInv |> List.map @@ fun (x, ys) ->
+  let inputs = List.map (fun _ -> fresh_symbol ()) inputs0 in
+  (* TODO: Check that inputs0 and inputs1 match *)
+  let rec check_body_refines_body_core address_taken =
+    let env0 = List.mapi (fun i v -> let x = local_name locals0 (i + 1) in if List.mem_assoc x address_taken then [] else [(x, Value v)]) inputs |> List.flatten in
+    let env1 = env0 in
+    let address_taken0, address_taken1 = address_taken |> List.map (fun (x0, x1) -> let a = fresh_symbol () in ((x0, Address a), (x1, Address a))) |> List.split in
+    let env0 = address_taken0 @ env0 in
+    let env1 = address_taken1 @ env1 in
+    let bblocks0_statuses = Array.make (Capnp.Array.length bblocks0) NotSeen in
+    let rec check_basic_block_refines_basic_block env0 i_bb0 env1 i_bb1 =
+      Printf.printf "INFO: In function %s, checking basic block %d against basic block %d, with env0 = [%s] and env1 = [%s]\n" def_path i_bb0 i_bb1 (string_of_env env0) (string_of_env env1);
+      match bblocks0_statuses.(i_bb0) with
+        NotSeen ->
+          let loopInv = env1 |> List.map (fun (x, v1) -> (x, env0 |> List.concat_map (fun (y, v0) -> if v1 = v0 then [y] else []) )) in
+          bblocks0_statuses.(i_bb0) <- Checking (i_bb1, loopInv);
+          let rec iter loopInv =
+            try
+              Printf.printf "Loop invariant = [%s]\n" (string_of_loop_inv loopInv);
+              (* Havoc all locals of the original crate *)
+              let env0, env1 = produce_loop_inv env0 env1 loopInv in
+              Printf.printf "INFO: In function %s, checking loop body at basic block %d against basic block %d, with env0 = [%s] and env1 = [%s]\n" def_path i_bb0 i_bb1 (string_of_env env0) (string_of_env env1);
+              check_codepos_refines_codepos env0 i_bb0 0 env1 i_bb1 0;
+              let Checking (i_bb1, loopInv) = bblocks0_statuses.(i_bb0) in
+              bblocks0_statuses.(i_bb0) <- Checked (i_bb1, loopInv)
+            with RecheckLoop i_bb0' as e ->
+              if i_bb0' <> i_bb0 then begin
+                bblocks0_statuses.(i_bb0) <- NotSeen;
+                raise e
+              end else
+                let Checking (i_bb1', loopInv) = bblocks0_statuses.(i_bb0) in
+                iter loopInv
+          in
+          iter loopInv
+      | Checking (i_bb1', loopInv) ->
+        Printf.printf "INFO: In function %s, loop detected with head = basic block %d\n" def_path i_bb0;
+        if i_bb1' <> i_bb1 then failwith (Printf.sprintf "In function %s, loop head %d in the original crate is being checked for refinement against basic block %d in the verified crate, but it is already being checked for refinement against loop head %d in the verified crate" def_path i_bb0 i_bb1 i_bb1');
+        if loopInv |> List.for_all @@ fun (x, ys) ->
           let v = List.assoc x env1 in
-          (x, ys |> List.filter @@ fun y -> List.assoc y env0 = v)
-        in
-        bblocks0_statuses.(i_bb0) <- Checking (i_bb1, loopInv); (* Weaken the candidate loop invariant *)
-        raise (RecheckLoop i_bb0)
-      end
-    | Checked (i_bb1', loopInv) ->
-      if i_bb1' = i_bb1 && loopInv |> List.for_all @@ fun (x, ys) ->
-        let v = List.assoc x env1 in
-        ys |> List.for_all @@ fun y -> List.assoc y env0 = v
-      then begin
-        Printf.printf "Re-reached loop with head %d, that was already verified; path is done.\n" i_bb0;
-        () (* Use the induction hypothesis; this path is done. *)
-      end else begin
-        (* Forget about the earlier result; try from scratch *)
-        bblocks0_statuses.(i_bb0) <- NotSeen;
-        check_basic_block_refines_basic_block env0 i_bb0 env1 i_bb1
-      end
-  (* Checks whether for each behavior of code position (bb0, s0), code position (bb1, s1) has a matching behavior *)
-  and check_codepos_refines_codepos env0 i_bb0 i_s0 env1 i_bb1 i_s1 =
-    let (env0, i_bb0, i_s0) = process_assignments bblocks0 env0 i_bb0 i_s0 in
-    let (env1, i_bb1, i_s1) = process_assignments bblocks1 env1 i_bb1 i_s1 in
-    let bb0 = Capnp.Array.get bblocks0 i_bb0 in
-    let bb1 = Capnp.Array.get bblocks1 i_bb1 in
-    let check_terminator_refines_terminator () =
-      let terminator0 = VfMirRd.Body.BasicBlock.terminator_get bb0 in
-      let terminator1 = VfMirRd.Body.BasicBlock.terminator_get bb1 in
-      let terminatorKind0 = VfMirRd.Body.BasicBlock.Terminator.kind_get terminator0 in
-      let terminatorKind1 = VfMirRd.Body.BasicBlock.Terminator.kind_get terminator1 in
-      match (VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.get terminatorKind0, VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.get terminatorKind1) with
-        (Goto bb_id0, Goto bb_id1) ->
-          let bb_idx0 = Stdint.Uint32.to_int @@ VfMirRd.Body.BasicBlockId.index_get bb_id0 in
-          let bb_idx1 = Stdint.Uint32.to_int @@ VfMirRd.Body.BasicBlockId.index_get bb_id1 in
-          check_basic_block_refines_basic_block env0 bb_idx0 env1 bb_idx1
-      | (Return, Return) ->
-          let retVal0 = List.assoc (VfMirRd.Body.LocalDeclId.name_get (VfMirRd.Body.LocalDecl.id_get (Capnp.Array.get locals0 0))) env0 in
-          let retVal1 = List.assoc (VfMirRd.Body.LocalDeclId.name_get (VfMirRd.Body.LocalDecl.id_get (Capnp.Array.get locals1 0))) env1 in
-          if not (values_equal retVal0 retVal1) then
-            failwith (Printf.sprintf "In function %s, at basic block %d in the original crate and basic block %d in the verified crate, the return values are not equal" def_path i_bb0 i_bb1)
-      | (Call call0, Call call1) ->
-        let func0 = VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.FnCallData.func_get call0 in
-        let func1 = VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.FnCallData.func_get call1 in
-        let func0 = eval_operand env0 func0 in
-        let func1 = eval_operand env1 func1 in
-        if not (values_equal func0 func1) then
-          failwith (Printf.sprintf "In function %s, at basic block %d in the original crate and basic block %d in the verified crate, the callees of the function calls are not equal" def_path i_bb0 i_bb1);
-        let args0 = VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.FnCallData.args_get_list call0 in
-        let args1 = VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.FnCallData.args_get_list call1 in
-        let args0 = List.map (eval_operand env0) args0 in
-        let args1 = List.map (eval_operand env1) args1 in
-        Printf.printf "INFO: In function %s, checking call of %s with args [%s] against call with args [%s]\n" def_path (string_of_term func0) (String.concat ", " (List.map string_of_term args0)) (String.concat ", " (List.map string_of_term args1));
-        if not (List.for_all2 values_equal args0 args1) then
-          failwith (Printf.sprintf "In function %s, at basic block %d in the original crate and basic block %d in the verified crate, the arguments of the function calls of %s are not equal: [%s] versus [%s]" def_path i_bb0 i_bb1 (string_of_term func0) (String.concat ", " (List.map string_of_term args0)) (String.concat ", " (List.map string_of_term args1)));
-        let dest0 = VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.FnCallData.destination_get call0 in
-        let dest1 = VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.FnCallData.destination_get call1 in
-        begin match VfMirRd.Util.Option.get dest0, VfMirRd.Util.Option.get dest1 with
-          Nothing, Nothing -> ()
-        | Something dest0, Something dest1 ->
-          let dest0 = VfMirRd.of_pointer dest0 in
-          let dest1 = VfMirRd.of_pointer dest1 in
-          let dest0Place = VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.FnCallData.DestinationData.place_get dest0 in
-          let dest1Place = VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.FnCallData.DestinationData.place_get dest1 in
-          let dest0Projection = VfMirRd.Body.Place.projection_get dest0Place in
-          let dest1Projection = VfMirRd.Body.Place.projection_get dest1Place in
-          if Capnp.Array.length dest0Projection <> 0 then
-            failwith "Place projections are not yet supported";
-          if Capnp.Array.length dest1Projection <> 0 then
-            failwith "Place projections are not yet supported";
-          let dest0LocalId = VfMirRd.Body.Place.local_get dest0Place in
-          let dest0LocalName = VfMirRd.Body.LocalDeclId.name_get dest0LocalId in
-          let dest1LocalId = VfMirRd.Body.Place.local_get dest1Place in
-          let dest1LocalName = VfMirRd.Body.LocalDeclId.name_get dest1LocalId in
-          let dest0bbid = VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.FnCallData.DestinationData.basic_block_id_get dest0 in
-          let dest1bbid = VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.FnCallData.DestinationData.basic_block_id_get dest1 in
-          let dest0bbidx = Stdint.Uint32.to_int @@ VfMirRd.Body.BasicBlockId.index_get dest0bbid in
-          let dest1bbidx = Stdint.Uint32.to_int @@ VfMirRd.Body.BasicBlockId.index_get dest1bbid in
-          let result = fresh_symbol () in
-          let env0 = update_env dest0LocalName result env0 in
-          let env1 = update_env dest1LocalName result env1 in
-          check_basic_block_refines_basic_block env0 dest0bbidx env1 dest1bbidx
+          ys |> List.for_all @@ fun y -> List.assoc y env0 = v
+        then begin
+          Printf.printf "Loop with head %d verified, with loop invariant %s!\n" i_bb0 (string_of_loop_inv loopInv);
+          () (* Use the induction hypothesis; this path is done. *)
+        end else begin
+          Printf.printf "Loop with head %d failed to verify; trying again with weaker invariant\n" i_bb0;
+          (* Forget about the earlier result; try from scratch *)
+          let loopInv = loopInv |> List.map @@ fun (x, ys) ->
+            let v = List.assoc x env1 in
+            (x, ys |> List.filter @@ fun y -> List.assoc y env0 = v)
+          in
+          bblocks0_statuses.(i_bb0) <- Checking (i_bb1, loopInv); (* Weaken the candidate loop invariant *)
+          raise (RecheckLoop i_bb0)
         end
-      | _ -> failwith "Unsupported terminator kind"
-    in
-    let check_statement_refines_statement () =
+      | Checked (i_bb1', loopInv) ->
+        if i_bb1' = i_bb1 && loopInv |> List.for_all @@ fun (x, ys) ->
+          let v = List.assoc x env1 in
+          ys |> List.for_all @@ fun y -> List.assoc y env0 = v
+        then begin
+          Printf.printf "Re-reached loop with head %d, that was already verified; path is done.\n" i_bb0;
+          () (* Use the induction hypothesis; this path is done. *)
+        end else begin
+          (* Forget about the earlier result; try from scratch *)
+          bblocks0_statuses.(i_bb0) <- NotSeen;
+          check_basic_block_refines_basic_block env0 i_bb0 env1 i_bb1
+        end
+    (* Checks whether for each behavior of code position (bb0, s0), code position (bb1, s1) has a matching behavior *)
+    and check_codepos_refines_codepos env0 i_bb0 i_s0 env1 i_bb1 i_s1 =
+      let (env0, i_bb0, i_s0) = process_assignments bblocks0 env0 i_bb0 i_s0 in
+      let (env1, i_bb1, i_s1) = process_assignments bblocks1 env1 i_bb1 i_s1 in
+      let bb0 = Capnp.Array.get bblocks0 i_bb0 in
+      let bb1 = Capnp.Array.get bblocks1 i_bb1 in
+      let check_terminator_refines_terminator () =
+        let terminator0 = VfMirRd.Body.BasicBlock.terminator_get bb0 in
+        let terminator1 = VfMirRd.Body.BasicBlock.terminator_get bb1 in
+        let span0 = VfMirRd.Body.SourceInfo.span_get @@ VfMirRd.Body.BasicBlock.Terminator.source_info_get terminator0 in
+        let span1 = VfMirRd.Body.SourceInfo.span_get @@ VfMirRd.Body.BasicBlock.Terminator.source_info_get terminator1 in
+        Printf.printf "INFO: Checking that terminator at %s refines terminator at %s\n" (string_of_span span0) (string_of_span span1);
+        let terminatorKind0 = VfMirRd.Body.BasicBlock.Terminator.kind_get terminator0 in
+        let terminatorKind1 = VfMirRd.Body.BasicBlock.Terminator.kind_get terminator1 in
+        match (VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.get terminatorKind0, VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.get terminatorKind1) with
+          (Goto bb_id0, Goto bb_id1) ->
+            let bb_idx0 = Stdint.Uint32.to_int @@ VfMirRd.Body.BasicBlockId.index_get bb_id0 in
+            let bb_idx1 = Stdint.Uint32.to_int @@ VfMirRd.Body.BasicBlockId.index_get bb_id1 in
+            check_basic_block_refines_basic_block env0 bb_idx0 env1 bb_idx1
+        | (Return, Return) ->
+            let retVal0 = List.assoc (VfMirRd.Body.LocalDeclId.name_get (VfMirRd.Body.LocalDecl.id_get (Capnp.Array.get locals0 0))) env0 in
+            let retVal1 = List.assoc (VfMirRd.Body.LocalDeclId.name_get (VfMirRd.Body.LocalDecl.id_get (Capnp.Array.get locals1 0))) env1 in
+            if retVal0 <> retVal1 then
+              failwith (Printf.sprintf "In function %s, at basic block %d in the original crate and basic block %d in the verified crate, the return values are not equal" def_path i_bb0 i_bb1)
+        | (Call call0, Call call1) ->
+          let func0 = VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.FnCallData.func_get call0 in
+          let func1 = VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.FnCallData.func_get call1 in
+          check_operand_refines_operand env0 span0 func0 env1 span1 func1;
+          let args0 = VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.FnCallData.args_get_list call0 in
+          let args1 = VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.FnCallData.args_get_list call1 in
+          List.iter2 (fun arg0 arg1 -> check_operand_refines_operand env0 span0 arg0 env1 span1 arg1) args0 args1;
+          let dest0 = VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.FnCallData.destination_get call0 in
+          let dest1 = VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.FnCallData.destination_get call1 in
+          begin match VfMirRd.Util.Option.get dest0, VfMirRd.Util.Option.get dest1 with
+            Nothing, Nothing -> ()
+          | Something dest0, Something dest1 ->
+            let dest0 = VfMirRd.of_pointer dest0 in
+            let dest1 = VfMirRd.of_pointer dest1 in
+            let dest0PlaceExpr = VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.FnCallData.DestinationData.place_get dest0 in
+            let dest1PlaceExpr = VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.FnCallData.DestinationData.place_get dest1 in
+            let dest0bbid = VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.FnCallData.DestinationData.basic_block_id_get dest0 in
+            let dest1bbid = VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.FnCallData.DestinationData.basic_block_id_get dest1 in
+            let dest0bbidx = Stdint.Uint32.to_int @@ VfMirRd.Body.BasicBlockId.index_get dest0bbid in
+            let dest1bbidx = Stdint.Uint32.to_int @@ VfMirRd.Body.BasicBlockId.index_get dest1bbid in
+            let result = fresh_symbol () in
+            begin match check_place_refines_place env0 dest0PlaceExpr env1 dest1PlaceExpr with
+              Local x0, Local x1 ->
+              let env0 = update_env x0 (Value result) env0 in
+              let env1 = update_env x1 (Value result) env1 in
+              check_basic_block_refines_basic_block env0 dest0bbidx env1 dest1bbidx
+            | Nonlocal, Nonlocal ->
+              check_basic_block_refines_basic_block env0 dest0bbidx env1 dest1bbidx
+            end
+          end
+        | _ -> failwith "Unsupported terminator kind"
+      in
+      let check_statement_refines_statement () =
+        let stmts0 = VfMirRd.Body.BasicBlock.statements_get bb0 in
+        let stmts1 = VfMirRd.Body.BasicBlock.statements_get bb1 in
+        let stmt0 = Capnp.Array.get stmts0 i_s0 in
+        let stmt1 = Capnp.Array.get stmts1 i_s1 in
+        let stmtSpan0 = VfMirRd.Body.SourceInfo.span_get @@ VfMirRd.Body.BasicBlock.Statement.source_info_get stmt0 in
+        let stmtSpan1 = VfMirRd.Body.SourceInfo.span_get @@ VfMirRd.Body.BasicBlock.Statement.source_info_get stmt1 in
+        Printf.printf "INFO: Checking that statement at %s refines statement at %s\n" (string_of_span stmtSpan0) (string_of_span stmtSpan1);
+        let stmtKind0 = VfMirRd.Body.BasicBlock.Statement.StatementKind.get (VfMirRd.Body.BasicBlock.Statement.kind_get stmt0) in
+        let stmtKind1 = VfMirRd.Body.BasicBlock.Statement.StatementKind.get (VfMirRd.Body.BasicBlock.Statement.kind_get stmt1) in
+        match (stmtKind0, stmtKind1) with
+          (Assign assign_data0, Assign assign_data1) ->
+            let rhsRvalue0 = VfMirRd.Body.BasicBlock.Statement.StatementKind.AssignData.rhs_rvalue_get assign_data0 in
+            let rhsRvalue1 = VfMirRd.Body.BasicBlock.Statement.StatementKind.AssignData.rhs_rvalue_get assign_data1 in
+            check_rvalue_refines_rvalue env0 stmtSpan0 rhsRvalue0 env1 stmtSpan1 rhsRvalue1;
+            let lhsPlace0 = VfMirRd.Body.BasicBlock.Statement.StatementKind.AssignData.lhs_place_get assign_data0 in
+            let lhsPlace1 = VfMirRd.Body.BasicBlock.Statement.StatementKind.AssignData.lhs_place_get assign_data1 in
+            begin match check_place_refines_place env0 lhsPlace0 env1 lhsPlace1 with
+              Local x0, Local x1 ->
+              let rhsValue = fresh_symbol () in
+              let env0 = update_env x0 (Value rhsValue) env0 in
+              let env1 = update_env x1 (Value rhsValue) env1 in
+              check_codepos_refines_codepos env0 i_bb0 (i_s0 + 1) env1 i_bb1 (i_s1 + 1)
+            | Nonlocal, Nonlocal ->
+              check_codepos_refines_codepos env0 i_bb0 (i_s0 + 1) env1 i_bb1 (i_s1 + 1)
+            end
+      in
       let stmts0 = VfMirRd.Body.BasicBlock.statements_get bb0 in
       let stmts1 = VfMirRd.Body.BasicBlock.statements_get bb1 in
-      let stmt0 = Capnp.Array.get stmts0 i_s0 in
-      let stmt1 = Capnp.Array.get stmts1 i_s1 in
-      let stmtKind0 = VfMirRd.Body.BasicBlock.Statement.StatementKind.get (VfMirRd.Body.BasicBlock.Statement.kind_get stmt0) in
-      let stmtKind1 = VfMirRd.Body.BasicBlock.Statement.StatementKind.get (VfMirRd.Body.BasicBlock.Statement.kind_get stmt1) in
-      match (stmtKind0, stmtKind1) with
-        (Assign assign_data0, Assign assign_data1) ->
-          let lhsPlace0 = VfMirRd.Body.BasicBlock.Statement.StatementKind.AssignData.lhs_place_get assign_data0 in
-          let lhsPlace1 = VfMirRd.Body.BasicBlock.Statement.StatementKind.AssignData.lhs_place_get assign_data1 in
-          let lhsProjection0 = VfMirRd.Body.Place.projection_get lhsPlace0 in
-          let lhsProjection1 = VfMirRd.Body.Place.projection_get lhsPlace1 in
-          if Capnp.Array.length lhsProjection0 <> 0 then
-            failwith "Place projections are not yet supported";
-          if Capnp.Array.length lhsProjection1 <> 0 then
-            failwith "Place projections are not yet supported";
-          let lhsLocalId0 = VfMirRd.Body.Place.local_get lhsPlace0 in
-          let lhsLocalName0 = VfMirRd.Body.LocalDeclId.name_get lhsLocalId0 in
-          let lhsLocalId1 = VfMirRd.Body.Place.local_get lhsPlace1 in
-          let lhsLocalName1 = VfMirRd.Body.LocalDeclId.name_get lhsLocalId1 in
-          let rhsRvalue0 = VfMirRd.Body.BasicBlock.Statement.StatementKind.AssignData.rhs_rvalue_get assign_data0 in
-          let rhsRvalue1 = VfMirRd.Body.BasicBlock.Statement.StatementKind.AssignData.rhs_rvalue_get assign_data1 in
-          begin match VfMirRd.Body.BasicBlock.Rvalue.get rhsRvalue0, VfMirRd.Body.BasicBlock.Rvalue.get rhsRvalue1 with
-            Use operand0, Use operand1 ->
-              (* Will not happen, because these kinds of statements are processed beforehand. *)
-              let v0 = eval_operand env0 operand0 in
-              let v1 = eval_operand env1 operand1 in
-              let env0 = update_env lhsLocalName0 v0 env0 in
-              let env1 = update_env lhsLocalName1 v1 env1 in
-              check_codepos_refines_codepos env0 i_bb0 (i_s0 + 1) env1 i_bb1 (i_s1 + 1)
-          | _ -> failwith "Rvalue not supported"
-          end
+      if i_s0 = Capnp.Array.length stmts0 then
+        if i_s1 = Capnp.Array.length stmts1 then
+          check_terminator_refines_terminator ()
+        else
+          failwith (Printf.sprintf "In function %s, cannot prove that the terminator of basic block %d in the original version refines statement %d of basic block %d in the verified version" def_path i_bb0 i_s1 i_bb1)
+      else
+        if i_s1 = Capnp.Array.length stmts1 then
+          failwith (Printf.sprintf "In function %s, cannot prove that statement %d of basic block %d in the original version refines the terminator of basic block %d in the verified version" def_path i_s0 i_bb0 i_bb1)
+        else
+          check_statement_refines_statement ()
     in
-    let stmts0 = VfMirRd.Body.BasicBlock.statements_get bb0 in
-    let stmts1 = VfMirRd.Body.BasicBlock.statements_get bb1 in
-    if i_s0 = Capnp.Array.length stmts0 then
-      if i_s1 = Capnp.Array.length stmts1 then
-        check_terminator_refines_terminator ()
-      else
-        failwith (Printf.sprintf "In function %s, cannot prove that the terminator of basic block %d in the original version refines statement %d of basic block %d in the verified version" def_path i_bb0 i_s1 i_bb1)
-    else
-      if i_s1 = Capnp.Array.length stmts1 then
-        failwith (Printf.sprintf "In function %s, cannot prove that statement %d of basic block %d in the original version refines the terminator of basic block %d in the verified version" def_path i_s0 i_bb0 i_bb1)
-      else
-        check_statement_refines_statement ()
+    try
+      check_basic_block_refines_basic_block env0 0 env1 0
+    with LocalAddressTaken (x0, x1) ->
+      let address_taken = (x0, x1) :: address_taken in
+      Printf.printf "Caught LocalAddressTaken; restarting with address_taken = %s\n" (String.concat ", " (List.map (fun (x0, x1) -> Printf.sprintf "%s = %s" x0 x1) address_taken));
+      check_body_refines_body_core address_taken
   in
-  check_basic_block_refines_basic_block env0 0 env1 0
+  check_body_refines_body_core []

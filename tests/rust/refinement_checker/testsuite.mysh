@@ -7,4 +7,6 @@ begin_parallel
   !refinement-checker loop_orig.rs loop_verified_bad.rs
   refinement-checker identical_orig.rs identical_verified.rs
   !refinement-checker identical_orig.rs identical_verified_bad.rs
+  refinement-checker take-addr_orig.rs take-addr_verified.rs
+  !refinement-checker take-addr_orig.rs take-addr_verified_bad.rs
 end_parallel

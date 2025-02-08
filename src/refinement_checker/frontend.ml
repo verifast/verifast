@@ -187,8 +187,20 @@ let get_vf_mir (rustc_args : string list) (rs_file_path : string) =
           match result with
           | Unix.WEXITED 1 ->
               (* Rustc aborted due to compilation errors *)
-              Printf.sprintf "failed because of rustc compilation errors:\n%s"
-                emsg
+              Printf.printf
+                "Could not obtain the MIR because of rustc compilation errors:\n";
+              let emsg_lines = String.split_on_char '\n' emsg in
+              let diagnostics =
+                List.filter
+                  (String.starts_with ~prefix:{|{"$message_type":"diagnostic"|})
+                  emsg_lines
+              in
+              let open Json in
+              diagnostics
+              |> List.iter (fun diagnostic ->
+                     let diagnostic = parse_json diagnostic in
+                     print_endline (o_assoc "rendered" diagnostic |> s_value));
+              exit 1
           | Unix.WEXITED exitCode ->
               let exitCodeInfo =
                 match exitCode with
@@ -208,4 +220,3 @@ let get_vf_mir (rustc_args : string list) (rs_file_path : string) =
   with Unix.Unix_error (ecode, fname, param) ->
     let emsg = SysUtil.gen_unix_error_msg ecode fname param in
     failwith (Printf.sprintf "Could not run vf-rust-mir-exporter: %s" emsg)
-
