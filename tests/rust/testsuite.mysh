@@ -98,7 +98,7 @@ cd safe_abstraction
     del proof_obligs_quick_fix_test_generic_result.rs
   end_sequential
   verifast -ignore_unwind_paths -skip_specless_fns -allow_assume linked_list.rs
-  verifast -rustc_arg --edition -rustc_arg 2021 -skip_specless_fns -allow_assume linked_list_unlink_node_lib.rs
+  verifast -rustc_arg --edition -rustc_arg 2021 -rustc_arg --cfg -rustc_arg test -skip_specless_fns -allow_assume linked_list_unlink_node_lib.rs
   verifast -ignore_unwind_paths -skip_specless_fns -allow_assume btree_node.rs
   verifast -skip_specless_fns -ignore_unwind_paths atomic.rs
 cd ..
