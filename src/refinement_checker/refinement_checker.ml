@@ -271,39 +271,66 @@ let rec process_assignments bblocks env i_bb i_s =
 
 let values_equal (v0: term) (v1: term) = v0 = v1
 
+let check_place_element_refines_place_element elem0 elem1 =
+  match VfMirRd.Body.Place.PlaceElement.get elem0, VfMirRd.Body.Place.PlaceElement.get elem1 with
+  | Deref, Deref -> ()
+  | Field field0, Field field1 ->
+      let fieldIndex0 = VfMirRd.Body.Place.PlaceElement.FieldData.index_get field0 in
+      let fieldIndex1 = VfMirRd.Body.Place.PlaceElement.FieldData.index_get field1 in
+      if fieldIndex0 <> fieldIndex1 then failwith "Field indices do not match"
+  | Index, Index -> failwith "PlaceElement::Index not supported"
+  | ConstantIndex, ConstantIndex -> failwith "PlaceElement::ConstantIndex not supported"
+  | Subslice, Subslice -> failwith "PlaceElement::Subslice not supported"
+  | Downcast variant_idx0, Downcast variant_idx1 ->
+    if variant_idx0 <> variant_idx1 then failwith "Variant indices do not match"
+  | OpaqueCast, OpaqueCast -> failwith "PlaceElement::OpaqueCast not supported"
+  | Subtype, Subtype -> failwith "PlaceElement::Subtype not supported"
+  | _ -> failwith "Place elements do not match"
+
+(* When this is raised, both variables did not yet have their address taken *)
+exception LocalAddressTaken of string (* x0 *) * string (* x1 *)
+
 type place =
   Local of string (* This place is a local variable whose address is never taken in this function *)
 | Nonlocal (* A "nonlocal place" is a plcae that is disjoint from all local variables whose address is never taken in this function *)
 
 (* Checks that the place expressions either both evaluate to a local whose address is never taken, or both evaluate to *the same* "nonlocal place" (see definition above). *)
 let check_place_refines_place env0 place0 env1 place1 =
-  let placeProjection0 = VfMirRd.Body.Place.projection_get place0 in
-  let placeProjection1 = VfMirRd.Body.Place.projection_get place1 in
-  if Capnp.Array.length placeProjection0 <> 0 then
-    failwith "Place projections are not yet supported";
-  if Capnp.Array.length placeProjection1 <> 0 then
-    failwith "Place projections are not yet supported";
   let placeLocalId0 = VfMirRd.Body.Place.local_get place0 in
   let placeLocalName0 = VfMirRd.Body.LocalDeclId.name_get placeLocalId0 in
   let placeLocalId1 = VfMirRd.Body.Place.local_get place1 in
   let placeLocalName1 = VfMirRd.Body.LocalDeclId.name_get placeLocalId1 in
-  match List.assoc_opt placeLocalName0 env0, List.assoc_opt placeLocalName1 env1 with
-    Some (Address a1), Some (Address a2) when values_equal a1 a2 -> Nonlocal, Nonlocal
-  | (Some (Address _), _) | (_, Some (Address _)) -> failwith "Place expressions do not match"
-  | _ ->
-    (* OK, neither local has its address taken *) Local placeLocalName0, Local placeLocalName1
+  let placeLocalState0 = List.assoc_opt placeLocalName0 env0 in
+  let placeLocalState1 = List.assoc_opt placeLocalName1 env1 in
+  let placeProjection0 = VfMirRd.Body.Place.projection_get place0 in
+  let placeProjection1 = VfMirRd.Body.Place.projection_get place1 in
+  if Capnp.Array.length placeProjection0 <> Capnp.Array.length placeProjection1 then
+    failwith "The two place expressions have a different number of projection elements";
+  match placeLocalState0, placeLocalState1 with
+    Some (Address a1), Some (Address a2) ->
+      if not (values_equal a1 a2) then failwith "The addresses of the two places are not equal";
+      for i = 0 to Capnp.Array.length placeProjection0 - 1 do
+        let projection0 = Capnp.Array.get placeProjection0 i in
+        let projection1 = Capnp.Array.get placeProjection1 i in
+        check_place_element_refines_place_element projection0 projection1
+      done;
+      Nonlocal, Nonlocal
+  | Some (Address _), _ | _, Some (Address _) -> failwith "Place expressions do not match"
+  | _, _ ->
+    (* OK, neither local has its address taken *)
+    if Capnp.Array.length placeProjection0 <> 0 then
+      (* if a local is projected, give up trying to track its value *)
+      raise (LocalAddressTaken (placeLocalName0, placeLocalName1));
+    Local placeLocalName0, Local placeLocalName1
 
-(* When this is raised, both variables did not yet have their address taken *)
-exception LocalAddressTaken of string (* x0 *) * string (* x1 *)
-
-let check_operand_refines_operand env0 span0 operand0 env1 span1 operand1 =
+let check_operand_refines_operand i env0 span0 operand0 env1 span1 operand1 =
   match VfMirRd.Body.BasicBlock.Operand.get operand0, VfMirRd.Body.BasicBlock.Operand.get operand1 with
     (Move placeExpr0, Move placeExpr1) | (Copy placeExpr0, Copy placeExpr1) ->
       begin match check_place_refines_place env0 placeExpr0 env1 placeExpr1 with
         Local x0, Local x1 ->
           begin match List.assoc x0 env0, List.assoc x1 env1 with
-            Value v0, Value v1 -> if not (values_equal v0 v1) then failwith (Printf.sprintf "The values of %s and %s are not equal" (string_of_span span0) (string_of_span span1))
-          | Address a1, Address a2 -> if not (values_equal a1 a2) then failwith (Printf.sprintf "The addresses of %s and %s are not equal" (string_of_span span0) (string_of_span span1))
+            Value v0, Value v1 -> if not (values_equal v0 v1) then failwith (Printf.sprintf "The values of the %d'th operand of %s and %s are not equal" i (string_of_span span0) (string_of_span span1))
+          | Address a1, Address a2 -> if not (values_equal a1 a2) then failwith (Printf.sprintf "The addresses of the %d'th operand of %s and %s are not equal" i (string_of_span span0) (string_of_span span1))
           | _ -> failwith "Operand mismatch"
           end
       | Nonlocal, Nonlocal -> ()
@@ -311,11 +338,32 @@ let check_operand_refines_operand env0 span0 operand0 env1 span1 operand1 =
   | Constant const_operand_cpn0, Constant const_operand_cpn1 ->
     if eval_const_operand const_operand_cpn0 <> eval_const_operand const_operand_cpn1 then failwith (Printf.sprintf "The constants %s and %s are not equal" (string_of_span span0) (string_of_span span1))
 
+let check_aggregate_refines_aggregate env0 span0 aggregate0 env1 span1 aggregate1 =
+  let operands0 = VfMirRd.Body.BasicBlock.Rvalue.AggregateData.operands_get aggregate0 in
+  let operands1 = VfMirRd.Body.BasicBlock.Rvalue.AggregateData.operands_get aggregate1 in
+  if Capnp.Array.length operands0 <> Capnp.Array.length operands1 then failwith "The two aggregate expressions have a different number of operands";
+  let aggregate_kind0 = VfMirRd.Body.BasicBlock.Rvalue.AggregateData.aggregate_kind_get aggregate0 in
+  let aggregate_kind1 = VfMirRd.Body.BasicBlock.Rvalue.AggregateData.aggregate_kind_get aggregate1 in
+  match VfMirRd.Body.BasicBlock.Rvalue.AggregateData.AggregateKind.get aggregate_kind0, VfMirRd.Body.BasicBlock.Rvalue.AggregateData.AggregateKind.get aggregate_kind1 with
+    Array _, Array _ -> failwith "Aggregate::Array not supported"
+  | Tuple, Tuple ->
+    for i = 0 to Capnp.Array.length operands0 - 1 do
+      let operand0 = Capnp.Array.get operands0 i in
+      let operand1 = Capnp.Array.get operands1 i in
+      check_operand_refines_operand i env0 span0 operand0 env1 span1 operand1
+    done
+  | Adt _, Adt _ -> failwith "Aggregate::Adt not supported"
+  | Closure, Closure -> failwith "Aggregate::Closure not supported"
+  | Coroutine, Coroutine -> failwith "Aggregate::Coroutine not supported"
+  | CoroutineClosure, CoroutineClosure -> failwith "Aggregate::CoroutineClosure not supported"
+  | RawPtr, RawPtr -> failwith "Aggregate::RawPtr not supported"
+  | _ -> failwith "Aggregate kinds do not match"
+
 (* Checks that the two rvalues evaluate to the same value *)
 let check_rvalue_refines_rvalue env0 span0 rhsRvalue0 env1 span1 rhsRvalue1 =
   match VfMirRd.Body.BasicBlock.Rvalue.get rhsRvalue0, VfMirRd.Body.BasicBlock.Rvalue.get rhsRvalue1 with
   Use operand0, Use operand1 ->
-    check_operand_refines_operand env0 span0 operand0 env1 span1 operand1
+    check_operand_refines_operand 0 env0 span0 operand0 env1 span1 operand1
 | Repeat, Repeat -> failwith "Rvalue::Repeat not supported"
 | Ref ref_data_cpn0, Ref ref_data_cpn1 ->
   (* We ignore the region because it does not affect the run-time behavior *)
@@ -339,7 +387,8 @@ let check_rvalue_refines_rvalue env0 span0 rhsRvalue0 env1 span1 rhsRvalue1 =
 | BinaryOp binary_op_data_cpn0, BinaryOp binary_op_data_cpn1 -> failwith "Rvalue::BinaryOp not supported"
 | NullaryOp, NullaryOp -> failwith "Rvalue::NullaryOp not supported"
 | UnaryOp unary_op_data_cpn0, UnaryOp unary_op_data_cpn1 -> failwith "Rvalue::UnaryOp not supported"
-| Aggregate aggregate_data_cpn0, Aggregate aggregate_data_cpn1 -> failwith "Rvalue::Aggregate not supported"
+| Aggregate aggregate_data_cpn0, Aggregate aggregate_data_cpn1 ->
+  check_aggregate_refines_aggregate env0 span0 aggregate_data_cpn0 env1 span1 aggregate_data_cpn1
 | Discriminant place_cpn0, Discriminant place_cpn1 -> failwith "Rvalue::Discriminant not supported"
 | ShallowInitBox, ShallowInitBox -> failwith "Rvalue::ShallowInitBox not supported"
 
@@ -493,10 +542,14 @@ let check_body_refines_body def_path body0 body1 =
         | (Call call0, Call call1) ->
           let func0 = VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.FnCallData.func_get call0 in
           let func1 = VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.FnCallData.func_get call1 in
-          check_operand_refines_operand env0 span0 func0 env1 span1 func1;
-          let args0 = VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.FnCallData.args_get_list call0 in
-          let args1 = VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.FnCallData.args_get_list call1 in
-          List.iter2 (fun arg0 arg1 -> check_operand_refines_operand env0 span0 arg0 env1 span1 arg1) args0 args1;
+          check_operand_refines_operand 0 env0 span0 func0 env1 span1 func1;
+          let args0 = VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.FnCallData.args_get call0 in
+          let args1 = VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.FnCallData.args_get call1 in
+          for i = 0 to Capnp.Array.length args0 - 1 do
+            let arg0 = Capnp.Array.get args0 i in
+            let arg1 = Capnp.Array.get args1 i in
+            check_operand_refines_operand (i + 1) env0 span0 arg0 env1 span1 arg1
+          done;
           let dest0 = VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.FnCallData.destination_get call0 in
           let dest1 = VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.FnCallData.destination_get call1 in
           begin match VfMirRd.Util.Option.get dest0, VfMirRd.Util.Option.get dest1 with
