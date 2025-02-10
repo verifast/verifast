@@ -560,6 +560,7 @@ let _ =
             ; "-link_should_fail", Set linkShouldFail, "Specify that the linking phase is expected to fail."
             ; "-javac", Unit (fun _ -> (useJavaFrontend := true; Java_frontend_bridge.load ())), " "
             ; "-enforce_annotations", Unit (fun _ -> (enforceAnnotations := true)), " "
+            ; "-rustc_args", String (fun args -> vfbindings := Vfbindings.set Vfparam_rustc_args (List.rev (String.split_on_char ' ' args)) !vfbindings), "Add the given arguments to the rustc command line"
             ]
   in
   let process_file filename =

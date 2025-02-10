@@ -26,5 +26,4 @@ trait SpecExtend<I> {
     fn spec_extend(&mut self, iter: I);
 }
 
-#[path = "linked_list_unlink_node.rs"]
 pub mod linked_list;
