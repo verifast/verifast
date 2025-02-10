@@ -2027,19 +2027,19 @@ mod vf_mir_builder {
                 mir::AggregateKind::Adt(
                     def_id,
                     variant_idx,
-                    substs,
+                    gen_args,
                     _user_type_annot_idx_opt,
-                    _union_active_field_opt,
+                    union_active_field_opt,
                 ) => {
                     let mut adt_data_cpn = agg_kind_cpn.init_adt();
                     let adt_id_cpn = adt_data_cpn.reborrow().init_adt_id();
                     Self::encode_adt_def_id(enc_ctx, *def_id, adt_id_cpn);
 
-                    let v_idx_cpn = adt_data_cpn.reborrow().init_variant_idx();
-                    capnp_utils::encode_u_int128(
-                        variant_idx.index().try_into().unwrap(),
-                        v_idx_cpn,
-                    );
+                    adt_data_cpn.set_variant_idx(variant_idx.as_u32());
+                    adt_data_cpn.set_union_active_field(match union_active_field_opt {
+                        None => 0,
+                        Some(idx) => idx.as_u32()
+                    });
 
                     let adt_def = enc_ctx.tcx.adt_def(def_id);
                     let variant = adt_def.variant(*variant_idx);
@@ -2052,8 +2052,8 @@ mod vf_mir_builder {
                         .reborrow()
                         .fill_field_names(variant.fields.iter().map(|f| f.name.as_str()));
 
-                    let substs_cpn = adt_data_cpn.reborrow().init_substs(substs.len());
-                    Self::encode_ty_args(enc_ctx, substs, substs_cpn);
+                    let gen_args_cpn = adt_data_cpn.reborrow().init_gen_args(gen_args.len());
+                    Self::encode_ty_args(enc_ctx, gen_args, gen_args_cpn);
                 }
                 mir::AggregateKind::Closure(_def_id, _substs) => agg_kind_cpn.set_closure(()),
                 mir::AggregateKind::Coroutine(_def_id, _substs) => agg_kind_cpn.set_coroutine(()),

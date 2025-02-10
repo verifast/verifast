@@ -2861,7 +2861,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           in
           let variant_idx_cpn = variant_idx_get adt_data_cpn in
           let variant_name = variant_id_get adt_data_cpn in
-          let substs_cpn = substs_get_list adt_data_cpn in
+          let substs_cpn = gen_args_get_list adt_data_cpn in
           let field_names = field_names_get_list adt_data_cpn in
           Ok Mir.(AggKindAdt { adt_kind; adt_name; variant_name; field_names })
       | Closure -> failwith "Todo: AggregateKind::Closure"
