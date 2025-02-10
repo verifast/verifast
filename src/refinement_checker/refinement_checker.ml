@@ -47,11 +47,13 @@ type literal_const_expr =
 | I32Value of Stdint.int32
 | I64Value of Stdint.int64
 | I128Value of Stdint.int128
+| ISizeValue of int (* size, in bytes; typically 8 *) * Stdint.int64
 | U8Value of Stdint.uint8
 | U16Value of Stdint.uint16
 | U32Value of Stdint.uint32
 | U64Value of Stdint.uint64
 | U128Value of Stdint.uint128
+| USizeValue of int (* size, in bytes; typically 8 *) * Stdint.uint64
 | CharValue of Stdint.uint32
 
 type const_expr =
@@ -96,6 +98,25 @@ and gen_arg =
 | Const of const_expr
 
 let string_of_gen_arg genArg = "(gen arg)"
+
+let decode_scalar_int ty scalar_int_cpn =
+  let data = decode_uint128 (VfMirRd.Ty.ScalarInt.data_get scalar_int_cpn) in
+  let size = VfMirRd.Ty.ScalarInt.size_get scalar_int_cpn in
+  match ty, size with
+    Bool, 1 -> BoolValue (data <> Stdint.Uint128.zero)
+  | Int (FixedWidth 0), 1 -> I8Value (Stdint.Uint128.to_int8 data)
+  | Int (FixedWidth 1), 2 -> I16Value (Stdint.Uint128.to_int16 data)
+  | Int (FixedWidth 2), 4 -> I32Value (Stdint.Uint128.to_int32 data)
+  | Int (FixedWidth 3), 8 -> I64Value (Stdint.Uint128.to_int64 data)
+  | Int (FixedWidth 4), 16 -> I128Value (Stdint.Uint128.to_int128 data)
+  | Int PtrWidth, _ -> ISizeValue (size, Stdint.Uint128.to_int64 data)
+  | UInt (FixedWidth 0), 1 -> U8Value (Stdint.Uint128.to_uint8 data)
+  | UInt (FixedWidth 1), 2 -> U16Value (Stdint.Uint128.to_uint16 data)
+  | UInt (FixedWidth 2), 4 -> U32Value (Stdint.Uint128.to_uint32 data)
+  | UInt (FixedWidth 3), 8 -> U64Value (Stdint.Uint128.to_uint64 data)
+  | UInt (FixedWidth 4), 16 -> U128Value data
+  | UInt PtrWidth, _ -> USizeValue (size, Stdint.Uint128.to_uint64 data)
+  | Char, 4 -> CharValue (Stdint.Uint128.to_uint32 data)
 
 let rec decode_ty ty_cpn =
   match VfMirRd.Ty.TyKind.get (VfMirRd.Ty.kind_get ty_cpn) with
@@ -160,26 +181,10 @@ and decode_const_expr const_cpn =
     let ty = decode_ty (VfMirRd.Ty.ConstKind.Value.ty_get value_cpn) in
     let valtree = VfMirRd.Ty.ConstKind.Value.val_tree_get value_cpn in
     match VfMirRd.Ty.ConstKind.ValTree.get valtree with
-      Leaf scalar_int_cpn ->
-        let data = decode_uint128 (VfMirRd.Ty.ScalarInt.data_get scalar_int_cpn) in
-        let size = VfMirRd.Ty.ScalarInt.size_get scalar_int_cpn in
-        begin match ty, size with
-          Bool, 1 -> LiteralConstExpr (BoolValue (data <> Stdint.Uint128.zero))
-        | Int (FixedWidth 0), 1 -> LiteralConstExpr (I8Value (Stdint.Uint128.to_int8 data))
-        | Int (FixedWidth 1), 2 -> LiteralConstExpr (I16Value (Stdint.Uint128.to_int16 data))
-        | Int (FixedWidth 2), 4 -> LiteralConstExpr (I32Value (Stdint.Uint128.to_int32 data))
-        | Int (FixedWidth 3), 8 -> LiteralConstExpr (I64Value (Stdint.Uint128.to_int64 data))
-        | Int (FixedWidth 4), 16 -> LiteralConstExpr (I128Value (Stdint.Uint128.to_int128 data))
-        | UInt (FixedWidth 0), 1 -> LiteralConstExpr (U8Value (Stdint.Uint128.to_uint8 data))
-        | UInt (FixedWidth 1), 2 -> LiteralConstExpr (U16Value (Stdint.Uint128.to_uint16 data))
-        | UInt (FixedWidth 2), 4 -> LiteralConstExpr (U32Value (Stdint.Uint128.to_uint32 data))
-        | UInt (FixedWidth 3), 8 -> LiteralConstExpr (U64Value (Stdint.Uint128.to_uint64 data))
-        | UInt (FixedWidth 4), 16 -> LiteralConstExpr (U128Value data)
-        | Char, 4 -> LiteralConstExpr (CharValue (Stdint.Uint128.to_uint32 data))
-        end
+      Leaf scalar_int_cpn -> LiteralConstExpr (decode_scalar_int ty scalar_int_cpn)
     | Branch -> failwith "Branch not supported"
 
-type term = Symbol of int | Tuple of term list | FnDef of string * gen_arg list
+type term = Symbol of int | Tuple of term list | FnDef of string * gen_arg list | ScalarInt of literal_const_expr
 
 let rec string_of_term = function
   Symbol id -> Printf.sprintf "Symbol %d" id
@@ -212,7 +217,11 @@ let eval_const_operand const_operand_cpn =
     let ty = decode_ty (VfMirRd.Body.ConstOperand.Const.Val.ty_get mir_val_const_cpn) in
     let mir_const_value_cpn = VfMirRd.Body.ConstOperand.Const.Val.const_value_get mir_val_const_cpn in
     begin match VfMirRd.Body.ConstValue.get mir_const_value_cpn with
-      Scalar scalar_cpn -> failwith "MIR scalar constants are not yet supported"
+      Scalar scalar_cpn ->
+      begin match VfMirRd.Body.Scalar.get scalar_cpn with
+        Int scalar_int_cpn -> ScalarInt (decode_scalar_int ty scalar_int_cpn)
+      | Ptr -> failwith "MIR pointer constants are not yet supported"
+      end
     | ZeroSized ->
       begin match ty with
         Tuple [] -> Tuple []
@@ -399,7 +408,18 @@ let check_rvalue_refines_rvalue env0 span0 rhsRvalue0 env1 span1 rhsRvalue1 =
 | AddressOf address_of_data_cpn0, AddressOf address_of_data_cpn1 -> failwith "Rvalue::AddressOf not supported"
 | Len, Len -> failwith "Rvalue::Len not supported"
 | Cast cast_data_cpn0, Cast cast_data_cpn1 -> failwith "Rvalue::Cast not supported"
-| BinaryOp binary_op_data_cpn0, BinaryOp binary_op_data_cpn1 -> failwith "Rvalue::BinaryOp not supported"
+| BinaryOp binary_op_data_cpn0, BinaryOp binary_op_data_cpn1 ->
+  let op0 = VfMirRd.Body.BasicBlock.Rvalue.BinaryOpData.operator_get binary_op_data_cpn0 in
+  let op1 = VfMirRd.Body.BasicBlock.Rvalue.BinaryOpData.operator_get binary_op_data_cpn1 in
+  let op0 = VfMirRd.Body.BasicBlock.Rvalue.BinaryOpData.BinOp.get op0 in
+  let op1 = VfMirRd.Body.BasicBlock.Rvalue.BinaryOpData.BinOp.get op1 in
+  if op0 <> op1 then failwith "Rvalue::BinaryOp: operators do not match";
+  let lhs0 = VfMirRd.Body.BasicBlock.Rvalue.BinaryOpData.operandl_get binary_op_data_cpn0 in
+  let lhs1 = VfMirRd.Body.BasicBlock.Rvalue.BinaryOpData.operandl_get binary_op_data_cpn1 in
+  check_operand_refines_operand 0 env0 span0 lhs0 env1 span1 lhs1;
+  let rhs0 = VfMirRd.Body.BasicBlock.Rvalue.BinaryOpData.operandr_get binary_op_data_cpn0 in
+  let rhs1 = VfMirRd.Body.BasicBlock.Rvalue.BinaryOpData.operandr_get binary_op_data_cpn1 in
+  check_operand_refines_operand 1 env0 span0 rhs0 env1 span1 rhs1
 | NullaryOp, NullaryOp -> failwith "Rvalue::NullaryOp not supported"
 | UnaryOp unary_op_data_cpn0, UnaryOp unary_op_data_cpn1 -> failwith "Rvalue::UnaryOp not supported"
 | Aggregate aggregate_data_cpn0, Aggregate aggregate_data_cpn1 ->

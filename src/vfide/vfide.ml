@@ -2140,6 +2140,9 @@ let () =
           iter args
         end
       end
+    | "-rustc_args"::arg::args ->
+      vfbindings := Vfbindings.set Vfparam_rustc_args (List.rev (String.split_on_char ' ' arg)) !vfbindings;
+      iter args
     | arg::args when not (startswith arg "-") -> path := Some arg; iter args
     | [] -> show_ide !path !prover !codeFont !traceFont !vfbindings !layout !javaFrontend !enforceAnnotations !verify_and_quit
     | _ ->
