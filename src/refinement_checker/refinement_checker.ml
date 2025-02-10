@@ -342,17 +342,32 @@ let check_aggregate_refines_aggregate env0 span0 aggregate0 env1 span1 aggregate
   let operands0 = VfMirRd.Body.BasicBlock.Rvalue.AggregateData.operands_get aggregate0 in
   let operands1 = VfMirRd.Body.BasicBlock.Rvalue.AggregateData.operands_get aggregate1 in
   if Capnp.Array.length operands0 <> Capnp.Array.length operands1 then failwith "The two aggregate expressions have a different number of operands";
+  for i = 0 to Capnp.Array.length operands0 - 1 do
+    let operand0 = Capnp.Array.get operands0 i in
+    let operand1 = Capnp.Array.get operands1 i in
+    check_operand_refines_operand i env0 span0 operand0 env1 span1 operand1
+  done;
   let aggregate_kind0 = VfMirRd.Body.BasicBlock.Rvalue.AggregateData.aggregate_kind_get aggregate0 in
   let aggregate_kind1 = VfMirRd.Body.BasicBlock.Rvalue.AggregateData.aggregate_kind_get aggregate1 in
   match VfMirRd.Body.BasicBlock.Rvalue.AggregateData.AggregateKind.get aggregate_kind0, VfMirRd.Body.BasicBlock.Rvalue.AggregateData.AggregateKind.get aggregate_kind1 with
     Array _, Array _ -> failwith "Aggregate::Array not supported"
-  | Tuple, Tuple ->
-    for i = 0 to Capnp.Array.length operands0 - 1 do
-      let operand0 = Capnp.Array.get operands0 i in
-      let operand1 = Capnp.Array.get operands1 i in
-      check_operand_refines_operand i env0 span0 operand0 env1 span1 operand1
-    done
-  | Adt _, Adt _ -> failwith "Aggregate::Adt not supported"
+  | Tuple, Tuple -> ()
+  | Adt adt_data0, Adt adt_data1 ->
+    let adt_id0 = VfMirRd.Body.BasicBlock.Rvalue.AggregateData.AggregateKind.AdtData.adt_id_get adt_data0 in
+    let adt_id0 = VfMirRd.Ty.AdtDefId.name_get adt_id0 in
+    let adt_id1 = VfMirRd.Body.BasicBlock.Rvalue.AggregateData.AggregateKind.AdtData.adt_id_get adt_data1 in
+    let adt_id1 = VfMirRd.Ty.AdtDefId.name_get adt_id1 in
+    if adt_id0 <> adt_id1 then failwith "Aggregate::Adt: ADT names do not match";
+    let variant_idx0 = VfMirRd.Body.BasicBlock.Rvalue.AggregateData.AggregateKind.AdtData.variant_idx_get adt_data0 in
+    let variant_idx1 = VfMirRd.Body.BasicBlock.Rvalue.AggregateData.AggregateKind.AdtData.variant_idx_get adt_data1 in
+    if variant_idx0 <> variant_idx1 then failwith "Aggregate::Adt: variant indices do not match";
+    let genArgs0 = VfMirRd.Body.BasicBlock.Rvalue.AggregateData.AggregateKind.AdtData.gen_args_get_list adt_data0 in
+    let genArgs1 = VfMirRd.Body.BasicBlock.Rvalue.AggregateData.AggregateKind.AdtData.gen_args_get_list adt_data1 in
+    if genArgs0 <> genArgs1 then failwith "Aggregate::Adt: generic arguments do not match";
+    let union_active_field_idx0 = VfMirRd.Body.BasicBlock.Rvalue.AggregateData.AggregateKind.AdtData.union_active_field_get adt_data0 in
+    let union_active_field_idx1 = VfMirRd.Body.BasicBlock.Rvalue.AggregateData.AggregateKind.AdtData.union_active_field_get adt_data1 in
+    if union_active_field_idx0 <> union_active_field_idx1 then failwith "Aggregate::Adt: union active field indices do not match";
+    ()
   | Closure, Closure -> failwith "Aggregate::Closure not supported"
   | Coroutine, Coroutine -> failwith "Aggregate::Coroutine not supported"
   | CoroutineClosure, CoroutineClosure -> failwith "Aggregate::CoroutineClosure not supported"

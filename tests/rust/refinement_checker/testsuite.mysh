@@ -12,4 +12,6 @@ begin_parallel
   refinement-checker tuples_orig.rs tuples_verified.rs
   !refinement-checker tuples_orig.rs tuples_verified_bad1.rs
   !refinement-checker tuples_orig.rs tuples_verified_bad2.rs
+  refinement-checker structs_orig.rs structs_verified.rs
+  !refinement-checker structs_orig.rs structs_verified_bad.rs
 end_parallel

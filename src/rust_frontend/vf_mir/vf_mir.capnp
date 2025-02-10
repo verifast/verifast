@@ -585,11 +585,11 @@ struct Body {
                 struct AggregateKind {
                     struct AdtData {
                         adtId @0: Ty.AdtDefId;
-                        variantIdx @1: BigUInt;
+                        variantIdx @1: UInt32;
                         variantId @5: Text;
-                        substs @2: List(Ty.GenArg);
+                        genArgs @2: List(Ty.GenArg);
                         userTypeAnnotationIndex @3: Void;
-                        unionActiveField @4: Void;
+                        unionActiveField @4: UInt32;
                         fieldNames @6: List(Text);
                         adtKind @7: Ty.AdtKind;
                     }
