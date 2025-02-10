@@ -363,7 +363,7 @@ let check_aggregate_refines_aggregate env0 span0 aggregate0 env1 span1 aggregate
     if variant_idx0 <> variant_idx1 then failwith "Aggregate::Adt: variant indices do not match";
     let genArgs0 = VfMirRd.Body.BasicBlock.Rvalue.AggregateData.AggregateKind.AdtData.gen_args_get_list adt_data0 in
     let genArgs1 = VfMirRd.Body.BasicBlock.Rvalue.AggregateData.AggregateKind.AdtData.gen_args_get_list adt_data1 in
-    if genArgs0 <> genArgs1 then failwith "Aggregate::Adt: generic arguments do not match";
+    if List.map decode_gen_arg genArgs0 <> List.map decode_gen_arg genArgs1 then failwith "Aggregate::Adt: generic arguments do not match";
     let union_active_field_idx0 = VfMirRd.Body.BasicBlock.Rvalue.AggregateData.AggregateKind.AdtData.union_active_field_get adt_data0 in
     let union_active_field_idx1 = VfMirRd.Body.BasicBlock.Rvalue.AggregateData.AggregateKind.AdtData.union_active_field_get adt_data1 in
     if union_active_field_idx0 <> union_active_field_idx1 then failwith "Aggregate::Adt: union active field indices do not match";
@@ -404,7 +404,11 @@ let check_rvalue_refines_rvalue env0 span0 rhsRvalue0 env1 span1 rhsRvalue1 =
 | UnaryOp unary_op_data_cpn0, UnaryOp unary_op_data_cpn1 -> failwith "Rvalue::UnaryOp not supported"
 | Aggregate aggregate_data_cpn0, Aggregate aggregate_data_cpn1 ->
   check_aggregate_refines_aggregate env0 span0 aggregate_data_cpn0 env1 span1 aggregate_data_cpn1
-| Discriminant place_cpn0, Discriminant place_cpn1 -> failwith "Rvalue::Discriminant not supported"
+| Discriminant place_cpn0, Discriminant place_cpn1 ->
+  begin match check_place_refines_place env0 place_cpn0 env1 place_cpn1 with
+    Local x0, Local x1 -> if List.assoc x0 env0 <> List.assoc x1 env1 then failwith "The discriminees of the two rvalues are not equal"
+  | Nonlocal, Nonlocal -> ()
+  end
 | ShallowInitBox, ShallowInitBox -> failwith "Rvalue::ShallowInitBox not supported"
 
 type basic_block_status =
@@ -470,7 +474,7 @@ let check_body_refines_body def_path body0 body1 =
   (* TODO: Check that inputs0 and inputs1 match *)
   let rec check_body_refines_body_core address_taken =
     let env0 = List.mapi (fun i v -> let x = local_name locals0 (i + 1) in if List.mem_assoc x address_taken then [] else [(x, Value v)]) inputs |> List.flatten in
-    let env1 = env0 in
+    let env1 = List.mapi (fun i v -> let x = local_name locals1 (i + 1) in if List.exists (fun (x0, x1) -> x1 = x) address_taken then [] else [(x, Value v)]) inputs |> List.flatten in
     let address_taken0, address_taken1 = address_taken |> List.map (fun (x0, x1) -> let a = fresh_symbol () in ((x0, Address a), (x1, Address a))) |> List.split in
     let env0 = address_taken0 @ env0 in
     let env1 = address_taken1 @ env1 in
@@ -520,8 +524,8 @@ let check_body_refines_body def_path body0 body1 =
         end
       | Checked (i_bb1', loopInv) ->
         if i_bb1' = i_bb1 && loopInv |> List.for_all @@ fun (x, ys) ->
-          let v = List.assoc x env1 in
-          ys |> List.for_all @@ fun y -> List.assoc y env0 = v
+          match List.assoc_opt x env1 with None -> false | Some v ->
+          ys |> List.for_all @@ fun y -> match List.assoc_opt y env0 with None -> false | Some v' -> v' = v
         then begin
           Printf.printf "Re-reached loop with head %d, that was already verified; path is done.\n" i_bb0;
           () (* Use the induction hypothesis; this path is done. *)
@@ -549,11 +553,48 @@ let check_body_refines_body def_path body0 body1 =
             let bb_idx0 = Stdint.Uint32.to_int @@ VfMirRd.Body.BasicBlockId.index_get bb_id0 in
             let bb_idx1 = Stdint.Uint32.to_int @@ VfMirRd.Body.BasicBlockId.index_get bb_id1 in
             check_basic_block_refines_basic_block env0 bb_idx0 env1 bb_idx1
+        | (SwitchInt switch_int_data0, SwitchInt switch_int_data1) ->
+          let discr0 = VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.SwitchIntData.discr_get switch_int_data0 in
+          let discr1 = VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.SwitchIntData.discr_get switch_int_data1 in
+          check_operand_refines_operand 0 env0 span0 discr0 env1 span1 discr1;
+          let targets0 = VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.SwitchIntData.targets_get switch_int_data0 in
+          let targets1 = VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.SwitchIntData.targets_get switch_int_data1 in
+          let branches0 = VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.SwitchIntData.SwitchTargets.branches_get targets0 in
+          let branches1 = VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.SwitchIntData.SwitchTargets.branches_get targets1 in
+          if Capnp.Array.length branches0 <> Capnp.Array.length branches1 then failwith "The two switch statements have a different number of branches";
+          for i = 0 to Capnp.Array.length branches0 - 1 do
+            let branch0 = Capnp.Array.get branches0 i in
+            let branch1 = Capnp.Array.get branches1 i in
+            let val0 = decode_uint128 @@ VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.SwitchIntData.SwitchTargets.Branch.val_get branch0 in
+            let val1 = decode_uint128 @@ VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.SwitchIntData.SwitchTargets.Branch.val_get branch1 in
+            if val0 <> val1 then failwith "SwitchInt branch values do not match";
+            let target0 = VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.SwitchIntData.SwitchTargets.Branch.target_get branch0 in
+            let target1 = VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.SwitchIntData.SwitchTargets.Branch.target_get branch1 in
+            let target0bbid = VfMirRd.Body.BasicBlockId.index_get target0 in
+            let target1bbid = VfMirRd.Body.BasicBlockId.index_get target1 in
+            let target0bbidx = Stdint.Uint32.to_int target0bbid in
+            let target1bbidx = Stdint.Uint32.to_int target1bbid in
+            check_basic_block_refines_basic_block env0 target0bbidx env1 target1bbidx
+          done;
+          let otherwise0 = VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.SwitchIntData.SwitchTargets.otherwise_get targets0 in
+          let otherwise1 = VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.SwitchIntData.SwitchTargets.otherwise_get targets1 in
+          begin match VfMirRd.Util.Option.get otherwise0, VfMirRd.Util.Option.get otherwise1 with
+            Nothing, Nothing -> ()
+          | Something target0, Something target1 ->
+            let target0 = VfMirRd.of_pointer target0 in
+            let target1 = VfMirRd.of_pointer target1 in
+            let target0bbidx = Stdint.Uint32.to_int @@ VfMirRd.Body.BasicBlockId.index_get target0 in
+            let target1bbidx = Stdint.Uint32.to_int @@ VfMirRd.Body.BasicBlockId.index_get target1 in
+            check_basic_block_refines_basic_block env0 target0bbidx env1 target1bbidx
+          end
+        | UnwindResume, UnwindResume -> ()
+        | UnwindTerminate, UnwindTerminate -> ()
         | (Return, Return) ->
             let retVal0 = List.assoc (VfMirRd.Body.LocalDeclId.name_get (VfMirRd.Body.LocalDecl.id_get (Capnp.Array.get locals0 0))) env0 in
             let retVal1 = List.assoc (VfMirRd.Body.LocalDeclId.name_get (VfMirRd.Body.LocalDecl.id_get (Capnp.Array.get locals1 0))) env1 in
             if retVal0 <> retVal1 then
               failwith (Printf.sprintf "In function %s, at basic block %d in the original crate and basic block %d in the verified crate, the return values are not equal" def_path i_bb0 i_bb1)
+        | _, Unreachable -> ()
         | (Call call0, Call call1) ->
           let func0 = VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.FnCallData.func_get call0 in
           let func1 = VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.FnCallData.func_get call1 in
@@ -588,7 +629,14 @@ let check_body_refines_body def_path body0 body1 =
               check_basic_block_refines_basic_block env0 dest0bbidx env1 dest1bbidx
             end
           end
-        | _ -> failwith "Unsupported terminator kind"
+        | Drop drop_data0, Drop drop_data1 -> failwith "Drop not supported"
+        | TailCall, TailCall -> failwith "TailCall not supported"
+        | Assert, Assert -> failwith "Assert not supported"
+        | Yield, Yield -> failwith "Yield not supported"
+        | CoroutineDrop, CoroutineDrop -> failwith "CoroutineDrop not supported"
+        | FalseEdge, FalseEdge -> failwith "FalseEdge not supported"
+        | InlineAsm, InlineAsm -> failwith "InlineAsm not supported"
+        | _ -> failwith "Terminator kinds do not match"
       in
       let check_statement_refines_statement () =
         let stmts0 = VfMirRd.Body.BasicBlock.statements_get bb0 in

@@ -14,4 +14,6 @@ begin_parallel
   !refinement-checker tuples_orig.rs tuples_verified_bad2.rs
   refinement-checker structs_orig.rs structs_verified.rs
   !refinement-checker structs_orig.rs structs_verified_bad.rs
+  refinement-checker enums_orig.rs enums_verified.rs
+  !refinement-checker enums_orig.rs enums_verified_bad.rs
 end_parallel
