@@ -143,6 +143,7 @@ let skip_whitespace contents offset =
 
 (* Checks that the two files are identical, after collapsing whitespace and spans checked by the refinement checker *)
 let check_files_match (path0, path1) =
+  Printf.printf "Checking that, apart from checked functions and comments, %s and %s are identical\n" path0 path1;
   let contents0, line_offsets0 = load_file path0 in
   let contents1, line_offsets1 = load_file path1 in
   let checked_ranges0 =
