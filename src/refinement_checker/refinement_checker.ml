@@ -482,16 +482,42 @@ not taken, we track the values.
 
 *)
 
+type generic_param_kind = Lifetime | Type | Const
+
+type generic_param = string (* name *) * generic_param_kind
+
+let decode_generic_param generic_param =
+  let name = VfMirRd.GenericParamDef.name_get generic_param in
+  let kind =
+    match VfMirRd.GenericParamDefKind.get @@ VfMirRd.GenericParamDef.kind_get generic_param with
+      Lifetime -> Lifetime
+    | Type -> Type
+    | Const -> Const
+  in
+  name, kind
+
 let check_body_refines_body def_path body0 body1 =
   Printf.printf "Checking function body %s\n" def_path;
+  let generics0 = VfMirRd.Body.generics_get_list body0 in
+  let generics1 = VfMirRd.Body.generics_get_list body1 in
+  if List.length generics0 <> List.length generics1 then failwith "The two functions have a different number of generic parameters";
+  let generics0 = List.map decode_generic_param generics0 in
+  let generics1 = List.map decode_generic_param generics1 in
+  if generics0 <> generics1 then failwith "The two functions have different generic parameters";
+  let preds0 = VfMirRd.Body.predicates_get_list body0 in
+  let preds1 = VfMirRd.Body.predicates_get_list body1 in
+  if List.length preds0 <> List.length preds1 then failwith "The two functions have a different number of predicates";
+  if  preds0 <> [] then failwith "Predicates are not yet supported";
   let inputs0 = VfMirRd.Body.inputs_get_list body0 in
   let inputs1 = VfMirRd.Body.inputs_get_list body1 in
+  let inputs0 = List.map decode_ty inputs0 in
+  let inputs1 = List.map decode_ty inputs1 in
+  if inputs0 <> inputs1 then failwith "The two functions have different input types";
   let locals0 = VfMirRd.Body.local_decls_get body0 in
   let locals1 = VfMirRd.Body.local_decls_get body1 in
   let bblocks0 = VfMirRd.Body.basic_blocks_get body0 in
   let bblocks1 = VfMirRd.Body.basic_blocks_get body1 in
   let inputs = List.map (fun _ -> fresh_symbol ()) inputs0 in
-  (* TODO: Check that inputs0 and inputs1 match *)
   let rec check_body_refines_body_core address_taken =
     let env0 = List.mapi (fun i v -> let x = local_name locals0 (i + 1) in if List.mem_assoc x address_taken then [] else [(x, Value v)]) inputs |> List.flatten in
     let env1 = List.mapi (fun i v -> let x = local_name locals1 (i + 1) in if List.exists (fun (x0, x1) -> x1 = x) address_taken then [] else [(x, Value v)]) inputs |> List.flatten in
