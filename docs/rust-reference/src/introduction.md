@@ -93,5 +93,24 @@ This reference is under construction; much material is still missing. Please
 bear with us! But if there are particular parts you're particularly eager to
 see, it always helps to let us know.
 
+## Further resources
+
+A tutorial is being prepared. In the meantime, the [VeriFast
+Tutorial](https://zenodo.org/records/13380705) for C is a good resource for
+familiarizing yourself with VeriFast's concepts. Rust versions of the examples
+and exercises of the VeriFast Tutorial are
+[available](https://github.com/verifast/verifast/tree/master/rust_tutorials/purely_unsafe/solutions);
+see the command lines used to verify them in
+[`verify.mysh`](https://github.com/verifast/verifast/blob/master/rust_tutorials/purely_unsafe/solutions/verify.mysh)
+(where they are listed in the order in which they appear in the Tutorial).
+(Note: the solutions found there can be transformed into starting points for
+exercises by stripping the VeriFast annotations using `bin/vfstrip`: e.g.
+`vfstrip < account.rs > account_stripped.rs`.)
+
+Further examples of VeriFast for Rust proofs are in
+[`tests/rust`](https://github.com/verifast/verifast/tree/master/tests/rust); the
+command lines are in
+[`tests/rust/testsuite.mysh`](https://github.com/verifast/verifast/blob/master/tests/rust/testsuite.mysh).
+
 [^other-languages]: VeriFast also supports (subsets of) C and Java.
 [^other-languages-incomplete]: as is its support for Java and, to a somewhat lesser extent, C
