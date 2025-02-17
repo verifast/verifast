@@ -55,25 +55,25 @@ lem init_ref_BoxU8(p: *BoxU8)
 @*/
 
 impl BoxU8 {
-    pub fn new(v: u8) -> BoxU8 {
-        let l = Layout::new::<u8>();
-        unsafe {
-            let p = alloc(l);
-            if p.is_null() {
-                handle_alloc_error(l);
-            }
-            *p = v;
-            Self { ptr: p }
+pub fn new(v: u8) -> BoxU8 {
+    let l = Layout::new::<u8>();
+    unsafe {
+        let p = alloc(l);
+        if p.is_null() {
+            handle_alloc_error(l);
         }
-    }
-    pub fn into_inner(b: BoxU8) -> u8 {
-        unsafe {
-            let ret = *b.ptr;
-            //@ close <BoxU8>.own(_t, b);
-            ret
-        }
+        *p = v;
+        Self { ptr: p }
     }
 }
+pub fn into_inner(b: BoxU8) -> u8 {
+    unsafe {
+        let ret = *b.ptr;
+        //@ close <BoxU8>.own(_t, b);
+        ret
+    }
+}
+} // impl BoxU8
 
 impl Drop for BoxU8 {
     fn drop<'a>(&'a mut self)
