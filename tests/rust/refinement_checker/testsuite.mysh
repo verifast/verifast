@@ -16,4 +16,5 @@ begin_parallel
   !refinement-checker structs_orig.rs structs_verified_bad.rs
   refinement-checker enums_orig.rs enums_verified.rs
   !refinement-checker enums_orig.rs enums_verified_bad.rs
+  !refinement-checker unsafety_orig.rs unsafety_verified_bad.rs
 end_parallel
