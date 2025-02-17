@@ -755,7 +755,7 @@ struct Body {
     predicates @17: List(Predicate);
     isTraitFn @12: Bool;
     isDropFn @13: Bool; # Implements std::ops::Drop::drop
-    # Todo @Nima: Add Visibility data
+    visibility @22: Visibility;
 }
 
 struct Trait {

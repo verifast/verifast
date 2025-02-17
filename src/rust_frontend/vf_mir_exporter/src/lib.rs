@@ -1303,6 +1303,8 @@ mod vf_mir_builder {
                     );
                 },
             );
+
+            Self::encode_visibility(tcx.visibility(def_id), body_cpn.reborrow().init_visibility());
         }
 
         fn encode_unsafety(us: hir::Safety, mut us_cpn: unsafety_cpn::Builder<'_>) {

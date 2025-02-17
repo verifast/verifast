@@ -498,6 +498,13 @@ let decode_generic_param generic_param =
 
 let check_body_refines_body def_path body0 body1 =
   Printf.printf "Checking function body %s\n" def_path;
+  let visibility0 = VfMirRd.Visibility.get @@ VfMirRd.Body.visibility_get body0 in
+  let visibility1 = VfMirRd.Visibility.get @@ VfMirRd.Body.visibility_get body1 in
+  if visibility0 <> visibility1 then failwith "The two functions have different visibilities";
+  let unsafety0 = VfMirRd.Unsafety.get @@ VfMirRd.Body.unsafety_get body0 in
+  let unsafety1 = VfMirRd.Unsafety.get @@ VfMirRd.Body.unsafety_get body1 in
+  (* We allow private functions to have different visibility *)
+  if visibility0 = Public && unsafety0 = Safe && unsafety1 = Unsafe then failwith "The two functions have different unsafety";
   let generics0 = VfMirRd.Body.generics_get_list body0 in
   let generics1 = VfMirRd.Body.generics_get_list body1 in
   if List.length generics0 <> List.length generics1 then failwith "The two functions have a different number of generic parameters";
