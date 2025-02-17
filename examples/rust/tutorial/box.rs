@@ -24,8 +24,8 @@ lem Box_share_mono<T>(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *Box<T>)
 }
 
 lem Box_share_full<T>(k: lifetime_t, t: thread_id_t, l: *Box<T>)
-    req type_interp::<T>() &*& atomic_mask(Nlft) &*& [?q]lifetime_token(k) &*& full_borrow(k, <Box<T>>.full_borrow_content(t, l));
-    ens type_interp::<T>() &*& atomic_mask(Nlft) &*& [q]lifetime_token(k) &*& [_](<Box<T>>.share)(k, t, l);
+    req type_interp::<T>() &*& atomic_mask(MaskTop) &*& [?q]lifetime_token(k) &*& full_borrow(k, <Box<T>>.full_borrow_content(t, l));
+    ens type_interp::<T>() &*& atomic_mask(MaskTop) &*& [q]lifetime_token(k) &*& [_](<Box<T>>.share)(k, t, l);
 {
     // We convert `full_borrow(k, <Box<T>>.full_borrow_content(t, l))` to `full_borrow(k, (*l).ptr |-> p &*& <T>.full_borrow_content(t, p));
     let klong = open_full_borrow_strong_m(k, <Box<T>>.full_borrow_content(t, l), q);
