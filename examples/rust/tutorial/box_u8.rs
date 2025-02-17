@@ -22,8 +22,8 @@ lem BoxU8_share_mono(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *BoxU8)
 
 pred_ctor ctx(p: *u8)(;) = std::alloc::alloc_block(p, std::alloc::Layout::new_::<u8>());
 lem BoxU8_share_full(k: lifetime_t, t: thread_id_t, l: *BoxU8)
-    req atomic_mask(Nlft) &*& [?q]lifetime_token(k) &*& full_borrow(k, BoxU8_full_borrow_content(t, l));
-    ens atomic_mask(Nlft) &*& [q]lifetime_token(k) &*& [_]BoxU8_share(k, t, l);
+    req atomic_mask(MaskTop) &*& [?q]lifetime_token(k) &*& full_borrow(k, BoxU8_full_borrow_content(t, l));
+    ens atomic_mask(MaskTop) &*& [q]lifetime_token(k) &*& [_]BoxU8_share(k, t, l);
 {
     let klong = open_full_borrow_strong_m(k, BoxU8_full_borrow_content(t, l), q);
     open BoxU8_full_borrow_content(t, l)();
@@ -67,7 +67,11 @@ impl BoxU8 {
         }
     }
     pub fn into_inner(b: BoxU8) -> u8 {
-        unsafe { *b.ptr }
+        unsafe {
+            let ret = *b.ptr;
+            //@ close <BoxU8>.own(_t, b);
+            ret
+        }
     }
 }
 
