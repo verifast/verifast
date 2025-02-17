@@ -1,8 +1,7 @@
 use std::alloc::{alloc, dealloc, handle_alloc_error, Layout};
+//@ use std::alloc_block_;
 
-pub struct BoxU8 {
-    ptr: *mut u8,
-}
+pub struct BoxU8 { ptr: *mut u8 }
 
 /*@
 pred <BoxU8>.own(t, b;) = *(b.ptr) |-> ?_ &*& std::alloc::alloc_block(b.ptr, std::alloc::Layout::new_::<u8>());
@@ -66,6 +65,9 @@ impl BoxU8 {
             *p = v;
             Self { ptr: p }
         }
+    }
+    pub fn into_inner(b: BoxU8) -> u8 {
+        unsafe { *b.ptr }
     }
 }
 
