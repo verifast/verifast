@@ -1,3 +1,4 @@
+#![feature(trivial_bounds)]
 use std::alloc::{alloc, dealloc, handle_alloc_error, Layout};
 //@ use std::alloc_block_;
 
@@ -66,10 +67,14 @@ pub fn new(v: u8) -> BoxU8 {
         Self { ptr: p }
     }
 }
+} // impl BoxU8
+
+impl BoxU8 where BoxU8: Copy { // never the case
 pub fn into_inner(b: BoxU8) -> u8 {
+// Assuming BoxU8 does not implement destructor
     unsafe {
         let ret = *b.ptr;
-        //@ close <BoxU8>.own(_t, b);
+        dealloc(b.ptr, Layout::new::<u8>());
         ret
     }
 }
