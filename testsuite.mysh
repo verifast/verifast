@@ -469,6 +469,7 @@ cd tutorial_solutions
   verifast_both -target 32bit students.c
 cd ..
 cd tests
+  verifast -c issue731.c
   verifast_both -c chars__of_struct.c
   verifast -c -allow_should_fail issue681.c
   verifast -c -allow_should_fail const_vars.c
