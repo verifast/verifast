@@ -423,6 +423,12 @@ let rec exec_cmds macros cwd parallel cmds =
             try
               while true do
                 let line = input_line cin in
+                let line =
+                  if String.ends_with ~suffix:"\r" line then
+                    String.sub line 0 (String.length line - 1)
+                  else
+                    line
+                in
                 push output line;
                 if !verbose then do_print_line (Printf.sprintf "[%d]%s" pid line)
               done
