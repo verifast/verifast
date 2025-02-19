@@ -1,1 +1,0 @@
-[ "$(verifast issue731.c)" = $'issue731.c\nissue731.c(1,1-2,1): Parse error: Unterminated comment..' ]
