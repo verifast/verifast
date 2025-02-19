@@ -4,8 +4,8 @@ use std::alloc::{alloc, dealloc, handle_alloc_error, Layout};
 
 pub struct BoxU8 { ptr: *mut u8 }
 
-/*@
-pred <BoxU8>.own(t, b;) = *(b.ptr) |-> ?_ &*& std::alloc::alloc_block(b.ptr, std::alloc::Layout::new_::<u8>());
+//@ pred <BoxU8>.own(t, b;) = *(b.ptr) |-> ?_ &*& alloc_block_(b.ptr);
+/*
 pred_ctor field_ptr_chunk(l: *BoxU8, p: *u8)(;) = (*l).ptr |-> p;
 pred <BoxU8>.share(k, t, l) = [_]exists(?p) &*& [_]frac_borrow(k, field_ptr_chunk(l, p)) &*& [_]frac_borrow(k, u8_full_borrow_content(t, p));
 
@@ -21,7 +21,7 @@ lem BoxU8_share_mono(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *BoxU8)
     leak BoxU8_share(k1, t, l);
 }
 
-pred_ctor ctx(p: *u8)(;) = std::alloc::alloc_block(p, std::alloc::Layout::new_::<u8>());
+pred_ctor ctx(p: *u8)(;) = alloc_block_(p);
 lem BoxU8_share_full(k: lifetime_t, t: thread_id_t, l: *BoxU8)
     req atomic_mask(MaskTop) &*& [?q]lifetime_token(k) &*& full_borrow(k, BoxU8_full_borrow_content(t, l));
     ens atomic_mask(MaskTop) &*& [q]lifetime_token(k) &*& [_]BoxU8_share(k, t, l);
@@ -60,20 +60,19 @@ pub fn new(v: u8) -> BoxU8 {
     let l = Layout::new::<u8>();
     unsafe {
         let p = alloc(l);
-        if p.is_null() {
-            handle_alloc_error(l);
-        }
+        if p.is_null() { handle_alloc_error(l); }
         *p = v;
         Self { ptr: p }
     }
 }
 } // impl BoxU8
 
-impl BoxU8 where BoxU8: Copy { // never the case
+/*impl BoxU8 where BoxU8: Copy { // never the case
 pub fn into_inner(b: BoxU8) -> u8 {
 // Assuming BoxU8 does not implement destructor
     unsafe {
         let ret = *b.ptr;
+        //@ to_u8s_(b.ptr);
         dealloc(b.ptr, Layout::new::<u8>());
         ret
     }
@@ -129,4 +128,4 @@ impl std::ops::DerefMut for BoxU8 {
         //@ leak full_borrow('a, field_ptr_chunk(self, p));
         r
     }
-}
+}*/
