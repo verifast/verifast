@@ -85,6 +85,7 @@ cd safe_abstraction
   verifast -ignore_unwind_paths -ignore_ref_creation -extern ../unverified/sys -allow_assume mutex.rs
   verifast -ignore_unwind_paths -ignore_ref_creation -allow_assume rc_u32.rs
   verifast -ignore_unwind_paths -ignore_ref_creation -allow_assume rc.rs
+  verifast -ignore_unwind_paths -ignore_ref_creation -allow_assume ref_cell.rs
   verifast -ignore_unwind_paths -ignore_ref_creation -allow_assume arc_u32.rs
   verifast -ignore_unwind_paths -ignore_ref_creation -allow_assume arc.rs
   begin_sequential
