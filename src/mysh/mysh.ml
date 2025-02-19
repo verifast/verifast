@@ -391,6 +391,16 @@ let rec exec_cmds macros cwd parallel cmds =
           else
             false, line
         in
+        let expected_output, line =
+          let r = Str.regexp {|\[ "\$(\([^)]*\))" = \$'\([^']*\)' ]$|} in
+          if Str.string_match r line 0 then
+            let expected_output = Str.matched_group 2 line in
+            let line = Str.matched_group 1 line in
+            let expected_output = Str.global_replace (Str.regexp_string "\\n") "\n" expected_output in
+            Some expected_output, line
+          else
+            None, line
+        in
         let cin = Unix.open_process_in (line ^ " 2>&1") in
         Mutex.unlock global_mutex;
         let current_alarm = ref None in
@@ -424,9 +434,15 @@ let rec exec_cmds macros cwd parallel cmds =
             let Some alarm = !current_alarm in
             cancel_alarm alarm;
             let success =
-              match status with
-                Unix.WEXITED n -> (n = 0) <> negate_exit_status
-              | _ -> false
+              match expected_output with
+                None ->
+                begin match status with
+                  Unix.WEXITED n -> (n = 0) <> negate_exit_status
+                | _ -> false
+                end
+              | Some expected_output ->
+                let actual_output = String.concat "\n" (List.rev !output) in
+                (String.trim actual_output = String.trim expected_output) <> negate_exit_status
             in
             if not success then begin
               let msg =
