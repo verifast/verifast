@@ -983,6 +983,7 @@ let make_lexer_core keywords ghostKeywords startpos text reportRange inComment i
       in_comment := true;
       reportRange CommentRange (current_loc());
       None
+    | '\000' -> error "Unterminated comment."
     | _ -> (text_junk (); multiline_comment ())
   in
   (current_loc,
