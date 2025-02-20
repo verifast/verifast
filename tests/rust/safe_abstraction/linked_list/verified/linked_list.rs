@@ -865,22 +865,45 @@ impl<T, A: Allocator> LinkedList<T, A> {
     /// `node` must point to a valid node that was boxed and leaked using the list's allocator.
     /// This method takes ownership of the node, so the pointer should not be used again.
     #[inline]
-    unsafe fn push_front_node(&mut self, node: NonNull<Node<T>>) {
+    unsafe fn push_front_node(&mut self, node: NonNull<Node<T>>)
+    /*@
+    req thread_token(?t) &*& *self |-> ?self0 &*& Allocator(t, self0.alloc, ?alloc_id) &*& Nodes(alloc_id, self0.head, None, self0.tail, None, ?nodes) &*&
+        length(nodes) == self0.len &*& foreach(nodes, elem_fbc::<T>(t)) &*&
+        *NonNull_ptr(node) |-> ?n &*& <T>.own(t, n.element) &*& alloc_block_in(alloc_id, NonNull_ptr(node) as *u8, Layout::new_::<Node<T>>());
+    @*/
+    //@ ens thread_token(t) &*& *self |-> ?self1 &*& <LinkedList<T, A>>.own(t, self1);
+    {
         // This method takes care not to create mutable references to whole nodes,
         // to maintain validity of aliasing pointers into `element`.
         unsafe {
+            //@ open_points_to(self);
             (*node.as_ptr()).next = self.head;
             (*node.as_ptr()).prev = None;
             let node = Some(node);
 
+            //@ open Nodes(_, _, _, _, _, _);
             match self.head {
-                None => self.tail = node,
+                None => {
+                    //@ close Nodes::<T>(alloc_id, None, None, None, None, nil);
+                    self.tail = node
+                }
                 // Not creating new mutable (unique!) references overlapping `element`.
-                Some(head) => (*head.as_ptr()).prev = node,
+                Some(head) => {
+                    (*head.as_ptr()).prev = node;
+                    //@ close Nodes(alloc_id, self0.head, node_1, self0.tail, None, nodes);
+                }
             }
 
             self.head = node;
+            //@ assume(self0.len < usize::MAX);
             self.len += 1;
+            //@ close_points_to(self);
+            //@ assert *self |-> ?self1;
+            //@ points_to_limits(&(*NonNull_ptr(node)).element);
+            //@ close Nodes(alloc_id, node_1, None, self1.tail, None, cons(node, nodes));
+            //@ close elem_fbc::<T>(t)(node);
+            //@ close foreach(cons(node, nodes), elem_fbc::<T>(t));
+            //@ close <LinkedList<T, A>>.own(t, self1);
         }
     }
 
