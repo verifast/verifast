@@ -17,4 +17,5 @@ begin_parallel
   refinement-checker enums_orig.rs enums_verified.rs
   !refinement-checker enums_orig.rs enums_verified_bad.rs
   !refinement-checker unsafety_orig.rs unsafety_verified_bad.rs
+  refinement-checker wrapper_fns_orig.rs wrapper_fns_verified0.rs
 end_parallel
