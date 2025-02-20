@@ -4,11 +4,13 @@ use std::alloc::{alloc, dealloc, handle_alloc_error, Layout};
 
 pub struct BoxU8 { ptr: *mut u8 }
 
-//@ pred <BoxU8>.own(t, b;) = *(b.ptr) |-> ?_ &*& alloc_block_(b.ptr);
-/*
+//@ pred <BoxU8>.own(t, b;) = *b.ptr |-> ?_ &*& alloc_block_(b.ptr);
+/*@
 pred_ctor field_ptr_chunk(l: *BoxU8, p: *u8)(;) = (*l).ptr |-> p;
 pred <BoxU8>.share(k, t, l) = [_]exists(?p) &*& [_]frac_borrow(k, field_ptr_chunk(l, p)) &*& [_]frac_borrow(k, u8_full_borrow_content(t, p));
+@*/
 
+/*@
 lem BoxU8_share_mono(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *BoxU8)
     req lifetime_inclusion(k1, k) == true &*& [_]BoxU8_share(k, t, l);
     ens [_]BoxU8_share(k1, t, l);
@@ -67,9 +69,8 @@ pub fn new(v: u8) -> BoxU8 {
 }
 } // impl BoxU8
 
-/*impl BoxU8 where BoxU8: Copy { // never the case
-pub fn into_inner(b: BoxU8) -> u8 {
-// Assuming BoxU8 does not implement destructor
+impl BoxU8 where BoxU8: Copy { // never the case
+pub fn into_inner1(b: BoxU8) -> u8 { // Assuming BoxU8 does not implement destructor
     unsafe {
         let ret = *b.ptr;
         //@ to_u8s_(b.ptr);
@@ -79,7 +80,7 @@ pub fn into_inner(b: BoxU8) -> u8 {
 }
 } // impl BoxU8
 
-impl Drop for BoxU8 {
+/*impl Drop for BoxU8 {
     fn drop<'a>(&'a mut self)
     //@ req thread_token(?t) &*& BoxU8_full_borrow_content(t, self)();
     //@ ens thread_token(t) &*& (*self).ptr |-> ?_;
@@ -91,7 +92,7 @@ impl Drop for BoxU8 {
             dealloc(self.ptr as *mut u8, Layout::new::<u8>());
         }
     }
-}
+}*/
 
 impl std::ops::Deref for BoxU8 {
     type Target = u8;
@@ -107,25 +108,25 @@ impl std::ops::Deref for BoxU8 {
 }
 
 impl std::ops::DerefMut for BoxU8 {
-    fn deref_mut<'a>(&'a mut self) -> &'a mut u8 {
-        //@ let klong = open_full_borrow_strong('a, BoxU8_full_borrow_content(_t, self), _q_a);
-        //@ open BoxU8_full_borrow_content(_t, self)();
-        let r = unsafe { &mut *self.ptr };
-        //@ open BoxU8_own(_t, ?b);
-        //@ let p = b.ptr;
-        //@ close sep(field_ptr_chunk(self, p), u8_full_borrow_content(_t, p))();
-        /*@
-        produce_lem_ptr_chunk full_borrow_convert_strong(ctx(p), sep(field_ptr_chunk(self, p), u8_full_borrow_content(_t, p)), klong, BoxU8_full_borrow_content(_t, self))() {
-            open sep(field_ptr_chunk(self, p), u8_full_borrow_content(_t, p))();
-            close BoxU8_own(_t, b);
-            close BoxU8_full_borrow_content(_t, self)();
-        }{
-            close_full_borrow_strong(klong, BoxU8_full_borrow_content(_t, self), sep(field_ptr_chunk(self, p), u8_full_borrow_content(_t, p)));
-        }
-        @*/
-        //@ full_borrow_mono(klong, 'a, sep(field_ptr_chunk(self, p), u8_full_borrow_content(_t, p)));
-        //@ full_borrow_split('a, field_ptr_chunk(self, p), u8_full_borrow_content(_t, p));
-        //@ leak full_borrow('a, field_ptr_chunk(self, p));
-        r
+fn deref_mut<'a>(&'a mut self) -> &'a mut u8 {
+    //@ let klong = open_full_borrow_strong('a, BoxU8_full_borrow_content(_t, self), _q_a);
+    //@ open BoxU8_full_borrow_content(_t, self)();
+    let ret = unsafe { &mut *self.ptr };
+    //@ open BoxU8_own(_t, ?b);
+    //@ let p = b.ptr;
+    //@ close sep(field_ptr_chunk(self, p), u8_full_borrow_content(_t, p))();
+    /*@
+    produce_lem_ptr_chunk full_borrow_convert_strong(ctx(p), sep(field_ptr_chunk(self, p), u8_full_borrow_content(_t, p)), klong, BoxU8_full_borrow_content(_t, self))() {
+        open sep(field_ptr_chunk(self, p), u8_full_borrow_content(_t, p))();
+        close BoxU8_own(_t, b);
+        close BoxU8_full_borrow_content(_t, self)();
+    }{
+        close_full_borrow_strong(klong, BoxU8_full_borrow_content(_t, self), sep(field_ptr_chunk(self, p), u8_full_borrow_content(_t, p)));
     }
-}*/
+    @*/
+    //@ full_borrow_mono(klong, 'a, sep(field_ptr_chunk(self, p), u8_full_borrow_content(_t, p)));
+    //@ full_borrow_split('a, field_ptr_chunk(self, p), u8_full_borrow_content(_t, p));
+    //@ leak full_borrow('a, field_ptr_chunk(self, p));
+    ret
+}
+}
