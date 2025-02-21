@@ -496,6 +496,41 @@ let decode_generic_param generic_param =
   in
   name, kind
 
+let check_predicate_refines_predicate pred0 pred1 =
+  match VfMirRd.Predicate.get pred0, VfMirRd.Predicate.get pred1 with
+    Outlives outlives_pred0, Outlives outlives_pred1 ->
+      let region1_0 = VfMirRd.Predicate.Outlives.region1_get outlives_pred0 in
+      let region1_1 = VfMirRd.Predicate.Outlives.region1_get outlives_pred1 in
+      if region1_0 <> region1_1 then failwith "The two outlives predicates have different regions on the left-hand side";
+      let region2_0 = VfMirRd.Predicate.Outlives.region2_get outlives_pred0 in
+      let region2_1 = VfMirRd.Predicate.Outlives.region2_get outlives_pred1 in
+      if region2_0 <> region2_1 then failwith "The two outlives predicates have different regions on the right-hand side"
+  | Trait trait_pred0, Trait trait_pred1 ->
+      let trait_id0 = VfMirRd.Predicate.Trait.def_id_get trait_pred0 in
+      let trait_id1 = VfMirRd.Predicate.Trait.def_id_get trait_pred1 in
+      if trait_id0 <> trait_id1 then failwith "The two trait predicates have different trait IDs";
+      let generic_args0 = VfMirRd.Predicate.Trait.args_get_list trait_pred0 in
+      let generic_args1 = VfMirRd.Predicate.Trait.args_get_list trait_pred1 in
+      if List.map decode_gen_arg generic_args0 <> List.map decode_gen_arg generic_args1 then failwith "The two trait predicates have different generic arguments"
+  | Projection projection_pred0, Projection projection_pred1 ->
+      let proj_term0 = VfMirRd.Predicate.Projection.projection_term_get projection_pred0 in
+      let proj_term1 = VfMirRd.Predicate.Projection.projection_term_get projection_pred1 in
+      let proj_term_def_id0 = VfMirRd.Predicate.Projection.AliasTerm.def_id_get proj_term0 in
+      let proj_term_def_id1 = VfMirRd.Predicate.Projection.AliasTerm.def_id_get proj_term1 in
+      if proj_term_def_id0 <> proj_term_def_id1 then failwith "The two projection predicates have different alias identifiers";
+      let proj_term_generic_args0 = VfMirRd.Predicate.Projection.AliasTerm.args_get_list proj_term0 in
+      let proj_term_generic_args1 = VfMirRd.Predicate.Projection.AliasTerm.args_get_list proj_term1 in
+      if List.map decode_gen_arg proj_term_generic_args0 <> List.map decode_gen_arg proj_term_generic_args1 then failwith "The two projection predicates have different alias generic arguments";
+      let rhs0 = VfMirRd.Predicate.Projection.term_get projection_pred0 in
+      let rhs1 = VfMirRd.Predicate.Projection.term_get projection_pred1 in
+      begin match VfMirRd.Predicate.Projection.Term.get rhs0, VfMirRd.Predicate.Projection.Term.get rhs1 with
+        Ty ty0, Ty ty1 ->
+          if decode_ty ty0 <> decode_ty ty1 then failwith "The two projection predicates have different right-hand side types"
+      | Const const0, Const const1 ->
+          if decode_const_expr const0 <> decode_const_expr const1 then failwith "The two projection predicates have different right-hand side constants"
+      end
+  | _ -> failwith "The two predicates have different kinds"
+
 let check_body_refines_body def_path body0 body1 =
   Printf.printf "Checking function body %s\n" def_path;
   let visibility0 = VfMirRd.Visibility.get @@ VfMirRd.Body.visibility_get body0 in
@@ -514,7 +549,7 @@ let check_body_refines_body def_path body0 body1 =
   let preds0 = VfMirRd.Body.predicates_get_list body0 in
   let preds1 = VfMirRd.Body.predicates_get_list body1 in
   if List.length preds0 <> List.length preds1 then failwith "The two functions have a different number of predicates";
-  if  preds0 <> [] then failwith "Predicates are not yet supported";
+  List.iter2 check_predicate_refines_predicate preds0 preds1;
   let inputs0 = VfMirRd.Body.inputs_get_list body0 in
   let inputs1 = VfMirRd.Body.inputs_get_list body1 in
   let inputs0 = List.map decode_ty inputs0 in
@@ -593,7 +628,7 @@ let check_body_refines_body def_path body0 body1 =
       let (env1, i_bb1, i_s1) = process_assignments bblocks1 env1 i_bb1 i_s1 in
       let bb0 = Capnp.Array.get bblocks0 i_bb0 in
       let bb1 = Capnp.Array.get bblocks1 i_bb1 in
-      let check_terminator_refines_terminator () =
+      let check_terminator_refines_terminator env1 =
         let terminator0 = VfMirRd.Body.BasicBlock.terminator_get bb0 in
         let terminator1 = VfMirRd.Body.BasicBlock.terminator_get bb1 in
         let span0 = VfMirRd.Body.SourceInfo.span_get @@ VfMirRd.Body.BasicBlock.Terminator.source_info_get terminator0 in
@@ -721,10 +756,56 @@ let check_body_refines_body def_path body0 body1 =
       let stmts0 = VfMirRd.Body.BasicBlock.statements_get bb0 in
       let stmts1 = VfMirRd.Body.BasicBlock.statements_get bb1 in
       if i_s0 = Capnp.Array.length stmts0 then
-        if i_s1 = Capnp.Array.length stmts1 then
-          check_terminator_refines_terminator ()
-        else
-          failwith (Printf.sprintf "In function %s, cannot prove that the terminator of basic block %d in the original version refines statement %d of basic block %d in the verified version" def_path i_bb0 i_s1 i_bb1)
+        let rec iter env1 i_s1 =
+          (* Process assignments of the form `x = &*y;` where x and y are locals whose address is not taken.
+           * We are here using the property that inserting such statements can only cause a program to have more UB, so if it verifies, the original program is also safe.
+           *)
+          if i_s1 = Capnp.Array.length stmts1 then
+            check_terminator_refines_terminator env1
+          else
+            let fail () =
+              failwith (Printf.sprintf "In function %s, cannot prove that the terminator of basic block %d in the original version refines statement %d of basic block %d in the verified version" def_path i_bb0 i_s1 i_bb1)
+            in
+            match VfMirRd.Body.BasicBlock.Statement.StatementKind.get @@ VfMirRd.Body.BasicBlock.Statement.kind_get @@ Capnp.Array.get stmts1 i_s1 with
+              Assign assign_data1 ->
+                let rhsRvalue1 = VfMirRd.Body.BasicBlock.Statement.StatementKind.AssignData.rhs_rvalue_get assign_data1 in
+                begin match VfMirRd.Body.BasicBlock.Rvalue.get rhsRvalue1 with
+                  Ref ref_data_cpn1 ->
+                    let borKind1 = VfMirRd.Body.BasicBlock.Rvalue.RefData.bor_kind_get ref_data_cpn1 in
+                    begin match VfMirRd.Body.BasicBlock.Rvalue.RefData.BorrowKind.get borKind1 with
+                      Shared ->
+                        let rhsPlaceExpr1 = VfMirRd.Body.BasicBlock.Rvalue.RefData.place_get ref_data_cpn1 in
+                        let rhsPlaceLocalId1 = VfMirRd.Body.Place.local_get rhsPlaceExpr1 in
+                        let rhsPlaceLocalName1 = VfMirRd.Body.LocalDeclId.name_get rhsPlaceLocalId1 in
+                        let rhsPlaceProjection1 = VfMirRd.Body.Place.projection_get rhsPlaceExpr1 in
+                        if Capnp.Array.length rhsPlaceProjection1 <> 1 then fail ();
+                        let rhsPlaceProjectionElem1 = Capnp.Array.get rhsPlaceProjection1 0 in
+                        begin match VfMirRd.Body.Place.PlaceElement.get rhsPlaceProjectionElem1 with
+                          Deref ->
+                            begin match List.assoc_opt rhsPlaceLocalName1 env1 with
+                              Some (Value rhsValue) ->
+                                let lhsPlaceExpr1 = VfMirRd.Body.BasicBlock.Statement.StatementKind.AssignData.lhs_place_get assign_data1 in
+                                let lhsPlaceLocalId1 = VfMirRd.Body.Place.local_get lhsPlaceExpr1 in
+                                let lhsPlaceLocalName1 = VfMirRd.Body.LocalDeclId.name_get lhsPlaceLocalId1 in
+                                let lhsPlaceProjection1 = VfMirRd.Body.Place.projection_get lhsPlaceExpr1 in
+                                if Capnp.Array.length lhsPlaceProjection1 <> 0 then fail ();
+                                begin match List.assoc_opt lhsPlaceLocalName1 env1 with
+                                  Some (Address _) -> fail ()
+                                | _ ->
+                                  let env1 = update_env lhsPlaceLocalName1 (Value rhsValue) env1 in
+                                  iter env1 (i_s1 + 1)
+                                end
+                            | _ -> fail ()
+                            end
+                        | _ -> fail ()
+                        end
+                    | _ -> fail ()
+                    end
+                | _ -> fail ()
+                end
+            | _ -> fail ()
+        in
+        iter env1 i_s1
       else
         if i_s1 = Capnp.Array.length stmts1 then
           failwith (Printf.sprintf "In function %s, cannot prove that statement %d of basic block %d in the original version refines the terminator of basic block %d in the verified version" def_path i_s0 i_bb0 i_bb1)
