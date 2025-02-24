@@ -107,26 +107,35 @@ impl std::ops::Deref for BoxU8 {
     }
 }
 
-impl std::ops::DerefMut for BoxU8 {
-fn deref_mut<'a>(&'a mut self) -> &'a mut u8 {
-    //@ let klong = open_full_borrow_strong('a, BoxU8_full_borrow_content(_t, self), _q_a);
-    //@ open BoxU8_full_borrow_content(_t, self)();
-    let ret = unsafe { &mut *self.ptr };
-    //@ open BoxU8_own(_t, ?b);
+impl BoxU8 {
+pub fn deref_mut1<'a>(this: &'a mut BoxU8) -> &'a mut u8
+//@ req thread_token(?t) &*& [?qa]lifetime_token('a) &*& full_borrow('a, <BoxU8>.full_borrow_content(t, this));
+//@ ens thread_token(t) &*& [qa]lifetime_token('a) &*& full_borrow('a, <u8>.full_borrow_content(t, result));
+{
+    //@ let klong = open_full_borrow_strong('a, <BoxU8>.full_borrow_content(t, this), qa);
+    //@ open <BoxU8>.full_borrow_content(t, this)();
+    let ret = unsafe { &mut *this.ptr };
+    //@ open <BoxU8>.own(t, ?b);
     //@ let p = b.ptr;
-    //@ close sep(field_ptr_chunk(self, p), u8_full_borrow_content(_t, p))();
+    //@ close u8_full_borrow_content(t, p)();
+    //@ close sep(field_ptr_chunk(this, p), <u8>.full_borrow_content(t, p))();
     /*@
-    produce_lem_ptr_chunk full_borrow_convert_strong(ctx(p), sep(field_ptr_chunk(self, p), u8_full_borrow_content(_t, p)), klong, BoxU8_full_borrow_content(_t, self))() {
-        open sep(field_ptr_chunk(self, p), u8_full_borrow_content(_t, p))();
-        close BoxU8_own(_t, b);
-        close BoxU8_full_borrow_content(_t, self)();
+    produce_lem_ptr_chunk full_borrow_convert_strong(ctx(p), sep(field_ptr_chunk(this, p), <u8>.full_borrow_content(t, p)), klong, <BoxU8>.full_borrow_content(t, this))() {
+        open sep(field_ptr_chunk(this, p), <u8>.full_borrow_content(t, p))();
+        open u8_full_borrow_content(t, p)();
+        close <BoxU8>.own(t, b);
+        close <BoxU8>.full_borrow_content(t, this)();
     }{
-        close_full_borrow_strong(klong, BoxU8_full_borrow_content(_t, self), sep(field_ptr_chunk(self, p), u8_full_borrow_content(_t, p)));
+        close_full_borrow_strong(klong, <BoxU8>.full_borrow_content(t, this), sep(field_ptr_chunk(this, p), <u8>.full_borrow_content(t, p)));
     }
     @*/
-    //@ full_borrow_mono(klong, 'a, sep(field_ptr_chunk(self, p), u8_full_borrow_content(_t, p)));
-    //@ full_borrow_split('a, field_ptr_chunk(self, p), u8_full_borrow_content(_t, p));
-    //@ leak full_borrow('a, field_ptr_chunk(self, p));
+    //@ full_borrow_mono(klong, 'a, sep(field_ptr_chunk(this, p), <u8>.full_borrow_content(t, p)));
+    //@ full_borrow_split('a, field_ptr_chunk(this, p), <u8>.full_borrow_content(t, p));
+    //@ leak full_borrow('a, field_ptr_chunk(this, p));
     ret
 }
 }
+
+//impl std::ops::DerefMut for BoxU8 {
+//fn deref_mut<'a>(&'a mut self) -> &'a mut u8 { Self::deref_mut_(self) }
+//}
