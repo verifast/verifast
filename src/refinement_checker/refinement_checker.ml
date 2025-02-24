@@ -6,22 +6,22 @@ let error msg =
   exit 1
 
 let decode_path path =
-  let name = VfMirRd.SpanData.Loc.SourceFile.name_get path in
-  match VfMirRd.SpanData.Loc.SourceFile.FileName.get name with
+  let name = VfMirRd.SourceFile.name_get path in
+  match VfMirRd.FileName.get name with
   | Real real_file_name -> (
       match
-        VfMirRd.SpanData.Loc.SourceFile.FileName.RealFileName.get real_file_name
+        VfMirRd.RealFileName.get real_file_name
       with
       | LocalPath path -> path
       | Remapped _ -> failwith "Remapped file names are not yet supported")
   | QuoteExpansion _ -> failwith "Quote expansions are not yet supported"
 
 let decode_loc loc =
-  let path = decode_path @@ VfMirRd.SpanData.Loc.file_get loc in
-  let line = Stdint.Uint64.to_int @@ VfMirRd.SpanData.Loc.line_get loc in
+  let path = decode_path @@ VfMirRd.Loc.file_get loc in
+  let line = Stdint.Uint64.to_int @@ VfMirRd.Loc.line_get loc in
   let col =
-    Stdint.Uint64.to_int @@ VfMirRd.SpanData.Loc.CharPos.pos_get
-    @@ VfMirRd.SpanData.Loc.col_get loc
+    Stdint.Uint64.to_int @@ VfMirRd.CharPos.pos_get
+    @@ VfMirRd.Loc.col_get loc
   in
   (path, line, col)
 
@@ -61,8 +61,8 @@ type const_expr =
 | LiteralConstExpr of literal_const_expr
 
 let decode_uint128 uint128_cpn =
-  let h = VfMirRd.Util.UInt128.h_get uint128_cpn in
-  let l = VfMirRd.Util.UInt128.l_get uint128_cpn in
+  let h = VfMirRd.UInt128.h_get uint128_cpn in
+  let l = VfMirRd.UInt128.l_get uint128_cpn in
   Stdint.Uint128.logor (Stdint.Uint128.shift_left (Stdint.Uint64.to_uint128 h) 64) (Stdint.Uint64.to_uint128 l)
 
 type adt_kind = Struct | Enum | Union
@@ -100,8 +100,8 @@ and gen_arg =
 let string_of_gen_arg genArg = "(gen arg)"
 
 let decode_scalar_int ty scalar_int_cpn =
-  let data = decode_uint128 (VfMirRd.Ty.ScalarInt.data_get scalar_int_cpn) in
-  let size = VfMirRd.Ty.ScalarInt.size_get scalar_int_cpn in
+  let data = decode_uint128 (VfMirRd.ScalarInt.data_get scalar_int_cpn) in
+  let size = VfMirRd.ScalarInt.size_get scalar_int_cpn in
   match ty, size with
     Bool, 1 -> BoolValue (data <> Stdint.Uint128.zero)
   | Int (FixedWidth 0), 1 -> I8Value (Stdint.Uint128.to_int8 data)
@@ -119,10 +119,10 @@ let decode_scalar_int ty scalar_int_cpn =
   | Char, 4 -> CharValue (Stdint.Uint128.to_uint32 data)
 
 let rec decode_ty ty_cpn =
-  match VfMirRd.Ty.TyKind.get (VfMirRd.Ty.kind_get ty_cpn) with
+  match VfMirRd.TyKind.get (VfMirRd.Ty.kind_get ty_cpn) with
     Bool -> Bool
   | Int int_ty_cpn ->
-    begin match VfMirRd.Ty.IntTy.get int_ty_cpn with
+    begin match VfMirRd.IntTy.get int_ty_cpn with
       I8 -> Int (FixedWidth 0)
     | I16 -> Int (FixedWidth 1)
     | I32 -> Int (FixedWidth 2)
@@ -131,7 +131,7 @@ let rec decode_ty ty_cpn =
     | ISize -> Int PtrWidth
     end
   | UInt uint_ty_cpn ->
-    begin match VfMirRd.Ty.UIntTy.get uint_ty_cpn with
+    begin match VfMirRd.UIntTy.get uint_ty_cpn with
       U8 -> UInt (FixedWidth 0)
     | U16 -> UInt (FixedWidth 1)
     | U32 -> UInt (FixedWidth 2)
@@ -141,46 +141,46 @@ let rec decode_ty ty_cpn =
     end
   | Char -> Char
   | Adt adt_ty_cpn ->
-    let name = VfMirRd.Ty.AdtDefId.name_get (VfMirRd.Ty.AdtTy.id_get adt_ty_cpn) in
+    let name = VfMirRd.AdtDefId.name_get (VfMirRd.TyKind.AdtTy.id_get adt_ty_cpn) in
     let kind =
-      match VfMirRd.Ty.AdtKind.get (VfMirRd.Ty.AdtTy.kind_get adt_ty_cpn) with
+      match VfMirRd.AdtKind.get (VfMirRd.TyKind.AdtTy.kind_get adt_ty_cpn) with
         StructKind -> Struct
       | EnumKind -> Enum
       | UnionKind -> Union
     in
-    let args = List.map decode_gen_arg (VfMirRd.Ty.AdtTy.substs_get_list adt_ty_cpn) in
+    let args = List.map decode_gen_arg (VfMirRd.TyKind.AdtTy.substs_get_list adt_ty_cpn) in
     Adt (name, kind, args)
-  | RawPtr raw_ptr_ty_cpn -> RawPtr (decode_ty (VfMirRd.Ty.RawPtrTy.ty_get raw_ptr_ty_cpn))
+  | RawPtr raw_ptr_ty_cpn -> RawPtr (decode_ty (VfMirRd.TyKind.RawPtrTy.ty_get raw_ptr_ty_cpn))
   | Ref ref_ty_cpn ->
-    let region = Region (VfMirRd.Ty.Region.id_get (VfMirRd.Ty.RefTy.region_get ref_ty_cpn)) in
-    let ty = VfMirRd.Ty.RefTy.ty_get ref_ty_cpn in
-    let mutability = decode_mutability (VfMirRd.Ty.RefTy.mutability_get ref_ty_cpn) in
+    let region = Region (VfMirRd.Region.id_get (VfMirRd.TyKind.RefTy.region_get ref_ty_cpn)) in
+    let ty = VfMirRd.TyKind.RefTy.ty_get ref_ty_cpn in
+    let mutability = decode_mutability (VfMirRd.TyKind.RefTy.mutability_get ref_ty_cpn) in
     Ref (region, decode_ty ty, mutability)
   | FnDef fn_def_ty_cpn ->
-    let id = VfMirRd.Ty.FnDefId.name_get (VfMirRd.Ty.FnDefTy.id_get fn_def_ty_cpn) in
-    let args = List.map decode_gen_arg (VfMirRd.Ty.FnDefTy.substs_get_list fn_def_ty_cpn) in
+    let id = VfMirRd.FnDefId.name_get (VfMirRd.TyKind.FnDefTy.id_get fn_def_ty_cpn) in
+    let args = List.map decode_gen_arg (VfMirRd.TyKind.FnDefTy.substs_get_list fn_def_ty_cpn) in
     FnDef (id, args)
   | Never -> Never
   | Tuple tys -> Tuple (Capnp.Array.map_list tys ~f:decode_ty)
   | Param param -> Param param
   | Str -> Str
   | Array array_ty_cpn ->
-    let elem_ty = decode_ty (VfMirRd.Ty.ArrayTy.elem_ty_get array_ty_cpn) in
-    let size = decode_const_expr (VfMirRd.Ty.ArrayTy.size_get array_ty_cpn) in
+    let elem_ty = decode_ty (VfMirRd.TyKind.ArrayTy.elem_ty_get array_ty_cpn) in
+    let size = decode_const_expr (VfMirRd.TyKind.ArrayTy.size_get array_ty_cpn) in
     Array (elem_ty, size)
   | Slice ty_cpn -> Slice (decode_ty ty_cpn)
 and decode_gen_arg gen_arg_cpn =
-  match VfMirRd.Ty.GenArg.GenArgKind.get (VfMirRd.Ty.GenArg.kind_get gen_arg_cpn) with
-    Lifetime lifetime -> Lifetime (Region (VfMirRd.Ty.Region.id_get lifetime))
+  match VfMirRd.GenericArgKind.get (VfMirRd.GenericArg.kind_get gen_arg_cpn) with
+    Lifetime lifetime -> Lifetime (Region (VfMirRd.Region.id_get lifetime))
   | Type ty -> Type (decode_ty ty)
   | Const const -> Const (decode_const_expr const)
 and decode_const_expr const_cpn =
-  match VfMirRd.Ty.ConstKind.get (VfMirRd.Ty.Const.kind_get const_cpn) with
-    Param param -> ParamConstExpr (VfMirRd.Ty.ConstKind.ParamConst.name_get param)
+  match VfMirRd.ConstKind.get (VfMirRd.TyConst.kind_get const_cpn) with
+    Param param -> ParamConstExpr (VfMirRd.ParamConst.name_get param)
   | Value value_cpn ->
-    let ty = decode_ty (VfMirRd.Ty.ConstKind.Value.ty_get value_cpn) in
-    let valtree = VfMirRd.Ty.ConstKind.Value.val_tree_get value_cpn in
-    match VfMirRd.Ty.ConstKind.ValTree.get valtree with
+    let ty = decode_ty (VfMirRd.Value.ty_get value_cpn) in
+    let valtree = VfMirRd.Value.val_tree_get value_cpn in
+    match VfMirRd.ValTree.get valtree with
       Leaf scalar_int_cpn -> LiteralConstExpr (decode_scalar_int ty scalar_int_cpn)
     | Branch -> failwith "Branch not supported"
 
@@ -210,15 +210,15 @@ let string_of_env env =
   String.concat "; " (List.map (fun (x, v) -> Printf.sprintf "%s: %s" x (string_of_local_var_state v)) env)
 
 let eval_const_operand const_operand_cpn =
-  let mir_const_cpn = VfMirRd.Body.ConstOperand.const_get const_operand_cpn in
-  match VfMirRd.Body.ConstOperand.Const.get mir_const_cpn with
+  let mir_const_cpn = VfMirRd.ConstOperand.const_get const_operand_cpn in
+  match VfMirRd.MirConst.get mir_const_cpn with
     Ty mir_ty_const_cpn -> failwith "Using typesystem constant expressions as MIR constant operands is not yet supported"
   | Val mir_val_const_cpn ->
-    let ty = decode_ty (VfMirRd.Body.ConstOperand.Const.Val.ty_get mir_val_const_cpn) in
-    let mir_const_value_cpn = VfMirRd.Body.ConstOperand.Const.Val.const_value_get mir_val_const_cpn in
-    begin match VfMirRd.Body.ConstValue.get mir_const_value_cpn with
+    let ty = decode_ty (VfMirRd.MirConst.Val.ty_get mir_val_const_cpn) in
+    let mir_const_value_cpn = VfMirRd.MirConst.Val.const_value_get mir_val_const_cpn in
+    begin match VfMirRd.ConstValue.get mir_const_value_cpn with
       Scalar scalar_cpn ->
-      begin match VfMirRd.Body.Scalar.get scalar_cpn with
+      begin match VfMirRd.Scalar.get scalar_cpn with
         Int scalar_int_cpn -> ScalarInt (decode_scalar_int ty scalar_int_cpn)
       | Ptr -> failwith "MIR pointer constants are not yet supported"
       end
@@ -236,31 +236,31 @@ let update_env x v env = (x, v) :: List.remove_assoc x env
 
 let rec process_assignments bblocks env i_bb i_s =
   let bb = Capnp.Array.get bblocks i_bb in
-  let stmts = VfMirRd.Body.BasicBlock.statements_get bb in
+  let stmts = VfMirRd.BasicBlock.statements_get bb in
   if i_s = Capnp.Array.length stmts then
     (env, i_bb, i_s)
   else
     let s = Capnp.Array.get stmts i_s in
-    match VfMirRd.Body.BasicBlock.Statement.StatementKind.get (VfMirRd.Body.BasicBlock.Statement.kind_get s) with
+    match VfMirRd.StatementKind.get (VfMirRd.Statement.kind_get s) with
       Assign assign_data ->
-        let lhsPlace = VfMirRd.Body.BasicBlock.Statement.StatementKind.AssignData.lhs_place_get assign_data in
-        let rhsRvalue = VfMirRd.Body.BasicBlock.Statement.StatementKind.AssignData.rhs_rvalue_get assign_data in
-        let lhsProjection = VfMirRd.Body.Place.projection_get lhsPlace in
+        let lhsPlace = VfMirRd.StatementKind.AssignData.lhs_place_get assign_data in
+        let rhsRvalue = VfMirRd.StatementKind.AssignData.rhs_rvalue_get assign_data in
+        let lhsProjection = VfMirRd.Place.projection_get lhsPlace in
         if Capnp.Array.length lhsProjection <> 0 then
           (env, i_bb, i_s)
         else
-          let lhsLocalId = VfMirRd.Body.Place.local_get lhsPlace in
-          let lhsLocalName = VfMirRd.Body.LocalDeclId.name_get lhsLocalId in
-          begin match VfMirRd.Body.BasicBlock.Rvalue.get rhsRvalue with
+          let lhsLocalId = VfMirRd.Place.local_get lhsPlace in
+          let lhsLocalName = VfMirRd.LocalDeclId.name_get lhsLocalId in
+          begin match VfMirRd.Rvalue.get rhsRvalue with
             Use operand ->
-              begin match VfMirRd.Body.BasicBlock.Operand.get operand with
+              begin match VfMirRd.Operand.get operand with
                 Move place | Copy place ->
-                  let placeProjection = VfMirRd.Body.Place.projection_get place in
+                  let placeProjection = VfMirRd.Place.projection_get place in
                   if Capnp.Array.length placeProjection <> 0 then
                     (env, i_bb, i_s)
                   else
-                    let placeLocalId = VfMirRd.Body.Place.local_get place in
-                    let placeLocalName = VfMirRd.Body.LocalDeclId.name_get placeLocalId in
+                    let placeLocalId = VfMirRd.Place.local_get place in
+                    let placeLocalName = VfMirRd.LocalDeclId.name_get placeLocalId in
                     begin match List.assoc placeLocalName env with
                       Value placeValue ->
                         begin match List.assoc_opt lhsLocalName env with
@@ -281,11 +281,11 @@ let rec process_assignments bblocks env i_bb i_s =
 let values_equal (v0: term) (v1: term) = v0 = v1
 
 let check_place_element_refines_place_element elem0 elem1 =
-  match VfMirRd.Body.Place.PlaceElement.get elem0, VfMirRd.Body.Place.PlaceElement.get elem1 with
+  match VfMirRd.PlaceElem.get elem0, VfMirRd.PlaceElem.get elem1 with
   | Deref, Deref -> ()
   | Field field0, Field field1 ->
-      let fieldIndex0 = VfMirRd.Body.Place.PlaceElement.FieldData.index_get field0 in
-      let fieldIndex1 = VfMirRd.Body.Place.PlaceElement.FieldData.index_get field1 in
+      let fieldIndex0 = VfMirRd.PlaceElem.FieldData.index_get field0 in
+      let fieldIndex1 = VfMirRd.PlaceElem.FieldData.index_get field1 in
       if fieldIndex0 <> fieldIndex1 then failwith "Field indices do not match"
   | Index, Index -> failwith "PlaceElement::Index not supported"
   | ConstantIndex, ConstantIndex -> failwith "PlaceElement::ConstantIndex not supported"
@@ -305,14 +305,14 @@ type place =
 
 (* Checks that the place expressions either both evaluate to a local whose address is never taken, or both evaluate to *the same* "nonlocal place" (see definition above). *)
 let check_place_refines_place env0 place0 env1 place1 =
-  let placeLocalId0 = VfMirRd.Body.Place.local_get place0 in
-  let placeLocalName0 = VfMirRd.Body.LocalDeclId.name_get placeLocalId0 in
-  let placeLocalId1 = VfMirRd.Body.Place.local_get place1 in
-  let placeLocalName1 = VfMirRd.Body.LocalDeclId.name_get placeLocalId1 in
+  let placeLocalId0 = VfMirRd.Place.local_get place0 in
+  let placeLocalName0 = VfMirRd.LocalDeclId.name_get placeLocalId0 in
+  let placeLocalId1 = VfMirRd.Place.local_get place1 in
+  let placeLocalName1 = VfMirRd.LocalDeclId.name_get placeLocalId1 in
   let placeLocalState0 = List.assoc_opt placeLocalName0 env0 in
   let placeLocalState1 = List.assoc_opt placeLocalName1 env1 in
-  let placeProjection0 = VfMirRd.Body.Place.projection_get place0 in
-  let placeProjection1 = VfMirRd.Body.Place.projection_get place1 in
+  let placeProjection0 = VfMirRd.Place.projection_get place0 in
+  let placeProjection1 = VfMirRd.Place.projection_get place1 in
   if Capnp.Array.length placeProjection0 <> Capnp.Array.length placeProjection1 then
     failwith "The two place expressions have a different number of projection elements";
   match placeLocalState0, placeLocalState1 with
@@ -333,7 +333,7 @@ let check_place_refines_place env0 place0 env1 place1 =
     Local placeLocalName0, Local placeLocalName1
 
 let check_operand_refines_operand i env0 span0 operand0 env1 span1 operand1 =
-  match VfMirRd.Body.BasicBlock.Operand.get operand0, VfMirRd.Body.BasicBlock.Operand.get operand1 with
+  match VfMirRd.Operand.get operand0, VfMirRd.Operand.get operand1 with
     (Move placeExpr0, Move placeExpr1) | (Copy placeExpr0, Copy placeExpr1) ->
       begin match check_place_refines_place env0 placeExpr0 env1 placeExpr1 with
         Local x0, Local x1 ->
@@ -348,33 +348,33 @@ let check_operand_refines_operand i env0 span0 operand0 env1 span1 operand1 =
     if eval_const_operand const_operand_cpn0 <> eval_const_operand const_operand_cpn1 then failwith (Printf.sprintf "The constants %s and %s are not equal" (string_of_span span0) (string_of_span span1))
 
 let check_aggregate_refines_aggregate env0 span0 aggregate0 env1 span1 aggregate1 =
-  let operands0 = VfMirRd.Body.BasicBlock.Rvalue.AggregateData.operands_get aggregate0 in
-  let operands1 = VfMirRd.Body.BasicBlock.Rvalue.AggregateData.operands_get aggregate1 in
+  let operands0 = VfMirRd.Rvalue.AggregateData.operands_get aggregate0 in
+  let operands1 = VfMirRd.Rvalue.AggregateData.operands_get aggregate1 in
   if Capnp.Array.length operands0 <> Capnp.Array.length operands1 then failwith "The two aggregate expressions have a different number of operands";
   for i = 0 to Capnp.Array.length operands0 - 1 do
     let operand0 = Capnp.Array.get operands0 i in
     let operand1 = Capnp.Array.get operands1 i in
     check_operand_refines_operand i env0 span0 operand0 env1 span1 operand1
   done;
-  let aggregate_kind0 = VfMirRd.Body.BasicBlock.Rvalue.AggregateData.aggregate_kind_get aggregate0 in
-  let aggregate_kind1 = VfMirRd.Body.BasicBlock.Rvalue.AggregateData.aggregate_kind_get aggregate1 in
-  match VfMirRd.Body.BasicBlock.Rvalue.AggregateData.AggregateKind.get aggregate_kind0, VfMirRd.Body.BasicBlock.Rvalue.AggregateData.AggregateKind.get aggregate_kind1 with
+  let aggregate_kind0 = VfMirRd.Rvalue.AggregateData.aggregate_kind_get aggregate0 in
+  let aggregate_kind1 = VfMirRd.Rvalue.AggregateData.aggregate_kind_get aggregate1 in
+  match VfMirRd.AggregateKind.get aggregate_kind0, VfMirRd.AggregateKind.get aggregate_kind1 with
     Array _, Array _ -> failwith "Aggregate::Array not supported"
   | Tuple, Tuple -> ()
   | Adt adt_data0, Adt adt_data1 ->
-    let adt_id0 = VfMirRd.Body.BasicBlock.Rvalue.AggregateData.AggregateKind.AdtData.adt_id_get adt_data0 in
-    let adt_id0 = VfMirRd.Ty.AdtDefId.name_get adt_id0 in
-    let adt_id1 = VfMirRd.Body.BasicBlock.Rvalue.AggregateData.AggregateKind.AdtData.adt_id_get adt_data1 in
-    let adt_id1 = VfMirRd.Ty.AdtDefId.name_get adt_id1 in
+    let adt_id0 = VfMirRd.AggregateKind.AdtData.adt_id_get adt_data0 in
+    let adt_id0 = VfMirRd.AdtDefId.name_get adt_id0 in
+    let adt_id1 = VfMirRd.AggregateKind.AdtData.adt_id_get adt_data1 in
+    let adt_id1 = VfMirRd.AdtDefId.name_get adt_id1 in
     if adt_id0 <> adt_id1 then failwith "Aggregate::Adt: ADT names do not match";
-    let variant_idx0 = VfMirRd.Body.BasicBlock.Rvalue.AggregateData.AggregateKind.AdtData.variant_idx_get adt_data0 in
-    let variant_idx1 = VfMirRd.Body.BasicBlock.Rvalue.AggregateData.AggregateKind.AdtData.variant_idx_get adt_data1 in
+    let variant_idx0 = VfMirRd.AggregateKind.AdtData.variant_idx_get adt_data0 in
+    let variant_idx1 = VfMirRd.AggregateKind.AdtData.variant_idx_get adt_data1 in
     if variant_idx0 <> variant_idx1 then failwith "Aggregate::Adt: variant indices do not match";
-    let genArgs0 = VfMirRd.Body.BasicBlock.Rvalue.AggregateData.AggregateKind.AdtData.gen_args_get_list adt_data0 in
-    let genArgs1 = VfMirRd.Body.BasicBlock.Rvalue.AggregateData.AggregateKind.AdtData.gen_args_get_list adt_data1 in
+    let genArgs0 = VfMirRd.AggregateKind.AdtData.gen_args_get_list adt_data0 in
+    let genArgs1 = VfMirRd.AggregateKind.AdtData.gen_args_get_list adt_data1 in
     if List.map decode_gen_arg genArgs0 <> List.map decode_gen_arg genArgs1 then failwith "Aggregate::Adt: generic arguments do not match";
-    let union_active_field_idx0 = VfMirRd.Body.BasicBlock.Rvalue.AggregateData.AggregateKind.AdtData.union_active_field_get adt_data0 in
-    let union_active_field_idx1 = VfMirRd.Body.BasicBlock.Rvalue.AggregateData.AggregateKind.AdtData.union_active_field_get adt_data1 in
+    let union_active_field_idx0 = VfMirRd.AggregateKind.AdtData.union_active_field_get adt_data0 in
+    let union_active_field_idx1 = VfMirRd.AggregateKind.AdtData.union_active_field_get adt_data1 in
     if union_active_field_idx0 <> union_active_field_idx1 then failwith "Aggregate::Adt: union active field indices do not match";
     ()
   | Closure, Closure -> failwith "Aggregate::Closure not supported"
@@ -385,21 +385,21 @@ let check_aggregate_refines_aggregate env0 span0 aggregate0 env1 span1 aggregate
 
 (* Checks that the two rvalues evaluate to the same value *)
 let check_rvalue_refines_rvalue env0 span0 rhsRvalue0 env1 span1 rhsRvalue1 =
-  match VfMirRd.Body.BasicBlock.Rvalue.get rhsRvalue0, VfMirRd.Body.BasicBlock.Rvalue.get rhsRvalue1 with
+  match VfMirRd.Rvalue.get rhsRvalue0, VfMirRd.Rvalue.get rhsRvalue1 with
   Use operand0, Use operand1 ->
     check_operand_refines_operand 0 env0 span0 operand0 env1 span1 operand1
 | Repeat, Repeat -> failwith "Rvalue::Repeat not supported"
 | Ref ref_data_cpn0, Ref ref_data_cpn1 ->
   (* We ignore the region because it does not affect the run-time behavior *)
-  let borKind0 = VfMirRd.Body.BasicBlock.Rvalue.RefData.bor_kind_get ref_data_cpn0 in
-  let borKind1 = VfMirRd.Body.BasicBlock.Rvalue.RefData.bor_kind_get ref_data_cpn1 in
-  begin match VfMirRd.Body.BasicBlock.Rvalue.RefData.BorrowKind.get borKind0, VfMirRd.Body.BasicBlock.Rvalue.RefData.BorrowKind.get borKind1 with
+  let borKind0 = VfMirRd.Rvalue.RefData.bor_kind_get ref_data_cpn0 in
+  let borKind1 = VfMirRd.Rvalue.RefData.bor_kind_get ref_data_cpn1 in
+  begin match VfMirRd.Rvalue.RefData.BorrowKind.get borKind0, VfMirRd.Rvalue.RefData.BorrowKind.get borKind1 with
     | Shared, Shared -> ()
     | Mut, Mut -> ()
     | _ -> failwith "Rvalue::Ref: borrow kinds do not match"
   end;
-  let placeExpr0 = VfMirRd.Body.BasicBlock.Rvalue.RefData.place_get ref_data_cpn0 in
-  let placeExpr1 = VfMirRd.Body.BasicBlock.Rvalue.RefData.place_get ref_data_cpn1 in
+  let placeExpr0 = VfMirRd.Rvalue.RefData.place_get ref_data_cpn0 in
+  let placeExpr1 = VfMirRd.Rvalue.RefData.place_get ref_data_cpn1 in
   begin match check_place_refines_place env0 placeExpr0 env1 placeExpr1 with
     Local x0, Local x1 -> raise (LocalAddressTaken (x0, x1))
   | Nonlocal, Nonlocal -> ()
@@ -409,16 +409,16 @@ let check_rvalue_refines_rvalue env0 span0 rhsRvalue0 env1 span1 rhsRvalue1 =
 | Len, Len -> failwith "Rvalue::Len not supported"
 | Cast cast_data_cpn0, Cast cast_data_cpn1 -> failwith "Rvalue::Cast not supported"
 | BinaryOp binary_op_data_cpn0, BinaryOp binary_op_data_cpn1 ->
-  let op0 = VfMirRd.Body.BasicBlock.Rvalue.BinaryOpData.operator_get binary_op_data_cpn0 in
-  let op1 = VfMirRd.Body.BasicBlock.Rvalue.BinaryOpData.operator_get binary_op_data_cpn1 in
-  let op0 = VfMirRd.Body.BasicBlock.Rvalue.BinaryOpData.BinOp.get op0 in
-  let op1 = VfMirRd.Body.BasicBlock.Rvalue.BinaryOpData.BinOp.get op1 in
+  let op0 = VfMirRd.Rvalue.BinaryOpData.operator_get binary_op_data_cpn0 in
+  let op1 = VfMirRd.Rvalue.BinaryOpData.operator_get binary_op_data_cpn1 in
+  let op0 = VfMirRd.Rvalue.BinaryOpData.BinOp.get op0 in
+  let op1 = VfMirRd.Rvalue.BinaryOpData.BinOp.get op1 in
   if op0 <> op1 then failwith "Rvalue::BinaryOp: operators do not match";
-  let lhs0 = VfMirRd.Body.BasicBlock.Rvalue.BinaryOpData.operandl_get binary_op_data_cpn0 in
-  let lhs1 = VfMirRd.Body.BasicBlock.Rvalue.BinaryOpData.operandl_get binary_op_data_cpn1 in
+  let lhs0 = VfMirRd.Rvalue.BinaryOpData.operandl_get binary_op_data_cpn0 in
+  let lhs1 = VfMirRd.Rvalue.BinaryOpData.operandl_get binary_op_data_cpn1 in
   check_operand_refines_operand 0 env0 span0 lhs0 env1 span1 lhs1;
-  let rhs0 = VfMirRd.Body.BasicBlock.Rvalue.BinaryOpData.operandr_get binary_op_data_cpn0 in
-  let rhs1 = VfMirRd.Body.BasicBlock.Rvalue.BinaryOpData.operandr_get binary_op_data_cpn1 in
+  let rhs0 = VfMirRd.Rvalue.BinaryOpData.operandr_get binary_op_data_cpn0 in
+  let rhs1 = VfMirRd.Rvalue.BinaryOpData.operandr_get binary_op_data_cpn1 in
   check_operand_refines_operand 1 env0 span0 rhs0 env1 span1 rhs1
 | NullaryOp, NullaryOp -> failwith "Rvalue::NullaryOp not supported"
 | UnaryOp unary_op_data_cpn0, UnaryOp unary_op_data_cpn1 -> failwith "Rvalue::UnaryOp not supported"
@@ -441,7 +441,7 @@ exception RecheckLoop of int (* i_bb0 *) (* When this is raised, the specified b
 let string_of_loop_inv loopInv =
   String.concat "; " (List.map (fun (x, ys) -> Printf.sprintf "%s: [%s]" x (String.concat ", " ys)) loopInv)
 
-let local_name locals i = VfMirRd.Body.LocalDeclId.name_get @@ VfMirRd.Body.LocalDecl.id_get (Capnp.Array.get locals i)
+let local_name locals i = VfMirRd.LocalDeclId.name_get @@ VfMirRd.LocalDecl.id_get (Capnp.Array.get locals i)
 
 let havoc_local_var_state = function
   Value _ -> Value (fresh_symbol ())
@@ -629,84 +629,84 @@ let check_body_refines_body def_path body0 body1 =
       let bb0 = Capnp.Array.get bblocks0 i_bb0 in
       let bb1 = Capnp.Array.get bblocks1 i_bb1 in
       let check_terminator_refines_terminator env1 =
-        let terminator0 = VfMirRd.Body.BasicBlock.terminator_get bb0 in
-        let terminator1 = VfMirRd.Body.BasicBlock.terminator_get bb1 in
-        let span0 = VfMirRd.Body.SourceInfo.span_get @@ VfMirRd.Body.BasicBlock.Terminator.source_info_get terminator0 in
-        let span1 = VfMirRd.Body.SourceInfo.span_get @@ VfMirRd.Body.BasicBlock.Terminator.source_info_get terminator1 in
+        let terminator0 = VfMirRd.BasicBlock.terminator_get bb0 in
+        let terminator1 = VfMirRd.BasicBlock.terminator_get bb1 in
+        let span0 = VfMirRd.SourceInfo.span_get @@ VfMirRd.Terminator.source_info_get terminator0 in
+        let span1 = VfMirRd.SourceInfo.span_get @@ VfMirRd.Terminator.source_info_get terminator1 in
         Printf.printf "INFO: Checking that terminator at %s refines terminator at %s\n" (string_of_span span0) (string_of_span span1);
-        let terminatorKind0 = VfMirRd.Body.BasicBlock.Terminator.kind_get terminator0 in
-        let terminatorKind1 = VfMirRd.Body.BasicBlock.Terminator.kind_get terminator1 in
-        match (VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.get terminatorKind0, VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.get terminatorKind1) with
+        let terminatorKind0 = VfMirRd.Terminator.kind_get terminator0 in
+        let terminatorKind1 = VfMirRd.Terminator.kind_get terminator1 in
+        match (VfMirRd.TerminatorKind.get terminatorKind0, VfMirRd.TerminatorKind.get terminatorKind1) with
           (Goto bb_id0, Goto bb_id1) ->
-            let bb_idx0 = Stdint.Uint32.to_int @@ VfMirRd.Body.BasicBlockId.index_get bb_id0 in
-            let bb_idx1 = Stdint.Uint32.to_int @@ VfMirRd.Body.BasicBlockId.index_get bb_id1 in
+            let bb_idx0 = Stdint.Uint32.to_int @@ VfMirRd.BasicBlockId.index_get bb_id0 in
+            let bb_idx1 = Stdint.Uint32.to_int @@ VfMirRd.BasicBlockId.index_get bb_id1 in
             check_basic_block_refines_basic_block env0 bb_idx0 env1 bb_idx1
         | (SwitchInt switch_int_data0, SwitchInt switch_int_data1) ->
-          let discr0 = VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.SwitchIntData.discr_get switch_int_data0 in
-          let discr1 = VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.SwitchIntData.discr_get switch_int_data1 in
+          let discr0 = VfMirRd.TerminatorKind.SwitchIntData.discr_get switch_int_data0 in
+          let discr1 = VfMirRd.TerminatorKind.SwitchIntData.discr_get switch_int_data1 in
           check_operand_refines_operand 0 env0 span0 discr0 env1 span1 discr1;
-          let targets0 = VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.SwitchIntData.targets_get switch_int_data0 in
-          let targets1 = VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.SwitchIntData.targets_get switch_int_data1 in
-          let branches0 = VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.SwitchIntData.SwitchTargets.branches_get targets0 in
-          let branches1 = VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.SwitchIntData.SwitchTargets.branches_get targets1 in
+          let targets0 = VfMirRd.TerminatorKind.SwitchIntData.targets_get switch_int_data0 in
+          let targets1 = VfMirRd.TerminatorKind.SwitchIntData.targets_get switch_int_data1 in
+          let branches0 = VfMirRd.SwitchTargets.branches_get targets0 in
+          let branches1 = VfMirRd.SwitchTargets.branches_get targets1 in
           if Capnp.Array.length branches0 <> Capnp.Array.length branches1 then failwith "The two switch statements have a different number of branches";
           for i = 0 to Capnp.Array.length branches0 - 1 do
             let branch0 = Capnp.Array.get branches0 i in
             let branch1 = Capnp.Array.get branches1 i in
-            let val0 = decode_uint128 @@ VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.SwitchIntData.SwitchTargets.Branch.val_get branch0 in
-            let val1 = decode_uint128 @@ VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.SwitchIntData.SwitchTargets.Branch.val_get branch1 in
+            let val0 = decode_uint128 @@ VfMirRd.SwitchTargets.Branch.val_get branch0 in
+            let val1 = decode_uint128 @@ VfMirRd.SwitchTargets.Branch.val_get branch1 in
             if val0 <> val1 then failwith "SwitchInt branch values do not match";
-            let target0 = VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.SwitchIntData.SwitchTargets.Branch.target_get branch0 in
-            let target1 = VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.SwitchIntData.SwitchTargets.Branch.target_get branch1 in
-            let target0bbid = VfMirRd.Body.BasicBlockId.index_get target0 in
-            let target1bbid = VfMirRd.Body.BasicBlockId.index_get target1 in
+            let target0 = VfMirRd.SwitchTargets.Branch.target_get branch0 in
+            let target1 = VfMirRd.SwitchTargets.Branch.target_get branch1 in
+            let target0bbid = VfMirRd.BasicBlockId.index_get target0 in
+            let target1bbid = VfMirRd.BasicBlockId.index_get target1 in
             let target0bbidx = Stdint.Uint32.to_int target0bbid in
             let target1bbidx = Stdint.Uint32.to_int target1bbid in
             check_basic_block_refines_basic_block env0 target0bbidx env1 target1bbidx
           done;
-          let otherwise0 = VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.SwitchIntData.SwitchTargets.otherwise_get targets0 in
-          let otherwise1 = VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.SwitchIntData.SwitchTargets.otherwise_get targets1 in
-          begin match VfMirRd.Util.Option.get otherwise0, VfMirRd.Util.Option.get otherwise1 with
+          let otherwise0 = VfMirRd.SwitchTargets.otherwise_get targets0 in
+          let otherwise1 = VfMirRd.SwitchTargets.otherwise_get targets1 in
+          begin match VfMirRd.Option.get otherwise0, VfMirRd.Option.get otherwise1 with
             Nothing, Nothing -> ()
           | Something target0, Something target1 ->
             let target0 = VfMirRd.of_pointer target0 in
             let target1 = VfMirRd.of_pointer target1 in
-            let target0bbidx = Stdint.Uint32.to_int @@ VfMirRd.Body.BasicBlockId.index_get target0 in
-            let target1bbidx = Stdint.Uint32.to_int @@ VfMirRd.Body.BasicBlockId.index_get target1 in
+            let target0bbidx = Stdint.Uint32.to_int @@ VfMirRd.BasicBlockId.index_get target0 in
+            let target1bbidx = Stdint.Uint32.to_int @@ VfMirRd.BasicBlockId.index_get target1 in
             check_basic_block_refines_basic_block env0 target0bbidx env1 target1bbidx
           end
         | UnwindResume, UnwindResume -> ()
         | UnwindTerminate, UnwindTerminate -> ()
         | (Return, Return) ->
-            let retVal0 = List.assoc (VfMirRd.Body.LocalDeclId.name_get (VfMirRd.Body.LocalDecl.id_get (Capnp.Array.get locals0 0))) env0 in
-            let retVal1 = List.assoc (VfMirRd.Body.LocalDeclId.name_get (VfMirRd.Body.LocalDecl.id_get (Capnp.Array.get locals1 0))) env1 in
+            let retVal0 = List.assoc (VfMirRd.LocalDeclId.name_get (VfMirRd.LocalDecl.id_get (Capnp.Array.get locals0 0))) env0 in
+            let retVal1 = List.assoc (VfMirRd.LocalDeclId.name_get (VfMirRd.LocalDecl.id_get (Capnp.Array.get locals1 0))) env1 in
             if retVal0 <> retVal1 then
               failwith (Printf.sprintf "In function %s, at basic block %d in the original crate and basic block %d in the verified crate, the return values are not equal" def_path i_bb0 i_bb1)
         | _, Unreachable -> ()
         | (Call call0, Call call1) ->
-          let func0 = VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.FnCallData.func_get call0 in
-          let func1 = VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.FnCallData.func_get call1 in
+          let func0 = VfMirRd.TerminatorKind.FnCallData.func_get call0 in
+          let func1 = VfMirRd.TerminatorKind.FnCallData.func_get call1 in
           check_operand_refines_operand 0 env0 span0 func0 env1 span1 func1;
-          let args0 = VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.FnCallData.args_get call0 in
-          let args1 = VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.FnCallData.args_get call1 in
+          let args0 = VfMirRd.TerminatorKind.FnCallData.args_get call0 in
+          let args1 = VfMirRd.TerminatorKind.FnCallData.args_get call1 in
           for i = 0 to Capnp.Array.length args0 - 1 do
             let arg0 = Capnp.Array.get args0 i in
             let arg1 = Capnp.Array.get args1 i in
             check_operand_refines_operand (i + 1) env0 span0 arg0 env1 span1 arg1
           done;
-          let dest0 = VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.FnCallData.destination_get call0 in
-          let dest1 = VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.FnCallData.destination_get call1 in
-          begin match VfMirRd.Util.Option.get dest0, VfMirRd.Util.Option.get dest1 with
+          let dest0 = VfMirRd.TerminatorKind.FnCallData.destination_get call0 in
+          let dest1 = VfMirRd.TerminatorKind.FnCallData.destination_get call1 in
+          begin match VfMirRd.Option.get dest0, VfMirRd.Option.get dest1 with
             Nothing, Nothing -> ()
           | Something dest0, Something dest1 ->
             let dest0 = VfMirRd.of_pointer dest0 in
             let dest1 = VfMirRd.of_pointer dest1 in
-            let dest0PlaceExpr = VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.FnCallData.DestinationData.place_get dest0 in
-            let dest1PlaceExpr = VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.FnCallData.DestinationData.place_get dest1 in
-            let dest0bbid = VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.FnCallData.DestinationData.basic_block_id_get dest0 in
-            let dest1bbid = VfMirRd.Body.BasicBlock.Terminator.TerminatorKind.FnCallData.DestinationData.basic_block_id_get dest1 in
-            let dest0bbidx = Stdint.Uint32.to_int @@ VfMirRd.Body.BasicBlockId.index_get dest0bbid in
-            let dest1bbidx = Stdint.Uint32.to_int @@ VfMirRd.Body.BasicBlockId.index_get dest1bbid in
+            let dest0PlaceExpr = VfMirRd.TerminatorKind.FnCallData.DestinationData.place_get dest0 in
+            let dest1PlaceExpr = VfMirRd.TerminatorKind.FnCallData.DestinationData.place_get dest1 in
+            let dest0bbid = VfMirRd.TerminatorKind.FnCallData.DestinationData.basic_block_id_get dest0 in
+            let dest1bbid = VfMirRd.TerminatorKind.FnCallData.DestinationData.basic_block_id_get dest1 in
+            let dest0bbidx = Stdint.Uint32.to_int @@ VfMirRd.BasicBlockId.index_get dest0bbid in
+            let dest1bbidx = Stdint.Uint32.to_int @@ VfMirRd.BasicBlockId.index_get dest1bbid in
             let result = fresh_symbol () in
             begin match check_place_refines_place env0 dest0PlaceExpr env1 dest1PlaceExpr with
               Local x0, Local x1 ->
@@ -727,22 +727,22 @@ let check_body_refines_body def_path body0 body1 =
         | _ -> failwith "Terminator kinds do not match"
       in
       let check_statement_refines_statement () =
-        let stmts0 = VfMirRd.Body.BasicBlock.statements_get bb0 in
-        let stmts1 = VfMirRd.Body.BasicBlock.statements_get bb1 in
+        let stmts0 = VfMirRd.BasicBlock.statements_get bb0 in
+        let stmts1 = VfMirRd.BasicBlock.statements_get bb1 in
         let stmt0 = Capnp.Array.get stmts0 i_s0 in
         let stmt1 = Capnp.Array.get stmts1 i_s1 in
-        let stmtSpan0 = VfMirRd.Body.SourceInfo.span_get @@ VfMirRd.Body.BasicBlock.Statement.source_info_get stmt0 in
-        let stmtSpan1 = VfMirRd.Body.SourceInfo.span_get @@ VfMirRd.Body.BasicBlock.Statement.source_info_get stmt1 in
+        let stmtSpan0 = VfMirRd.SourceInfo.span_get @@ VfMirRd.Statement.source_info_get stmt0 in
+        let stmtSpan1 = VfMirRd.SourceInfo.span_get @@ VfMirRd.Statement.source_info_get stmt1 in
         Printf.printf "INFO: Checking that statement at %s refines statement at %s\n" (string_of_span stmtSpan0) (string_of_span stmtSpan1);
-        let stmtKind0 = VfMirRd.Body.BasicBlock.Statement.StatementKind.get (VfMirRd.Body.BasicBlock.Statement.kind_get stmt0) in
-        let stmtKind1 = VfMirRd.Body.BasicBlock.Statement.StatementKind.get (VfMirRd.Body.BasicBlock.Statement.kind_get stmt1) in
+        let stmtKind0 = VfMirRd.StatementKind.get (VfMirRd.Statement.kind_get stmt0) in
+        let stmtKind1 = VfMirRd.StatementKind.get (VfMirRd.Statement.kind_get stmt1) in
         match (stmtKind0, stmtKind1) with
           (Assign assign_data0, Assign assign_data1) ->
-            let rhsRvalue0 = VfMirRd.Body.BasicBlock.Statement.StatementKind.AssignData.rhs_rvalue_get assign_data0 in
-            let rhsRvalue1 = VfMirRd.Body.BasicBlock.Statement.StatementKind.AssignData.rhs_rvalue_get assign_data1 in
+            let rhsRvalue0 = VfMirRd.StatementKind.AssignData.rhs_rvalue_get assign_data0 in
+            let rhsRvalue1 = VfMirRd.StatementKind.AssignData.rhs_rvalue_get assign_data1 in
             check_rvalue_refines_rvalue env0 stmtSpan0 rhsRvalue0 env1 stmtSpan1 rhsRvalue1;
-            let lhsPlace0 = VfMirRd.Body.BasicBlock.Statement.StatementKind.AssignData.lhs_place_get assign_data0 in
-            let lhsPlace1 = VfMirRd.Body.BasicBlock.Statement.StatementKind.AssignData.lhs_place_get assign_data1 in
+            let lhsPlace0 = VfMirRd.StatementKind.AssignData.lhs_place_get assign_data0 in
+            let lhsPlace1 = VfMirRd.StatementKind.AssignData.lhs_place_get assign_data1 in
             begin match check_place_refines_place env0 lhsPlace0 env1 lhsPlace1 with
               Local x0, Local x1 ->
               let rhsValue = fresh_symbol () in
@@ -753,8 +753,8 @@ let check_body_refines_body def_path body0 body1 =
               check_codepos_refines_codepos env0 i_bb0 (i_s0 + 1) env1 i_bb1 (i_s1 + 1)
             end
       in
-      let stmts0 = VfMirRd.Body.BasicBlock.statements_get bb0 in
-      let stmts1 = VfMirRd.Body.BasicBlock.statements_get bb1 in
+      let stmts0 = VfMirRd.BasicBlock.statements_get bb0 in
+      let stmts1 = VfMirRd.BasicBlock.statements_get bb1 in
       if i_s0 = Capnp.Array.length stmts0 then
         let rec iter env1 i_s1 =
           (* Process assignments of the form `x = &*y;` where x and y are locals whose address is not taken.
@@ -766,28 +766,28 @@ let check_body_refines_body def_path body0 body1 =
             let fail () =
               failwith (Printf.sprintf "In function %s, cannot prove that the terminator of basic block %d in the original version refines statement %d of basic block %d in the verified version" def_path i_bb0 i_s1 i_bb1)
             in
-            match VfMirRd.Body.BasicBlock.Statement.StatementKind.get @@ VfMirRd.Body.BasicBlock.Statement.kind_get @@ Capnp.Array.get stmts1 i_s1 with
+            match VfMirRd.StatementKind.get @@ VfMirRd.Statement.kind_get @@ Capnp.Array.get stmts1 i_s1 with
               Assign assign_data1 ->
-                let rhsRvalue1 = VfMirRd.Body.BasicBlock.Statement.StatementKind.AssignData.rhs_rvalue_get assign_data1 in
-                begin match VfMirRd.Body.BasicBlock.Rvalue.get rhsRvalue1 with
+                let rhsRvalue1 = VfMirRd.StatementKind.AssignData.rhs_rvalue_get assign_data1 in
+                begin match VfMirRd.Rvalue.get rhsRvalue1 with
                   Ref ref_data_cpn1 ->
-                    let borKind1 = VfMirRd.Body.BasicBlock.Rvalue.RefData.bor_kind_get ref_data_cpn1 in
-                    begin match VfMirRd.Body.BasicBlock.Rvalue.RefData.BorrowKind.get borKind1 with
+                    let borKind1 = VfMirRd.Rvalue.RefData.bor_kind_get ref_data_cpn1 in
+                    begin match VfMirRd.Rvalue.RefData.BorrowKind.get borKind1 with
                       Shared ->
-                        let rhsPlaceExpr1 = VfMirRd.Body.BasicBlock.Rvalue.RefData.place_get ref_data_cpn1 in
-                        let rhsPlaceLocalId1 = VfMirRd.Body.Place.local_get rhsPlaceExpr1 in
-                        let rhsPlaceLocalName1 = VfMirRd.Body.LocalDeclId.name_get rhsPlaceLocalId1 in
-                        let rhsPlaceProjection1 = VfMirRd.Body.Place.projection_get rhsPlaceExpr1 in
+                        let rhsPlaceExpr1 = VfMirRd.Rvalue.RefData.place_get ref_data_cpn1 in
+                        let rhsPlaceLocalId1 = VfMirRd.Place.local_get rhsPlaceExpr1 in
+                        let rhsPlaceLocalName1 = VfMirRd.LocalDeclId.name_get rhsPlaceLocalId1 in
+                        let rhsPlaceProjection1 = VfMirRd.Place.projection_get rhsPlaceExpr1 in
                         if Capnp.Array.length rhsPlaceProjection1 <> 1 then fail ();
                         let rhsPlaceProjectionElem1 = Capnp.Array.get rhsPlaceProjection1 0 in
-                        begin match VfMirRd.Body.Place.PlaceElement.get rhsPlaceProjectionElem1 with
+                        begin match VfMirRd.PlaceElem.get rhsPlaceProjectionElem1 with
                           Deref ->
                             begin match List.assoc_opt rhsPlaceLocalName1 env1 with
                               Some (Value rhsValue) ->
-                                let lhsPlaceExpr1 = VfMirRd.Body.BasicBlock.Statement.StatementKind.AssignData.lhs_place_get assign_data1 in
-                                let lhsPlaceLocalId1 = VfMirRd.Body.Place.local_get lhsPlaceExpr1 in
-                                let lhsPlaceLocalName1 = VfMirRd.Body.LocalDeclId.name_get lhsPlaceLocalId1 in
-                                let lhsPlaceProjection1 = VfMirRd.Body.Place.projection_get lhsPlaceExpr1 in
+                                let lhsPlaceExpr1 = VfMirRd.StatementKind.AssignData.lhs_place_get assign_data1 in
+                                let lhsPlaceLocalId1 = VfMirRd.Place.local_get lhsPlaceExpr1 in
+                                let lhsPlaceLocalName1 = VfMirRd.LocalDeclId.name_get lhsPlaceLocalId1 in
+                                let lhsPlaceProjection1 = VfMirRd.Place.projection_get lhsPlaceExpr1 in
                                 if Capnp.Array.length lhsPlaceProjection1 <> 0 then fail ();
                                 begin match List.assoc_opt lhsPlaceLocalName1 env1 with
                                   Some (Address _) -> fail ()

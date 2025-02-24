@@ -422,33 +422,33 @@ mod vf_mir_builder {
     use crate::vf_mir_capnp::unsafety as unsafety_cpn;
     use crate::vf_mir_capnp::vf_mir as vf_mir_cpn;
     use crate::vf_mir_capnp::visibility as visibility_cpn;
-    use adt_def_cpn::variant_def as variant_def_cpn;
-    use basic_block_cpn::operand as operand_cpn;
-    use basic_block_cpn::rvalue as rvalue_cpn;
-    use basic_block_cpn::statement as statement_cpn;
-    use basic_block_cpn::terminator as terminator_cpn;
+    use crate::vf_mir_capnp::variant_def as variant_def_cpn;
+    use crate::vf_mir_capnp::operand as operand_cpn;
+    use crate::vf_mir_capnp::rvalue as rvalue_cpn;
+    use crate::vf_mir_capnp::statement as statement_cpn;
+    use crate::vf_mir_capnp::terminator as terminator_cpn;
     use binary_op_data_cpn::bin_op as bin_op_cpn;
-    use body_cpn::basic_block as basic_block_cpn;
-    use body_cpn::basic_block_id as basic_block_id_cpn;
-    use body_cpn::const_operand as const_operand_cpn;
-    use body_cpn::const_operand::const_ as const_cpn;
-    use body_cpn::const_value as const_value_cpn;
-    use body_cpn::contract as contract_cpn;
-    use body_cpn::local_decl as local_decl_cpn;
-    use body_cpn::local_decl_id as local_decl_id_cpn;
-    use body_cpn::place as place_cpn;
-    use body_cpn::scalar as scalar_cpn;
-    use body_cpn::source_info as source_info_cpn;
-    use body_cpn::var_debug_info as var_debug_info_cpn;
-    use file_name_cpn::real_file_name as real_file_name_cpn;
+    use crate::vf_mir_capnp::basic_block as basic_block_cpn;
+    use crate::vf_mir_capnp::basic_block_id as basic_block_id_cpn;
+    use crate::vf_mir_capnp::const_operand as const_operand_cpn;
+    use crate::vf_mir_capnp::mir_const as const_cpn;
+    use crate::vf_mir_capnp::const_value as const_value_cpn;
+    use crate::vf_mir_capnp::contract as contract_cpn;
+    use crate::vf_mir_capnp::local_decl as local_decl_cpn;
+    use crate::vf_mir_capnp::local_decl_id as local_decl_id_cpn;
+    use crate::vf_mir_capnp::place as place_cpn;
+    use crate::vf_mir_capnp::scalar as scalar_cpn;
+    use crate::vf_mir_capnp::source_info as source_info_cpn;
+    use crate::vf_mir_capnp::var_debug_info as var_debug_info_cpn;
+    use crate::vf_mir_capnp::real_file_name as real_file_name_cpn;
     use hir_cpn::generics as hir_generics_cpn;
     use hir_generic_param_cpn::generic_param_kind as hir_generic_param_kind_cpn;
     use hir_generic_param_cpn::param_name as hir_generic_param_name_cpn;
     use hir_generics_cpn::generic_param as hir_generic_param_cpn;
-    use loc_cpn::char_pos as char_pos_cpn;
-    use loc_cpn::source_file as source_file_cpn;
+    use crate::vf_mir_capnp::char_pos as char_pos_cpn;
+    use crate::vf_mir_capnp::source_file as source_file_cpn;
     use mir::HasLocalDecls;
-    use place_cpn::place_element as place_element_cpn;
+    use crate::vf_mir_capnp::place_elem as place_element_cpn;
     use ref_data_cpn::borrow_kind as borrow_kind_cpn;
     use rustc_ast::util::comments::Comment;
     use rustc_hir as hir;
@@ -462,39 +462,39 @@ mod vf_mir_builder {
     use rustc_middle::{mir, ty::TyCtxt};
     use rustc_span::source_map::Spanned;
     use rustc_span::Span;
-    use rvalue_cpn::aggregate_data::aggregate_kind as aggregate_kind_cpn;
+    use crate::vf_mir_capnp::aggregate_kind as aggregate_kind_cpn;
     use rvalue_cpn::binary_op_data as binary_op_data_cpn;
     use rvalue_cpn::ref_data as ref_data_cpn;
     use rvalue_cpn::unary_op_data as unary_op_data_cpn;
-    use source_file_cpn::file_name as file_name_cpn;
-    use span_data_cpn::loc as loc_cpn;
-    use statement_cpn::statement_kind as statement_kind_cpn;
+    use crate::vf_mir_capnp::file_name as file_name_cpn;
+    use crate::vf_mir_capnp::loc as loc_cpn;
+    use crate::vf_mir_capnp::statement_kind as statement_kind_cpn;
     use std::collections::LinkedList;
     use std::sync::Arc;
-    use switch_int_data_cpn::switch_targets as switch_targets_cpn;
-    use terminator_cpn::terminator_kind as terminator_kind_cpn;
+    use crate::vf_mir_capnp::switch_targets as switch_targets_cpn;
+    use crate::vf_mir_capnp::terminator_kind as terminator_kind_cpn;
     use terminator_kind_cpn::fn_call_data as fn_call_data_cpn;
-    use terminator_kind_cpn::unwind_action as unwind_action_cpn;
+    use crate::vf_mir_capnp::unwind_action as unwind_action_cpn;
     use terminator_kind_cpn::switch_int_data as switch_int_data_cpn;
     use tracing::{debug, trace};
-    use ty_cpn::adt_def as adt_def_cpn;
-    use ty_cpn::adt_def_id as adt_def_id_cpn;
-    use ty_cpn::adt_kind as adt_kind_cpn;
-    use ty_cpn::adt_ty as adt_ty_cpn;
-    use ty_cpn::const_ as ty_const_cpn;
-    use ty_cpn::const_kind as const_kind_cpn;
-    use const_kind_cpn::val_tree as val_tree_cpn;
-    use ty_cpn::scalar_int as scalar_int_cpn;
-    use ty_cpn::fn_def_ty as fn_def_ty_cpn;
-    use ty_cpn::gen_arg as gen_arg_cpn;
-    use ty_cpn::int_ty as int_ty_cpn;
-    use ty_cpn::raw_ptr_ty as raw_ptr_ty_cpn;
-    use ty_cpn::ref_ty as ref_ty_cpn;
-    use ty_cpn::region as region_cpn;
-    use ty_cpn::ty_kind as ty_kind_cpn;
-    use ty_cpn::u_int_ty as u_int_ty_cpn;
+    use crate::vf_mir_capnp::adt_def as adt_def_cpn;
+    use crate::vf_mir_capnp::adt_def_id as adt_def_id_cpn;
+    use crate::vf_mir_capnp::adt_kind as adt_kind_cpn;
+    use ty_kind_cpn::adt_ty as adt_ty_cpn;
+    use crate::vf_mir_capnp::ty_const as ty_const_cpn;
+    use crate::vf_mir_capnp::const_kind as const_kind_cpn;
+    use crate::vf_mir_capnp::val_tree as val_tree_cpn;
+    use crate::vf_mir_capnp::scalar_int as scalar_int_cpn;
+    use ty_kind_cpn::fn_def_ty as fn_def_ty_cpn;
+    use crate::vf_mir_capnp::generic_arg as gen_arg_cpn;
+    use crate::vf_mir_capnp::int_ty as int_ty_cpn;
+    use ty_kind_cpn::raw_ptr_ty as raw_ptr_ty_cpn;
+    use ty_kind_cpn::ref_ty as ref_ty_cpn;
+    use crate::vf_mir_capnp::region as region_cpn;
+    use crate::vf_mir_capnp::ty_kind as ty_kind_cpn;
+    use crate::vf_mir_capnp::u_int_ty as u_int_ty_cpn;
     use unary_op_data_cpn::un_op as un_op_cpn;
-    use var_debug_info_cpn::var_debug_info_contents as var_debug_info_contents_cpn;
+    use crate::vf_mir_capnp::var_debug_info_contents as var_debug_info_contents_cpn;
     use variant_def_cpn::field_def as field_def_cpn;
 
     struct Module {
@@ -1638,10 +1638,10 @@ mod vf_mir_builder {
                 ty::TyKind::Alias(kind, alias_ty) => {
                     let mut alias_ty_cpn = ty_kind_cpn.init_alias();
                     alias_ty_cpn.set_kind(match kind {
-                        ty::AliasTyKind::Projection => crate::vf_mir_capnp::ty::AliasTyKind::Projection,
-                        ty::AliasTyKind::Inherent => crate::vf_mir_capnp::ty::AliasTyKind::Inherent,
-                        ty::AliasTyKind::Opaque => crate::vf_mir_capnp::ty::AliasTyKind::Opaque,
-                        ty::AliasTyKind::Weak => crate::vf_mir_capnp::ty::AliasTyKind::Weak,
+                        ty::AliasTyKind::Projection => crate::vf_mir_capnp::AliasTyKind::Projection,
+                        ty::AliasTyKind::Inherent => crate::vf_mir_capnp::AliasTyKind::Inherent,
+                        ty::AliasTyKind::Opaque => crate::vf_mir_capnp::AliasTyKind::Opaque,
+                        ty::AliasTyKind::Weak => crate::vf_mir_capnp::AliasTyKind::Weak,
                     });
                     alias_ty_cpn.set_def_id(&tcx.def_path_str(alias_ty.def_id));
                     alias_ty_cpn.fill_args(alias_ty.args, |arg_cpn, arg| {

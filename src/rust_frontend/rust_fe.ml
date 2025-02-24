@@ -215,7 +215,7 @@ module Make (Args : RUST_FE_ARGS) = struct
     (*** For now we are just using the first message *)
     | msg :: _ -> (
         try
-          let vf_mir_rd = VfMirRd.of_message msg in
+          let vf_mir_rd = VfMirRd.VfMir.of_message msg in
           Ok vf_mir_rd
         with Capnp.Message.Invalid_message emsg ->
           Error
@@ -226,8 +226,8 @@ module Make (Args : RUST_FE_ARGS) = struct
     Perf.init_windows_error_mode ();
     match get_vf_mir_rd rustc_args rs_file_path with
     | Ok vf_mir_rd ->
-      let targetTriple = VfMirRd.target_triple_get vf_mir_rd in
-      let pointerWidth = VfMirRd.pointer_width_get vf_mir_rd in
+      let targetTriple = VfMirRd.VfMir.target_triple_get vf_mir_rd in
+      let pointerWidth = VfMirRd.VfMir.pointer_width_get vf_mir_rd in
       let Some data_model = Args.data_model_opt in
       let data_model_name = Ast.string_of_data_model data_model in
       if pointerWidth <> 8 * (1 lsl data_model.ptr_width) then
