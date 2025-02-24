@@ -7302,7 +7302,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             ctxt#assert_term (ctxt#mk_eq type_pred_term (snd ctorSymb));
             iter pn ilist defs ds cont
           | None ->
-            static_error l "No such predicate or predicate constructor" None
+            static_error l ("No such predicate or predicate constructor: " ^ rhs) None
         else
           begin match resolve Ghost (pn,ilist) lrhs rhs purefuncmap with
             Some (rhs, (_, ctor_tparams, PredType ([], ctor_ps', inputParamCount, Inductiveness_Inductive), ctor_ps, ctorSymb)) ->
