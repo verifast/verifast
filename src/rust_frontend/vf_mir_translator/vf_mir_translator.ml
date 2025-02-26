@@ -692,7 +692,6 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let open SourceInfoRd in
     let span_cpn = span_get src_info_cpn in
     let* span = translate_span_data span_cpn in
-    let scope_cpn = scope_get src_info_cpn in
     let src_info : Mir.source_info = { span; scope = () } in
     Ok src_info
 

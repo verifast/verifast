@@ -1877,7 +1877,6 @@ mod vf_mir_builder {
             //debug!("Encoding SourceInfo {:?}", src_info);
             let span_cpn = src_info_cpn.reborrow().init_span();
             Self::encode_span_data(tcx, &src_info.span.data(), span_cpn);
-            let scope_cpn = src_info_cpn.init_scope();
         }
 
         fn encode_statement_kind(

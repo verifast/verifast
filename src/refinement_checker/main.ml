@@ -1,3 +1,4 @@
+open Vf_mir_decoder
 open Refinement_checker
 
 let memoize f =
@@ -37,17 +38,17 @@ let original_path, verified_path =
 let () = Perf.init_windows_error_mode ()
 
 let original_vf_mir =
-  VfMirRd.VfMir.of_message @@ Frontend.get_vf_mir !rustc_args original_path
+  decode_vf_mir @@ VfMirRd.VfMir.of_message @@ Frontend.get_vf_mir !rustc_args original_path
 
 let verified_vf_mir =
-  VfMirRd.VfMir.of_message @@ Frontend.get_vf_mir !rustc_args verified_path
+  decode_vf_mir @@ VfMirRd.VfMir.of_message @@ Frontend.get_vf_mir !rustc_args verified_path
 
 (* Check, for each function body in original_vf_mir, that there is a matching function body in verified_vf_mir *)
-let original_bodies = VfMirRd.VfMir.bodies_get_list original_vf_mir
+let original_bodies = original_vf_mir.bodies
 
 let verified_bodies =
-  VfMirRd.VfMir.bodies_get_list verified_vf_mir
-  |> List.map (fun body -> (VfMirRd.Body.def_path_get body, body))
+  verified_vf_mir.bodies
+  |> List.map (fun body -> (body.def_path, body))
 
 let get_line_offsets text =
   let rec get_line_offsets' text offset acc =
@@ -65,7 +66,7 @@ let load_file_core path =
   (contents, line_offsets)
 
 let load_file = memoize load_file_core
-let decode_body_span body = decode_span @@ VfMirRd.Body.span_get body
+let decode_body_span (body: body) = decode_span body.span
 
 let load_span_snippet span =
   let (path, start_line, start_col), (_, end_line, end_col) = span in
@@ -227,17 +228,17 @@ let check_files_match (path0, path1) =
 let check_files_match = memoize check_files_match
 
 let rec check_module module0 module1 =
-  let (path0, _, _), _ = decode_span @@ VfMirRd.Module.body_span_get module0 in
-  let (path1, _, _), _ = decode_span @@ VfMirRd.Module.body_span_get module1 in
+  let (path0, _, _), _ = decode_span module0.body_span in
+  let (path1, _, _), _ = decode_span module1.body_span in
   check_files_match (path0, path1);
-  let submodules0 = VfMirRd.Module.submodules_get_list module0 in
-  let submodules1 = VfMirRd.Module.submodules_get_list module1 in
+  let submodules0 = module0.submodules in
+  let submodules1 = module1.submodules in
   List.iter2 check_module submodules0 submodules1
 
 let () =
   original_bodies
   |> List.iter @@ fun body ->
-     let def_path = VfMirRd.Body.def_path_get body in
+     let def_path = body.def_path in
      match List.assoc_opt def_path verified_bodies with
      | None ->
          error
@@ -247,8 +248,8 @@ let () =
 
 let () =
   check_files_match (original_path, verified_path);
-  let modules0 = VfMirRd.VfMir.modules_get_list original_vf_mir in
-  let modules1 = VfMirRd.VfMir.modules_get_list verified_vf_mir in
+  let modules0 = original_vf_mir.modules in
+  let modules1 = verified_vf_mir.modules in
   List.iter2 check_module modules0 modules1
 
 let () = Printf.printf "No refinement errors found\n"
