@@ -52,6 +52,7 @@ if [ $(uname -s) = "Linux" ]; then
   if ! rustup show home; then
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s - -y
   fi
+  $HOME/.cargo/bin/cargo install --locked --git https://github.com/btj/capnpc-ocaml-decoder
 
   cd /
   dl_and_unzip_llvm-clang Linux 835a0da7ae9b237844d5dc9f3aa69cf76df08c7fa07dd1834850fd69c114011e
@@ -97,6 +98,7 @@ elif [ $(uname -s) = "Darwin" ]; then
   if ! rustup show home; then
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s - -y
   fi
+  $HOME/.cargo/bin/cargo install --locked --git https://github.com/btj/capnpc-ocaml-decoder
 
   cd /usr/local
   if [ "$(uname -p)" = arm ]; then

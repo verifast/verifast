@@ -706,9 +706,9 @@ struct VarDebugInfo {
 }
 
 struct SourceInfo {
-    struct SourceScope {}
+    #struct SourceScope {}
     span @0: SpanData;
-    scope @1: SourceScope;
+    #scope @1: SourceScope;
 }
 
 struct Contract {
