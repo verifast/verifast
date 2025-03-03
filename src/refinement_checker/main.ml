@@ -80,8 +80,14 @@ let bodies_are_identical body0 body1 =
   let snippet1 = load_span_snippet (decode_body_span body1) in
   snippet0 = snippet1
 
+let wrapper_fn_spans =
+  verified_bodies |> List.map (fun (fn, body) ->
+    if String.ends_with ~suffix:"__VeriFast_wrapper" fn then
+      [decode_body_span body]
+    else []) |> List.flatten
+
 let original_checked_spans = ref []
-let verified_checked_spans = ref []
+let verified_checked_spans = ref wrapper_fn_spans
 
 let check_body_refines_body def_path body verified_body =
   if bodies_are_identical body verified_body then
@@ -142,6 +148,13 @@ let skip_whitespace contents offset =
   in
   skip_whitespace' offset
 
+let rec skip_whitespace_and_checked_ranges contents offset checked_ranges =
+  let offset = skip_whitespace contents offset in
+  match checked_ranges with
+  | (start, end_) :: checked_ranges when start = offset ->
+    skip_whitespace_and_checked_ranges contents end_ checked_ranges
+  | _ -> offset, checked_ranges
+
 (* Checks that the two files are identical, after collapsing whitespace and spans checked by the refinement checker *)
 let check_files_match (path0, path1) =
   Printf.printf "Checking that, apart from checked functions and comments, %s and %s are identical\n" path0 path1;
@@ -176,52 +189,34 @@ let check_files_match (path0, path1) =
   let checked_ranges0 = List.sort compare checked_ranges0 in
   let checked_ranges1 = List.sort compare checked_ranges1 in
   let rec iter offset0 offset1 checked_ranges0 checked_ranges1 =
-    let offset0' = skip_whitespace contents0 offset0 in
-    let offset1' = skip_whitespace contents1 offset1 in
+    let offset0', checked_ranges0 = skip_whitespace_and_checked_ranges contents0 offset0 checked_ranges0 in
+    let offset1', checked_ranges1 = skip_whitespace_and_checked_ranges contents1 offset1 checked_ranges1 in
     if offset0' = offset0 <> (offset1' = offset1) then
       failwith
         (Printf.sprintf
            "Comparing %s to %s: Whitespace mismatch at offset %d/%d" path0 path1
            offset0 offset1);
     let offset0, offset1 = (offset0', offset1') in
-    match checked_ranges0 with
-    | (start0, end0) :: checked_ranges0 when start0 = offset0 -> (
-        match checked_ranges1 with
-        | (start1, end1) :: checked_ranges1 when start1 = offset1 ->
-            iter end0 end1 checked_ranges0 checked_ranges1
-        | _ ->
-            failwith
-              (Printf.sprintf
-                 "Comparing %s to %s: Mismatched checked ranges at offset %d/%d"
-                 path0 path1 offset0 offset1))
-    | _ -> (
-        match checked_ranges1 with
-        | (start1, end1) :: checked_ranges1 when start1 = offset1 ->
-            failwith
-              (Printf.sprintf
-                 "Comparing %s to %s: Mismatched checked ranges at offset %d/%d"
-                 path0 path1 offset0 offset1)
-        | _ ->
-            if offset0 = String.length contents0 then
-              if offset1 = String.length contents1 then (
-                assert (checked_ranges0 = [] && checked_ranges1 = []);
-                ())
-              else
-                failwith
-                  (Printf.sprintf "Comparing %s to %s: Unexpected EOF in %s"
-                     path0 path1 path1)
-            else if offset1 = String.length contents1 then
-              failwith
-                (Printf.sprintf "Comparing %s to %s: Unexpected EOF in %s" path0
-                   path1 path0)
-            else (
-              if contents0.[offset0] <> contents1.[offset1] then
-                failwith
-                  (Printf.sprintf
-                     "Comparing %s to %s: Mismatch at offset %d/%d: %c vs %c"
-                     path0 path1 offset0 offset1 contents0.[offset0]
-                     contents1.[offset1]);
-              iter (offset0 + 1) (offset1 + 1) checked_ranges0 checked_ranges1))
+    if offset0 = String.length contents0 then
+      if offset1 = String.length contents1 then (
+        assert (checked_ranges0 = [] && checked_ranges1 = []);
+        ())
+      else
+        failwith
+          (Printf.sprintf "Comparing %s to %s: Unexpected EOF in %s"
+              path0 path1 path1)
+    else if offset1 = String.length contents1 then
+      failwith
+        (Printf.sprintf "Comparing %s to %s: Unexpected EOF in %s" path0
+            path1 path0)
+    else (
+      if contents0.[offset0] <> contents1.[offset1] then
+        failwith
+          (Printf.sprintf
+              "Comparing %s to %s: Mismatch at offset %d/%d: %c vs %c"
+              path0 path1 offset0 offset1 contents0.[offset0]
+              contents1.[offset1]);
+      iter (offset0 + 1) (offset1 + 1) checked_ranges0 checked_ranges1)
   in
   iter 0 0 checked_ranges0 checked_ranges1
 

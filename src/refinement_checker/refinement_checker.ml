@@ -247,6 +247,7 @@ type basic_block_info = <
   terminator: terminator;
   to_string: string;
   sibling: int -> basic_block_info;
+  caller: (string (* callee result variable *) * place (* destination place *) * basic_block_info (* destination basic block *)) option;
 >
 
 let rec basic_block_info_of bbs bb_idx =
@@ -256,13 +257,68 @@ let rec basic_block_info_of bbs bb_idx =
     method id = id
     method statements = bb.statements
     method terminator = bb.terminator
-    method to_string = Printf.sprintf "Basic block %s" (string_of_basic_block_path id)
+    method to_string = Printf.sprintf "%s" (string_of_basic_block_path id)
     method sibling i = basic_block_info_of bbs i
+    method caller = None
   end
 
-let rec process_assignments (env: env) (i_bb: basic_block_info) i_s (ss_i: statement list) =
+let local_name (locals: local_decl array) i = locals.(i).id.name
+
+let rec process_assignments bodies (env: env) (i_bb: basic_block_info) i_s (ss_i: statement list) =
   match ss_i with
-    [] -> (env, i_bb, i_s, ss_i)
+    [] ->
+    begin match i_bb#terminator.kind with
+      Call ({func=Constant {const=Val {const_value=ZeroSized; ty={kind=FnDef {id={name=funcName}; substs}}}}} as call) when String.ends_with ~suffix:"__VeriFast_wrapper" funcName ->
+      let {args; destination; unwind_action} = call in
+      let args = args |> List.map @@ fun arg ->
+        match arg with
+          Move place | Copy place ->
+          let placeProjection = place.projection in
+          if placeProjection <> [] then
+            failwith "Place projections are not yet supported as wrapper call arguments";
+          let placeLocalId = place.local in
+          let placeLocalName = placeLocalId.name in
+          let placeLocalPath = {lv_caller=i_bb#id.bb_caller; lv_name=placeLocalName} in
+          begin match List.assoc placeLocalPath env with
+            Value v -> v
+          | Address v -> failwith "Locals whose address is taken are not yet supported as wrapper call arguments"
+          end
+        | Constant constant -> failwith "Constants are not yet supported as wrapper call arguments"
+      in
+      let caller = Some i_bb#id in
+      let body: body = List.assoc funcName bodies in
+      let bbs = Array.of_list body.basic_blocks in
+      let locals = Array.of_list body.local_decls in
+      let env = List.mapi (fun i v -> let x = local_name locals (i + 1) in {lv_caller=caller; lv_name=x}, Value v) args @ env in
+      let caller_info =
+        match destination with
+          Nothing -> failwith "Diverging wrapper calls are not yet supported"
+        | Something {place; basic_block_id={index}} -> Some (locals.(0).id.name, place, i_bb#sibling (Stdint.Uint32.to_int index))
+      in
+      let rec bb_info_of i: basic_block_info =
+        let callee_bb_id = {bb_caller=caller; bb_index=i} in
+        object
+        method id = callee_bb_id
+        method statements = bbs.(i).statements
+        method terminator = bbs.(i).terminator
+        method to_string = Printf.sprintf "Basic block %s" (string_of_basic_block_path callee_bb_id)
+        method sibling i = bb_info_of i
+        method caller = caller_info
+      end in
+      process_assignments bodies env (bb_info_of 0) 0 (bbs.(0).statements) (* TODO: deal with unwind_action *)
+    | Return when i_bb#caller <> None ->
+      let Some (returnLocalName, destinationPlace, destinationBb) = i_bb#caller in
+      let returnLocalPath = {lv_caller=i_bb#id.bb_caller; lv_name=returnLocalName} in
+      if destinationPlace.projection <> [] then failwith "Wrapper calls whose destination place has a projection are not yet supported";
+      begin match List.assoc returnLocalPath env with
+        Value v ->
+          let destinationLocalPath = {lv_caller=destinationBb#id.bb_caller; lv_name=destinationPlace.local.name} in
+          let env = update_env destinationLocalPath (Value v) env in
+          process_assignments bodies env destinationBb 0 (destinationBb#statements)
+      | Address _ -> failwith "Locals whose address is taken are not yet supported as wrapper call destinations"
+      end
+    | _ -> (env, i_bb, i_s, ss_i)
+    end
   | s::ss_i_plus_1 ->
     match s.kind with
       Assign assign_data ->
@@ -292,7 +348,7 @@ let rec process_assignments (env: env) (i_bb: basic_block_info) i_s (ss_i: state
                           Some (Address _) -> (env, i_bb, i_s, ss_i)
                         | _ ->
                           let env = update_env lhsLocalPath (Value placeValue) env in
-                          process_assignments env i_bb (i_s + 1) (ss_i_plus_1)
+                          process_assignments bodies env i_bb (i_s + 1) (ss_i_plus_1)
                         end
                     | _ -> (env, i_bb, i_s, ss_i)
                       end
@@ -301,7 +357,7 @@ let rec process_assignments (env: env) (i_bb: basic_block_info) i_s (ss_i: state
               end
             | _ -> (env, i_bb, i_s, ss_i)
             end
-    | Nop -> process_assignments env i_bb (i_s + 1) ss_i_plus_1
+    | Nop -> process_assignments bodies env i_bb (i_s + 1) ss_i_plus_1
 
 let values_equal (v0: term) (v1: term) = v0 = v1
 
@@ -465,8 +521,6 @@ exception RecheckLoop of basic_block_path (* i_bb0 *) (* When this is raised, th
 
 let string_of_loop_inv (loopInv: loop_invariant) =
   String.concat "; " (List.map (fun (x, ys) -> Printf.sprintf "%s: [%s]" (string_of_lv_path x) (String.concat ", " (List.map string_of_lv_path ys))) loopInv)
-
-let local_name (locals: local_decl array) i = locals.(i).id.name
 
 let havoc_local_var_state = function
   Value _ -> Value (fresh_symbol ())
@@ -648,8 +702,8 @@ let check_body_refines_body verified_bodies def_path body0 body1 =
         end
     (* Checks whether for each behavior of code position (bb0, s0), code position (bb1, s1) has a matching behavior *)
     and check_codepos_refines_codepos env0 i_bb0 i_s0 ss_i0 env1 i_bb1 i_s1 ss_i1 =
-      let (env0, i_bb0, i_s0, ss_i0) = process_assignments env0 i_bb0 i_s0 ss_i0 in
-      let (env1, i_bb1, i_s1, ss_i1) = process_assignments env1 i_bb1 i_s1 ss_i1 in
+      let (env0, i_bb0, i_s0, ss_i0) = process_assignments [] env0 i_bb0 i_s0 ss_i0 in
+      let (env1, i_bb1, i_s1, ss_i1) = process_assignments verified_bodies env1 i_bb1 i_s1 ss_i1 in
       let caller0 = i_bb0#id.bb_caller in
       let caller1 = i_bb1#id.bb_caller in
       let check_terminator_refines_terminator env1 =
@@ -733,6 +787,7 @@ let check_body_refines_body verified_bodies def_path body0 body1 =
               check_basic_block_refines_basic_block env0 (i_bb0#sibling dest0bbidx) env1 (i_bb1#sibling dest1bbidx)
             end
           end
+          (* TODO: Check that unwindAction0 refines unwindAction1 *)
         | Drop drop_data0, Drop drop_data1 -> failwith "Drop not supported"
         | TailCall, TailCall -> failwith "TailCall not supported"
         | Assert, Assert -> failwith "Assert not supported"
@@ -768,58 +823,55 @@ let check_body_refines_body verified_bodies def_path body0 body1 =
             end
       in
       if ss_i0 = [] then
-        let rec iter env1 i_s1 (ss_i1: statement list) =
-          (* Process assignments of the form `x = &*y;` where x and y are locals whose address is not taken.
-           * We are here using the property that inserting such statements can only cause a program to have more UB, so if it verifies, the original program is also safe.
-           *)
-          match ss_i1 with
-            [] -> check_terminator_refines_terminator env1
-          | stmt1::ss_i1_plus_1 ->
-            let fail () =
-              failwith (Printf.sprintf "In function %s, cannot prove that the terminator of basic block %s in the original version refines statement %d of basic block %s in the verified version" def_path i_bb0#to_string i_s1 i_bb1#to_string)
-            in
-            match stmt1.kind with
-              Assign assign_data1 ->
-                let rhsRvalue1 = assign_data1.rhs_rvalue in
-                begin match rhsRvalue1 with
-                  Ref ref_data_cpn1 ->
-                    let borKind1 = ref_data_cpn1.bor_kind in
-                    begin match borKind1 with
-                      Shared ->
-                        let rhsPlaceExpr1 = ref_data_cpn1.place in
-                        let rhsPlaceLocalId1 = rhsPlaceExpr1.local in
-                        let rhsPlaceLocalName1 = rhsPlaceLocalId1.name in
-                        let rhsPlaceLocalPath1 = {lv_caller=caller1; lv_name=rhsPlaceLocalName1} in
-                        let rhsPlaceProjection1 = rhsPlaceExpr1.projection in
-                        if List.length rhsPlaceProjection1 <> 1 then fail ();
-                        let rhsPlaceProjectionElem1 = List.hd rhsPlaceProjection1 in
-                        begin match rhsPlaceProjectionElem1 with
-                          Deref ->
-                            begin match List.assoc_opt rhsPlaceLocalPath1 env1 with
-                              Some (Value rhsValue) ->
-                                let lhsPlaceExpr1 = assign_data1.lhs_place in
-                                let lhsPlaceLocalId1 = lhsPlaceExpr1.local in
-                                let lhsPlaceLocalName1 = lhsPlaceLocalId1.name in
-                                let lhsPlaceLocalPath1 = {lv_caller=caller1; lv_name=lhsPlaceLocalName1} in
-                                let lhsPlaceProjection1 = lhsPlaceExpr1.projection in
-                                if lhsPlaceProjection1 <> [] then fail ();
-                                begin match List.assoc_opt lhsPlaceLocalPath1 env1 with
-                                  Some (Address _) -> fail ()
-                                | _ ->
-                                  let env1 = update_env lhsPlaceLocalPath1 (Value rhsValue) env1 in
-                                  iter env1 (i_s1 + 1) ss_i1_plus_1
-                                end
-                            | _ -> fail ()
-                            end
-                        | _ -> fail ()
-                        end
-                    | _ -> fail ()
-                    end
-                | _ -> fail ()
-                end
-            | _ -> fail ()
-        in
-        iter env1 i_s1 ss_i1
+        (* Process assignments of the form `x = &*y;` where x and y are locals whose address is not taken.
+          * We are here using the property that inserting such statements can only cause a program to have more UB, so if it verifies, the original program is also safe.
+          *)
+        match ss_i1 with
+          [] -> check_terminator_refines_terminator env1
+        | stmt1::ss_i1_plus_1 ->
+          let fail () =
+            failwith (Printf.sprintf "In function %s, cannot prove that the terminator of basic block %s in the original version refines statement %d of basic block %s in the verified version" def_path i_bb0#to_string i_s1 i_bb1#to_string)
+          in
+          match stmt1.kind with
+            Assign assign_data1 ->
+              let rhsRvalue1 = assign_data1.rhs_rvalue in
+              begin match rhsRvalue1 with
+                Ref ref_data_cpn1 ->
+                  let borKind1 = ref_data_cpn1.bor_kind in
+                  begin match borKind1 with
+                    Shared ->
+                      let rhsPlaceExpr1 = ref_data_cpn1.place in
+                      let rhsPlaceLocalId1 = rhsPlaceExpr1.local in
+                      let rhsPlaceLocalName1 = rhsPlaceLocalId1.name in
+                      let rhsPlaceLocalPath1 = {lv_caller=caller1; lv_name=rhsPlaceLocalName1} in
+                      let rhsPlaceProjection1 = rhsPlaceExpr1.projection in
+                      if List.length rhsPlaceProjection1 <> 1 then fail ();
+                      let rhsPlaceProjectionElem1 = List.hd rhsPlaceProjection1 in
+                      begin match rhsPlaceProjectionElem1 with
+                        Deref ->
+                          begin match List.assoc_opt rhsPlaceLocalPath1 env1 with
+                            Some (Value rhsValue) ->
+                              let lhsPlaceExpr1 = assign_data1.lhs_place in
+                              let lhsPlaceLocalId1 = lhsPlaceExpr1.local in
+                              let lhsPlaceLocalName1 = lhsPlaceLocalId1.name in
+                              let lhsPlaceLocalPath1 = {lv_caller=caller1; lv_name=lhsPlaceLocalName1} in
+                              let lhsPlaceProjection1 = lhsPlaceExpr1.projection in
+                              if lhsPlaceProjection1 <> [] then fail ();
+                              begin match List.assoc_opt lhsPlaceLocalPath1 env1 with
+                                Some (Address _) -> fail ()
+                              | _ ->
+                                let env1 = update_env lhsPlaceLocalPath1 (Value rhsValue) env1 in
+                                check_codepos_refines_codepos env0 i_bb0 i_s0 ss_i0 env1 i_bb1 (i_s1 + 1) ss_i1_plus_1
+                              end
+                          | _ -> fail ()
+                          end
+                      | _ -> fail ()
+                      end
+                  | _ -> fail ()
+                  end
+              | _ -> fail ()
+              end
+          | _ -> fail ()
       else
         if ss_i1 = [] then
           failwith (Printf.sprintf "In function %s, cannot prove that statement %d of basic block %s in the original version refines the terminator of basic block %s in the verified version" def_path i_s0 i_bb0#to_string i_bb1#to_string)
