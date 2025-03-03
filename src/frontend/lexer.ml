@@ -817,12 +817,17 @@ let make_lexer_core keywords ghostKeywords startpos text reportRange inComment i
   and exponent_part () =
     match text_peek () with
       ('+' | '-' as c) ->
-        text_junk (); store c; end_exponent_part ()
-    | _ -> end_exponent_part ()
-  and end_exponent_part () =
+        text_junk (); store c; exponent_digits_part ()
+    | _ -> exponent_digits_part ()
+  and exponent_digits_part () =
     match text_peek () with
       ('0'..'9' as c) ->
-        text_junk (); store c; end_exponent_part ()
+        text_junk (); store c; exponent_more_digits_part ()
+    | _ -> error "Bad fraction literal"
+  and exponent_more_digits_part () =
+    match text_peek () with
+      ('0'..'9' as c) ->
+        text_junk (); store c; exponent_more_digits_part ()
     | _ -> fraction_suffix (num_of_decimal_fraction (get_string ()))
   and string () =
     match text_peek () with
