@@ -198,9 +198,6 @@ let string_of_local_var_state = function
   Value v -> Printf.sprintf "Value %s" (string_of_term v)
 | Address v -> Printf.sprintf "Address %s" (string_of_term v)
 
-let string_of_env env =
-  String.concat "; " (List.map (fun (x, v) -> Printf.sprintf "%s: %s" x (string_of_local_var_state v)) env)
-
 let eval_const_operand const_operand_cpn =
   let mir_const_cpn = const_operand_cpn.const in
   match mir_const_cpn with
@@ -224,11 +221,46 @@ let eval_const_operand const_operand_cpn =
     end
   | Unevaluated -> failwith "Unevaluated constant operands are not yet supported"
 
+type call_path = basic_block_path option
+and basic_block_path = {bb_caller: basic_block_path option; bb_index: int}
+
+let rec string_of_call_path = function
+  None -> ""
+| Some caller -> Printf.sprintf "%s." (string_of_basic_block_path caller)
+and string_of_basic_block_path {bb_caller; bb_index} =
+  Printf.sprintf "%s%d" (string_of_call_path bb_caller) bb_index
+
+type local_variable_path = {lv_caller: call_path; lv_name: string}
+
+let string_of_lv_path {lv_caller; lv_name} = Printf.sprintf "%s%s" (string_of_call_path lv_caller) lv_name
+
+type env = (local_variable_path * local_var_state) list
+
+let string_of_env env =
+  String.concat "; " (List.map (fun (x, v) -> Printf.sprintf "%s: %s" (string_of_lv_path x) (string_of_local_var_state v)) env)
+
 let update_env x v env = (x, v) :: List.remove_assoc x env
 
-let rec process_assignments bblocks env i_bb i_s (ss_i: statement list) =
-  let bb = bblocks.(i_bb) in
-  let stmts = bb.statements in
+type basic_block_info = <
+  id: basic_block_path;
+  statements: statement list;
+  terminator: terminator;
+  to_string: string;
+  sibling: int -> basic_block_info;
+>
+
+let rec basic_block_info_of bbs bb_idx =
+  let bb = bbs.(bb_idx) in
+  let id = {bb_caller=None; bb_index=bb_idx} in
+  object
+    method id = id
+    method statements = bb.statements
+    method terminator = bb.terminator
+    method to_string = Printf.sprintf "Basic block %s" (string_of_basic_block_path id)
+    method sibling i = basic_block_info_of bbs i
+  end
+
+let rec process_assignments (env: env) (i_bb: basic_block_info) i_s (ss_i: statement list) =
   match ss_i with
     [] -> (env, i_bb, i_s, ss_i)
   | s::ss_i_plus_1 ->
@@ -242,6 +274,7 @@ let rec process_assignments bblocks env i_bb i_s (ss_i: statement list) =
         else
           let lhsLocalId = lhsPlace.local in
           let lhsLocalName = lhsLocalId.name in
+          let lhsLocalPath = {lv_caller=i_bb#id.bb_caller; lv_name=lhsLocalName} in
           begin match rhsRvalue with
             Use operand ->
               begin match operand with
@@ -252,13 +285,14 @@ let rec process_assignments bblocks env i_bb i_s (ss_i: statement list) =
                   else
                     let placeLocalId = place.local in
                     let placeLocalName = placeLocalId.name in
-                    begin match List.assoc placeLocalName env with
+                    let placeLocalPath = {lv_caller=i_bb#id.bb_caller; lv_name=placeLocalName} in
+                    begin match List.assoc placeLocalPath env with
                       Value placeValue ->
-                        begin match List.assoc_opt lhsLocalName env with
+                        begin match List.assoc_opt lhsLocalPath env with
                           Some (Address _) -> (env, i_bb, i_s, ss_i)
                         | _ ->
-                          let env = update_env lhsLocalName (Value placeValue) env in
-                          process_assignments bblocks env i_bb (i_s + 1) (ss_i_plus_1)
+                          let env = update_env lhsLocalPath (Value placeValue) env in
+                          process_assignments env i_bb (i_s + 1) (ss_i_plus_1)
                         end
                     | _ -> (env, i_bb, i_s, ss_i)
                       end
@@ -267,7 +301,7 @@ let rec process_assignments bblocks env i_bb i_s (ss_i: statement list) =
               end
             | _ -> (env, i_bb, i_s, ss_i)
             end
-    | Nop -> process_assignments bblocks env i_bb (i_s + 1) ss_i_plus_1
+    | Nop -> process_assignments env i_bb (i_s + 1) ss_i_plus_1
 
 let values_equal (v0: term) (v1: term) = v0 = v1
 
@@ -290,18 +324,27 @@ let check_place_element_refines_place_element elem0 elem1 =
 (* When this is raised, both variables did not yet have their address taken *)
 exception LocalAddressTaken of string (* x0 *) * string (* x1 *)
 
+let local_address_taken path0 path1 =
+  if path0.lv_caller <> None then
+    failwith "Taking the address of a local variable in an inlined function is not yet supported";
+  if path1.lv_caller <> None then
+    failwith "Taking the address of a local variable in an inlined function is not yet supported";
+  raise (LocalAddressTaken (path0.lv_name, path1.lv_name))
+
 type place =
-  Local of string (* This place is a local variable whose address is never taken in this function *)
+  Local of local_variable_path (* This place is a local variable whose address is never taken in this function *)
 | Nonlocal (* A "nonlocal place" is a plcae that is disjoint from all local variables whose address is never taken in this function *)
 
 (* Checks that the place expressions either both evaluate to a local whose address is never taken, or both evaluate to *the same* "nonlocal place" (see definition above). *)
-let check_place_refines_place env0 place0 env1 place1 =
+let check_place_refines_place (env0: env) caller0 place0 (env1: env) caller1 place1 =
   let placeLocalId0 = place0.local in
   let placeLocalName0 = placeLocalId0.name in
+  let placeLocalPath0 = {lv_caller=caller0; lv_name=placeLocalName0} in
   let placeLocalId1 = place1.local in
   let placeLocalName1 = placeLocalId1.name in
-  let placeLocalState0 = List.assoc_opt placeLocalName0 env0 in
-  let placeLocalState1 = List.assoc_opt placeLocalName1 env1 in
+  let placeLocalPath1 = {lv_caller=caller1; lv_name=placeLocalName1} in
+  let placeLocalState0 = List.assoc_opt placeLocalPath0 env0 in
+  let placeLocalState1 = List.assoc_opt placeLocalPath1 env1 in
   let placeProjection0 = place0.projection in
   let placeProjection1 = place1.projection in
   if List.length placeProjection0 <> List.length placeProjection1 then
@@ -316,13 +359,13 @@ let check_place_refines_place env0 place0 env1 place1 =
     (* OK, neither local has its address taken *)
     if placeProjection0 <> [] then
       (* if a local is projected, give up trying to track its value *)
-      raise (LocalAddressTaken (placeLocalName0, placeLocalName1));
-    Local placeLocalName0, Local placeLocalName1
+      local_address_taken placeLocalPath0 placeLocalPath1;
+    Local placeLocalPath0, Local placeLocalPath1
 
-let check_operand_refines_operand i env0 span0 operand0 env1 span1 operand1 =
+let check_operand_refines_operand i env0 span0 caller0 operand0 env1 span1 caller1 operand1 =
   match operand0, operand1 with
     (Move placeExpr0, Move placeExpr1) | (Copy placeExpr0, Copy placeExpr1) ->
-      begin match check_place_refines_place env0 placeExpr0 env1 placeExpr1 with
+      begin match check_place_refines_place env0 caller0 placeExpr0 env1 caller1 placeExpr1 with
         Local x0, Local x1 ->
           begin match List.assoc x0 env0, List.assoc x1 env1 with
             Value v0, Value v1 -> if not (values_equal v0 v1) then failwith (Printf.sprintf "The values of the %d'th operand of %s and %s are not equal" i (string_of_span span0) (string_of_span span1))
@@ -334,11 +377,11 @@ let check_operand_refines_operand i env0 span0 operand0 env1 span1 operand1 =
   | Constant const_operand_cpn0, Constant const_operand_cpn1 ->
     if eval_const_operand const_operand_cpn0 <> eval_const_operand const_operand_cpn1 then failwith (Printf.sprintf "The constants %s and %s are not equal" (string_of_span span0) (string_of_span span1))
 
-let check_aggregate_refines_aggregate env0 span0 aggregate0 env1 span1 aggregate1 =
+let check_aggregate_refines_aggregate env0 span0 caller0 aggregate0 env1 span1 caller1 aggregate1 =
   let operands0 = aggregate0.operands in
   let operands1 = aggregate1.operands in
   if List.length operands0 <> List.length operands1 then failwith "The two aggregate expressions have a different number of operands";
-  List.iteri (fun i (operand0, operand1) -> check_operand_refines_operand i env0 span0 operand0 env1 span1 operand1) (List.combine operands0 operands1);
+  List.iteri (fun i (operand0, operand1) -> check_operand_refines_operand i env0 span0 caller0 operand0 env1 span1 caller1 operand1) (List.combine operands0 operands1);
   let aggregate_kind0 = aggregate0.aggregate_kind in
   let aggregate_kind1 = aggregate1.aggregate_kind in
   match aggregate_kind0, aggregate_kind1 with
@@ -367,10 +410,10 @@ let check_aggregate_refines_aggregate env0 span0 aggregate0 env1 span1 aggregate
   | _ -> failwith "Aggregate kinds do not match"
 
 (* Checks that the two rvalues evaluate to the same value *)
-let check_rvalue_refines_rvalue env0 span0 rhsRvalue0 env1 span1 rhsRvalue1 =
+let check_rvalue_refines_rvalue env0 span0 caller0 rhsRvalue0 env1 span1 caller1 rhsRvalue1 =
   match rhsRvalue0, rhsRvalue1 with
   Use operand0, Use operand1 ->
-    check_operand_refines_operand 0 env0 span0 operand0 env1 span1 operand1
+    check_operand_refines_operand 0 env0 span0 caller0 operand0 env1 span1 caller1 operand1
 | Repeat, Repeat -> failwith "Rvalue::Repeat not supported"
 | Ref ref_data_cpn0, Ref ref_data_cpn1 ->
   (* We ignore the region because it does not affect the run-time behavior *)
@@ -383,8 +426,8 @@ let check_rvalue_refines_rvalue env0 span0 rhsRvalue0 env1 span1 rhsRvalue1 =
   end;
   let placeExpr0 = ref_data_cpn0.place in
   let placeExpr1 = ref_data_cpn1.place in
-  begin match check_place_refines_place env0 placeExpr0 env1 placeExpr1 with
-    Local x0, Local x1 -> raise (LocalAddressTaken (x0, x1))
+  begin match check_place_refines_place env0 caller0 placeExpr0 env1 caller1 placeExpr1 with
+    Local x0, Local x1 -> local_address_taken x0 x1
   | Nonlocal, Nonlocal -> ()
   end
 | ThreadLocalRef, ThreadLocalRef -> failwith "Rvalue::ThreadLocalRef not supported"
@@ -397,30 +440,31 @@ let check_rvalue_refines_rvalue env0 span0 rhsRvalue0 env1 span1 rhsRvalue1 =
   if op0 <> op1 then failwith "Rvalue::BinaryOp: operators do not match";
   let lhs0 = binary_op_data_cpn0.operandl in
   let lhs1 = binary_op_data_cpn1.operandl in
-  check_operand_refines_operand 0 env0 span0 lhs0 env1 span1 lhs1;
+  check_operand_refines_operand 0 env0 span0 caller0 lhs0 env1 span1 caller1 lhs1;
   let rhs0 = binary_op_data_cpn0.operandr in
   let rhs1 = binary_op_data_cpn1.operandr in
-  check_operand_refines_operand 1 env0 span0 rhs0 env1 span1 rhs1
+  check_operand_refines_operand 1 env0 span0 caller0 rhs0 env1 span1 caller1 rhs1
 | NullaryOp, NullaryOp -> failwith "Rvalue::NullaryOp not supported"
 | UnaryOp unary_op_data_cpn0, UnaryOp unary_op_data_cpn1 -> failwith "Rvalue::UnaryOp not supported"
 | Aggregate aggregate_data_cpn0, Aggregate aggregate_data_cpn1 ->
-  check_aggregate_refines_aggregate env0 span0 aggregate_data_cpn0 env1 span1 aggregate_data_cpn1
+  check_aggregate_refines_aggregate env0 span0 caller0 aggregate_data_cpn0 env1 span1 caller1 aggregate_data_cpn1
 | Discriminant place_cpn0, Discriminant place_cpn1 ->
-  begin match check_place_refines_place env0 place_cpn0 env1 place_cpn1 with
+  begin match check_place_refines_place env0 caller0 place_cpn0 env1 caller1 place_cpn1 with
     Local x0, Local x1 -> if List.assoc x0 env0 <> List.assoc x1 env1 then failwith "The discriminees of the two rvalues are not equal"
   | Nonlocal, Nonlocal -> ()
   end
 | ShallowInitBox, ShallowInitBox -> failwith "Rvalue::ShallowInitBox not supported"
 
+type loop_invariant = (local_variable_path * local_variable_path list) list (* For each local of the verified program, a list of the locals of the original program that have the same value at each iteration *)
+
 type basic_block_status =
-  NotSeen
-| Checking of int (* i_bb1 *) * (string * string list) list (* Candidate loop invariant: for each local of the verified program, a list of the locals of the original program that have the same value at each iteration *)
-| Checked of int (* i_bb1 *) * (string * string list) list (* Loop invariant that was used to verify this loop. *)
+  Checking of basic_block_path (* i_bb1 *) * loop_invariant (* Candidate loop invariant *)
+| Checked of basic_block_path (* i_bb1 *) * loop_invariant (* Loop invariant that was used to verify this loop. *)
 
-exception RecheckLoop of int (* i_bb0 *) (* When this is raised, the specified basic block's status has already been updated with a weakened candidate loop invariant *)
+exception RecheckLoop of basic_block_path (* i_bb0 *) (* When this is raised, the specified basic block's status has already been updated with a weakened candidate loop invariant *)
 
-let string_of_loop_inv loopInv =
-  String.concat "; " (List.map (fun (x, ys) -> Printf.sprintf "%s: [%s]" x (String.concat ", " ys)) loopInv)
+let string_of_loop_inv (loopInv: loop_invariant) =
+  String.concat "; " (List.map (fun (x, ys) -> Printf.sprintf "%s: [%s]" (string_of_lv_path x) (String.concat ", " (List.map string_of_lv_path ys))) loopInv)
 
 let local_name (locals: local_decl array) i = locals.(i).id.name
 
@@ -512,7 +556,7 @@ let check_predicate_refines_predicate pred0 pred1 =
       end
   | _ -> failwith "The two predicates have different kinds"
 
-let check_body_refines_body def_path body0 body1 =
+let check_body_refines_body verified_bodies def_path body0 body1 =
   Printf.printf "Checking function body %s\n" def_path;
   let visibility0 = body0.visibility in
   let visibility1 = body1.visibility in
@@ -538,80 +582,79 @@ let check_body_refines_body def_path body0 body1 =
   if inputs0 <> inputs1 then failwith "The two functions have different input types";
   let locals0 = Array.of_list body0.local_decls in
   let locals1 = Array.of_list body1.local_decls in
-  let bblocks0 = Array.of_list body0.basic_blocks in
-  let bblocks1 = Array.of_list body1.basic_blocks in
   let inputs = List.map (fun _ -> fresh_symbol ()) inputs0 in
+  (* We don't support the case where locals in inlined callees have their address taken, so address_taken always refers to locals of the root bodies. *)
   let rec check_body_refines_body_core address_taken =
-    let env0 = List.mapi (fun i v -> let x = local_name locals0 (i + 1) in if List.mem_assoc x address_taken then [] else [(x, Value v)]) inputs |> List.flatten in
-    let env1 = List.mapi (fun i v -> let x = local_name locals1 (i + 1) in if List.exists (fun (x0, x1) -> x1 = x) address_taken then [] else [(x, Value v)]) inputs |> List.flatten in
-    let address_taken0, address_taken1 = address_taken |> List.map (fun (x0, x1) -> let a = fresh_symbol () in ((x0, Address a), (x1, Address a))) |> List.split in
+    let env0 = List.mapi (fun i v -> let x = local_name locals0 (i + 1) in if List.mem_assoc x address_taken then [] else [{lv_caller=None; lv_name=x}, Value v]) inputs |> List.flatten in
+    let env1 = List.mapi (fun i v -> let x = local_name locals1 (i + 1) in if List.exists (fun (x0, x1) -> x1 = x) address_taken then [] else [{lv_caller=None; lv_name=x}, Value v]) inputs |> List.flatten in
+    let address_taken0, address_taken1 = address_taken |> List.map (fun (x0, x1) -> let a = fresh_symbol () in (({lv_caller=None; lv_name=x0}, Address a), ({lv_caller=None; lv_name=x1}, Address a))) |> List.split in
     let env0 = address_taken0 @ env0 in
     let env1 = address_taken1 @ env1 in
-    let bblocks0_statuses = Array.make (Array.length bblocks0) NotSeen in
-    let rec check_basic_block_refines_basic_block env0 i_bb0 env1 i_bb1 =
-      Printf.printf "INFO: In function %s, checking basic block %d against basic block %d, with env0 = [%s] and env1 = [%s]\n" def_path i_bb0 i_bb1 (string_of_env env0) (string_of_env env1);
-      match bblocks0_statuses.(i_bb0) with
-        NotSeen ->
+    let bblocks0_statuses: (basic_block_path, basic_block_status) Hashtbl.t = Hashtbl.create 100 in
+    let rec check_basic_block_refines_basic_block (env0: env) (i_bb0: basic_block_info) (env1: env) (i_bb1: basic_block_info) =
+      Printf.printf "INFO: In function %s, checking basic block %s against basic block %s, with env0 = [%s] and env1 = [%s]\n" def_path i_bb0#to_string i_bb1#to_string (string_of_env env0) (string_of_env env1);
+      match Hashtbl.find_opt bblocks0_statuses i_bb0#id with
+        None ->
           let loopInv = env1 |> List.map (fun (x, v1) -> (x, env0 |> List.concat_map (fun (y, v0) -> if v1 = v0 then [y] else []) )) in
-          bblocks0_statuses.(i_bb0) <- Checking (i_bb1, loopInv);
+          Hashtbl.replace bblocks0_statuses i_bb0#id (Checking (i_bb1#id, loopInv));
           let rec iter loopInv =
             try
               Printf.printf "Loop invariant = [%s]\n" (string_of_loop_inv loopInv);
               (* Havoc all locals of the original crate *)
               let env0, env1 = produce_loop_inv env0 env1 loopInv in
-              Printf.printf "INFO: In function %s, checking loop body at basic block %d against basic block %d, with env0 = [%s] and env1 = [%s]\n" def_path i_bb0 i_bb1 (string_of_env env0) (string_of_env env1);
-              check_codepos_refines_codepos env0 i_bb0 0 bblocks0.(i_bb0).statements env1 i_bb1 0 bblocks1.(i_bb1).statements;
-              let Checking (i_bb1, loopInv) = bblocks0_statuses.(i_bb0) in
-              bblocks0_statuses.(i_bb0) <- Checked (i_bb1, loopInv)
+              Printf.printf "INFO: In function %s, checking loop body at basic block %s against basic block %s, with env0 = [%s] and env1 = [%s]\n" def_path i_bb0#to_string i_bb1#to_string (string_of_env env0) (string_of_env env1);
+              check_codepos_refines_codepos env0 i_bb0 0 i_bb0#statements env1 i_bb1 0 i_bb1#statements;
+              let Checking (i_bb1, loopInv) = Hashtbl.find bblocks0_statuses i_bb0#id in
+              Hashtbl.replace bblocks0_statuses i_bb0#id (Checked (i_bb1, loopInv))
             with RecheckLoop i_bb0' as e ->
-              if i_bb0' <> i_bb0 then begin
-                bblocks0_statuses.(i_bb0) <- NotSeen;
+              if i_bb0' <> i_bb0#id then begin
+                Hashtbl.remove bblocks0_statuses i_bb0#id;
                 raise e
               end else
-                let Checking (i_bb1', loopInv) = bblocks0_statuses.(i_bb0) in
+                let Checking (i_bb1', loopInv) = Hashtbl.find bblocks0_statuses i_bb0#id in
                 iter loopInv
           in
           iter loopInv
-      | Checking (i_bb1', loopInv) ->
-        Printf.printf "INFO: In function %s, loop detected with head = basic block %d\n" def_path i_bb0;
-        if i_bb1' <> i_bb1 then failwith (Printf.sprintf "In function %s, loop head %d in the original crate is being checked for refinement against basic block %d in the verified crate, but it is already being checked for refinement against loop head %d in the verified crate" def_path i_bb0 i_bb1 i_bb1');
+      | Some (Checking (i_bb1', loopInv)) ->
+        Printf.printf "INFO: In function %s, loop detected with head = basic block %s\n" def_path i_bb0#to_string;
+        if i_bb1' <> i_bb1#id then failwith (Printf.sprintf "In function %s, loop head %s in the original crate is being checked for refinement against basic block %s in the verified crate, but it is already being checked for refinement against loop head %s in the verified crate" def_path i_bb0#to_string i_bb1#to_string (string_of_basic_block_path i_bb1'));
         if loopInv |> List.for_all @@ fun (x, ys) ->
           let v = List.assoc x env1 in
           ys |> List.for_all @@ fun y -> List.assoc y env0 = v
         then begin
-          Printf.printf "Loop with head %d verified, with loop invariant %s!\n" i_bb0 (string_of_loop_inv loopInv);
+          Printf.printf "Loop with head %s verified, with loop invariant %s!\n" i_bb0#to_string (string_of_loop_inv loopInv);
           () (* Use the induction hypothesis; this path is done. *)
         end else begin
-          Printf.printf "Loop with head %d failed to verify; trying again with weaker invariant\n" i_bb0;
+          Printf.printf "Loop with head %s failed to verify; trying again with weaker invariant\n" i_bb0#to_string;
           (* Forget about the earlier result; try from scratch *)
           let loopInv = loopInv |> List.map @@ fun (x, ys) ->
             let v = List.assoc x env1 in
             (x, ys |> List.filter @@ fun y -> List.assoc y env0 = v)
           in
-          bblocks0_statuses.(i_bb0) <- Checking (i_bb1, loopInv); (* Weaken the candidate loop invariant *)
-          raise (RecheckLoop i_bb0)
+          Hashtbl.replace bblocks0_statuses i_bb0#id (Checking (i_bb1#id, loopInv)); (* Weaken the candidate loop invariant *)
+          raise (RecheckLoop i_bb0#id)
         end
-      | Checked (i_bb1', loopInv) ->
-        if i_bb1' = i_bb1 && loopInv |> List.for_all @@ fun (x, ys) ->
+      | Some (Checked (i_bb1', loopInv)) ->
+        if i_bb1' = i_bb1#id && loopInv |> List.for_all @@ fun (x, ys) ->
           match List.assoc_opt x env1 with None -> false | Some v ->
           ys |> List.for_all @@ fun y -> match List.assoc_opt y env0 with None -> false | Some v' -> v' = v
         then begin
-          Printf.printf "Re-reached loop with head %d, that was already verified; path is done.\n" i_bb0;
+          Printf.printf "Re-reached loop with head %s, that was already verified; path is done.\n" i_bb0#to_string;
           () (* Use the induction hypothesis; this path is done. *)
         end else begin
           (* Forget about the earlier result; try from scratch *)
-          bblocks0_statuses.(i_bb0) <- NotSeen;
+          Hashtbl.remove bblocks0_statuses i_bb0#id;
           check_basic_block_refines_basic_block env0 i_bb0 env1 i_bb1
         end
     (* Checks whether for each behavior of code position (bb0, s0), code position (bb1, s1) has a matching behavior *)
     and check_codepos_refines_codepos env0 i_bb0 i_s0 ss_i0 env1 i_bb1 i_s1 ss_i1 =
-      let (env0, i_bb0, i_s0, ss_i0) = process_assignments bblocks0 env0 i_bb0 i_s0 ss_i0 in
-      let (env1, i_bb1, i_s1, ss_i1) = process_assignments bblocks1 env1 i_bb1 i_s1 ss_i1 in
-      let bb0 = bblocks0.(i_bb0) in
-      let bb1 = bblocks1.(i_bb1) in
+      let (env0, i_bb0, i_s0, ss_i0) = process_assignments env0 i_bb0 i_s0 ss_i0 in
+      let (env1, i_bb1, i_s1, ss_i1) = process_assignments env1 i_bb1 i_s1 ss_i1 in
+      let caller0 = i_bb0#id.bb_caller in
+      let caller1 = i_bb1#id.bb_caller in
       let check_terminator_refines_terminator env1 =
-        let terminator0 = bb0.terminator in
-        let terminator1 = bb1.terminator in
+        let terminator0 = i_bb0#terminator in
+        let terminator1 = i_bb1#terminator in
         let span0 = terminator0.source_info.span in
         let span1 = terminator1.source_info.span in
         Printf.printf "INFO: Checking that terminator at %s refines terminator at %s\n" (string_of_span span0) (string_of_span span1);
@@ -621,11 +664,11 @@ let check_body_refines_body def_path body0 body1 =
           (Goto bb_id0, Goto bb_id1) ->
             let bb_idx0 = Stdint.Uint32.to_int @@ bb_id0.index in
             let bb_idx1 = Stdint.Uint32.to_int @@ bb_id1.index in
-            check_basic_block_refines_basic_block env0 bb_idx0 env1 bb_idx1
+            check_basic_block_refines_basic_block env0 (i_bb0#sibling bb_idx0) env1 (i_bb1#sibling bb_idx1)
         | (SwitchInt switch_int_data0, SwitchInt switch_int_data1) ->
           let discr0 = switch_int_data0.discr in
           let discr1 = switch_int_data1.discr in
-          check_operand_refines_operand 0 env0 span0 discr0 env1 span1 discr1;
+          check_operand_refines_operand 0 env0 span0 caller0 discr0 env1 span1 caller1 discr1;
           let targets0 = switch_int_data0.targets in
           let targets1 = switch_int_data1.targets in
           let branches0 = targets0.branches in
@@ -641,7 +684,7 @@ let check_body_refines_body def_path body0 body1 =
             let target1bbid = target1.index in
             let target0bbidx = Stdint.Uint32.to_int target0bbid in
             let target1bbidx = Stdint.Uint32.to_int target1bbid in
-            check_basic_block_refines_basic_block env0 target0bbidx env1 target1bbidx
+            check_basic_block_refines_basic_block env0 (i_bb0#sibling target0bbidx) env1 (i_bb1#sibling target1bbidx)
           );
           let otherwise0 = targets0.otherwise in
           let otherwise1 = targets1.otherwise in
@@ -650,24 +693,24 @@ let check_body_refines_body def_path body0 body1 =
           | Something target0, Something target1 ->
             let target0bbidx = Stdint.Uint32.to_int target0.index in
             let target1bbidx = Stdint.Uint32.to_int target1.index in
-            check_basic_block_refines_basic_block env0 target0bbidx env1 target1bbidx
+            check_basic_block_refines_basic_block env0 (i_bb0#sibling target0bbidx) env1 (i_bb1#sibling target1bbidx)
           end
         | UnwindResume, UnwindResume -> ()
         | UnwindTerminate, UnwindTerminate -> ()
         | (Return, Return) ->
-            let retVal0 = List.assoc locals0.(0).id.name env0 in
-            let retVal1 = List.assoc locals1.(0).id.name env1 in
+            let retVal0 = List.assoc {lv_caller=None; lv_name=locals0.(0).id.name} env0 in
+            let retVal1 = List.assoc {lv_caller=None; lv_name=locals1.(0).id.name} env1 in
             if retVal0 <> retVal1 then
-              failwith (Printf.sprintf "In function %s, at basic block %d in the original crate and basic block %d in the verified crate, the return values are not equal" def_path i_bb0 i_bb1)
+              failwith (Printf.sprintf "In function %s, at basic block %s in the original crate and basic block %s in the verified crate, the return values are not equal" def_path i_bb0#to_string i_bb1#to_string)
         | _, Unreachable -> ()
         | (Call call0, Call call1) ->
           let func0 = call0.func in
           let func1 = call1.func in
-          check_operand_refines_operand 0 env0 span0 func0 env1 span1 func1;
+          check_operand_refines_operand 0 env0 span0 caller0 func0 env1 span1 caller1 func1;
           let args0 = call0.args in
           let args1 = call1.args in
           List.combine args0 args1 |> List.iteri (fun i (arg0, arg1) ->
-            check_operand_refines_operand (i + 1) env0 span0 arg0 env1 span1 arg1
+            check_operand_refines_operand (i + 1) env0 span0 caller0 arg0 env1 span1 caller1 arg1
           );
           let dest0 = call0.destination in
           let dest1 = call1.destination in
@@ -681,13 +724,13 @@ let check_body_refines_body def_path body0 body1 =
             let dest0bbidx = Stdint.Uint32.to_int dest0bbid.index in
             let dest1bbidx = Stdint.Uint32.to_int dest1bbid.index in
             let result = fresh_symbol () in
-            begin match check_place_refines_place env0 dest0PlaceExpr env1 dest1PlaceExpr with
+            begin match check_place_refines_place env0 caller0 dest0PlaceExpr env1 caller1 dest1PlaceExpr with
               Local x0, Local x1 ->
               let env0 = update_env x0 (Value result) env0 in
               let env1 = update_env x1 (Value result) env1 in
-              check_basic_block_refines_basic_block env0 dest0bbidx env1 dest1bbidx
+              check_basic_block_refines_basic_block env0 (i_bb0#sibling dest0bbidx) env1 (i_bb1#sibling dest1bbidx)
             | Nonlocal, Nonlocal ->
-              check_basic_block_refines_basic_block env0 dest0bbidx env1 dest1bbidx
+              check_basic_block_refines_basic_block env0 (i_bb0#sibling dest0bbidx) env1 (i_bb1#sibling dest1bbidx)
             end
           end
         | Drop drop_data0, Drop drop_data1 -> failwith "Drop not supported"
@@ -711,10 +754,10 @@ let check_body_refines_body def_path body0 body1 =
           (Assign assign_data0, Assign assign_data1) ->
             let rhsRvalue0 = assign_data0.rhs_rvalue in
             let rhsRvalue1 = assign_data1.rhs_rvalue in
-            check_rvalue_refines_rvalue env0 stmtSpan0 rhsRvalue0 env1 stmtSpan1 rhsRvalue1;
+            check_rvalue_refines_rvalue env0 stmtSpan0 caller0 rhsRvalue0 env1 stmtSpan1 caller1 rhsRvalue1;
             let lhsPlace0 = assign_data0.lhs_place in
             let lhsPlace1 = assign_data1.lhs_place in
-            begin match check_place_refines_place env0 lhsPlace0 env1 lhsPlace1 with
+            begin match check_place_refines_place env0 caller0 lhsPlace0 env1 caller1 lhsPlace1 with
               Local x0, Local x1 ->
               let rhsValue = fresh_symbol () in
               let env0 = update_env x0 (Value rhsValue) env0 in
@@ -724,8 +767,6 @@ let check_body_refines_body def_path body0 body1 =
               check_codepos_refines_codepos env0 i_bb0 (i_s0 + 1) ss_i0_plus_1 env1 i_bb1 (i_s1 + 1) ss_i1_plus_1
             end
       in
-      let stmts0 = bb0.statements in
-      let stmts1 = bb1.statements in
       if ss_i0 = [] then
         let rec iter env1 i_s1 (ss_i1: statement list) =
           (* Process assignments of the form `x = &*y;` where x and y are locals whose address is not taken.
@@ -735,7 +776,7 @@ let check_body_refines_body def_path body0 body1 =
             [] -> check_terminator_refines_terminator env1
           | stmt1::ss_i1_plus_1 ->
             let fail () =
-              failwith (Printf.sprintf "In function %s, cannot prove that the terminator of basic block %d in the original version refines statement %d of basic block %d in the verified version" def_path i_bb0 i_s1 i_bb1)
+              failwith (Printf.sprintf "In function %s, cannot prove that the terminator of basic block %s in the original version refines statement %d of basic block %s in the verified version" def_path i_bb0#to_string i_s1 i_bb1#to_string)
             in
             match stmt1.kind with
               Assign assign_data1 ->
@@ -748,22 +789,24 @@ let check_body_refines_body def_path body0 body1 =
                         let rhsPlaceExpr1 = ref_data_cpn1.place in
                         let rhsPlaceLocalId1 = rhsPlaceExpr1.local in
                         let rhsPlaceLocalName1 = rhsPlaceLocalId1.name in
+                        let rhsPlaceLocalPath1 = {lv_caller=caller1; lv_name=rhsPlaceLocalName1} in
                         let rhsPlaceProjection1 = rhsPlaceExpr1.projection in
                         if List.length rhsPlaceProjection1 <> 1 then fail ();
                         let rhsPlaceProjectionElem1 = List.hd rhsPlaceProjection1 in
                         begin match rhsPlaceProjectionElem1 with
                           Deref ->
-                            begin match List.assoc_opt rhsPlaceLocalName1 env1 with
+                            begin match List.assoc_opt rhsPlaceLocalPath1 env1 with
                               Some (Value rhsValue) ->
                                 let lhsPlaceExpr1 = assign_data1.lhs_place in
                                 let lhsPlaceLocalId1 = lhsPlaceExpr1.local in
                                 let lhsPlaceLocalName1 = lhsPlaceLocalId1.name in
+                                let lhsPlaceLocalPath1 = {lv_caller=caller1; lv_name=lhsPlaceLocalName1} in
                                 let lhsPlaceProjection1 = lhsPlaceExpr1.projection in
                                 if lhsPlaceProjection1 <> [] then fail ();
-                                begin match List.assoc_opt lhsPlaceLocalName1 env1 with
+                                begin match List.assoc_opt lhsPlaceLocalPath1 env1 with
                                   Some (Address _) -> fail ()
                                 | _ ->
-                                  let env1 = update_env lhsPlaceLocalName1 (Value rhsValue) env1 in
+                                  let env1 = update_env lhsPlaceLocalPath1 (Value rhsValue) env1 in
                                   iter env1 (i_s1 + 1) ss_i1_plus_1
                                 end
                             | _ -> fail ()
@@ -779,12 +822,12 @@ let check_body_refines_body def_path body0 body1 =
         iter env1 i_s1 ss_i1
       else
         if ss_i1 = [] then
-          failwith (Printf.sprintf "In function %s, cannot prove that statement %d of basic block %d in the original version refines the terminator of basic block %d in the verified version" def_path i_s0 i_bb0 i_bb1)
+          failwith (Printf.sprintf "In function %s, cannot prove that statement %d of basic block %s in the original version refines the terminator of basic block %s in the verified version" def_path i_s0 i_bb0#to_string i_bb1#to_string)
         else
           check_statement_refines_statement ()
     in
     try
-      check_basic_block_refines_basic_block env0 0 env1 0
+      check_basic_block_refines_basic_block env0 (basic_block_info_of (Array.of_list body0.basic_blocks) 0) env1 (basic_block_info_of (Array.of_list body1.basic_blocks) 0)
     with LocalAddressTaken (x0, x1) ->
       let address_taken = (x0, x1) :: address_taken in
       Printf.printf "Caught LocalAddressTaken; restarting with address_taken = %s\n" (String.concat ", " (List.map (fun (x0, x1) -> Printf.sprintf "%s = %s" x0 x1) address_taken));

@@ -89,7 +89,7 @@ let check_body_refines_body def_path body verified_body =
   else (
     Printf.printf
       "Function bodies for %s are different; checking refinement...\n" def_path;
-    check_body_refines_body def_path body verified_body;
+    check_body_refines_body verified_bodies def_path body verified_body;
     push original_checked_spans (decode_body_span body);
     push verified_checked_spans (decode_body_span verified_body))
 
