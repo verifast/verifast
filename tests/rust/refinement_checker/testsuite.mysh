@@ -19,5 +19,6 @@ begin_parallel
   !refinement-checker unsafety_orig.rs unsafety_verified_bad.rs
   refinement-checker wrapper_fns_orig.rs wrapper_fns_verified0.rs
   refinement-checker wrapper_fns_orig.rs wrapper_fns_verified.rs
+  refinement-checker wrapper_fns_orig.rs wrapper_fns_verified2.rs
   !refinement-checker wrapper_fns_orig.rs wrapper_fns_verified_bad.rs
 end_parallel

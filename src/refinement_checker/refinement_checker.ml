@@ -3,6 +3,10 @@ type 'a option = 'a Option.t
 module VfMir = S
 module VfMirRd = VfMir.Reader
 
+let string_of_mutability: mutability -> string = function
+  Mut -> "Mut"
+| Not -> "Not"
+
 let error msg =
   Printf.printf "ERROR: %s\n" msg;
   exit 1
@@ -55,9 +59,29 @@ type literal_const_expr =
 | USizeValue of int (* size, in bytes; typically 8 *) * Stdint.uint64
 | CharValue of Stdint.uint32
 
+let string_of_literal_const_expr = function
+  BoolValue b -> Printf.sprintf "BoolValue %b" b
+| I8Value i -> Printf.sprintf "I8Value %s" (Stdint.Int8.to_string i)
+| I16Value i -> Printf.sprintf "I16Value %s" (Stdint.Int16.to_string i)
+| I32Value i -> Printf.sprintf "I32Value %s" (Stdint.Int32.to_string i)
+| I64Value i -> Printf.sprintf "I64Value %s" (Stdint.Int64.to_string i)
+| I128Value i -> Printf.sprintf "I128Value %s" (Stdint.Int128.to_string i)
+| ISizeValue (size, i) -> Printf.sprintf "ISizeValue %d %s" size (Stdint.Int64.to_string i)
+| U8Value i -> Printf.sprintf "U8Value %s" (Stdint.Uint8.to_string i)
+| U16Value i -> Printf.sprintf "U16Value %s" (Stdint.Uint16.to_string i)
+| U32Value i -> Printf.sprintf "U32Value %s" (Stdint.Uint32.to_string i)
+| U64Value i -> Printf.sprintf "U64Value %s" (Stdint.Uint64.to_string i)
+| U128Value i -> Printf.sprintf "U128Value %s" (Stdint.Uint128.to_string i)
+| USizeValue (size, i) -> Printf.sprintf "USizeValue %d %s" size (Stdint.Uint64.to_string i)
+| CharValue i -> Printf.sprintf "CharValue %s" (Stdint.Uint32.to_string i)
+
 type const_expr =
   ParamConstExpr of string
 | LiteralConstExpr of literal_const_expr
+
+let string_of_const_expr = function
+  ParamConstExpr param -> Printf.sprintf "ParamConstExpr %s" param
+| LiteralConstExpr literal -> string_of_literal_const_expr literal
 
 let decode_uint128 uint128_cpn =
   let h = uint128_cpn.h in
@@ -67,6 +91,9 @@ let decode_uint128 uint128_cpn =
 type adt_kind = Struct | Enum | Union
 
 type region = Region of string
+
+let string_of_region = function
+  Region s -> s
 
 type ty =
   Bool
@@ -89,7 +116,27 @@ and gen_arg =
 | Type of ty
 | Const of const_expr
 
-let string_of_gen_arg genArg = "(gen arg)"
+let rec string_of_ty = function
+  Bool -> "Bool"
+| Int (FixedWidth n) -> Printf.sprintf "Int (FixedWidth %d)" n
+| Int PtrWidth -> "Int PtrWidth"
+| UInt (FixedWidth n) -> Printf.sprintf "UInt (FixedWidth %d)" n
+| UInt PtrWidth -> "UInt PtrWidth"
+| Char -> "Char"
+| Adt (name, kind, args) -> Printf.sprintf "Adt %s %s" name (String.concat "; " (List.map string_of_gen_arg args))
+| RawPtr ty -> Printf.sprintf "RawPtr %s" (string_of_ty ty)
+| Ref (region, ty, mutability) -> Printf.sprintf "Ref %s %s %s" (string_of_region region) (string_of_ty ty) (string_of_mutability mutability)
+| FnDef (id, args) -> Printf.sprintf "FnDef %s %s" id (String.concat "; " (List.map string_of_gen_arg args))
+| Never -> "Never"
+| Tuple tys -> Printf.sprintf "Tuple [%s]" (String.concat "; " (List.map string_of_ty tys))
+| Param param -> Printf.sprintf "Param %s" param
+| Str -> "Str"
+| Array (ty, size) -> Printf.sprintf "Array %s %s" (string_of_ty ty) (string_of_const_expr size)
+| Slice ty -> Printf.sprintf "Slice %s" (string_of_ty ty)
+and string_of_gen_arg = function
+  Lifetime region -> Printf.sprintf "Lifetime %s" (string_of_region region)
+| Type ty -> Printf.sprintf "Type %s" (string_of_ty ty)
+| Const const -> Printf.sprintf "Const %s" (string_of_const_expr const)
 
 let decode_scalar_int ty scalar_int_cpn =
   let data = decode_uint128 scalar_int_cpn.data in
@@ -110,7 +157,25 @@ let decode_scalar_int ty scalar_int_cpn =
   | UInt PtrWidth, _ -> USizeValue (size, Stdint.Uint128.to_uint64 data)
   | Char, 4 -> CharValue (Stdint.Uint128.to_uint32 data)
 
-let rec decode_ty (ty_cpn: Vf_mir_decoder.ty) =
+type generic_env = {
+  lifetimes: (string * region) list;
+  types: (string * ty) list;
+  consts: (string * const_expr) list;
+}
+
+let string_of_genv genv =
+  Printf.sprintf "{lifetimes=[%s]; types=[%s]; consts=[%s]}"
+    (String.concat "; " (List.map (fun (name, region) -> Printf.sprintf "%s: %s" name (string_of_region region)) genv.lifetimes))
+    (String.concat "; " (List.map (fun (name, ty) -> Printf.sprintf "%s: %s" name (string_of_ty ty)) genv.types))
+    (String.concat "; " (List.map (fun (name, const) -> Printf.sprintf "%s: %s" name (string_of_const_expr const)) genv.consts))
+
+let decode_lifetime genv: Vf_mir_decoder.region -> region = function
+  {id="'<erased>"} -> Region "'<erased>"
+| {id} ->
+  try List.assoc id genv.lifetimes
+  with Not_found -> failwith ("No such lifetime: " ^ id)
+
+let rec decode_ty (genv: generic_env) (ty_cpn: Vf_mir_decoder.ty) =
   match ty_cpn.kind with
     Bool -> Bool
   | Int int_ty_cpn ->
@@ -140,37 +205,37 @@ let rec decode_ty (ty_cpn: Vf_mir_decoder.ty) =
       | EnumKind -> Enum
       | UnionKind -> Union
     in
-    let args = List.map decode_gen_arg adt_ty_cpn.substs in
+    let args = List.map (decode_gen_arg genv) adt_ty_cpn.substs in
     Adt (name, kind, args)
-  | RawPtr raw_ptr_ty_cpn -> RawPtr (decode_ty raw_ptr_ty_cpn.ty)
+  | RawPtr raw_ptr_ty_cpn -> RawPtr (decode_ty genv raw_ptr_ty_cpn.ty)
   | Ref ref_ty_cpn ->
-    let region = Region ref_ty_cpn.region.id in
+    let region = decode_lifetime genv ref_ty_cpn.region in
     let ty = ref_ty_cpn.ty in
     let mutability = ref_ty_cpn.mutability in
-    Ref (region, decode_ty ty, mutability)
+    Ref (region, decode_ty genv ty, mutability)
   | FnDef fn_def_ty_cpn ->
     let id = fn_def_ty_cpn.id.name in
-    let args = List.map decode_gen_arg fn_def_ty_cpn.substs in
+    let args = List.map (decode_gen_arg genv) fn_def_ty_cpn.substs in
     FnDef (id, args)
   | Never -> Never
-  | Tuple tys -> Tuple (List.map decode_ty tys)
-  | Param param -> Param param
+  | Tuple tys -> Tuple (List.map (decode_ty genv) tys)
+  | Param param -> List.assoc param genv.types
   | Str -> Str
   | Array array_ty_cpn ->
-    let elem_ty = decode_ty array_ty_cpn.elem_ty in
-    let size = decode_const_expr array_ty_cpn.size in
+    let elem_ty = decode_ty genv array_ty_cpn.elem_ty in
+    let size = decode_const_expr genv array_ty_cpn.size in
     Array (elem_ty, size)
-  | Slice ty_cpn -> Slice (decode_ty ty_cpn)
-and decode_gen_arg gen_arg_cpn =
+  | Slice ty_cpn -> Slice (decode_ty genv ty_cpn)
+and decode_gen_arg genv gen_arg_cpn =
   match gen_arg_cpn.kind with
-    Lifetime lifetime -> Lifetime (Region lifetime.id)
-  | Type ty -> Type (decode_ty ty)
-  | Const const -> Const (decode_const_expr const)
-and decode_const_expr const_cpn =
+    Lifetime lifetime -> Lifetime (decode_lifetime genv lifetime)
+  | Type ty -> Type (decode_ty genv ty)
+  | Const const -> Const (decode_const_expr genv const)
+and decode_const_expr genv const_cpn =
   match const_cpn.kind with
-    Param param -> ParamConstExpr param.name
+    Param param -> List.assoc param.name genv.consts
   | Value value_cpn ->
-    let ty = decode_ty value_cpn.ty in
+    let ty = decode_ty genv value_cpn.ty in
     let valtree = value_cpn.val_tree in
     match valtree with
       Leaf scalar_int_cpn -> LiteralConstExpr (decode_scalar_int ty scalar_int_cpn)
@@ -198,12 +263,12 @@ let string_of_local_var_state = function
   Value v -> Printf.sprintf "Value %s" (string_of_term v)
 | Address v -> Printf.sprintf "Address %s" (string_of_term v)
 
-let eval_const_operand const_operand_cpn =
+let eval_const_operand genv const_operand_cpn =
   let mir_const_cpn = const_operand_cpn.const in
   match mir_const_cpn with
     Ty mir_ty_const_cpn -> failwith "Using typesystem constant expressions as MIR constant operands is not yet supported"
   | Val mir_val_const_cpn ->
-    let ty = decode_ty mir_val_const_cpn.ty in
+    let ty = decode_ty genv mir_val_const_cpn.ty in
     let mir_const_value_cpn = mir_val_const_cpn.const_value in
     begin match mir_const_value_cpn with
       Scalar scalar_cpn ->
@@ -243,6 +308,7 @@ let update_env x v env = (x, v) :: List.remove_assoc x env
 
 type basic_block_info = <
   id: basic_block_path;
+  genv: generic_env;
   statements: statement list;
   terminator: terminator;
   to_string: string;
@@ -250,15 +316,16 @@ type basic_block_info = <
   caller: (string (* callee result variable *) * place (* destination place *) * basic_block_info (* destination basic block *)) option;
 >
 
-let rec basic_block_info_of bbs bb_idx =
+let rec basic_block_info_of genv bbs bb_idx =
   let bb = bbs.(bb_idx) in
   let id = {bb_caller=None; bb_index=bb_idx} in
   object
     method id = id
+    method genv = genv
     method statements = bb.statements
     method terminator = bb.terminator
-    method to_string = Printf.sprintf "%s" (string_of_basic_block_path id)
-    method sibling i = basic_block_info_of bbs i
+    method to_string = string_of_basic_block_path id
+    method sibling i = basic_block_info_of genv bbs i
     method caller = None
   end
 
@@ -270,6 +337,7 @@ let rec process_assignments bodies (env: env) (i_bb: basic_block_info) i_s (ss_i
     begin match i_bb#terminator.kind with
       Call ({func=Constant {const=Val {const_value=ZeroSized; ty={kind=FnDef {id={name=funcName}; substs}}}}} as call) when String.ends_with ~suffix:"__VeriFast_wrapper" funcName ->
       let {args; destination; unwind_action} = call in
+      let substs = List.map (decode_gen_arg i_bb#genv) substs in
       let args = args |> List.map @@ fun arg ->
         match arg with
           Move place | Copy place ->
@@ -287,6 +355,21 @@ let rec process_assignments bodies (env: env) (i_bb: basic_block_info) i_s (ss_i
       in
       let caller = Some i_bb#id in
       let body: body = List.assoc funcName bodies in
+      let generic_params = body.generics in
+      let genv =
+        let rec iter lifetimes types consts (generic_params: generic_param_def list) substs =
+          match generic_params, substs with
+            [], [] -> {lifetimes; types; consts}
+          | {name; kind=Lifetime}::generic_params, Lifetime lifetime::substs ->
+            iter ((name, lifetime)::lifetimes) types consts generic_params substs
+          | {name; kind=Type}::generic_params, Type ty::substs ->
+            iter lifetimes ((name, ty)::types) consts generic_params substs
+          | {name; kind=Const}::generic_params, Const const::substs ->
+            iter lifetimes types ((name, const)::consts) generic_params substs
+        in
+        iter [] [] [] generic_params substs
+      in
+      Printf.printf "Entering wrapper call %s with genv=%s\n" funcName (string_of_genv genv);
       let bbs = Array.of_list body.basic_blocks in
       let locals = Array.of_list body.local_decls in
       let env = List.mapi (fun i v -> let x = local_name locals (i + 1) in {lv_caller=caller; lv_name=x}, Value v) args @ env in
@@ -299,9 +382,10 @@ let rec process_assignments bodies (env: env) (i_bb: basic_block_info) i_s (ss_i
         let callee_bb_id = {bb_caller=caller; bb_index=i} in
         object
         method id = callee_bb_id
+        method genv = genv
         method statements = bbs.(i).statements
         method terminator = bbs.(i).terminator
-        method to_string = Printf.sprintf "Basic block %s" (string_of_basic_block_path callee_bb_id)
+        method to_string = string_of_basic_block_path callee_bb_id
         method sibling i = bb_info_of i
         method caller = caller_info
       end in
@@ -418,7 +502,7 @@ let check_place_refines_place (env0: env) caller0 place0 (env1: env) caller1 pla
       local_address_taken placeLocalPath0 placeLocalPath1;
     Local placeLocalPath0, Local placeLocalPath1
 
-let check_operand_refines_operand i env0 span0 caller0 operand0 env1 span1 caller1 operand1 =
+let check_operand_refines_operand i genv0 env0 span0 caller0 operand0 genv1 env1 span1 caller1 operand1 =
   match operand0, operand1 with
     (Move placeExpr0, Move placeExpr1) | (Copy placeExpr0, Copy placeExpr1) ->
       begin match check_place_refines_place env0 caller0 placeExpr0 env1 caller1 placeExpr1 with
@@ -431,13 +515,15 @@ let check_operand_refines_operand i env0 span0 caller0 operand0 env1 span1 calle
       | Nonlocal, Nonlocal -> ()
         end
   | Constant const_operand_cpn0, Constant const_operand_cpn1 ->
-    if eval_const_operand const_operand_cpn0 <> eval_const_operand const_operand_cpn1 then failwith (Printf.sprintf "The constants %s and %s are not equal" (string_of_span span0) (string_of_span span1))
+    let term0 = eval_const_operand genv0 const_operand_cpn0 in
+    let term1 = eval_const_operand genv1 const_operand_cpn1 in
+    if term0 <> term1 then failwith (Printf.sprintf "The constants %s at %s and %s at %s are not equal" (string_of_term term0) (string_of_span span0) (string_of_term term1) (string_of_span span1))
 
-let check_aggregate_refines_aggregate env0 span0 caller0 aggregate0 env1 span1 caller1 aggregate1 =
+let check_aggregate_refines_aggregate genv0 env0 span0 caller0 aggregate0 genv1 env1 span1 caller1 aggregate1 =
   let operands0 = aggregate0.operands in
   let operands1 = aggregate1.operands in
   if List.length operands0 <> List.length operands1 then failwith "The two aggregate expressions have a different number of operands";
-  List.iteri (fun i (operand0, operand1) -> check_operand_refines_operand i env0 span0 caller0 operand0 env1 span1 caller1 operand1) (List.combine operands0 operands1);
+  List.iteri (fun i (operand0, operand1) -> check_operand_refines_operand i genv0 env0 span0 caller0 operand0 genv1 env1 span1 caller1 operand1) (List.combine operands0 operands1);
   let aggregate_kind0 = aggregate0.aggregate_kind in
   let aggregate_kind1 = aggregate1.aggregate_kind in
   match aggregate_kind0, aggregate_kind1 with
@@ -454,7 +540,7 @@ let check_aggregate_refines_aggregate env0 span0 caller0 aggregate0 env1 span1 c
     if variant_idx0 <> variant_idx1 then failwith "Aggregate::Adt: variant indices do not match";
     let genArgs0 = adt_data0.gen_args in
     let genArgs1 = adt_data1.gen_args in
-    if List.map decode_gen_arg genArgs0 <> List.map decode_gen_arg genArgs1 then failwith "Aggregate::Adt: generic arguments do not match";
+    if List.map (decode_gen_arg genv0) genArgs0 <> List.map (decode_gen_arg genv1) genArgs1 then failwith "Aggregate::Adt: generic arguments do not match";
     let union_active_field_idx0 = adt_data0.union_active_field in
     let union_active_field_idx1 = adt_data1.union_active_field in
     if union_active_field_idx0 <> union_active_field_idx1 then failwith "Aggregate::Adt: union active field indices do not match";
@@ -466,10 +552,10 @@ let check_aggregate_refines_aggregate env0 span0 caller0 aggregate0 env1 span1 c
   | _ -> failwith "Aggregate kinds do not match"
 
 (* Checks that the two rvalues evaluate to the same value *)
-let check_rvalue_refines_rvalue env0 span0 caller0 rhsRvalue0 env1 span1 caller1 rhsRvalue1 =
+let check_rvalue_refines_rvalue genv0 env0 span0 caller0 rhsRvalue0 genv1 env1 span1 caller1 rhsRvalue1 =
   match rhsRvalue0, rhsRvalue1 with
   Use operand0, Use operand1 ->
-    check_operand_refines_operand 0 env0 span0 caller0 operand0 env1 span1 caller1 operand1
+    check_operand_refines_operand 0 genv0 env0 span0 caller0 operand0 genv1 env1 span1 caller1 operand1
 | Repeat, Repeat -> failwith "Rvalue::Repeat not supported"
 | Ref ref_data_cpn0, Ref ref_data_cpn1 ->
   (* We ignore the region because it does not affect the run-time behavior *)
@@ -496,14 +582,14 @@ let check_rvalue_refines_rvalue env0 span0 caller0 rhsRvalue0 env1 span1 caller1
   if op0 <> op1 then failwith "Rvalue::BinaryOp: operators do not match";
   let lhs0 = binary_op_data_cpn0.operandl in
   let lhs1 = binary_op_data_cpn1.operandl in
-  check_operand_refines_operand 0 env0 span0 caller0 lhs0 env1 span1 caller1 lhs1;
+  check_operand_refines_operand 0 genv0 env0 span0 caller0 lhs0 genv1 env1 span1 caller1 lhs1;
   let rhs0 = binary_op_data_cpn0.operandr in
   let rhs1 = binary_op_data_cpn1.operandr in
-  check_operand_refines_operand 1 env0 span0 caller0 rhs0 env1 span1 caller1 rhs1
+  check_operand_refines_operand 1 genv0 env0 span0 caller0 rhs0 genv1 env1 span1 caller1 rhs1
 | NullaryOp, NullaryOp -> failwith "Rvalue::NullaryOp not supported"
 | UnaryOp unary_op_data_cpn0, UnaryOp unary_op_data_cpn1 -> failwith "Rvalue::UnaryOp not supported"
 | Aggregate aggregate_data_cpn0, Aggregate aggregate_data_cpn1 ->
-  check_aggregate_refines_aggregate env0 span0 caller0 aggregate_data_cpn0 env1 span1 caller1 aggregate_data_cpn1
+  check_aggregate_refines_aggregate genv0 env0 span0 caller0 aggregate_data_cpn0 genv1 env1 span1 caller1 aggregate_data_cpn1
 | Discriminant place_cpn0, Discriminant place_cpn1 ->
   begin match check_place_refines_place env0 caller0 place_cpn0 env1 caller1 place_cpn1 with
     Local x0, Local x1 -> if List.assoc x0 env0 <> List.assoc x1 env1 then failwith "The discriminees of the two rvalues are not equal"
@@ -575,7 +661,7 @@ let decode_generic_param (generic_param: generic_param_def) =
   in
   name, kind
 
-let check_predicate_refines_predicate pred0 pred1 =
+let check_predicate_refines_predicate genv0 pred0 genv1 pred1 =
   match pred0, pred1 with
     Outlives outlives_pred0, Outlives outlives_pred1 ->
       let region1_0 = outlives_pred0.region1 in
@@ -590,7 +676,7 @@ let check_predicate_refines_predicate pred0 pred1 =
       if trait_id0 <> trait_id1 then failwith "The two trait predicates have different trait IDs";
       let generic_args0 = trait_pred0.args in
       let generic_args1 = trait_pred1.args in
-      if List.map decode_gen_arg generic_args0 <> List.map decode_gen_arg generic_args1 then failwith "The two trait predicates have different generic arguments"
+      if List.map (decode_gen_arg genv0) generic_args0 <> List.map (decode_gen_arg genv1) generic_args1 then failwith "The two trait predicates have different generic arguments"
   | Projection projection_pred0, Projection projection_pred1 ->
       let proj_term0 = projection_pred0.projection_term in
       let proj_term1 = projection_pred1.projection_term in
@@ -599,14 +685,14 @@ let check_predicate_refines_predicate pred0 pred1 =
       if proj_term_def_id0 <> proj_term_def_id1 then failwith "The two projection predicates have different alias identifiers";
       let proj_term_generic_args0 = proj_term0.args in
       let proj_term_generic_args1 = proj_term1.args in
-      if List.map decode_gen_arg proj_term_generic_args0 <> List.map decode_gen_arg proj_term_generic_args1 then failwith "The two projection predicates have different alias generic arguments";
+      if List.map (decode_gen_arg genv0) proj_term_generic_args0 <> List.map (decode_gen_arg genv1) proj_term_generic_args1 then failwith "The two projection predicates have different alias generic arguments";
       let rhs0 = projection_pred0.term in
       let rhs1 = projection_pred1.term in
       begin match rhs0, rhs1 with
         Ty ty0, Ty ty1 ->
-          if decode_ty ty0 <> decode_ty ty1 then failwith "The two projection predicates have different right-hand side types"
+          if decode_ty genv0 ty0 <> decode_ty genv1 ty1 then failwith "The two projection predicates have different right-hand side types"
       | Const const0, Const const1 ->
-          if decode_const_expr const0 <> decode_const_expr const1 then failwith "The two projection predicates have different right-hand side constants"
+          if decode_const_expr genv0 const0 <> decode_const_expr genv1 const1 then failwith "The two projection predicates have different right-hand side constants"
       end
   | _ -> failwith "The two predicates have different kinds"
 
@@ -617,22 +703,35 @@ let check_body_refines_body verified_bodies def_path body0 body1 =
   if visibility0 <> visibility1 then failwith "The two functions have different visibilities";
   let unsafety0 = body0.unsafety in
   let unsafety1 = body1.unsafety in
-  (* We allow private functions to have different visibility *)
+  (* We allow private functions to have different unsafety *)
   if visibility0 = Public && unsafety0 = Safe && unsafety1 = Unsafe then failwith "The two functions have different unsafety";
   let generics0 = body0.generics in
   let generics1 = body1.generics in
   if List.length generics0 <> List.length generics1 then failwith "The two functions have a different number of generic parameters";
   let generics0 = List.map decode_generic_param generics0 in
   let generics1 = List.map decode_generic_param generics1 in
-  if generics0 <> generics1 then failwith "The two functions have different generic parameters";
+  let root_genv0, root_genv1 =
+    let rec iter lifetimes0 lifetimes1 types0 types1 consts0 consts1 generics0 generics1 =
+      match generics0, generics1 with
+        [], [] -> {lifetimes=lifetimes0; types=types0; consts=consts0}, {lifetimes=lifetimes1; types=types1; consts=consts1}
+      | (name0, Lifetime)::generics0, (name1, Lifetime)::generics1 ->
+        iter ((name0, Region name0)::lifetimes0) ((name1, Region name0)::lifetimes1) types0 types1 consts0 consts1 generics0 generics1
+      | (name0, Type)::generics0, (name1, Type)::generics1 ->
+        iter lifetimes0 lifetimes1 ((name0, Param name0)::types0) ((name1, Param name0)::types1) consts0 consts1 generics0 generics1
+      | (name0, Const)::generics0, (name1, Const)::generics1 ->
+        iter lifetimes0 lifetimes1 types0 types1 ((name0, ParamConstExpr name0)::consts0) ((name1, ParamConstExpr name0)::consts1) generics0 generics1
+      | _ -> failwith "The two functions have different kinds of generic parameters"
+    in
+    iter [] [] [] [] [] [] generics0 generics1
+  in
   let preds0 = body0.predicates in
   let preds1 = body1.predicates in
   if List.length preds0 <> List.length preds1 then failwith "The two functions have a different number of predicates";
-  List.iter2 check_predicate_refines_predicate preds0 preds1;
+  List.iter2 (fun pred0 pred1 -> check_predicate_refines_predicate root_genv0 pred0 root_genv1 pred1) preds0 preds1;
   let inputs0 = body0.inputs in
   let inputs1 = body1.inputs in
-  let inputs0 = List.map decode_ty inputs0 in
-  let inputs1 = List.map decode_ty inputs1 in
+  let inputs0 = List.map (decode_ty root_genv0) inputs0 in
+  let inputs1 = List.map (decode_ty root_genv1) inputs1 in
   if inputs0 <> inputs1 then failwith "The two functions have different input types";
   let locals0 = Array.of_list body0.local_decls in
   let locals1 = Array.of_list body1.local_decls in
@@ -722,7 +821,7 @@ let check_body_refines_body verified_bodies def_path body0 body1 =
         | (SwitchInt switch_int_data0, SwitchInt switch_int_data1) ->
           let discr0 = switch_int_data0.discr in
           let discr1 = switch_int_data1.discr in
-          check_operand_refines_operand 0 env0 span0 caller0 discr0 env1 span1 caller1 discr1;
+          check_operand_refines_operand 0 i_bb0#genv env0 span0 caller0 discr0 i_bb1#genv env1 span1 caller1 discr1;
           let targets0 = switch_int_data0.targets in
           let targets1 = switch_int_data1.targets in
           let branches0 = targets0.branches in
@@ -760,11 +859,11 @@ let check_body_refines_body verified_bodies def_path body0 body1 =
         | (Call call0, Call call1) ->
           let func0 = call0.func in
           let func1 = call1.func in
-          check_operand_refines_operand 0 env0 span0 caller0 func0 env1 span1 caller1 func1;
+          check_operand_refines_operand 0 i_bb0#genv env0 span0 caller0 func0 i_bb1#genv env1 span1 caller1 func1;
           let args0 = call0.args in
           let args1 = call1.args in
           List.combine args0 args1 |> List.iteri (fun i (arg0, arg1) ->
-            check_operand_refines_operand (i + 1) env0 span0 caller0 arg0 env1 span1 caller1 arg1
+            check_operand_refines_operand (i + 1) i_bb0#genv env0 span0 caller0 arg0 i_bb1#genv env1 span1 caller1 arg1
           );
           let dest0 = call0.destination in
           let dest1 = call1.destination in
@@ -809,7 +908,7 @@ let check_body_refines_body verified_bodies def_path body0 body1 =
           (Assign assign_data0, Assign assign_data1) ->
             let rhsRvalue0 = assign_data0.rhs_rvalue in
             let rhsRvalue1 = assign_data1.rhs_rvalue in
-            check_rvalue_refines_rvalue env0 stmtSpan0 caller0 rhsRvalue0 env1 stmtSpan1 caller1 rhsRvalue1;
+            check_rvalue_refines_rvalue i_bb0#genv env0 stmtSpan0 caller0 rhsRvalue0 i_bb1#genv env1 stmtSpan1 caller1 rhsRvalue1;
             let lhsPlace0 = assign_data0.lhs_place in
             let lhsPlace1 = assign_data1.lhs_place in
             begin match check_place_refines_place env0 caller0 lhsPlace0 env1 caller1 lhsPlace1 with
@@ -879,7 +978,7 @@ let check_body_refines_body verified_bodies def_path body0 body1 =
           check_statement_refines_statement ()
     in
     try
-      check_basic_block_refines_basic_block env0 (basic_block_info_of (Array.of_list body0.basic_blocks) 0) env1 (basic_block_info_of (Array.of_list body1.basic_blocks) 0)
+      check_basic_block_refines_basic_block env0 (basic_block_info_of root_genv0 (Array.of_list body0.basic_blocks) 0) env1 (basic_block_info_of root_genv1 (Array.of_list body1.basic_blocks) 0)
     with LocalAddressTaken (x0, x1) ->
       let address_taken = (x0, x1) :: address_taken in
       Printf.printf "Caught LocalAddressTaken; restarting with address_taken = %s\n" (String.concat ", " (List.map (fun (x0, x1) -> Printf.sprintf "%s = %s" x0 x1) address_taken));
