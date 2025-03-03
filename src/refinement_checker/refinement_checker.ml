@@ -226,20 +226,19 @@ let eval_const_operand const_operand_cpn =
 
 let update_env x v env = (x, v) :: List.remove_assoc x env
 
-let rec process_assignments bblocks env i_bb i_s =
+let rec process_assignments bblocks env i_bb i_s (ss_i: statement list) =
   let bb = bblocks.(i_bb) in
   let stmts = bb.statements in
-  if i_s = List.length stmts then
-    (env, i_bb, i_s)
-  else
-    let s = List.nth stmts i_s in
+  match ss_i with
+    [] -> (env, i_bb, i_s, ss_i)
+  | s::ss_i_plus_1 ->
     match s.kind with
       Assign assign_data ->
         let lhsPlace = assign_data.lhs_place in
         let rhsRvalue = assign_data.rhs_rvalue in
         let lhsProjection = lhsPlace.projection in
         if lhsProjection <> [] then
-          (env, i_bb, i_s)
+          (env, i_bb, i_s, ss_i)
         else
           let lhsLocalId = lhsPlace.local in
           let lhsLocalName = lhsLocalId.name in
@@ -249,26 +248,26 @@ let rec process_assignments bblocks env i_bb i_s =
                 Move place | Copy place ->
                   let placeProjection = place.projection in
                   if placeProjection <> [] then
-                    (env, i_bb, i_s)
+                    (env, i_bb, i_s, ss_i)
                   else
                     let placeLocalId = place.local in
                     let placeLocalName = placeLocalId.name in
                     begin match List.assoc placeLocalName env with
                       Value placeValue ->
                         begin match List.assoc_opt lhsLocalName env with
-                          Some (Address _) -> (env, i_bb, i_s)
+                          Some (Address _) -> (env, i_bb, i_s, ss_i)
                         | _ ->
                           let env = update_env lhsLocalName (Value placeValue) env in
-                          process_assignments bblocks env i_bb (i_s + 1)
+                          process_assignments bblocks env i_bb (i_s + 1) (ss_i_plus_1)
                         end
-                    | _ -> (env, i_bb, i_s)
+                    | _ -> (env, i_bb, i_s, ss_i)
                       end
               | Constant constant ->
-                  (env, i_bb, i_s)
+                  (env, i_bb, i_s, ss_i)
               end
-            | _ -> (env, i_bb, i_s)
+            | _ -> (env, i_bb, i_s, ss_i)
             end
-    | Nop -> process_assignments bblocks env i_bb (i_s + 1)
+    | Nop -> process_assignments bblocks env i_bb (i_s + 1) ss_i_plus_1
 
 let values_equal (v0: term) (v1: term) = v0 = v1
 
@@ -561,7 +560,7 @@ let check_body_refines_body def_path body0 body1 =
               (* Havoc all locals of the original crate *)
               let env0, env1 = produce_loop_inv env0 env1 loopInv in
               Printf.printf "INFO: In function %s, checking loop body at basic block %d against basic block %d, with env0 = [%s] and env1 = [%s]\n" def_path i_bb0 i_bb1 (string_of_env env0) (string_of_env env1);
-              check_codepos_refines_codepos env0 i_bb0 0 env1 i_bb1 0;
+              check_codepos_refines_codepos env0 i_bb0 0 bblocks0.(i_bb0).statements env1 i_bb1 0 bblocks1.(i_bb1).statements;
               let Checking (i_bb1, loopInv) = bblocks0_statuses.(i_bb0) in
               bblocks0_statuses.(i_bb0) <- Checked (i_bb1, loopInv)
             with RecheckLoop i_bb0' as e ->
@@ -605,9 +604,9 @@ let check_body_refines_body def_path body0 body1 =
           check_basic_block_refines_basic_block env0 i_bb0 env1 i_bb1
         end
     (* Checks whether for each behavior of code position (bb0, s0), code position (bb1, s1) has a matching behavior *)
-    and check_codepos_refines_codepos env0 i_bb0 i_s0 env1 i_bb1 i_s1 =
-      let (env0, i_bb0, i_s0) = process_assignments bblocks0 env0 i_bb0 i_s0 in
-      let (env1, i_bb1, i_s1) = process_assignments bblocks1 env1 i_bb1 i_s1 in
+    and check_codepos_refines_codepos env0 i_bb0 i_s0 ss_i0 env1 i_bb1 i_s1 ss_i1 =
+      let (env0, i_bb0, i_s0, ss_i0) = process_assignments bblocks0 env0 i_bb0 i_s0 ss_i0 in
+      let (env1, i_bb1, i_s1, ss_i1) = process_assignments bblocks1 env1 i_bb1 i_s1 ss_i1 in
       let bb0 = bblocks0.(i_bb0) in
       let bb1 = bblocks1.(i_bb1) in
       let check_terminator_refines_terminator env1 =
@@ -701,10 +700,8 @@ let check_body_refines_body def_path body0 body1 =
         | _ -> failwith "Terminator kinds do not match"
       in
       let check_statement_refines_statement () =
-        let stmts0 = bb0.statements in
-        let stmts1 = bb1.statements in
-        let stmt0 = List.nth stmts0 i_s0 in
-        let stmt1 = List.nth stmts1 i_s1 in
+        let stmt0::ss_i0_plus_1 = ss_i0 in
+        let stmt1::ss_i1_plus_1 = ss_i1 in
         let stmtSpan0 = stmt0.source_info.span in
         let stmtSpan1 = stmt1.source_info.span in
         Printf.printf "INFO: Checking that statement at %s refines statement at %s\n" (string_of_span stmtSpan0) (string_of_span stmtSpan1);
@@ -722,25 +719,25 @@ let check_body_refines_body def_path body0 body1 =
               let rhsValue = fresh_symbol () in
               let env0 = update_env x0 (Value rhsValue) env0 in
               let env1 = update_env x1 (Value rhsValue) env1 in
-              check_codepos_refines_codepos env0 i_bb0 (i_s0 + 1) env1 i_bb1 (i_s1 + 1)
+              check_codepos_refines_codepos env0 i_bb0 (i_s0 + 1) ss_i0_plus_1 env1 i_bb1 (i_s1 + 1) ss_i1_plus_1
             | Nonlocal, Nonlocal ->
-              check_codepos_refines_codepos env0 i_bb0 (i_s0 + 1) env1 i_bb1 (i_s1 + 1)
+              check_codepos_refines_codepos env0 i_bb0 (i_s0 + 1) ss_i0_plus_1 env1 i_bb1 (i_s1 + 1) ss_i1_plus_1
             end
       in
       let stmts0 = bb0.statements in
       let stmts1 = bb1.statements in
-      if i_s0 = List.length stmts0 then
-        let rec iter env1 i_s1 =
+      if ss_i0 = [] then
+        let rec iter env1 i_s1 (ss_i1: statement list) =
           (* Process assignments of the form `x = &*y;` where x and y are locals whose address is not taken.
            * We are here using the property that inserting such statements can only cause a program to have more UB, so if it verifies, the original program is also safe.
            *)
-          if i_s1 = List.length stmts1 then
-            check_terminator_refines_terminator env1
-          else
+          match ss_i1 with
+            [] -> check_terminator_refines_terminator env1
+          | stmt1::ss_i1_plus_1 ->
             let fail () =
               failwith (Printf.sprintf "In function %s, cannot prove that the terminator of basic block %d in the original version refines statement %d of basic block %d in the verified version" def_path i_bb0 i_s1 i_bb1)
             in
-            match (List.nth stmts1 i_s1).kind with
+            match stmt1.kind with
               Assign assign_data1 ->
                 let rhsRvalue1 = assign_data1.rhs_rvalue in
                 begin match rhsRvalue1 with
@@ -767,7 +764,7 @@ let check_body_refines_body def_path body0 body1 =
                                   Some (Address _) -> fail ()
                                 | _ ->
                                   let env1 = update_env lhsPlaceLocalName1 (Value rhsValue) env1 in
-                                  iter env1 (i_s1 + 1)
+                                  iter env1 (i_s1 + 1) ss_i1_plus_1
                                 end
                             | _ -> fail ()
                             end
@@ -779,9 +776,9 @@ let check_body_refines_body def_path body0 body1 =
                 end
             | _ -> fail ()
         in
-        iter env1 i_s1
+        iter env1 i_s1 ss_i1
       else
-        if i_s1 = List.length stmts1 then
+        if ss_i1 = [] then
           failwith (Printf.sprintf "In function %s, cannot prove that statement %d of basic block %d in the original version refines the terminator of basic block %d in the verified version" def_path i_s0 i_bb0 i_bb1)
         else
           check_statement_refines_statement ()
