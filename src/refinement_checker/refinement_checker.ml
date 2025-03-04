@@ -219,7 +219,7 @@ let rec decode_ty (genv: generic_env) (ty_cpn: Vf_mir_decoder.ty) =
     FnDef (id, args)
   | Never -> Never
   | Tuple tys -> Tuple (List.map (decode_ty genv) tys)
-  | Param param -> List.assoc param genv.types
+  | Param param -> (try List.assoc param genv.types with Not_found -> failwith ("No such type parameter: " ^ param))
   | Str -> Str
   | Array array_ty_cpn ->
     let elem_ty = decode_ty genv array_ty_cpn.elem_ty in
@@ -661,6 +661,20 @@ let decode_generic_param (generic_param: generic_param_def) =
   in
   name, kind
 
+let decode_hir_generic_param (hir_generic_param: hir_generics_generic_param) =
+  let name =
+    match hir_generic_param.name with
+      Plain ident -> ident.name.name
+    | Fresh k -> Printf.sprintf "'_%s" (Stdint.Uint128.to_string (decode_uint128 k))
+  in
+  let kind =
+    match hir_generic_param.kind with
+      Lifetime -> Lifetime
+    | Type -> Type
+    | Const -> Const
+  in
+  name, kind
+
 let check_predicate_refines_predicate genv0 pred0 genv1 pred1 =
   match pred0, pred1 with
     Outlives outlives_pred0, Outlives outlives_pred1 ->
@@ -705,11 +719,13 @@ let check_body_refines_body verified_bodies def_path body0 body1 =
   let unsafety1 = body1.unsafety in
   (* We allow private functions to have different unsafety *)
   if visibility0 = Public && unsafety0 = Safe && unsafety1 = Unsafe then failwith "The two functions have different unsafety";
-  let generics0 = body0.generics in
-  let generics1 = body1.generics in
+  let generics0 = match body0.impl_block_hir_generics with Nothing -> [] | Something generics -> generics.params in
+  let generics1 = match body1.impl_block_hir_generics with Nothing -> [] | Something generics -> generics.params in
+  let generics0 = generics0 @ body0.hir_generics.params in
+  let generics1 = generics1 @ body1.hir_generics.params in
   if List.length generics0 <> List.length generics1 then failwith "The two functions have a different number of generic parameters";
-  let generics0 = List.map decode_generic_param generics0 in
-  let generics1 = List.map decode_generic_param generics1 in
+  let generics0 = List.map decode_hir_generic_param generics0 in
+  let generics1 = List.map decode_hir_generic_param generics1 in
   let root_genv0, root_genv1 =
     let rec iter lifetimes0 lifetimes1 types0 types1 consts0 consts1 generics0 generics1 =
       match generics0, generics1 with
