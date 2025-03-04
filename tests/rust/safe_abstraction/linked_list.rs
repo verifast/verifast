@@ -1344,7 +1344,7 @@ impl<T, A: Allocator> LinkedList<T, A> {
                 head: second_part_head,
                 tail: second_part_tail,
                 len: self.len - at,
-                alloc: clone_allocator(&self.alloc),
+                alloc: Allocator_clone__VeriFast_wrapper(&self.alloc),
                 marker: PhantomData,
             };
             //@ std::alloc::end_ref_Allocator::<'static, A>();
@@ -1364,7 +1364,7 @@ impl<T, A: Allocator> LinkedList<T, A> {
         } else {
             //@ let alloc_ref = precreate_ref(&(*self).alloc);
             //@ std::alloc::init_ref_Allocator::<'static, A>(alloc_ref);
-            let alloc = clone_allocator(&self.alloc);
+            let alloc = Allocator_clone__VeriFast_wrapper(&self.alloc);
             //@ std::alloc::end_ref_Allocator::<'static, A>();
             //@ std::alloc::Allocator_to_own::<A>(alloc);
             //@ close_points_to(self);
@@ -1377,7 +1377,7 @@ impl<T, A: Allocator> LinkedList<T, A> {
     }
 }
 
-unsafe fn clone_allocator<'a, A: Allocator + Clone>(alloc: &'a A) -> A
+unsafe fn Allocator_clone__VeriFast_wrapper<'a, A: Allocator + Clone>(alloc: &'a A) -> A
 //@ req thread_token(?t) &*& Allocator::<&'a A>(t, alloc, ?alloc_id);
 //@ ens thread_token(t) &*& Allocator::<&'a A>(t, _, alloc_id) &*& Allocator::<A>(t, result, alloc_id);
 {
@@ -2150,7 +2150,7 @@ impl<T, A: Allocator> LinkedList<T, A> {
         if at == 0 {
                 //@ let alloc_ref = precreate_ref(&(*self).alloc);
                 //@ std::alloc::init_ref_Allocator::<'static, A>(alloc_ref);
-                let alloc1 = clone_allocator(&self.alloc);
+                let alloc1 = Allocator_clone__VeriFast_wrapper(&self.alloc);
                 //@ std::alloc::end_ref_Allocator::<'static, A>();
                 //@ std::alloc::Allocator_to_own::<A>(alloc1);
                 //@ close_points_to(self);
@@ -2160,7 +2160,7 @@ impl<T, A: Allocator> LinkedList<T, A> {
         } else if at == len {
                 //@ let alloc_ref = precreate_ref(&(*self).alloc);
                 //@ std::alloc::init_ref_Allocator::<'static, A>(alloc_ref);
-                let alloc2 = clone_allocator(&self.alloc);
+                let alloc2 = Allocator_clone__VeriFast_wrapper(&self.alloc);
                 //@ std::alloc::end_ref_Allocator::<'static, A>();
                 //@ std::alloc::Allocator_to_own::<A>(alloc2);
                 //@ close_points_to(self);

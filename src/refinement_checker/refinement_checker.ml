@@ -439,8 +439,22 @@ let rec process_assignments bodies (env: env) (i_bb: basic_block_info) i_s (ss_i
               | Constant constant ->
                   (env, i_bb, i_s, ss_i)
               end
+          | AddressOf addr_of_data ->
+            begin match addr_of_data.place.projection with
+              [Deref] ->
+                let placeLocalId = addr_of_data.place.local in
+                let placeLocalName = placeLocalId.name in
+                let placeLocalPath = {lv_caller=i_bb#id.bb_caller; lv_name=placeLocalName} in
+                begin match List.assoc placeLocalPath env with
+                  Value placeValue ->
+                    let env = update_env lhsLocalPath (Value placeValue) env in
+                    process_assignments bodies env i_bb (i_s + 1) ss_i_plus_1
+                | Address _ -> (env, i_bb, i_s, ss_i)
+                end
             | _ -> (env, i_bb, i_s, ss_i)
             end
+          | _ -> (env, i_bb, i_s, ss_i)
+          end
     | Nop -> process_assignments bodies env i_bb (i_s + 1) ss_i_plus_1
 
 let values_equal (v0: term) (v1: term) = v0 = v1
@@ -948,41 +962,16 @@ let check_body_refines_body verified_bodies def_path body0 body1 =
             failwith (Printf.sprintf "In function %s, cannot prove that the terminator of basic block %s in the original version refines statement %d of basic block %s in the verified version" def_path i_bb0#to_string i_s1 i_bb1#to_string)
           in
           match stmt1.kind with
-            Assign assign_data1 ->
-              let rhsRvalue1 = assign_data1.rhs_rvalue in
-              begin match rhsRvalue1 with
-                Ref ref_data_cpn1 ->
-                  let borKind1 = ref_data_cpn1.bor_kind in
-                  begin match borKind1 with
-                    Shared ->
-                      let rhsPlaceExpr1 = ref_data_cpn1.place in
-                      let rhsPlaceLocalId1 = rhsPlaceExpr1.local in
-                      let rhsPlaceLocalName1 = rhsPlaceLocalId1.name in
-                      let rhsPlaceLocalPath1 = {lv_caller=caller1; lv_name=rhsPlaceLocalName1} in
-                      let rhsPlaceProjection1 = rhsPlaceExpr1.projection in
-                      if List.length rhsPlaceProjection1 <> 1 then fail ();
-                      let rhsPlaceProjectionElem1 = List.hd rhsPlaceProjection1 in
-                      begin match rhsPlaceProjectionElem1 with
-                        Deref ->
-                          begin match List.assoc_opt rhsPlaceLocalPath1 env1 with
-                            Some (Value rhsValue) ->
-                              let lhsPlaceExpr1 = assign_data1.lhs_place in
-                              let lhsPlaceLocalId1 = lhsPlaceExpr1.local in
-                              let lhsPlaceLocalName1 = lhsPlaceLocalId1.name in
-                              let lhsPlaceLocalPath1 = {lv_caller=caller1; lv_name=lhsPlaceLocalName1} in
-                              let lhsPlaceProjection1 = lhsPlaceExpr1.projection in
-                              if lhsPlaceProjection1 <> [] then fail ();
-                              begin match List.assoc_opt lhsPlaceLocalPath1 env1 with
-                                Some (Address _) -> fail ()
-                              | _ ->
-                                let env1 = update_env lhsPlaceLocalPath1 (Value rhsValue) env1 in
-                                check_codepos_refines_codepos env0 i_bb0 i_s0 ss_i0 env1 i_bb1 (i_s1 + 1) ss_i1_plus_1
-                              end
-                          | _ -> fail ()
-                          end
-                      | _ -> fail ()
-                      end
-                  | _ -> fail ()
+            Assign {lhs_place={projection=[]; local={name=lhsPlaceLocalName1}}; rhs_rvalue=Ref {place={projection=[Deref]; local={name=rhsPlaceLocalName1}}}} ->
+              let rhsPlaceLocalPath1 = {lv_caller=caller1; lv_name=rhsPlaceLocalName1} in
+              begin match List.assoc_opt rhsPlaceLocalPath1 env1 with
+                Some (Value rhsValue) ->
+                  let lhsPlaceLocalPath1 = {lv_caller=caller1; lv_name=lhsPlaceLocalName1} in
+                  begin match List.assoc_opt lhsPlaceLocalPath1 env1 with
+                    Some (Address _) -> fail ()
+                  | _ ->
+                    let env1 = update_env lhsPlaceLocalPath1 (Value rhsValue) env1 in
+                    check_codepos_refines_codepos env0 i_bb0 i_s0 ss_i0 env1 i_bb1 (i_s1 + 1) ss_i1_plus_1
                   end
               | _ -> fail ()
               end

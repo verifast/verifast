@@ -21,4 +21,5 @@ begin_parallel
   refinement-checker wrapper_fns_orig.rs wrapper_fns_verified.rs
   refinement-checker wrapper_fns_orig.rs wrapper_fns_verified2.rs
   !refinement-checker wrapper_fns_orig.rs wrapper_fns_verified_bad.rs
+  refinement-checker reservation_orig.rs reservation_verified.rs
 end_parallel
