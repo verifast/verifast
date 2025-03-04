@@ -114,30 +114,24 @@ pub fn deref_mut<'a>(this: &'a mut BoxU8) -> &'a mut u8
 /*@ ens thread_token(t) &*& [qa]lifetime_token('a) &*&
     full_borrow('a, <u8>.full_borrow_content(t, result)); @*/
 {
-//@ let klong = open_full_borrow_strong('a, <BoxU8>.full_borrow_content(t, this), qa);
+//@ open_full_borrow_strong_('a, <BoxU8>.full_borrow_content(t, this));
 //@ open <BoxU8>.full_borrow_content(t, this)();
 let ret = unsafe { &mut *this.ptr };
 //@ open <BoxU8>.own(t, ?b);
 //@ let p = b.ptr;
-//@ close u8_full_borrow_content(t, p)();
-//@ close sep(field_ptr_chunk(this, p), <u8>.full_borrow_content(t, p))();
-/*@
-produce_lem_ptr_chunk full_borrow_convert_strong(ctx(p),
-    sep(field_ptr_chunk(this, p), <u8>.full_borrow_content(t, p)), klong,
+/*@ {
+pred ctx() = field_ptr_chunk(this, p)() &*& alloc_block_(p);
+produce_lem_ptr_chunk restore_full_borrow_(ctx, <u8>.full_borrow_content(t, p),
     <BoxU8>.full_borrow_content(t, this))()
 {
-    open sep(field_ptr_chunk(this, p), <u8>.full_borrow_content(t, p))();
-    open u8_full_borrow_content(t, p)();
+    open u8_full_borrow_content(t, p)(); open ctx();
     close <BoxU8>.own(t, b);
     close <BoxU8>.full_borrow_content(t, this)();
 }{
-    close_full_borrow_strong(klong, <BoxU8>.full_borrow_content(t, this),
-        sep(field_ptr_chunk(this, p), <u8>.full_borrow_content(t, p)));
+    close ctx(); close u8_full_borrow_content(t, p)();
+    close_full_borrow_strong_();
 }
-@*/
-//@ full_borrow_mono(klong, 'a, sep(field_ptr_chunk(this, p), <u8>.full_borrow_content(t, p)));
-//@ full_borrow_split('a, field_ptr_chunk(this, p), <u8>.full_borrow_content(t, p));
-//@ leak full_borrow('a, field_ptr_chunk(this, p));
+} @*/
 ret
 }
 }
