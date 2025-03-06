@@ -88,6 +88,9 @@ let decode_uint128 uint128_cpn =
   let l = uint128_cpn.l in
   Stdint.Uint128.logor (Stdint.Uint128.shift_left (Stdint.Uint64.to_uint128 h) 64) (Stdint.Uint64.to_uint128 l)
 
+let encode_uint128 n =
+  {h=Stdint.Uint64.of_uint128 (Stdint.Uint128.shift_right n 64); l=Stdint.Uint64.of_uint128 n}
+
 type adt_kind = Struct | Enum | Union
 
 type region = Region of string
@@ -104,7 +107,8 @@ type ty =
 | RawPtr of ty
 | Ref of region * ty * mutability
 | FnDef of string * gen_arg list
-(*| FnPtr of ty list * ty*)
+| FnPtr of ty_kind_fn_ptr_ty
+| Closure of string * gen_arg list
 | Never
 | Tuple of ty list
 | Param of string
@@ -127,6 +131,8 @@ let rec string_of_ty = function
 | RawPtr ty -> Printf.sprintf "RawPtr %s" (string_of_ty ty)
 | Ref (region, ty, mutability) -> Printf.sprintf "Ref %s %s %s" (string_of_region region) (string_of_ty ty) (string_of_mutability mutability)
 | FnDef (id, args) -> Printf.sprintf "FnDef %s %s" id (String.concat "; " (List.map string_of_gen_arg args))
+| FnPtr _ -> "FnPtr <info elided>"
+| Closure (id, args) -> Printf.sprintf "Closure %s %s" id (String.concat "; " (List.map string_of_gen_arg args))
 | Never -> "Never"
 | Tuple tys -> Printf.sprintf "Tuple [%s]" (String.concat "; " (List.map string_of_ty tys))
 | Param param -> Printf.sprintf "Param %s" param
@@ -197,6 +203,7 @@ let rec decode_ty (genv: generic_env) (ty_cpn: Vf_mir_decoder.ty) =
     | USize -> UInt PtrWidth
     end
   | Char -> Char
+  | Float -> failwith "TODO: Float"
   | Adt adt_ty_cpn ->
     let name = adt_ty_cpn.id.name in
     let kind =
@@ -207,6 +214,7 @@ let rec decode_ty (genv: generic_env) (ty_cpn: Vf_mir_decoder.ty) =
     in
     let args = List.map (decode_gen_arg genv) adt_ty_cpn.substs in
     Adt (name, kind, args)
+  | Foreign -> failwith "TODO: Foreign"
   | RawPtr raw_ptr_ty_cpn -> RawPtr (decode_ty genv raw_ptr_ty_cpn.ty)
   | Ref ref_ty_cpn ->
     let region = decode_lifetime genv ref_ty_cpn.region in
@@ -217,14 +225,29 @@ let rec decode_ty (genv: generic_env) (ty_cpn: Vf_mir_decoder.ty) =
     let id = fn_def_ty_cpn.id.name in
     let args = List.map (decode_gen_arg genv) fn_def_ty_cpn.substs in
     FnDef (id, args)
+  | FnPtr info -> FnPtr info (* FIXME: The MIR exporter throws away some FnPtr info unsoundly *)
+  | Dynamic -> failwith "TODO: Dynamic"
+  | Closure closure_ty_cpn ->
+    let id = closure_ty_cpn.def_id in
+    let args = List.map (decode_gen_arg genv) closure_ty_cpn.substs in
+    Closure (id, args)
+  | CoroutineClosure -> failwith "TODO: CoroutineClosure"
+  | Coroutine -> failwith "TODO: Coroutine"
+  | CoroutineWitness -> failwith "TODO: CoroutineWitness"
   | Never -> Never
   | Tuple tys -> Tuple (List.map (decode_ty genv) tys)
+  | Alias _ -> failwith "TODO: Alias"
   | Param param -> (try List.assoc param genv.types with Not_found -> failwith ("No such type parameter: " ^ param))
+  | Bound -> failwith "TODO: Bound"
+  | Placeholder -> failwith "TODO: Placeholder"
+  | Infer -> failwith "TODO: Infer"
+  | Error -> failwith "TODO: Error"
   | Str -> Str
   | Array array_ty_cpn ->
     let elem_ty = decode_ty genv array_ty_cpn.elem_ty in
     let size = decode_const_expr genv array_ty_cpn.size in
     Array (elem_ty, size)
+  | Pattern -> failwith "TODO: Pattern"
   | Slice ty_cpn -> Slice (decode_ty genv ty_cpn)
 and decode_gen_arg genv gen_arg_cpn =
   match gen_arg_cpn.kind with
@@ -241,12 +264,23 @@ and decode_const_expr genv const_cpn =
       Leaf scalar_int_cpn -> LiteralConstExpr (decode_scalar_int ty scalar_int_cpn)
     | Branch -> failwith "Branch not supported"
 
-type term = Symbol of int | Tuple of term list | FnDef of string * gen_arg list | ScalarInt of literal_const_expr
+type term =
+  Symbol of int
+| Tuple of term list
+| StructValue of term list
+| EnumValue of string * term list
+| Closure of term list
+| FnDef of string * gen_arg list
+| ScalarInt of literal_const_expr
 
 let rec string_of_term = function
   Symbol id -> Printf.sprintf "Symbol %d" id
 | Tuple ts -> Printf.sprintf "Tuple [%s]" (String.concat "; " (List.map string_of_term ts))
+| StructValue ts -> Printf.sprintf "StructValue [%s]" (String.concat "; " (List.map string_of_term ts))
+| EnumValue (variant, ts) -> Printf.sprintf "EnumValue %s [%s]" variant (String.concat "; " (List.map string_of_term ts))
 | FnDef (fn, genArgs) -> Printf.sprintf "FnDef %s [%s]" fn (String.concat "; " (List.map string_of_gen_arg genArgs))
+| ScalarInt literal -> Printf.sprintf "ScalarInt %s" (string_of_literal_const_expr literal)
+| Closure ts -> Printf.sprintf "Closure [%s]" (String.concat "; " (List.map string_of_term ts))
 
 let next_symbol_id = ref 0
 
@@ -331,75 +365,319 @@ let rec basic_block_info_of genv bbs bb_idx =
 
 let local_name (locals: local_decl array) i = locals.(i).id.name
 
+let fns_to_be_inlined: (string * body) list =
+  let local x = {local={name=x}; projection=[]; local_is_mutable=false; kind=Other} in
+ [
+  "std::option::Option::<T>::map",
+  let span =
+    {
+      lo={file={name=Real (LocalPath "<core>/option.rs")}; line=Stdint.Uint64.of_int 1; col={pos=Stdint.Uint64.of_int 1}};
+      hi={file={name=Real (LocalPath "<core>/option.rs")}; line=Stdint.Uint64.of_int 1; col={pos=Stdint.Uint64.of_int 1}}
+    }
+  in
+  let local_decls: local_decl list =
+    [
+      {id={name="result"}; ty={kind=Adt {id={name="std::option::Option"}; kind=StructKind; substs=[{kind=Type {kind=Param "U"}}]}}; mutability=Not; source_info={span}};
+      {id={name="self"}; ty={kind=Adt {id={name="std::option::Option"}; kind=StructKind; substs=[{kind=Type {kind=Param "T"}}]}}; mutability=Not; source_info={span}};
+      {id={name="f"}; ty={kind=Param "F"}; mutability=Not; source_info={span}};
+      {id={name="discr"}; ty={kind=Int ISize}; mutability=Not; source_info={span}};
+      {id={name="payload"}; ty={kind=Param "T"}; mutability=Not; source_info={span}};
+      (*{id={name="argsTuple"}; ty={kind=Tuple [{kind=Param "T"}]}; mutability=Not; source_info={span}};*)
+      {id={name="fResult"}; ty={kind=Param "U"}; mutability=Not; source_info={span}};
+    ]
+  in
+  let basic_blocks: basic_block list =
+    [
+      {
+        id={index=Stdint.Uint32.of_int 0};
+        statements=[
+          {kind=Assign {lhs_place=local "discr"; rhs_rvalue=Discriminant (local "self")}; source_info={span}}
+        ];
+        terminator={
+          kind=SwitchInt {
+            discr=Move (local "discr");
+            discr_ty={kind=Int ISize};
+            targets={
+              branches=[
+                {val_=encode_uint128 (Stdint.Uint128.of_int 0); target={index=Stdint.Uint32.of_int 2}};
+                {val_=encode_uint128 (Stdint.Uint128.of_int 1); target={index=Stdint.Uint32.of_int 3}};
+              ];
+              otherwise=Something {index=Stdint.Uint32.of_int 1}
+            }
+          };
+          source_info={span}
+        };
+        is_cleanup=false;
+      };
+      {
+        id={index=Stdint.Uint32.of_int 1};
+        statements=[];
+        terminator={kind=Unreachable; source_info={span}};
+        is_cleanup=false;
+      };
+      {
+        id={index=Stdint.Uint32.of_int 2};
+        statements=[
+          {
+            kind=Assign {
+              lhs_place=local "result";
+              rhs_rvalue=Aggregate {
+                aggregate_kind=Adt {
+                  adt_id={name="std::option::Option"};
+                  variant_idx=Stdint.Uint32.of_int 0;
+                  gen_args=[{kind=Type {kind=Param "U"}}];
+                  user_type_annotation_index=();
+                  union_active_field=Stdint.Uint32.of_int 0;
+                  variant_id="None";
+                  field_names=[];
+                  adt_kind=EnumKind;
+                };
+                operands=[]
+              }
+            };
+            source_info={span}
+          }
+        ];
+        terminator={kind=Goto {index=Stdint.Uint32.of_int 6}; source_info={span}};
+        is_cleanup=false;
+      };
+      {
+        id={index=Stdint.Uint32.of_int 3};
+        statements=[
+          {
+            kind=Assign {
+              lhs_place=local "payload";
+              rhs_rvalue=Use (Copy {
+                local={name="self"};
+                projection=[
+                  Downcast (Stdint.Uint32.of_int 1);
+                  Field {
+                    index=Stdint.Uint32.of_int 0;
+                    ty={kind=Param "T"};
+                    name=Nothing;
+                  }
+                ];
+                local_is_mutable=false;
+                kind=Other;
+              })
+            };
+            source_info={span}
+          };
+          (* {
+            kind=Assign {
+              lhs_place=local "argsTuple";
+              rhs_rvalue=Aggregate {
+                aggregate_kind=Tuple;
+                operands=[Move (local "payload")]
+              }
+            };
+            source_info={span}
+          } *)
+        ];
+        terminator={
+          kind=Call {
+            func=Constant {
+              const=Val {
+                const_value=ZeroSized;
+                ty={
+                  kind=FnDef {
+                    id={name="std::ops::FnOnce::call_once--VeriFast"};
+                    id_mono=Nothing;
+                    substs=[
+                      {kind=Type {kind=Param "F"}};
+                      {kind=Type {kind=Tuple [{kind=Param "T"}]}};
+                    ];
+                    late_bound_generic_param_count=0;
+                  }
+                }
+              };
+              span
+            };
+            args=[
+              Move (local "f");
+              Move (local (*"argsTuple"*)"payload")
+            ];
+            destination=Something {
+              place=local "fResult";
+              basic_block_id={index=Stdint.Uint32.of_int 4}
+            };
+            unwind_action=Cleanup {index=Stdint.Uint32.of_int 5};
+            call_span=span;
+            ghost_generic_arg_list=Nothing
+          };
+          source_info={span}
+        };
+        is_cleanup=false;
+      };
+      {
+        id={index=Stdint.Uint32.of_int 4};
+        statements=[
+          {
+            kind=Assign {
+              lhs_place=local "result";
+              rhs_rvalue=Aggregate {
+                aggregate_kind=Adt {
+                  adt_id={name="std::option::Option"};
+                  variant_idx=Stdint.Uint32.of_int 1;
+                  gen_args=[{kind=Type {kind=Param "U"}}];
+                  user_type_annotation_index=();
+                  union_active_field=Stdint.Uint32.of_int 1;
+                  variant_id="Some";
+                  field_names=[];
+                  adt_kind=EnumKind;
+                };
+                operands=[Move (local "fResult")]
+              }
+            };
+            source_info={span}
+          }
+        ];
+        terminator={kind=Goto {index=Stdint.Uint32.of_int 6}; source_info={span}};
+        is_cleanup=false;
+      };
+      {
+        id={index=Stdint.Uint32.of_int 5};
+        statements=[];
+        terminator={kind=UnwindResume; source_info={span}};
+        is_cleanup=true;
+      };
+      {
+        id={index=Stdint.Uint32.of_int 6};
+        statements=[];
+        terminator={kind=Return; source_info={span}};
+        is_cleanup=false;
+      }
+    ]
+  in
+  {
+    fn_sig_span=span;
+    def_kind=Fn;
+    def_path="std::option::Option::map";
+    module_def_path="std::option";
+    contract={annotations=[]; span};
+    output={kind=Adt {id={name="std::option::Option"}; kind=StructKind; substs=[{kind=Type {kind=Param "U"}}]}};
+    inputs=[
+      {kind=Adt {id={name="std::option::Option"}; kind=StructKind; substs=[{kind=Type {kind=Param "T"}}]}};
+      {kind=Param "F"};
+    ];
+    local_decls;
+    basic_blocks;
+    span;
+    imp_span=span;
+    var_debug_info=[];
+    ghost_stmts=[];
+    ghost_decl_blocks=[];
+    unsafety=Safe;
+    impl_block_hir_generics=Nothing;
+    impl_block_predicates=[];
+    hir_generics={
+      params=[
+        {name=Plain {name={name="T"}; span}; bounds=(); span; pure_wrt_drop=false; kind=Type};
+        {name=Plain {name={name="U"}; span}; bounds=(); span; pure_wrt_drop=false; kind=Type};
+        {name=Plain {name={name="F"}; span}; bounds=(); span; pure_wrt_drop=false; kind=Type};
+      ];
+      where_clause=();
+      span
+    };
+    generics=[
+      {name="T"; kind=Type};
+      {name="U"; kind=Type};
+      {name="F"; kind=Type};
+    ];
+    predicates=[];
+    is_trait_fn=false;
+    is_drop_fn=false;
+    visibility=Public;
+  }
+]
+
 let rec process_assignments bodies (env: env) (i_bb: basic_block_info) i_s (ss_i: statement list) =
+  let eval_operand: 'r. operand -> (string -> 'r) -> (term -> 'r) -> 'r = fun operand fallback cont ->
+    match operand with
+      Move place | Copy place ->
+      if place.projection <> [] then
+        fallback "Place projections"
+      else
+      let placeLocalPath = {lv_caller=i_bb#id.bb_caller; lv_name=place.local.name} in
+      begin match List.assoc placeLocalPath env with
+        Value v -> cont v
+      | Address v -> fallback "Locals whose address is taken"
+      end
+    | Constant constant -> fallback "Constants"
+  in
+  let rec eval_operands operands fallback cont =
+    match operands with
+      [] -> cont []
+    | operand::operands ->
+      eval_operand operand fallback (fun v -> eval_operands operands fallback (fun vs -> cont (v::vs)))
+  in
+  let inline_call funcName substs call (body: body) =
+    let {args; destination; unwind_action} = call in
+    let args = args |> List.map @@ fun arg ->
+      eval_operand arg (fun msg -> failwith (msg ^ " are not yet supported as arguments of inlined calls")) (fun v -> v)
+    in
+    let caller = Some i_bb#id in
+    let generic_params = body.generics in
+    let genv =
+      let rec iter lifetimes types consts (generic_params: generic_param_def list) substs =
+        match generic_params, substs with
+          [], [] -> {lifetimes; types; consts}
+        | {name; kind=Lifetime}::generic_params, Lifetime lifetime::substs ->
+          iter ((name, lifetime)::lifetimes) types consts generic_params substs
+        | {name; kind=Type}::generic_params, Type ty::substs ->
+          iter lifetimes ((name, ty)::types) consts generic_params substs
+        | {name; kind=Const}::generic_params, Const const::substs ->
+          iter lifetimes types ((name, const)::consts) generic_params substs
+      in
+      iter [] [] [] generic_params substs
+    in
+    Printf.printf "Entering inlined call of %s with genv=%s\n" funcName (string_of_genv genv);
+    let bbs = Array.of_list body.basic_blocks in
+    let locals = Array.of_list body.local_decls in
+    let env = List.mapi (fun i v -> let x = local_name locals (i + 1) in {lv_caller=caller; lv_name=x}, Value v) args @ env in
+    let caller_info =
+      match destination with
+        Nothing -> failwith "Diverging inlined calls are not yet supported"
+      | Something {place; basic_block_id={index}} -> Some (locals.(0).id.name, place, i_bb#sibling (Stdint.Uint32.to_int index))
+    in
+    let rec bb_info_of i: basic_block_info =
+      let callee_bb_id = {bb_caller=caller; bb_index=i} in
+      object
+      method id = callee_bb_id
+      method genv = genv
+      method statements = bbs.(i).statements
+      method terminator = bbs.(i).terminator
+      method to_string = string_of_basic_block_path callee_bb_id
+      method sibling i = bb_info_of i
+      method caller = caller_info
+    end in
+    process_assignments bodies env (bb_info_of 0) 0 (bbs.(0).statements) (* TODO: deal with unwind_action *)
+  in
   match ss_i with
     [] ->
     begin match i_bb#terminator.kind with
-      Call ({func=Constant {const=Val {const_value=ZeroSized; ty={kind=FnDef {id={name=funcName}; substs}}}}} as call) when String.ends_with ~suffix:"__VeriFast_wrapper" funcName ->
-      let {args; destination; unwind_action} = call in
+      Call ({func=Constant {const=Val {const_value=ZeroSized; ty={kind=FnDef {id={name=funcName}; substs}}}}} as call) ->
       let substs = List.map (decode_gen_arg i_bb#genv) substs in
-      let args = args |> List.map @@ fun arg ->
-        match arg with
-          Move place | Copy place ->
-          let placeProjection = place.projection in
-          if placeProjection <> [] then
-            failwith "Place projections are not yet supported as wrapper call arguments";
-          let placeLocalId = place.local in
-          let placeLocalName = placeLocalId.name in
-          let placeLocalPath = {lv_caller=i_bb#id.bb_caller; lv_name=placeLocalName} in
-          begin match List.assoc placeLocalPath env with
-            Value v -> v
-          | Address v -> failwith "Locals whose address is taken are not yet supported as wrapper call arguments"
-          end
-        | Constant constant -> failwith "Constants are not yet supported as wrapper call arguments"
-      in
-      let caller = Some i_bb#id in
-      let body: body = List.assoc funcName bodies in
-      let generic_params = body.generics in
-      let genv =
-        let rec iter lifetimes types consts (generic_params: generic_param_def list) substs =
-          match generic_params, substs with
-            [], [] -> {lifetimes; types; consts}
-          | {name; kind=Lifetime}::generic_params, Lifetime lifetime::substs ->
-            iter ((name, lifetime)::lifetimes) types consts generic_params substs
-          | {name; kind=Type}::generic_params, Type ty::substs ->
-            iter lifetimes ((name, ty)::types) consts generic_params substs
-          | {name; kind=Const}::generic_params, Const const::substs ->
-            iter lifetimes types ((name, const)::consts) generic_params substs
-        in
-        iter [] [] [] generic_params substs
-      in
-      Printf.printf "Entering wrapper call %s with genv=%s\n" funcName (string_of_genv genv);
-      let bbs = Array.of_list body.basic_blocks in
-      let locals = Array.of_list body.local_decls in
-      let env = List.mapi (fun i v -> let x = local_name locals (i + 1) in {lv_caller=caller; lv_name=x}, Value v) args @ env in
-      let caller_info =
-        match destination with
-          Nothing -> failwith "Diverging wrapper calls are not yet supported"
-        | Something {place; basic_block_id={index}} -> Some (locals.(0).id.name, place, i_bb#sibling (Stdint.Uint32.to_int index))
-      in
-      let rec bb_info_of i: basic_block_info =
-        let callee_bb_id = {bb_caller=caller; bb_index=i} in
-        object
-        method id = callee_bb_id
-        method genv = genv
-        method statements = bbs.(i).statements
-        method terminator = bbs.(i).terminator
-        method to_string = string_of_basic_block_path callee_bb_id
-        method sibling i = bb_info_of i
-        method caller = caller_info
-      end in
-      process_assignments bodies env (bb_info_of 0) 0 (bbs.(0).statements) (* TODO: deal with unwind_action *)
+      if funcName = "std::ops::FnOnce::call_once--VeriFast" then
+        let [Type (Closure (closureName, closureGenArgs)); Type (Tuple paramTypes)] = substs in
+        let body = List.assoc closureName bodies in
+        inline_call closureName closureGenArgs call body
+      else if String.ends_with ~suffix:"__VeriFast_wrapper" funcName then
+        inline_call funcName substs call (List.assoc funcName bodies)
+      else begin match List.assoc_opt funcName fns_to_be_inlined with
+        Some body -> inline_call funcName substs call body
+      | None -> (env, i_bb, i_s, ss_i)
+      end
     | Return when i_bb#caller <> None ->
       let Some (returnLocalName, destinationPlace, destinationBb) = i_bb#caller in
       let returnLocalPath = {lv_caller=i_bb#id.bb_caller; lv_name=returnLocalName} in
-      if destinationPlace.projection <> [] then failwith "Wrapper calls whose destination place has a projection are not yet supported";
+      if destinationPlace.projection <> [] then failwith "Inlined calls whose destination place has a projection are not yet supported";
       begin match List.assoc returnLocalPath env with
         Value v ->
           let destinationLocalPath = {lv_caller=destinationBb#id.bb_caller; lv_name=destinationPlace.local.name} in
           let env = update_env destinationLocalPath (Value v) env in
           process_assignments bodies env destinationBb 0 (destinationBb#statements)
-      | Address _ -> failwith "Locals whose address is taken are not yet supported as wrapper call destinations"
+      | Address _ -> failwith "Locals whose address is taken are not yet supported as return value destinations of inlined calls"
       end
     | _ -> (env, i_bb, i_s, ss_i)
     end
@@ -415,45 +693,41 @@ let rec process_assignments bodies (env: env) (i_bb: basic_block_info) i_s (ss_i
           let lhsLocalId = lhsPlace.local in
           let lhsLocalName = lhsLocalId.name in
           let lhsLocalPath = {lv_caller=i_bb#id.bb_caller; lv_name=lhsLocalName} in
-          begin match rhsRvalue with
-            Use operand ->
-              begin match operand with
-                Move place | Copy place ->
-                  let placeProjection = place.projection in
-                  if placeProjection <> [] then
-                    (env, i_bb, i_s, ss_i)
-                  else
-                    let placeLocalId = place.local in
-                    let placeLocalName = placeLocalId.name in
-                    let placeLocalPath = {lv_caller=i_bb#id.bb_caller; lv_name=placeLocalName} in
-                    begin match List.assoc placeLocalPath env with
-                      Value placeValue ->
-                        begin match List.assoc_opt lhsLocalPath env with
-                          Some (Address _) -> (env, i_bb, i_s, ss_i)
-                        | _ ->
-                          let env = update_env lhsLocalPath (Value placeValue) env in
-                          process_assignments bodies env i_bb (i_s + 1) (ss_i_plus_1)
-                        end
-                    | _ -> (env, i_bb, i_s, ss_i)
-                      end
-              | Constant constant ->
-                  (env, i_bb, i_s, ss_i)
+          begin match List.assoc_opt lhsLocalPath env with
+            Some (Address _) -> (env, i_bb, i_s, ss_i)
+          | _ ->
+            let perform_assignment rhsValue =
+              let env = update_env lhsLocalPath (Value rhsValue) env in
+              process_assignments bodies env i_bb (i_s + 1) ss_i_plus_1
+            in
+            begin match rhsRvalue with
+              Use operand ->
+                eval_operand operand (fun msg -> (env, i_bb, i_s, ss_i)) @@ perform_assignment
+            | Aggregate {aggregate_kind=Adt {adt_kind=StructKind; adt_id={name}}; operands} ->
+              eval_operands operands (fun msg -> (env, i_bb, i_s, ss_i)) @@ fun rhsValues ->
+                perform_assignment @@ StructValue rhsValues
+            | Aggregate {aggregate_kind=Adt {adt_kind=EnumKind; variant_id; adt_id={name}}; operands} ->
+              eval_operands operands (fun msg -> (env, i_bb, i_s, ss_i)) @@ fun rhsValues ->
+                perform_assignment @@ EnumValue (variant_id, rhsValues)
+            | Aggregate {aggregate_kind=Tuple; operands} ->
+              eval_operands operands (fun msg -> (env, i_bb, i_s, ss_i)) @@ fun rhsValues ->
+                perform_assignment @@ Tuple rhsValues
+            | Aggregate {aggregate_kind=Closure _; operands} ->
+              eval_operands operands (fun msg -> (env, i_bb, i_s, ss_i)) @@ fun rhsValues ->
+                perform_assignment @@ Closure rhsValues
+            | AddressOf addr_of_data ->
+              begin match addr_of_data.place.projection with
+                [Deref] ->
+                  let placeLocalPath = {lv_caller=i_bb#id.bb_caller; lv_name=addr_of_data.place.local.name} in
+                  begin match List.assoc placeLocalPath env with
+                    Value placeValue ->
+                    perform_assignment placeValue
+                  | Address _ -> (env, i_bb, i_s, ss_i)
+                  end
+              | _ -> (env, i_bb, i_s, ss_i)
               end
-          | AddressOf addr_of_data ->
-            begin match addr_of_data.place.projection with
-              [Deref] ->
-                let placeLocalId = addr_of_data.place.local in
-                let placeLocalName = placeLocalId.name in
-                let placeLocalPath = {lv_caller=i_bb#id.bb_caller; lv_name=placeLocalName} in
-                begin match List.assoc placeLocalPath env with
-                  Value placeValue ->
-                    let env = update_env lhsLocalPath (Value placeValue) env in
-                    process_assignments bodies env i_bb (i_s + 1) ss_i_plus_1
-                | Address _ -> (env, i_bb, i_s, ss_i)
-                end
             | _ -> (env, i_bb, i_s, ss_i)
             end
-          | _ -> (env, i_bb, i_s, ss_i)
           end
     | Nop -> process_assignments bodies env i_bb (i_s + 1) ss_i_plus_1
 
@@ -487,9 +761,12 @@ let local_address_taken path0 path1 =
 
 type place =
   Local of local_variable_path (* This place is a local variable whose address is never taken in this function *)
-| Nonlocal (* A "nonlocal place" is a plcae that is disjoint from all local variables whose address is never taken in this function *)
+| LocalProjection of local_variable_path (* This place is a projection starting from the given local variable *)
+| Nonlocal (* A "nonlocal place" is a place that is disjoint from all local variables whose address is never taken in this function *)
 
-(* Checks that the place expressions either both evaluate to a local whose address is never taken, or both evaluate to *the same* "nonlocal place" (see definition above). *)
+(* Checks that the place expressions either both evaluate to a local whose address is never taken,
+   or both perform *the same* projection on local variables whose address is never taken,
+   or both evaluate to *the same* "nonlocal place" (see definition above). *)
 let check_place_refines_place (env0: env) caller0 place0 (env1: env) caller1 place1 =
   let placeLocalId0 = place0.local in
   let placeLocalName0 = placeLocalId0.name in
@@ -503,24 +780,25 @@ let check_place_refines_place (env0: env) caller0 place0 (env1: env) caller1 pla
   let placeProjection1 = place1.projection in
   if List.length placeProjection0 <> List.length placeProjection1 then
     failwith "The two place expressions have a different number of projection elements";
+  List.iter2 check_place_element_refines_place_element placeProjection0 placeProjection1;
   match placeLocalState0, placeLocalState1 with
     Some (Address a1), Some (Address a2) ->
       if not (values_equal a1 a2) then failwith "The addresses of the two places are not equal";
-      List.iter2 check_place_element_refines_place_element placeProjection0 placeProjection1;
       Nonlocal, Nonlocal
   | Some (Address _), _ | _, Some (Address _) -> failwith "Place expressions do not match"
   | _, _ ->
     (* OK, neither local has its address taken *)
     if placeProjection0 <> [] then
       (* if a local is projected, give up trying to track its value *)
-      local_address_taken placeLocalPath0 placeLocalPath1;
-    Local placeLocalPath0, Local placeLocalPath1
+      LocalProjection placeLocalPath0, LocalProjection placeLocalPath1
+    else
+      Local placeLocalPath0, Local placeLocalPath1
 
 let check_operand_refines_operand i genv0 env0 span0 caller0 operand0 genv1 env1 span1 caller1 operand1 =
   match operand0, operand1 with
     (Move placeExpr0, Move placeExpr1) | (Copy placeExpr0, Copy placeExpr1) ->
       begin match check_place_refines_place env0 caller0 placeExpr0 env1 caller1 placeExpr1 with
-        Local x0, Local x1 ->
+        (Local x0, Local x1) | (LocalProjection x0, LocalProjection x1) ->
           begin match List.assoc x0 env0, List.assoc x1 env1 with
             Value v0, Value v1 -> if not (values_equal v0 v1) then failwith (Printf.sprintf "The values of the %d'th operand of %s and %s are not equal" i (string_of_span span0) (string_of_span span1))
           | Address a1, Address a2 -> if not (values_equal a1 a2) then failwith (Printf.sprintf "The addresses of the %d'th operand of %s and %s are not equal" i (string_of_span span0) (string_of_span span1))
@@ -559,7 +837,7 @@ let check_aggregate_refines_aggregate genv0 env0 span0 caller0 aggregate0 genv1 
     let union_active_field_idx1 = adt_data1.union_active_field in
     if union_active_field_idx0 <> union_active_field_idx1 then failwith "Aggregate::Adt: union active field indices do not match";
     ()
-  | Closure, Closure -> failwith "Aggregate::Closure not supported"
+  | Closure _, Closure _ -> failwith "Aggregate::Closure not supported"
   | Coroutine, Coroutine -> failwith "Aggregate::Coroutine not supported"
   | CoroutineClosure, CoroutineClosure -> failwith "Aggregate::CoroutineClosure not supported"
   | RawPtr, RawPtr -> failwith "Aggregate::RawPtr not supported"
@@ -583,7 +861,7 @@ let check_rvalue_refines_rvalue genv0 env0 span0 caller0 rhsRvalue0 genv1 env1 s
   let placeExpr0 = ref_data_cpn0.place in
   let placeExpr1 = ref_data_cpn1.place in
   begin match check_place_refines_place env0 caller0 placeExpr0 env1 caller1 placeExpr1 with
-    Local x0, Local x1 -> local_address_taken x0 x1
+    (Local x0, Local x1) | (LocalProjection x0, LocalProjection x1) -> local_address_taken x0 x1
   | Nonlocal, Nonlocal -> ()
   end
 | ThreadLocalRef, ThreadLocalRef -> failwith "Rvalue::ThreadLocalRef not supported"
@@ -606,7 +884,7 @@ let check_rvalue_refines_rvalue genv0 env0 span0 caller0 rhsRvalue0 genv1 env1 s
   check_aggregate_refines_aggregate genv0 env0 span0 caller0 aggregate_data_cpn0 genv1 env1 span1 caller1 aggregate_data_cpn1
 | Discriminant place_cpn0, Discriminant place_cpn1 ->
   begin match check_place_refines_place env0 caller0 place_cpn0 env1 caller1 place_cpn1 with
-    Local x0, Local x1 -> if List.assoc x0 env0 <> List.assoc x1 env1 then failwith "The discriminees of the two rvalues are not equal"
+    (Local x0, Local x1) | (LocalProjection x0, LocalProjection x1) -> if List.assoc x0 env0 <> List.assoc x1 env1 then failwith "The discriminees of the two rvalues are not equal"
   | Nonlocal, Nonlocal -> ()
   end
 | ShallowInitBox, ShallowInitBox -> failwith "Rvalue::ShallowInitBox not supported"
@@ -724,7 +1002,7 @@ let check_predicate_refines_predicate genv0 pred0 genv1 pred1 =
       end
   | _ -> failwith "The two predicates have different kinds"
 
-let check_body_refines_body verified_bodies def_path body0 body1 =
+let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
   Printf.printf "Checking function body %s\n" def_path;
   let visibility0 = body0.visibility in
   let visibility1 = body1.visibility in
@@ -831,8 +1109,8 @@ let check_body_refines_body verified_bodies def_path body0 body1 =
         end
     (* Checks whether for each behavior of code position (bb0, s0), code position (bb1, s1) has a matching behavior *)
     and check_codepos_refines_codepos env0 i_bb0 i_s0 ss_i0 env1 i_bb1 i_s1 ss_i1 =
-      let (env0, i_bb0, i_s0, ss_i0) = process_assignments [] env0 i_bb0 i_s0 ss_i0 in
-      let (env1, i_bb1, i_s1, ss_i1) = process_assignments verified_bodies env1 i_bb1 i_s1 ss_i1 in
+      let (env0, i_bb0, i_s0, ss_i0) = process_assignments bodies0 env0 i_bb0 i_s0 ss_i0 in
+      let (env1, i_bb1, i_s1, ss_i1) = process_assignments bodies1 env1 i_bb1 i_s1 ss_i1 in
       let caller0 = i_bb0#id.bb_caller in
       let caller1 = i_bb1#id.bb_caller in
       let check_terminator_refines_terminator env1 =
@@ -884,7 +1162,7 @@ let check_body_refines_body verified_bodies def_path body0 body1 =
             let retVal0 = List.assoc {lv_caller=None; lv_name=locals0.(0).id.name} env0 in
             let retVal1 = List.assoc {lv_caller=None; lv_name=locals1.(0).id.name} env1 in
             if retVal0 <> retVal1 then
-              failwith (Printf.sprintf "In function %s, at basic block %s in the original crate and basic block %s in the verified crate, the return values are not equal" def_path i_bb0#to_string i_bb1#to_string)
+              failwith (Printf.sprintf "In function %s, at basic block %s in the original crate and basic block %s in the verified crate, the return values %s and %s are not equal" def_path i_bb0#to_string i_bb1#to_string (string_of_local_var_state retVal0) (string_of_local_var_state retVal1))
         | _, Unreachable -> ()
         | (Call call0, Call call1) ->
           let func0 = call0.func in
@@ -912,6 +1190,7 @@ let check_body_refines_body verified_bodies def_path body0 body1 =
               let env0 = update_env x0 (Value result) env0 in
               let env1 = update_env x1 (Value result) env1 in
               check_basic_block_refines_basic_block env0 (i_bb0#sibling dest0bbidx) env1 (i_bb1#sibling dest1bbidx)
+            | LocalProjection x0, LocalProjection x1 -> local_address_taken x0 x1
             | Nonlocal, Nonlocal ->
               check_basic_block_refines_basic_block env0 (i_bb0#sibling dest0bbidx) env1 (i_bb1#sibling dest1bbidx)
             end
@@ -947,6 +1226,7 @@ let check_body_refines_body verified_bodies def_path body0 body1 =
               let env0 = update_env x0 (Value rhsValue) env0 in
               let env1 = update_env x1 (Value rhsValue) env1 in
               check_codepos_refines_codepos env0 i_bb0 (i_s0 + 1) ss_i0_plus_1 env1 i_bb1 (i_s1 + 1) ss_i1_plus_1
+            | LocalProjection x0, LocalProjection x1 -> local_address_taken x0 x1
             | Nonlocal, Nonlocal ->
               check_codepos_refines_codepos env0 i_bb0 (i_s0 + 1) ss_i0_plus_1 env1 i_bb1 (i_s1 + 1) ss_i1_plus_1
             end

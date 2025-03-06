@@ -307,6 +307,11 @@ struct TyKind {
         mutability @2: Mutability;
     }
 
+    struct ClosureTy {
+        defId @0: Text;
+        substs @1: List(GenericArg);
+    }
+
     struct AliasTy {
         kind @0: AliasTyKind;
         defId @1: Text;
@@ -331,7 +336,7 @@ struct TyKind {
         fnDef @6: FnDefTy;
         fnPtr @10: FnPtrTy;
         dynamic @19: Void; # TODO: Elaborate
-        closure @20: Void; # TODO: Elaborate
+        closure @20: ClosureTy; # TODO: Elaborate
         coroutineClosure @21: Void; # TODO: Elaborate
         coroutine @22: Void; # TODO: Elaborate
         coroutineWitness @23: Void; # TODO: Elaborate
@@ -503,11 +508,15 @@ struct AggregateKind {
         fieldNames @6: List(Text);
         adtKind @7: AdtKind;
     }
+    struct ClosureData {
+        closureId @0: Text;
+        genArgs @1: List(GenericArg);
+    }
     union {
         array @0: Ty; #Elements type
         tuple @1: Void;
         adt @2: AdtData;
-        closure @3: Void;
+        closure @3: ClosureData;
         coroutine @4: Void;
         coroutineClosure @5: Void;
         rawPtr @6: Void; # Create a raw pointer from a thin pointer and metadata (length or vtable)
@@ -721,6 +730,7 @@ struct Body {
         union {
             fn @0: Void;
             assocFn @1: Void;
+            closure @2: Void;
         }
     }
 

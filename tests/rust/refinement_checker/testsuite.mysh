@@ -22,4 +22,11 @@ begin_parallel
   refinement-checker wrapper_fns_orig.rs wrapper_fns_verified2.rs
   !refinement-checker wrapper_fns_orig.rs wrapper_fns_verified_bad.rs
   refinement-checker reservation_orig.rs reservation_verified.rs
+  refinement-checker option-map_orig.rs option-map_verified.rs
+  !refinement-checker option-map_orig.rs option-map_verified_bad.rs
+  refinement-checker option-map2_orig.rs option-map2_verified.rs
+  !refinement-checker option-map2_orig.rs option-map2_verified_bad.rs
+  !refinement-checker option-map2_orig.rs option-map2_verified_bad2.rs
+  !refinement-checker option-map2_orig.rs option-map2_verified_bad3.rs
+  !refinement-checker option-map2_orig.rs option-map2_verified_bad4.rs
 end_parallel
