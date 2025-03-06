@@ -1652,7 +1652,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | FnDef fn_def_ty_cpn -> `FnDef
     | FnPtr fn_ptr_ty_cpn -> `FnPtr
     | Dynamic -> `Dynamic
-    | Closure -> `Closure
+    | Closure _ -> `Closure
     | CoroutineClosure -> `CoroutineClosure
     | Coroutine -> `Coroutine
     | CoroutineWitness -> `CoroutineWitness
@@ -1819,7 +1819,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | FnDef fn_def_ty_cpn -> translate_fn_def_ty fn_def_ty_cpn loc
     | FnPtr fn_ptr_ty_cpn -> translate_fn_ptr_ty fn_ptr_ty_cpn loc
     | Dynamic -> Ast.static_error loc "Dynamic types are not yet supported" None
-    | Closure -> Ast.static_error loc "Closure types are not yet supported" None
+    | Closure _ -> Ast.static_error loc "Closure types are not yet supported" None (* CAVEAT: Once we allow closure types to appear as function call generic arguments, we must also verify closure bodies. *)
     | CoroutineClosure ->
         Ast.static_error loc "Coroutine closure types are not yet supported"
           None
@@ -2860,7 +2860,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           let substs_cpn = gen_args_get_list adt_data_cpn in
           let field_names = field_names_get_list adt_data_cpn in
           Ok Mir.(AggKindAdt { adt_kind; adt_name; variant_name; field_names })
-      | Closure -> failwith "Todo: AggregateKind::Closure"
+      | Closure _ -> failwith "Todo: AggregateKind::Closure" (* CAVEAT: Once we allow closure values, we must also check closure bodies. *)
       | Coroutine -> failwith "Todo: AggregateKind::Coroutine"
       | CoroutineClosure -> failwith "Todo: AggregateKind::CoroutineClosure"
       | RawPtr -> failwith "Todo: AggregateKind::RawPtr"
@@ -6938,6 +6938,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       in
       let traits_decls = List.flatten traits_decls in
       let bodies_cpn = VfMirRd.VfMir.bodies_get_list vf_mir_cpn in
+      let bodies_cpn = bodies_cpn |> List.filter (fun body_cpn -> BodyRd.DefKind.get (BodyRd.def_kind_get body_cpn) <> BodyRd.DefKind.Closure) in (* It's okay to ignore closure bodies so long as we crash when we encounter closure types as function call generic arguments. *)
       let bodies_cpn =
         if Args.skip_specless_fns then
           List.filter
