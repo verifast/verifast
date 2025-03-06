@@ -44,7 +44,9 @@ let verified_vf_mir =
   decode_vf_mir @@ VfMirRd.VfMir.of_message @@ Frontend.get_vf_mir !rustc_args verified_path
 
 (* Check, for each function body in original_vf_mir, that there is a matching function body in verified_vf_mir *)
-let original_bodies = original_vf_mir.bodies
+let original_bodies =
+  original_vf_mir.bodies
+  |> List.map (fun body -> (body.def_path, body))
 
 let verified_bodies =
   verified_vf_mir.bodies
@@ -95,7 +97,7 @@ let check_body_refines_body def_path body verified_body =
   else (
     Printf.printf
       "Function bodies for %s are different; checking refinement...\n" def_path;
-    check_body_refines_body verified_bodies def_path body verified_body;
+    check_body_refines_body original_bodies verified_bodies def_path body verified_body;
     push original_checked_spans (decode_body_span body);
     push verified_checked_spans (decode_body_span verified_body))
 
@@ -232,13 +234,16 @@ let rec check_module module0 module1 =
 
 let () =
   original_bodies
-  |> List.iter @@ fun body ->
-     let def_path = body.def_path in
+  |> List.iter @@ fun (def_path, body) ->
      match List.assoc_opt def_path verified_bodies with
      | None ->
-         error
-           (Printf.sprintf "Function body %s not found in verified path"
-              def_path)
+        if body.visibility = Restricted then
+          () (* If a private function of the original program does not appear in the verified program,
+                it must be the case that all calls of that function were inlined. *)
+        else
+          error
+            (Printf.sprintf "Function body %s not found in verified path"
+               def_path)
      | Some verified_body -> check_body_refines_body def_path body verified_body
 
 let () =
