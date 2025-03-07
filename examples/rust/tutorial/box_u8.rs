@@ -120,7 +120,7 @@ let ret = unsafe { &mut *this.ptr };
 //@ open <BoxU8>.own(t, ?b);
 //@ let p = b.ptr;
 /*@ {
-pred ctx() = field_ptr_chunk(this, p)() &*& alloc_block_(p);
+pred ctx() = *this |-> b &*& alloc_block_(p);
 produce_lem_ptr_chunk restore_full_borrow_(ctx, <u8>.full_borrow_content(t, p),
     <BoxU8>.full_borrow_content(t, this))()
 {
