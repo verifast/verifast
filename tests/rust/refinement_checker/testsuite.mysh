@@ -29,4 +29,5 @@ begin_parallel
   !refinement-checker option-map2_orig.rs option-map2_verified_bad2.rs
   !refinement-checker option-map2_orig.rs option-map2_verified_bad3.rs
   !refinement-checker option-map2_orig.rs option-map2_verified_bad4.rs
+  refinement-checker option-map-upvars_orig.rs option-map-upvars_verified.rs
 end_parallel
