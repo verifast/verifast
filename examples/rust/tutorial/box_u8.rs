@@ -114,7 +114,11 @@ pub fn deref_mut<'a>(this: &'a mut BoxU8) -> &'a mut u8
 /*@ ens thread_token(t) &*& [qa]lifetime_token('a) &*&
     full_borrow('a, <u8>.full_borrow_content(t, result)); @*/
 {
+/*$\vfNote{produce \texttt{req} clause}$*/
+/*$\vfHeap{\vfResAdd{thread\_token(t)}, \vfResAdd{[qa]lifetime\_token('a)}, \vfResAdd{full\_borrow('a, \tl{}BoxU8\tg{}.full\_borrow\_content(t, this))}}$*/
 //@ open_full_borrow_strong_('a, <BoxU8>.full_borrow_content(t, this));
+/*$\vfHeap{thread\_token(t), \vfResRm{[qa]lifetime\_token('a)}, \vfResRm{full\_borrow('a, \tl{}BoxU8\tg{}.full\_borrow\_content(t, this))},}$
+$\vfResAdd{\tl{}BoxU8\tg{}.full\_borrow\_content(t, this)()}, \vfResAdd{close\_full\_borrow\_token\_strong\_('a, \tl{}BoxU8\tg{}.full\_borrow\_content(t, this), qa)}$*/
 //@ open <BoxU8>.full_borrow_content(t, this)();
 let ret = unsafe { &mut *this.ptr };
 //@ open <BoxU8>.own(t, ?b);
