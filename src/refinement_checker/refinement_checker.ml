@@ -632,13 +632,12 @@ let rec process_assignments bodies (env: env) (i_bb: basic_block_info) i_s (ss_i
     | operand::operands ->
       eval_operand operand fallback (fun v -> eval_operands operands fallback (fun vs -> cont (v::vs)))
   in
-  let inline_call funcName substs call (body: body) =
+  let inline_call0 funcName generic_params substs call (body: body) =
     let {args; destination; unwind_action} = call in
     let args = args |> List.map @@ fun arg ->
       eval_operand arg (fun msg -> failwith (msg ^ " are not yet supported as arguments of inlined calls")) (fun v -> v)
     in
     let caller = Some i_bb#id in
-    let generic_params = body.generics in
     let genv =
       let rec iter lifetimes types consts (generic_params: generic_param_def list) substs =
         match generic_params, substs with
@@ -674,6 +673,9 @@ let rec process_assignments bodies (env: env) (i_bb: basic_block_info) i_s (ss_i
     end in
     process_assignments bodies env (bb_info_of 0) 0 (bbs.(0).statements) (* TODO: deal with unwind_action *)
   in
+  let inline_call funcName substs call (body: body) =
+    inline_call0 funcName body.generics substs call body
+  in
   match ss_i with
     [] ->
     begin match i_bb#terminator.kind with
@@ -682,7 +684,15 @@ let rec process_assignments bodies (env: env) (i_bb: basic_block_info) i_s (ss_i
       if funcName = "std::ops::FnOnce::call_once--VeriFast" then
         let [Type (Closure (closureName, closureGenArgs)); Type (Tuple paramTypes)] = substs in
         let body = List.assoc closureName bodies in
-        inline_call closureName closureGenArgs call body
+        let closureGenArgs = Array.of_list closureGenArgs in
+        let closureGenArgs = Array.to_list @@ Array.sub closureGenArgs 0 (Array.length closureGenArgs - 3) in
+        let genericParams = closureGenArgs |> List.map @@ fun arg ->
+          match arg with
+            Lifetime (Region name) -> {name; kind=Lifetime}
+          | Type (Param name) -> {name; kind=Type}
+          | Const (ParamConstExpr name) -> {name; kind=Const}
+        in
+        inline_call0 closureName genericParams closureGenArgs call body
       else if String.ends_with ~suffix:"__VeriFast_wrapper" funcName then
         inline_call funcName substs call (List.assoc funcName bodies)
       else begin match List.assoc_opt funcName fns_to_be_inlined with
@@ -891,7 +901,9 @@ let check_rvalue_refines_rvalue genv0 env0 span0 caller0 rhsRvalue0 genv1 env1 s
 | ThreadLocalRef, ThreadLocalRef -> failwith "Rvalue::ThreadLocalRef not supported"
 | AddressOf address_of_data_cpn0, AddressOf address_of_data_cpn1 -> failwith "Rvalue::AddressOf not supported"
 | Len, Len -> failwith "Rvalue::Len not supported"
-| Cast cast_data_cpn0, Cast cast_data_cpn1 -> failwith "Rvalue::Cast not supported"
+| Cast cast_data_cpn0, Cast cast_data_cpn1 ->
+  check_operand_refines_operand 0 genv0 env0 span0 caller0 cast_data_cpn0.operand genv1 env1 span1 caller1 cast_data_cpn1.operand;
+  if decode_ty genv0 cast_data_cpn0.ty <> decode_ty genv1 cast_data_cpn1.ty then failwith "Rvalue::Cast: types do not match"
 | BinaryOp binary_op_data_cpn0, BinaryOp binary_op_data_cpn1 ->
   let op0 = binary_op_data_cpn0.operator in
   let op1 = binary_op_data_cpn1.operator in

@@ -30,4 +30,7 @@ begin_parallel
   !refinement-checker option-map2_orig.rs option-map2_verified_bad3.rs
   !refinement-checker option-map2_orig.rs option-map2_verified_bad4.rs
   refinement-checker option-map-upvars_orig.rs option-map-upvars_verified.rs
+  refinement-checker option-map-generics_orig.rs option-map-generics_verified.rs
+  !refinement-checker option-map-generics_orig.rs option-map-generics_verified_bad.rs
+  !refinement-checker option-map-generics_orig.rs option-map-generics_verified_bad2.rs
 end_parallel
