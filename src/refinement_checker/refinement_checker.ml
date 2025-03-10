@@ -370,11 +370,115 @@ let local_name (locals: local_decl array) i = locals.(i).id.name
 let fns_to_be_inlined: (string * body) list =
   let local x = {local={name=x}; projection=[]; local_is_mutable=false; kind=Other} in
  [
+  (
+  "std::boxed::Box::<T, A>::as_ptr",
+  let span =
+    {
+      lo={file={name=Real (LocalPath "<core>/box.rs:as_ptr")}; line=Stdint.Uint64.of_int 1; col={pos=Stdint.Uint64.of_int 1}};
+      hi={file={name=Real (LocalPath "<core>/box.rs:as_ptr")}; line=Stdint.Uint64.of_int 1; col={pos=Stdint.Uint64.of_int 1}}
+    }
+  in
+  let local_decls: local_decl list =
+    [
+      {id={name="result"}; ty={kind=RawPtr {mutability=Not; ty={kind=Param "T"}}}; mutability=Not; source_info={span}};
+      {id={name="self"}; ty={kind=Ref {region={id="'<erased>"}; mutability=Not; ty={kind=Adt {id={name="std::boxed::Box"}; kind=StructKind; substs=[{kind=Type {kind=Param "T"}}]}}}}; mutability=Not; source_info={span}};
+      {id={name="b"}; ty={kind=Adt {id={name="std::boxed::Box"}; kind=StructKind; substs=[{kind=Type {kind=Param "T"}}]}}; mutability=Not; source_info={span}};
+    ]
+  in
+  let basic_blocks: basic_block list =
+    [
+      {
+        id={index=Stdint.Uint32.of_int 0};
+        statements=[
+          {
+            kind=Assign {
+              lhs_place=local "b";
+              rhs_rvalue=Use (Copy {
+                local={name="self"};
+                projection=[Deref];
+                local_is_mutable=false;
+                kind=Other
+              })
+            };
+            source_info={span}
+          };
+          {
+            kind=Assign {
+              lhs_place=local "result";
+              rhs_rvalue=Use (Copy {
+                local={name="b"};
+                projection=[
+                  Field {
+                    index=Stdint.Uint32.of_int 0;
+                    ty={kind=Adt {id={name="std::ptr::Unique"}; kind=StructKind; substs=[{kind=Type {kind=Param "T"}}]}};
+                    name=Nothing;
+                  };
+                  Field {
+                    index=Stdint.Uint32.of_int 0;
+                    ty={kind=Adt {id={name="std::ptr::NonNull"}; kind=StructKind; substs=[{kind=Type {kind=Param "T"}}]}};
+                    name=Nothing;
+                  };
+                  Field {
+                    index=Stdint.Uint32.of_int 0;
+                    ty={kind=RawPtr {mutability=Not; ty={kind=Param "T"}}};
+                    name=Nothing;
+                  }
+                ];
+                local_is_mutable=false;
+                kind=Other
+              })
+            };
+            source_info={span}
+          }
+        ];
+        terminator={kind=Return; source_info={span}};
+        is_cleanup=false;
+      }
+    ]
+  in
+  {
+    fn_sig_span=span;
+    def_kind=Fn;
+    def_path="std::boxed::Box::<T, A>::as_ptr";
+    module_def_path="std::boxed";
+    contract={annotations=[]; span};
+    output={kind=RawPtr {mutability=Not; ty={kind=Param "T"}}};
+    inputs=[
+      {kind=Ref {region={id="'<erased>"}; mutability=Not; ty={kind=Adt {id={name="std::boxed::Box"}; kind=StructKind; substs=[{kind=Type {kind=Param "T"}}]}}}};
+    ];
+    local_decls;
+    basic_blocks;
+    span;
+    imp_span=span;
+    var_debug_info=[];
+    ghost_stmts=[];
+    ghost_decl_blocks=[];
+    unsafety=Safe;
+    impl_block_hir_generics=Nothing;
+    impl_block_predicates=[];
+    hir_generics={
+      params=[
+        {name=Plain {name={name="T"}; span}; bounds=(); span; pure_wrt_drop=false; kind=Type};
+        {name=Plain {name={name="A"}; span}; bounds=(); span; pure_wrt_drop=false; kind=Type};
+      ];
+      where_clause=();
+      span
+    };
+    generics=[
+      {name="T"; kind=Type};
+      {name="A"; kind=Type};
+    ];
+    predicates=[];
+    is_trait_fn=false;
+    is_drop_fn=false;
+    visibility=Public;
+  }
+  );
   "std::option::Option::<T>::map",
   let span =
     {
-      lo={file={name=Real (LocalPath "<core>/option.rs")}; line=Stdint.Uint64.of_int 1; col={pos=Stdint.Uint64.of_int 1}};
-      hi={file={name=Real (LocalPath "<core>/option.rs")}; line=Stdint.Uint64.of_int 1; col={pos=Stdint.Uint64.of_int 1}}
+      lo={file={name=Real (LocalPath "<core>/option.rs:map")}; line=Stdint.Uint64.of_int 1; col={pos=Stdint.Uint64.of_int 1}};
+      hi={file={name=Real (LocalPath "<core>/option.rs:map")}; line=Stdint.Uint64.of_int 1; col={pos=Stdint.Uint64.of_int 1}}
     }
   in
   let local_decls: local_decl list =
@@ -760,6 +864,13 @@ let rec process_assignments bodies (env: env) (i_bb: basic_block_info) i_s (ss_i
             | Ref {bor_kind=Shared; place={local; local_is_mutable=false; projection=[]}} ->
               let placeLocalPath = {lv_caller=i_bb#id.bb_caller; lv_name=local.name} in
               perform_assignment (AddressOfNonMutLocal placeLocalPath)
+            | Ref {bor_kind=Shared; place={local; local_is_mutable=false; projection=[Deref]}} ->
+              load_from_local local (fun msg -> (env, i_bb, i_s, ss_i)) @@ fun v ->
+              begin match v with
+                AddressOfNonMutLocal lv_path ->
+                perform_assignment (AddressOfNonMutLocal lv_path)
+              | _ -> (env, i_bb, i_s, ss_i)
+              end
             | _ -> (env, i_bb, i_s, ss_i)
             end
           end
@@ -1297,36 +1408,29 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
               check_codepos_refines_codepos env0 i_bb0 (i_s0 + 1) ss_i0_plus_1 env1 i_bb1 (i_s1 + 1) ss_i1_plus_1
             end
       in
-      if ss_i0 = [] then
+      match ss_i0, ss_i1 with
+        [], [] -> check_terminator_refines_terminator env1
+      | _, [] -> failwith (Printf.sprintf "In function %s, cannot prove that statement %d of basic block %s in the original version refines the terminator of basic block %s in the verified version" def_path i_s0 i_bb0#to_string i_bb1#to_string)
+      | {kind=Assign {lhs_place={projection=[]}; rhs_rvalue=Ref {place={projection=[Deref]}}}}::_, _ -> check_statement_refines_statement ()
+      | _, {kind=Assign {lhs_place={projection=[]; local={name=lhsPlaceLocalName1}}; rhs_rvalue=Ref {place={projection=[Deref]; local={name=rhsPlaceLocalName1}}}}}::ss_i1_plus_1 ->
         (* Process assignments of the form `x = &*y;` where x and y are locals whose address is not taken.
           * We are here using the property that inserting such statements can only cause a program to have more UB, so if it verifies, the original program is also safe.
           *)
-        match ss_i1 with
-          [] -> check_terminator_refines_terminator env1
-        | stmt1::ss_i1_plus_1 ->
-          let fail () =
-            failwith (Printf.sprintf "In function %s, cannot prove that the terminator of basic block %s in the original version refines statement %d of basic block %s in the verified version" def_path i_bb0#to_string i_s1 i_bb1#to_string)
-          in
-          match stmt1.kind with
-            Assign {lhs_place={projection=[]; local={name=lhsPlaceLocalName1}}; rhs_rvalue=Ref {place={projection=[Deref]; local={name=rhsPlaceLocalName1}}}} ->
-              let rhsPlaceLocalPath1 = {lv_caller=caller1; lv_name=rhsPlaceLocalName1} in
-              begin match List.assoc_opt rhsPlaceLocalPath1 env1 with
-                Some (Value rhsValue) ->
-                  let lhsPlaceLocalPath1 = {lv_caller=caller1; lv_name=lhsPlaceLocalName1} in
-                  begin match List.assoc_opt lhsPlaceLocalPath1 env1 with
-                    Some (Address _) -> fail ()
-                  | _ ->
-                    let env1 = update_env lhsPlaceLocalPath1 (Value rhsValue) env1 in
-                    check_codepos_refines_codepos env0 i_bb0 i_s0 ss_i0 env1 i_bb1 (i_s1 + 1) ss_i1_plus_1
-                  end
-              | _ -> fail ()
-              end
-          | _ -> fail ()
-      else
-        if ss_i1 = [] then
-          failwith (Printf.sprintf "In function %s, cannot prove that statement %d of basic block %s in the original version refines the terminator of basic block %s in the verified version" def_path i_s0 i_bb0#to_string i_bb1#to_string)
-        else
-          check_statement_refines_statement ()
+        let rhsPlaceLocalPath1 = {lv_caller=caller1; lv_name=rhsPlaceLocalName1} in
+        let fail () = failwith (Printf.sprintf "In function %s, cannot prove that code position %d of basic block %s in the original version refines the statement at position %d of basic block %s in the verified version" def_path i_s0 i_bb0#to_string i_s1 i_bb1#to_string) in
+        begin match List.assoc_opt rhsPlaceLocalPath1 env1 with
+          Some (Value rhsValue) ->
+            let lhsPlaceLocalPath1 = {lv_caller=caller1; lv_name=lhsPlaceLocalName1} in
+            begin match List.assoc_opt lhsPlaceLocalPath1 env1 with
+              Some (Address _) -> fail ()
+            | _ ->
+              let env1 = update_env lhsPlaceLocalPath1 (Value rhsValue) env1 in
+              check_codepos_refines_codepos env0 i_bb0 i_s0 ss_i0 env1 i_bb1 (i_s1 + 1) ss_i1_plus_1
+            end
+        | _ -> fail ()
+        end
+      | [], _ -> failwith (Printf.sprintf "In function %s, cannot prove that the terminator of basic block %s in the original version refines statement %d of basic block %s in the verified version" def_path i_bb0#to_string i_s1 i_bb1#to_string)
+      | _ -> check_statement_refines_statement ()
     in
     try
       check_basic_block_refines_basic_block env0 (basic_block_info_of root_genv0 (Array.of_list body0.basic_blocks) 0) env1 (basic_block_info_of root_genv1 (Array.of_list body1.basic_blocks) 0)
