@@ -118,22 +118,49 @@ pub fn deref_mut<'a>(this: &'a mut BoxU8) -> &'a mut u8
 /*$\vfHeap{\vfResAdd{thread\_token(t)}, \vfResAdd{[qa]lifetime\_token('a)}, \vfResAdd{full\_borrow('a, \tl{}BoxU8\tg{}.full\_borrow\_content(t, this))}}$*/
 //@ open_full_borrow_strong_('a, <BoxU8>.full_borrow_content(t, this));
 /*$\vfHeap{thread\_token(t), \vfResRm{[qa]lifetime\_token('a)}, \vfResRm{full\_borrow('a, \tl{}BoxU8\tg{}.full\_borrow\_content(t, this))},}$
-$\vfResAdd{\tl{}BoxU8\tg{}.full\_borrow\_content(t, this)()}, \vfResAdd{close\_full\_borrow\_token\_strong\_('a, \tl{}BoxU8\tg{}.full\_borrow\_content(t, this), qa)}$*/
+$\vfState{}{\vfResAdd{\tl{}BoxU8\tg{}.full\_borrow\_content(t, this)()},}$
+$\vfState{}{\vfResAdd{close\_full\_borrow\_token\_strong\_('a, \tl{}BoxU8\tg{}.full\_borrow\_content(t, this), qa)}}$*/
 //@ open <BoxU8>.full_borrow_content(t, this)();
+/*$\vfHeap{thread\_token(t), close\_full\_borrow\_token\_strong\_('a, \tl{}BoxU8\tg{}.full\_borrow\_content(t, this), qa),}$
+$\vfState{}{\vfResRm{\tl{}BoxU8\tg{}.full\_borrow\_content(t, this)()}, \vfResAdd{*this |-> b}, \vfResAdd{\tl{}BoxU8\tg{}.own(t, b)}}$*/
 let ret = unsafe { &mut *this.ptr };
 //@ open <BoxU8>.own(t, ?b);
-//@ let p = b.ptr;
-/*@ {
+/*$\vfHeap{thread\_token(t), close\_full\_borrow\_token\_strong\_('a, \tl{}BoxU8\tg{}.full\_borrow\_content(t, this), qa),}$
+$\vfState{}{*this |-> b, \vfResRm{\tl{}BoxU8\tg{}.own(t, b)}, \vfResAdd{*b.ptr |-> \_v}, \vfResAdd{alloc\_block\_(b.ptr)}}$*/
+//@ let p = b.ptr; //$\vfNote{ghost variable}$
+/*@ { //$\vfNote{defining a new predicate in function body needs an extra scope}$
 pred ctx() = *this |-> b &*& alloc_block_(p);
+/*$\vfNote{producing a proof of \texttt{restore\_full\_borrow\_} with }\vfState{}{P=\tl{}BoxU8\tg{}.full\_borrow\_content(t, this)}\vfNote{ and }$
+$\vfState{}{Q=\tl{}u8\tg{}.full\_borrow\_content(t, p)}\vfNote{.}$*/
 produce_lem_ptr_chunk restore_full_borrow_(ctx, <u8>.full_borrow_content(t, p),
     <BoxU8>.full_borrow_content(t, this))()
-{
+{ //$\vfNote{the proof of the lemma for which a chunk to be produced}$
+    //$\vfNote{producing lemma's \texttt{req} clause}$
+    //$\vfHeap{\vfResAdd{ctx()}, \vfResAdd{\tl{}u8\tg{}.full\_borrow\_content(t, p)()}}$
     open u8_full_borrow_content(t, p)(); open ctx();
-    close <BoxU8>.own(t, b);
-    close <BoxU8>.full_borrow_content(t, this)();
-}{
+    close <BoxU8>.own(t, b); close <BoxU8>.full_borrow_content(t, this)();
+}{ //$\vfNote{rest of the \texttt{deref\_mut}'s body verification}$
+    //$\vfNote{producing lemma pointer chunk}$
+    /*$\vfHeap{thread\_token(t),}$
+    $\vfState{}{close\_full\_borrow\_token\_strong\_('a, \tl{}BoxU8\tg{}.full\_borrow\_content(t, this), qa),}$
+    $\vfState{}{*this |-> b, *b.ptr |-> \_v, alloc\_block\_(b.ptr),}$
+    $\vfState{}{\vfResAdd{is\_restore\_full\_borrow\_(lem, ctx, \tl{}u8\tg{}.full\_borrow\_content(t, p),}}\hookleftarrow$
+        $\vfState{}{\vfResAdd{\tl{}BoxU8\tg{}.full\_borrow\_content(t, this))}}$*/
     close ctx(); close u8_full_borrow_content(t, p)();
+    /*$\vfHeap{thread\_token(t),}$
+    $\vfState{}{close\_full\_borrow\_token\_strong\_('a, \tl{}BoxU8\tg{}.full\_borrow\_content(t, this), qa),}$
+    $\vfState{}{is\_restore\_full\_borrow\_(lem, ctx, \tl{}u8\tg{}.full\_borrow\_content(t, p),}\hookleftarrow$
+        $\vfState{}{\tl{}BoxU8\tg{}.full\_borrow\_content(t, this)), \vfResRm{*this |-> b}, \vfResRm{*b.ptr |-> \_v}, \vfResRm{alloc\_block\_(b.ptr)},}$
+    $\vfState{}{\vfResAdd{ctx()}, \vfResAdd{\tl{}u8\tg{}.full\_borrow\_content(t, p)()}}$*/
     close_full_borrow_strong_();
+    /*$\vfHeap{thread\_token(t),}$
+    $\vfState{}{\vfResRm{close\_full\_borrow\_token\_strong\_('a, \tl{}BoxU8\tg{}.full\_borrow\_content(t, this), qa)},}$
+    $\vfState{}{\vfResRm{is\_restore\_full\_borrow\_(lem, ctx, \tl{}u8\tg{}.full\_borrow\_content(t, p),}}\hookleftarrow$
+        $\vfState{}{\vfResRm{\tl{}BoxU8\tg{}.full\_borrow\_content(t, this))}, \vfResRm{ctx()}, \vfResRm{\tl{}u8\tg{}.full\_borrow\_content(t, p)()},}$
+    $\vfState{}{\vfResAdd{is\_restore\_full\_borrow\_(lem, ctx, \tl{}u8\tg{}.full\_borrow\_content(t, p),}}\hookleftarrow$
+        $\vfState{}{\vfResAdd{\tl{}BoxU8\tg{}.full\_borrow\_content(t, this))},}$
+    $\vfState{}{\vfResAdd{[qa]lifetime\_token('a)}, \vfResAdd{full\_borrow('a, \tl{}u8\tg{}.full\_borrow\_content(t, p))}}$*/
+    //$\vfNote{consuming \texttt{is\_restore\_full\_borrow\_} chunk}$
 }
 } @*/
 ret
