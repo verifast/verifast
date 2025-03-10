@@ -371,6 +371,125 @@ let fns_to_be_inlined: (string * body) list =
   let local x = {local={name=x}; projection=[]; local_is_mutable=false; kind=Other} in
  [
   (
+    "std::boxed::Box::<T, A>::into_inner",
+    let span =
+      {
+        lo={file={name=Real (LocalPath "<core>/box.rs:into_inner")}; line=Stdint.Uint64.of_int 1; col={pos=Stdint.Uint64.of_int 1}};
+        hi={file={name=Real (LocalPath "<core>/box.rs:into_inner")}; line=Stdint.Uint64.of_int 1; col={pos=Stdint.Uint64.of_int 1}}
+      }
+    in
+    let local_decls: local_decl list =
+      [
+        {id={name="result"}; ty={kind=Param "T"}; mutability=Not; source_info={span}};
+        {id={name="self"}; ty={kind=Adt {id={name="std::boxed::Box"}; kind=StructKind; substs=[{kind=Type {kind=Param "T"}}]}}; mutability=Not; source_info={span}};
+        {id={name="contents_ptr"}; ty={kind=RawPtr {mutability=Not; ty={kind=Param "T"}}}; mutability=Not; source_info={span}};
+      ]
+    in
+    let basic_blocks: basic_block list =
+      [
+        {
+          id={index=Stdint.Uint32.of_int 0};
+          statements=[
+            {
+              kind=Assign {
+                lhs_place=local "contents_ptr";
+                rhs_rvalue=Use (Copy {
+                  local={name="self"};
+                  projection=[
+                    Field {
+                      index=Stdint.Uint32.of_int 0;
+                      ty={kind=Adt {id={name="std::ptr::Unique"}; kind=StructKind; substs=[{kind=Type {kind=Param "T"}}]}};
+                      name=Nothing;
+                    };
+                    Field {
+                      index=Stdint.Uint32.of_int 0;
+                      ty={kind=Adt {id={name="std::ptr::NonNull"}; kind=StructKind; substs=[{kind=Type {kind=Param "T"}}]}};
+                      name=Nothing;
+                    };
+                    Field {
+                      index=Stdint.Uint32.of_int 0;
+                      ty={kind=RawPtr {mutability=Not; ty={kind=Param "T"}}};
+                      name=Nothing;
+                    }
+                  ];
+                  local_is_mutable=false;
+                  kind=Other
+                })
+              };
+              source_info={span}
+            };
+            {
+              kind=Assign {
+                lhs_place=local "result";
+                rhs_rvalue=Use (Copy {
+                  local={name="contents_ptr"};
+                  projection=[Deref];
+                  local_is_mutable=false;
+                  kind=Other
+                })
+              };
+              source_info={span}
+            }
+          ];
+          terminator={
+            kind=Drop {place=local "self"; target={index=Stdint.Uint32.of_int 1}; unwind_action=Cleanup {index=Stdint.Uint32.of_int 2}};
+            source_info={span}
+          };
+          is_cleanup=false;
+        };
+        {
+          id={index=Stdint.Uint32.of_int 1};
+          statements=[];
+          terminator={kind=Return; source_info={span}};
+          is_cleanup=false;
+        };
+        {
+          id={index=Stdint.Uint32.of_int 2};
+          statements=[];
+          terminator={kind=UnwindResume; source_info={span}};
+          is_cleanup=true;
+        }
+      ]
+    in
+    {
+      fn_sig_span=span;
+      def_kind=Fn;
+      def_path="std::boxed::Box::<T, A>::into_inner";
+      module_def_path="std::boxed";
+      contract={annotations=[]; span};
+      output={kind=Param "T"};
+      inputs=[
+        {kind=Adt {id={name="std::boxed::Box"}; kind=StructKind; substs=[{kind=Type {kind=Param "T"}}]}};
+      ];
+      local_decls;
+      basic_blocks;
+      span;
+      imp_span=span;
+      var_debug_info=[];
+      ghost_stmts=[];
+      ghost_decl_blocks=[];
+      unsafety=Safe;
+      impl_block_hir_generics=Nothing;
+      impl_block_predicates=[];
+      hir_generics={
+        params=[
+          {name=Plain {name={name="T"}; span}; bounds=(); span; pure_wrt_drop=false; kind=Type};
+          {name=Plain {name={name="A"}; span}; bounds=(); span; pure_wrt_drop=false; kind=Type};
+        ];
+        where_clause=();
+        span
+      };
+      generics=[
+        {name="T"; kind=Type};
+        {name="A"; kind=Type};
+      ];
+      predicates=[];
+      is_trait_fn=false;
+      is_drop_fn=false;
+      visibility=Public;
+    }
+  );
+  (
   "std::boxed::Box::<T, A>::as_ptr",
   let span =
     {
@@ -1373,7 +1492,18 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
             end
           end
           (* TODO: Check that unwindAction0 refines unwindAction1 *)
-        | Drop drop_data0, Drop drop_data1 -> failwith "Drop not supported"
+        | Drop drop_data0, Drop drop_data1 ->
+          let env0, env1 =
+            match check_place_refines_place env0 caller0 drop_data0.place env1 caller1 drop_data1.place with
+              Local x0, Local x1 ->
+              if List.assoc x0 env0 <> List.assoc x1 env1 then failwith "The two drop terminators drop different values";
+              List.remove_assoc x0 env0, List.remove_assoc x1 env1
+            | Nonlocal, Nonlocal -> env0, env1
+          in
+          let i_bb_target0 = i_bb0#sibling (Stdint.Uint32.to_int drop_data0.target.index) in
+          let i_bb_target1 = i_bb1#sibling (Stdint.Uint32.to_int drop_data1.target.index) in
+          (* Todo: follow unwind path *)
+          check_basic_block_refines_basic_block env0 i_bb_target0 env1 i_bb_target1
         | TailCall, TailCall -> failwith "TailCall not supported"
         | Assert, Assert -> failwith "Assert not supported"
         | Yield, Yield -> failwith "Yield not supported"
