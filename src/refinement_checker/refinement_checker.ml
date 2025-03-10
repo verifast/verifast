@@ -264,6 +264,19 @@ and decode_const_expr genv const_cpn =
       Leaf scalar_int_cpn -> LiteralConstExpr (decode_scalar_int ty scalar_int_cpn)
     | Branch -> failwith "Branch not supported"
 
+type call_path = basic_block_path option
+and basic_block_path = {bb_caller: basic_block_path option; bb_index: int}
+
+let rec string_of_call_path = function
+  None -> ""
+| Some caller -> Printf.sprintf "%s." (string_of_basic_block_path caller)
+and string_of_basic_block_path {bb_caller; bb_index} =
+  Printf.sprintf "%s%d" (string_of_call_path bb_caller) bb_index
+
+type local_variable_path = {lv_caller: call_path; lv_name: string}
+
+let string_of_lv_path {lv_caller; lv_name} = Printf.sprintf "%s%s" (string_of_call_path lv_caller) lv_name
+
 type term =
   Symbol of int
 | Tuple of term list
@@ -272,6 +285,7 @@ type term =
 | Closure of term list
 | FnDef of string * gen_arg list
 | ScalarInt of literal_const_expr
+| AddressOfNonMutLocal of local_variable_path
 
 let rec string_of_term = function
   Symbol id -> Printf.sprintf "Symbol %d" id
@@ -281,6 +295,7 @@ let rec string_of_term = function
 | FnDef (fn, genArgs) -> Printf.sprintf "FnDef %s [%s]" fn (String.concat "; " (List.map string_of_gen_arg genArgs))
 | ScalarInt literal -> Printf.sprintf "ScalarInt %s" (string_of_literal_const_expr literal)
 | Closure ts -> Printf.sprintf "Closure [%s]" (String.concat "; " (List.map string_of_term ts))
+| AddressOfNonMutLocal lv_path -> Printf.sprintf "AddressOfNonMutLocal %s" (string_of_lv_path lv_path)
 
 let next_symbol_id = ref 0
 
@@ -319,19 +334,6 @@ let eval_const_operand genv const_operand_cpn =
     | Slice slice_cpn -> failwith "MIR slice constants are not yet supported"
     end
   | Unevaluated -> failwith "Unevaluated constant operands are not yet supported"
-
-type call_path = basic_block_path option
-and basic_block_path = {bb_caller: basic_block_path option; bb_index: int}
-
-let rec string_of_call_path = function
-  None -> ""
-| Some caller -> Printf.sprintf "%s." (string_of_basic_block_path caller)
-and string_of_basic_block_path {bb_caller; bb_index} =
-  Printf.sprintf "%s%d" (string_of_call_path bb_caller) bb_index
-
-type local_variable_path = {lv_caller: call_path; lv_name: string}
-
-let string_of_lv_path {lv_caller; lv_name} = Printf.sprintf "%s%s" (string_of_call_path lv_caller) lv_name
 
 type env = (local_variable_path * local_var_state) list
 
@@ -592,16 +594,35 @@ let fns_to_be_inlined: (string * body) list =
 ]
 
 let rec process_assignments bodies (env: env) (i_bb: basic_block_info) i_s (ss_i: statement list) =
+  let load_from_lv_path: 'r. local_variable_path -> (string -> 'r) -> (term -> 'r) -> 'r = fun localPath fallback cont ->
+    begin match List.assoc localPath env with
+      Value v -> cont v
+    | Address v -> fallback "Locals whose address is taken"
+    end
+  in
+  let load_from_local: 'r. local_decl_id -> (string -> 'r) -> (term -> 'r) -> 'r = fun local fallback cont ->
+    let localPath = {lv_caller=i_bb#id.bb_caller; lv_name=local.name} in
+    load_from_lv_path localPath fallback cont
+  in
   let eval_operand: 'r. operand -> (string -> 'r) -> (term -> 'r) -> 'r = fun operand fallback cont ->
     match operand with
       Move place | Copy place ->
-      if place.projection <> [] then
-        fallback "Place projections"
-      else
-      let placeLocalPath = {lv_caller=i_bb#id.bb_caller; lv_name=place.local.name} in
-      begin match List.assoc placeLocalPath env with
-        Value v -> cont v
-      | Address v -> fallback "Locals whose address is taken"
+      begin match place.projection with
+        [] -> load_from_local place.local fallback cont
+      | [Deref] ->
+        load_from_local place.local fallback @@ fun v ->
+        begin match v with
+          AddressOfNonMutLocal lv_path ->
+          load_from_lv_path lv_path fallback cont
+        | _ -> fallback "Dereferences"
+        end
+      | [Field {index}] ->
+        load_from_local place.local fallback @@ fun v ->
+        begin match v with
+          Closure vs -> cont (List.nth vs (Stdint.Uint32.to_int index))
+        | _ -> fallback "Field projections"
+        end
+      | _ -> fallback "Place projections"
       end
     | Constant constant -> fallback "Constants"
   in
@@ -726,6 +747,9 @@ let rec process_assignments bodies (env: env) (i_bb: basic_block_info) i_s (ss_i
                   end
               | _ -> (env, i_bb, i_s, ss_i)
               end
+            | Ref {bor_kind=Shared; place={local; local_is_mutable=false; projection=[]}} ->
+              let placeLocalPath = {lv_caller=i_bb#id.bb_caller; lv_name=local.name} in
+              perform_assignment (AddressOfNonMutLocal placeLocalPath)
             | _ -> (env, i_bb, i_s, ss_i)
             end
           end
@@ -889,7 +913,10 @@ let check_rvalue_refines_rvalue genv0 env0 span0 caller0 rhsRvalue0 genv1 env1 s
   end
 | ShallowInitBox, ShallowInitBox -> failwith "Rvalue::ShallowInitBox not supported"
 
-type loop_invariant = (local_variable_path * local_variable_path list) list (* For each local of the verified program, a list of the locals of the original program that have the same value at each iteration *)
+type loop_invariant = {
+  consts: (local_variable_path * term) list; (* (lv_path, t) means the value of local `lv_path` of the original program equals t *)
+  eqs: (local_variable_path * local_variable_path list) list (* For each local of the verified program, a list of the locals of the original program that have the same value at each iteration *)
+} 
 
 type basic_block_status =
   Checking of basic_block_path (* i_bb1 *) * loop_invariant (* Candidate loop invariant *)
@@ -898,7 +925,9 @@ type basic_block_status =
 exception RecheckLoop of basic_block_path (* i_bb0 *) (* When this is raised, the specified basic block's status has already been updated with a weakened candidate loop invariant *)
 
 let string_of_loop_inv (loopInv: loop_invariant) =
-  String.concat "; " (List.map (fun (x, ys) -> Printf.sprintf "%s: [%s]" (string_of_lv_path x) (String.concat ", " (List.map string_of_lv_path ys))) loopInv)
+  Printf.sprintf "{consts: %s; eqs: %s}"
+    (String.concat "; " (List.map (fun (x, t) -> Printf.sprintf "%s: %s" (string_of_lv_path x) (string_of_term t)) loopInv.consts))
+    (String.concat "; " (List.map (fun (x, ys) -> Printf.sprintf "%s: [%s]" (string_of_lv_path x) (String.concat ", " (List.map string_of_lv_path ys))) loopInv.eqs))
 
 let havoc_local_var_state = function
   Value _ -> Value (fresh_symbol ())
@@ -917,10 +946,17 @@ let unify v v' =
   if v != v' then v.unified_with <- Some v'
 
 (* Produce an environment for the product program that satisfies only the equalities implied by the loop invariant. *)
-let produce_loop_inv env0 env1 loopInv =
-  let env0 = List.map (fun (x, v) -> (x, {unified_with=None; value=havoc_local_var_state v})) env0 in
+let produce_loop_inv env0 env1 (loopInv: loop_invariant) =
+  let env0 = env0 |> List.map @@ fun (x, v) ->
+    let value =
+      match List.assoc_opt x loopInv.consts with
+        None -> havoc_local_var_state v
+      | Some t -> Value t
+    in
+    (x, {unified_with=None; value})
+  in
   (* Havoc all locals of the verified crate that are not known to be equal to any locals of the original crate *)
-  let env1 = List.map2 (fun (x, v) (x, ys) -> (x, let v = {unified_with=None; value=havoc_local_var_state v} in List.iter (fun y -> unify v (List.assoc y env0)) ys; v)) env1 loopInv in
+  let env1 = List.map2 (fun (x, v) (x, ys) -> (x, let v = {unified_with=None; value=havoc_local_var_state v} in List.iter (fun y -> unify v (List.assoc y env0)) ys; v)) env1 loopInv.eqs in
   let env0 = List.map (fun (x, v) -> (x, (unwrap_unif_var v).value)) env0 in
   let env1 = List.map (fun (x, v) -> (x, (unwrap_unif_var v).value)) env1 in
   env0, env1
@@ -1056,7 +1092,10 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
       Printf.printf "INFO: In function %s, checking basic block %s against basic block %s, with env0 = [%s] and env1 = [%s]\n" def_path i_bb0#to_string i_bb1#to_string (string_of_env env0) (string_of_env env1);
       match Hashtbl.find_opt bblocks0_statuses i_bb0#id with
         None ->
-          let loopInv = env1 |> List.map (fun (x, v1) -> (x, env0 |> List.concat_map (fun (y, v0) -> if v1 = v0 then [y] else []) )) in
+          let loopInv = {
+            consts=env0 |> List.map (function (x, Value t) -> [(x, t)] | _ -> []) |> List.flatten;
+            eqs=env1 |> List.map (fun (x, v1) -> (x, env0 |> List.concat_map (fun (y, v0) -> if v1 = v0 then [y] else []) ))
+          } in
           Hashtbl.replace bblocks0_statuses i_bb0#id (Checking (i_bb1#id, loopInv));
           let rec iter loopInv =
             try
@@ -1079,7 +1118,12 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
       | Some (Checking (i_bb1', loopInv)) ->
         Printf.printf "INFO: In function %s, loop detected with head = basic block %s\n" def_path i_bb0#to_string;
         if i_bb1' <> i_bb1#id then failwith (Printf.sprintf "In function %s, loop head %s in the original crate is being checked for refinement against basic block %s in the verified crate, but it is already being checked for refinement against loop head %s in the verified crate" def_path i_bb0#to_string i_bb1#to_string (string_of_basic_block_path i_bb1'));
-        if loopInv |> List.for_all @@ fun (x, ys) ->
+        let consts_hold =
+          loopInv.consts |> List.for_all @@ fun (x, t) ->
+            let v = List.assoc x env0 in
+            match v with Value t' -> t = t' | Address _ -> false
+        in
+        if consts_hold && loopInv.eqs |> List.for_all @@ fun (x, ys) ->
           let v = List.assoc x env1 in
           ys |> List.for_all @@ fun y -> List.assoc y env0 = v
         then begin
@@ -1088,15 +1132,25 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
         end else begin
           Printf.printf "Loop with head %s failed to verify; trying again with weaker invariant\n" i_bb0#to_string;
           (* Forget about the earlier result; try from scratch *)
-          let loopInv = loopInv |> List.map @@ fun (x, ys) ->
+          let consts = loopInv.consts |> List.filter @@ fun (x, t) ->
+            let v = List.assoc x env0 in
+            match v with Value t' -> t' = t | Address _ -> false
+          in
+          let eqs = loopInv.eqs |> List.map @@ fun (x, ys) ->
             let v = List.assoc x env1 in
             (x, ys |> List.filter @@ fun y -> List.assoc y env0 = v)
           in
-          Hashtbl.replace bblocks0_statuses i_bb0#id (Checking (i_bb1#id, loopInv)); (* Weaken the candidate loop invariant *)
+          Hashtbl.replace bblocks0_statuses i_bb0#id (Checking (i_bb1#id, {consts; eqs})); (* Weaken the candidate loop invariant *)
           raise (RecheckLoop i_bb0#id)
         end
       | Some (Checked (i_bb1', loopInv)) ->
-        if i_bb1' = i_bb1#id && loopInv |> List.for_all @@ fun (x, ys) ->
+        if i_bb1' = i_bb1#id && 
+          let consts_hold =
+            loopInv.consts |> List.for_all @@ fun (x, t) ->
+              match List.assoc_opt x env0 with Some (Value t') when t' = t -> true | _ -> false
+          in
+          consts_hold &&
+          loopInv.eqs |> List.for_all @@ fun (x, ys) ->
           match List.assoc_opt x env1 with None -> false | Some v ->
           ys |> List.for_all @@ fun y -> match List.assoc_opt y env0 with None -> false | Some v' -> v' = v
         then begin
