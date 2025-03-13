@@ -3259,10 +3259,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 
   (* A universal type is one that is isomorphic to the universe for purposes of type erasure *)
   let rec is_universal_type tp =
-    match tp with
+    match tp with 
       Bool | AbstractType _ -> false
     | GhostTypeParam x | RealTypeParam x -> true
-    | Int (_, _) | RustChar | RealType | PtrType _ | RustRefType _ | PredType (_, _, _, _) | ObjType _ | ArrayType _ | BoxIdType | HandleIdType | AnyType -> true
+    | RustChar | Float | Double | LongDouble -> true (* FIXME: Aren't these finite types? *)
+    | Int (_, _) | RealType | PtrType _ | RustRefType _ | PredType (_, _, _, _) | ObjType _ | ArrayType _ | BoxIdType | HandleIdType | AnyType -> true
     | PureFuncType (t1, t2) -> is_universal_type t1 && is_universal_type t2
     | InductiveType (i0, targs) ->
       let (_, _, _, _, _, cond, _, _, _) = List.assoc i0 inductivemap in
