@@ -250,6 +250,10 @@ fixpoint list<t> update<t>(int i, t y, list<t> xs) {
 lemma_auto(nth(i, update(j, y, xs))) void nth_update<t>(int i, int j, t y, list<t> xs);
   requires 0 <= i && i < length(xs) && 0 <= j && j < length(xs);
   ensures nth(i, update(j, y, xs)) == (i == j ? y : nth(i, xs));
+
+lemma_auto(update(i, nth(i, l) , l)) void update_nth_equal<t>(list<t> l, int i);
+    requires 0<=i && i<length(l);
+    ensures update(i, nth(i, l) , l) == l;
     
 lemma_auto(length(update(i, y, xs))) void length_update<t>(int i, t y, list<t> xs);
   requires true;
