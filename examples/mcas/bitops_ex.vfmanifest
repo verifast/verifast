@@ -17,6 +17,7 @@
 .requires CRT/list.gh#length_nonnegative
 .requires CRT/list.gh#length_remove
 .requires CRT/list.gh#length_take
+.requires CRT/list.gh#update_nth_equal
 .requires CRT/list.gh#length_update
 .requires CRT/list.gh#mem_append
 .requires CRT/list.gh#mem_index_of

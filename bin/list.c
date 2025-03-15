@@ -318,6 +318,18 @@ lemma void nth_update<t>(int i, int j, t y, list<t> xs)
     }
 }
 
+lemma void update_nth_equal<t>(list<t> l, int i)
+    requires 0<=i && i<length(l);
+    ensures update(i, nth(i, l) , l) == l;
+{
+    switch (l) {
+        case nil:
+        case cons(h,t):
+            if (i > 0) 
+                update_nth_equal(t, i-1);
+    }
+}
+
 lemma void length_update<t>(int i, t y, list<t> xs)
     requires true;
     ensures length(update(i, y, xs)) == length(xs);
