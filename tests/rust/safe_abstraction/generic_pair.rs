@@ -289,8 +289,8 @@ impl<A, B> Pair<A, B> {
             //@ open Pair_full_borrow_content::<A, B>(_t, self)();
             //@ open Pair_own::<A, B>(_t, ?pair0);
             //@ open Pair_fst(self, pair0.fst);
-            let result = std::ptr::read(&self.fst);
-            std::ptr::write(&mut self.fst, new_fst);
+            let result = (&raw const self.fst).read();
+            (&raw mut self.fst).write(new_fst);
             //@ close Pair_fst(self, new_fst);
             //@ close Pair_own::<A, B>(_t, Pair::<A, B> { fst: new_fst, snd: pair0.snd });
             //@ close Pair_full_borrow_content::<A, B>(_t, self)();
@@ -306,8 +306,8 @@ impl<A, B> Pair<A, B> {
             //@ open Pair_full_borrow_content::<A, B>(_t, self)();
             //@ open Pair_own::<A, B>(_t, ?pair0);
             //@ open Pair_snd(self, pair0.snd);
-            let result = std::ptr::read(&self.snd);
-            std::ptr::write(&mut self.snd, new_snd);
+            let result = (&raw const self.snd).read();
+            (&raw mut self.snd).write(new_snd);
             //@ close Pair_snd(self, new_snd);
             //@ close Pair_own::<A, B>(_t, Pair::<A, B> { fst: pair0.fst, snd: new_snd });
             //@ close Pair_full_borrow_content::<A, B>(_t, self)();
