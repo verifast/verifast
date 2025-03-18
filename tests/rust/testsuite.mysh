@@ -2,6 +2,7 @@ begin_parallel
 verifast -allow_dead_code -allow_should_fail struct_layout.rs
 verifast ghost_cmd_inj.rs
 verifast parser_test.rs
+verifast ghost_while.rs
 verifast -allow_should_fail type_pred_defs_for_imported_structs.rs
 verifast -allow_should_fail duplicate_type_pred_defs.rs
 verifast -allow_should_fail -allow_assume preprocessor_test.rs

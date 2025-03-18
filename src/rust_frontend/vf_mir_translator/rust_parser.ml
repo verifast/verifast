@@ -556,6 +556,12 @@ let rec parse_stmt = function%parser
     [%let cs = rep parse_match_stmt_arm];
     (_, Kwd "}")
   ] -> SwitchStmt (l, e, cs)
+| [ (l, Kwd "while");
+    parse_expr_no_struct_expr as e;
+    (linv, Kwd "inv"); parse_asn as inv; (_, Kwd ";");
+    (ldecr, Kwd "decreases"); parse_expr as decr; (_, Kwd ";");
+    parse_block_stmt as s
+  ] -> WhileStmt (l, e, Some (LoopInv inv), Some decr, [s], [])
 | [ (l, Kwd "assert"); parse_asn as p; (_, Kwd ";") ] -> Assert (l, p)
 | [ (l, Kwd "leak"); parse_asn as p; (_, Kwd ";") ] -> Leak (l, p)
 | [ (l, Kwd "produce_lem_ptr_chunk");
