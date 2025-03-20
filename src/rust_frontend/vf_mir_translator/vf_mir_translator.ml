@@ -582,7 +582,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       | Nil -> Ok []
       | Cons cons_cpn ->
           let open Cons in
-          let h_cpn = VfMirStub.Reader.of_pointer (h_get cons_cpn) in
+          let h_cpn = VfMirRd.of_pointer (h_get cons_cpn) in
           let t_cpn = t_get cons_cpn in
           let* t_cpn = ind_list_get_list t_cpn in
           Ok (h_cpn :: t_cpn)
@@ -643,7 +643,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         match OptionRd.get local_path_opt_cpn with
         | Nothing -> Ok virtual_name
         | Something ptr_cpn ->
-            let text_wrapper_cpn = VfMirStub.Reader.of_pointer ptr_cpn in
+            let text_wrapper_cpn = VfMirRd.of_pointer ptr_cpn in
             Ok (TextWrapperRd.text_get text_wrapper_cpn)
         | Undefined _ ->
             Error (`TrRealFileName "Unknown RealFileName::Remapped"))
@@ -692,7 +692,6 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let open SourceInfoRd in
     let span_cpn = span_get src_info_cpn in
     let* span = translate_span_data span_cpn in
-    let scope_cpn = scope_get src_info_cpn in
     let src_info : Mir.source_info = { span; scope = () } in
     Ok src_info
 
@@ -930,9 +929,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     in
     Ok ty_info
 
-  let translate_scalar_int (scalar_int_cpn : TyRd.ScalarInt.t)
+  let translate_scalar_int (scalar_int_cpn : VfMirRd.ScalarInt.t)
       (ty : Ast.type_expr) (loc : Ast.loc) =
-    let open TyRd.ScalarInt in
+    let open VfMirRd.ScalarInt in
     let value =
       IntAux.Uint128.to_big_int (CapnpAux.uint128_get (data_get scalar_int_cpn))
     in
@@ -1361,10 +1360,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | Const _ -> Ok Mir.GenArgConst
     | Undefined _ -> Error (`TrGenArg "Unknown generic arg. kind")
 
-  and decode_generic_param (gen_param_cpn : VfMirStub.Reader.GenericParamDef.t)
-      =
-    let open VfMirStub.Reader.GenericParamDef in
-    let open VfMirStub.Reader.GenericParamDefKind in
+  and decode_generic_param (gen_param_cpn : VfMirRd.GenericParamDef.t) =
+    let open VfMirRd.GenericParamDef in
+    let open VfMirRd.GenericParamDefKind in
     let name = name_get gen_param_cpn in
     match get (kind_get gen_param_cpn) with
     | Type -> `Type name
@@ -1436,7 +1434,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         if ListAux.is_empty substs then
           Error (`TrFnDefTy "Generic function type without generic arg(s)")
         else
-          let id_mono_cpn = VfMirStub.Reader.of_pointer ptr_cpn in
+          let id_mono_cpn = VfMirRd.of_pointer ptr_cpn in
           let id_mono = FnDefIdRd.name_get id_mono_cpn in
           let name_mono = TrName.translate_def_path id_mono in
           let vf_ty_mono = Ast.ManifestTypeExpr (loc, Ast.FuncType name_mono) in
@@ -1509,7 +1507,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let mut_cpn = mutability_get ref_ty_cpn in
     let* mut = translate_mutability mut_cpn in
     let ty_cpn = ty_get ref_ty_cpn in
-    match TyRd.TyKind.get @@ TyRd.kind_get ty_cpn with
+    match TyKindRd.get @@ TyRd.kind_get ty_cpn with
     | Str -> Ok (str_ref_ty_info loc region mut)
     | Slice elem_ty_cpn ->
         let* elem_ty_info = translate_ty elem_ty_cpn loc in
@@ -1626,8 +1624,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let substs_cpn = substs_get_list adt_ty_cpn in
     (def_path, kind, List.map decode_generic_arg substs_cpn)
 
-  and decode_ref_ty (ref_ty_cpn : TyRd.RefTy.t) =
-    let open TyRd.RefTy in
+  and decode_ref_ty (ref_ty_cpn : TyKindRd.RefTy.t) =
+    let open TyKindRd.RefTy in
     let region_cpn = region_get ref_ty_cpn in
     let region = translate_region region_cpn in
     let mut_cpn = mutability_get ref_ty_cpn in
@@ -1641,7 +1639,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
   and decode_ty (ty_cpn : TyRd.t) =
     let open TyRd in
     let kind_cpn = kind_get ty_cpn in
-    match TyRd.TyKind.get kind_cpn with
+    match TyKindRd.get kind_cpn with
     | Bool -> `Bool
     | Int int_ty_cpn -> `Int
     | UInt u_int_ty_cpn -> `Uint
@@ -1654,7 +1652,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | FnDef fn_def_ty_cpn -> `FnDef
     | FnPtr fn_ptr_ty_cpn -> `FnPtr
     | Dynamic -> `Dynamic
-    | Closure -> `Closure
+    | Closure _ -> `Closure
     | CoroutineClosure -> `CoroutineClosure
     | Coroutine -> `Coroutine
     | CoroutineWitness -> `CoroutineWitness
@@ -1737,8 +1735,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     in
     Ok (Mir.TyInfoBasic { vf_ty; interp })
 
-  and translate_ty_const_kind (ck_cpn : TyRd.ConstKind.t) (loc : Ast.loc) =
-    let open TyRd.ConstKind in
+  and translate_ty_const_kind (ck_cpn : VfMirRd.ConstKind.t) (loc : Ast.loc) =
+    let open VfMirRd.ConstKind in
     match get ck_cpn with
     | Param _ -> Ast.static_error loc "Todo: ConstKind::Param" None
     | Infer -> Ast.static_error loc "Todo: ConstKind::Infer" None
@@ -1746,10 +1744,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | Placeholder -> Ast.static_error loc "Todo: ConstKind::Placeholder" None
     | Unevaluated -> Ast.static_error loc "Todo: ConstKind::Unevaluated" None
     | Value v_cpn -> (
-        let open Value in
+        let open VfMirRd.Value in
         let* ty = translate_ty (ty_get v_cpn) loc in
         let val_tree = val_tree_get v_cpn in
-        let open ValTree in
+        let open VfMirRd.ValTree in
         match get val_tree with
         | Leaf scalar_int_cpn ->
             translate_scalar_int scalar_int_cpn (Mir.basic_type_of ty) loc
@@ -1757,12 +1755,12 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | Error -> Ast.static_error loc "Todo: ConstKind::Error" None
     | Expr -> Ast.static_error loc "Todo: ConstKind::Expr" None
 
-  and translate_ty_const (ty_const_cpn : TyRd.Const.t) (loc : Ast.loc) =
-    let open TyRd.Const in
+  and translate_ty_const (ty_const_cpn : VfMirRd.TyConst.t) (loc : Ast.loc) =
+    let open VfMirRd.TyConst in
     translate_ty_const_kind (kind_get ty_const_cpn) loc
 
-  and translate_array_ty (array_ty_cpn : TyRd.ArrayTy.t) (loc : Ast.loc) =
-    let open TyRd.ArrayTy in
+  and translate_array_ty (array_ty_cpn : TyKindRd.ArrayTy.t) (loc : Ast.loc) =
+    let open TyKindRd.ArrayTy in
     let elem_ty_cpn = elem_ty_get array_ty_cpn in
     let* elem_ty_info = translate_ty elem_ty_cpn loc in
     let elem_ty = Mir.basic_type_of elem_ty_info in
@@ -1807,7 +1805,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let open Ast in
     let open TyRd in
     let kind_cpn = kind_get ty_cpn in
-    match TyRd.TyKind.get kind_cpn with
+    match TyKindRd.get kind_cpn with
     | Bool -> Ok (bool_ty_info loc)
     | Int int_ty_cpn -> translate_int_ty int_ty_cpn loc
     | UInt u_int_ty_cpn -> translate_u_int_ty u_int_ty_cpn loc
@@ -1821,7 +1819,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | FnDef fn_def_ty_cpn -> translate_fn_def_ty fn_def_ty_cpn loc
     | FnPtr fn_ptr_ty_cpn -> translate_fn_ptr_ty fn_ptr_ty_cpn loc
     | Dynamic -> Ast.static_error loc "Dynamic types are not yet supported" None
-    | Closure -> Ast.static_error loc "Closure types are not yet supported" None
+    | Closure _ -> Ast.static_error loc "Closure types are not yet supported" None (* CAVEAT: Once we allow closure types to appear as function call generic arguments, we must also verify closure bodies. *)
     | CoroutineClosure ->
         Ast.static_error loc "Coroutine closure types are not yet supported"
           None
@@ -1951,7 +1949,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             match OptionRd.get name_cpn with
             | Nothing -> None
             | Something name_cpn ->
-                Some (SymbolRd.name_get (VfMirStub.Reader.of_pointer name_cpn))
+                Some (SymbolRd.name_get (VfMirRd.of_pointer name_cpn))
           in
           Field (name, Stdint.Uint32.to_int index)
       | Downcast variant_index -> Downcast (Stdint.Uint32.to_int variant_index)
@@ -2033,9 +2031,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       | Slice _ -> failwith "Todo: ConstValue::Slice"
       | Undefined _ -> Error (`TrConstValue "Unknown ConstValue")
 
-    let translate_mir_ty_const (ty_const_cpn : ConstOperandRd.Const.TyConst.t)
+    let translate_mir_ty_const (ty_const_cpn : VfMirRd.MirConst.TyData.t)
         (loc : Ast.loc) =
-      let open ConstOperandRd.Const.TyConst in
+      let open VfMirRd.MirConst.TyData in
       let ty_cpn = ty_get ty_const_cpn in
       let* ty_info = translate_ty ty_cpn loc in
       let ty_expr = Mir.raw_type_of ty_info in
@@ -2062,13 +2060,13 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           Ok (`TrTypedConstantScalar e)
       | _ -> failwith "Todo: Constant of unsupported type"
 
-    let translate_mir_const (constant_kind_cpn : ConstOperandRd.Const.t)
+    let translate_mir_const (constant_kind_cpn : VfMirRd.MirConst.t)
         (loc : Ast.loc) =
-      let open ConstOperandRd.Const in
+      let open VfMirRd.MirConst in
       match get constant_kind_cpn with
       | Ty ty_const_cpn -> translate_mir_ty_const ty_const_cpn loc
       | Val val_cpn -> (
-          let open ConstOperandRd.Const.Val in
+          let open VfMirRd.MirConst.Val in
           let* ty_info = translate_ty (ty_get val_cpn) loc in
           let ty_expr = Mir.raw_type_of ty_info in
           match ty_expr with
@@ -2180,9 +2178,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           match OptionRd.get ghost_generic_arg_list_opt_cpn with
           | Nothing -> Ok targs
           | Something ptr_cpn ->
-              let ghost_generic_arg_list_cpn =
-                VfMirStub.Reader.of_pointer ptr_cpn
-              in
+              let ghost_generic_arg_list_cpn = VfMirRd.of_pointer ptr_cpn in
               translate_ghost_generic_arg_list ghost_generic_arg_list_cpn
         in
         let args = List.map (fun expr -> Ast.LitPat expr) args in
@@ -2524,7 +2520,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                 Mir.EncodedTerminator,
                 [] )
         | Something ptr_cpn ->
-            let destination_data_cpn = VfMirStub.Reader.of_pointer ptr_cpn in
+            let destination_data_cpn = VfMirRd.of_pointer ptr_cpn in
             let* { Mir.dst = dst, dst_is_mutable; Mir.dst_bblock_id } =
               translate_destination_data destination_data_cpn loc
             in
@@ -2632,7 +2628,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         match OptionRd.get otherwise_cpn with
         | Nothing -> None
         | Something ptr_cpn ->
-            let otherwise_cpn = VfMirStub.Reader.of_pointer ptr_cpn in
+            let otherwise_cpn = VfMirRd.of_pointer ptr_cpn in
             let otherwise = translate_basic_block_id otherwise_cpn in
             Some otherwise
       in
@@ -2864,7 +2860,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           let substs_cpn = gen_args_get_list adt_data_cpn in
           let field_names = field_names_get_list adt_data_cpn in
           Ok Mir.(AggKindAdt { adt_kind; adt_name; variant_name; field_names })
-      | Closure -> failwith "Todo: AggregateKind::Closure"
+      | Closure _ -> failwith "Todo: AggregateKind::Closure" (* CAVEAT: Once we allow closure values, we must also check closure bodies. *)
       | Coroutine -> failwith "Todo: AggregateKind::Coroutine"
       | CoroutineClosure -> failwith "Todo: AggregateKind::CoroutineClosure"
       | RawPtr -> failwith "Todo: AggregateKind::RawPtr"
@@ -3033,7 +3029,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             let place_ty = decode_ty (place_ty_get ref_data_cpn) in
             let is_implicit = is_implicit_get ref_data_cpn in
             let place_kind =
-              BodyRd.PlaceKind.get (BodyRd.Place.kind_get place_cpn)
+              VfMirRd.PlaceKind.get (VfMirRd.Place.kind_get place_cpn)
             in
             (*
             Printf.printf "ref creation at %s: place_ty=%s, bor_kind=%s, place_kind=%s, is_implicit=%b\n"
@@ -4240,8 +4236,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     in
     ListAux.try_map (translate_trait_required_fn adt_defs name) required_fns
 
-  let decode_predicate (pred_cpn : VfMirStub.Reader.Predicate.t) =
-    let open VfMirStub.Reader.Predicate in
+  let decode_predicate (pred_cpn : VfMirRd.Predicate.t) =
+    let open VfMirRd.Predicate in
     match get pred_cpn with
     | Outlives outlives_pred_cpn ->
         let open Outlives in
@@ -4281,8 +4277,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
          | _ -> [])
 
   let translate_projection_pred (loc : Ast.loc)
-      (proj_pred_cpn : VfMirStub.Reader.Predicate.Projection.t) =
-    let open VfMirStub.Reader.Predicate.Projection in
+      (proj_pred_cpn : VfMirRd.Predicate.Projection.t) =
+    let open VfMirRd.Predicate.Projection in
     let* assoc_type_def_id, tparam :: trait_args =
       let projection_term_cpn = projection_term_get proj_pred_cpn in
       let open AliasTerm in
@@ -4393,7 +4389,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           match impl_block_hir_generics_get body_cpn |> OptionRd.get with
           | Nothing -> Ok []
           | Something hir_gens_cpn_ptr ->
-              let hir_gens_cpn = VfMirStub.Reader.of_pointer hir_gens_cpn_ptr in
+              let hir_gens_cpn = VfMirRd.of_pointer hir_gens_cpn_ptr in
               let* gens, gens_loc = translate_hir_generics hir_gens_cpn in
               Ok gens
         in
@@ -4402,7 +4398,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         let early_bound_generic_param_names =
           generics_get_list body_cpn
           |> List.map @@ fun generic_param ->
-             VfMirStub.Reader.GenericParamDef.name_get generic_param
+             VfMirRd.GenericParamDef.name_get generic_param
         in
         let early_gens, late_gens =
           List.partition
@@ -5750,9 +5746,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           let field_types =
             variants_cpn
             |> Util.flatmap @@ fun variant_cpn ->
-               VariantDef.fields_get_list variant_cpn
+               VfMirRd.VariantDef.fields_get_list variant_cpn
                |> List.map @@ fun field_cpn ->
-                  VariantDef.FieldDef.ty_get field_cpn |> decode_ty
+                  VfMirRd.VariantDef.FieldDef.ty_get field_cpn |> decode_ty
           in
           (* If send_preds = None, it means this ADT is never Send.
              If send_preds = Some xs, then xs is a list of type parameters such that if any of them are not Send, then this ADT is not Send.
@@ -6774,9 +6770,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                     | Some prototype -> [ prototype ]
                     | None -> []))
 
-  let rec translate_module (module_cpn : VfMirStub.Reader.Module.t) :
+  let rec translate_module (module_cpn : VfMirRd.Module.t) :
       (Ast.decl, _) result =
-    let open VfMirStub.Reader.Module in
+    let open VfMirRd.Module in
     let name = name_get module_cpn in
     let* loc = translate_span_data (header_span_get module_cpn) in
     let* submodules =
@@ -6848,9 +6844,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       iter segments
     else d
 
-  let translate_vf_mir (extern_specs : string list) (vf_mir_cpn : VfMirRd.t) =
+  let translate_vf_mir (extern_specs : string list) (vf_mir_cpn : VfMirRd.VfMir.t) =
     let job _ =
-      let directives_cpn = VfMirRd.directives_get_list vf_mir_cpn in
+      let directives_cpn = VfMirRd.VfMir.directives_get_list vf_mir_cpn in
       let* directives = ListAux.try_map translate_annotation directives_cpn in
       let vf_mir_translator_directives, vf_directives =
         directives
@@ -6860,7 +6856,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       |> List.iter (fun ({ span; raw } : Mir.annot) ->
              Args.report_should_fail raw (Ast.lexed_loc span));
       let* module_decls =
-        ListAux.try_map translate_module (VfMirRd.modules_get_list vf_mir_cpn)
+        ListAux.try_map translate_module (VfMirRd.VfMir.modules_get_list vf_mir_cpn)
       in
       let module_imports_map =
         let rec iter moduleName module_decls =
@@ -6877,7 +6873,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         iter "" module_decls
       in
       let ghost_decl_batches_cpn =
-        VfMirRd.ghost_decl_batches_get_list vf_mir_cpn
+        VfMirRd.VfMir.ghost_decl_batches_get_list vf_mir_cpn
       in
       let* ghost_decl_batches =
         ListAux.try_map translate_ghost_decl_batch ghost_decl_batches_cpn
@@ -6894,9 +6890,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let ghost_decls = module_decls @ ghost_decl_batches in
       let ghost_decl_map = AstAux.decl_map_of ghost_decls in
       let* trait_impls =
-        translate_trait_impls (VfMirRd.trait_impls_get_list vf_mir_cpn)
+        translate_trait_impls (VfMirRd.VfMir.trait_impls_get_list vf_mir_cpn)
       in
-      let adt_defs_cpn = VfMirRd.adt_defs_get vf_mir_cpn in
+      let adt_defs_cpn = VfMirRd.VfMir.adt_defs_get vf_mir_cpn in
       let* adt_defs_cpn = CapnpAux.ind_list_get_list adt_defs_cpn in
       let* adt_defs =
         ListAux.try_map
@@ -6933,7 +6929,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       in
       let* _ = check_proof_obligations ghost_decl_map adts_proof_obligs in
       let* traits_cpn =
-        CapnpAux.ind_list_get_list (VfMirRd.traits_get vf_mir_cpn)
+        CapnpAux.ind_list_get_list (VfMirRd.VfMir.traits_get vf_mir_cpn)
       in
       let* traits_decls =
         ListAux.try_map
@@ -6941,7 +6937,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           traits_cpn
       in
       let traits_decls = List.flatten traits_decls in
-      let bodies_cpn = VfMirRd.bodies_get_list vf_mir_cpn in
+      let bodies_cpn = VfMirRd.VfMir.bodies_get_list vf_mir_cpn in
+      let bodies_cpn = bodies_cpn |> List.filter (fun body_cpn -> BodyRd.DefKind.get (BodyRd.def_kind_get body_cpn) <> BodyRd.DefKind.Closure) in (* It's okay to ignore closure bodies so long as we crash when we encounter closure types as function call generic arguments. *)
       let bodies_cpn =
         if Args.skip_specless_fns then
           List.filter

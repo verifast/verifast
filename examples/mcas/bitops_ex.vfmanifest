@@ -26,6 +26,7 @@
 .requires CRT/list.gh#reverse_reverse
 .requires CRT/list.gh#take_0
 .requires CRT/list.gh#take_length
+.requires CRT/list.gh#update_nth_equal
 .requires CRT/nat.gh#int_of_nat_nonnegative
 .requires CRT/nat.gh#int_of_nat_of_int
 .requires CRT/nat.gh#nat_of_1

@@ -1,3 +1,4 @@
+open Vf_mir_decoder
 open Refinement_checker
 
 let memoize f =
@@ -37,17 +38,19 @@ let original_path, verified_path =
 let () = Perf.init_windows_error_mode ()
 
 let original_vf_mir =
-  VfMirRd.VfMir.of_message @@ Frontend.get_vf_mir !rustc_args original_path
+  decode_vf_mir @@ VfMirRd.VfMir.of_message @@ Frontend.get_vf_mir !rustc_args original_path
 
 let verified_vf_mir =
-  VfMirRd.VfMir.of_message @@ Frontend.get_vf_mir !rustc_args verified_path
+  decode_vf_mir @@ VfMirRd.VfMir.of_message @@ Frontend.get_vf_mir !rustc_args verified_path
 
 (* Check, for each function body in original_vf_mir, that there is a matching function body in verified_vf_mir *)
-let original_bodies = VfMirRd.VfMir.bodies_get_list original_vf_mir
+let original_bodies =
+  original_vf_mir.bodies
+  |> List.map (fun body -> (body.def_path, body))
 
 let verified_bodies =
-  VfMirRd.VfMir.bodies_get_list verified_vf_mir
-  |> List.map (fun body -> (VfMirRd.Body.def_path_get body, body))
+  verified_vf_mir.bodies
+  |> List.map (fun body -> (body.def_path, body))
 
 let get_line_offsets text =
   let rec get_line_offsets' text offset acc =
@@ -65,7 +68,7 @@ let load_file_core path =
   (contents, line_offsets)
 
 let load_file = memoize load_file_core
-let decode_body_span body = decode_span @@ VfMirRd.Body.span_get body
+let decode_body_span (body: body) = decode_span body.span
 
 let load_span_snippet span =
   let (path, start_line, start_col), (_, end_line, end_col) = span in
@@ -79,8 +82,14 @@ let bodies_are_identical body0 body1 =
   let snippet1 = load_span_snippet (decode_body_span body1) in
   snippet0 = snippet1
 
+let wrapper_fn_spans =
+  verified_bodies |> List.map (fun (fn, body) ->
+    if String.ends_with ~suffix:"__VeriFast_wrapper" fn then
+      [decode_body_span body]
+    else []) |> List.flatten
+
 let original_checked_spans = ref []
-let verified_checked_spans = ref []
+let verified_checked_spans = ref wrapper_fn_spans
 
 let check_body_refines_body def_path body verified_body =
   if bodies_are_identical body verified_body then
@@ -88,7 +97,7 @@ let check_body_refines_body def_path body verified_body =
   else (
     Printf.printf
       "Function bodies for %s are different; checking refinement...\n" def_path;
-    check_body_refines_body def_path body verified_body;
+    check_body_refines_body original_bodies verified_bodies def_path body verified_body;
     push original_checked_spans (decode_body_span body);
     push verified_checked_spans (decode_body_span verified_body))
 
@@ -141,6 +150,13 @@ let skip_whitespace contents offset =
   in
   skip_whitespace' offset
 
+let rec skip_whitespace_and_checked_ranges contents offset checked_ranges =
+  let offset = skip_whitespace contents offset in
+  match checked_ranges with
+  | (start, end_) :: checked_ranges when start = offset ->
+    skip_whitespace_and_checked_ranges contents end_ checked_ranges
+  | _ -> offset, checked_ranges
+
 (* Checks that the two files are identical, after collapsing whitespace and spans checked by the refinement checker *)
 let check_files_match (path0, path1) =
   Printf.printf "Checking that, apart from checked functions and comments, %s and %s are identical\n" path0 path1;
@@ -175,80 +191,65 @@ let check_files_match (path0, path1) =
   let checked_ranges0 = List.sort compare checked_ranges0 in
   let checked_ranges1 = List.sort compare checked_ranges1 in
   let rec iter offset0 offset1 checked_ranges0 checked_ranges1 =
-    let offset0' = skip_whitespace contents0 offset0 in
-    let offset1' = skip_whitespace contents1 offset1 in
+    let offset0', checked_ranges0 = skip_whitespace_and_checked_ranges contents0 offset0 checked_ranges0 in
+    let offset1', checked_ranges1 = skip_whitespace_and_checked_ranges contents1 offset1 checked_ranges1 in
     if offset0' = offset0 <> (offset1' = offset1) then
       failwith
         (Printf.sprintf
            "Comparing %s to %s: Whitespace mismatch at offset %d/%d" path0 path1
            offset0 offset1);
     let offset0, offset1 = (offset0', offset1') in
-    match checked_ranges0 with
-    | (start0, end0) :: checked_ranges0 when start0 = offset0 -> (
-        match checked_ranges1 with
-        | (start1, end1) :: checked_ranges1 when start1 = offset1 ->
-            iter end0 end1 checked_ranges0 checked_ranges1
-        | _ ->
-            failwith
-              (Printf.sprintf
-                 "Comparing %s to %s: Mismatched checked ranges at offset %d/%d"
-                 path0 path1 offset0 offset1))
-    | _ -> (
-        match checked_ranges1 with
-        | (start1, end1) :: checked_ranges1 when start1 = offset1 ->
-            failwith
-              (Printf.sprintf
-                 "Comparing %s to %s: Mismatched checked ranges at offset %d/%d"
-                 path0 path1 offset0 offset1)
-        | _ ->
-            if offset0 = String.length contents0 then
-              if offset1 = String.length contents1 then (
-                assert (checked_ranges0 = [] && checked_ranges1 = []);
-                ())
-              else
-                failwith
-                  (Printf.sprintf "Comparing %s to %s: Unexpected EOF in %s"
-                     path0 path1 path1)
-            else if offset1 = String.length contents1 then
-              failwith
-                (Printf.sprintf "Comparing %s to %s: Unexpected EOF in %s" path0
-                   path1 path0)
-            else (
-              if contents0.[offset0] <> contents1.[offset1] then
-                failwith
-                  (Printf.sprintf
-                     "Comparing %s to %s: Mismatch at offset %d/%d: %c vs %c"
-                     path0 path1 offset0 offset1 contents0.[offset0]
-                     contents1.[offset1]);
-              iter (offset0 + 1) (offset1 + 1) checked_ranges0 checked_ranges1))
+    if offset0 = String.length contents0 then
+      if offset1 = String.length contents1 then (
+        assert (checked_ranges0 = [] && checked_ranges1 = []);
+        ())
+      else
+        failwith
+          (Printf.sprintf "Comparing %s to %s: Unexpected EOF in %s"
+              path0 path1 path1)
+    else if offset1 = String.length contents1 then
+      failwith
+        (Printf.sprintf "Comparing %s to %s: Unexpected EOF in %s" path0
+            path1 path0)
+    else (
+      if contents0.[offset0] <> contents1.[offset1] then
+        failwith
+          (Printf.sprintf
+              "Comparing %s to %s: Mismatch at offset %d/%d: %c vs %c"
+              path0 path1 offset0 offset1 contents0.[offset0]
+              contents1.[offset1]);
+      iter (offset0 + 1) (offset1 + 1) checked_ranges0 checked_ranges1)
   in
   iter 0 0 checked_ranges0 checked_ranges1
 
 let check_files_match = memoize check_files_match
 
 let rec check_module module0 module1 =
-  let (path0, _, _), _ = decode_span @@ VfMirRd.Module.body_span_get module0 in
-  let (path1, _, _), _ = decode_span @@ VfMirRd.Module.body_span_get module1 in
+  let (path0, _, _), _ = decode_span module0.body_span in
+  let (path1, _, _), _ = decode_span module1.body_span in
   check_files_match (path0, path1);
-  let submodules0 = VfMirRd.Module.submodules_get_list module0 in
-  let submodules1 = VfMirRd.Module.submodules_get_list module1 in
+  let submodules0 = module0.submodules in
+  let submodules1 = module1.submodules in
   List.iter2 check_module submodules0 submodules1
 
 let () =
   original_bodies
-  |> List.iter @@ fun body ->
-     let def_path = VfMirRd.Body.def_path_get body in
+  |> List.iter @@ fun (def_path, body) ->
      match List.assoc_opt def_path verified_bodies with
      | None ->
-         error
-           (Printf.sprintf "Function body %s not found in verified path"
-              def_path)
+        if body.visibility = Restricted then
+          () (* If a private function of the original program does not appear in the verified program,
+                it must be the case that all calls of that function were inlined. *)
+        else
+          error
+            (Printf.sprintf "Function body %s not found in verified path"
+               def_path)
      | Some verified_body -> check_body_refines_body def_path body verified_body
 
 let () =
   check_files_match (original_path, verified_path);
-  let modules0 = VfMirRd.VfMir.modules_get_list original_vf_mir in
-  let modules1 = VfMirRd.VfMir.modules_get_list verified_vf_mir in
+  let modules0 = original_vf_mir.modules in
+  let modules1 = verified_vf_mir.modules in
   List.iter2 check_module modules0 modules1
 
 let () = Printf.printf "No refinement errors found\n"

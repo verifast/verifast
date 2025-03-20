@@ -469,6 +469,8 @@ cd tutorial_solutions
   verifast_both -target 32bit students.c
 cd ..
 cd tests
+  [ "$(verifast issue739.c)" = $'issue739.c\nissue739.c(1,11-13): Parse error: Bad fraction literal' ]
+  [ "$(verifast issue731.c)" = $'issue731.c\nissue731.c(1,1-2,1): Parse error: Unterminated comment.' ]
   verifast_both -c chars__of_struct.c
   verifast -c -allow_should_fail issue681.c
   verifast -c -allow_should_fail const_vars.c

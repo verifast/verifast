@@ -1,7 +1,6 @@
 use crate::vf_mir_capnp;
-use util_cpn::int128 as int128_cpn;
-use util_cpn::u_int128 as u_int128_cpn;
-use vf_mir_capnp::util as util_cpn;
+use crate::vf_mir_capnp::int128 as int128_cpn;
+use crate::vf_mir_capnp::u_int128 as u_int128_cpn;
 
 // pub fn encode_int128(v: i128, mut v_cpn: int128_cpn::Builder<'_>) {
 //     let le_bytes = v.to_le_bytes();

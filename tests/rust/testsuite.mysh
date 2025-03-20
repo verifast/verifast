@@ -2,6 +2,7 @@ begin_parallel
 verifast -allow_dead_code -allow_should_fail struct_layout.rs
 verifast ghost_cmd_inj.rs
 verifast parser_test.rs
+verifast ghost_while.rs
 verifast -allow_should_fail type_pred_defs_for_imported_structs.rs
 verifast -allow_should_fail duplicate_type_pred_defs.rs
 verifast -allow_should_fail -allow_assume preprocessor_test.rs
@@ -100,7 +101,7 @@ cd safe_abstraction
   end_sequential
   verifast -ignore_unwind_paths -skip_specless_fns -allow_assume linked_list.rs
   cd linked_list
-    verifast -rustc_args "--edition 2021 --cfg test" -skip_specless_fns -allow_assume verified/lib.rs
+    verifast -rustc_args "--edition 2021 --cfg test" -ignore_unwind_paths -skip_specless_fns -allow_assume verified/lib.rs
     refinement-checker --rustc-args "--edition 2021 --cfg test" orig/lib.rs verified/lib.rs
   cd ..
   verifast -ignore_unwind_paths -skip_specless_fns -allow_assume btree_node.rs

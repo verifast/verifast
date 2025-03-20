@@ -52,6 +52,7 @@ if [ $(uname -s) = "Linux" ]; then
   if ! rustup show home; then
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s - -y
   fi
+  $HOME/.cargo/bin/cargo install --locked --git https://github.com/btj/capnpc-ocaml-decoder
 
   cd /
   dl_and_unzip_llvm-clang Linux 835a0da7ae9b237844d5dc9f3aa69cf76df08c7fa07dd1834850fd69c114011e
@@ -82,10 +83,10 @@ elif [ $(uname -s) = "Darwin" ]; then
   brewinstall oras
   if [ "$(uname -p)" = arm ]; then
     oras pull ghcr.io/homebrew/core/gtksourceview:2.10.5_7@sha256:0511545c79d16ff872f2bbc931abcdd5c1b4f3d70b71064f7d59989f68c8c073
-    brew install ./gtksourceview--2.10.5_7.arm64_monterey.bottle.tar.gz
+    HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1 brew install ./gtksourceview--2.10.5_7.arm64_monterey.bottle.tar.gz
   else
     oras pull ghcr.io/homebrew/core/gtksourceview:2.10.5_7@sha256:368413983346081e277782a5df7ac4b9e9ad1adce149fa7028fa6d99e809b7ae
-    brew install ./gtksourceview--2.10.5_7.monterey.bottle.tar.gz
+    HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1 brew install ./gtksourceview--2.10.5_7.monterey.bottle.tar.gz
   fi
   brewinstall vala
   brewinstall cmake
@@ -97,6 +98,7 @@ elif [ $(uname -s) = "Darwin" ]; then
   if ! rustup show home; then
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s - -y
   fi
+  $HOME/.cargo/bin/cargo install --locked --git https://github.com/btj/capnpc-ocaml-decoder
 
   cd /usr/local
   if [ "$(uname -p)" = arm ]; then
