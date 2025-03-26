@@ -425,6 +425,9 @@ cd examples
     verifast_both -c -allow_should_fail struct.c
     verifast_both -c -fno-strict-aliasing -assume_no_subobject_provenance packed.c
   cd ..
+  cd rust
+    call testsuite.mysh
+  cd ..
 cd ..
 cd tutorial_solutions
   verifast_both -c -disable_overflow_check account.c

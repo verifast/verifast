@@ -665,13 +665,17 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       produce_c_object l coef pointerTerm pointeeType eval_h Uninitialized false true h env cont
     | ExprStmt (CallExpr (l, "close_points_to", targs, [], args, Static)) when language = CLang ->
       require_pure();
-      let e = match (targs, args) with ([], [LitPat e]) -> e | _ -> static_error l "close_points_to expects no type argument and one argument." None in
+      let e, coef = match (targs, args) with
+        ([], [LitPat e]) -> e, real_unit
+        | ([], [LitPat e; LitPat coef]) -> let coef = check_expr_t (pn,ilist) tparams tenv coef RealType in e, ev coef
+        | _ -> static_error l "close_points_to expects no type argument and one or two argument(s)." None
+      in
       let (w, tp) = check_expr (pn,ilist) tparams tenv e in
       let pointeeType = match tp with PtrType tp | RustRefType (_, _, tp) -> tp | _ -> static_error l "The argument of close_points_to must be a pointer." None in
       eval_h h env w $. fun h env pointerTerm ->
       with_context (Executing (h, env, l, "Consuming object")) $. fun () ->
-      consume_c_object_core_core l real_unit_pat pointerTerm pointeeType h env true false $. fun _ h (Some value) ->
-      cont (Chunk ((generic_points_to_symb (), true), [pointeeType], real_unit, [pointerTerm; value], None)::h) env
+      consume_c_object_core_core l (TermPat coef) pointerTerm pointeeType h env true false $. fun _ h (Some value) ->
+      cont (Chunk ((generic_points_to_symb (), true), [pointeeType], coef, [pointerTerm; value], None)::h) env
     | ExprStmt (CallExpr (l, "open_malloc_block", targs, [], args, Static)) when language = CLang ->
       require_pure ();
       let e = match (targs, args) with ([], [LitPat e]) -> e | _ -> static_error l "open_malloc_block expects no type arguments and one argument." None in

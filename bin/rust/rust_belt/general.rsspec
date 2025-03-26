@@ -166,6 +166,8 @@ type_pred_def <u64>.own = u64_own;
 type_pred_def <u128>.own = u128_own;
 type_pred_def <usize>.own = usize_own;
 
+type_pred_def <u8>.full_borrow_content = u8_full_borrow_content;
+
 lem close_ref_mut_own<'a, T>(t: thread_id_t, l: &'a mut T);
     req full_borrow('a, <T>.full_borrow_content(t, l));
     ens <&'a mut T>.own(t, l);
