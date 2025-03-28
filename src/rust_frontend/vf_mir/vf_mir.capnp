@@ -434,6 +434,7 @@ struct PlaceElem {
     union {
         deref @0: Void;
         field @1: FieldData;
+        boxAsPtr @8: Ty; # The MIR pattern `(((X.0: std::ptr::Unique<T>).0: std::ptr::NonNull<T>).0: *const T)` when X is a Box<T>. The Ty is T.
         index @3: Void;
         constantIndex @4: Void;
         subslice @5: Void;
