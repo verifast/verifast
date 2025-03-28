@@ -35,4 +35,5 @@ begin_parallel
   !refinement-checker option-map-generics_orig.rs option-map-generics_verified_bad2.rs
   refinement-checker box-deref_orig.rs box-deref_verified.rs
   refinement-checker box-ref-deref_orig.rs box-ref-deref_verified.rs
+  refinement-checker move-out-of-box_orig.rs move-out-of-box_verified.rs
 end_parallel

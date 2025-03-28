@@ -2566,10 +2566,18 @@ mod vf_mir_builder {
             let local = &enc_ctx.body().local_decls()[place.local];
             let mut pty = PlaceTy::from_ty(local.ty);
             let mut kind = PlaceKind::Other;
-            place_cpn.reborrow().fill_projection(place.projection, |place_elm_cpn, place_elm| {
-                kind = Self::encode_place_element(enc_ctx, pty.ty, &place_elm, place_elm_cpn, kind);
-                pty = pty.projection_ty(enc_ctx.tcx, place_elm);
-            });
+            if place.projection.len() == 3 && local.ty.is_box() {
+                // The only projection that can be applied to a Box is (((X.0: std::ptr::Unique<T>).0: std::ptr::NonNull<T>).0: *const T)
+                let place_projection_cpn = place_cpn.reborrow().init_projection(1);
+                let place_elem_cpn = place_projection_cpn.get(0);
+                let ty_cpn = place_elem_cpn.init_box_as_ptr();
+                Self::encode_ty(enc_ctx.tcx, enc_ctx, local.ty.boxed_ty().unwrap(), ty_cpn);
+            } else {
+                place_cpn.reborrow().fill_projection(place.projection, |place_elm_cpn, place_elm| {
+                    kind = Self::encode_place_element(enc_ctx, pty.ty, &place_elm, place_elm_cpn, kind);
+                    pty = pty.projection_ty(enc_ctx.tcx, place_elm);
+                });
+            }
             let mut kind_cpn = place_cpn.init_kind();
             match kind {
                 PlaceKind::MutableRef => kind_cpn.set_mutable_ref(()),
