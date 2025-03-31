@@ -67,7 +67,6 @@ pub fn leftpad_vec(c: u8, n: usize, v: &mut Vec<u8>) {
         //@ std::vec::Vec_unseparate_buffer(*v);
         //@ foreach_own_u8(_t, cspad);
         //@ foreach_append(cspad, cs);
-        //@ std::vec::Vec_to_own(*v);
     }
-    //@ if ns >= n { std::vec::Vec_to_own(*v); }
+    //@ std::vec::Vec_to_own(*v);
 }
