@@ -18,7 +18,7 @@ void memmove(void *dest, void *src, size_t count);
         dest <= src ?
             chars(dest, src - dest, _)
         :
-            chars(src + count, dest - src, _);
+            chars_(src + count, dest - src, _);
     @*/
     /*@
     ensures
