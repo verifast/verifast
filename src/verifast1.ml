@@ -4496,7 +4496,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       begin match t1, t2 with
         PtrType pt1, PtrType pt2 when operator = Sub ->
         if pt1 <> pt2 then static_error l "Pointers must be of same type" None;
-        if pt1 <> charType && pt1 <> Void then static_error l "Subtracting non-char pointers is not yet supported" None;
+        if pt1 <> charType && pt1 <> Void && pt1 <> u8Type then
+          static_error l (if is_rust then "Subtracting non-u8 pointers is not yet supported" else "Subtracting non-char pointers is not yet supported") None;
         (WOperation (l, PtrDiff, [w1; w2], t1), ptrdiff_t, None)
       | PtrType pt1, _ ->
         let (w2, t2, _) = check e2 in
