@@ -45,6 +45,7 @@ ensures
     all_eq(take(length(cs1) - length(cs), cs1), c) == true &*&
     drop(length(cs1) - length(cs), cs1) == cs;
 @*/
+//@ terminates;
 {
   size_t l = strlen(s);
   if (n > l) {
