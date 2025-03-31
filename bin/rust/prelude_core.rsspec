@@ -40,6 +40,10 @@ lem_auto is_power_of_2_lem();
     req true;
     ens is_power_of_2(1) && is_power_of_2(2) && is_power_of_2(4) && is_power_of_2(8) && is_power_of_2(16) && is_power_of_2(32);
 
+lem_auto align_of_u8();
+    req true;
+    ens std::mem::align_of::<u8>() == 1;
+
 lem size_align<T>();
     req true;
     ens std::mem::size_of::<T>() % std::mem::align_of::<T>() == 0;
