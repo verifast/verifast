@@ -95,6 +95,10 @@ see, it always helps to let us know.
 
 ## Further resources
 
+There is a [brief introduction to VeriFast for Rust](https://model-checking.github.io/verify-rust-std/tools/verifast.html),
+with a few examples, in
+the [Verify Rust Std Lib book](https://model-checking.github.io/verify-rust-std/intro.html).
+
 A tutorial is being prepared. In the meantime, the [VeriFast
 Tutorial](https://zenodo.org/records/13380705) for C is a good resource for
 familiarizing yourself with VeriFast's concepts. Rust versions of the examples
