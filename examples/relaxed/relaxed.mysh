@@ -1,2 +1,5 @@
 verifast -prover redux relaxed.o lock.c lock_client.c
 verifast -prover redux relaxed.o message_passing.c
+cd arc
+  verifast -c arc.c
+cd ..
