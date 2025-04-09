@@ -1740,7 +1740,7 @@ and context () =
             | Mul (t1, t2) -> find_terms t1 @ find_terms t2
             | NumLit n -> []
             | App (s, args, _) -> check_pat pat
-            | IfThenElse (t1, t2, t3) -> []
+            | IfThenElse (t1, t2, t3) -> find_terms t1 @ find_terms t2 @ find_terms t3
             | RealLe (t1, t2) -> find_terms t1 @ find_terms t2
             | RealLt (t1, t2) -> find_terms t1 @ find_terms t2
             | True -> []
