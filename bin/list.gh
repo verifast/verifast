@@ -43,10 +43,6 @@ lemma_auto void length_nonnegative<t>(list<t> xs);
     requires true;
     ensures length(xs) >= 0;
 
-lemma_auto void list_map_equal_length<t, s> (list<t> xs, fixpoint(t,s) f);
-    requires true;
-    ensures length(xs)==length(map(f, xs));
-
 fixpoint list<t> append<t>(list<t> xs, list<t> ys) {
     switch (xs) {
         case nil: return ys;
@@ -229,6 +225,10 @@ fixpoint list<b> map<a, b>(fixpoint(a x, b) requires x < xs f, list<a> xs) {
         case cons(x, xs0): return cons(f(x), map(f, xs0));
     }
 }
+
+lemma_auto(map(f, xs)) void list_map_equal_length<a, b> (list<a> xs, fixpoint(a,b) f);
+    requires true;
+    ensures length(xs)==length(map(f, xs));
 
 fixpoint bool forall<t>(list<t> xs, fixpoint(t, bool) fp) {
     switch (xs) {
