@@ -306,6 +306,17 @@ lemma void foreach_append<t>(list<t> xs, list<t> ys)
     }
 }
 
+lemma void list_map_equal_length<t, s> (list<t> xs, fixpoint(t,s) f)
+    requires true;
+    ensures length(xs) == length(map(f, xs));
+{
+    switch (xs) {
+        case nil:
+        case cons(x, xs0):
+            list_map_equal_length(xs0);
+    }
+}
+
 lemma void nth_update<t>(int i, int j, t y, list<t> xs)
     requires 0 <= i &*& i < length(xs) &*& 0 <= j &*& j < length(xs);
     ensures nth(i, update(j, y, xs)) == (i == j ? y : nth(i, xs));
