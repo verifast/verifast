@@ -1,0 +1,3 @@
+(executable
+ (name cargo_verifast)
+ (libraries unix json))

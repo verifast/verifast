@@ -421,7 +421,7 @@ void send_asymmetric_decrypted(struct network_status *net_stat, struct keypair *
     {
       //@ assert e == asymmetric_encrypted_item(?principal3, ?count3, ?pay, ?ent);
       char tag;
-      //@ close chars(&tag, 1, _);
+      //@ close chars_(&tag, 1, _);
       random_buffer_(&tag, 1);
       //@ open chars(&tag, 1, _);
       if (tag == TAG_DATA || tag == TAG_PAIR ||           

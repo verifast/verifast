@@ -34,7 +34,7 @@ typedef lemma void queue_try_dequeue(predicate(list<int> vs) I)();
 @*/
 
 bool try_dequeue(struct queue* q, int* res);
-  //@ requires [?f]queue(q, ?I) &*& integer(res, ?v) &*& is_queue_try_dequeue(?lem, I) &*& try_dequeue_pre(lem)();
-  //@ ensures [f]queue(q, I) &*& integer(res, ?nv) &*& try_dequeue_post(lem)(result, ?ret) &*& result ? ret == nv : true;
+  //@ requires [?f]queue(q, ?I) &*& *res |-> _ &*& is_queue_try_dequeue(?lem, I) &*& try_dequeue_pre(lem)();
+  //@ ensures [f]queue(q, I) &*& try_dequeue_post(lem)(result, ?ret) &*& result ? *res |-> ret : *res |-> _;
 
 #endif

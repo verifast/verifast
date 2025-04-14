@@ -1,15 +1,19 @@
 begin_parallel
+verifast -allow_dead_code -allow_should_fail struct_layout.rs
 verifast ghost_cmd_inj.rs
 verifast parser_test.rs
+verifast ghost_while.rs
 verifast -allow_should_fail type_pred_defs_for_imported_structs.rs
 verifast -allow_should_fail duplicate_type_pred_defs.rs
-verifast -allow_should_fail public_fields.rs
 verifast -allow_should_fail -allow_assume preprocessor_test.rs
 verifast -allow_should_fail -allow_assume preprocessor_test_crlf.rs
 verifast -allow_should_fail -allow_assume preprocessor_test_crlf_bom.rs
 verifast -allow_should_fail pred_arg_lft.rs
 verifast -allow_should_fail -allow_dead_code lemma_without_body.rs
 verifast -allow_should_fail -allow_dead_code assume_stmt.rs
+verifast hidden_locals.rs
+verifast -allow_should_fail -allow_dead_code this_pred.rs
+verifast use_decls_in_modules.rs
 begin_sequential
 cd unverified
   cd platform
@@ -25,54 +29,67 @@ pushd ../../rust_tutorials/purely_unsafe/solutions
 popd
 verifast -ignore_ref_creation -allow_assume nonnull.rs
 cd purely_unsafe
+  verifast -ignore_unwind_paths leftpad.rs
+  verifast arrays.rs
   verifast -allow_assume std_thread.rs
   verifast -allow_should_fail -allow_dead_code nonmut_let_immut.rs
   verifast struct_exprs.rs
   verifast scalars.rs
-  verifast alloc.rs
-  verifast reverse.rs
-  verifast account.rs
-  verifast account_value.rs
-  verifast point_value.rs
-  verifast account_with_box.rs
-  verifast deque_i32.rs
-  verifast deque.rs
-  verifast -allow_assume strlen.rs
-  verifast tree.rs
-  verifast -allow_assume tree2.rs
+  verifast -ignore_unwind_paths alloc.rs
+  verifast -ignore_unwind_paths reverse.rs
+  verifast simple_reverse.rs
+  verifast -ignore_unwind_paths account.rs
+  verifast -ignore_unwind_paths account_value.rs
+  verifast -ignore_unwind_paths point_value.rs
+  verifast -ignore_unwind_paths account_with_box.rs
+  verifast -ignore_unwind_paths deque_i32.rs
+  verifast -ignore_unwind_paths deque.rs
+  verifast -ignore_unwind_paths -allow_assume strlen.rs
+  verifast -ignore_unwind_paths tree.rs
+  verifast -ignore_unwind_paths -allow_assume tree2.rs
   verifast traits0.rs
   verifast -allow_should_fail -allow_dead_code traits0_error.rs
   verifast -allow_should_fail -allow_dead_code traits0_error2.rs
   verifast pred_fam.rs
-  verifast -allow_assume tree3.rs
+  verifast -ignore_unwind_paths -allow_assume tree3.rs
   verifast generic_structs.rs
   verifast -ignore_ref_creation str.rs
-  verifast -prover z3v4.5 -target LP64 -ignore_ref_creation -extern ../unverified/platform httpd.rs
-  verifast -prover z3v4.5 -target LP64 -ignore_ref_creation -extern ../unverified/platform httpd_vec.rs
-  verifast -prover z3v4.5 -extern ../unverified/platform mt_account_transfer.rs
-  verifast -prover z3v4.5 -target LP64 -ignore_ref_creation -extern ../unverified/platform httpd_mt.rs
+  verifast -ignore_unwind_paths -prover z3v4.5 -target LP64 -ignore_ref_creation -extern ../unverified/platform httpd.rs
+  verifast -ignore_unwind_paths -prover z3v4.5 -target LP64 -ignore_ref_creation -extern ../unverified/platform httpd_vec.rs
+  cd simple_mutex
+    cargo verifast -ignore_unwind_paths -allow_assume
+  cd ..
+  cd mt_account_transfer
+    cargo verifast -ignore_unwind_paths
+  cd ..
+  cd httpd_mt
+    cargo verifast -ignore_unwind_paths
+  cd ..
   verifast my_option.rs
-  verifast -ignore_ref_creation vec_test.rs
-  verifast -target LP64 -ignore_ref_creation -extern ../unverified/platform atomics_example.rs
+  verifast -ignore_unwind_paths -ignore_ref_creation vec_test.rs
+  verifast -ignore_unwind_paths -target LP64 -ignore_ref_creation -extern ../unverified/platform atomics_example.rs
+  verifast -ignore_unwind_paths -ignore_ref_creation -disable_overflow_check type_projections.rs
 cd ..
 cd safe_abstraction
+  verifast -allow_should_fail public_fields.rs
   verifast box.rs
   verifast full_bor_primitive_types.rs
   verifast shared_primitive_types.rs
-  verifast -allow_assume deque_i32.rs
-  verifast -ignore_ref_creation -allow_assume deque.rs
+  verifast -ignore_unwind_paths -allow_assume deque_i32.rs
+  verifast -ignore_unwind_paths -ignore_ref_creation -allow_assume deque.rs
   verifast -ignore_ref_creation -allow_assume cell_u32.rs
-  verifast -ignore_ref_creation -allow_assume cell.rs
-  verifast -ignore_ref_creation -allow_assume tree.rs
+  verifast -ignore_unwind_paths -ignore_ref_creation -allow_assume cell.rs
+  verifast -ignore_unwind_paths -ignore_ref_creation -allow_assume tree.rs
   verifast -allow_should_fail -allow_dead_code drop_test.rs
-  verifast -ignore_ref_creation tparam_own.rs
-  verifast -ignore_ref_creation generic_pair.rs
-  verifast -ignore_ref_creation -extern ../unverified/sys -allow_assume mutex_u32.rs
-  verifast -ignore_ref_creation -extern ../unverified/sys -allow_assume mutex.rs
-  verifast -ignore_ref_creation -allow_assume rc_u32.rs
-  verifast -ignore_ref_creation -allow_assume rc.rs
-  verifast -ignore_ref_creation -allow_assume arc_u32.rs
-  verifast -ignore_ref_creation -allow_assume arc.rs
+  verifast -ignore_unwind_paths -ignore_ref_creation tparam_own.rs
+  verifast -ignore_unwind_paths -ignore_ref_creation generic_pair.rs
+  verifast -ignore_unwind_paths -ignore_ref_creation -extern ../unverified/sys -allow_assume mutex_u32.rs
+  verifast -ignore_unwind_paths -ignore_ref_creation -extern ../unverified/sys -allow_assume mutex.rs
+  verifast -ignore_unwind_paths -ignore_ref_creation -allow_assume rc_u32.rs
+  verifast -ignore_unwind_paths -ignore_ref_creation -allow_assume rc.rs
+  verifast -ignore_unwind_paths -ignore_ref_creation -allow_assume ref_cell.rs
+  verifast -ignore_unwind_paths -ignore_ref_creation -allow_assume arc_u32.rs
+  verifast -ignore_unwind_paths -ignore_ref_creation -allow_assume arc.rs
   begin_sequential
     verifast -apply_quick_fix proof_obligs_quick_fix_test_result.rs proof_obligs_quick_fix_test.rs
     verifast -allow_assume proof_obligs_quick_fix_test_result.rs
@@ -83,7 +100,16 @@ cd safe_abstraction
     verifast -allow_assume proof_obligs_quick_fix_test_generic_result.rs
     del proof_obligs_quick_fix_test_generic_result.rs
   end_sequential
-  verifast -skip_specless_fns -prover z3v4.5 -allow_assume linked_list.rs
+  verifast -ignore_unwind_paths -skip_specless_fns -allow_assume linked_list.rs
+  cd linked_list
+    verifast -rustc_args "--edition 2021 --cfg test" -ignore_unwind_paths -skip_specless_fns -allow_assume verified/lib.rs
+    refinement-checker --rustc-args "--edition 2021 --cfg test" orig/lib.rs verified/lib.rs
+  cd ..
+  verifast -ignore_unwind_paths -skip_specless_fns -allow_assume btree_node.rs
+  verifast -skip_specless_fns -ignore_unwind_paths atomic.rs
+cd ..
+cd refinement_checker
+  call testsuite.mysh
 cd ..
 end_parallel
 end_sequential

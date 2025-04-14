@@ -7,6 +7,7 @@ module type RUST_FE_ARGS = sig
   val skip_specless_fns : bool
   val allow_ignore_ref_creation : bool
   val ignore_ref_creation : bool
+  val ignore_unwind_paths : bool
 end
 
 module Make (Args : RUST_FE_ARGS) = struct
@@ -116,6 +117,8 @@ module Make (Args : RUST_FE_ARGS) = struct
       let args = Array.of_list ([bin_path; rs_file_path; "--sysroot=" ^ tchain_root] @ rustc_args) in
       let current_env = Unix.environment () in
       let* env = add_path_to_env_var current_env (match Vfconfig.platform with MacOS -> "DYLD_LIBRARY_PATH" | Windows -> "PATH" | _ -> "LD_LIBRARY_PATH") tchain_lib in
+      (* Printf.eprintf "Running %s with arguments %s\n" bin_path (String.concat " " (List.map (Printf.sprintf "'%s'") (Array.to_list args)));
+      flush stderr; *)
       let chns = Unix.open_process_args_full bin_path args env in
       Ok chns
     with
@@ -212,7 +215,7 @@ module Make (Args : RUST_FE_ARGS) = struct
     (*** For now we are just using the first message *)
     | msg :: _ -> (
         try
-          let vf_mir_rd = VfMirRd.of_message msg in
+          let vf_mir_rd = VfMirRd.VfMir.of_message msg in
           Ok vf_mir_rd
         with Capnp.Message.Invalid_message emsg ->
           Error
@@ -223,14 +226,14 @@ module Make (Args : RUST_FE_ARGS) = struct
     Perf.init_windows_error_mode ();
     match get_vf_mir_rd rustc_args rs_file_path with
     | Ok vf_mir_rd ->
-      let targetTriple = VfMirRd.target_triple_get vf_mir_rd in
-      let pointerWidth = VfMirRd.pointer_width_get vf_mir_rd in
+      let targetTriple = VfMirRd.VfMir.target_triple_get vf_mir_rd in
+      let pointerWidth = VfMirRd.VfMir.pointer_width_get vf_mir_rd in
       let Some data_model = Args.data_model_opt in
       let data_model_name = Ast.string_of_data_model data_model in
       if pointerWidth <> 8 * (1 lsl data_model.ptr_width) then
         raise (Parser.CompilationError (Printf.sprintf "C target %s does not match rustc target %s; specify a matching C target using the -target command-line option" data_model_name targetTriple));
       (!Stats.stats)#set_success_qualifier (Printf.sprintf "target: %s (%s)" targetTriple data_model_name);
-      VfMirTr.translate_vf_mir extern_specs vf_mir_rd Args.report_should_fail Args.skip_specless_fns Args.allow_ignore_ref_creation Args.ignore_ref_creation
+      VfMirTr.translate_vf_mir extern_specs vf_mir_rd
     | Error einfo ->
         let gen_emsg = "Rust frontend failed to generate VF MIR: " in
         let desc =

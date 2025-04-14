@@ -154,7 +154,11 @@ clean::
 
 ../lib/libgtksourceview-2.0.0.dylib:
 	mkdir -p ../lib
+ifeq ($(shell uname -p), arm)
+	for i in $$( cat vfide-osx-local-dlls.txt ); do cp /opt/homebrew/$${i#/usr/local/} ../lib; done
+else
 	for i in $$( cat vfide-osx-local-dlls.txt ); do cp $$i ../lib; done
+endif
 	mkdir -p ../lib/gdk-pixbuf-2.0/2.10.0
 	echo > ../lib/gdk-pixbuf-2.0/2.10.0/loaders.cache
 
@@ -292,8 +296,9 @@ STDLIB_FILES = \
 	$(STDLIB_FILES_GEN)
 
 TOOLS_EXCEPT_VFIDE = ../bin/mysh$(DOTEXE) ../bin/verifast$(DOTEXE) \
+        ../bin/rustc-verifast$(DOTEXE) ../bin/cargo-verifast$(DOTEXE) ../bin/cargo-vfide$(DOTEXE)\
         ../bin/main_class$(DOTEXE) ../bin/java_card_applet$(DOTEXE) \
-        ../bin/dlsymtool$(DOTEXE) ../bin/vfstrip$(DOTEXE) ../bin/explorer$(DOTEXE)
+        ../bin/dlsymtool$(DOTEXE) ../bin/vfstrip$(DOTEXE) ../bin/explorer$(DOTEXE) ../bin/refinement-checker$(DOTEXE)
 
 TOOLS_EXCEPT_VFIDE += ../bin/vf-cxx-ast-exporter$(DOTEXE) build-vf-rust-mir-exporter
 
@@ -391,6 +396,23 @@ _build/default/mysh/mysh.exe: .FORCE
 
 mysh: ../bin/mysh$(DOTEXE)
 .PHONY: mysh
+
+_build/default/rustc_verifast/rustc_verifast.exe: .FORCE
+	@echo "  DUNE " $@
+	dune build rustc_verifast/rustc_verifast.exe
+
+../bin/rustc-verifast$(DOTEXE): _build/default/rustc_verifast/rustc_verifast.exe
+	if [ ! -e $@ -o $< -nt $@ ]; then cp -f $< $@; fi
+
+_build/default/cargo_verifast/cargo_verifast.exe: .FORCE
+	@echo "  DUNE " $@
+	dune build cargo_verifast/cargo_verifast.exe
+
+../bin/cargo-verifast$(DOTEXE): _build/default/cargo_verifast/cargo_verifast.exe
+	if [ ! -e $@ -o $< -nt $@ ]; then cp -f $< $@; fi
+
+../bin/cargo-vfide$(DOTEXE): _build/default/cargo_verifast/cargo_verifast.exe
+	if [ ! -e $@ -o $< -nt $@ ]; then cp -f $< $@; fi
 
 _build/default/dlsymtool/dlsymtool.exe: .FORCE
 	@echo "  DUNE " $@
@@ -529,6 +551,13 @@ _build/default/explorer/explorer.exe: .FORCE
 	dune build $@
 
 ../bin/explorer$(DOTEXE): _build/default/explorer/explorer.exe
+	if [ ! -e $@ -o $< -nt $@ ]; then cp -f $< $@; fi
+
+_build/default/refinement_checker/main.exe: .FORCE
+	@echo "  DUNE " $@
+	dune build $@
+
+../bin/refinement-checker$(DOTEXE): _build/default/refinement_checker/main.exe
 	if [ ! -e $@ -o $< -nt $@ ]; then cp -f $< $@; fi
 
 verifast: ../bin/verifast$(DOTEXE) $(STDLIB)

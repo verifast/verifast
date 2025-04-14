@@ -1,0 +1,17 @@
+/*@
+
+inductive nat = zero | succ(nat);
+
+// For negative x, returns zero.
+fix nat_of_int(x: i32) -> nat;
+
+lem_auto nat_of_int_zero();
+    req true;
+    ens nat_of_int(0) == zero;
+
+lem_auto nat_of_int_one();
+    req true;
+    ens nat_of_int(1) == succ(zero);
+
+
+@*/

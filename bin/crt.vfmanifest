@@ -145,6 +145,7 @@
 .provides ./prelude.h#map_uchar_of_char_char_of_uchar
 .provides ./prelude.h#map_char_of_uchar_uchar_of_char
 .provides ./prelude.h#chars_to_uchars
+.provides ./prelude.h#of_chars__chars__of
 .provides ./prelude.h#uchars_to_chars
 .provides ./prelude.h#chars_to_ints
 .provides ./prelude.h#ints_to_chars

@@ -61,20 +61,36 @@ pub fn run_compiler() -> i32 {
     rustc_driver::catch_with_exit_code(move || {
         let mut rustc_args: Vec<_> = std::env::args().collect();
         rustc_args.push("-Coverflow_checks=off".to_owned());
-        // To also compile crates without a main function
-        // Todo @Nima: Should it not be passed from VeriFast?
-        rustc_args.push("--crate-type=lib".to_owned());
         // We must pass -Zpolonius so that the borrowck information is computed.
-        rustc_args.push("-Zpolonius".to_owned());
+        //rustc_args.push("-Zpolonius".to_owned());
         // To have MIR dump annotated with lifetimes
-        rustc_args.push("-Zverbose_internals".to_owned());
-        rustc_args.push("--error-format=json".to_owned());
+        //rustc_args.push("-Zverbose_internals".to_owned());
+        let mut preprocess = true;
+        if let Some(index) = rustc_args.iter().position(|arg| arg == "--vf-rust-mir-exporter:no-preprocess") {
+            preprocess = false;
+            rustc_args.remove(index);
+        }
+        {
+            // Find the index of the '--vf-rust-mir-exporter:no-default-args' argument.
+            if let Some(index) = rustc_args
+                .iter()
+                .position(|arg| arg == "--vf-rust-mir-exporter:no-default-args") {
+                // Remove the argument.
+                rustc_args.remove(index);
+            } else {
+                // To also compile crates without a main function
+                // Todo @Nima: Should it not be passed from VeriFast?
+                rustc_args.push("--crate-type=lib".to_owned());
+                rustc_args.push("--error-format=json".to_owned());
+            }
+        }
 
         // Todo @Nima: Find the correct sysroot by yourself. for now we get it as an argument.
         // See filesearch::get_or_default_sysroot()
 
         let mut callbacks = CompilerCalls {
             source_files: Box::leak(Box::new(std::sync::Mutex::new(SourceFiles::new()))),
+            preprocess,
         };
         // Call the Rust compiler with our callbacks.
         trace!("Calling the Rust Compiler with args: {:?}", rustc_args);
@@ -167,6 +183,7 @@ impl rustc_span::source_map::FileLoader for FileLoader {
 
 struct CompilerCalls {
     source_files: &'static std::sync::Mutex<SourceFiles>,
+    preprocess: bool,
 }
 
 impl rustc_driver::Callbacks for CompilerCalls {
@@ -176,9 +193,11 @@ impl rustc_driver::Callbacks for CompilerCalls {
             None => {}
             Some(loader) => todo!(),
         }
-        config.file_loader = Some(Box::from(FileLoader {
-            source_files: self.source_files,
-        }));
+        if self.preprocess {
+            config.file_loader = Some(Box::from(FileLoader {
+                source_files: self.source_files,
+            }));
+        }
 
         // assert!(config.override_queries.is_none());
         // config.override_queries = Some(override_queries);
@@ -201,6 +220,7 @@ impl rustc_driver::Callbacks for CompilerCalls {
             // Collect definition ids of bodies.
             let hir = tcx.hir();
             let mut visitor = HirVisitor {
+                tcx,
                 structs: Vec::new(),
                 trait_impls: Vec::new(),
                 bodies: Vec::new(),
@@ -211,10 +231,15 @@ impl rustc_driver::Callbacks for CompilerCalls {
             // Trigger borrow checking of all bodies.
             for (def_id, span) in visitor.bodies {
                 //let _ = tcx.optimized_mir(def_id);
-                bodies.push((
-                    tcx.mir_drops_elaborated_and_const_checked(def_id).steal(),
-                    span,
-                ))
+                let body = tcx.mir_drops_elaborated_and_const_checked(def_id);
+                if body.is_stolen() {
+                    trace!("Skipping body for {}; it's already been stolen", tcx.def_path_str(def_id));
+                } else {
+                    bodies.push((
+                        body.steal(),
+                        span,
+                    ))
+                }
             }
 
             // See what bodies were borrow checked.
@@ -301,14 +326,22 @@ struct TraitImplInfo {
 }
 
 /// Visitor that collects all body definition ids mentioned in the program.
-struct HirVisitor {
+struct HirVisitor<'tcx> {
+    tcx: TyCtxt<'tcx>,
     structs: Vec<LocalDefId>,
     trait_impls: Vec<TraitImplInfo>,
     bodies: Vec<(LocalDefId, Span)>,
 }
 
-impl<'tcx> rustc_hir::intravisit::Visitor<'tcx> for HirVisitor {
-    fn visit_item(&mut self, item: &rustc_hir::Item) {
+impl<'tcx> rustc_hir::intravisit::Visitor<'tcx> for HirVisitor<'tcx> {
+
+    type NestedFilter = rustc_middle::hir::nested_filter::All;
+
+    fn nested_visit_map(&mut self) -> rustc_middle::hir::map::Map<'tcx> {
+        self.tcx.hir()
+    }
+
+    fn visit_item(&mut self, item: &'tcx rustc_hir::Item<'tcx>) {
         match &item.kind {
             rustc_hir::ItemKind::Fn(fn_sig, _, _) => {
                 self.bodies.push((item.owner_id.def_id, fn_sig.span))
@@ -351,23 +384,40 @@ impl<'tcx> rustc_hir::intravisit::Visitor<'tcx> for HirVisitor {
             }
             _ => (),
         }
+        rustc_hir::intravisit::walk_item(self, item);
     }
 
-    fn visit_trait_item(&mut self, trait_item: &rustc_hir::TraitItem) {
+    fn visit_trait_item(&mut self, trait_item: &'tcx rustc_hir::TraitItem<'tcx>) {
         if let rustc_hir::TraitItemKind::Fn(fn_sig, trait_fn) = &trait_item.kind {
             if let rustc_hir::TraitFn::Provided(_) = trait_fn {
                 self.bodies.push((trait_item.owner_id.def_id, fn_sig.span));
             }
         }
+        rustc_hir::intravisit::walk_trait_item(self, trait_item)
     }
 
-    fn visit_impl_item(&mut self, impl_item: &rustc_hir::ImplItem) {
+    fn visit_impl_item(&mut self, impl_item: &'tcx rustc_hir::ImplItem<'tcx>) {
         if let rustc_hir::ImplItemKind::Fn(fn_sig, _) = impl_item.kind {
             self.bodies.push((impl_item.owner_id.def_id, fn_sig.span));
         }
+        rustc_hir::intravisit::walk_impl_item(self, impl_item);
     }
 
-    fn visit_foreign_item(&mut self, _foreign_item: &rustc_hir::ForeignItem) {}
+    fn visit_foreign_item(&mut self, foreign_item: &'tcx rustc_hir::ForeignItem<'tcx>) {
+        rustc_hir::intravisit::walk_foreign_item(self, foreign_item);
+    }
+
+    fn visit_fn(&mut self, fk: rustc_hir::intravisit::FnKind<'tcx>, fd: &'tcx rustc_hir::FnDecl<'tcx>, b: rustc_hir::BodyId, span: Span, id: LocalDefId) {
+        match fk {
+            rustc_hir::intravisit::FnKind::Closure => {
+                trace!("Found closure {:?}", id);
+                self.bodies.push((id, span));
+            }
+            _ => {}
+        }
+        rustc_hir::intravisit::walk_fn(self, fk, fd, b, id);
+    }
+
 }
 
 /// Pull MIR bodies stored in the thread-local.
@@ -403,74 +453,79 @@ mod vf_mir_builder {
     use crate::vf_mir_capnp::unsafety as unsafety_cpn;
     use crate::vf_mir_capnp::vf_mir as vf_mir_cpn;
     use crate::vf_mir_capnp::visibility as visibility_cpn;
-    use adt_def_cpn::variant_def as variant_def_cpn;
-    use basic_block_cpn::operand as operand_cpn;
-    use basic_block_cpn::rvalue as rvalue_cpn;
-    use basic_block_cpn::statement as statement_cpn;
-    use basic_block_cpn::terminator as terminator_cpn;
+    use crate::vf_mir_capnp::variant_def as variant_def_cpn;
+    use crate::vf_mir_capnp::operand as operand_cpn;
+    use crate::vf_mir_capnp::rvalue as rvalue_cpn;
+    use crate::vf_mir_capnp::statement as statement_cpn;
+    use crate::vf_mir_capnp::terminator as terminator_cpn;
     use binary_op_data_cpn::bin_op as bin_op_cpn;
-    use body_cpn::basic_block as basic_block_cpn;
-    use body_cpn::basic_block_id as basic_block_id_cpn;
-    use body_cpn::const_operand as const_operand_cpn;
-    use body_cpn::const_operand::const_ as const_cpn;
-    use body_cpn::const_value as const_value_cpn;
-    use body_cpn::contract as contract_cpn;
-    use body_cpn::local_decl as local_decl_cpn;
-    use body_cpn::local_decl_id as local_decl_id_cpn;
-    use body_cpn::place as place_cpn;
-    use body_cpn::scalar as scalar_cpn;
-    use body_cpn::source_info as source_info_cpn;
-    use body_cpn::var_debug_info as var_debug_info_cpn;
-    use file_name_cpn::real_file_name as real_file_name_cpn;
+    use crate::vf_mir_capnp::basic_block as basic_block_cpn;
+    use crate::vf_mir_capnp::basic_block_id as basic_block_id_cpn;
+    use crate::vf_mir_capnp::const_operand as const_operand_cpn;
+    use crate::vf_mir_capnp::mir_const as const_cpn;
+    use crate::vf_mir_capnp::const_value as const_value_cpn;
+    use crate::vf_mir_capnp::contract as contract_cpn;
+    use crate::vf_mir_capnp::local_decl as local_decl_cpn;
+    use crate::vf_mir_capnp::local_decl_id as local_decl_id_cpn;
+    use crate::vf_mir_capnp::place as place_cpn;
+    use crate::vf_mir_capnp::scalar as scalar_cpn;
+    use crate::vf_mir_capnp::source_info as source_info_cpn;
+    use crate::vf_mir_capnp::var_debug_info as var_debug_info_cpn;
+    use crate::vf_mir_capnp::real_file_name as real_file_name_cpn;
     use hir_cpn::generics as hir_generics_cpn;
     use hir_generic_param_cpn::generic_param_kind as hir_generic_param_kind_cpn;
     use hir_generic_param_cpn::param_name as hir_generic_param_name_cpn;
     use hir_generics_cpn::generic_param as hir_generic_param_cpn;
-    use loc_cpn::char_pos as char_pos_cpn;
-    use loc_cpn::source_file as source_file_cpn;
+    use crate::vf_mir_capnp::char_pos as char_pos_cpn;
+    use crate::vf_mir_capnp::source_file as source_file_cpn;
     use mir::HasLocalDecls;
-    use place_cpn::place_element as place_element_cpn;
+    use crate::vf_mir_capnp::place_elem as place_element_cpn;
     use ref_data_cpn::borrow_kind as borrow_kind_cpn;
     use rustc_ast::util::comments::Comment;
     use rustc_hir as hir;
     use rustc_interface::interface::Compiler;
     use rustc_middle::bug;
     use rustc_middle::mir::interpret::AllocRange;
+    use rustc_middle::mir::UnwindAction;
     use rustc_middle::ty;
     use rustc_middle::ty::GenericParamDef;
     use rustc_middle::ty::GenericParamDefKind;
     use rustc_middle::{mir, ty::TyCtxt};
     use rustc_span::source_map::Spanned;
     use rustc_span::Span;
-    use rvalue_cpn::aggregate_data::aggregate_kind as aggregate_kind_cpn;
+    use crate::vf_mir_capnp::aggregate_kind as aggregate_kind_cpn;
     use rvalue_cpn::binary_op_data as binary_op_data_cpn;
     use rvalue_cpn::ref_data as ref_data_cpn;
     use rvalue_cpn::unary_op_data as unary_op_data_cpn;
-    use source_file_cpn::file_name as file_name_cpn;
-    use span_data_cpn::loc as loc_cpn;
-    use statement_cpn::statement_kind as statement_kind_cpn;
+    use crate::vf_mir_capnp::file_name as file_name_cpn;
+    use crate::vf_mir_capnp::loc as loc_cpn;
+    use crate::vf_mir_capnp::statement_kind as statement_kind_cpn;
     use std::collections::LinkedList;
-    use switch_int_data_cpn::switch_targets as switch_targets_cpn;
-    use terminator_cpn::terminator_kind as terminator_kind_cpn;
+    use std::sync::Arc;
+    use crate::vf_mir_capnp::switch_targets as switch_targets_cpn;
+    use crate::vf_mir_capnp::terminator_kind as terminator_kind_cpn;
     use terminator_kind_cpn::fn_call_data as fn_call_data_cpn;
+    use crate::vf_mir_capnp::unwind_action as unwind_action_cpn;
     use terminator_kind_cpn::switch_int_data as switch_int_data_cpn;
     use tracing::{debug, trace};
-    use ty_cpn::adt_def as adt_def_cpn;
-    use ty_cpn::adt_def_id as adt_def_id_cpn;
-    use ty_cpn::adt_kind as adt_kind_cpn;
-    use ty_cpn::adt_ty as adt_ty_cpn;
-    use ty_cpn::const_ as ty_const_cpn;
-    use ty_cpn::const_kind as const_kind_cpn;
-    use ty_cpn::fn_def_ty as fn_def_ty_cpn;
-    use ty_cpn::gen_arg as gen_arg_cpn;
-    use ty_cpn::int_ty as int_ty_cpn;
-    use ty_cpn::raw_ptr_ty as raw_ptr_ty_cpn;
-    use ty_cpn::ref_ty as ref_ty_cpn;
-    use ty_cpn::region as region_cpn;
-    use ty_cpn::ty_kind as ty_kind_cpn;
-    use ty_cpn::u_int_ty as u_int_ty_cpn;
+    use crate::vf_mir_capnp::adt_def as adt_def_cpn;
+    use crate::vf_mir_capnp::adt_def_id as adt_def_id_cpn;
+    use crate::vf_mir_capnp::adt_kind as adt_kind_cpn;
+    use ty_kind_cpn::adt_ty as adt_ty_cpn;
+    use crate::vf_mir_capnp::ty_const as ty_const_cpn;
+    use crate::vf_mir_capnp::const_kind as const_kind_cpn;
+    use crate::vf_mir_capnp::val_tree as val_tree_cpn;
+    use crate::vf_mir_capnp::scalar_int as scalar_int_cpn;
+    use ty_kind_cpn::fn_def_ty as fn_def_ty_cpn;
+    use crate::vf_mir_capnp::generic_arg as gen_arg_cpn;
+    use crate::vf_mir_capnp::int_ty as int_ty_cpn;
+    use ty_kind_cpn::raw_ptr_ty as raw_ptr_ty_cpn;
+    use ty_kind_cpn::ref_ty as ref_ty_cpn;
+    use crate::vf_mir_capnp::region as region_cpn;
+    use crate::vf_mir_capnp::ty_kind as ty_kind_cpn;
+    use crate::vf_mir_capnp::u_int_ty as u_int_ty_cpn;
     use unary_op_data_cpn::un_op as un_op_cpn;
-    use var_debug_info_cpn::var_debug_info_contents as var_debug_info_contents_cpn;
+    use crate::vf_mir_capnp::var_debug_info_contents as var_debug_info_contents_cpn;
     use variant_def_cpn::field_def as field_def_cpn;
 
     struct Module {
@@ -499,7 +554,11 @@ mod vf_mir_builder {
                 n: rustc_hir::HirId,
             ) {
                 let name = self.tcx.hir().ident(n).as_str().into();
-                let body_span = m.spans.inner_span;
+                let mut body_span = m.spans.inner_span;
+                if Arc::as_ptr(&self.tcx.sess.source_map().lookup_source_file(header_span.lo())) ==
+                    Arc::as_ptr(&self.tcx.sess.source_map().lookup_source_file(body_span.lo())) {
+                    body_span = header_span.to(body_span);
+                }
                 let mut mod_annots: LinkedList<Box<GhostRange>> = self
                     .annots
                     .extract_if(|annot| body_span.contains(annot.span().unwrap()))
@@ -965,6 +1024,7 @@ mod vf_mir_builder {
                 Self::encode_predicate(enc_ctx, pred, pred_cpn);
             });
             adt_def_cpn.set_implements_drop(adt_def.has_dtor(tcx));
+            adt_def_cpn.set_is_repr_c(adt_def.repr().c());
         }
 
         fn encode_adt_kind(adt_kind: ty::AdtKind, mut adt_kind_cpn: adt_kind_cpn::Builder<'_>) {
@@ -1035,20 +1095,20 @@ mod vf_mir_builder {
             pred: &(ty::Clause<'tcx>, rustc_span::Span),
             mut pred_cpn: predicate_cpn::Builder<'_>,
         ) {
-            match pred.0.kind().skip_binder() {
-                ty::ClauseKind::RegionOutlives(outlives_pred) => {
+            match pred.0.kind().no_bound_vars() {
+                Some(ty::ClauseKind::RegionOutlives(outlives_pred)) => {
                     let mut outlives_cpn = pred_cpn.init_outlives();
                     Self::encode_region(outlives_pred.0, outlives_cpn.reborrow().init_region1());
                     Self::encode_region(outlives_pred.1, outlives_cpn.reborrow().init_region2());
                 }
-                ty::ClauseKind::Trait(trait_pred) => {
+                Some(ty::ClauseKind::Trait(trait_pred)) => {
                     let mut trait_cpn = pred_cpn.init_trait();
                     trait_cpn.set_def_id(&enc_ctx.tcx.def_path_str(trait_pred.trait_ref.def_id));
                     trait_cpn.fill_args(trait_pred.trait_ref.args, |arg_cpn, arg| {
                         Self::encode_gen_arg(enc_ctx.tcx, enc_ctx, arg, arg_cpn);
                     });
                 }
-                ty::ClauseKind::Projection(projection_pred) => {
+                Some(ty::ClauseKind::Projection(projection_pred)) => {
                     let mut proj_cpn = pred_cpn.init_projection();
                     let mut proj_term_cpn = proj_cpn.reborrow().init_projection_term();
                     proj_term_cpn.set_def_id(&enc_ctx.tcx.def_path_str(projection_pred.projection_term.def_id));
@@ -1094,7 +1154,7 @@ mod vf_mir_builder {
             let def_id = body.source.def_id();
 
             let kind = tcx.def_kind(def_id);
-            match kind {
+            let is_closure = match kind {
                 hir::def::DefKind::Fn | hir::def::DefKind::AssocFn => {
                     let mut def_kind_cpn = body_cpn.reborrow().init_def_kind();
                     def_kind_cpn.set_fn(());
@@ -1114,9 +1174,15 @@ mod vf_mir_builder {
                             }
                         }
                     }
+                    false
+                }
+                hir::def::DefKind::Closure => {
+                    let mut def_kind_cpn = body_cpn.reborrow().init_def_kind();
+                    def_kind_cpn.set_closure(());
+                    true
                 }
                 _ => std::todo!("Unsupported definition kind"),
-            }
+            };
 
             let def_path = tcx.def_path_str(def_id);
             body_cpn.set_def_path(&def_path);
@@ -1126,10 +1192,12 @@ mod vf_mir_builder {
                 body_cpn.set_module_def_path(&tcx.def_path_str(parent_module.to_def_id()));
             }
 
-            Self::encode_unsafety(
-                tcx.fn_sig(def_id).skip_binder().safety(),
-                body_cpn.reborrow().init_unsafety(),
-            );
+            if !is_closure {
+                Self::encode_unsafety(
+                    tcx.fn_sig(def_id).skip_binder().safety(),
+                    body_cpn.reborrow().init_unsafety(),
+                );
+            }
 
             if let Some(impl_did) = tcx.impl_of_method(def_id) {
                 let impl_hir_gens = tcx.hir().get_generics(impl_did.expect_local()).unwrap();
@@ -1143,12 +1211,14 @@ mod vf_mir_builder {
                 });
             }
 
-            let hir_gens_cpn = body_cpn.reborrow().init_hir_generics();
-            let hir_gens = tcx
-                .hir()
-                .get_generics(def_id.expect_local())
-                .expect(&format!("Failed to get HIR generics data"));
-            Self::encode_hir_generics(enc_ctx, hir_gens, hir_gens_cpn);
+            if !is_closure {
+                let hir_gens_cpn = body_cpn.reborrow().init_hir_generics();
+                let hir_gens = tcx
+                    .hir()
+                    .get_generics(def_id.expect_local())
+                    .expect(&format!("Failed to get HIR generics data"));
+                Self::encode_hir_generics(enc_ctx, hir_gens, hir_gens_cpn);
+            }
 
             let generics = tcx.generics_of(def_id);
             body_cpn.reborrow().fill_generics(
@@ -1166,35 +1236,39 @@ mod vf_mir_builder {
                     Self::encode_predicate(enc_ctx, pred, pred_cpn);
                 });
 
-            let contract_cpn = body_cpn.reborrow().init_contract();
-            let body_contract_span = crate::span_utils::body_contract_span(tcx, body);
-            let contract_annots = enc_ctx
-                .annots
-                .extract_if(|annot| {
-                    body_contract_span.contains(annot.span().expect("Dummy span").data())
-                })
-                .collect::<LinkedList<_>>();
-            Self::encode_contract(tcx, contract_annots, &body_contract_span, contract_cpn);
-
-            let polysig = tcx.fn_sig(def_id);
-            let sig0 = polysig.skip_binder();
-            let sig = sig0.skip_binder();
-            Self::encode_ty(
-                tcx,
-                enc_ctx,
-                sig.output(),
-                body_cpn.reborrow().init_output(),
-            );
-            body_cpn.fill_inputs(sig.inputs(), |input_cpn, input| {
-                Self::encode_ty(tcx, enc_ctx, *input, input_cpn);
-            });
+            if !is_closure {
+                let contract_cpn = body_cpn.reborrow().init_contract();
+                let body_contract_span = crate::span_utils::body_contract_span(tcx, body);
+                let contract_annots = enc_ctx
+                    .annots
+                    .extract_if(|annot| {
+                        body_contract_span.contains(annot.span().expect("Dummy span").data())
+                    })
+                    .collect::<LinkedList<_>>();
+                Self::encode_contract(tcx, contract_annots, &body_contract_span, contract_cpn);
+            }
 
             let local_decls_count = body.local_decls().len();
-            assert!(
-                local_decls_count > sig.inputs().len() as usize,
-                "Local declarations of {} are not more than its args",
-                def_path
-            );
+            
+            if !is_closure {
+                let polysig = tcx.fn_sig(def_id);
+                let sig0 = polysig.skip_binder();
+                let sig = sig0.skip_binder();
+                Self::encode_ty(
+                    tcx,
+                    enc_ctx,
+                    sig.output(),
+                    body_cpn.reborrow().init_output(),
+                );
+                body_cpn.fill_inputs(sig.inputs(), |input_cpn, input| {
+                    Self::encode_ty(tcx, enc_ctx, *input, input_cpn);
+                });
+                assert!(
+                    local_decls_count > sig.inputs().len() as usize,
+                    "Local declarations of {} are not more than its args",
+                    def_path
+                );
+            }
 
             body_cpn.fill_local_decls(
                 body.local_decls().iter_enumerated(),
@@ -1274,6 +1348,8 @@ mod vf_mir_builder {
                     );
                 },
             );
+
+            Self::encode_visibility(tcx.visibility(def_id), body_cpn.reborrow().init_visibility());
         }
 
         fn encode_unsafety(us: hir::Safety, mut us_cpn: unsafety_cpn::Builder<'_>) {
@@ -1588,13 +1664,18 @@ mod vf_mir_builder {
                 ty::TyKind::FnPtr(binder, header) => {
                     let fn_ptr_ty_cpn = ty_kind_cpn.init_fn_ptr();
                     let fn_sig = binder
-                        .no_bound_vars()
-                        .expect("TODO: Function pointer types with bound variables");
+                        .skip_binder();
                     let output_cpn = fn_ptr_ty_cpn.init_output();
                     Self::encode_ty(tcx, enc_ctx, fn_sig.output(), output_cpn);
                 }
                 ty::TyKind::Dynamic(_, _, _) => ty_kind_cpn.set_dynamic(()),
-                ty::TyKind::Closure(_, _) => ty_kind_cpn.set_closure(()),
+                ty::TyKind::Closure(def_id, gen_args) => {
+                    let mut closure_ty_cpn = ty_kind_cpn.init_closure();
+                    closure_ty_cpn.set_def_id(&tcx.def_path_str(*def_id));
+                    closure_ty_cpn.fill_substs(gen_args.iter(), |gen_arg_cpn, gen_arg| {
+                        Self::encode_gen_arg(tcx, enc_ctx, gen_arg, gen_arg_cpn);
+                    });
+                }
                 ty::TyKind::CoroutineClosure(_, _) => ty_kind_cpn.set_coroutine_closure(()),
                 ty::TyKind::Coroutine(_, _) => ty_kind_cpn.set_coroutine(()),
                 ty::TyKind::CoroutineWitness(_, _) => ty_kind_cpn.set_coroutine_witness(()),
@@ -1607,10 +1688,10 @@ mod vf_mir_builder {
                 ty::TyKind::Alias(kind, alias_ty) => {
                     let mut alias_ty_cpn = ty_kind_cpn.init_alias();
                     alias_ty_cpn.set_kind(match kind {
-                        ty::AliasTyKind::Projection => crate::vf_mir_capnp::ty::AliasTyKind::Projection,
-                        ty::AliasTyKind::Inherent => crate::vf_mir_capnp::ty::AliasTyKind::Inherent,
-                        ty::AliasTyKind::Opaque => crate::vf_mir_capnp::ty::AliasTyKind::Opaque,
-                        ty::AliasTyKind::Weak => crate::vf_mir_capnp::ty::AliasTyKind::Weak,
+                        ty::AliasTyKind::Projection => crate::vf_mir_capnp::AliasTyKind::Projection,
+                        ty::AliasTyKind::Inherent => crate::vf_mir_capnp::AliasTyKind::Inherent,
+                        ty::AliasTyKind::Opaque => crate::vf_mir_capnp::AliasTyKind::Opaque,
+                        ty::AliasTyKind::Weak => crate::vf_mir_capnp::AliasTyKind::Weak,
                     });
                     alias_ty_cpn.set_def_id(&tcx.def_path_str(alias_ty.def_id));
                     alias_ty_cpn.fill_args(alias_ty.args, |arg_cpn, arg| {
@@ -1823,7 +1904,7 @@ mod vf_mir_builder {
             basic_block_idx: mir::BasicBlock,
             mut basic_block_id_cpn: basic_block_id_cpn::Builder<'_>,
         ) {
-            basic_block_id_cpn.set_name(&format!("{:?}", basic_block_idx));
+            basic_block_id_cpn.set_index(basic_block_idx.as_u32());
         }
 
         fn encode_statement(
@@ -1846,7 +1927,6 @@ mod vf_mir_builder {
             //debug!("Encoding SourceInfo {:?}", src_info);
             let span_cpn = src_info_cpn.reborrow().init_span();
             Self::encode_span_data(tcx, &src_info.span.data(), span_cpn);
-            let scope_cpn = src_info_cpn.init_scope();
         }
 
         fn encode_statement_kind(
@@ -1875,7 +1955,7 @@ mod vf_mir_builder {
             enc_ctx: &mut EncCtx<'tcx, 'a>,
             span: rustc_span::Span,
             rvalue: &mir::Rvalue<'tcx>,
-            rvalue_cpn: rvalue_cpn::Builder<'_>,
+            mut rvalue_cpn: rvalue_cpn::Builder<'_>,
         ) {
             debug!("Encoding Rvalue {:?}", rvalue);
             match rvalue {
@@ -1884,7 +1964,7 @@ mod vf_mir_builder {
                     Self::encode_operand(tcx, enc_ctx, operand, operand_cpn);
                 }
                 // [x; 32]
-                mir::Rvalue::Repeat(operand, ty_const) => todo!(),
+                mir::Rvalue::Repeat(operand, ty_const) => rvalue_cpn.set_repeat(()),
                 // &x or &mut x
                 mir::Rvalue::Ref(region, bor_kind, place) => {
                     let mut ref_data_cpn = rvalue_cpn.init_ref();
@@ -1902,7 +1982,7 @@ mod vf_mir_builder {
                         ref_data_cpn.set_is_implicit(is_identifier);
                     }
                 }
-                mir::Rvalue::ThreadLocalRef(def_id) => todo!(),
+                mir::Rvalue::ThreadLocalRef(def_id) => rvalue_cpn.set_thread_local_ref(()),
                 mir::Rvalue::RawPtr(mutability, place) => {
                     let mut ao_data_cpn = rvalue_cpn.init_address_of();
                     let mutability_cpn = ao_data_cpn.reborrow().init_mutability();
@@ -1910,7 +1990,7 @@ mod vf_mir_builder {
                     let place_cpn = ao_data_cpn.init_place();
                     Self::encode_place(enc_ctx, place, place_cpn);
                 }
-                mir::Rvalue::Len(place) => todo!(),
+                mir::Rvalue::Len(place) => rvalue_cpn.set_len(()),
                 mir::Rvalue::Cast(cast_kind, operand, ty) => {
                     let mut cast_data_cpn = rvalue_cpn.init_cast();
                     let operand_cpn = cast_data_cpn.reborrow().init_operand();
@@ -1927,7 +2007,7 @@ mod vf_mir_builder {
                     let operandr_cpn = bin_op_data_cpn.init_operandr();
                     Self::encode_operand(tcx, enc_ctx, operandr, operandr_cpn);
                 }
-                mir::Rvalue::NullaryOp(null_op, ty) => todo!(),
+                mir::Rvalue::NullaryOp(null_op, ty) => rvalue_cpn.set_nullary_op(()),
                 mir::Rvalue::UnaryOp(un_op, operand) => {
                     let mut un_op_data_cpn = rvalue_cpn.init_unary_op();
                     let un_op_cpn = un_op_data_cpn.reborrow().init_operator();
@@ -1965,7 +2045,7 @@ mod vf_mir_builder {
                     });
                 }
                 // Transmutes a `*mut u8` into shallow-initialized `Box<T>`.
-                mir::Rvalue::ShallowInitBox(operand, ty) => todo!(),
+                mir::Rvalue::ShallowInitBox(operand, ty) => rvalue_cpn.set_shallow_init_box(()),
                 mir::Rvalue::CopyForDeref(place) => {
                     let operand_cpn = rvalue_cpn.init_use();
                     let place_cpn = operand_cpn.init_copy();
@@ -1998,19 +2078,19 @@ mod vf_mir_builder {
                 mir::AggregateKind::Adt(
                     def_id,
                     variant_idx,
-                    substs,
+                    gen_args,
                     _user_type_annot_idx_opt,
-                    _union_active_field_opt,
+                    union_active_field_opt,
                 ) => {
                     let mut adt_data_cpn = agg_kind_cpn.init_adt();
                     let adt_id_cpn = adt_data_cpn.reborrow().init_adt_id();
                     Self::encode_adt_def_id(enc_ctx, *def_id, adt_id_cpn);
 
-                    let v_idx_cpn = adt_data_cpn.reborrow().init_variant_idx();
-                    capnp_utils::encode_u_int128(
-                        variant_idx.index().try_into().unwrap(),
-                        v_idx_cpn,
-                    );
+                    adt_data_cpn.set_variant_idx(variant_idx.as_u32());
+                    adt_data_cpn.set_union_active_field(match union_active_field_opt {
+                        None => 0,
+                        Some(idx) => idx.as_u32()
+                    });
 
                     let adt_def = enc_ctx.tcx.adt_def(def_id);
                     let variant = adt_def.variant(*variant_idx);
@@ -2023,10 +2103,16 @@ mod vf_mir_builder {
                         .reborrow()
                         .fill_field_names(variant.fields.iter().map(|f| f.name.as_str()));
 
-                    let substs_cpn = adt_data_cpn.reborrow().init_substs(substs.len());
-                    Self::encode_ty_args(enc_ctx, substs, substs_cpn);
+                    let gen_args_cpn = adt_data_cpn.reborrow().init_gen_args(gen_args.len());
+                    Self::encode_ty_args(enc_ctx, gen_args, gen_args_cpn);
                 }
-                mir::AggregateKind::Closure(_def_id, _substs) => agg_kind_cpn.set_closure(()),
+                mir::AggregateKind::Closure(def_id, gen_args) => {
+                    let mut closure_data_cpn = agg_kind_cpn.init_closure();
+                    closure_data_cpn.set_closure_id(&enc_ctx.tcx.def_path_str(*def_id));
+                    closure_data_cpn.fill_gen_args(gen_args.iter(), |gen_arg_cpn, gen_arg| {
+                        Self::encode_gen_arg(enc_ctx.tcx, enc_ctx, gen_arg, gen_arg_cpn);
+                    });
+                }
                 mir::AggregateKind::Coroutine(_def_id, _substs) => agg_kind_cpn.set_coroutine(()),
                 mir::AggregateKind::CoroutineClosure(_def_id, _substs) => agg_kind_cpn.set_coroutine_closure(()),
                 mir::AggregateKind::RawPtr(_ty, _mutability) => agg_kind_cpn.set_raw_ptr(()),
@@ -2114,7 +2200,8 @@ mod vf_mir_builder {
                         switch_int_data_cpn,
                     );
                 }
-                mir::TerminatorKind::UnwindResume => terminator_kind_cpn.set_resume(()),
+                mir::TerminatorKind::UnwindResume => terminator_kind_cpn.set_unwind_resume(()),
+                mir::TerminatorKind::UnwindTerminate(_) => terminator_kind_cpn.set_unwind_terminate(()),
                 mir::TerminatorKind::Return => terminator_kind_cpn.set_return(()),
                 mir::TerminatorKind::Unreachable => terminator_kind_cpn.set_unreachable(()),
                 mir::TerminatorKind::Call {
@@ -2134,6 +2221,7 @@ mod vf_mir_builder {
                         args,
                         destination,
                         target,
+                        unwind,
                         fn_span,
                         fn_call_data_cpn,
                     );
@@ -2146,9 +2234,15 @@ mod vf_mir_builder {
                 } => {
                     let mut drop_data_cpn = terminator_kind_cpn.init_drop();
                     Self::encode_place(enc_ctx, place, drop_data_cpn.reborrow().init_place());
-                    Self::encode_basic_block_id(*target, drop_data_cpn.init_target());
+                    Self::encode_basic_block_id(*target, drop_data_cpn.reborrow().init_target());
+                    Self::encode_unwind_action(unwind, drop_data_cpn.reborrow().init_unwind_action());
                 }
-                _ => todo!("Unsupported Mir terminator kind"),
+                mir::TerminatorKind::TailCall { .. } => terminator_kind_cpn.set_tail_call(()),
+                mir::TerminatorKind::Assert { .. } => terminator_kind_cpn.set_assert(()),
+                mir::TerminatorKind::Yield { .. } => terminator_kind_cpn.set_yield(()),
+                mir::TerminatorKind::CoroutineDrop { .. } => terminator_kind_cpn.set_coroutine_drop(()),
+                mir::TerminatorKind::FalseEdge { .. } => terminator_kind_cpn.set_false_edge(()),
+                mir::TerminatorKind::InlineAsm { .. } => terminator_kind_cpn.set_inline_asm(()),
             }
         }
 
@@ -2194,6 +2288,21 @@ mod vf_mir_builder {
             Self::encode_basic_block_id(targets.otherwise(), target_cpn);
         }
 
+        fn encode_unwind_action(
+            unwind: &UnwindAction,
+            mut unwind_action_cpn: unwind_action_cpn::Builder<'_>,
+        ) {
+            match unwind {
+                UnwindAction::Continue => unwind_action_cpn.set_continue(()),
+                UnwindAction::Unreachable => unwind_action_cpn.set_unreachable(()),
+                UnwindAction::Terminate(_) => unwind_action_cpn.set_terminate(()),
+                UnwindAction::Cleanup(basic_block) => {
+                    let cleanup_cpn = unwind_action_cpn.init_cleanup();
+                    Self::encode_basic_block_id(*basic_block, cleanup_cpn);
+                }
+            }
+        }
+
         fn encode_fn_call_data(
             tcx: TyCtxt<'tcx>,
             enc_ctx: &mut EncCtx<'tcx, 'a>,
@@ -2201,6 +2310,7 @@ mod vf_mir_builder {
             args: &Box<[Spanned<mir::Operand<'tcx>>]>,
             destination: &mir::Place<'tcx>,
             target: &Option<mir::BasicBlock>,
+            unwind: &UnwindAction,
             fn_span: &rustc_span::Span,
             mut fn_call_data_cpn: fn_call_data_cpn::Builder<'_>,
         ) {
@@ -2224,6 +2334,8 @@ mod vf_mir_builder {
                     Self::encode_basic_block_id(*dest_bblock_id, basic_block_id_cpn);
                 }
             }
+
+            Self::encode_unwind_action(unwind, fn_call_data_cpn.reborrow().init_unwind_action());
 
             let call_span_data_cpn = fn_call_data_cpn.reborrow().init_call_span();
             Self::encode_span_data(tcx, &fn_span.data(), call_span_data_cpn);
@@ -2288,7 +2400,7 @@ mod vf_mir_builder {
             tcx: TyCtxt<'tcx>,
             enc_ctx: &mut EncCtx<'tcx, 'a>,
             const_: &mir::Const<'tcx>,
-            const_cpn: const_cpn::Builder<'_>,
+            mut const_cpn: const_cpn::Builder<'_>,
         ) {
             match const_ {
                 mir::Const::Ty(ty, ty_const) => {
@@ -2307,15 +2419,18 @@ mod vf_mir_builder {
                     Self::encode_ty(tcx, enc_ctx, *ty, val_cpn.init_ty());
                 }
                 mir::Const::Unevaluated(unevaluated_const, ty) => {
-                    let const_value = const_.eval(tcx, enc_ctx.body().typing_env(tcx), Span::default()).unwrap();
-                    let mut val_cpn = const_cpn.init_val();
-                    Self::encode_const_value(
-                        tcx,
-                        *ty,
-                        &const_value,
-                        val_cpn.reborrow().init_const_value(),
-                    );
-                    Self::encode_ty(tcx, enc_ctx, *ty, val_cpn.init_ty());
+                    if let Ok(const_value) = const_.eval(tcx, enc_ctx.body().typing_env(tcx), Span::default()) {
+                        let mut val_cpn = const_cpn.init_val();
+                        Self::encode_const_value(
+                            tcx,
+                            *ty,
+                            &const_value,
+                            val_cpn.reborrow().init_const_value(),
+                        );
+                        Self::encode_ty(tcx, enc_ctx, *ty, val_cpn.init_ty());
+                    } else {
+                        const_cpn.set_unevaluated(());
+                    }
                 }
             }
         }
@@ -2327,14 +2442,22 @@ mod vf_mir_builder {
             ty_const_cpn: ty_const_cpn::Builder<'_>,
         ) {
             debug!("Encoding typesystem constant {:?}", ty_const);
+            let mut ty_const = *ty_const;
+            if let ty::ConstKind::Unevaluated(_) = ty_const.kind() {
+                let typing_env = ty::TypingEnv { typing_mode: ty::TypingMode::PostAnalysis, param_env: ty::ParamEnv::empty() };
+                if let Ok(ty_const_normalized) = tcx.try_normalize_erasing_regions(typing_env, ty_const) {
+                    ty_const = ty_const_normalized;
+                }
+            }
             let kind_cpn = ty_const_cpn.init_kind();
-            Self::encode_const_kind(tcx, &ty_const.kind(), kind_cpn);
+            Self::encode_const_kind(tcx, enc_ctx, &ty_const.kind(), kind_cpn);
         }
 
         fn encode_const_kind(
             tcx: TyCtxt<'tcx>,
+            enc_ctx: &mut EncCtx<'tcx, 'a>,
             const_kind: &ty::ConstKind<'tcx>,
-            const_kind_cpn: const_kind_cpn::Builder<'_>,
+            mut const_kind_cpn: const_kind_cpn::Builder<'_>,
         ) {
             use ty::ConstKind as CK;
             match const_kind {
@@ -2345,40 +2468,38 @@ mod vf_mir_builder {
                     param_const_cpn.set_name(param_const.name.as_str());
                 }
                 // Infer the value of the const.
-                CK::Infer(infer_const) => todo!(),
+                CK::Infer(infer_const) => const_kind_cpn.set_infer(()),
                 // Bound const variable, used only when preparing a trait query.
-                CK::Bound(debruijn_idx, bound_var) => todo!(),
+                CK::Bound(debruijn_idx, bound_var) => const_kind_cpn.set_bound(()),
                 // A placeholder const - universally quantified higher-ranked const.
-                CK::Placeholder(placeholder_const) => todo!(),
+                CK::Placeholder(placeholder_const) => const_kind_cpn.set_placeholder(()),
                 // Used in the HIR by using `Unevaluated` everywhere and later normalizing to one of the other
                 // variants when the code is monomorphic enough for that.
-                CK::Unevaluated(unevaluated) => todo!(),
+                CK::Unevaluated(unevaluated) => const_kind_cpn.set_unevaluated(()),
                 // Used to hold computed value.
                 CK::Value(ty, val_tree) => {
-                    let const_value_cpn = const_kind_cpn.init_value();
-                    Self::encode_val_tree(tcx, *ty, val_tree, const_value_cpn);
+                    let mut value_cpn = const_kind_cpn.init_value();
+                    Self::encode_ty(tcx, enc_ctx, *ty, value_cpn.reborrow().init_ty());
+                    Self::encode_val_tree(tcx, val_tree, value_cpn.init_val_tree());
                 }
                 // A placeholder for a const which could not be computed; this is
                 // propagated to avoid useless error messages.
-                CK::Error(delay_span_bug_emitted) => todo!(),
-                _ => todo!(),
+                CK::Error(delay_span_bug_emitted) => const_kind_cpn.set_error(()),
+                CK::Expr(_) => const_kind_cpn.set_expr(()),
             }
         }
 
         fn encode_val_tree(
             tcx: TyCtxt<'tcx>,
-            ty: ty::Ty<'tcx>,
             val_tree: &ty::ValTree<'tcx>,
-            const_value_cpn: const_value_cpn::Builder<'_>,
+            val_tree_cpn: val_tree_cpn::Builder<'_>,
         ) {
             use ty::ValTree as VT;
             match val_tree {
                 // Used only for types with `layout::abi::Scalar` ABI and ZSTs.
                 VT::Leaf(scalar_int) => {
-                    // `Scalar`s are a limited number of primitives.
-                    // It is easier to encode the value itself instead of its internal representation in the compiler
-                    let scalar_cpn = const_value_cpn.init_scalar();
-                    Self::encode_scalar_int(tcx, ty, scalar_int, scalar_cpn);
+                    let scalar_int_cpn = val_tree_cpn.init_leaf();
+                    Self::encode_scalar_int(tcx, scalar_int, scalar_int_cpn);
                 }
                 // Used only for `&[u8]` and `&str`
                 VT::Branch(_) => todo!(),
@@ -2398,7 +2519,8 @@ mod vf_mir_builder {
                     // `Scalar`s are a limited number of primitives.
                     // It is easier to encode the value itself instead of its internal representation in the compiler
                     let scalar_cpn = const_value_cpn.init_scalar();
-                    Self::encode_scalar_int(tcx, ty, scalar_int, scalar_cpn);
+                    let scalar_int_cpn = scalar_cpn.init_int();
+                    Self::encode_scalar_int(tcx, scalar_int, scalar_int_cpn);
                 }
                 CV::Scalar(rustc_middle::mir::interpret::Scalar::Ptr(_, _)) => {
                     let mut scalar_con = const_value_cpn.init_scalar();
@@ -2423,97 +2545,11 @@ mod vf_mir_builder {
 
         fn encode_scalar_int(
             tcx: TyCtxt<'tcx>,
-            ty: ty::Ty<'tcx>,
-            scalar: &rustc_middle::ty::ScalarInt,
-            mut scalar_cpn: scalar_cpn::Builder<'_>,
+            scalar_int: &rustc_middle::ty::ScalarInt,
+            mut scalar_int_cpn: scalar_int_cpn::Builder<'_>,
         ) {
-            let gen_err_msg = "Failed to encode scalar";
-            let err_msg = &format!(
-                "{}. Cannot make a {:?} value out of the scalar {:?}",
-                gen_err_msg, ty, scalar
-            );
-            match ty.kind() {
-                ty::TyKind::Bool => {
-                    let bv = scalar.try_to_bool().expect(err_msg);
-                    scalar_cpn.set_bool(bv);
-                }
-                ty::TyKind::Char => {
-                    let cv = scalar.to_u32();
-                    scalar_cpn.set_char(cv as u32);
-                }
-                ty::TyKind::Int(int_ty) => {
-                    let mut int_val_cpn = scalar_cpn.init_int();
-                    match int_ty {
-                        ty::IntTy::Isize => {
-                            let visz = scalar.to_i64();
-                            capnp_utils::encode_int128(
-                                visz.try_into().unwrap(),
-                                int_val_cpn.init_isize(),
-                            );
-                        }
-                        ty::IntTy::I8 => {
-                            let vi8 = scalar.to_i8();
-                            int_val_cpn.set_i8(vi8);
-                        }
-                        ty::IntTy::I16 => {
-                            let vi16 = scalar.to_i16();
-                            int_val_cpn.set_i16(vi16);
-                        }
-                        ty::IntTy::I32 => {
-                            let vi32 = scalar.to_i32();
-                            int_val_cpn.set_i32(vi32);
-                        }
-                        ty::IntTy::I64 => {
-                            let vi64 = scalar.to_i64();
-                            int_val_cpn.set_i64(vi64);
-                        }
-                        ty::IntTy::I128 => {
-                            let vi128 = scalar.to_i128();
-                            capnp_utils::encode_int128(vi128, int_val_cpn.init_i128());
-                        }
-                    }
-                }
-                ty::TyKind::Uint(uint_ty) => {
-                    let mut uint_val_cpn = scalar_cpn.init_uint();
-                    match uint_ty {
-                        ty::UintTy::Usize => {
-                            let vusz = scalar.to_u64();
-                            capnp_utils::encode_u_int128(
-                                vusz.try_into().unwrap(),
-                                uint_val_cpn.init_usize(),
-                            );
-                        }
-                        ty::UintTy::U8 => {
-                            let vu8 = scalar.to_u8();
-                            uint_val_cpn.set_u8(vu8);
-                        }
-                        ty::UintTy::U16 => {
-                            let vu16 = scalar.to_u16();
-                            uint_val_cpn.set_u16(vu16);
-                        }
-                        ty::UintTy::U32 => {
-                            let vu32 = scalar.to_u32();
-                            uint_val_cpn.set_u32(vu32);
-                        }
-                        ty::UintTy::U64 => {
-                            let vu64 = scalar.to_u64();
-                            uint_val_cpn.set_u64(vu64);
-                        }
-                        ty::UintTy::U128 => {
-                            let vu128 = scalar.to_u128();
-                            capnp_utils::encode_u_int128(vu128, uint_val_cpn.init_u128());
-                        }
-                    }
-                }
-                ty::TyKind::Float(float_ty) => todo!(),
-                ty::TyKind::FnDef(def_id, substs) => scalar_cpn.set_fn_def(()),
-                ty::TyKind::Tuple(substs) => {
-                    for ty in ty.tuple_fields() {
-                        todo!();
-                    }
-                }
-                _ => panic!("{}. Type {:?} is not a scalar type.", gen_err_msg, ty),
-            }
+            capnp_utils::encode_u_int128(scalar_int.to_bits_unchecked(), scalar_int_cpn.reborrow().init_data());
+            scalar_int_cpn.set_size(scalar_int.size().bytes().try_into().unwrap());
         }
 
         fn encode_place(
@@ -2530,10 +2566,18 @@ mod vf_mir_builder {
             let local = &enc_ctx.body().local_decls()[place.local];
             let mut pty = PlaceTy::from_ty(local.ty);
             let mut kind = PlaceKind::Other;
-            place_cpn.reborrow().fill_projection(place.projection, |place_elm_cpn, place_elm| {
-                kind = Self::encode_place_element(enc_ctx, pty.ty, &place_elm, place_elm_cpn, kind);
-                pty = pty.projection_ty(enc_ctx.tcx, place_elm);
-            });
+            if place.projection.len() == 3 && local.ty.is_box() {
+                // The only projection that can be applied to a Box is (((X.0: std::ptr::Unique<T>).0: std::ptr::NonNull<T>).0: *const T)
+                let place_projection_cpn = place_cpn.reborrow().init_projection(1);
+                let place_elem_cpn = place_projection_cpn.get(0);
+                let ty_cpn = place_elem_cpn.init_box_as_ptr();
+                Self::encode_ty(enc_ctx.tcx, enc_ctx, local.ty.boxed_ty().unwrap(), ty_cpn);
+            } else {
+                place_cpn.reborrow().fill_projection(place.projection, |place_elm_cpn, place_elm| {
+                    kind = Self::encode_place_element(enc_ctx, pty.ty, &place_elm, place_elm_cpn, kind);
+                    pty = pty.projection_ty(enc_ctx.tcx, place_elm);
+                });
+            }
             let mut kind_cpn = place_cpn.init_kind();
             match kind {
                 PlaceKind::MutableRef => kind_cpn.set_mutable_ref(()),
@@ -2585,11 +2629,30 @@ mod vf_mir_builder {
                      */
                     PlaceKind::Other
                 }
+                mir::ProjectionElem::Index(_) => {
+                    place_elm_cpn.set_index(());
+                    PlaceKind::Other
+                }
+                mir::ProjectionElem::ConstantIndex{ .. } => {
+                    place_elm_cpn.set_constant_index(());
+                    PlaceKind::Other
+                }
+                mir::ProjectionElem::Subslice{ .. } => {
+                    place_elm_cpn.set_subslice(());
+                    PlaceKind::Other
+                }
                 mir::ProjectionElem::Downcast(symbol, variant_idx) => {
                     place_elm_cpn.set_downcast(variant_idx.as_u32());
                     PlaceKind::Other
                 }
-                _ => todo!(),
+                mir::ProjectionElem::OpaqueCast(_) => {
+                    place_elm_cpn.set_opaque_cast(());
+                    PlaceKind::Other
+                }
+                mir::ProjectionElem::Subtype(_) => {
+                    place_elm_cpn.set_subtype(());
+                    PlaceKind::Other
+                }
             }
         }
     }

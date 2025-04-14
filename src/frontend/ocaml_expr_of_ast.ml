@@ -35,6 +35,7 @@ let rec of_type = function
   Bool -> c "Bool"
 | Void -> c "Void"
 | Int (s, r) -> C ("Int", [of_signedness s; of_int_rank r])
+| RustChar -> c "RustChar"
 | RealType -> c "RealType"
 | Float -> c "Float"
 | Double -> c "Double"
@@ -55,13 +56,19 @@ let rec of_type = function
 | PureFuncType (at, rt) -> C ("PureFuncType", [of_type at; of_type rt])
 | ObjType (cn, ts) -> C ("ObjType", [S cn; of_list of_type ts])
 | ArrayType t -> C ("ArrayType", [of_type t])
-| StaticArrayType (t, n) -> C ("StaticArrayType", [of_type t; I n])
+| StaticArrayType (t, n) -> C ("StaticArrayType", [of_type t; of_type n])
+| LiteralConstType n -> C ("LiteralConstType", [I n])
 | BoxIdType -> c "BoxIdType"
 | HandleIdType -> c "HandleIdType"
 | AnyType -> c "AnyType"
 | RealTypeParam x -> C ("RealTypeParam", [S x])
 | InferredRealType x -> C ("InferredRealType", [S x])
 | GhostTypeParam x -> C ("GhostTypeParam", [S x])
+| GhostTypeParamWithEqs (x, eqs) ->
+  C ("GhostTypeParamWithEqs", [
+    S x;
+    of_list (fun ((traitName, traitArgs, assocTypeName), tp) -> T [T [S traitName; of_list of_type traitArgs; S assocTypeName]; of_type tp]) eqs
+  ])
 | InferredType (o, r) -> C ("InferredType", [I (Oo.id o); of_ref of_inferred_type_state r])
 | ClassOrInterfaceName x -> C ("ClassOrInterfaceName", [S x])
 | PackageName p -> C ("PackageName", [S p])
@@ -173,8 +180,9 @@ let rec of_type_expr = function
   C ("StaticArrayTypeExpr", [
     of_loc l;
     of_type_expr elemTp;
-    I nbElems
+    of_type_expr nbElems
   ])
+| LiteralConstTypeExpr (l, n) -> C ("LiteralConstTypeExpr", [of_loc l; I n])
 | FuncTypeExpr (l, retTp, params) ->
   C ("FuncTypeExpr", [
     of_loc l;
@@ -219,6 +227,14 @@ let rec of_type_expr = function
   C ("ConstTypeExpr", [
     of_loc l;
     of_type_expr tp
+  ])
+| ProjectionTypeExpr (l, tp, traitName, traitArgs, assocTypeName) ->
+  C ("ProjectionTypeExpr", [
+    of_loc l;
+    of_type_expr tp;
+    S traitName;
+    of_list of_type_expr traitArgs;
+    S assocTypeName
   ])
 and of_operator = function
   MinValue t -> C ("MinValue", [of_type t])
@@ -644,7 +660,7 @@ and of_expr = function
     of_pat coef;
     of_expr a
   ])
-| EnsuresAsn (l, a) -> C ("EnsuresAsn", [of_loc l; of_expr a])
+| EnsuresAsn (l, result_var, a) -> C ("EnsuresAsn", [of_loc l; s result_var; of_expr a])
 | MatchAsn (l, e, pat) ->
   C ("MatchAsn", [
     of_loc l;
@@ -682,10 +698,11 @@ and of_pat = function
     of_option of_expr e
   ])
 and of_wswitch_asn_clause = function
-  WSwitchAsnClause (l, cn, xs, pts, a) ->
+  WSwitchAsnClause (l, cn, full_cn, xs, pts, a) ->
   C ("WSwitchAsnClause", [
     of_loc l;
     S cn;
+    S full_cn;
     of_list (of_option s) xs;
     of_list (of_option of_prover_type) pts;
     of_expr a
@@ -987,7 +1004,7 @@ and of_decl = function
   ])
 | TypedefDecl (l, t, x, tparams) ->
   C ("TypedefDecl", [of_loc l; of_type_expr t; S x; of_list s tparams])
-| FuncTypeDecl (l, gh, rt, ftn, tparams, ftparams, params, (pre, post, terminates)) ->
+| FuncTypeDecl (l, gh, rt, ftn, tparams, ftparams, params, (pre, (result_var, post), terminates)) ->
   C ("FuncTypeDecl", [
     of_loc l;
     of_ghostness gh;
@@ -998,7 +1015,7 @@ and of_decl = function
     of_list (fun (t, x) -> T [of_type_expr t; S x]) params;
     T [
       of_expr pre;
-      of_expr post;
+      T [s result_var; of_expr post];
       B terminates
     ]
   ])
@@ -1007,7 +1024,7 @@ and of_decl = function
     of_loc l;
     S mangled_name;
     of_params params;
-    of_option of_spec contract_opt;
+    of_option (fun (pre, post) -> T [of_expr pre; of_expr post]) contract_opt;
     B terminates;
     body_opt |> of_option (fun (init_list, body_ss) ->
       T [
@@ -1032,7 +1049,7 @@ and of_decl = function
   C ("CxxDtor", [
     of_loc l;
     S mangled_name;
-    of_option of_spec contract_opt;
+    of_option (fun (pre, post) -> T [of_expr pre; of_expr post]) contract_opt;
     B terminates;
     of_option of_body_ss body_opt;
     B implicit;
@@ -1090,10 +1107,10 @@ and of_body_ss (ss, close_brace_loc) =
     of_list of_stmt ss; 
     of_loc close_brace_loc
   ]
-and of_spec (pre, post) =
+and of_spec (pre, (result_var, post)) =
   T [
     of_expr pre;
-    of_expr post;
+    T [s result_var; of_expr post];
   ]
 and of_ghostness = function
   Ghost -> c "Ghost"
@@ -1122,6 +1139,7 @@ and of_ctor = function
   ])
 and of_struct_attr = function
   Packed -> c "Packed"
+| ReprC -> c "ReprC"
 and of_constant_value = function
   IntConst n -> C ("IntConst", [BigInt n])
 | BoolConst b -> C ("BoolConst", [B b])

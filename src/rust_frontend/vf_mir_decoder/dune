@@ -1,0 +1,12 @@
+(library
+ (name vf_mir_decoder)
+ (flags (:standard -w -55)) ; -55: inlining impossible
+ (libraries stdint capnp vf_mir))
+
+(rule
+ (targets vf_mir_decoder.ml)
+ (deps
+  (:schema ../vf_mir/vf_mir.capnp))
+ (action
+  (with-stdout-to vf_mir_decoder.ml
+   (run capnp compile -I %{env:CAPNP_INC_DIR=} -o ocaml-decoder %{schema}))))

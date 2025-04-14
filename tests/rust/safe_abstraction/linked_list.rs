@@ -1,4 +1,4 @@
-// verifast_options{prover:z3v4.5 skip_specless_fns}
+// verifast_options{ignore_unwind_paths skip_specless_fns}
 
 //! A doubly-linked list with owned nodes.
 //!
@@ -481,8 +481,6 @@ pred<T, A> <LinkedList<T, A>>.share(k, t, l) =
     [_](<A>.share(k, t, &(*l).alloc)) &*&
     [_]foreach(nodes, elem_share::<T>(k, t));
 
-pred True() = true;
-
 fix elem_fbcs<T>(t: thread_id_t, nodes: list<NonNull<Node<T>>>) -> pred() {
     match nodes {
         nil => True,
@@ -491,8 +489,8 @@ fix elem_fbcs<T>(t: thread_id_t, nodes: list<NonNull<Node<T>>>) -> pred() {
 }
 
 lem LinkedList_share_full<T, A>(k: lifetime_t, t: thread_id_t, l: *LinkedList<T, A>)
-    req type_interp::<T>() &*& type_interp::<A>() &*& atomic_mask(Nlft) &*& full_borrow(k, LinkedList_full_borrow_content::<T, A>(t, l)) &*& [?q]lifetime_token(k);
-    ens type_interp::<T>() &*& type_interp::<A>() &*& atomic_mask(Nlft) &*& [_]LinkedList_share::<T, A>(k, t, l) &*& [q]lifetime_token(k);
+    req type_interp::<T>() &*& type_interp::<A>() &*& atomic_mask(MaskTop) &*& full_borrow(k, LinkedList_full_borrow_content::<T, A>(t, l)) &*& [?q]lifetime_token(k);
+    ens type_interp::<T>() &*& type_interp::<A>() &*& atomic_mask(MaskTop) &*& [_]LinkedList_share::<T, A>(k, t, l) &*& [q]lifetime_token(k);
 {
     let klong = open_full_borrow_strong_m(k, LinkedList_full_borrow_content::<T, A>(t, l), q);
     open LinkedList_full_borrow_content::<T, A>(t, l)();
@@ -566,8 +564,8 @@ lem LinkedList_share_full<T, A>(k: lifetime_t, t: thread_id_t, l: *LinkedList<T,
     full_borrow_into_frac_m(k, LinkedList_frac_borrow_content::<T, A>(alloc_id, l, head, tail, nodes, prevs, nexts));
     {
         lem iter(nodes_left: list<NonNull<Node<T>>>)
-            req type_interp::<T>() &*& atomic_mask(Nlft) &*& [q]lifetime_token(k) &*& full_borrow(k, elem_fbcs::<T>(t, nodes_left));
-            ens type_interp::<T>() &*& atomic_mask(Nlft) &*& [q]lifetime_token(k) &*& foreach(nodes_left, elem_share::<T>(k, t));
+            req type_interp::<T>() &*& atomic_mask(MaskTop) &*& [q]lifetime_token(k) &*& full_borrow(k, elem_fbcs::<T>(t, nodes_left));
+            ens type_interp::<T>() &*& atomic_mask(MaskTop) &*& [q]lifetime_token(k) &*& foreach(nodes_left, elem_share::<T>(k, t));
         {
             match nodes_left {
                 nil => {
@@ -965,6 +963,7 @@ impl<T> Node<T> {
     unsafe fn into_element<A: Allocator>(self: Box<Self, A>) -> T
     //@ req thread_token(?t) &*& Box_in::<Node<T>, A>(t, self, ?alloc_id, ?node);
     //@ ens thread_token(t) &*& result == node.element &*& Allocator::<A>(t, _, alloc_id);
+    //@ on_unwind_ens thread_token(t);
     {
         Box::into_inner(self).element // self.element
     }
@@ -992,28 +991,28 @@ impl<T, A: Allocator> LinkedList<T, A> {
             //@ open_points_to(self);
             (*node.as_ptr()).next = self.head;
             (*node.as_ptr()).prev = None;
-            let node_ = Some(node);
+            let node = Some(node);
 
             //@ open Nodes(_, _, _, _, _, _);
             match self.head {
                 None => {
                     //@ close Nodes::<T>(alloc_id, None, None, None, None, nil);
-                    self.tail = node_
+                    self.tail = node
                 }
                 // Not creating new mutable (unique!) references overlapping `element`.
                 Some(head) => {
-                    (*head.as_ptr()).prev = node_;
-                    //@ close Nodes(alloc_id, self0.head, node_, self0.tail, None, nodes);
+                    (*head.as_ptr()).prev = node;
+                    //@ close Nodes(alloc_id, self0.head, node_1, self0.tail, None, nodes);
                 }
             }
 
-            self.head = node_;
+            self.head = node;
             //@ assume(self0.len < usize::MAX);
             self.len += 1;
             //@ close_points_to(self);
             //@ assert *self |-> ?self1;
             //@ points_to_limits(&(*NonNull_ptr(node)).element);
-            //@ close Nodes(alloc_id, node_, None, self1.tail, None, cons(node, nodes));
+            //@ close Nodes(alloc_id, node_1, None, self1.tail, None, cons(node, nodes));
             //@ close elem_fbc::<T>(t)(node);
             //@ close foreach(cons(node, nodes), elem_fbc::<T>(t));
             //@ close <LinkedList<T, A>>.own(t, self1);
@@ -1058,18 +1057,18 @@ impl<T, A: Allocator> LinkedList<T, A> {
                 //@ let alloc_ref = precreate_ref(&(*self).alloc);
                 //@ std::alloc::init_ref_Allocator::<'static, A>(alloc_ref);
                 self.head = (*node.as_ptr()).next;
-                let node_ = Box::from_raw_in(node.as_ptr(), &self.alloc);
+                let node = Box::from_raw_in(node.as_ptr(), &self.alloc);
 
                 //@ open Nodes(_, ?next, _, ?tail, _, _);
-                match self.head {
-                    None => self.tail = None,
-                    // Not creating new mutable (unique!) references overlapping `element`.
-                    Some(head) => (*head.as_ptr()).prev = None,
-                }
+            match self.head {
+                None => self.tail = None,
+                // Not creating new mutable (unique!) references overlapping `element`.
+                Some(head) => (*head.as_ptr()).prev = None,
+            }
                 //@ close Nodes(alloc_id, next, None, (*self).tail, None, _);
 
-                self.len -= 1;
-                Some(node_)
+            self.len -= 1;
+                Some(node)
             }
         }
     }
@@ -1086,15 +1085,15 @@ impl<T, A: Allocator> LinkedList<T, A> {
         unsafe {
             (*node.as_ptr()).next = None;
             (*node.as_ptr()).prev = self.tail;
-            let node_ = Some(node);
+            let node = Some(node);
 
             match self.tail {
-                None => self.head = node_,
+                None => self.head = node,
                 // Not creating new mutable (unique!) references overlapping `element`.
-                Some(tail) => (*tail.as_ptr()).next = node_,
+                Some(tail) => (*tail.as_ptr()).next = node,
             }
 
-            self.tail = node_;
+            self.tail = node;
             self.len += 1;
         }
     }
@@ -1107,17 +1106,17 @@ impl<T, A: Allocator> LinkedList<T, A> {
         match self.tail {
             None => None,
             Some(node) => unsafe {
-                let node_ = Box::from_raw_in(node.as_ptr(), &self.alloc);
-                self.tail = node_.prev;
+                let node = Box::from_raw_in(node.as_ptr(), &self.alloc);
+                self.tail = node.prev;
 
-                match self.tail {
-                    None => self.head = None,
-                    // Not creating new mutable (unique!) references overlapping `element`.
-                    Some(tail) => (*tail.as_ptr()).next = None,
-                }
+            match self.tail {
+                None => self.head = None,
+                // Not creating new mutable (unique!) references overlapping `element`.
+                Some(tail) => (*tail.as_ptr()).next = None,
+            }
 
-                self.len -= 1;
-                Some(node_)
+            self.len -= 1;
+                Some(node)
             }
         }
     }
@@ -1151,15 +1150,15 @@ impl<T, A: Allocator> LinkedList<T, A> {
         (*self).len |-> length(nodes1) + length(nodes2);
     @*/
     {
-        let node_ = unsafe { node.as_mut() }; // this one is ours now, we can create an &mut.
+        let node = unsafe { node.as_mut() }; // this one is ours now, we can create an &mut.
 
         // Not creating new mutable (unique!) references overlapping `element`.
-        match node_.prev {
+        match node.prev {
             Some(prev) => unsafe {
                 //@ Nodes_last_lemma(head);
                 //@ Nodes_split_off_last(head);
                 //@ assert Nodes(_, head, None, ?pprev, prev_, ?nodes10);
-                (*prev.as_ptr()).next = node_.next;
+                (*prev.as_ptr()).next = node.next;
                 //@ open Nodes(alloc_id, next_, Some(node), tail, None, nodes2);
                 //@ close Nodes(alloc_id, next_, Some(node), tail, None, nodes2);
                 //@ close Nodes::<T>(alloc_id, next_, prev_, prev_, next_, []);
@@ -1171,21 +1170,21 @@ impl<T, A: Allocator> LinkedList<T, A> {
                 //@ Nodes_last_lemma(head);
                 //@ open Nodes(alloc_id, head, _, _, _, nodes1);
                 //@ close Nodes(alloc_id, next_, None, None, next_, []);
-                self.head = node_.next
+                self.head = node.next
             }
         };
 
-        match node_.next {
+        match node.next {
             Some(next) => unsafe {
                 //@ open Nodes(alloc_id, next_, Some(node), tail, None, nodes2);
-                (*next.as_ptr()).prev = node_.prev;
+                (*next.as_ptr()).prev = node.prev;
                 //@ close Nodes(alloc_id, next_, prev_, tail, None, nodes2);
             },
             // this node is the tail node
             None => {
                 //@ open Nodes(alloc_id, next_, Some(node), _, _, nodes2);
                 //@ close Nodes(alloc_id, next_, prev_, prev_, next_, []);
-                self.tail = node_.prev;
+                self.tail = node.prev;
                 
             }
         };
@@ -1207,16 +1206,16 @@ impl<T, A: Allocator> LinkedList<T, A> {
     ) {
         // This method takes care not to create multiple mutable references to whole nodes at the same time,
         // to maintain validity of aliasing pointers into `element`.
-        if let Some(mut existing_prev_) = existing_prev {
+        if let Some(mut existing_prev) = existing_prev {
             unsafe {
-                existing_prev_.as_mut().next = Some(splice_start);
+                existing_prev.as_mut().next = Some(splice_start);
             }
         } else {
             self.head = Some(splice_start);
         }
-        if let Some(mut existing_next_) = existing_next {
+        if let Some(mut existing_next) = existing_next {
             unsafe {
-                existing_next_.as_mut().prev = Some(splice_end);
+                existing_next.as_mut().prev = Some(splice_end);
             }
         } else {
             self.tail = Some(splice_end);
@@ -1318,14 +1317,14 @@ impl<T, A: Allocator> LinkedList<T, A> {
     {
         // The split node is the new tail node of the first part and owns
         // the head of the second part.
-        if let Some(mut split_node_) = split_node {
+        if let Some(mut split_node) = split_node {
             //@ Nodes_last_lemma(head0);
             //@ Nodes_split_off_last(head0);
             //@ assert Nodes(alloc_id, head0, None, ?prev0, split_node, ?nodes10);
             let second_part_head;
             let second_part_tail;
             unsafe {
-                second_part_head = split_node_.as_mut().next.take();
+                second_part_head = split_node.as_mut().next.take();
             }
             //@ open Nodes(_, next0, split_node, tail0, None, nodes2);
             if let Some(mut head) = second_part_head {
@@ -1345,16 +1344,16 @@ impl<T, A: Allocator> LinkedList<T, A> {
                 head: second_part_head,
                 tail: second_part_tail,
                 len: self.len - at,
-                alloc: clone_allocator(&self.alloc),
+                alloc: Allocator_clone__VeriFast_wrapper(&self.alloc),
                 marker: PhantomData,
             };
             //@ std::alloc::end_ref_Allocator::<'static, A>();
 
             // Fix the tail ptr of the first part
-            self.tail = Some(split_node_);
+            self.tail = Some(split_node);
             self.len = at;
             //@ close Nodes::<T>(alloc_id, None, split_node, split_node, None, []);
-            //@ close Nodes::<T>(alloc_id, split_node, prev0, split_node, None, [split_node_]);
+            //@ close Nodes::<T>(alloc_id, split_node, prev0, split_node, None, [split_node_1]);
             //@ Nodes_append(head0);
             //@ close_points_to(self);
             //@ close <LinkedList<T, A>>.own(t, *self);
@@ -1365,7 +1364,7 @@ impl<T, A: Allocator> LinkedList<T, A> {
         } else {
             //@ let alloc_ref = precreate_ref(&(*self).alloc);
             //@ std::alloc::init_ref_Allocator::<'static, A>(alloc_ref);
-            let alloc = clone_allocator(&self.alloc);
+            let alloc = Allocator_clone__VeriFast_wrapper(&self.alloc);
             //@ std::alloc::end_ref_Allocator::<'static, A>();
             //@ std::alloc::Allocator_to_own::<A>(alloc);
             //@ close_points_to(self);
@@ -1378,7 +1377,7 @@ impl<T, A: Allocator> LinkedList<T, A> {
     }
 }
 
-unsafe fn clone_allocator<'a, A: Allocator + Clone>(alloc: &'a A) -> A
+unsafe fn Allocator_clone__VeriFast_wrapper<'a, A: Allocator + Clone>(alloc: &'a A) -> A
 //@ req thread_token(?t) &*& Allocator::<&'a A>(t, alloc, ?alloc_id);
 //@ ens thread_token(t) &*& Allocator::<&'a A>(t, _, alloc_id) &*& Allocator::<A>(t, result, alloc_id);
 {
@@ -1412,6 +1411,7 @@ impl<T> LinkedList<T> {
     pub const fn new() -> Self
     //@ req thread_token(?t);
     //@ ens thread_token(t) &*& <LinkedList<T, Global>>.own(t, result);
+    //@ on_unwind_ens thread_token(t);
     {
         let r = LinkedList { head: None, tail: None, len: 0, alloc: Global, marker: PhantomData };
         //@ close foreach(nil, elem_fbc::<T>(t));
@@ -1488,6 +1488,7 @@ impl<T, A: Allocator> LinkedList<T, A> {
     pub const fn new_in(alloc: A) -> Self
     //@ req thread_token(?t) &*& <A>.own(t, alloc);
     //@ ens thread_token(t) &*& <LinkedList<T, A>>.own(t, result);
+    //@ on_unwind_ens thread_token(t);
     {
         let r = LinkedList { head: None, tail: None, len: 0, alloc, marker: PhantomData };
         //@ std::alloc::open_Allocator_own::<A>(alloc);
@@ -1519,6 +1520,7 @@ impl<T, A: Allocator> LinkedList<T, A> {
     pub fn iter<'a>(&'a self) -> Iter<'a, T>
     //@ req thread_token(?t) &*& [?q]lifetime_token('a) &*& [_](<LinkedList<T, A>>.share('a, t, self));
     //@ ens thread_token(t) &*& [q]lifetime_token('a) &*& <Iter<'a, T>>.own(t, result);
+    //@ on_unwind_ens thread_token(t) &*& [q]lifetime_token('a);
     {
         //@ open <LinkedList<T, A>>.share('a, t, self);
         //@ assert [_]exists(LinkedList_share_info(?alloc_id, ?head, ?tail, ?nodes, ?prevs, ?nexts));
@@ -1601,6 +1603,7 @@ impl<T, A: Allocator> LinkedList<T, A> {
     pub fn cursor_front_mut<'a>(&'a mut self) -> CursorMut<'a, T, A>
     //@ req thread_token(?t) &*& [?q]lifetime_token('a) &*& full_borrow('a, <LinkedList<T, A>>.full_borrow_content(t, self));
     //@ ens thread_token(t) &*& [q]lifetime_token('a) &*& <CursorMut<'a, T, A>>.own(t, result);
+    //@ on_unwind_ens thread_token(t) &*& [q]lifetime_token('a);
     {
         //@ let t1 = if is_Send(typeid(T)) && is_Send(typeid(A)) { default_tid } else { t };
         //@ let klong = open_full_borrow_strong('a, <LinkedList<T, A>>.full_borrow_content(t, self), q);
@@ -1670,6 +1673,7 @@ impl<T, A: Allocator> LinkedList<T, A> {
     pub fn cursor_back_mut<'a>(&'a mut self) -> CursorMut<'a, T, A>
     //@ req thread_token(?t) &*& [?q]lifetime_token('a) &*& full_borrow('a, <LinkedList<T, A>>.full_borrow_content(t, self));
     //@ ens thread_token(t) &*& [q]lifetime_token('a) &*& <CursorMut<'a, T, A>>.own(t, result);
+    //@ on_unwind_ens thread_token(t) &*& [q]lifetime_token('a);
     {
         //@ let t1 = if is_Send(typeid(T)) && is_Send(typeid(A)) { default_tid } else { t };
         //@ let klong = open_full_borrow_strong('a, <LinkedList<T, A>>.full_borrow_content(t, self), q);
@@ -1808,6 +1812,7 @@ impl<T, A: Allocator> LinkedList<T, A> {
     pub fn clear(&mut self)
     //@ req thread_token(?t) &*& *self |-> ?self0 &*& <LinkedList<T, A>>.own(t, self0);
     //@ ens thread_token(t) &*& *self |-> ?self1 &*& <LinkedList<T, A>>.own(t, self1);
+    //@ on_unwind_ens thread_token(t) &*& *self |-> ?self1 &*& <LinkedList<T, A>>.own(t, self1);
     {
         //@ open_points_to(self);
         //@ open <LinkedList<T, A>>.own(t, self0);
@@ -1819,11 +1824,11 @@ impl<T, A: Allocator> LinkedList<T, A> {
             //@ let_lft 'a = k;
             //@ std::alloc::init_ref_Allocator_at_lifetime::<'a, A>(alloc_ref);
             let ll = LinkedList {
-                head: self.head.take(),
-                tail: self.tail.take(),
+            head: self.head.take(),
+            tail: self.tail.take(),
                 len: mem::replace(&mut self.len, 0), //mem::take(&mut self.len),
-                alloc: &self.alloc,
-                marker: PhantomData,
+            alloc: &self.alloc,
+            marker: PhantomData,
             };
             //@ close <LinkedList<T, &'a A>>.own(t, ll);
             drop/*@::<LinkedList<T, &'a A>> @*/(ll);
@@ -1987,17 +1992,21 @@ impl<T, A: Allocator> LinkedList<T, A> {
     pub fn push_front(&mut self, elt: T)
     //@ req thread_token(?t) &*& *self |-> ?ll0 &*& <LinkedList<T, A>>.own(t, ll0) &*& <T>.own(t, elt);
     //@ ens thread_token(t) &*& *self |-> ?ll1 &*& <LinkedList<T, A>>.own(t, ll1);
+    //@ on_unwind_ens thread_token(t) &*& *self |-> ?ll1 &*& <LinkedList<T, A>>.own(t, ll1);
     {
         unsafe {
             //@ open_points_to(self);
             //@ open <LinkedList<T, A>>.own(t, ll0);
             //@ let alloc_ref = precreate_ref(&(*self).alloc);
             //@ std::alloc::init_ref_Allocator::<'static, A>(alloc_ref);
-            let node = Box::new_in(Node::new(elt), &self.alloc);
+            let node0 = Node::new(elt);
+            //@ close drop_perm::<Node<T>>(false, True, t, node0);
+        let node = Box::new_in(node0, &self.alloc);
+            //@ open drop_perm::<Node<T>>(false, True, t, node0);
             let node_ptr = NonNull::new_unchecked(Box::leak(node) as *mut Node<T>); //NonNull::from(Box::leak(node));
             //@ std::alloc::end_ref_Allocator::<'static, A>();
             //@ close_points_to(self);
-            // SAFETY: node_ptr is a unique pointer to a node we boxed with self.alloc and leaked
+        // SAFETY: node_ptr is a unique pointer to a node we boxed with self.alloc and leaked
             self.push_front_node(node_ptr);
         }
     }
@@ -2025,6 +2034,7 @@ impl<T, A: Allocator> LinkedList<T, A> {
     pub fn pop_front(&mut self) -> Option<T>
     //@ req thread_token(?t) &*& *self |-> ?self0 &*& <LinkedList<T, A>>.own(t, self0);
     //@ ens thread_token(t) &*& *self |-> ?self1 &*& <LinkedList<T, A>>.own(t, self1) &*& <Option<T>>.own(t, result);
+    //@ on_unwind_ens thread_token(t) &*& *self |-> ?self1 &*& <LinkedList<T, A>>.own(t, self1);
     {
         unsafe {
             //@ open <LinkedList<T, A>>.own(t, self0);
@@ -2065,9 +2075,9 @@ impl<T, A: Allocator> LinkedList<T, A> {
     #[rustc_confusables("push", "append")]
     pub fn push_back(&mut self, elt: T) {
         unsafe {
-            let node = Box::new_in(Node::new(elt), &self.alloc);
-            let node_ptr = NonNull::from(Box::leak(node));
-            // SAFETY: node_ptr is a unique pointer to a node we boxed with self.alloc and leaked
+        let node = Box::new_in(Node::new(elt), &self.alloc);
+        let node_ptr = NonNull::from(Box::leak(node));
+        // SAFETY: node_ptr is a unique pointer to a node we boxed with self.alloc and leaked
             self.push_back_node(node_ptr);
         }
     }
@@ -2129,41 +2139,42 @@ impl<T, A: Allocator> LinkedList<T, A> {
         A: Clone,
     //@ req thread_token(?t) &*& *self |-> ?self0 &*& <LinkedList<T, A>>.own(t, self0);
     //@ ens thread_token(t) &*& *self |-> ?self1 &*& <LinkedList<T, A>>.own(t, self1) &*& <LinkedList<T, A>>.own(t, result);
+    //@ on_unwind_ens thread_token(t) &*& *self |-> ?self1 &*& <LinkedList<T, A>>.own(t, self1);
     {
         unsafe {
             //@ open <LinkedList<T, A>>.own(t, self0);
             //@ open_points_to(self);
             let len = self.len;
             //@ assert (*self).head |-> ?head &*& (*self).tail |-> ?tail &*& Nodes(?alloc_id, _, _, _, _, _);
-            assert!(at <= len, "Cannot split off at a nonexistent index");
-            if at == 0 {
+        assert!(at <= len, "Cannot split off at a nonexistent index");
+        if at == 0 {
                 //@ let alloc_ref = precreate_ref(&(*self).alloc);
                 //@ std::alloc::init_ref_Allocator::<'static, A>(alloc_ref);
-                let alloc1 = clone_allocator(&self.alloc);
+                let alloc1 = Allocator_clone__VeriFast_wrapper(&self.alloc);
                 //@ std::alloc::end_ref_Allocator::<'static, A>();
                 //@ std::alloc::Allocator_to_own::<A>(alloc1);
                 //@ close_points_to(self);
                 //@ assert *self |-> ?self1;
                 //@ close <LinkedList<T, A>>.own(t, self1);
                 return mem::replace(self, Self::new_in(alloc1));
-            } else if at == len {
+        } else if at == len {
                 //@ let alloc_ref = precreate_ref(&(*self).alloc);
                 //@ std::alloc::init_ref_Allocator::<'static, A>(alloc_ref);
-                let alloc2 = clone_allocator(&self.alloc);
+                let alloc2 = Allocator_clone__VeriFast_wrapper(&self.alloc);
                 //@ std::alloc::end_ref_Allocator::<'static, A>();
                 //@ std::alloc::Allocator_to_own::<A>(alloc2);
                 //@ close_points_to(self);
                 //@ assert *self |-> ?self1;
                 //@ close <LinkedList<T, A>>.own(t, self1);
                 return Self::new_in(alloc2);
-            }
+        }
 
-            // Below, we iterate towards the `i-1`th node, either from the start or the end,
-            // depending on which would be faster.
+        // Below, we iterate towards the `i-1`th node, either from the start or the end,
+        // depending on which would be faster.
             let mut iter;
             let mut i;
             //@ assert Nodes(alloc_id, head, None, tail, None, ?nodes);
-            let split_node = if at - 1 <= len - 1 - (at - 1) {
+        let split_node = if at - 1 <= len - 1 - (at - 1) {
                 iter = self.head;
                 i = 0;
                 //@ close Nodes(alloc_id, head, None, None, head, []);
@@ -2196,8 +2207,8 @@ impl<T, A: Allocator> LinkedList<T, A> {
                 //@ append_assoc(nodes1, [iter_], tail(nodes2));
                 //@ foreach_unappend(append(nodes1, [iter_]), tail(nodes2), elem_fbc::<T>(t));
                 iter
-            } else {
-                // better off starting from the end
+        } else {
+            // better off starting from the end
                 iter = self.tail;
                 i = 0;
                 //@ close Nodes(alloc_id, None, iter, iter, None, []);
@@ -2221,8 +2232,8 @@ impl<T, A: Allocator> LinkedList<T, A> {
                 }
                 //@ foreach_unappend(nodes1, nodes2, elem_fbc::<T>(t));
                 iter
-            };
-            unsafe { self.split_off_after_node(split_node, at) }
+        };
+        unsafe { self.split_off_after_node(split_node, at) }
         }
     }
 
@@ -2326,7 +2337,7 @@ impl<T, A: Allocator> LinkedList<T, A> {
 
     /// Retains only the elements specified by the predicate.
     ///
-    /// In other words, remove all elements `e` for which `f(&e)` returns false.
+    /// In other words, remove all elements `e` for which `f(&mut e)` returns false.
     /// This method operates in place, visiting each element exactly once in the
     /// original order, and preserves the order of the retained elements.
     ///
@@ -2402,6 +2413,7 @@ impl<T, A: Allocator> LinkedList<T, A> {
         F: FnMut(&mut T) -> bool,
     //@ req thread_token(?t) &*& [?q]lifetime_token('a) &*& full_borrow('a, <LinkedList<T, A>>.full_borrow_content(t, self)) &*& <F>.own(t, filter);
     //@ ens thread_token(t) &*& [q]lifetime_token('a) &*& <ExtractIf<'a, T, F, A>>.own(t, result);
+    //@ on_unwind_ens thread_token(t) &*& [q]lifetime_token('a);
     {
         //@ let klong = open_full_borrow_strong('a, <LinkedList<T, A>>.full_borrow_content(t, self), q);
         //@ open <LinkedList<T, A>>.full_borrow_content(t, self)();
@@ -2412,7 +2424,7 @@ impl<T, A: Allocator> LinkedList<T, A> {
         // avoid borrow issues.
         let it = self.head;
         let old_len = self.len;
-        
+
         //@ let ghost_cell_id = create_ghost_cell::<pair<Option<NonNull<Node<T>>>, usize>>(pair(it, 0));
 
         /*@
@@ -2446,7 +2458,7 @@ impl<T, A: Allocator> LinkedList<T, A> {
     }
 }
 
-struct DropGuard<'a, T, A: Allocator>(&'a mut LinkedList<T, A>);
+        struct DropGuard<'a, T, A: Allocator>(&'a mut LinkedList<T, A>);
 
 /*@
 
@@ -2462,14 +2474,14 @@ lem DropGuard_own_mono<'a0, 'a1, T, A>()
 
 @*/
 
-impl<'a, T, A: Allocator> Drop for DropGuard<'a, T, A> {
-    fn drop(&mut self) {
+        impl<'a, T, A: Allocator> Drop for DropGuard<'a, T, A> {
+            fn drop(&mut self) {
         unsafe {
-            // Continue the same loop we do below. This only runs when a destructor has
-            // panicked. If another one panics this will abort.
-            while self.0.pop_front_node().is_some() {}
+                // Continue the same loop we do below. This only runs when a destructor has
+                // panicked. If another one panics this will abort.
+                while self.0.pop_front_node().is_some() {}
+            }
         }
-    }
 }
 
 #[stable(feature = "rust1", since = "1.0.0")]
@@ -2485,10 +2497,20 @@ unsafe impl<#[may_dangle] T, A: Allocator> Drop for LinkedList<T, A> {
         (*self).marker |-> ?marker &*& <std::marker::PhantomData<std::boxed::Box<Node<T>, A>>>.own(t, marker) &*&
         struct_LinkedList_padding::<T, A>(self);
     @*/
+    /*@
+    on_unwind_ens
+        thread_token(t) &*&
+        (*self).head |-> ?head &*& <Option<NonNull<Node<T>> >>.own(t, head) &*&
+        (*self).tail |-> ?tail &*& <Option<NonNull<Node<T>> >>.own(t, tail) &*&
+        (*self).len |-> ?_ &*&
+        (*self).alloc |-> ?alloc &*& <A>.own(t, alloc) &*&
+        (*self).marker |-> ?marker &*& <std::marker::PhantomData<std::boxed::Box<Node<T>, A>>>.own(t, marker) &*&
+        struct_LinkedList_padding::<T, A>(self);
+    @*/
     {
         unsafe {
-            // Wrap self so that if a destructor panics, we can try to keep looping
-            let guard = DropGuard(self);
+        // Wrap self so that if a destructor panics, we can try to keep looping
+        let guard = DropGuard(self);
             //@ open_full_borrow_content(t, self);
             loop {
                 //@ inv thread_token(t) &*& *self |-> ?self0 &*& <LinkedList<T, A>>.own(t, self0) &*& [1/2]guard.0 |-> self &*& [1/2]element |-> _;
@@ -2500,7 +2522,7 @@ unsafe impl<#[may_dangle] T, A: Allocator> Drop for LinkedList<T, A> {
                 }
             }
             //@ close <DropGuard<'static, T, A>>.own(t, guard);
-            mem::forget(guard);
+        mem::forget(guard);
             //@ let head = (*self).head;
             //@ match head { Option::None => {} Option::Some(head_) => { std::ptr::close_NonNull_own::<Node<T>>(t, head_); } }
             //@ close <std::option::Option<NonNull<Node<T>>>>.own(t, head);
@@ -2525,6 +2547,7 @@ impl<'a, T> Iterator for Iter<'a, T> {
     fn next(&mut self) -> Option<&'a T>
     //@ req thread_token(?t) &*& [?q]lifetime_token('a) &*& *self |-> ?self0 &*& <Iter<'a, T>>.own(t, self0);
     //@ ens thread_token(t) &*& [q]lifetime_token('a) &*& *self |-> ?self1 &*& <Iter<'a, T>>.own(t, self1) &*& <Option<&'a T>>.own(t, result);
+    //@ on_unwind_ens thread_token(t) &*& [q]lifetime_token('a) &*& *self |-> ?self1 &*& <Iter<'a, T>>.own(t, self1);
     {
         if self.len == 0 {
             //@ close std::option::Option_own::<&'a T>(t, Option::None);
@@ -2535,14 +2558,14 @@ impl<'a, T> Iterator for Iter<'a, T> {
                     //@ close std::option::Option_own::<&'a T>(t, Option::None);
                     None
                 }
-                Some(node_) => unsafe {
+                Some(node) => unsafe {
                     //@ open <Iter<'a, T>>.own(t, self0);
                     //@ open exists(Iter_info(?alloc_id, ?head0, ?prev, ?next, ?tail0, ?nodes_before, ?nodes, ?nodes_after, ?prevs_before, ?prevs, ?prevs_after, ?nexts_before, ?nexts, ?nexts_after));
                     //@ open_frac_borrow('a, Iter_frac_borrow_content::<T>(alloc_id, head0, self0.head, prev, self0.tail, next, tail0, nodes_before, nodes, nodes_after, prevs_before, prevs, prevs_after, nexts_before, nexts, nexts_after), q);
                     //@ open [?f]Iter_frac_borrow_content::<T>(alloc_id, head0, self0.head, prev, self0.tail, next, tail0, nodes_before, nodes, nodes_after, prevs_before, prevs, prevs_after, nexts_before, nexts, nexts_after)();
                     //@ open Nodes1::<T>(alloc_id, self0.head, prev, self0.tail, next, nodes, prevs, nexts);
-                    // Need an unbound lifetime to get 'a
-                    let node = node_.as_ptr(); //&*node_.as_ptr();
+                // Need an unbound lifetime to get 'a
+                    let node = node.as_ptr(); //&*node_.as_ptr();
                     let len = self.len;
                     //@ produce_limits(len);
                     self.len = len - 1;
@@ -2552,32 +2575,32 @@ impl<'a, T> Iterator for Iter<'a, T> {
                     //@ close [f]Iter_frac_borrow_content::<T>(alloc_id, head0, self0.head, prev, self0.tail, next, tail0, nodes_before, nodes, nodes_after, prevs_before, prevs, prevs_after, nexts_before, nexts, nexts_after)();
                     //@ close_frac_borrow(f, Iter_frac_borrow_content::<T>(alloc_id, head0, self0.head, prev, self0.tail, next, tail0, nodes_before, nodes, nodes_after, prevs_before, prevs, prevs_after, nexts_before, nexts, nexts_after));
                     /*@
-                    produce_lem_ptr_chunk implies_frac(Iter_frac_borrow_content::<T>(alloc_id, head0, self0.head, prev, self0.tail, next, tail0, nodes_before, nodes, nodes_after, prevs_before, prevs, prevs_after, nexts_before, nexts, nexts_after), Iter_frac_borrow_content::<T>(alloc_id, head0, self1.head, self0.head, self1.tail, next, tail0, append(nodes_before, [node_]), tail(nodes), nodes_after, append(prevs_before, [prev]), tail(prevs), prevs_after, append(nexts_before, [self1.head]), tail(nexts), nexts_after))() {
+                    produce_lem_ptr_chunk implies_frac(Iter_frac_borrow_content::<T>(alloc_id, head0, self0.head, prev, self0.tail, next, tail0, nodes_before, nodes, nodes_after, prevs_before, prevs, prevs_after, nexts_before, nexts, nexts_after), Iter_frac_borrow_content::<T>(alloc_id, head0, self1.head, self0.head, self1.tail, next, tail0, append(nodes_before, [node]), tail(nodes), nodes_after, append(prevs_before, [prev]), tail(prevs), prevs_after, append(nexts_before, [self1.head]), tail(nexts), nexts_after))() {
                         open [?f1]Iter_frac_borrow_content::<T>(alloc_id, head0, self0.head, prev, self0.tail, next, tail0, nodes_before, nodes, nodes_after, prevs_before, prevs, prevs_after, nexts_before, nexts, nexts_after)();
                         open Nodes1::<T>(alloc_id, self0.head, prev, self0.tail, next, nodes, prevs, nexts);
                         close [f1]Nodes1::<T>(alloc_id, self1.head, self0.head, self0.head, self1.head, [], [], []);
-                        assert self0.head == Option::Some(node_) &*& [f1](*NonNull_ptr(node_)).next |-> self1.head;
-                        close [f1]Nodes1::<T>(alloc_id, self0.head, prev, self0.head, self1.head, [node_], [prev], [self1.head]);
+                        assert self0.head == Option::Some(node) &*& [f1](*NonNull_ptr(node)).next |-> self1.head;
+                        close [f1]Nodes1::<T>(alloc_id, self0.head, prev, self0.head, self1.head, [node], [prev], [self1.head]);
                         Nodes1_append::<T>(head0);
-                        close [f1]Iter_frac_borrow_content::<T>(alloc_id, head0, self1.head, self0.head, self1.tail, next, tail0, append(nodes_before, [node_]), tail(nodes), nodes_after, append(prevs_before, [prev]), tail(prevs), prevs_after, append(nexts_before, [self1.head]), tail(nexts), nexts_after)();
+                        close [f1]Iter_frac_borrow_content::<T>(alloc_id, head0, self1.head, self0.head, self1.tail, next, tail0, append(nodes_before, [node]), tail(nodes), nodes_after, append(prevs_before, [prev]), tail(prevs), prevs_after, append(nexts_before, [self1.head]), tail(nexts), nexts_after)();
                     } {
-                        produce_lem_ptr_chunk implies_frac(Iter_frac_borrow_content::<T>(alloc_id, head0, self1.head, self0.head, self1.tail, next, tail0, append(nodes_before, [node_]), tail(nodes), nodes_after, append(prevs_before, [prev]), tail(prevs), prevs_after, append(nexts_before, [self1.head]), tail(nexts), nexts_after), Iter_frac_borrow_content::<T>(alloc_id, head0, self0.head, prev, self0.tail, next, tail0, nodes_before, nodes, nodes_after, prevs_before, prevs, prevs_after, nexts_before, nexts, nexts_after))() {
-                            open [?f1]Iter_frac_borrow_content::<T>(alloc_id, head0, self1.head, self0.head, self1.tail, next, tail0, append(nodes_before, [node_]), tail(nodes), nodes_after, append(prevs_before, [prev]), tail(prevs), prevs_after, append(nexts_before, [self1.head]), tail(nexts), nexts_after)();
-                            Nodes1_split::<T>(nodes_before, [node_], prevs_before, [prev], nexts_before, [self1.head]);
-                            open Nodes1::<T>(alloc_id, _, _, _, _, [node_], [prev], [self1.head]);
+                        produce_lem_ptr_chunk implies_frac(Iter_frac_borrow_content::<T>(alloc_id, head0, self1.head, self0.head, self1.tail, next, tail0, append(nodes_before, [node]), tail(nodes), nodes_after, append(prevs_before, [prev]), tail(prevs), prevs_after, append(nexts_before, [self1.head]), tail(nexts), nexts_after), Iter_frac_borrow_content::<T>(alloc_id, head0, self0.head, prev, self0.tail, next, tail0, nodes_before, nodes, nodes_after, prevs_before, prevs, prevs_after, nexts_before, nexts, nexts_after))() {
+                            open [?f1]Iter_frac_borrow_content::<T>(alloc_id, head0, self1.head, self0.head, self1.tail, next, tail0, append(nodes_before, [node]), tail(nodes), nodes_after, append(prevs_before, [prev]), tail(prevs), prevs_after, append(nexts_before, [self1.head]), tail(nexts), nexts_after)();
+                            Nodes1_split::<T>(nodes_before, [node], prevs_before, [prev], nexts_before, [self1.head]);
+                            open Nodes1::<T>(alloc_id, _, _, _, _, [node], [prev], [self1.head]);
                             open Nodes1::<T>(alloc_id, self1.head, _, _, _, [], [], []);
                             close [f1]Nodes1::<T>(alloc_id, self0.head, prev, self0.tail, next, nodes, prevs, nexts);
                             close [f1]Iter_frac_borrow_content::<T>(alloc_id, head0, self0.head, prev, self0.tail, next, tail0, nodes_before, nodes, nodes_after, prevs_before, prevs, prevs_after, nexts_before, nexts, nexts_after)();
                         } {
-                            frac_borrow_implies('a, Iter_frac_borrow_content::<T>(alloc_id, head0, self0.head, prev, self0.tail, next, tail0, nodes_before, nodes, nodes_after, prevs_before, prevs, prevs_after, nexts_before, nexts, nexts_after), Iter_frac_borrow_content::<T>(alloc_id, head0, self1.head, self0.head, self1.tail, next, tail0, append(nodes_before, [node_]), tail(nodes), nodes_after, append(prevs_before, [prev]), tail(prevs), prevs_after, append(nexts_before, [self1.head]), tail(nexts), nexts_after));
+                            frac_borrow_implies('a, Iter_frac_borrow_content::<T>(alloc_id, head0, self0.head, prev, self0.tail, next, tail0, nodes_before, nodes, nodes_after, prevs_before, prevs, prevs_after, nexts_before, nexts, nexts_after), Iter_frac_borrow_content::<T>(alloc_id, head0, self1.head, self0.head, self1.tail, next, tail0, append(nodes_before, [node]), tail(nodes), nodes_after, append(prevs_before, [prev]), tail(prevs), prevs_after, append(nexts_before, [self1.head]), tail(nexts), nexts_after));
                         }
                     }
                     @*/
-                    //@ close exists(Iter_info(alloc_id, head0, self0.head, next, tail0, append(nodes_before, [node_]), tail(nodes), nodes_after, append(prevs_before, [prev]), tail(prevs), prevs_after, append(nexts_before, [self1.head]), tail(nexts), nexts_after));
+                    //@ close exists(Iter_info(alloc_id, head0, self0.head, next, tail0, append(nodes_before, [node]), tail(nodes), nodes_after, append(prevs_before, [prev]), tail(prevs), prevs_after, append(nexts_before, [self1.head]), tail(nexts), nexts_after));
                     //@ open foreach(_, _);
                     //@ close <Iter<'a, T>>.own(t, *self);
-                    //@ open elem_share::<T>('a, t)(node_);
-                    //@ let elem_ref = precreate_ref(&(*node).element);
+                    //@ open elem_share::<T>('a, t)(node);
+                    //@ let elem_ref = precreate_ref(&(*node_1).element);
                     //@ produce_type_interp::<T>();
                     //@ init_ref_share::<T>('a, t, elem_ref);
                     //@ leak type_interp::<T>();
@@ -2922,6 +2945,14 @@ impl<'a, T, A: Allocator> Cursor<'a, T, A> {
     pub fn back(&self) -> Option<&'a T> {
         self.list.back()
     }
+
+    /// Provides a reference to the cursor's parent list.
+    #[must_use]
+    #[inline(always)]
+    #[unstable(feature = "linked_list_cursors", issue = "58533")]
+    pub fn as_list(&self) -> &'a LinkedList<T, A> {
+        self.list
+    }
 }
 
 impl<'a, T, A: Allocator> CursorMut<'a, T, A> {
@@ -2945,6 +2976,7 @@ impl<'a, T, A: Allocator> CursorMut<'a, T, A> {
     pub fn move_next(&mut self)
     //@ req thread_token(?t) &*& [?q]lifetime_token('a) &*& *self |-> ?self0 &*& <CursorMut<'a, T, A>>.own(t, self0);
     //@ ens thread_token(t) &*& [q]lifetime_token('a) &*& *self |-> ?self1 &*& <CursorMut<'a, T, A>>.own(t, self1);
+    //@ on_unwind_ens thread_token(t) &*& [q]lifetime_token('a) &*& *self |-> ?self1 &*& <CursorMut<'a, T, A>>.own(t, self1);
     {
         //@ open_points_to(self);
         //@ open <CursorMut<'a, T, A>>.own(t, self0);
@@ -2999,6 +3031,7 @@ impl<'a, T, A: Allocator> CursorMut<'a, T, A> {
     pub fn move_prev(&mut self)
     //@ req thread_token(?t) &*& [?q]lifetime_token('a) &*& *self |-> ?self0 &*& <CursorMut<'a, T, A>>.own(t, self0);
     //@ ens thread_token(t) &*& [q]lifetime_token('a) &*& *self |-> ?self1 &*& <CursorMut<'a, T, A>>.own(t, self1);
+    //@ on_unwind_ens thread_token(t) &*& [q]lifetime_token('a) &*& *self |-> ?self1 &*& <CursorMut<'a, T, A>>.own(t, self1);
     {
         //@ let t1 = if is_Send(typeid(T)) && is_Send(typeid(A)) { default_tid } else { t };
         //@ open_points_to(self);
@@ -3080,6 +3113,7 @@ impl<'a, T, A: Allocator> CursorMut<'a, T, A> {
     pub fn current<'b>(&'b mut self) -> Option<&'b mut T>
     //@ req thread_token(?t) &*& [?qa]lifetime_token('a) &*& [?qb]lifetime_token('b) &*& full_borrow('b, <CursorMut<'a, T, A>>.full_borrow_content(t, self)) &*& lifetime_inclusion('b, 'a) == true;
     //@ ens thread_token(t) &*& [qa]lifetime_token('a) &*& [qb]lifetime_token('b) &*& <Option<&'b mut T>>.own(t, result);
+    //@ on_unwind_ens thread_token(t) &*& [qa]lifetime_token('a) &*& [qb]lifetime_token('b);
     {
         unsafe {
             //@ let t1 = if is_Send(typeid(T)) && is_Send(typeid(A)) { default_tid } else { t };
@@ -3239,6 +3273,18 @@ impl<'a, T, A: Allocator> CursorMut<'a, T, A> {
     pub fn as_cursor(&self) -> Cursor<'_, T, A> {
         Cursor { list: self.list, current: self.current, index: self.index }
     }
+
+    /// Provides a read-only reference to the cursor's parent list.
+    ///
+    /// The lifetime of the returned reference is bound to that of the
+    /// `CursorMut`, which means it cannot outlive the `CursorMut` and that the
+    /// `CursorMut` is frozen for the lifetime of the reference.
+    #[must_use]
+    #[inline(always)]
+    #[unstable(feature = "linked_list_cursors", issue = "58533")]
+    pub fn as_list(&self) -> &LinkedList<T, A> {
+        self.list
+    }
 }
 
 // Now the list editing operations
@@ -3337,6 +3383,7 @@ impl<'a, T, A: Allocator> CursorMut<'a, T, A> {
     pub fn remove_current(&mut self) -> Option<T>
     //@ req thread_token(?t) &*& [?q]lifetime_token('a) &*& *self |-> ?self0 &*& <CursorMut<'a, T, A>>.own(t, self0);
     //@ ens thread_token(t) &*& [q]lifetime_token('a) &*& *self |-> ?self1 &*& <CursorMut<'a, T, A>>.own(t, self1) &*& <Option<T>>.own(t, result);
+    //@ on_unwind_ens thread_token(t) &*& [q]lifetime_token('a) &*& *self |-> ?self1 &*& <CursorMut<'a, T, A>>.own(t, self1);
     {
         //let unlinked_node = self.current?;
         match self.current {
@@ -3356,7 +3403,7 @@ impl<'a, T, A: Allocator> CursorMut<'a, T, A> {
                 //@ let current1 = (*self).current;
                 //@ open foreach(nodes2, elem_fbc::<T>(t1));
                 //@ open elem_fbc::<T>(t1)(unlinked_node);
-                self.list.unlink_node(unlinked_node);
+            self.list.unlink_node(unlinked_node);
                 /*@
                 if t1 != t {
                     std::alloc::Allocator_send(t, (*self0.list).alloc);
@@ -3364,8 +3411,8 @@ impl<'a, T, A: Allocator> CursorMut<'a, T, A> {
                 @*/
                 //@ let alloc_ref = precreate_ref(&(*self0.list).alloc);
                 //@ std::alloc::init_ref_Allocator::<'static, A>(alloc_ref);
-                let unlinked_node_ = Box::from_raw_in(unlinked_node.as_ptr(), &self.list.alloc);
-                let r = Some(Box::into_inner(unlinked_node_).element); // Some(unlinked_node_.element)
+                let unlinked_node = Box::from_raw_in(unlinked_node.as_ptr(), &self.list.alloc);
+                let r = Some(Box::into_inner(unlinked_node).element); // Some(unlinked_node_.element)
                 //@ std::alloc::end_ref_Allocator::<'static, A>();
                 //@ ghost_cell_mutate(ghost_cell_id, pair(self0.index, current1));
                 /*@
@@ -3647,6 +3694,7 @@ lem ExtractIf_own_mono<'a0, 'a1, T, F0, F1, A>()
 fn call_pred<T, F: FnMut(&mut T) -> bool>(f: &mut F, element: &mut T) -> bool
 //@ req thread_token(?t) &*& *f |-> ?f0 &*& <F>.own(t, f0) &*& *element |-> ?element0 &*& <T>.own(t, element0);
 //@ ens thread_token(t) &*& *f |-> ?f1 &*& <F>.own(t, f1) &*& *element |-> ?element1 &*& <T>.own(t, element1);
+//@ on_unwind_ens thread_token(t) &*& *f |-> ?f1 &*& <F>.own(t, f1) &*& *element |-> ?element1 &*& <T>.own(t, element1);
 {
     //@ assume(false); //~allow_dead_code
     f(element) //~allow_dead_code
@@ -3662,6 +3710,7 @@ where
     fn next(&mut self) -> Option<T>
     //@ req thread_token(?t) &*& [?q]lifetime_token('a) &*& *self |-> ?self0 &*& <ExtractIf<'a, T, F, A>>.own(t, self0);
     //@ ens thread_token(t) &*& [q]lifetime_token('a) &*& *self |-> ?self1 &*& <ExtractIf<'a, T, F, A>>.own(t, self1) &*& <Option<T>>.own(t, result);
+    //@ on_unwind_ens thread_token(t) &*& [q]lifetime_token('a) &*& *self |-> ?self1 &*& <ExtractIf<'a, T, F, A>>.own(t, self1);
     {
         loop { //while let Some(mut node) = self.it {
             //@ inv thread_token(t) &*& [q]lifetime_token('a) &*& *self |-> ?self1 &*& <ExtractIf<'a, T, F, A>>.own(t, self1) &*& node |-> _;
@@ -3676,15 +3725,15 @@ where
                     //@ assert Allocator::<A>(t, ?alloc, _);
                     //@ open Nodes(?alloc_id, self1.it, ?prev, ?tail, None, ?nodes2);
                     self.it = (*node.as_ptr()).next; //node.as_ref().next;
-                    self.idx += 1;
+                self.idx += 1;
                     //@ ghost_cell_mutate(ghost_cell_id, pair((*self).it, (*self).idx));
-                    
+
                     //@ open foreach(nodes2, elem_fbc::<T>(t));
                     //@ open elem_fbc::<T>(t)(node);
 
                     if call_pred(&mut self.pred, &mut node.as_mut().element) {
-                        // `unlink_node` is okay with aliasing `element` references.
-                        self.list.unlink_node(node);
+                    // `unlink_node` is okay with aliasing `element` references.
+                    self.list.unlink_node(node);
                         //@ let alloc_ref = precreate_ref(&(*(*self).list).alloc);                        
                         //@ std::alloc::init_ref_Allocator::<'static, A>(alloc_ref);
                         let r = Some(Box::into_inner(Box::from_raw_in(node.as_ptr(), &self.list.alloc)).element);
@@ -3705,8 +3754,8 @@ where
                     //@ close ExtractIf_fbc::<T, A>(t, self1.list, ghost_cell_id, self1.old_len)();
                     //@ close_full_borrow(ExtractIf_fbc(t, self1.list, ghost_cell_id, self1.old_len));
                     //@ close <ExtractIf<'a, T, F, A>>.own(t, *self);
-                }
             }
+        }
         }
         //@ close <std::option::Option<T>>.own(t, None);
         None
@@ -3939,18 +3988,16 @@ impl<T, const N: usize> From<[T; N]> for LinkedList<T> {
 
 // Ensure that `LinkedList` and its read-only iterators are covariant in their type parameters.
 #[allow(dead_code)]
-fn assert_covariance_a<'a>(x: LinkedList<&'static str>) -> LinkedList<&'a str> {
-    x
-}
-
-#[allow(dead_code)]
-fn assert_covariance_b<'i, 'a>(x: Iter<'i, &'static str>) -> Iter<'i, &'a str> {
-    x
-}
-
-#[allow(dead_code)]
-fn assert_covariance_c<'a>(x: IntoIter<&'static str>) -> IntoIter<&'a str> {
-    x
+fn assert_covariance() {
+    fn a<'a>(x: LinkedList<&'static str>) -> LinkedList<&'a str> {
+        x
+    }
+    fn b<'i, 'a>(x: Iter<'i, &'static str>) -> Iter<'i, &'a str> {
+        x
+    }
+    fn c<'a>(x: IntoIter<&'static str>) -> IntoIter<&'a str> {
+        x
+    }
 }
 
 #[stable(feature = "rust1", since = "1.0.0")]

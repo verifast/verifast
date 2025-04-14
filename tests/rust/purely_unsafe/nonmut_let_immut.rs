@@ -1,6 +1,7 @@
 unsafe fn mutate(p: *const i32)
 //@ req *p |-> _;
 //@ ens *p |-> 42;
+//@ on_unwind_ens false;
 {
     *(p as *mut i32) = 42;
 }

@@ -19,7 +19,7 @@ lemma void serialize_item(item i);
 
 int serialize_to_public_message(char** dest, struct item* item);
   /*@ requires [?f0]world(?pub, ?key_clsfy) &*& 
-               [?f1]item(item, ?i, pub) &*& pointer(dest, _) &*& 
+               [?f1]item(item, ?i, pub) &*& *dest |-> _ &*& 
                [_]pub(i); @*/
   /*@ ensures  [f0]world(pub, key_clsfy) &*& 
                [f1]item(item, i, pub) &*& pointer(dest, ?d) &*& 

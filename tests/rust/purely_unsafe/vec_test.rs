@@ -1,4 +1,4 @@
-// verifast_options{ignore_ref_creation}
+// verifast_options{ignore_unwind_paths ignore_ref_creation}
 
 unsafe fn assert(b: bool)
 //@ req b;
@@ -14,8 +14,12 @@ fn main() {
     unsafe {
         //@ assert thread_token(?t);
         let mut v = std::vec::Vec::<u8>::new();
+        //@ close drop_perm::<u8>(false, True, _t, 10);
         v.push(10);
+        //@ open drop_perm::<u8>(false, True, _t, 10);
+        //@ close drop_perm::<u8>(false, True, _t, 20);
         v.push(20);
+        //@ open drop_perm::<u8>(false, True, _t, 20);
         assert(v.len() == 2);
         //@ std::vec::Vec_separate_buffer(v);
         //@ open array(?buffer, 2, _);

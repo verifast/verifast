@@ -75,30 +75,30 @@ mod threading {
 
     /*@
 
-    pred Mutex(mutex: Mutex;);
-    pred Mutex_state(mutex: Mutex; owner: option<usize>);
+    pred Mutex(mutex: Mutex; ghost_cell_id: i32);
+    pred Mutex_state(mutex: Mutex; owner: option<thread_id_t>);
 
-    lem_type Mutex_acquire_op(mutex: Mutex, acquirer: usize, P: pred(), Q: pred()) = lem();
+    lem_type Mutex_acquire_op(mutex: Mutex, acquirer: thread_id_t, P: pred(), Q: pred()) = lem();
         req [?f]Mutex_state(mutex, ?state) &*& P() &*& state != none || f == 1;
         ens Mutex_state(mutex, some(acquirer)) &*& state == none &*& Q();
 
-    lem_type Mutex_acquire_ghop(mutex: Mutex, acquirer: usize, pre: pred(), post: pred()) = lem();
+    lem_type Mutex_acquire_ghop(mutex: Mutex, acquirer: thread_id_t, pre: pred(), post: pred()) = lem();
         req atomic_mask(MaskTop) &*& is_Mutex_acquire_op(?op, mutex, acquirer, ?P, ?Q) &*& P() &*& pre();
         ens atomic_mask(MaskTop) &*& is_Mutex_acquire_op(op, mutex, acquirer, P, Q) &*& Q() &*& post();
     
-    lem_type Mutex_try_acquire_op(mutex: Mutex, acquirer: usize, P: pred(), Q: pred(bool)) = lem();
+    lem_type Mutex_try_acquire_op(mutex: Mutex, acquirer: thread_id_t, P: pred(), Q: pred(bool)) = lem();
         req [?f]Mutex_state(mutex, ?state) &*& P() &*& state != none || f == 1;
         ens Mutex_state(mutex, match state { none() => some(acquirer), some(owner) => some(owner) }) &*& Q(state == none);
 
-    lem_type Mutex_try_acquire_ghop(mutex: Mutex, acquirer: usize, pre: pred(), post: pred(bool)) = lem();
+    lem_type Mutex_try_acquire_ghop(mutex: Mutex, acquirer: thread_id_t, pre: pred(), post: pred(bool)) = lem();
         req atomic_mask(MaskTop) &*& is_Mutex_try_acquire_op(?op, mutex, acquirer, ?P, ?Q) &*& P() &*& pre();
         ens atomic_mask(MaskTop) &*& is_Mutex_try_acquire_op(op, mutex, acquirer, P, Q) &*& Q(?success) &*& post(success);
     
-    lem_type Mutex_release_op(mutex: Mutex, releaser: usize, P: pred(), Q: pred()) = lem();
+    lem_type Mutex_release_op(mutex: Mutex, releaser: thread_id_t, P: pred(), Q: pred()) = lem();
         req Mutex_state(mutex, some(releaser)) &*& P();
         ens Mutex_state(mutex, none) &*& Q();
 
-    lem_type Mutex_release_ghop(mutex: Mutex, releaser: usize, pre: pred(), post: pred()) = lem();
+    lem_type Mutex_release_ghop(mutex: Mutex, releaser: thread_id_t, pre: pred(), post: pred()) = lem();
         req atomic_mask(MaskTop) &*& is_Mutex_release_op(?op, mutex, releaser, ?P, ?Q) &*& P() &*& pre();
         ens atomic_mask(MaskTop) &*& is_Mutex_release_op(op, mutex, releaser, P, Q) &*& Q() &*& post();
     
@@ -108,22 +108,22 @@ mod threading {
 
         unsafe fn new() -> Mutex;
         //@ req true;
-        //@ ens Mutex(result) &*& Mutex_state(result, none);
+        //@ ens Mutex(result, ?ghost_cell_id) &*& Mutex_state(result, none) &*& ghost_cell::<i32>(ghost_cell_id, 0);
 
         unsafe fn acquire(self: Mutex);
-        //@ req [?f]Mutex(self) &*& is_Mutex_acquire_ghop(?ghop, self, currentThread, ?pre, ?post) &*& pre();
-        //@ ens [f]Mutex(self) &*& post();
+        //@ req [?f]Mutex(self, ?ghost_cell_id) &*& is_Mutex_acquire_ghop(?ghop, self, currentThread, ?pre, ?post) &*& pre();
+        //@ ens [f]Mutex(self, ghost_cell_id) &*& post();
 
         unsafe fn try_acquire(self: Mutex) -> bool;
-        //@ req [?f]Mutex(self) &*& is_Mutex_try_acquire_ghop(?ghop, self, currentThread, ?pre, ?post) &*& pre();
-        //@ ens [f]Mutex(self) &*& post(result);
+        //@ req [?f]Mutex(self, ?ghost_cell_id) &*& is_Mutex_try_acquire_ghop(?ghop, self, currentThread, ?pre, ?post) &*& pre();
+        //@ ens [f]Mutex(self, ghost_cell_id) &*& post(result);
 
         unsafe fn release(self: Mutex);
-        //@ req [?f]Mutex(self) &*& is_Mutex_release_ghop(?ghop, self, currentThread, ?pre, ?post) &*& pre();
-        //@ ens [f]Mutex(self) &*& post();
+        //@ req [?f]Mutex(self, ?ghost_cell_id) &*& is_Mutex_release_ghop(?ghop, self, currentThread, ?pre, ?post) &*& pre();
+        //@ ens [f]Mutex(self, ghost_cell_id) &*& post();
 
         unsafe fn dispose(self: Mutex);
-        //@ req Mutex(self) &*& Mutex_state(self, none);
+        //@ req Mutex(self, ?ghost_cell_id) &*& Mutex_state(self, none) &*& ghost_cell::<i32>(ghost_cell_id, _);
         //@ ens true;
 
     }

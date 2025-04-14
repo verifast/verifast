@@ -432,14 +432,14 @@ void enqueue(struct queue* q, int x)
 }
 
 bool try_dequeue(struct queue* q, int* res)
-  //@ requires [?f]queue(q, ?I) &*& integer(res, ?v) &*& is_queue_try_dequeue(?lem, I) &*& try_dequeue_pre(lem)();
-  //@ ensures [f]queue(q, I) &*& integer(res, ?nv) &*& try_dequeue_post(lem)(result, ?ret) &*& result ? ret == nv : true;
+  //@ requires [?f]queue(q, ?I) &*& *res |-> _ &*& is_queue_try_dequeue(?lem, I) &*& try_dequeue_pre(lem)();
+  //@ ensures [f]queue(q, I) &*& try_dequeue_post(lem)(result, ?ret) &*& result ? *res |-> ret : *res |-> _;
 {
   //@ open [f]queue(q, I);
   //@ assert [f]msqueue_box(?id, q, I);
   //@ handle ha = create_handle msqueue_box_handle(id);
   while(true)
-    //@ invariant [f]msqueue_box(id, q, I) &*& integer(res, v) &*& is_queue_try_dequeue(lem, I) &*& try_dequeue_pre(lem)() &*& msqueue_box_handle(ha, id);
+    //@ invariant [f]msqueue_box(id, q, I) &*& *res |-> _ &*& is_queue_try_dequeue(lem, I) &*& try_dequeue_pre(lem)() &*& msqueue_box_handle(ha, id);
   {
     // h = q->head
     /*@

@@ -37,6 +37,11 @@ lem create_atomic_space(mask: mask_t, inv_: pred());
     req !mask_is_empty(mask) &*& inv_();
     ens atomic_space(mask, inv_);
 
+lem destroy_atomic_space(mask: mask_t, inv_: pred());
+    nonghost_callers_only
+    req atomic_space(mask, inv_);
+    ens inv_();
+
 lem open_atomic_space(spaceMask: mask_t, inv_: pred());
     req [?f]atomic_space(spaceMask, inv_) &*& atomic_mask(?currentMask) &*& mask_le(spaceMask, currentMask) == true;
     ens [f]atomic_space(spaceMask, inv_) &*& atomic_mask(mask_diff(currentMask, spaceMask))
@@ -100,7 +105,7 @@ lem close_na_inv_m(t: thread_id_t, m: mask_t);
 /*@
 
 pred bool_own(t: thread_id_t, v: bool;) = true;
-pred char_own(t: thread_id_t, v: u32;) = 0 <= v && v <= 0xD7FF || 0xE000 <= v && v <= 0x10FFFF;
+pred char_own(t: thread_id_t, v: char;) = 0 <= v as u32 && v as u32 <= 0xD7FF || 0xE000 <= v as u32 && v as u32 <= 0x10FFFF;
 pred raw_ptr_own(t: thread_id_t, v: *_;) = true;
 
 pred i8_own(t: thread_id_t, v: i8;) = true;
@@ -118,7 +123,7 @@ pred u128_own(t: thread_id_t, v: u128;) = true;
 pred usize_own(t: thread_id_t, v: usize;) = true;
 
 pred_ctor bool_full_borrow_content(t: thread_id_t, l: *bool)(;) = *l |-> ?_;
-pred_ctor char_full_borrow_content(t: thread_id_t, l: *u32)(;) = *l |-> ?c &*& char_own(t, c);
+pred_ctor char_full_borrow_content(t: thread_id_t, l: *char)(;) = *l |-> ?c &*& char_own(t, c);
 pred_ctor raw_ptr_full_borrow_content(t: thread_id_t, l: **_)(;) = *l |-> ?_;
 
 pred_ctor i8_full_borrow_content(t: thread_id_t, l: *i8)(;) = *l |-> ?_;
@@ -191,8 +196,8 @@ lem share_full_borrow<T>(k: lifetime_t, t: thread_id_t, l: *_);
     ens [_](<T>.share)(k, t, l) &*& [q]lifetime_token(k);
 
 lem share_full_borrow_m<T>(k: lifetime_t, t: thread_id_t, l: *_);
-    req type_interp::<T>() &*& atomic_mask(?mask) &*& mask_le(Nlft, mask) == true &*& full_borrow(k, (<T>.full_borrow_content)(t, l)) &*& [?q]lifetime_token(k);
-    ens type_interp::<T>() &*& atomic_mask(mask) &*& [_](<T>.share)(k, t, l) &*& [q]lifetime_token(k);
+    req type_interp::<T>() &*& atomic_mask(MaskTop) &*& full_borrow(k, (<T>.full_borrow_content)(t, l)) &*& [?q]lifetime_token(k);
+    ens type_interp::<T>() &*& atomic_mask(MaskTop) &*& [_](<T>.share)(k, t, l) &*& [q]lifetime_token(k);
 
 lem init_ref_share<T>(k: lifetime_t, t: thread_id_t, p: *T);
     nonghost_callers_only
@@ -229,5 +234,16 @@ fix upcast<t0, t1>(x: t0) -> t1; // Cast a value of type t0 to a supertype t1 of
 lem own_mono<T0, T1>(t: thread_id_t, v: T0);
     req type_interp::<T0>() &*& type_interp::<T1>() &*& <T0>.own(t, v) &*& is_subtype_of::<T0, T1>() == true;
     ens type_interp::<T0>() &*& type_interp::<T1>() &*& <T1>.own(t, upcast::<T0, T1>(v));
+
+lem_type to_own<T>(R: pred(), t: thread_id_t, x: T) = lem();
+    req R();
+    ens <T>.own(t, x);
+
+pred drop_perm<T>(charged: bool, R: pred(), t: thread_id_t, x: T) =
+    if charged {
+        R() &*& is_to_own::<T>(_, R, t, x)
+    } else {
+        ignore_unwind_paths
+    };
 
 @*/

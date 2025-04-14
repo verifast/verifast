@@ -51,6 +51,7 @@ let rec parse_type = function%parser
 | [ (l, Ident "u128") ] -> ManifestTypeExpr (l, Int (Unsigned, FixedWidthRank 4))
 | [ (l, Ident "usize") ] -> ManifestTypeExpr (l, Int (Unsigned, PtrRank))
 | [ (l, Ident "bool") ] -> ManifestTypeExpr (l, Bool)
+| [ (l, Ident "char") ] -> ManifestTypeExpr (l, RustChar)
 | [ (l, Ident "f32" ) ] -> ManifestTypeExpr (l, Float)
 | [ (l, Ident "f64" ) ] -> ManifestTypeExpr (l, Double)
 | [ (l, Ident "real" ) ] -> ManifestTypeExpr (l, RealType)
@@ -127,6 +128,16 @@ let rec parse_type = function%parser
        ] -> tp
     ]
     ] -> tp
+| [ (l, Kwd "["); parse_type as elemTp; (_, Kwd ";"); parse_type as size; (_, Kwd "]") ] -> StaticArrayTypeExpr (l, elemTp, size)
+| [ (l, Int (n, _, _, _, _)) ] -> LiteralConstTypeExpr (l, int_of_big_int n)
+| [ (l, Kwd "<"); parse_type as t; (_, Kwd "as"); parse_type as trait; (_, Kwd ">"); (l, Kwd "::"); (_, Ident x) ] ->
+  begin match trait with
+    IdentTypeExpr (ltrait, None, trait_name) ->
+    ProjectionTypeExpr (l, t, trait_name, [], x)
+  | ConstructedTypeExpr (ltrait, trait_name, trait_targs) ->
+    ProjectionTypeExpr (l, t, trait_name, trait_targs, x)
+  | _ -> raise (ParseException (type_expr_loc trait, "Trait name expected"))
+  end
 and parse_type_with_opt_name = function%parser
   [ parse_type as t;
     [%let (x, t) = function%parser
@@ -155,7 +166,7 @@ let rec parse_expr_funcs allowStructExprs =
       ]
     ] -> e
   and parse_pointsto_expr = function%parser
-    [ parse_disj_expr as e;
+    [ parse_assign_expr as e;
       [%let e = match e with
         CallExpr (l, "#list", [], [], [coefPat], Static) ->
         begin function%parser
@@ -171,6 +182,11 @@ let rec parse_expr_funcs allowStructExprs =
         end
       ]
     ] -> e
+  and parse_assign_expr = function%parser
+    [ parse_disj_expr as e; [%let e = parse_assign_expr_rest e] ] -> e
+  and parse_assign_expr_rest e = function%parser
+    [ (l, Kwd "="); parse_assign_expr as e1 ] -> AssignExpr (l, e, Mutation, e1)
+  | [ ] -> e
   and parse_disj_expr = function%parser
     [ parse_conj_expr as e; [%let e = parse_disj_rest e ] ] -> e
   and parse_disj_rest e = function%parser
@@ -284,6 +300,16 @@ let rec parse_expr_funcs allowStructExprs =
     | _ -> raise (ParseException (expr_loc e, "This expression form is not supported in this position"))
     end
   | [ ] -> e
+  and parse_if_expr = function%parser
+    [ (l, Kwd "if");
+      parse_expr_no_struct_expr as cond;
+      parse_block_expr as trueBranch;
+      (_, Kwd "else");
+      [%let falseBranch = function%parser
+         [ parse_if_expr as e ] -> e
+       | [ parse_block_expr as e ] -> e
+      ]
+    ] -> IfExpr (l, cond, trueBranch, falseBranch)
   and parse_primary_expr = function%parser
     [ (l, Ident x); [%let e = parse_path_rest l x];
       [%let e = parse_struct_expr_rest e] ] -> e
@@ -292,12 +318,7 @@ let rec parse_expr_funcs allowStructExprs =
   | [ (l, String s) ] -> StringLit (l, s)
   | [ (l, Kwd "true") ] -> True l
   | [ (l, Kwd "false") ] -> False l
-  | [ (l, Kwd "if");
-      parse_expr_no_struct_expr as cond;
-      parse_block_expr as trueBranch;
-      (_, Kwd "else");
-      parse_block_expr as falseBranch;
-    ] -> IfExpr (l, cond, trueBranch, falseBranch)
+  | [ parse_if_expr as e ] -> e
   | [ (l, Kwd "match");
       parse_expr_no_struct_expr as scrutinee;
       (_, Kwd "{");
@@ -411,13 +432,39 @@ let parse_pure_spec_clause = function%parser
 | [ (l, Kwd "assume_correct") ] -> AssumeCorrectClause l
 | [ (_, Kwd "req"); parse_asn as p; (_, Kwd ";") ] -> RequiresClause p
 | [ (_, Kwd "ens"); parse_asn as p; (_, Kwd ";") ] -> EnsuresClause p
+| [ (_, Kwd "on_unwind_ens"); parse_asn as p; (_, Kwd ";") ] -> OnUnwindEnsuresClause p
 
 let parse_spec_clause = function%parser
   [ [%let c = peek_in_ghost_range @@ function%parser
     [ parse_pure_spec_clause as c; (_, Kwd "@*/") ] -> c ] ] -> c
 | [ parse_pure_spec_clause as c ] -> c
 
-let parse_spec_clauses = function%parser
+let mk_outcome_post l post unwind_post =
+  "outcome",
+  SwitchExpr (l, Var (l, "outcome"), [
+    SwitchExprClause (expr_loc post, "returning", ["result"], post);
+    SwitchExprClause (expr_loc unwind_post, "unwinding", [], unwind_post)
+  ], None) 
+
+let result_post_of_outcome_post ("outcome", SwitchExpr (_, _, [SwitchExprClause (_, "returning", ["result"], post); _], _)) = ("result", post)
+
+let result_spec_of_outcome_spec (pre, post) = (pre, result_post_of_outcome_post post)
+
+let result_decl_of_outcome_decl = function
+  Func (l, Regular, tparams, rt, g, ps, nonghost_callers_only, ft, pre_post, terminates, body, is_virtual, overrides) ->
+  let rt = Option.map (fun (ConstructedTypeExpr (_, "fn_outcome", [rt])) -> rt) rt in
+  Func (l, Regular, tparams, rt, g, ps, nonghost_callers_only, ft, Option.map result_spec_of_outcome_spec pre_post, terminates, body, is_virtual, overrides)
+| FuncTypeDecl (l, Real, rt, ftn, tparams, ftps, ps, (pre, post, terminates)) ->
+  let rt = Option.map (fun (ConstructedTypeExpr (_, "fn_outcome", [rt])) -> rt) rt in
+  FuncTypeDecl (l, Real, rt, ftn, tparams, ftps, ps, (pre, result_post_of_outcome_post post, terminates))
+| d -> d
+
+let result_package_of_outcome_package (PackageDecl (l, pn, ilist, ds)) =
+  PackageDecl (l, pn, ilist, List.map result_decl_of_outcome_decl ds)
+
+let result_header_of_outcome_header (l, incl, incls, ps) = (l, incl, incls, List.map result_package_of_outcome_package ps)
+
+let parse_spec_clauses l k = function%parser
   [ [%let cs = rep parse_spec_clause ] ] ->
   let nonghost_callers_only, cs =
     match cs with
@@ -431,7 +478,17 @@ let parse_spec_clauses = function%parser
   in
   let pre_post, cs =
     match cs with
-      RequiresClause pre::EnsuresClause post::cs -> Some (pre, post), cs
+      RequiresClause pre::EnsuresClause post::OnUnwindEnsuresClause unwind_post::cs ->
+      if k <> Regular then raise (ParseException (expr_loc unwind_post, "An on_unwind_ens clause is not allowed here."));
+      Some (pre, mk_outcome_post l post unwind_post), cs
+    | RequiresClause pre::EnsuresClause post::cs ->
+      let post =
+        if k = Regular then
+          mk_outcome_post l post (EmpAsn l)
+        else
+          "result", post
+      in
+      Some (pre, post), cs
     | _ -> None, cs
   in
   let terminates, cs =
@@ -444,7 +501,7 @@ let parse_spec_clauses = function%parser
       AssumeCorrectClause l::cs -> true, cs
     | _ -> false, cs
   in
-  if cs <> [] then raise (Stream.Error "The number, kind, or order of specification clauses is incorrect. Expected: nonghost_callers_only clause (optional), function type clause (optional), contract (optional), terminates clause (optional), assume_correct clause (optional).");
+  if cs <> [] then raise (Stream.Error "The number, kind, or order of specification clauses is incorrect. Expected: nonghost_callers_only clause (optional), function type clause (optional), 'req', 'ens', and 'on_unwind_ens' clauses (optional), terminates clause (optional), assume_correct clause (optional).");
   ((nonghost_callers_only, ft, pre_post, terminates), assume_correct)
 
 let parse_pred_asn = function%parser
@@ -494,18 +551,17 @@ let rec parse_stmt = function%parser
   Close (l, target, g, targs, es1, es2, coef)
 | [ (l, Kwd "let"); (lx, Ident x); (_, Kwd "="); parse_expr as e; (_, Kwd ";") ] ->
   DeclStmt (l, [lx, None, x, Some e, (ref false, ref None)])
-| [ (l, Kwd "if"); parse_expr_no_struct_expr as e; parse_block_stmt as s1;
-    [%let s = function%parser
-      [ (_, Kwd "else");
-        parse_block_stmt as s2
-      ] -> IfStmt (l, e, [s1], [s2])
-    | [] -> IfStmt (l, e, [s1], [])
-    ]
-  ] -> s
+| [ parse_if_stmt as s ] -> s
 | [ (l, Kwd "match"); parse_expr_no_struct_expr as e; (_, Kwd "{");
     [%let cs = rep parse_match_stmt_arm];
     (_, Kwd "}")
   ] -> SwitchStmt (l, e, cs)
+| [ (l, Kwd "while");
+    parse_expr_no_struct_expr as e;
+    (linv, Kwd "inv"); parse_asn as inv; (_, Kwd ";");
+    (ldecr, Kwd "decreases"); parse_expr as decr; (_, Kwd ";");
+    parse_block_stmt as s
+  ] -> WhileStmt (l, e, Some (LoopInv inv), Some decr, [s], [])
 | [ (l, Kwd "assert"); parse_asn as p; (_, Kwd ";") ] -> Assert (l, p)
 | [ (l, Kwd "leak"); parse_asn as p; (_, Kwd ";") ] -> Leak (l, p)
 | [ (l, Kwd "produce_lem_ptr_chunk");
@@ -552,6 +608,18 @@ and parse_block_stmt = function%parser
     parse_stmts as ss;
     (closeBraceLoc, Kwd "}")
   ] -> BlockStmt (l, ds, ss, closeBraceLoc, ref [])
+and parse_if_stmt = function%parser
+  [ (l, Kwd "if"); parse_expr_no_struct_expr as e; parse_block_stmt as s1;
+    [%let s = function%parser
+      [ (_, Kwd "else");
+        [%let s2 = function%parser
+           [ parse_if_stmt as s2 ] -> s2
+         | [ parse_block_stmt as s2 ] -> s2
+        ]
+      ] -> IfStmt (l, e, [s1], [s2])
+    | [] -> IfStmt (l, e, [s1], [])
+    ]
+  ] -> s
 and parse_stmts stream = rep parse_stmt stream
 
 and parse_param = function%parser
@@ -591,17 +659,19 @@ and parse_func_header k = function%parser
       [ (_, Kwd "->"); parse_type as t ] -> Some t
     | [ ] -> if k = Regular then Some (StructTypeExpr (l, Some "std_tuple_0_", None, [], [])) else None
     ]
-  ] -> (l, g, tparams, ps, rt)
+  ] ->
+  let rt = Option.map (fun rt -> match k with Regular -> ConstructedTypeExpr (type_expr_loc rt, "fn_outcome", [rt]) | _ -> rt) rt in
+  (l, g, tparams, ps, rt)
 
 and parse_func_rest k = function%parser
   [ [%let (l, g, tparams, ps, rt) = parse_func_header k];
     [%let d = function%parser
       [ (_, Kwd ";");
-        [%let ((nonghost_callers_only, ft, co, terminates), assume_correct) = parse_spec_clauses]
+        [%let ((nonghost_callers_only, ft, co, terminates), assume_correct) = parse_spec_clauses l k]
       ] ->
       if assume_correct then raise (ParseException (l, "assume_correct clause is not allowed here."));
       Func (l, k, tparams, rt, g, ps, nonghost_callers_only, ft, co, terminates, None, false, [])
-    | [ [%let ((nonghost_callers_only, ft, co, terminates), assume_correct) = parse_spec_clauses];
+    | [ [%let ((nonghost_callers_only, ft, co, terminates), assume_correct) = parse_spec_clauses l k];
         (_, Kwd "{");
         parse_stmts as ss;
         (closeBraceLoc, Kwd "}")
@@ -636,6 +706,7 @@ and parse_lemma_keyword = function%parser
   ] -> Lemma (true, trigger)
 
 and parse_ghost_decl = function%parser
+| [ (_, Kwd "pub"); parse_ghost_decl as d ] -> d
 | [ (l, Kwd "inductive"); (li, Ident i); parse_type_params as tparams; (_, Kwd "=");
     [%let cs = function%parser
      | [ parse_ctors as cs ] -> cs
@@ -734,11 +805,18 @@ and parse_ghost_decl = function%parser
     (_, Kwd ";");
     (_, Kwd "req"); parse_asn as pre; (_, Kwd ";");
     (_, Kwd "ens"); parse_asn as post; (_, Kwd ";");
+    [%let unwind_post = function%parser
+       [ (_, Kwd "on_unwind_ens"); parse_asn as unwind_post; (_, Kwd ";") ] -> unwind_post
+     | [ ] -> EmpAsn l
+    ];
     [%let terminates = function%parser
        [ (_, Kwd "terminates"); (_, Kwd ";") ] -> true
      | [ ] -> false
     ]
-  ] -> [FuncTypeDecl (l, Real, rt, ftn, tparams, ftps, ps, (pre, post, terminates))]
+  ] ->
+    let rt = Option.map (fun rt -> ConstructedTypeExpr (l, "fn_outcome", [rt])) rt in
+    let post = mk_outcome_post l post unwind_post in
+    [FuncTypeDecl (l, Real, rt, ftn, tparams, ftps, ps, (pre, post, terminates))]
 | [ (l, Kwd "lem_type"); (lftn, Ident ftn); parse_type_params as tparams; (_, Kwd "("); [%let ftps = rep_comma parse_param]; (_, Kwd ")"); (_, Kwd "=");
   (_, Kwd "lem"); (_, Kwd "("); [%let ps = rep_comma parse_param]; (_, Kwd ")"); 
   [%let rt = function%parser
@@ -748,7 +826,7 @@ and parse_ghost_decl = function%parser
   (_, Kwd ";");
   (_, Kwd "req"); parse_asn as pre; (_, Kwd ";");
   (_, Kwd "ens"); parse_asn as post; (_, Kwd ";")
-] -> [FuncTypeDecl (l, Ghost, rt, ftn, tparams, ftps, ps, (pre, post, false))]
+] -> [FuncTypeDecl (l, Ghost, rt, ftn, tparams, ftps, ps, (pre, ("result", post), false))]
 | [ (l, Kwd "abstract_type"); (_, Ident tn); (_, Kwd ";") ] -> [AbstractTypeDecl (l, tn)]
 | [ (l, Kwd "type_pred_decl"); (_, Kwd "<"); (_, Kwd "Self"); (_, Kwd ">"); (_, Kwd "."); (_, Ident predName); (_, Kwd ":"); parse_type as te; (_, Kwd ";") ] ->
   [TypePredDecl (l, te, "Self", predName)]
@@ -771,7 +849,7 @@ and parse_ghost_decl = function%parser
   in
   if targ_names <> tparams then raise (ParseException (lrhs, "Right-hand side type arguments must match definition type parameters"));
   [TypePredDef (l, tparams, tp, predName, Left (lrhs, rhs))]
-| [ (l, Kwd "let_lft"); (lx, PrimePrefixedIdent x); (_, Kwd "="); parse_expr as e; (_, Kwd ";") ] -> [TypeWithTypeidDecl (l, x, CallExpr (l, "typeid_of_lft", [], [], [LitPat e], Static))]
+| [ (l, Kwd "let_lft"); (lx, PrimePrefixedIdent x); (_, Kwd "="); parse_expr as e; (_, Kwd ";") ] -> [TypeWithTypeidDecl (l, "'" ^ x, CallExpr (l, "typeid_of_lft", [], [], [LitPat e], Static))]
 
 and parse_ghost_decls stream = List.flatten (rep parse_ghost_decl stream)
 
@@ -819,11 +897,12 @@ let rec parse_decl = function%parser
     | IdentTypeExpr (lx, None, x) -> (lx, x, [])
     | ManifestTypeExpr (lx, tp) -> (lx, Printf.sprintf "<impl %s>" (Verifast0.rust_string_of_type tp), [])
     | ConstructedTypeExpr (lx, x, targs) ->
-      let targs = targs |> List.map @@ function
-          IdentTypeExpr (ltarg, None, x) -> x
-        | targ -> static_error (type_expr_loc targ) "This form of type is not yet supported here" None
+      let rec string_of_type_expr = function
+        IdentTypeExpr (_, None, x) -> x
+      | ConstructedTypeExpr (_, x, targs) -> Printf.sprintf "%s<%s>" x (String.concat ", " (List.map string_of_type_expr targs))
+      | tp -> static_error (type_expr_loc tp) "This form of type is not supported here" None
       in
-      (lx, x, targs)
+      (lx, x, List.map string_of_type_expr targs)
     | _ -> static_error (type_expr_loc tp) "This form of type is not supported here" None
   in
   let prefix = x ^ (if targs = [] then "" else "::<" ^ String.concat ", " targs ^ ">") ^ "::" in
@@ -843,8 +922,12 @@ let rec parse_decl = function%parser
   ] -> [ModuleDecl (l, x, [], List.flatten ds)]
 | [ (l, Ident "include"); (_, Kwd "!"); (_, Kwd "{"); (ls, String path); (_, Kwd "}") ] ->
   parse_rsspec_file ls path
-| [ (l, Kwd "type"); (lx, Ident x); parse_type_params as tparams; (_, Kwd "="); parse_type as tp; (_, Kwd ";") ] ->
-  [TypedefDecl (l, tp, x, tparams)]
+| [ (l, Kwd "type"); (lx, Ident x); parse_type_params as tparams;
+    [%let ds = function%parser
+       [ (_, Kwd "="); parse_type as tp; (_, Kwd ";") ] -> [TypedefDecl (l, tp, x, tparams)]
+     | [ (_, Kwd ";") ] -> [Func (l, Fixpoint, [], Some (PtrTypeExpr (l, ManifestTypeExpr (l, Void))), x ^ "_typeid", [], false, None, None, false, None, false, [])]
+    ]
+  ] -> ds
 | [ (l, Kwd "fn"); [%let d = parse_func_rest Regular] ] -> [d]
 | [ (_, Kwd "unsafe"); (l, Kwd "fn"); [%let d = parse_func_rest Regular] ] -> [d]
 | [ (_, Kwd "struct"); (l, Ident sn); parse_type_params as tparams;

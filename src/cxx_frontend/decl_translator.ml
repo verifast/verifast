@@ -82,7 +82,7 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
         params,
         ng_callers_only,
         ft,
-        pre_post,
+        Option.map (fun (pre, post) -> (pre, ("result", post))) pre_post,
         terminates,
         body_opt,
         false,
@@ -230,7 +230,7 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
         params,
         ng_callers_only,
         ft,
-        pre_post,
+        Option.map (fun (pre, post) -> (pre, ("result", post))) pre_post,
         terminates,
         body_opt,
         is_virtual,
@@ -371,7 +371,7 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
     let l, type_desc = type_get decl |> Node_translator.decompose in
     match R.Type.get type_desc with
     | R.Type.FunctionProto fp ->
-        let return_type, (ft_type_params, ft_params, params), contract =
+        let return_type, (ft_type_params, ft_params, params), (pre, post, terminates) =
           transl_function_proto_type l fp
         in
         Ast.FuncTypeDecl
@@ -382,7 +382,7 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
             ft_type_params,
             ft_params,
             params,
-            contract )
+            (pre, ("result", post), terminates) )
     | _ ->
         let ty = Type_translator.translate_decomposed l type_desc in
         Ast.TypedefDecl (loc, ty, name, [])
@@ -415,7 +415,7 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
           params,
           ng_callers_only,
           ft,
-          pre_post,
+          Option.map (fun (pre, post) -> (pre, ("result", post))) pre_post,
           terminates,
           body_opt,
           false,

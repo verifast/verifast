@@ -253,17 +253,17 @@ int participant(bool initial, int server, int current, int next,
                item(key, ?k, ror_pub) &*&
                  info_for_item(k) == int_pair(0, server) &*&
                  k == symmetric_key_item(current, ?c1) &*&
-               *key1 |-> ?_ &*& *key2 |-> ?_; @*/
+               *key1 |-> _ &*& *key2 |-> _; @*/
   /*@ ensures  [f0]world(ror_pub, ror_key_clsfy) &*&
                principal(current, count + 1) &*&
                item(key, k, ror_pub) &*&
-               *key1 |-> ?p_key1 &*& *key2 |-> ?p_key2 &*&
+               *key2 |-> ?p_key2 &*&
                item(p_key2, ?k2, ror_pub) &*&
                col || ror_key_clsfy(current, c1, true) ||
                info_for_item(k2) ==
                  int_pair(1, int_pair(current, next)) &*&
-               initial ? true :
-                 item(p_key1, ?k1, ror_pub) &*&
+               initial ? *key1 |-> _  :
+                 *key1 |-> ?p_key1 &*& item(p_key1, ?k1, ror_pub) &*&
                  col || ror_key_clsfy(current, c1, true) ||
                  info_for_item(k1) ==
                    int_pair(1, int_pair(result, current)); @*/

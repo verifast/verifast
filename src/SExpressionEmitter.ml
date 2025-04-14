@@ -106,6 +106,8 @@ let rec sexpr_of_type_ (t : type_) : sexpression =
                                         sexpr_of_type_ t ]
     | StaticArrayType (t, n)  -> List [ Symbol "type-static-array-type";
                                         sexpr_of_type_ t;
+                                        sexpr_of_type_ n ]
+    | LiteralConstType n      -> List [ Symbol "type-literal-const";
                                         Number (Big_int.big_int_of_int n) ]
     | BoxIdType               -> aux2 "type-box-id"
     | HandleIdType            -> aux2 "type-handle-id-type"
@@ -139,7 +141,9 @@ let rec sexpr_of_type_expr : type_expr -> sexpression = function
   | ArrayTypeExpr (_, te) ->
       List [ Symbol "type-expr-array-type"; sexpr_of_type_expr te ]
   | StaticArrayTypeExpr (_, te, n) ->
-      List [ Symbol "type-expr-static-array"; sexpr_of_type_expr te; sexpr_of_int n ]
+      List [ Symbol "type-expr-static-array"; sexpr_of_type_expr te; sexpr_of_type_expr n ]
+  | LiteralConstTypeExpr (_, n) ->
+      List [ Symbol "type-expr-literal-const"; Number (Big_int.big_int_of_int n) ]
   | IdentTypeExpr (_, package, name) ->
       build_list
         [ Symbol "type-expr-ident" ]
@@ -658,10 +662,11 @@ let rec sexpr_of_expr (expr : expr) : sexpression =
             "pat", sexpr_of_pat pat;
             "asn", sexpr_of_expr asn
           ]
-    | EnsuresAsn (loc, asn) ->
+    | EnsuresAsn (loc, result_var, asn) ->
         build_list
           [ Symbol "expr-ensures-asn" ]
-          [ "asn", sexpr_of_expr asn ]
+          [ "asn", sexpr_of_expr asn;
+            "result-var", Symbol result_var ]
     | MatchAsn (loc, asn, pat) ->
         build_list
           [ Symbol "expr-match-asn" ]
@@ -715,11 +720,12 @@ and sexpr_of_switch_clause (c : switch_expr_clause) : sexpression =
 
 and sexpr_of_wswitch_asn_clause (c: wswitch_asn_clause) : sexpression =
   match c with
-    | WSwitchAsnClause (loc, name, l, ptypes, expr) ->
+    | WSwitchAsnClause (loc, name, full_name, l, ptypes, expr) ->
         build_list
           [ Symbol "w-switch-asn-clause" ]
           [
             "name", Symbol name;
+            "full_name", Symbol full_name;
             "l", sexpr_of_list (sexpr_of_option (fun x -> Symbol x)) l;
             "ptypes", sexpr_of_list (sexpr_of_option sexpr_of_prover_type) ptypes;
             "expr", sexpr_of_expr expr
@@ -966,8 +972,9 @@ and sexpr_of_decl (decl : decl) : sexpression =
       let contract =
         match contract with
           | None -> []
-          | Some (pre, post) -> [ "precondition", sexpr_of_pred pre
-                                ; "postcondition", sexpr_of_pred post ]
+          | Some (pre, (result_var, post)) ->
+            [ "precondition", sexpr_of_pred pre
+            ; "postcondition", List [ Symbol result_var; sexpr_of_pred post ] ]
       in
       let kw = List.concat [ [ "kind", sexpr_of_func_kind kind
                              ; "type-parameters", List (List.map symbol tparams )

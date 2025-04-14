@@ -124,9 +124,9 @@ let _ =
             begin 
               match contract_opt with
                 | None -> parse_decl_list tail
-                | Some contract -> let (_, postcond) = contract in (loc, name, postcond) :: parse_decl_list tail
+                | Some contract -> let (_, (_, postcond)) = contract in (loc, name, postcond) :: parse_decl_list tail
             end
-          | FuncTypeDecl(loc, _, _, name, _, _, _, (_, postcond, _)) -> (loc, name, postcond) :: parse_decl_list tail
+          | FuncTypeDecl(loc, _, _, name, _, _, _, (_, (_, postcond), _)) -> (loc, name, postcond) :: parse_decl_list tail
           | _ -> parse_decl_list tail
     in
 
@@ -152,7 +152,7 @@ let _ =
                           begin 
                             match contract_opt with
                               | Some contract -> 
-                                let (_, postcond) = contract in 
+                                let (_, (_, postcond)) = contract in 
                                 postcond
                           end
                     end
@@ -258,7 +258,8 @@ let _ =
         | PureFuncType(type_1, type_2) -> "(" ^ string_of_type_ type_1 ^ ", " ^ string_of_type_ type_2 ^ ")"
         | ObjType(name, _) -> name
         | ArrayType(type_in) -> string_of_type_ type_in ^ "[]"
-        | StaticArrayType(type_in, nb_elems) -> string_of_type_ type_in ^ "[" ^ string_of_int nb_elems ^ "]"
+        | StaticArrayType(type_in, nb_elems) -> string_of_type_ type_in ^ "[" ^ string_of_type_ nb_elems ^ "]"
+        | LiteralConstType n -> string_of_int n
         | GhostTypeParam(name) -> name
         | RealTypeParam(name) -> name
         | PackageName(name) -> name
@@ -278,7 +279,8 @@ let _ =
         | EnumTypeExpr(_, name_opt, _) -> (match name_opt with Some name -> name | _ -> "")
         | PtrTypeExpr(_, type_expr_in) -> string_of_type_expr type_expr_in ^ " *"
         | ArrayTypeExpr(_, type_expr_in) -> string_of_type_expr type_expr_in ^ "[]"
-        | StaticArrayTypeExpr(_, type_expr_in, nb_elems) -> string_of_type_expr type_expr_in ^ "[" ^ string_of_int nb_elems ^ "]"
+        | StaticArrayTypeExpr(_, type_expr_in, nb_elems) -> string_of_type_expr type_expr_in ^ "[" ^ string_of_type_expr nb_elems ^ "]"
+        | LiteralConstTypeExpr (_, n) -> string_of_int n
         | ManifestTypeExpr(_, type_) -> string_of_type_ type_
         | IdentTypeExpr(_, _, name) -> name
         | ConstructedTypeExpr(_, name, type_expr_list) -> name ^ "<" ^ string_of_type_expr_list type_expr_list ^ ">"

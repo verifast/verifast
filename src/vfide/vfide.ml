@@ -389,6 +389,8 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
       GAction.add_toggle_action "AssumeNoProvenance" ~label:"Assume no pointer provenance" ~active:(Vfbindings.get Vfparam_assume_no_provenance !vfbindings) ~callback:(fun toggleAction -> set_or_reset_bool_vfbinding Vfparam_assume_no_provenance toggleAction#get_active);
       GAction.add_toggle_action "AssumeNoSubobjectProvenance" ~label:"Assume no subobject provenance" ~active:(Vfbindings.get Vfparam_assume_no_subobject_provenance !vfbindings) ~callback:(fun toggleAction -> set_or_reset_bool_vfbinding Vfparam_assume_no_subobject_provenance toggleAction#get_active);
       GAction.add_toggle_action "NoStrictAliasing" ~label:"Assume untyped memory (GCC's fno-strict-aliasing)" ~active:(Vfbindings.get Vfparam_fno_strict_aliasing !vfbindings) ~callback:(fun toggleAction -> set_or_reset_bool_vfbinding Vfparam_fno_strict_aliasing toggleAction#get_active);
+      GAction.add_toggle_action "IgnoreRefCreation" ~label:"Treat Rust reference creation like raw pointer creation" ~active:(Vfbindings.get Vfparam_ignore_ref_creation !vfbindings) ~callback:(fun toggleAction -> set_or_reset_bool_vfbinding Vfparam_ignore_ref_creation toggleAction#get_active);
+      GAction.add_toggle_action "IgnoreUnwindPaths" ~label:"Ignore Rust unwind paths" ~active:(Vfbindings.get Vfparam_ignore_unwind_paths !vfbindings) ~callback:(fun toggleAction -> set_or_reset_bool_vfbinding Vfparam_ignore_unwind_paths toggleAction#get_active);
       GAction.add_toggle_action "UseJavaFrontend" ~label:"Use the Java frontend" ~active:(toggle_java_frontend javaFrontend; javaFrontend) ~callback:(fun toggleAction -> toggle_java_frontend toggleAction#get_active);
       GAction.add_toggle_action "SimplifyTerms" ~label:"Simplify Terms" ~active:(not (Vfbindings.get Vfparam_no_simplify_terms !vfbindings)) ~callback:(fun toggleAction -> set_or_reset_bool_vfbinding Vfparam_no_simplify_terms (not toggleAction#get_active));
       a "Include paths" ~label:"_Include paths...";
@@ -460,6 +462,9 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
           <menuitem action='AssumeNoProvenance' />
           <menuitem action='AssumeNoSubobjectProvenance' />
           <menuitem action='NoStrictAliasing' />
+          <separator />
+          <menuitem action='IgnoreRefCreation' />
+          <menuitem action='IgnoreUnwindPaths' />
           <separator />
           <menu action='TargetArchitecture'>
             <menuitem action='Stub' />
@@ -2135,6 +2140,9 @@ let () =
           iter args
         end
       end
+    | "-rustc_args"::arg::args ->
+      vfbindings := Vfbindings.set Vfparam_rustc_args (List.rev (String.split_on_char ' ' arg)) !vfbindings;
+      iter args
     | arg::args when not (startswith arg "-") -> path := Some arg; iter args
     | [] -> show_ide !path !prover !codeFont !traceFont !vfbindings !layout !javaFrontend !enforceAnnotations !verify_and_quit
     | _ ->

@@ -560,6 +560,7 @@ let _ =
             ; "-link_should_fail", Set linkShouldFail, "Specify that the linking phase is expected to fail."
             ; "-javac", Unit (fun _ -> (useJavaFrontend := true; Java_frontend_bridge.load ())), " "
             ; "-enforce_annotations", Unit (fun _ -> (enforceAnnotations := true)), " "
+            ; "-rustc_args", String (fun args -> vfbindings := Vfbindings.set Vfparam_rustc_args (List.rev (String.split_on_char ' ' args)) !vfbindings), "Add the given arguments to the rustc command line"
             ]
   in
   let process_file filename =
@@ -594,7 +595,7 @@ let _ =
             | Some (allASTs, noLocs, target_file) ->
               if allASTs then begin
                 if not (Sys.file_exists target_file) then Sys.mkdir target_file 0o700;
-                let target_file = Filename.concat target_file (String.map (function '/'|'\\' -> '-' | c -> c) (smart_compose dir path)) ^ ".ast.ml" in
+                let target_file = Filename.concat target_file (String.map (function '/'|'\\'|':' -> '-' | c -> c) (smart_compose dir path)) ^ ".ast.ml" in
                 Ocaml_expr_formatter.print_ocaml_expr_to_file noLocs target_file (Ocaml_expr_of_ast.of_list Ocaml_expr_of_ast.of_package packages)
               end else if path = filename && dir = Filename.dirname filename then
                 Ocaml_expr_formatter.print_ocaml_expr_to_file noLocs target_file (Ocaml_expr_of_ast.of_list Ocaml_expr_of_ast.of_package packages)

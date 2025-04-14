@@ -1,8 +1,20 @@
 include!{"prelude_core_core.rsspec"}
 include!{"list.rsspec"}
+include!{"nat.rsspec"}
 include!{"listex.rsspec"}
 
 /*@
+
+inductive fn_outcome<T> = returning(result: T) | unwinding;
+
+fix fn_outcome_result<t>(outcome: fn_outcome<t>) -> t {
+    match outcome {
+        returning(result) => result,
+        unwinding => default_value,
+    }
+}
+
+fix ignore_unwind_paths() -> bool;
 
 lem assume(b: bool);
     req true;
@@ -11,6 +23,8 @@ lem assume(b: bool);
 lem note(b: bool);
     req b;
     ens b;
+
+pred True(;) = true;
 
 pred exists<t>(x: t;) = true;
 pred exists_np<t>(x: t) = true;
@@ -25,6 +39,10 @@ fix is_power_of_2(n: i32) -> bool;
 lem_auto is_power_of_2_lem();
     req true;
     ens is_power_of_2(1) && is_power_of_2(2) && is_power_of_2(4) && is_power_of_2(8) && is_power_of_2(16) && is_power_of_2(32);
+
+lem_auto align_of_u8();
+    req true;
+    ens std::mem::align_of::<u8>() == 1;
 
 lem size_align<T>();
     req true;
@@ -127,14 +145,33 @@ fix has_type(p: *_, typeid_: *_) -> bool;
 
 fix ptr_add_(p: pointer, offset: i32, elemTypeid: *_) -> pointer {
     ptr_add(p, offset * std::mem::size_of(elemTypeid))
-}   
+}
+
+fix u8s__of<T>(v: T) -> list<option<u8>>;
+fix of_u8s_<T>(cs: list<option<u8>>) -> T;
+
+lem_auto(of_u8s_::<T>(u8s__of::<T>(v as T))) of_u8s__u8s__of<T>(v: T);
+req true;
+ens of_u8s_::<T>(u8s__of::<T>(v)) == v;
 
 pred points_to_<t>(p: *t; v: option<t>);
 pred points_to<t>(p: *t; v: t) = points_to_::<t>(p, some(v));
 
+lem points_to_bool_to_u8(p: *bool);
+    req *p |-> ?b;
+    ens *(p as *u8) |-> b;
+
+lem points_to_u8_to_bool(p: *u8);
+    req *p |-> ?v &*& v == 0 || v == 1;
+    ens *(p as *bool) |-> v == 1;
+
+lem points_to__limits<T>(p: *T);
+    req [?f]points_to_(p, ?v);
+    ens [f]points_to_(p, v) &*& f <= 1 &*& object_pointer_within_limits(p, std::mem::size_of::<T>()) == true;
+
 lem points_to_limits<T>(p: *T);
     req [?f]points_to(p, ?v);
-    ens [f]points_to(p, v) &*& object_pointer_within_limits(p, std::mem::size_of::<T>()) == true;
+    ens [f]points_to(p, v) &*& f <= 1 &*& object_pointer_within_limits(p, std::mem::size_of::<T>()) == true;
 
 pred array_<T>(p: *T, count: i32; values: list<option<T>>) =
     pointer_within_limits(p) == true &*&
@@ -154,11 +191,11 @@ pred array<T>(p: *T, count: i32; values: list<T>) =
 
 lem_auto array__inv<T>();
     req [?f]array_::<T>(?p, ?count, ?elems);
-    ens [f]array_::<T>(p, count, elems) &*& count == length(elems) &*& pointer_within_limits(p) == true &*& pointer_within_limits(p + count) == true;
+    ens [f]array_::<T>(p, count, elems) &*& count == length(elems) &*& count * std::mem::size_of::<T>() <= isize::MAX &*& pointer_within_limits(p) == true &*& pointer_within_limits(p + count) == true;
     
 lem_auto array_inv<T>();
     req [?f]array::<T>(?p, ?count, ?elems);
-    ens [f]array::<T>(p, count, elems) &*& count == length(elems) &*& pointer_within_limits(p) == true &*& pointer_within_limits(p + count) == true;
+    ens [f]array::<T>(p, count, elems) &*& count == length(elems) &*& count * std::mem::size_of::<T>() <= isize::MAX &*& pointer_within_limits(p) == true &*& pointer_within_limits(p + count) == true;
 
 
 lem array_split<T>(p: *T, offset: i32);
@@ -189,6 +226,29 @@ lem array__join<T>(p: *T);
 lem array_to_array_<T>(p: *T);
     req [?f]array(p, ?count, ?vs);
     ens [f]array_(p, count, map(some, vs));
+
+fix const_of_usize(n: usize) -> *_;
+fix usize_of_const(type_id: *_) -> usize;
+
+lem_auto usize_of_const_of_usize(n: usize);
+    req true;
+    ens usize_of_const(const_of_usize(n)) == n;
+
+fix Array_elems<T, N>(array: [T; N]) -> list<T>;
+// If `length(elems)` is not `usize_of_const(typeid(N))` then the result is unspecified.
+fix Array_of_elems<T, N>(elems: list<T>) -> [T; N];
+
+lem Array__to_array_<T, N>(p: *[T; N]);
+    req [?f](*p |-?-> ?array_);
+    ens [f](p as *T)[..usize_of_const(typeid(N))] |-?-> match array_ { none => repeat(nat_of_int(usize_of_const(typeid(N))), none), some(array) => map(some, Array_elems(array)) };
+
+lem Array_to_array<T, N>(p: *[T; N]);
+    req [?f](*p |-> ?array);
+    ens [f](p as *T)[..usize_of_const(typeid(N))] |-> Array_elems(array);
+
+lem array_to_Array<T, N>(p: *[T; N]);
+    req [?f](p as *T)[..usize_of_const(typeid(N))] |-> ?elems;
+    ens [f](*p |-> Array_of_elems(elems));
 
 lem from_u8s_<T>(p: *T);
     req [?f](p as *u8)[..std::mem::size_of::<T>()] |-> _ &*& p as usize % std::mem::align_of::<T>() == 0;

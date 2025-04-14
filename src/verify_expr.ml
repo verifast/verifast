@@ -113,7 +113,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     cont h coef value
 
   let current_thread_name = "currentThread"
-  let current_thread_type = intType
+  let current_thread_type = match dialect with Some Rust -> AbstractType "thread_id_t" | _ -> intType
   
   (* Region: function contracts *)
   
@@ -121,12 +121,12 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let rec iter functypemap ds =
       match ds with
         [] -> List.rev functypemap
-      | (ftn, (l, gh, tparams, rt, ftxmap, xmap, pn, ilist, pre, post, terminates, predfammaps, typeid))::ds ->
+      | (ftn, (l, gh, tparams, rt, ftxmap, xmap, pn, ilist, pre, (result_var, post), terminates, predfammaps, typeid))::ds ->
         let (pre, post) =
           let (wpre, tenv) = check_asn (pn,ilist) tparams (ftxmap @ xmap @ [("this", PtrType Void); (current_thread_name, current_thread_type)]) pre in
-          let postmap = match rt with None -> tenv | Some rt -> ("result", rt)::tenv in
+          let postmap = match rt with None -> tenv | Some rt -> (result_var, rt)::tenv in
           let (wpost, tenv) = check_asn (pn,ilist) tparams postmap post in
-          (wpre, wpost)
+          (wpre, (result_var, wpost))
         in
         iter ((ftn, (l, gh, tparams, rt, ftxmap, xmap, pre, post, terminates, predfammaps, typeid))::functypemap) ds
     in
@@ -222,7 +222,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let currentThreadEnv = [(current_thread_name, get_unique_var_symb current_thread_name current_thread_type)] in
     let env0 = tparam_typeid_env @ currentThreadEnv @ env0_0 @ cenv0 in
     produce_asn_with_post tparam_typeid_env tpenv0 [] [] env0 pre0 real_unit None None (fun h _ env0 post0_opt ->
-      let post0 = match post0_opt with Some post0 -> post0 | None -> post0 in
+      let (result_var0, post0) = match post0_opt with Some post0 -> post0 | None -> post0 in
       let bs = zip2 xmap env0_0 in
       let env = tparam_typeid_env @ currentThreadEnv @ List.map (fun ((p, _), (p0, v)) -> (p, v)) bs @ env00 in
       begin match pre with
@@ -231,11 +231,11 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | _ -> ()
       end;
       consume_asn_with_post rules tpenv h tparam_typeid_env [] env pre true real_unit (fun _ h _ env _ post_opt ->
-        let post = match post_opt with Some post -> post | None -> post in
+        let (result_var, post) = match post_opt with Some post -> post | None -> post in
         let (env, env0) =
           match rt with
             None -> (env, env0)
-          | Some t -> let result = get_unique_var_symb "result" t in (("result", result)::env, ("result", result)::env0)
+          | Some t -> let result = get_unique_var_symb result_var t in ((result_var, result)::env, (result_var0, result)::env0)
         in
         execute_branch begin fun () ->
           produce_asn tparam_typeid_env tpenv h [] env post real_unit None None (fun h _ _ ->
@@ -289,6 +289,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let functypes_implemented = ref []
   
   let check_func_header pn ilist tparams0 tenv0 env0 l k tparams rt fn fterm xs nonghost_callers_only functype_opt contract_opt terminates body =
+    push_tparam_eqs_table ();
     if terminates && k <> Regular then static_error l "Terminates clause not allowed here." None;
     check_tparams l tparams0 tparams;
     let tparam_typeid_tenv = tparams |> flatmap @@ fun x ->
@@ -299,6 +300,19 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         []
     in
     let tparams1 = tparams0 @ tparams in
+    begin match body with
+      Some (ss, closeBraceLoc) ->
+      let rec iter = function
+        ExprStmt (CallExpr (_, "#register_type_projection_equality", [ProjectionTypeExpr (_, IdentTypeExpr (_, None, x), traitName, traitArgs, assocTypeName); rhs], _, _, _))::ss ->
+        let traitArgs = List.map (check_pure_type (pn,ilist) tparams1 Ghost) traitArgs in
+        let rhs = check_pure_type (pn,ilist) tparams1 Ghost rhs in
+        register_tparam_eq x ((traitName, traitArgs, assocTypeName), rhs);
+        iter ss
+      | ss -> ()
+      in
+      iter ss
+    | None -> ()
+    end;
     let rt = match rt with None -> None | Some rt -> Some (check_pure_type (pn,ilist) tparams1 Ghost rt) in
     let xmap =
       let rec iter xm xs =
@@ -310,7 +324,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let t = check_pure_type (pn,ilist) tparams1 Ghost te in
           let t =
             match t with
-              ArrayType elemType | StaticArrayType (elemType, _) when language = CLang -> PtrType elemType
+              ArrayType elemType | StaticArrayType (elemType, _) when language = CLang && not is_rust -> PtrType elemType
             | _ -> t
           in
           iter ((x, t)::xm) xs
@@ -321,20 +335,20 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let (pre, pre_tenv, post) =
       match contract_opt with
         None -> static_error l "Non-fixpoint function must have contract." None
-      | Some (pre, post) ->
+      | Some (pre, (result_var, post)) ->
         let (wpre, pre_tenv) = check_asn (pn,ilist) tparams1 tenv pre in
         let pre_tenv = List.remove_assoc "#pre" pre_tenv in
         let postmap = 
           match rt, dialect with
           | Some ((StructType _) as rt), Some Cxx ->
-            ("result", RefType rt) :: pre_tenv
+            (result_var, RefType rt) :: pre_tenv
           | Some rt, _ ->
-            ("result", rt) :: pre_tenv
+            (result_var, rt) :: pre_tenv
           | None, _ ->
             pre_tenv
         in
         let (wpost, tenv) = check_asn (pn,ilist) tparams1 postmap post in
-        (wpre, pre_tenv, wpost)
+        (wpre, pre_tenv, (result_var, wpost))
     in
     if nonghost_callers_only then begin
       match k with
@@ -403,12 +417,13 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             Some (ftn, ft_predfammaps, fttargs, ftargs)
         end
     in
+    pop_tparam_eqs_table ();
     (rt, xmap, functype_opt, pre, pre_tenv, post)
   
   let is_transparent_stmt s =
     match s with
     | Assert (_, False _) -> true
-    | ExprStmt (CallExpr (_, "std::hint::unreachable_unchecked", _, _, _, _)) -> true
+    | ExprStmt (CallExpr (l, "std::hint::unreachable_unchecked", _, _, _, _)) -> reportShouldFail "allow_dead_code" (root_caller_token l); true
     | LabelStmt _ -> true
     | PureStmt _ | NonpureStmt _ | BlockStmt _ -> true
     | _ -> false
@@ -518,8 +533,9 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         if report_skipped_stmts || match contract_opt with Some ((False _ | ExprAsn (_, False _)), _) -> false | _ -> true then begin match body_opt with None -> () | Some (_, (ss, _)) -> reportStmts ss end;
         let this_type = PtrType (StructType (struct_name, [])) in
         let thisType_type = PtrType (StructType ("std::type_info", [])) in
+        let contract_opt = Option.map (fun (pre, post) -> (pre, ("result", post))) contract_opt in
         let None, xmap, None, pre, pre_tenv, post =
-          check_func_header pn ilist [] ["this", this_type; "thisType", thisType_type] [] loc Regular [] None struct_name None params false None contract_opt terminates body_opt
+          check_func_header pn ilist [] ["this", this_type; "thisType", thisType_type] [] loc Regular [] None struct_name None params false None contract_opt terminates (if body_opt = None then None else Some ([], dummy_loc))
         in
         begin
           match try_assoc2 mangled_name ctor_map cxx_ctor_map0 with 
@@ -595,6 +611,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         if report_skipped_stmts || match contract_opt with Some ((False _ | ExprAsn (_, False _)), _) -> false | _ -> true then begin match body_opt with None -> () | Some (ss, _) -> reportStmts ss end;
         let this_type = PtrType (StructType (struct_name, [])) in
         let thisType_type = PtrType (StructType ("std::type_info", [])) in
+        let contract_opt = Option.map (fun (pre, post) -> (pre, ("result", post))) contract_opt in
         let None, [], None, pre, pre_tenv, post =
           check_func_header pn ilist [] ["this", this_type; "thisType", thisType_type] [] loc Regular [] None struct_name None [] false None contract_opt terminates body_opt
         in
@@ -728,7 +745,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               None-> static_error l1 (".java file does not correctly implement .javaspec file: interface does not declare method " ^ string_of_sign sign) None
             | Some (ItfMethodInfo (lm1, gh1, rt1, xmap1, pre1, pre_tenv1, post1, epost1, terminates1, v1, abstract1, mtparams1)) ->
               let (mn, _) = sign in
-              check_func_header_compat lm1 ("Method '" ^ mn ^ "'") "Method specification check" [] (func_kind_of_ghostness gh1,[],rt1, xmap1,false, pre1, post1, epost1, terminates1) (func_kind_of_ghostness gh0, [], rt0, xmap0, false, [], [], pre0, post0, epost0, terminates1);
+              check_func_header_compat lm1 ("Method '" ^ mn ^ "'") "Method specification check" [] (func_kind_of_ghostness gh1,[],rt1, xmap1,false, pre1, ("result", post1), epost1, terminates1) (func_kind_of_ghostness gh0, [], rt0, xmap0, false, [], [], pre0, ("result", post0), epost0, terminates1);
               match_meths meths0 (List.remove_assoc sign meths1)
         in
         match_fields fields0 fields1;
@@ -783,8 +800,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let thisTerm = get_unique_var_symb "this" thisType in
             let (mn, _) = sign in
             check_func_header_compat l ("Method '" ^ mn ^ "'") "Method specification check" [("this", thisTerm)]
-              (Regular, [], rt, xmap, false, pre, post, epost, terminates)
-              (Regular, [], rt', xmap', false, [], [("this", thisTerm)], pre', post', epost', terminates');
+              (Regular, [], rt, xmap, false, pre, ("result", post), epost, terminates)
+              (Regular, [], rt', xmap', false, [], [("this", thisTerm)], pre', ("result", post'), epost', terminates');
             pop();
             end
           ) superspecs;
@@ -809,9 +826,9 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let rec iter cs =
         match cs with
           [] -> cs
-        | WSwitchAsnClause (l, ctor, pats, info, body) as c::cs0 ->
+        | WSwitchAsnClause (l, ctor, full_ctor, pats, info, body) as c::cs0 ->
           let body' = dynamic_of body in
-          let c' = if body' == body then c else WSwitchAsnClause (l, ctor, pats, info, body') in
+          let c' = if body' == body then c else WSwitchAsnClause (l, ctor, full_ctor, pats, info, body') in
           let cs0' = iter cs0 in
           if c' == c && cs0' == cs0 then cs else c'::cs0'
       in
@@ -913,8 +930,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   let thisTerm = get_unique_var_symb "this" thisType in
                   assume (ctxt#mk_eq (ctxt#mk_app get_class_symbol [thisTerm]) (List.assoc cn classterms)) (fun _ ->
                     check_func_header_compat l ("Method '" ^ n ^ "'") "Method specification check" [("this", thisTerm)]
-                      (Regular, [], rt, xmap, false, pre, post, epost, terminates)
-                      (Regular, [], rt', xmap', false, [], [("this", thisTerm)], pre', post', epost', terminates');
+                      (Regular, [], rt, xmap, false, pre, ("result", post), epost, terminates)
+                      (Regular, [], rt', xmap', false, [], [("this", thisTerm)], pre', ("result", post'), epost', terminates');
                     success()
                   )
                   end
@@ -1085,8 +1102,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   let epost1: (type_ * asn) list = epost1 in
                   let (mn, _) = sign0 in
                   check_func_header_compat lm1 ("Method '" ^ mn ^ "'") "Method implementation check" []
-                    (func_kind_of_ghostness gh1,[], rt1, xmap1,false, pre1, post1, epost1, terminates1)
-                    (func_kind_of_ghostness gh0, [], rt0, xmap0, false, [], [], pre0, post0, epost0, terminates0);
+                    (func_kind_of_ghostness gh1,[], rt1, xmap1,false, pre1, ("result", post1), epost1, terminates1)
+                    (func_kind_of_ghostness gh0, [], rt0, xmap0, false, [], [], pre0, ("result", post0), epost0, terminates0);
                   if ss0=None then meths_impl:=(fst sign0,lm0)::!meths_impl;
                   iter rest meths1
             in
@@ -1104,8 +1121,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   let epost1: (type_ * asn) list = epost1 in
                   let rt= None in
                   check_func_header_compat lm1 ("Class '" ^ cn ^ "'") "Constructor implementation check" []
-                    (Regular, [], rt, ("this", ObjType (cn, []))::xmap1, false, pre1, post1, epost1, terminates1)
-                    (Regular, [], rt, ("this", ObjType (cn, []))::xmap0, false, [], [], pre0, post0, epost0, terminates0);
+                    (Regular, [], rt, ("this", ObjType (cn, []))::xmap1, false, pre1, ("result", post1), epost1, terminates1)
+                    (Regular, [], rt, ("this", ObjType (cn, []))::xmap0, false, [], [], pre0, ("result", post0), epost0, terminates0);
                   if ss0=None then cons_impl:=(cn,lm0)::!cons_impl;
                   iter rest constr1
             in
@@ -1361,7 +1378,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | CxxLValueToRValue (_, e) -> expr_mark_addr_taken e locals
     | CxxDerivedToBase (_, e, _) -> expr_mark_addr_taken e locals
     | Sep (_, e1, e2) -> expr_mark_addr_taken e1 locals; expr_mark_addr_taken e2 locals
-    | EnsuresAsn (_, e) -> expr_mark_addr_taken e locals
+    | EnsuresAsn (_, result_var, e) -> expr_mark_addr_taken e locals
     | TypeExpr _ -> ()
     | Typeid (_, e) -> expr_mark_addr_taken e locals
     | TypePredExpr (_, _, _) | WTypePredExpr (_, _, _) -> ()
@@ -1386,7 +1403,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | SwitchExpr(_, e, cls, None) -> expr_mark_addr_taken e locals;
         List.iter (fun (SwitchExprClause(_, _, _, a)) -> ass_mark_addr_taken a locals) cls;
     | WSwitchAsn(_, e, i, cls) -> expr_mark_addr_taken e locals;
-        List.iter (fun (WSwitchAsnClause(_, _, _, _, a)) -> ass_mark_addr_taken a locals) cls;
+        List.iter (fun (WSwitchAsnClause(_, _, _, _, _, a)) -> ass_mark_addr_taken a locals) cls;
     | EmpAsn _ -> ()
     | ForallAsn (l, tp, i, e) -> expr_mark_addr_taken e locals; 
     | CoefAsn(_, pat, a) -> pat_expr_mark_addr_taken pat locals; ass_mark_addr_taken a locals
@@ -1564,7 +1581,11 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     eval_core assert_term (Some read_field) env e
   
-  type c_object_value = Unspecified | Default | Expr of expr | Term of termnode
+  type c_object_value = Uninitialized | Default | Expr of expr | Term of termnode | MaybeUninitTerm of termnode
+
+  let type_definitely_has_nonzero_size = function
+    Bool | Int _ | Float | Double | LongDouble | PtrType _ | RustRefType _ -> true
+  | _ -> false
 
   (** Used to produce malloc'ed, global, local, or nested C variables/objects.
     * If [tp] is a struct type, [producePaddingChunk] says whether the padding chunk for the outermost struct should be produced.
@@ -1588,7 +1609,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         match init with
           Default -> cont h env (Some (match tp with PtrType _ -> null_pointer_term () | Bool -> false_term | _ -> ctxt#mk_intlit 0))
         | Expr e -> eval_h h env e $. fun h env value -> cont h env (Some value)
-        | Unspecified -> cont h env None
+        | Uninitialized | MaybeUninitTerm _ -> cont h env None
         | Term t -> cont h env (Some t)
       end $. fun h env value ->
       produce_points_to_chunk_ l h tp coef addr RegularPointsTo value $. fun h ->
@@ -1597,10 +1618,9 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     match tp with
       StaticArrayType (elemTp, elemCount) ->
       let elemSize = sizeof_core l env elemTp in
-      if elemCount > 0 then begin
-        let arraySize = ctxt#mk_mul (ctxt#mk_intlit elemCount) elemSize in
-        ctxt#assert_term (mk_object_pointer_within_limits addr arraySize)
-      end;
+      let elemCountTerm = eval_const_type l env elemCount in
+      let arraySize = ctxt#mk_mul elemCountTerm elemSize in
+      ctxt#assert_term (mk_object_pointer_within_limits addr arraySize); (* Is this okay when arraySize == 0? *)
       let assume_array_elem_type l env addr cont =
         let elem_type =
           let rec aux t =
@@ -1613,18 +1633,24 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         assume_has_type l env addr elem_type cont
       in
       let produce_char_array_chunk h env addr elemCount =
-        produce_char_array_chunk h env addr (ctxt#mk_mul (ctxt#mk_intlit elemCount) elemSize)
+        produce_char_array_chunk h env addr (ctxt#mk_mul elemCount elemSize)
       in
-      let produce_array_chunk h env produceUninitChunk addr elems elemCount =
+      let produce_array_chunk h env produceUninitChunk elemTp addr elems elemCount =
+        match dialect with
+          Some Rust ->
+          let length = elemCount in
+          assume_eq (mk_length elems) length $. fun () ->
+          cont (Chunk (((if produceUninitChunk then array__symb () else array_symb ()), true), [elemTp], coef, [addr; length; elems], None)::h) env
+        | _ ->
         match try_pointee_pred_symb0 elemTp with
           Some (_, _, _, arrayPredSymb, _, _, _, _, _, _, _, uninitArrayPredSymb) ->
-          let length = ctxt#mk_intlit elemCount in
+          let length = elemCount in
           assume_eq (mk_length elems) length $. fun () ->
           cont (Chunk (((if produceUninitChunk then uninitArrayPredSymb else arrayPredSymb), true), [], coef, [addr; length; elems], None)::h) env
         | None ->
         match integer__chunk_args elemTp with
           Some (k, signedness) ->
-          let length = ctxt#mk_intlit elemCount in
+          let length = elemCount in
           assume_eq (mk_length elems) length $. fun () ->
           assume_has_type l env addr elemTp $. fun () ->
           cont (Chunk (((if produceUninitChunk then integers___symb () else integers__symb ()), true), [], coef, [addr; rank_size_term k; mk_bool (signedness = Signed); length; elems], None)::h) env
@@ -1635,14 +1661,19 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       begin match elemTp, init with
         Int (Signed, CharRank), Expr (StringLit (_, s)) ->
-        produce_array_chunk h env false addr (mk_char_list_of_c_string elemCount s) elemCount
+        let elemCount =
+          match elemCount with
+            LiteralConstType n -> n
+          | _ -> static_error l "String literals in array initializers are only supported for arrays with a known size." None
+        in
+        produce_array_chunk h env false elemTp addr (mk_char_list_of_c_string elemCount s) elemCountTerm
       | (UnionType _ | StructType _ | StaticArrayType (_, _)), Expr (InitializerList (ll, es)) ->
         let rec iter h env i es =
           let addr = mk_ptr_add_ l env addr (ctxt#mk_intlit i) elemTp in
           match es with
             [] ->
             assume_array_elem_type l env addr @@ fun () ->
-            produce_char_array_chunk h env addr (elemCount - i)
+            produce_char_array_chunk h env addr (ctxt#mk_sub elemCountTerm (ctxt#mk_intlit i))
           | (f_opt, e)::es ->
             begin match f_opt with
               None -> ()
@@ -1653,6 +1684,11 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         in
         iter h env 0 es
       | _, Expr (InitializerList (ll, es)) ->
+        let elemCount =
+          match elemCount with
+            LiteralConstType n -> n
+          | _ -> static_error l "Array initializers are only supported for arrays with a known size." None
+        in
         let rec iter h env n es cont =
           match es with
             [] -> cont h env (mk_zero_list n)
@@ -1666,9 +1702,11 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             cont h env (mk_cons elemTp elem elems)
         in
         iter h env elemCount es $. fun h env elems ->
-        produce_array_chunk h env false addr elems elemCount
+        produce_array_chunk h env false elemTp addr elems elemCountTerm
+      | _, MaybeUninitTerm term ->
+        produce_array_chunk h env true elemTp addr term elemCountTerm
       | _ ->
-        let elems = get_unique_var_symb "elems" (list_type (if init = Unspecified then option_type elemTp else elemTp)) in
+        let elems = get_unique_var_symb "elems" (list_type (if init = Uninitialized then option_type elemTp else elemTp)) in
         begin fun cont ->
           match init, elemTp with
             Default, (Int (_, _)) ->
@@ -1678,7 +1716,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           | _ ->
             cont ()
         end $. fun () ->
-        produce_array_chunk h env (init = Unspecified) addr elems elemCount
+        produce_array_chunk h env (init = Uninitialized) elemTp addr elems elemCountTerm
       end
     | UnionType un -> begin
       match language, dialect, List.assoc_opt un unionmap with
@@ -1694,7 +1732,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let tpenv = List.combine tparams targs in
       let producePaddingChunk = match language, dialect, fields with CLang, Some Rust, [] -> false | _ -> producePaddingChunk in
       let field_values_of_struct_as_value v =
-        let (_, csym, getters, _) = List.assoc sn struct_accessor_map in
+        let (_, csym, getters, _, _) = List.assoc sn struct_accessor_map in
         if getters = [] then ctxt#assert_term (ctxt#mk_eq v (ctxt#mk_app csym []));
         List.combine getters fields |> List.map begin fun ((_, getter), (f, (lf, gh, t, offset, finit))) ->
           prover_convert_term (ctxt#mk_app getter [v]) t (instantiate_type tpenv t)
@@ -1712,7 +1750,17 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | Expr e -> eval_h h env e $. fun h env v -> cont h env (Some (Some (`Terms (field_values_of_struct_as_value v))))
         | Term t -> cont h env (Some (Some (`Terms (field_values_of_struct_as_value t))))
         | Default -> cont h env (Some None) (* Initialize to default value (= zero) *)
-        | Unspecified -> cont h env None (* Do not initialize; i.e. arbitrary initial value *)
+        | Uninitialized -> cont h env None (* Do not initialize *)
+        | MaybeUninitTerm term ->
+          let (_, _, _, _, csym_opt) = List.assoc sn struct_accessor_map in
+          let _, _, Some (_, fields_map, _), _, _ = List.assoc sn structmap in
+          let field_terms = fields_map |> List.map (fun (field_name, (_, gh, field_type, _, _)) -> 
+            match gh with
+            | Real -> get_unique_var_symb_non_ghost field_name (option_type field_type)
+            | Ghost -> get_unique_var_symb_ field_name field_type true) 
+          in
+          assume_eq (ctxt#mk_app csym_opt field_terms) term @@ fun () ->
+          cont h env (Some (Some (`MaybeUninitTerms field_terms)))
       end $. fun h env inits ->
       begin fun cont ->
         match producePaddingChunk, padding_predsymb_opt with
@@ -1721,24 +1769,34 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | _ ->
           cont h
       end $. fun h ->
-      let rec iter h env fields inits =
+      let rec iter h env has_nonempty_field fields inits =
         match fields with
-          [] -> cont h env
+          [] ->
+          if has_nonempty_field then
+            assume_neq (mk_ptr_address addr) int_zero_term $. fun () ->
+            cont h env
+          else
+            cont h env
         | (f, (lf, gh, t0, offset, finit))::fields ->
           if gh = Ghost && not allowGhostFields then static_error l "Cannot produce a struct instance with ghost fields in this context." None;
           let t = instantiate_type tpenv t0 in
+          let pointsto_kind = match init with MaybeUninitTerm _ -> MaybeUninit | _ -> RegularPointsTo in 
+          let has_nonempty_field = has_nonempty_field || type_definitely_has_nonzero_size t in
           let init, inits =
-            if gh = Ghost then Unspecified, inits else
+            if gh = Ghost then Uninitialized, inits else
             match inits with
               Some (Some (`Exprs (e::es))) -> Expr e, Some (Some (`Exprs es))
             | Some (Some (`Terms (t::ts))) -> Term t, Some (Some (`Terms ts))
+            | Some (Some (`MaybeUninitTerms (t :: ts))) -> MaybeUninitTerm t, Some (Some (`MaybeUninitTerms ts))
             | Some (None | Some (`Exprs [] | `Terms [])) -> Default, Some None
-            | _ -> Unspecified, None
+            | _ -> Uninitialized, None
           in
           match t with
             StaticArrayType (_, _) | StructType _ | UnionType _ ->
             produce_c_object l coef (field_address l env addr sn targs f) t eval_h init allowGhostFields true h env $. fun h env ->
-            iter h env fields inits
+            let Some offsetFunc = offset in
+            assume (mk_field_pointer_within_limits addr (ctxt#mk_app offsetFunc (List.map (typeid_of_core l env) targs))) $. fun () ->
+            iter h env has_nonempty_field fields inits
           | _ ->
             begin fun cont ->
               match init with
@@ -1756,12 +1814,15 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 end
               | Expr e -> eval_h h env e (fun h env v -> cont h env (Some v))
               | Term t -> cont h env (Some t)
-              | Unspecified -> cont h env (match gh with Ghost -> Some (get_unique_var_symb_ "value" t true) | Real -> None)
+              | MaybeUninitTerm t -> 
+                let t = prover_convert_term t t0 (instantiate_type tpenv t0) in
+                cont h env (Some t)
+              | Uninitialized -> cont h env (match gh with Ghost -> Some (get_unique_var_symb_ "value" t true) | Real -> None)
             end $. fun h env value ->
-            assume_field h env sn tparams f t0 targs gh addr RegularPointsTo value coef $. fun h ->
-            iter h env fields inits
+            assume_field h env sn tparams f t0 targs gh addr pointsto_kind value coef $. fun h ->
+            iter h env has_nonempty_field fields inits
       in
-      iter h env fields inits
+      iter h env false fields inits
     | _ ->
       produce_points_to ()
   
@@ -1777,15 +1838,22 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in  
     match tp with
       StaticArrayType (elemTp, elemCount) ->
-      begin match try_pointee_pred_symb0 elemTp with
+      let elemCountTerm = eval_const_type l typeid_env elemCount in
+      begin match dialect with
+        Some Rust ->
+        let pats = [TermPat addr; TermPat (elemCountTerm); dummypat] in
+        consume_chunk rules h typeid_env [] [] [] l ((if consumeUninitChunk then array__symb () else array_symb ()), true) [elemTp] real_unit coefpat (Some 2) pats $. fun chunk h _ [_; _; elems] _ _ _ _ ->
+        cont [chunk] h (Some elems)
+      | _ ->
+      match try_pointee_pred_symb0 elemTp with
         Some (_, _, _, arrayPredSymb, _, _, _, _, _, _, _, uninitArrayPredSymb) ->
-        let pats = [TermPat addr; TermPat (ctxt#mk_intlit elemCount); dummypat] in
+        let pats = [TermPat addr; TermPat (elemCountTerm); dummypat] in
         consume_chunk rules h typeid_env [] [] [] l ((if consumeUninitChunk then uninitArrayPredSymb else arrayPredSymb), true) [] real_unit coefpat (Some 2) pats $. fun chunk h _ [_; _; elems] _ _ _ _ ->
         cont [chunk] h (Some elems)
       | None ->
       match integer__chunk_args elemTp with
         Some (k, signedness) ->
-        let pats = [TermPat addr; TermPat (rank_size_term k); TermPat (mk_bool (signedness = Signed)); TermPat (ctxt#mk_intlit elemCount); dummypat] in
+        let pats = [TermPat addr; TermPat (rank_size_term k); TermPat (mk_bool (signedness = Signed)); TermPat (elemCountTerm); dummypat] in
         consume_chunk rules h typeid_env [] [] [] l ((if consumeUninitChunk then integers___symb () else integers__symb ()), true) [] real_unit coefpat (Some 4) pats $. fun chunk h _ [_; _; _; _; elems] _ _ _ _ ->
         cont [chunk] h (Some elems)
       | None ->
@@ -1815,30 +1883,33 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let rec iter chunks vs h fields =
         match fields with
           [] ->
-          let (_, csym, _, _) = List.assoc sn struct_accessor_map in
-          cont chunks h (Some (if consumeUninitChunk then real_unit (* dummy term; should never be used *) else ctxt#mk_app csym (List.rev vs)))
+          let (_, csym, _, _, csym_opt) = List.assoc sn struct_accessor_map in
+          let csym_symb = if consumeUninitChunk then csym_opt else csym in
+          let struct_val = ctxt#mk_app csym_symb (List.rev vs) in
+          cont chunks h (Some struct_val)
         | (f, (lf, gh, t0, offset, finit))::fields ->
           let t = instantiate_type tpenv t0 in
           match t with
             StaticArrayType (_, _) | StructType _ | UnionType _ ->
             consume_c_object_core_core l coefpat (field_address l typeid_env addr sn targs f) t h typeid_env true consumeUninitChunk $. fun chunks' h (Some value) ->
-            let value =
-              if consumeUninitChunk then value else prover_convert_term value t t0
-            in
+            let value = if consumeUninitChunk then value else prover_convert_term value t t0 in
             iter (chunks' @ chunks) (value::vs) h fields
           | _ ->
-             let (_, (_, _, _, _, f_symb, _, _)), p__opt = List.assoc (sn, f) field_pred_map in
-             let f_symb_used =
-               match consumeUninitChunk, p__opt with
-                 true, Some (_, (_, _, _, _, f_symb_, _, _)) ->
-                 f_symb_
-               | _ -> f_symb
-             in
-             consume_chunk rules h typeid_env [] [] [] l (f_symb_used, true) targs real_unit coefpat (Some 1) [TermPat addr; dummypat] $. fun chunk h coef [_; value] size ghostenv env env' ->
-             let value =
-               if consumeUninitChunk then value else prover_convert_term value t t0
-             in
-             iter (chunk::chunks) (value::vs) h fields
+            let (_, (_, _, _, _, f_symb, _, _)), p__opt = List.assoc (sn, f) field_pred_map in
+            let f_symb_is_maybe_uninit, f_symb_used =
+              match consumeUninitChunk, p__opt with
+                true, Some (_, (_, _, _, _, f_symb_, _, _)) ->
+                true, f_symb_
+              | _ -> false, f_symb
+            in
+            consume_chunk rules h typeid_env [] [] [] l (f_symb_used, true) targs real_unit coefpat (Some 1) [TermPat addr; dummypat] $. fun chunk h coef [_; value] size ghostenv env env' ->
+            let value =
+              match consumeUninitChunk, f_symb_is_maybe_uninit, gh with
+              | true, true, Real -> value
+              | true, false, Real -> mk_some t value
+              | _ -> prover_convert_term value t t0
+            in
+            iter (chunk::chunks) (value::vs) h fields
       in
       iter chunks [] h fields
     | _ ->
@@ -2148,7 +2219,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           cont h
       end $. fun h ->
       consume_asn_with_post rules tpenv h env ghostenv cenv pre true real_unit (fun _ h ghostenv' env' chunk_size post' ->
-        let post =
+        let (result_var, post) =
           match post' with
             None -> post
           | Some post' -> post'
@@ -2222,12 +2293,12 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           | Some t0 ->
             let symbol_name =
               match xo with
-                None -> "result"
+                None -> result_var
               | Some x -> x
             in
             let t = instantiate_type tpenv t0 in
             let r = get_unique_var_symb_ symbol_name t pure in
-            let env'' = update env' "result" (prover_convert_term r t t0) in
+            let env'' = update env' result_var (prover_convert_term r t t0) in
             r, env''
         in
         execute_branch begin fun () ->
@@ -2314,11 +2385,11 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | Sep (l, a1, a2) -> asserts_exclusive_ownership a1 || asserts_exclusive_ownership a2
     | IfAsn (l, e, a1, a2) -> asserts_exclusive_ownership a1 || asserts_exclusive_ownership a2
     | WSwitchAsn (l, e, i, cs) ->
-      List.exists (function WSwitchAsnClause (l, c, xs, _, a) -> asserts_exclusive_ownership a) cs
+      List.exists (function WSwitchAsnClause (l, c, c_full, xs, _, a) -> asserts_exclusive_ownership a) cs
     | EmpAsn _ -> false
     | ForallAsn (_, _, _, _) -> false
     | CoefAsn (l, DummyPat, a) -> false (* TODO: Support more coefpats *)
-    | EnsuresAsn (l, _) -> false
+    | EnsuresAsn (l, result_var, _) -> false
     | WMatchAsn (_, _, _, _) -> false
     | LetTypeAsn (_, _, _, a) -> asserts_exclusive_ownership a
     | _ -> true
@@ -2384,7 +2455,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         if isActivating then
           let pats = [TermPat target; TermPat (sizeof_core l env memberType); dummypat] in
           consume_chunk rules h env [] [] [] l (chars__pred_symb(), true) [] real_unit real_unit_pat (Some 2) pats $. fun _ h _ [_; _; cs] _ _ _ _ ->
-          produce_c_object l real_unit vp memberType eval_h Unspecified false true h env $. fun h env ->
+          produce_c_object l real_unit vp memberType eval_h Uninitialized false true h env $. fun h env ->
           cont h env vp
         else
           cont h env vp
@@ -2416,7 +2487,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | WSelect (l, w, fparent, tparams, fname, tp, targs) ->
         let tpenv = List.combine tparams targs in
         let tp' = instantiate_type tpenv tp in
-        let (_, _, getters, setters) = List.assoc fparent struct_accessor_map in
+        let (_, _, getters, setters, _) = List.assoc fparent struct_accessor_map in
         let getter = List.assoc fname getters in
         let setter = List.assoc fname setters in
         lhs_to_lvalue h env w $. fun h env w ->
@@ -2505,8 +2576,9 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         if pure then static_error l "Cannot write in a pure context." None;
         let consume_elem () =
           let target = mk_ptr_add_ l env arr i elem_tp in
-          consume_points_to_chunk_ rules h env [] env [] l elem_tp real_unit real_unit_pat target RegularPointsTo dummypat true $. fun _ h _ _ _ _ _ ->
-          produce_points_to_chunk l h elem_tp real_unit target value $. fun h ->
+          let coefpat, coef = match assignment_kind with Mutation -> real_unit_pat, real_unit | Initialization -> TermPat real_half, real_half in
+          consume_points_to_chunk_ rules h env [] env [] l elem_tp real_unit coefpat target RegularPointsTo dummypat true $. fun _ h _ _ _ _ _ ->
+          produce_points_to_chunk l h elem_tp coef target value $. fun h ->
           cont h env
         in
         let write_integer__array_element () =
@@ -2678,7 +2750,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         end
         begin fun () ->
           assume_neq (mk_ptr_address result) int_zero_term $. fun () ->
-          produce_c_object l real_unit result t eval_h (if g = "calloc" then Default else Unspecified) true false h env $. fun h env ->
+          produce_c_object l real_unit result t eval_h (if g = "calloc" then Default else Uninitialized) true false h env $. fun h env ->
           match t with
             StructType (sn, targs) ->
             let (_, (_, _, _, _, malloc_block_symb, _, _)) = List.assoc sn malloc_block_pred_map in
@@ -2831,7 +2903,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let cont h = cont h env result in
       let init = 
         match expr_opt with 
-        | None -> Unspecified
+        | None -> Uninitialized
         | Some e -> Expr e 
       in 
       let verify_call loc args params pre post terminates h env target_struct cont = verify_call funcmap eval_h loc (pn, ilist) xo None [] args ([], None, params, ["this", result], pre, post, None, terminates, false) false false (Some target_struct) leminfo sizemap h [] tenv ghostenv env cont @@ fun _ _ _ _ _ -> assert false in
@@ -2898,7 +2970,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let Some targEnv = zip ctpenv targtps in
             List.map (fun (name,tp) -> (name, replace_type l targEnv tp)) xmap 
         in
-        check_correct h None None [] args (lm, [], None, xmap, ["this", obj], pre, post, Some(epost), terminates, false) is_upcall (Some cn) (fun h env _ -> cont h env obj)
+        check_correct h None None [] args (lm, [], None, xmap, ["this", obj], pre, ("result", post), Some(epost), terminates, false) is_upcall (Some cn) (fun h env _ -> cont h env obj)
       | _ -> static_error l "Multiple matching overloads" None
       end
     | WMethodCall (l, tn, m, pts, args, fb, tpenv) when m <> "getClass" ->
@@ -2927,7 +2999,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         if not pure then static_error l "A lemma method call is not allowed in a non-pure context." None;
         if leminfo_is_lemma leminfo then static_error l "Lemma method calls in lemmas are currently not supported (for termination reasons)." None
       end;
-      check_correct h xo None mtargs args (lm, mtparams, rt, xmap, [], pre, post, Some epost, terminates, true) is_upcall target_class cont
+      check_correct h xo None mtargs args (lm, mtparams, rt, xmap, [], pre, ("result", post), Some epost, terminates, true) is_upcall target_class cont
     | WSuperMethodCall(l, supercn, m, args, (lm, gh, rt, xmap, pre, post, epost, terminates, rank, v)) ->
       if gh = Real && pure then static_error l "Method call is not allowed in a pure context" None;
       if gh = Ghost then begin
@@ -2939,7 +3011,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           Some rank, RealMethodInfo (Some rank0) -> rank < rank0
         | _ -> true
       in
-      check_correct h None None [] args (lm, [], rt, xmap, [], pre, post, Some epost, terminates, false) is_upcall (Some supercn) cont
+      check_correct h None None [] args (lm, [], rt, xmap, [], pre, ("result", post), Some epost, terminates, false) is_upcall (Some supercn) cont
     | WFunCall (l, g, targs, es, binding) ->
       let FuncInfo (funenv, fterm, lg, k, tparams, tr, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body, is_virt, overrides) = List.assoc g funcmap in
       if heapReadonly && not assume_left_to_right_evaluation && not (startswith g "vf__") && asserts_exclusive_ownership pre then has_heap_effects ();

@@ -296,7 +296,7 @@ struct cons *create_cons(struct object *head, struct object *tail)
 }
 
 void destruct_cons(struct object *object, struct object **head, struct object **tail)
-    //@ requires heap() &*& ref(object) &*& pointer(head, _) &*& pointer(tail, _);
+    //@ requires heap() &*& ref(object) &*& *head |-> _ &*& *tail |-> _;
     //@ ensures heap() &*& pointer(head, ?h) &*& ref(h) &*& pointer(tail, ?t) &*& ref(t);
 {
     //@ open ref(object);

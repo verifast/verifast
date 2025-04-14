@@ -45,10 +45,12 @@ pred_ctor ref_padding_initialized_<T>(p: *T)(;) = ref_padding_initialized(p);
 fn create_ref_mut<T>(x: *T) -> *T;
 //@ req *x |-> ?v;
 //@ ens *result |-> v &*& ref_mut_end_token(result, x);
+//@ on_unwind_ens false;
 
 fn reborrow_ref_mut_implicit<T>(x: *T) -> *T;
 //@ req true;
 //@ ens result == x;
+//@ on_unwind_ens false;
 
 /*@
 
@@ -71,23 +73,29 @@ lem precreate_ref<T>(x: *T) -> *T;
 fn create_ref<T>(x: *T) -> *T;
 //@ req ref_precreated_token(x, ?p) &*& [?f]ref_initialized(p);
 //@ ens [f]ref_initialized(p) &*& result == p;
+//@ on_unwind_ens false;
 
 fn reborrow_ref<T>(x: *T) -> *T;
 //@ req [?f]ref_initialized(x);
 //@ ens [f]ref_initialized(x) &*& result == x;
+//@ on_unwind_ens false;
 
-fn reborrow_ref_UnsafeCell(x: *_) -> *_;
+fn create_ref_UnsafeCell(x: *_) -> *_;
 //@ req true;
-//@ ens result == x;
+//@ ens ref_origin(result) == ref_origin(x);
+//@ on_unwind_ens false;
 
 fn create_slice_ref<T>(x: slice_ref<'static, T>) -> slice_ref<'static, T>;
 //@ req true; // TODO
 //@ ens result == x;
+//@ on_unwind_ens false;
 
 fn reborrow_slice_ref<T>(x: slice_ref<'static, T>) -> slice_ref<'static, T>;
 //@ req true; // TODO
 //@ ens result == x;
+//@ on_unwind_ens false;
 
 fn create_str_ref(x: str_ref<'static>) -> str_ref<'static>;
 //@ req true; // TODO
 //@ ens result == x;
+//@ on_unwind_ens false;

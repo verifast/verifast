@@ -284,12 +284,12 @@ lemma void build_rec1_eq(int d, list<int> s)
 @*/
 
 bool build_rec(int d, struct list *s, struct tree **t)
-    //@ requires list(s, ?vs) &*& *t |-> ?_;
+    //@ requires list(s, ?vs) &*& *t |-> _;
     /*@
-    ensures list(s, ?rvs) &*& *t |-> ?rt &*&
+    ensures list(s, ?rvs) &*&
         switch (build_rec1(d, vs)) {
-            case fail: return result == false;
-            case success(rvt, rvs0): return result == true &*& rvs == rvs0 &*& tree(rt, rvt);
+            case fail: return *t |-> _ &*& result == false;
+            case success(rvt, rvs0): return *t |-> ?rt &*& result == true &*& rvs == rvs0 &*& tree(rt, rvt);
         };
     @*/
     // decreases max_func(0, fold_left(0, max_func, vs) - d); // Not yet checked by VeriFast.
@@ -338,12 +338,12 @@ lemma void build_complete(tree t)
 @*/
 
 bool build(struct list *s, struct tree **t)
-    //@ requires list(s, ?vs) &*& *t |-> ?_;
+    //@ requires list(s, ?vs) &*& *t |-> _;
     /*@
-    ensures list(s, ?rvs) &*& *t |-> ?rt &*&
+    ensures list(s, ?rvs) &*&
     switch (build0(vs)) {
-        case build_fail: return result == false;
-        case build_success(rvt): return result == true &*& tree(rt, rvt) &*& rvs == nil;
+        case build_fail: return *t |-> _ &*& result == false;
+        case build_success(rvt): return *t |-> ?rt &*& result == true &*& tree(rt, rvt) &*& rvs == nil;
     };
     @*/
 {

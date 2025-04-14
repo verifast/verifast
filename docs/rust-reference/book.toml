@@ -1,0 +1,11 @@
+[book]
+authors = ["Bart Jacobs"]
+language = "en"
+multilingual = false
+src = "src"
+title = "The VeriFast for Rust Reference"
+
+[output.html]
+git-repository-url = "https://github.com/verifast/verifast/tree/master/docs/rust-reference"
+git-repository-icon = "fa-github"
+edit-url-template = "https://github.com/verifast/verifast/edit/master/docs/rust-reference/{path}"

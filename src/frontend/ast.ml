@@ -148,6 +148,7 @@ type type_ = (* ?type_ *)
     Bool
   | Void
   | Int of signedness * int_rank
+  | RustChar
   | RealType  (* Mathematical real numbers. Used for fractional permission coefficients. Also used for reasoning about floating-point code. *)
   | Float
   | Double
@@ -157,32 +158,37 @@ type type_ = (* ?type_ *)
   | PtrType of type_
   | RustRefType of type_ (*lifetime*) * rust_ref_kind * type_
   | FuncType of string   (* The name of a typedef whose body is a C function type. *)
-  | InlineFuncType of type_ (* Return type only *)
+  | InlineFuncType of type_ (* InlineFuncType rt denotes Rust type 'unsafe fn(...) -> rt'. *)
   | InductiveType of string * type_ list
   | PredType of string list * type_ list * int option * inductiveness (* if None, not necessarily precise; if Some n, precise with n input parameters *)
   | PureFuncType of type_ * type_  (* Curried *)
   | ObjType of string * type_ list (* type arguments *)
   | ArrayType of type_
-  | StaticArrayType of type_ * int (* for array declarations in C *)
+  | StaticArrayType of type_ (* element type *) * type_ (* size; in C this is always a LiteralConstType *) (* C array type T[N]; Rust array type [T; N] *)
+  | LiteralConstType of int (* Rust const generic argument *)
   | BoxIdType (* box type, for shared boxes *)
   | HandleIdType (* handle type, for shared boxes *)
   | AnyType (* supertype of all inductive datatypes; useful in combination with predicate families *)
   | RealTypeParam of string (* a reference to a type parameter declared in the enclosing Real code *)
   | InferredRealType of string
   | GhostTypeParam of string (* a reference to a type parameter declared in the ghost code *)
+  | GhostTypeParamWithEqs of (* a reference to a type parameter declared in the ghost code *)
+      string *
+      ((string * type_ list * string) * type_) list (* type projection equalities: TraitName<TraitArgs>::AssocTypeName == T *)
   | InferredType of < > * inferred_type_state ref (* inferred type, is unified during type checking. '< >' is the type of objects with no methods. This hack is used to prevent types from incorrectly comparing equal, as in InferredType (ref Unconstrained) = InferredType (ref Unconstrained). Yes, ref Unconstrained = ref Unconstrained. But object end <> object end. *)
   | ClassOrInterfaceName of string (* not a real type; used only during type checking *)
   | PackageName of string (* not a real type; used only during type checking *)
   | RefType of type_ (* not a real type; used only for locals whose address is taken *)
   | AbstractType of string
   | StaticLifetime (* 'static in Rust *)
+  | ProjectionType of type_ * string (* trait name *) * type_ list (* trait generic args *) * string (* associated type name *) (* In Rust: <T as X<GArgs>>::Y *)
 and inferred_type_state =
     Unconstrained
   | ContainsAnyConstraint of bool (* allow the type to contain 'any' in positive positions *)
   | EqConstraint of type_
 
 let type_fold_open state f = function
-  Bool | Void | Int (_, _) | RealType | Float | Double | LongDouble -> state
+  Bool | Void | Int (_, _) | RustChar | RealType | Float | Double | LongDouble -> state
 | StructType (sn, targs) -> List.fold_left f state targs
 | UnionType _ -> state
 | PtrType tp -> f state tp
@@ -194,10 +200,13 @@ let type_fold_open state f = function
 | PureFuncType (tp1, tp2) -> f (f state tp1) tp2
 | ObjType (_, targs) -> List.fold_left f state targs
 | ArrayType tp -> f state tp
-| StaticArrayType (tp, _) -> f state tp
+| StaticArrayType (elem_tp, size) -> f (f state elem_tp) size
+| LiteralConstType _ -> state
 | BoxIdType | HandleIdType | AnyType | RealTypeParam _ | InferredRealType _ | GhostTypeParam _ | InferredType (_, _) | ClassOrInterfaceName _ | PackageName _ -> state
 | RefType tp -> f state tp
 | AbstractType _ | StaticLifetime -> state
+| GhostTypeParamWithEqs (tp, eqs) -> List.fold_left (fun state (_, tp) -> f state tp) state eqs
+| ProjectionType (tp, _, targs, _) -> List.fold_left f (f state tp) targs
 
 let is_ptr_type tp =
   match tp with
@@ -328,7 +337,8 @@ type type_expr = (* ?type_expr *)
   | PtrTypeExpr of loc * type_expr
   | RustRefTypeExpr of loc * type_expr * rust_ref_kind * type_expr
   | ArrayTypeExpr of loc * type_expr
-  | StaticArrayTypeExpr of loc * type_expr (* type *) * int (* number of elements*)
+  | StaticArrayTypeExpr of loc * type_expr (* type *) * type_expr (* number of elements; in C this is always a LiteralConstTypeExpr *)
+  | LiteralConstTypeExpr of loc * int
   | FuncTypeExpr of loc * type_expr (* return type *) * (type_expr * string) list (* parameters *)
   | ManifestTypeExpr of loc * type_  (* A type expression that is obviously a given type. *)
   | IdentTypeExpr of loc * string option (* package name *) * string
@@ -337,6 +347,7 @@ type type_expr = (* ?type_expr *)
   | PureFuncTypeExpr of loc * (type_expr * (loc * string) option) list * expr (* 'requires' clause *) option   (* Potentially uncurried *)
   | LValueRefTypeExpr of loc * type_expr
   | ConstTypeExpr of loc * type_expr
+  | ProjectionTypeExpr of loc * type_expr * string (* trait name *) * type_expr list (* trait generic args *) * string (* associated type name *) (* In Rust: <T as X<GArgs>>::Y *)
 and
   operator =  (* ?operator *)
   | Add | Sub | PtrDiff | Le | Ge | Lt | Gt | Eq | Neq | And | Or | Xor | Not | Mul | Div | Mod | BitNot | BitAnd | BitXor | BitOr | ShiftLeft | ShiftRight
@@ -599,7 +610,7 @@ and
       loc *
       pat *
       asn
-  | EnsuresAsn of loc * asn
+  | EnsuresAsn of loc * string (* result variable *) * asn
   | MatchAsn of loc * expr * pat
   | WMatchAsn of loc * expr * pat * type_
   | LetTypeAsn of loc * string * type_ * asn (* `let_type U = T in A` means A with type T substituted for type parameter U *)
@@ -619,7 +630,8 @@ and
   wswitch_asn_clause = (* ?switch_asn_clause *)
   | WSwitchAsnClause of
       loc * 
-      string * 
+      string (* ctor name *) *
+      string (* full ctor name *) *
       string option list (* pattern variables, or None if _ *) *
       prover_type option list (* Boxing info *) *
       asn
@@ -916,7 +928,7 @@ and
       (type_expr * string) list *  (* parameters *)
       bool (* nonghost_callers_only *) *
       (string * type_expr list * (loc * string) list) option (* implemented function type, with function type type arguments and function type arguments *) *
-      (asn * asn) option *  (* contract *)
+      (asn * (string (* result variable *) * asn)) option *  (* contract *)
       bool *  (* terminates *)
       (stmt list * loc (* Close brace *)) option *  (* body *)
       bool * (* virtual *)
@@ -958,7 +970,7 @@ and
       string list * (* type parameters *)
       (type_expr * string) list *
       (type_expr * string) list *
-      (asn * asn * bool) (* precondition, postcondition, terminates *)
+      (asn * (string (* result variable *) * asn) * bool) (* precondition, postcondition, terminates *)
   | BoxClassDecl of
       loc *
       string *
@@ -1025,6 +1037,7 @@ and
 and
   struct_attr =
   | Packed
+  | ReprC
 and constant_value = (* ?constant_value *)
   IntConst of big_int
 | BoolConst of bool
@@ -1053,6 +1066,7 @@ let type_expr_loc t =
   | PureFuncTypeExpr (l, tes, _) -> l
   | FuncTypeExpr (l, _, _) -> l
   | ConstTypeExpr (l, te) -> l
+  | ProjectionTypeExpr (l, te, _, _, _) -> l
 
 let string_of_func_kind f=
   match f with
@@ -1144,7 +1158,7 @@ let rec expr_loc e =
   | EmpAsn l -> l
   | ForallAsn (l, tp, i, e) -> l
   | CoefAsn (l, coef, body) -> l
-  | EnsuresAsn (l, body) -> l
+  | EnsuresAsn (l, result_var, body) -> l
   | CxxNew (l, _, _)
   | WCxxNew (l, _, _) -> l
   | CxxDelete (l, _) -> l
@@ -1200,7 +1214,8 @@ let type_expr_fold_open f state te =
   | PtrTypeExpr (l, te) -> f state te
   | RustRefTypeExpr (l, lft, kind, te) -> f (f state lft) te
   | ArrayTypeExpr (l, te) -> f state te
-  | StaticArrayTypeExpr (l, elemTp, n) -> f state elemTp
+  | StaticArrayTypeExpr (l, elemTp, size) -> f (f state elemTp) size
+  | LiteralConstTypeExpr _ -> state
   | FuncTypeExpr (l, retTp, ps) -> List.fold_left f (f state retTp) (List.map fst ps)
   | ManifestTypeExpr (l, tp) -> state
   | IdentTypeExpr (l, pn, x) -> state
@@ -1209,6 +1224,7 @@ let type_expr_fold_open f state te =
   | PureFuncTypeExpr (l, tps, _) -> List.fold_left (fun state (tp, _) -> f state tp) state tps
   | LValueRefTypeExpr (l, tp) -> f state tp
   | ConstTypeExpr (l, tp) -> f state tp
+  | ProjectionTypeExpr (l, tp, traitName, traitGenericArgs, assocTypeName) -> List.fold_left f (f state tp) traitGenericArgs
 
 let stmt_fold_open f state s =
   match s with
@@ -1387,13 +1403,13 @@ let expr_fold_open iter state e =
   | WSwitchAsn (l, e, i, sacs) ->
     let rec iter' state = function
       [] -> state
-    | WSwitchAsnClause (l, _, _, _, a)::sacs -> iter' (iter state e) sacs
+    | WSwitchAsnClause (l, _, _, _, _, a)::sacs -> iter' (iter state e) sacs
     in
     iter' (iter state e) sacs
   | EmpAsn l -> state
   | ForallAsn (l, tp, i, e) -> iter state e
   | CoefAsn (l, coef, body) -> iter (iterpat state coef) body
-  | EnsuresAsn (l, body) -> iter state body
+  | EnsuresAsn (l, result_var, body) -> iter state body
   | _ -> static_error (expr_loc e) "This expression form is not allowed in this position." None
 
 (* Postfix fold *)

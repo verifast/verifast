@@ -11,6 +11,22 @@ include!{"rust_belt/aliasing.rsspec"}
 union std_empty_ {}
 struct std_tuple_0_ {}
 struct std_tuple_1_<T1>(T1)
+struct std_tuple_2_<T1, T2>(T1, T2)
+
+
+/*@
+
+lem open_tuple_0_own(t: thread_id_t);
+    req <()>.own(_, _);
+    ens true;
+
+lem close_tuple_0_own(t: thread_id_t);
+    req true;
+    ens <()>.own(t, std_tuple_0_ {});
+
+pred<T1, T2> <(T1, T2)>.share(k, t, l) = <T1>.share(k, t, &(*l).0) &*& <T2>.share(k, t, &(*l).1);
+
+@*/
 
 struct slice_ref<'a, T> { ptr: *T, len: usize }
 
@@ -21,7 +37,8 @@ struct str_ref<'a> { ptr: *u8, len: usize }
 pred junk();
 
 fn_type main_full(mainModule: i32) = fn();
-    req thread_token(?_t);
-    ens thread_token(_t) &*& junk();
+    req thread_token(currentThread);
+    ens thread_token(currentThread) &*& junk();
+    on_unwind_ens thread_token(currentThread);
 
 @*/

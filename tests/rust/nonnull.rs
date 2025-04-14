@@ -11,7 +11,7 @@ lem ptr::NonNull_own_mono<T0, T1>()
     close ptr::NonNull_own::<T1>(t, ptr::NonNull::<T1> { pointer: v.pointer as *_ });
 }
 
-pred_ctor ptr::NonNull_frac_bc<T>(t: thread_id_t, l: *ptr::NonNull<T>)(;) = (*l).pointer |-> ?p &*& struct_ptr::NonNull_padding(l) &*& ptr::NonNull_own(t, ptr::NonNull::<T> { pointer: p });
+pred_ctor ptr::NonNull_frac_bc<T>(t: thread_id_t, l: *ptr::NonNull<T>)(;) = (*l).pointer |-> ?p &*& ptr::struct_NonNull_padding(l) &*& ptr::NonNull_own(t, ptr::NonNull::<T> { pointer: p });
 pred<T> <ptr::NonNull<T>>.share(k, t, l) =
     frac_borrow(k, ptr::NonNull_frac_bc(t, l));
 
@@ -26,8 +26,8 @@ lem ptr::NonNull_share_mono<T>(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l:
 }
 
 lem ptr::NonNull_share_full<T>(k: lifetime_t, t: thread_id_t, l: *ptr::NonNull<T>)
-    req atomic_mask(Nlft) &*& full_borrow(k, ptr::NonNull_full_borrow_content(t, l)) &*& [?q]lifetime_token(k);
-    ens atomic_mask(Nlft) &*& [_]ptr::NonNull_share(k, t, l) &*& [q]lifetime_token(k);
+    req atomic_mask(MaskTop) &*& full_borrow(k, ptr::NonNull_full_borrow_content(t, l)) &*& [?q]lifetime_token(k);
+    ens atomic_mask(MaskTop) &*& [_]ptr::NonNull_share(k, t, l) &*& [q]lifetime_token(k);
 {
     produce_lem_ptr_chunk implies(ptr::NonNull_frac_bc(t, l), ptr::NonNull_full_borrow_content(t, l))(){
         open ptr::NonNull_frac_bc::<T>(t, l)();
@@ -45,7 +45,7 @@ lem ptr::NonNull_share_full<T>(k: lifetime_t, t: thread_id_t, l: *ptr::NonNull<T
     close [qf]<ptr::NonNull<T>>.share(k, t, l);
 }
 
-lem init_ref_ptr::NonNull<T>(p: *ptr::NonNull<T>)
+lem ptr::init_ref_NonNull<T>(p: *ptr::NonNull<T>)
     req type_interp::<T>() &*& atomic_mask(Nlft) &*& ref_init_perm(p, ?x) &*& [_]ptr::NonNull_share::<T>(?k, ?t, x) &*& [?q]lifetime_token(k);
     ens type_interp::<T>() &*& atomic_mask(Nlft) &*& [q]lifetime_token(k) &*& [_]ptr::NonNull_share::<T>(k, t, p) &*& [_]frac_borrow(k, ref_initialized_(p));
 {
@@ -72,6 +72,7 @@ pub mod ptr {
         pub unsafe fn new_unchecked(ptr: *mut T) -> Self
             //@ req true;
             //@ ens result.pointer == ptr;
+            //@ on_unwind_ens false;
         {
             NonNull { pointer: ptr }
         }
@@ -80,6 +81,7 @@ pub mod ptr {
         pub unsafe fn as_ref<'a>(&'a self) -> &'a T
             //@ req [?q](*self).pointer |-> ?p;
             //@ ens [q](*self).pointer |-> p;
+            //@ on_unwind_ens false;
         {
             &*self.pointer
         }

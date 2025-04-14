@@ -27,6 +27,7 @@
 .requires CRT/list.gh#reverse_reverse
 .requires CRT/list.gh#take_0
 .requires CRT/list.gh#take_length
+.requires CRT/list.gh#update_nth_equal
 .requires CRT/nat.gh#int_of_nat_nonnegative
 .requires CRT/nat.gh#int_of_nat_of_int
 .requires CRT/nat.gh#nat_of_1
@@ -116,6 +117,7 @@
 .requires CRT/prelude.h#map_uchar_of_char_char_of_uchar
 .requires CRT/prelude.h#null_pointer_provenance_max_addr
 .requires CRT/prelude.h#null_pointer_provenance_min_addr
+.requires CRT/prelude.h#of_chars__chars__of
 .requires CRT/prelude.h#pointer_nonzero
 .requires CRT/prelude.h#pointer_of_chars_of_pointer
 .requires CRT/prelude.h#pointer_to_chars

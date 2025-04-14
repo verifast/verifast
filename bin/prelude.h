@@ -284,6 +284,10 @@ lemma void integer_unique(int *p);
     requires [?f]integer(p, ?v);
     ensures [f]integer(p, v) &*& f <= 1;
 
+lemma void int__unique(int *p);
+    requires [?f]int_(p, ?v);
+    ensures [f]int_(p, v) &*& f <= 1;
+
 lemma void integer_limits(int *p);
     requires [?f]integer(p, ?v);
     ensures [f]integer(p, v) &*& object_pointer_within_limits(p, sizeof(int)) == true &*& INT_MIN <= v &*& v <= INT_MAX;
@@ -355,6 +359,13 @@ predicate chars(char *array, int count; list<char> cs) =
         cs == nil
     :
         character(array, ?c) &*& chars(array + 1, count - 1, ?cs0) &*& cs == cons(c, cs0);
+
+fixpoint list<option<char> > chars__of<t>(void *typeId, t v);
+fixpoint t of_chars_<t>(void *typeId, list<option<char> > cs);
+
+lemma_auto(of_chars_<t>(typeId, chars__of<t>(typeId, v))) void of_chars__chars__of<t>(void *typeId, t v);
+requires true;
+ensures of_chars_<t>(typeId, chars__of<t>(typeId, v)) == v;
 
 lemma_auto void chars_to_chars_(char *array);
     requires [?f]chars(array, ?count, ?cs);

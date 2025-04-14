@@ -110,7 +110,7 @@ let rust_ghost_keywords = [
   "producing_box_pred"; "producing_handle_pred"; "producing_fresh_handle_pred"; "handle"; "any"; "split_fraction"; "by"; "merge_fractions";
   "unloadable_module"; "decreases"; "forall_"; "import_module"; "require_module"; ".."; "extends"; "permbased";
   "terminates"; "abstract_type"; "fix_auto"; "typeid"; "activating"; "truncating"; "typedef"; "fn_type"; "lem_type";
-  "type_pred_decl"; "type_pred_def"; "let_lft"
+  "type_pred_decl"; "type_pred_def"; "let_lft"; "on_unwind_ens"
 ]
 
 let java_keywords = [
@@ -218,6 +218,7 @@ type spec_clause = (* ?spec_clause *)
 | FuncTypeClause of string * type_expr list * (loc * string) list
 | RequiresClause of asn
 | EnsuresClause of asn
+| OnUnwindEnsuresClause of asn
 | TerminatesClause of loc
 | AssumeCorrectClause of loc
 
@@ -647,7 +648,7 @@ and
         (_, Kwd "]") 
       ] ->
       if sign_big_int size <= 0 then raise (ParseException (lsize, "Array must have size > 0."));
-      fun t -> f (StaticArrayTypeExpr (l, t, int_of_big_int size))
+      fun t -> f (StaticArrayTypeExpr (l, t, LiteralConstTypeExpr (lsize, int_of_big_int size)))
     end
     ]; 
     [%l f = parse_declarator_suffix f]
@@ -668,7 +669,7 @@ and
   let tx =
     match tx, init with
       ArrayTypeExpr (l, elemTp), Some (InitializerList (_, es)) when language = CLang ->
-      StaticArrayTypeExpr (l, elemTp, List.length es)
+      StaticArrayTypeExpr (l, elemTp, LiteralConstTypeExpr (l, List.length es))
     | _ -> tx
   in
   register_varname x;
@@ -805,8 +806,8 @@ and
             (_, Kwd ";");
             [%l spec = opt parse_spec]
           ] ->
-          let contract = check_for_contract spec l "Function type declaration should have contract." (fun (pre, post) -> (pre, post, false)) in
-          [FuncTypeDecl (l, Real, rt, g, tparams, ftps, ps, contract)]
+          let (pre, post, terminates) = check_for_contract spec l "Function type declaration should have contract." (fun (pre, post) -> (pre, post, false)) in
+          [FuncTypeDecl (l, Real, rt, g, tparams, ftps, ps, (pre, ("result", post), terminates))]
         | [ (_, Kwd ";") ] ->
           begin match rt with
           | None -> raise (ParseException (l, "Void not allowed here."))
@@ -836,8 +837,8 @@ and
         (_, Kwd ";");
         [%l spec = opt parse_spec]
       ] -> 
-      let contract = check_for_contract spec l "Function type declaration should have contract." (fun (pre, post) -> (pre, post, false)) in
-      g, [FuncTypeDecl (l, Real, rt, g, tparams, ftps, ps, contract); TypedefDecl (l, ManifestTypeExpr (lp, PtrType (FuncType g)), g, [])]
+      let (pre, post, terminates) = check_for_contract spec l "Function type declaration should have contract." (fun (pre, post) -> (pre, post, false)) in
+      g, [FuncTypeDecl (l, Real, rt, g, tparams, ftps, ps, (pre, ("result", post), terminates)); TypedefDecl (l, ManifestTypeExpr (lp, PtrType (FuncType g)), g, [])]
     end
     ]
   ] -> pop_typedef_scope (); register_typedef g; ds
@@ -871,7 +872,7 @@ and
   ] ->
   let ds = check_function_for_contract d in
   begin match ds with
-    [Func (l, k, tparams, t, g, ps, gc, ft, Some (pre, post), terminates, ss, _, _)] ->
+    [Func (l, k, tparams, t, g, ps, gc, ft, Some (pre, (_, post)), terminates, ss, _, _)] ->
     begin match pre, post with
       ExprAsn (_, False _), _ | False _, _ | _, False _ -> ()
     | _ -> raise (ParseException (l, "Function marked 'noreturn' must declare 'ensures false'."))
@@ -894,7 +895,7 @@ and check_for_contract: 'a. 'a option -> loc -> string -> (asn * asn -> 'a) -> '
 and check_function_for_contract d =
   match d with
   | Func(l, k, tparams, t, g, ps, gc, ft, contract, terminates, ss, virt, overrides) ->
-    let contract = check_for_contract contract l "Function declaration should have a contract." (fun co -> co) in
+    let contract = check_for_contract contract l "Function declaration should have a contract." (fun (pre, post) -> (pre, ("result", post))) in
     [Func(l, k, tparams, t, g, ps, gc, ft, Some contract, terminates, ss, virt, overrides)]
   | _ -> [d]
 and
@@ -1035,7 +1036,7 @@ and
     [%l (ftps, ps) = parse_functype_paramlists]; 
     (_, Kwd ";"); 
     [%l (pre, post, terminates) = parse_spec] 
-  ] -> [FuncTypeDecl (l, Ghost, rt, g, tps, ftps, ps, (pre, post, terminates))]
+  ] -> [FuncTypeDecl (l, Ghost, rt, g, tps, ftps, ps, (pre, ("result", post), terminates))]
 | [ (l, Kwd "unloadable_module"); 
     (_, Kwd ";") 
   ] -> [UnloadableModuleDecl l]
@@ -1116,7 +1117,7 @@ and
             [ReturnStmt (l, Some measure)])])], l), false, []);
         Func (l, Fixpoint, tparams, Some rt, g, ps, false, None, None, false, Some ([ReturnStmt (l, Some (call "fix" [Var (l, gdef_curried); Var (l, gmeasure); call iargs (List.map (fun (t, x) -> Var (l, x)) ps)]))], l), false, []);
         Func (l, Lemma (kwd = "fixpoint_auto", None), tparams, None, g ^ "_def", ps, false, None,
-          Some (Operation (l, Le, [IntLit (l, zero_big_int, true, false, NoLSuffix); measure]), Operation (l, Eq, [call g (List.map (fun (t, x) -> Var (l, x)) ps); bodyExpr])),
+          Some (Operation (l, Le, [IntLit (l, zero_big_int, true, false, NoLSuffix); measure]), ("result", Operation (l, Eq, [call g (List.map (fun (t, x) -> Var (l, x)) ps); bodyExpr]))),
           false,
           Some ([
             IfStmt (l, Operation (l, Neq, [call g (List.map (fun (t, x) -> Var (l, x)) ps); bodyExpr]), [
@@ -1257,12 +1258,12 @@ and
         f = function%parser
         | [ (_, Kwd ";"); 
             [%l (nonghost_callers_only, ft, co, terminates) = parse_spec_clauses] 
-          ] -> Func (l, k, tparams, t, g, ps, nonghost_callers_only, ft, co, terminates, None, false, [])
+          ] -> Func (l, k, tparams, t, g, ps, nonghost_callers_only, ft, Option.map (fun (pre, post) -> (pre, ("result", post))) co, terminates, None, false, [])
         | [ [%l (nonghost_callers_only, ft, co, terminates) = parse_spec_clauses]; 
             (_, Kwd "{"); 
             parse_stmts as ss; 
             (closeBraceLoc, Kwd "}") 
-          ] -> Func (l, k, tparams, t, g, ps, nonghost_callers_only, ft, co, terminates, Some (ss, closeBraceLoc), false, [])
+          ] -> Func (l, k, tparams, t, g, ps, nonghost_callers_only, ft, Option.map (fun (pre, post) -> (pre, ("result", post))) co, terminates, Some (ss, closeBraceLoc), false, [])
         ]
       ] -> pop_typedef_scope (); f
     | [ [%l () = (fun s -> if k = Regular && tparams = [] && t <> None then () else raise Stream.Failure)];
@@ -1279,7 +1280,7 @@ and
       let t =
         match t, init with
           ArrayTypeExpr (l, elemTp), Some (InitializerList (_, es)) ->
-          StaticArrayTypeExpr (l, elemTp, List.length es)
+          StaticArrayTypeExpr (l, elemTp, LiteralConstTypeExpr (l, List.length es))
         | _ -> t
       in
       Global (l, t, g, init)
@@ -2131,7 +2132,7 @@ and parse_array_braces te = function%parser
         [%l te = parse_array_braces te] 
       ] ->
         if sign_big_int size <= 0 then raise (ParseException (lsize, "Array must have size > 0."));
-        StaticArrayTypeExpr (l, te, int_of_big_int size)
+        StaticArrayTypeExpr (l, te, LiteralConstTypeExpr (l, int_of_big_int size))
     | [ (_, Kwd "]") ] ->
       ArrayTypeExpr (l, te)
     end
@@ -2181,7 +2182,7 @@ and
     let tx =
       match tx, init with
         ArrayTypeExpr (l, elemTp), Some (InitializerList (_, es)) when language = CLang ->
-        StaticArrayTypeExpr (l, elemTp, List.length es)
+        StaticArrayTypeExpr (l, elemTp, LiteralConstTypeExpr (l, List.length es))
       | _ -> tx
     in
     DeclStmt(type_expr_loc te, (lx, Some tx, x, init, (ref false, ref None))::ds)
@@ -2237,7 +2238,7 @@ and
   ] -> CoefAsn (l, coef, p)
 | [ (l, Kwd "ensures"); 
     parse_asn as p 
-  ] -> EnsuresAsn (l, p)
+  ] -> EnsuresAsn (l, "result", p)
 and
   parse_pointsto_rhs = function%parser
 | [ (_, Kwd "_") ] -> DummyPat

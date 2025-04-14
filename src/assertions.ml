@@ -139,10 +139,10 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let ((_, (_, _, _, _, symb, _, _)), p__opt) = List.assoc (fparent, fname) field_pred_map in
     let tpenv = List.combine tparams targs in
     let frange = instantiate_type tpenv frange in
-    if fghost = Real then begin
-      match tv with
-        Some tv -> assume_bounds tv frange
-      | None -> ()
+    begin match fghost, tv, kind with
+    | Real, Some tv, RegularPointsTo -> assume_bounds tv frange
+    | Real, Some tv, MaybeUninit -> assume_bounds tv (option_type frange)
+    | _ -> ()
     end;
     (* automatic generation of t1 != t2 if t1.f |-> _ &*& t2.f |-> _ *)
     begin fun cont ->
@@ -542,7 +542,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let (_, tparams, ctormap, _, _, _, _, _, _) = List.assoc i inductivemap in
       let rec iter cs =
         match cs with
-          WSwitchAsnClause (lc, cn, pats, patsInfo, p)::cs ->
+          WSwitchAsnClause (lc, cn, full_cn, pats, patsInfo, p)::cs ->
           branch
             (fun _ ->
                let (_, (_, tparams, _, tps, cs)) = List.assoc cn ctormap in
@@ -601,8 +601,8 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | CoefAsn (l, coef', body) ->
       evalpat true ghostenv env coef' RealType RealType $. fun ghostenv env coef' ->
       produce_asn_core_with_post typeid_env tpenv h ghostenv env body (real_mul l coef coef') size_first size_all assuming cont_with_post
-    | EnsuresAsn (l, body) ->
-      cont_with_post h ghostenv env (Some body)
+    | EnsuresAsn (l, result_var, body) ->
+      cont_with_post h ghostenv env (Some (result_var, body))
     | WPredExprAsn (l, e, pts, inputParamCount, pats) ->
       let symb = eval None env e in
       let pts' = instantiate_types tpenv pts in
@@ -812,14 +812,14 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       result
   and lookup_integer__chunk h0 env l tp t =
     match int_rank_and_signedness tp with
-      Some (k, signedness) ->
+      Some (k, signedness) when match dialect with Some Rust -> false | _ -> true ->
       begin match lookup_integer__chunk_core h0 t k signedness with
         None -> assert_false h0 env l ("No matching points-to chunk: integer_(" ^ ctxt#pprint t ^ ", " ^ ctxt#pprint (rank_size_term k) ^ ", " ^ (if signedness = Signed then "true" else "false") ^ ", _)") None
       | Some v ->
         assert_has_type env t tp h0 env l "This read might violate C's effective types rules" None;
         v
       end
-    | None ->
+    | _ ->
     match tp with
       StructType (sn, targs) ->
       let (_, tparams, body, _, structTypeidFunc) = List.assoc sn structmap in
@@ -846,7 +846,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             in
             prover_convert_term v tp' tp
           in
-          let (_, csym, _, _) = List.assoc sn struct_accessor_map in
+          let (_, csym, _, _, _) = List.assoc sn struct_accessor_map in
           ctxt#mk_app csym vs
       end
     | _ ->
@@ -908,6 +908,36 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       Some symb -> symb
     | None -> static_error l ("Dereferencing pointers of type " ^ string_of_type pointeeType ^ " is not yet supported.") None
   
+  let read_generic_array h env l a i tp =
+    let array_symb = array_symb () in
+    let slices =
+      head_flatmap
+        begin function
+          Chunk (g, [tp'], coef, [a'; n'; vs'], _)
+            when
+              predname_eq g (array_symb, true) &&
+              unify tp' tp &&
+              definitely_equal a' a &&
+              ctxt#query (ctxt#mk_and (ctxt#mk_le (ctxt#mk_intlit 0) i) (ctxt#mk_lt i n')) ->
+            [mk_nth tp i vs']
+        | _ -> []
+        end
+        h
+    in
+    match slices with
+      None ->
+        begin match lookup_points_to_chunk_core h (generic_points_to_symb ()) [tp] (mk_ptr_add_ l env a i tp) with
+          None ->
+          assert_false h env l
+            (sprintf "No matching array chunk: array::<%s>(%s, 0<=%s<n, _)"
+                (string_of_type tp)
+                (ctxt#pprint a)
+                (ctxt#pprint i))
+            None
+        | Some v -> v
+        end
+    | Some v -> v
+
   let read_integer__array h env l a i tp =
     let (k, signedness) =
       match int_rank_and_signedness tp with
@@ -949,6 +979,9 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | Some v -> v
 
   let read_c_array h env l a i tp =
+    match dialect with
+      Some Rust -> read_generic_array h env l a i tp
+    | _ ->
     match try_pointee_pred_symb0 tp with
       None -> read_integer__array h env l a i tp
     | Some (_, predsym, _, array_predsym, _, _, _, _, _, _, _, _) ->
@@ -1408,7 +1441,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let (_, tparams, ctormap, _, _, _, _, _, _) = List.assoc i inductivemap in
       let rec iter cs =
         match cs with
-          WSwitchAsnClause (lc, cn, pats, patsInfo, p)::cs ->
+          WSwitchAsnClause (lc, cn, full_cn, pats, patsInfo, p)::cs ->
           let (_, (_, tparams, _, tps, ctorsym)) = List.assoc cn ctormap in
           let Some pts = zip pats tps in
           let (xs, xenv) =
@@ -1455,8 +1488,8 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | CoefAsn (l, coefpat, WPointsTo (_, e, tp, kind, rhs)) -> points_to l (SrcPat coefpat) e tp kind (SrcPat rhs)
     | CoefAsn (l, coefpat, WPredAsn (_, g, is_global_predref, targs, pat0, pats)) -> pred_asn l (SrcPat coefpat) g is_global_predref targs (srcpats pat0) (srcpats pats)
     | CoefAsn (l, coefpat, WInstPredAsn (_, e_opt, st, cfin, tn, g, index, pats)) -> inst_call_pred l (SrcPat coefpat) e_opt st tn g index pats
-    | EnsuresAsn (l, body) ->
-      cont_with_post [] h ghostenv env env' None (Some body)
+    | EnsuresAsn (l, result_var, body) ->
+      cont_with_post [] h ghostenv env env' None (Some (result_var, body))
     | WPredExprAsn (l, e, pts, inputParamCount, pats) -> pred_expr_asn l real_unit_pat e pts inputParamCount pats
     | CoefAsn (l, coefpat, WPredExprAsn (_, e, pts, inputParamCount, pats)) -> pred_expr_asn l (SrcPat coefpat) e pts inputParamCount pats
     )
@@ -1520,9 +1553,9 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             (*| ForallAsn _ -> cont conds*)
             | WSwitchAsn(_, e, i, cases) when expr_is_fixed inputVars e ->
               flatmap 
-                (fun (WSwitchAsnClause (l, casename, args, boxinginfo, asn)) ->
+                (fun (WSwitchAsnClause (l, ctorname, full_ctorname, args, boxinginfo, asn)) ->
                   if (List.length args) = 0 then
-                    let cond = WOperation (l, Eq, [e; WVar (l, casename, PureFuncName [])], AnyType) in
+                    let cond = WOperation (l, Eq, [e; WVar (l, full_ctorname, PureFuncName [])], AnyType) in
                     iter (cond :: conds) asn cont
                   else 
                    []
@@ -2242,7 +2275,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           None -> cont None
         | Some ((coef, v), h) ->
           let tpenv = List.combine tparams wanted_targs in
-          let (_, _, getters, _) = List.assoc sn struct_accessor_map in
+          let (_, _, getters, _, _) = List.assoc sn struct_accessor_map in
           let chunks = List.map2 begin fun (fn', (_, Real, ft', _, _)) (_, getter) ->
             let fv = prover_convert_term (ctxt#mk_app getter [v]) ft' (instantiate_type tpenv ft') in
             let ((_, (_, _, _, _, symb', _, _)), _) = List.assoc (sn, fn') field_pred_map in
@@ -2326,7 +2359,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             with
               None -> cont None
             | Some ((coef, v), h) ->
-              let (_, csym, _, _) = List.assoc sn struct_accessor_map in
+              let (_, csym, _, _, _) = List.assoc sn struct_accessor_map in
               cont (Some (Chunk ((generic_points_to_symb (), true), [wanted_targ], coef, [structPointerTerm; ctxt#mk_app csym [v]], None)::h))
             end
           | _ ->
@@ -2341,7 +2374,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             | Some (coef, h) ->
               let rec iter h vs = function
                 [] ->
-                let (_, csym, _, _) = List.assoc sn struct_accessor_map in
+                let (_, csym, _, _, _) = List.assoc sn struct_accessor_map in
                 cont (Some (Chunk ((generic_points_to_symb (), true), [wanted_targ], coef, [structPointerTerm; ctxt#mk_app csym (List.rev vs)], None)::h))
               | (fn, (_, Real, ft, _, _))::fds ->
                 let ((_, (_, _, _, _, symb, _, _)), _) = List.assoc (sn, fn) field_pred_map in

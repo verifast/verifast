@@ -1,6 +1,7 @@
 (library
  (name cxx_frontend_stubs)
  (libraries stdint capnp capnp.unix)
+ (flags (:standard -w -55)) ; -55: inlining impossible
  (wrapped false))
 (rule
  (targets stubs_ast.mli stubs_ast.ml)

@@ -1,0 +1,7 @@
+[package]
+name = "simple_mutex"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+platform = { path = "../../unverified/platform" }

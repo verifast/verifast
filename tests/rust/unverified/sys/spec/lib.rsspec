@@ -40,14 +40,13 @@ mod locks {
         //@ req exists::<pred()>(?P) &*& P();
         //@ ens SysMutex(result, P);
 
-        // TODO: Use `current_thread` var in `SysMutex_locked` like in the `threading.h`. The `SysMutex` interface does not need `thread_token` in the contracts.
         unsafe fn lock<'a>(self: &'a Mutex);
-        //@ req thread_token(?t) &*& [?q]SysMutex_share(self, ?P);
-        //@ ens thread_token(t) &*& [q]SysMutex_share(self, P) &*& SysMutex_locked(self, P, t) &*& P();
+        //@ req [?q]SysMutex_share(self, ?P);
+        //@ ens [q]SysMutex_share(self, P) &*& SysMutex_locked(self, P, currentThread) &*& P();
 
         unsafe fn unlock<'a>(self: &'a Mutex);
-        //@ req thread_token(?t) &*& SysMutex_locked(self, ?P, t) &*& P() &*& [?q]SysMutex_share(self, P);
-        //@ ens thread_token(t) &*& [q]SysMutex_share(self, P);
+        //@ req SysMutex_locked(self, ?P, currentThread) &*& P() &*& [?q]SysMutex_share(self, P);
+        //@ ens [q]SysMutex_share(self, P);
         
     }
     

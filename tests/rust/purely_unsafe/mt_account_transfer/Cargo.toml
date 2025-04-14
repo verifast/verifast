@@ -1,0 +1,8 @@
+[package]
+name = "mt_account_transfer"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+platform = { path = "../../unverified/platform" }
+simple_mutex = { path = "../simple_mutex" }

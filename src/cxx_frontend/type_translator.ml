@@ -106,7 +106,7 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
     let open R.ConstantArray in
     let elemCount = count_get ca in
     let elemType = translate (type_get ca) in
-    Ast.StaticArrayTypeExpr (loc, elemType, elemCount)
+    Ast.StaticArrayTypeExpr (loc, elemType, LiteralConstTypeExpr (loc, elemCount))
 
   and transl_incomplete_array (loc : Ast.loc) (ia : R.Node.t) : Ast.type_expr =
     Ast.ArrayTypeExpr (loc, translate ia)

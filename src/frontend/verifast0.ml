@@ -88,7 +88,7 @@ let rec c_string_of_type t =
   | UnionType un -> "union " ^ un
   | PtrType t -> c_string_of_type t ^ " *"
   | FuncType ft -> ft
-  | InlineFuncType rt -> Printf.sprintf "fn(?) -> %s" (c_string_of_type rt)
+  | InlineFuncType rt -> Printf.sprintf "unsafe fn(?) -> %s" (c_string_of_type rt)
   | PredType (tparams, ts, inputParamCount, inductiveness) ->
     let tparamsText = if tparams = [] then "" else "<" ^ String.concat ", " tparams ^ ">" in
     let paramTypesText =
@@ -119,7 +119,8 @@ let rec c_string_of_type t =
   | InferredRealType x -> x ^ "?"
   | InferredType (_, t) -> begin match !t with EqConstraint t -> c_string_of_type t | _ -> "?" end
   | ArrayType(t) -> (c_string_of_type t) ^ "[]"
-  | StaticArrayType(t, s) -> (c_string_of_type t) ^ "[" ^ (string_of_int s) ^ "]" 
+  | StaticArrayType(t, s) -> c_string_of_type t ^ "[" ^ c_string_of_type s ^ "]" 
+  | LiteralConstType n -> string_of_int n
   | ClassOrInterfaceName(n) -> n (* not a real type; used only during type checking *)
   | PackageName(n) -> n (* not a real type; used only during type checking *)
   | RefType(t) -> "ref " ^ (c_string_of_type t)
@@ -186,7 +187,8 @@ let rec java_string_of_type t =
   | InferredRealType x -> x ^ "?"
   | InferredType (_, t) -> begin match !t with EqConstraint t -> java_string_of_type t | _ -> "?" end
   | ArrayType(t) -> (java_string_of_type t) ^ "[]"
-  | StaticArrayType(t, s) -> (java_string_of_type t) ^ "[" ^ (string_of_int s) ^ "]" 
+  | StaticArrayType(t, s) -> java_string_of_type t ^ "[" ^ java_string_of_type s ^ "]" 
+  | LiteralConstType n -> string_of_int n
   | ClassOrInterfaceName(n) -> n (* not a real type; used only during type checking *)
   | PackageName(n) -> n (* not a real type; used only during type checking *)
   | RefType(t) -> "ref " ^ (java_string_of_type t)
@@ -210,6 +212,7 @@ let rec rust_string_of_type t =
   | Int (Unsigned, PtrRank) -> "usize"
   | Int (Signed, FixedWidthRank k) -> "i" ^ string_of_int ((1 lsl k) * 8)
   | Int (Unsigned, FixedWidthRank k) -> "u" ^ string_of_int ((1 lsl k) * 8)
+  | RustChar -> "char"
   | Float -> "f32"
   | Double -> "f64"
   | LongDouble -> "std::ffi::c_longdouble"
@@ -218,7 +221,7 @@ let rec rust_string_of_type t =
   | InductiveType (i, targs) -> i ^ "<" ^ String.concat ", " (List.map rust_string_of_type targs) ^ ">"
   | ObjType (l, []) -> "class " ^ l
   | ObjType (l, targs) -> "class " ^ l ^ "<" ^ String.concat ", " (List.map rust_string_of_type targs) ^ ">"
-  | StructType (sn, targs) -> "struct " ^ sn ^ (match targs with [] -> "" | _ -> "<" ^ String.concat ", " (List.map rust_string_of_type targs) ^ ">")
+  | StructType (sn, targs) -> sn ^ (match targs with [] -> "" | _ -> "<" ^ String.concat ", " (List.map rust_string_of_type targs) ^ ">")
   | UnionType un -> "union " ^ un
   | PtrType Void -> "*_"
   | PtrType t -> "*" ^ rust_string_of_type t
@@ -252,15 +255,22 @@ let rec rust_string_of_type t =
   | AnyType -> "any"
   | RealTypeParam x -> "<" ^ x ^ ">"
   | GhostTypeParam x -> x
+  | GhostTypeParamWithEqs (x, eqs) ->
+    let string_of_eq ((traitName, traitArgs, assocTypeName), t) =
+      Printf.sprintf "%s<%s>" traitName (String.concat ", " (List.map rust_string_of_type traitArgs @ [Printf.sprintf "%s = %s" assocTypeName (rust_string_of_type t)]))
+    in
+    x ^ ": " ^ String.concat ", " (List.map string_of_eq eqs)
   | InferredRealType x -> x ^ "?"
   | InferredType (_, t) -> begin match !t with EqConstraint t -> rust_string_of_type t | _ -> "?" end
   | ArrayType(t) -> (rust_string_of_type t) ^ "[]"
-  | StaticArrayType(t, s) -> (rust_string_of_type t) ^ "[" ^ (string_of_int s) ^ "]" 
+  | StaticArrayType(t, s) -> Printf.sprintf "[%s; %s]" (rust_string_of_type t) (rust_string_of_type s)
+  | LiteralConstType n -> string_of_int n
   | ClassOrInterfaceName(n) -> n (* not a real type; used only during type checking *)
   | PackageName(n) -> n (* not a real type; used only during type checking *)
   | RefType(t) -> "ref " ^ (rust_string_of_type t)
   | AbstractType x -> x
   | StaticLifetime -> "'static"
+  | ProjectionType (t, traitName, traitArgs, assocTypeName) -> Printf.sprintf "<%s as %s<%s>>::%s" (rust_string_of_type t) traitName (String.concat ", " (List.map rust_string_of_type traitArgs)) assocTypeName
 
 let string_of_type lang dialect =
   match lang, dialect with
@@ -321,6 +331,7 @@ type _ vfparam =
 | Vfparam_externs: string list vfparam
 | Vfparam_skip_specless_fns: bool vfparam (* Skip verification of functions for which the user did not provide a precondition and postcondition. This is the default behavior for C, C++ and Java but not for Rust. *)
 | Vfparam_ignore_ref_creation: bool vfparam
+| Vfparam_ignore_unwind_paths: bool vfparam (* In Rust, ignore control flow paths due to stack unwinding after a panic. *)
 
 let cast_vfarg: type t1 t2. t1 vfparam -> t1 -> t2 vfparam -> t2 option = fun p0 a0 p ->
   (* if Obj.magic p0 = Obj.magic p then Some (Obj.magic a0) else None *)
@@ -343,6 +354,7 @@ let cast_vfarg: type t1 t2. t1 vfparam -> t1 -> t2 vfparam -> t2 option = fun p0
   | Vfparam_externs, Vfparam_externs -> Some a0
   | Vfparam_skip_specless_fns, Vfparam_skip_specless_fns -> Some a0
   | Vfparam_ignore_ref_creation, Vfparam_ignore_ref_creation -> Some a0
+  | Vfparam_ignore_unwind_paths, Vfparam_ignore_unwind_paths -> Some a0
   | _ -> None
 
 type _ vfparam_info =
@@ -374,6 +386,7 @@ let vfparam_info_of: type a. a vfparam -> a vfparam_info = function
 | Vfparam_externs -> string_list_param
 | Vfparam_skip_specless_fns -> BoolParam
 | Vfparam_ignore_ref_creation -> BoolParam
+| Vfparam_ignore_unwind_paths -> BoolParam
 
 let default_vfarg: type ta. ta vfparam -> ta = fun p ->
   match vfparam_info_of p with
@@ -406,6 +419,7 @@ let vfparams = [
   "target", (Vfparam Vfparam_data_model, "Target platform of the program being verified. Determines the size of pointer and integer types. Supported targets: " ^ String.concat ", " (List.map fst data_models));
   "skip_specless_fns", (Vfparam Vfparam_skip_specless_fns, "Skip verification of functions for which the user did not provide a precondition and postcondition. This is the default behavior for C, C++ and Java but not for Rust.");
   "ignore_ref_creation", (Vfparam Vfparam_ignore_ref_creation, "In Rust, treat &E or &mut E like &raw E. This is unsound!");
+  "ignore_unwind_paths", (Vfparam Vfparam_ignore_unwind_paths, "In Rust, ignore control flow paths due to stack unwinding after a panic. This is sound only when compiling with -C panic=abort.");
 ]
 
 type vfbinding = Vfbinding: 'a vfparam * 'a -> vfbinding

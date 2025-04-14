@@ -357,6 +357,7 @@ let rec exec_cmds macros cwd parallel cmds =
         | [] -> error "Nothing to pop"
         end
       | ["del"; file] -> join_children (); Sys.remove (get_abs_path file)
+      | ["ifnotwindows"; line] -> if Vfconfig.platform <> Windows then exec_line line
       | ["ifnotmac"; line] -> if Vfconfig.platform <> MacOS then exec_line line
       | ["ifz3"; line] -> if Vfconfig.z3_present then exec_line line
       | ["ifz3v4.5"; line] -> if Vfconfig.z3v4dot5_present then exec_line line
@@ -384,6 +385,22 @@ let rec exec_cmds macros cwd parallel cmds =
         let line' = if cwd = "." then line else cwd ^ "$ " ^ line in
         Mutex.lock global_mutex;
         Sys.chdir (get_abs_path ".");
+        let negate_exit_status, line =
+          if line <> "" && line.[0] = '!' then
+            true, String.sub line 1 (String.length line - 1)
+          else
+            false, line
+        in
+        let expected_output, line =
+          let r = Str.regexp {|\[ "\$(\([^)]*\))" = \$'\([^']*\)' ]$|} in
+          if Str.string_match r line 0 then
+            let expected_output = Str.matched_group 2 line in
+            let line = Str.matched_group 1 line in
+            let expected_output = Str.global_replace (Str.regexp_string "\\n") "\n" expected_output in
+            Some expected_output, line
+          else
+            None, line
+        in
         let cin = Unix.open_process_in (line ^ " 2>&1") in
         Mutex.unlock global_mutex;
         let current_alarm = ref None in
@@ -406,6 +423,12 @@ let rec exec_cmds macros cwd parallel cmds =
             try
               while true do
                 let line = input_line cin in
+                let line =
+                  if String.ends_with ~suffix:"\r" line then
+                    String.sub line 0 (String.length line - 1)
+                  else
+                    line
+                in
                 push output line;
                 if !verbose then do_print_line (Printf.sprintf "[%d]%s" pid line)
               done
@@ -416,7 +439,18 @@ let rec exec_cmds macros cwd parallel cmds =
             if !verbose then print_endline (Printf.sprintf "[%d]%f seconds\n" pid (time1 -. time0));
             let Some alarm = !current_alarm in
             cancel_alarm alarm;
-            if status <> Unix.WEXITED 0 then begin
+            let success =
+              match expected_output with
+                None ->
+                begin match status with
+                  Unix.WEXITED n -> (n = 0) <> negate_exit_status
+                | _ -> false
+                end
+              | Some expected_output ->
+                let actual_output = String.concat "\n" (List.rev !output) in
+                (String.trim actual_output = String.trim expected_output) <> negate_exit_status
+            in
+            if not success then begin
               let msg =
                 if !verbose then
                   Printf.sprintf "=== Process %d %s ===" pid (string_of_status status)

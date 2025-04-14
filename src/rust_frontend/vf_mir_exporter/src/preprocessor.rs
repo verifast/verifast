@@ -159,6 +159,7 @@ pub fn preprocess(
     let mut output = String::new();
     let mut inside_word = false;
     let mut brace_depth = 0;
+    let mut bracket_depth = 0;
     let mut last_token_was_fn = false;
     let mut next_block_is_fn_body = false;
     let mut fn_body_brace_depth = -1;
@@ -197,15 +198,18 @@ pub fn preprocess(
                     ';' => {
                         cs.next();
                         output.push(c);
-                        next_block_is_fn_body = false;
+                        if bracket_depth == 0 { // We are not inside an array type [T; N].
+                            next_block_is_fn_body = false;
+                        }
                     }
                     '{' => {
                         start_of_block = cs.pos;
                         cs.next();
                         output.push('{');
                         if next_block_is_fn_body {
-                            assert!(fn_body_brace_depth == -1, "{}:{}: nested functions are not yet supported", start_of_block.line, start_of_block.column);
-                            fn_body_brace_depth = brace_depth;
+                            if fn_body_brace_depth == -1 {
+                                fn_body_brace_depth = brace_depth;
+                            }
                             next_block_is_fn_body = false;
                         }
                         brace_depth += 1;
@@ -225,6 +229,16 @@ pub fn preprocess(
                             fn_body_brace_depth = -1;
                         }
                         output.push('}');
+                    }
+                    '[' => {
+                        cs.next();
+                        output.push('[');
+                        bracket_depth += 1;
+                    }
+                    ']' => {
+                        cs.next();
+                        output.push(']');
+                        bracket_depth -= 1;
                     }
                     '/' => {
                         cs.next();

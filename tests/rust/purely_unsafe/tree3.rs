@@ -1,3 +1,5 @@
+// verifast_options{ignore_unwind_paths}
+
 /*@
 
 lem_auto bitand_zero(y: usize)
@@ -268,8 +270,6 @@ impl Tree {
 struct CountingTreeVisitor;
 
 /*@
-
-inductive wrap<t> = wrap(t);
 
 pred_fam_inst TreeVisitor(typeid(CountingTreeVisitor))(visitor_data: *mut u8, elems_todo: list< *mut u8 >, maxCount: wrap<i32>) =
     maxCount == wrap(?m) &*& m <= 0x7fffffff &*&
