@@ -11,17 +11,6 @@ lemma_auto void length_nonnegative<t>(list<t> xs)
     }
 }
 
-lemma void list_map_equal_length<t, s> (list<t> xs, fixpoint(t,s) f)
-    requires true;
-    ensures length(xs) == length(map(f, xs));
-{
-    switch (xs) {
-        case nil:
-        case cons(x, xs0):
-            list_map_equal_length(xs0, f);
-    }
-}
-
 lemma void append_nil<t>(list<t> xs)
     requires true;
     ensures append(xs, nil) == xs;
