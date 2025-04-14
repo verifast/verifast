@@ -18,7 +18,7 @@ lemma void list_map_equal_length<t, s> (list<t> xs, fixpoint(t,s) f)
     switch (xs) {
         case nil:
         case cons(x, xs0):
-            list_map_equal_length(xs0);
+            list_map_equal_length(xs0, f);
     }
 }
 
