@@ -15,7 +15,7 @@
 .requires CRT/list.gh#length_append
 .requires CRT/list.gh#length_drop
 .requires CRT/list.gh#length_nonnegative
-.requires CRT/list.gh#update_nth_equal
+.requires CRT/list.gh#list_map_equal_length
 .requires CRT/list.gh#length_remove
 .requires CRT/list.gh#length_take
 .requires CRT/list.gh#length_update
