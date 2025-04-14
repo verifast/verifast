@@ -43,6 +43,10 @@ lemma_auto void length_nonnegative<t>(list<t> xs);
     requires true;
     ensures length(xs) >= 0;
 
+lemma_auto void list_map_equal_length<t, s> (list<t> xs, fixpoint(t,s) f);
+    requires true;
+    ensures length(xs)==length(map(f, xs));
+
 fixpoint list<t> append<t>(list<t> xs, list<t> ys) {
     switch (xs) {
         case nil: return ys;
