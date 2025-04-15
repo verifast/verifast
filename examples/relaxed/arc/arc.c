@@ -25,7 +25,7 @@ lemma void counting_done();
 
 /*@
 
-predicate Acq(predicate() P); // P will be available after the next acquire fence
+predicate Acq(int threadId, predicate() P); // P will be available after the next acquire fence in the specified thread
 
 predicate relaxed_ullong(unsigned long long *p; predicate(unsigned long long) inv);
 predicate relaxed_ullong_tied_resource(unsigned long long *p, predicate() P);
@@ -79,10 +79,10 @@ requires
     [?f]relaxed_ullong(p, ?inv) &*& relaxed_ullong_tied_resource(p, ?P) &*&
     is_fetch_and_decrement_release_ghop(?ghop, f, p, inv, P, ?pre, ?post) &*& pre();
 @*/
-//@ ensures Acq(post(result));
+//@ ensures Acq(currentThread, post(result));
 
 void fence_acquire();
-//@ requires Acq(?P);
+//@ requires Acq(currentThread, ?P);
 //@ ensures P();
 
 struct arc {
@@ -208,6 +208,6 @@ void arc_drop(arc arc)
       //@ leak arc_inv(arc, countingId)(_);
       free(arc);
     }
-    //@ if (counter0 != 1) leak Acq(_);
+    //@ if (counter0 != 1) leak Acq(_, _);
   }
 }
