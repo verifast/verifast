@@ -306,14 +306,14 @@ lemma void foreach_append<t>(list<t> xs, list<t> ys)
     }
 }
 
-lemma void list_map_equal_length<t, s> (list<t> xs, fixpoint(t,s) f)
+lemma void length_map<t, s>(fixpoint(t, s) f, list<t> xs)
     requires true;
     ensures length(xs) == length(map(f, xs));
 {
     switch (xs) {
         case nil:
         case cons(x, xs0):
-            list_map_equal_length(xs0, f);
+            length_map(f, xs0);
     }
 }
 
