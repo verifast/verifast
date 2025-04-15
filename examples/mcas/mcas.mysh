@@ -1,3 +1,3 @@
-ifz3v4.5 verifast -prover z3v4.5 -c -emit_vfmanifest bitops_ex.c
+verifast -prover z3v4.5 -c -emit_vfmanifest bitops_ex.c
 verifast -fno-strict-aliasing -assume_no_provenance threading.o bitops_ex.o popl20_prophecies.vfmanifest atomics.c ghost_cells_ex.c listex_ex.c assoc_list.c ghost_lists.c ghost_counters.c rdcss.c mcas.c mcas_client.c
 del bitops_ex.vfmanifest
