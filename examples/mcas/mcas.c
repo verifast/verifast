@@ -614,17 +614,6 @@ lemma void nth_map<a, b>(int n, fixpoint(a, b) f, list<a> xs)
     }
 }
 
-lemma void length_map<a, b>(fixpoint(a, b) f, list<a> xs)
-    requires true;
-    ensures length(map(f, xs)) == length(xs);
-{
-    switch (xs) {
-    case nil:
-    case cons(x0, xs0):
-        length_map(f, xs0);
-    }
-}
-
 lemma void es_apply_lemma(int k, list<pair<void *, pair<void *, void *> > > es, list<pair<void *, void *> > cs)
     requires distinct(mapfst(es)) == true &*& 0 <= k &*& k < length(es) &*& mem_es(es, cs) == true;
     ensures

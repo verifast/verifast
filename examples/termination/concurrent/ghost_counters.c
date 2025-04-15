@@ -216,17 +216,6 @@ lemma void sum_raw_ghost_list_member_handle_fracs_lt_n(int id, list<pair<real, i
     }
 }
 
-lemma void length_map<a, b>(fixpoint(a, b) f, list<a> xs)
-    requires true;
-    ensures length(map(f, xs)) == length(xs);
-{
-    switch (xs) {
-        case nil:
-        case cons(x0, xs0):
-            length_map(f, xs0);
-    }
-}
-
 lemma void raw_ghost_list_remove_elems()
     requires raw_ghost_list<unit>(?id, ?n, ?elems) &*& foreachp(?cs, chunk(id)) &*& real_sum(map(fst, cs)) == real_of_int(length(elems));
     ensures raw_ghost_list<unit>(id, n, nil);
