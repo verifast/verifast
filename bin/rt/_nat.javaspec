@@ -53,5 +53,11 @@ lemma void minuslemma(int x, int y);
   requires 0 < x && x <= y;
   ensures succ(nat_of_int(y - x)) == nat_of_int(y - int_of_nat(prev(nat_of_int(x))));
 
+fixpoint list<t> repeat<t>(nat n, t x) {
+  switch (n) {
+    case zero: return nil;
+    case succ(n0): return cons(x, repeat(n0, x));
+  }
+}
 
 @*/
