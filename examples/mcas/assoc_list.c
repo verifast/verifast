@@ -4,17 +4,6 @@
 
 /*@
 
-lemma void length_map<a, b>(fixpoint(a, b) f, list<a> xs)
-    requires true;
-    ensures length(map(f, xs)) == length(xs);
-{
-    switch (xs) {
-    case nil:
-    case cons(x0, xs0):
-        length_map(f, xs0);
-    }
-}
-
 lemma void length_mapfst<a, b>(list<pair<a, b> > xys)
     requires true;
     ensures length(mapfst(xys)) == length(xys);

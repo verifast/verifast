@@ -226,6 +226,10 @@ fixpoint list<b> map<a, b>(fixpoint(a x, b) requires x < xs f, list<a> xs) {
     }
 }
 
+lemma_auto(map(f, xs)) void length_map<a, b>(fixpoint(a, b) f, list<a> xs);
+    requires true;
+    ensures length(xs) == length(map(f, xs));
+
 fixpoint bool forall<t>(list<t> xs, fixpoint(t, bool) fp) {
     switch (xs) {
         case nil: return true;

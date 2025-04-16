@@ -20,8 +20,8 @@ enum memory_order {
 //@ predicate Write(int *loc, predicate(int) Q);
 //@ predicate Read(int *loc, predicate(int) Q);
 //@ predicate RMW(int *loc, predicate(int) Q);
-//@ predicate RelFenced(predicate() P);
-//@ predicate AcqFenced(predicate() P);
+//@ predicate RelFenced(int threadId, predicate() P);
+//@ predicate AcqFenced(int threadId, predicate() P);
 
 //@ predicate_ctor apply(predicate(int) Q, int value)() = Q(value);
 //@ predicate_ctor erased(predicate(int) Q, int value0)(int value) = value == value0 ? true : Q(value);
@@ -57,7 +57,7 @@ lemma void convert_to_atomic_rmw(int *loc, predicate(int) Q);
 // --- Atomic stores ------------------------------------
 
 void atomic_store_explicit(int *loc, int value, enum memory_order order);
-    //@ requires Write(loc, ?Q) &*& (is_release(order) ? Q(value) : RelFenced(apply(Q,value)));
+    //@ requires Write(loc, ?Q) &*& (is_release(order) ? Q(value) : RelFenced(currentThread, apply(Q,value)));
     //@ ensures Write(loc, Q);
 
 void atomic_store_release(int *loc, int value);
@@ -65,7 +65,7 @@ void atomic_store_release(int *loc, int value);
     //@ ensures Write(loc, Q);
 
 void atomic_store_relaxed(int *loc, int value);
-    //@ requires Write(loc, ?Q) &*& RelFenced(apply(Q,value));
+    //@ requires Write(loc, ?Q) &*& RelFenced(currentThread, apply(Q,value));
     //@ ensures Write(loc, Q);
 
 // --- Atomic loads -------------------------------------
@@ -82,7 +82,7 @@ int atomic_read_acquire(int *loc);
 
 int atomic_load_explicit(int *loc, enum memory_order order);
     //@ requires exists<fixpoint(int, bool)>(?cond) &*& Read(loc, ?Q);
-    //@ ensures cond(result) ? Read(loc, erased(Q, result)) &*& (is_acquire(order) ? Q(result) : AcqFenced(apply(Q,result))) : Read(loc, Q);
+    //@ ensures cond(result) ? Read(loc, erased(Q, result)) &*& (is_acquire(order) ? Q(result) : AcqFenced(currentThread, apply(Q,result))) : Read(loc, Q);
 
 
 int atomic_load_acquire(int *loc);
@@ -91,21 +91,21 @@ int atomic_load_acquire(int *loc);
 
 int atomic_load_relaxed(int *loc);
     //@ requires exists<fixpoint(int, bool)>(?cond) &*& Read(loc, ?Q);
-    //@ ensures cond(result) ? Read(loc, erased(Q, result)) &*& AcqFenced(apply(Q,result)) : Read(loc, Q);
+    //@ ensures cond(result) ? Read(loc, erased(Q, result)) &*& AcqFenced(currentThread, apply(Q,result)) : Read(loc, Q);
 
 
 // --- Fences -------------------------------------------
 
 void atomic_thread_fence(enum memory_order order);
-    //@ requires exists<predicate()>(?P) &*& is_acquire(order) ? AcqFenced(P) : P();
-    //@ ensures is_release(order) ? RelFenced(P) : P();
+    //@ requires exists<predicate()>(?P) &*& is_acquire(order) ? AcqFenced(currentThread, P) : P();
+    //@ ensures is_release(order) ? RelFenced(currentThread, P) : P();
 
 void fence_release();
     //@ requires exists<predicate()>(?P) &*& P();
-    //@ ensures RelFenced(P);
+    //@ ensures RelFenced(currentThread, P);
 
 void fence_acquire();
-    //@ requires AcqFenced(?P);
+    //@ requires AcqFenced(currentThread, ?P);
     //@ ensures P();
 
 
@@ -145,23 +145,19 @@ lemma void merge_Read(int *loc, predicate(int) Q1, predicate(int) Q2);
     ensures Read(loc, sep1(Q1, Q2));
 
 lemma void split_RelFenced(int *loc, predicate() P1, predicate() P2);
-    requires RelFenced(sep0(P1, P2));
-    ensures RelFenced(P1) &*& RelFenced(P2);
+    requires RelFenced(?threadId, sep0(P1, P2));
+    ensures RelFenced(threadId, P1) &*& RelFenced(threadId, P2);
 
 lemma void merge_RelFenced(int *loc, predicate() P1, predicate() P2);
-    requires RelFenced(P1) &*& RelFenced(P2);
-    ensures RelFenced(sep0(P1, P2));
+    requires RelFenced(?threadId, P1) &*& RelFenced(threadId, P2);
+    ensures RelFenced(threadId, sep0(P1, P2));
 
-lemma void RelFenced_True_intro();
+lemma void RelFenced_True_intro(int threadId);
     requires true;
-    ensures RelFenced(True);
+    ensures RelFenced(threadId, True);
 
 lemma void RelFenced_elim();
-    requires RelFenced(?P);
-    ensures P();
-
-lemma void AcqFenced_elim();
-    requires RelFenced(?P);
+    requires RelFenced(_, ?P);
     ensures P();
 
 @*/
