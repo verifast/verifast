@@ -9,6 +9,7 @@ cd bin
   cd ..
 cd ..
 cd examples
+  verifast -c leftpad.c
   verifast -c -uppercase_type_params_carry_typeid generic_pred_ctors.c
   verifast -c -prover z3v4.5 -uppercase_type_params_carry_typeid generic_pred_ctors.c
   verifast -c mutually_recursive_fns_simple.c
@@ -364,6 +365,7 @@ cd examples
     verifast_both -c -disable_overflow_check InstanceOf.java
     verifast_both -c InterfaceLemmas.java
     verifast_both -c Iterator.java
+    verifast -c leftpad.java
     verifast_both -allow_assume -disable_overflow_check -c map.java
     verifast_both -c -disable_overflow_check NestedExprTest.java
     cd prodcons
@@ -469,6 +471,7 @@ cd tutorial_solutions
   verifast_both -target 32bit students.c
 cd ..
 cd tests
+  verifast -c issue766.c
   [ "$(verifast issue739.c)" = $'issue739.c\nissue739.c(1,11-13): Parse error: Bad fraction literal' ]
   [ "$(verifast issue731.c)" = $'issue731.c\nissue731.c(1,1-2,1): Parse error: Unterminated comment.' ]
   verifast_both -c chars__of_struct.c

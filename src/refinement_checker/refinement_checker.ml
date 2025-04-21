@@ -371,6 +371,189 @@ let fns_to_be_inlined: (string * body) list =
   let local x = {local={name=x}; projection=[]; local_is_mutable=false; kind=Other} in
  [
   (
+    "std::boxed::Box::<T, A>::into_inner",
+    let span =
+      {
+        lo={file={name=Real (LocalPath "<core>/box.rs:into_inner")}; line=Stdint.Uint64.of_int 1; col={pos=Stdint.Uint64.of_int 1}};
+        hi={file={name=Real (LocalPath "<core>/box.rs:into_inner")}; line=Stdint.Uint64.of_int 1; col={pos=Stdint.Uint64.of_int 1}}
+      }
+    in
+    let local_decls: local_decl list =
+      [
+        {id={name="result"}; ty={kind=Param "T"}; mutability=Not; source_info={span}};
+        {id={name="self"}; ty={kind=Adt {id={name="std::boxed::Box"}; kind=StructKind; substs=[{kind=Type {kind=Param "T"}}; {kind=Type {kind=Param "A"}}]}}; mutability=Not; source_info={span}};
+        {id={name="contents_ptr"}; ty={kind=RawPtr {mutability=Not; ty={kind=Param "T"}}}; mutability=Not; source_info={span}};
+        {id={name="ref_self"}; ty={kind=Ref {region={id="'<erased>"}; mutability=Mut; ty={kind=Adt {id={name="std::boxed::Box"}; kind=StructKind; substs=[{kind=Type {kind=Param "T"}}; {kind=Type {kind=Param "A"}}]}}}}; mutability=Not; source_info={span}};
+        {id={name="drop_result"}; ty={kind=Tuple []}; mutability=Not; source_info={span}};
+      ]
+    in
+    let basic_blocks: basic_block list =
+      [
+        {
+          id={index=Stdint.Uint32.of_int 0};
+          statements=[
+            {
+              kind=Assign {
+                lhs_place=local "contents_ptr";
+                rhs_rvalue=Use (Copy {
+                  local={name="self"};
+                  projection=[
+                    BoxAsPtr {kind=Param "T"}
+                  ];
+                  local_is_mutable=false;
+                  kind=Other
+                })
+              };
+              source_info={span}
+            };
+            {
+              kind=Assign {
+                lhs_place=local "result";
+                rhs_rvalue=Use (Move {
+                  local={name="contents_ptr"};
+                  projection=[Deref];
+                  local_is_mutable=false;
+                  kind=Other
+                })
+              };
+              source_info={span}
+            };
+            {
+              kind=Assign {
+                lhs_place=local "ref_self";
+                rhs_rvalue=Ref {
+                  region={id="'<erased>"};
+                  bor_kind=Mut;
+                  place=local "self";
+                  place_ty={kind=Adt {id={name="std::boxed::Box"}; kind=StructKind; substs=[{kind=Type {kind=Param "T"}}; {kind=Type {kind=Param "A"}}]}};
+                  is_implicit=false;
+                }
+              };
+              source_info={span}
+            };
+          ];
+          terminator={
+            kind=Call {
+              func=Constant {
+                const=Val {
+                  const_value=ZeroSized;
+                  ty={
+                    kind=FnDef {
+                      id={name="std::ops::Drop::drop"};
+                      id_mono=Nothing;
+                      substs=[
+                        {kind=Type {kind=Adt {id={name="std::boxed::Box"}; kind=StructKind; substs=[{kind=Type {kind=Param "T"}}; {kind=Type {kind=Param "A"}}]}}};
+                      ];
+                      late_bound_generic_param_count=1;
+                    }
+                  }
+                };
+                span
+              };
+              args=[
+                Move (local "ref_self");
+              ];
+              destination=Something {
+                place=local "drop_result";
+                basic_block_id={index=Stdint.Uint32.of_int 1}
+              };
+              unwind_action=Cleanup {index=Stdint.Uint32.of_int 3};
+              call_span=span;
+              ghost_generic_arg_list=Nothing
+            };
+            source_info={span}
+          };
+          is_cleanup=false;
+        };
+        {
+          id={index=Stdint.Uint32.of_int 1};
+          statements=[];
+          terminator={
+            kind=Drop {
+              place={
+                local={name="self"};
+                projection=[Field {index=Stdint.Uint32.of_int 1; name=Something {name="1"}; ty={kind=Param "A"}}];
+                local_is_mutable=false;
+                kind=Other
+              };
+              target={index=Stdint.Uint32.of_int 2};
+              unwind_action=Cleanup {index=Stdint.Uint32.of_int 4};
+            };
+            source_info={span}
+          };
+          is_cleanup=false;
+        };
+        {
+          id={index=Stdint.Uint32.of_int 2};
+          statements=[];
+          terminator={kind=Return; source_info={span}};
+          is_cleanup=false;
+        };
+        {
+          id={index=Stdint.Uint32.of_int 3};
+          statements=[];
+          terminator={
+            kind=Drop {
+              place={
+                local={name="self"};
+                projection=[Field {index=Stdint.Uint32.of_int 1; name=Something {name="1"}; ty={kind=Param "A"}}];
+                local_is_mutable=false;
+                kind=Other
+              };
+              target={index=Stdint.Uint32.of_int 4};
+              unwind_action=Terminate;
+            };
+            source_info={span}
+          };
+          is_cleanup=false;
+        };
+        {
+          id={index=Stdint.Uint32.of_int 4};
+          statements=[];
+          terminator={kind=UnwindResume; source_info={span}};
+          is_cleanup=true;
+        }
+      ]
+    in
+    {
+      fn_sig_span=span;
+      def_kind=Fn;
+      def_path="std::boxed::Box::<T, A>::into_inner";
+      module_def_path="std::boxed";
+      contract={annotations=[]; span};
+      output={kind=Param "T"};
+      inputs=[
+        {kind=Adt {id={name="std::boxed::Box"}; kind=StructKind; substs=[{kind=Type {kind=Param "T"}}]}};
+      ];
+      local_decls;
+      basic_blocks;
+      span;
+      imp_span=span;
+      var_debug_info=[];
+      ghost_stmts=[];
+      ghost_decl_blocks=[];
+      unsafety=Safe;
+      impl_block_hir_generics=Nothing;
+      impl_block_predicates=[];
+      hir_generics={
+        params=[
+          {name=Plain {name={name="T"}; span}; bounds=(); span; pure_wrt_drop=false; kind=Type};
+          {name=Plain {name={name="A"}; span}; bounds=(); span; pure_wrt_drop=false; kind=Type};
+        ];
+        where_clause=();
+        span
+      };
+      generics=[
+        {name="T"; kind=Type};
+        {name="A"; kind=Type};
+      ];
+      predicates=[];
+      is_trait_fn=false;
+      is_drop_fn=false;
+      visibility=Public;
+    }
+  );
+  (
   "std::boxed::Box::<T, A>::as_ptr",
   let span =
     {
@@ -408,21 +591,7 @@ let fns_to_be_inlined: (string * body) list =
               rhs_rvalue=Use (Copy {
                 local={name="b"};
                 projection=[
-                  Field {
-                    index=Stdint.Uint32.of_int 0;
-                    ty={kind=Adt {id={name="std::ptr::Unique"}; kind=StructKind; substs=[{kind=Type {kind=Param "T"}}]}};
-                    name=Nothing;
-                  };
-                  Field {
-                    index=Stdint.Uint32.of_int 0;
-                    ty={kind=Adt {id={name="std::ptr::NonNull"}; kind=StructKind; substs=[{kind=Type {kind=Param "T"}}]}};
-                    name=Nothing;
-                  };
-                  Field {
-                    index=Stdint.Uint32.of_int 0;
-                    ty={kind=RawPtr {mutability=Not; ty={kind=Param "T"}}};
-                    name=Nothing;
-                  }
+                  BoxAsPtr {kind=Param "T"}
                 ];
                 local_is_mutable=false;
                 kind=Other
@@ -885,6 +1054,7 @@ let check_place_element_refines_place_element elem0 elem1 =
       let fieldIndex0 = field0.index in
       let fieldIndex1 = field1.index in
       if fieldIndex0 <> fieldIndex1 then failwith "Field indices do not match"
+  | BoxAsPtr _, BoxAsPtr _ -> ()
   | Index, Index -> failwith "PlaceElement::Index not supported"
   | ConstantIndex, ConstantIndex -> failwith "PlaceElement::ConstantIndex not supported"
   | Subslice, Subslice -> failwith "PlaceElement::Subslice not supported"
@@ -895,14 +1065,10 @@ let check_place_element_refines_place_element elem0 elem1 =
   | _ -> failwith "Place elements do not match"
 
 (* When this is raised, both variables did not yet have their address taken *)
-exception LocalAddressTaken of string (* x0 *) * string (* x1 *)
+exception LocalAddressTaken of local_variable_path (* x0 *) * local_variable_path (* x1 *)
 
 let local_address_taken path0 path1 =
-  if path0.lv_caller <> None then
-    failwith "Taking the address of a local variable in an inlined function is not yet supported";
-  if path1.lv_caller <> None then
-    failwith "Taking the address of a local variable in an inlined function is not yet supported";
-  raise (LocalAddressTaken (path0.lv_name, path1.lv_name))
+  raise (LocalAddressTaken (path0, path1))
 
 type place =
   Local of local_variable_path (* This place is a local variable whose address is never taken in this function *)
@@ -1038,8 +1204,9 @@ let check_rvalue_refines_rvalue genv0 env0 span0 caller0 rhsRvalue0 genv1 env1 s
 
 type loop_invariant = {
   consts: (local_variable_path * term) list; (* (lv_path, t) means the value of local `lv_path` of the original program equals t *)
-  eqs: (local_variable_path * local_variable_path list) list (* For each local of the verified program, a list of the locals of the original program that have the same value at each iteration *)
-} 
+  eqs: (local_variable_path * local_variable_path list) list (* For each local of the verified program, a list of the locals of the original program that have the same value at each iteration *);
+  address_taken: (local_variable_path * local_variable_path) list (* (lv_path0, lv_path1) means the address of local `lv_path0` of the original program equals the address of local `lv_path1` of the verified program *)
+}
 
 type basic_block_status =
   Checking of basic_block_path (* i_bb1 *) * loop_invariant (* Candidate loop invariant *)
@@ -1073,7 +1240,11 @@ let produce_loop_inv env0 env1 (loopInv: loop_invariant) =
   let env0 = env0 |> List.map @@ fun (x, v) ->
     let value =
       match List.assoc_opt x loopInv.consts with
-        None -> havoc_local_var_state v
+        None ->
+          if List.exists (fun (x0, x1) -> x = x0) loopInv.address_taken then
+            Address (fresh_symbol ())
+          else
+            havoc_local_var_state v
       | Some t -> Value t
     in
     (x, {unified_with=None; value})
@@ -1203,11 +1374,10 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
   let locals0 = Array.of_list body0.local_decls in
   let locals1 = Array.of_list body1.local_decls in
   let inputs = List.map (fun _ -> fresh_symbol ()) inputs0 in
-  (* We don't support the case where locals in inlined callees have their address taken, so address_taken always refers to locals of the root bodies. *)
   let rec check_body_refines_body_core address_taken =
-    let env0 = List.mapi (fun i v -> let x = local_name locals0 (i + 1) in if List.mem_assoc x address_taken then [] else [{lv_caller=None; lv_name=x}, Value v]) inputs |> List.flatten in
-    let env1 = List.mapi (fun i v -> let x = local_name locals1 (i + 1) in if List.exists (fun (x0, x1) -> x1 = x) address_taken then [] else [{lv_caller=None; lv_name=x}, Value v]) inputs |> List.flatten in
-    let address_taken0, address_taken1 = address_taken |> List.map (fun (x0, x1) -> let a = fresh_symbol () in (({lv_caller=None; lv_name=x0}, Address a), ({lv_caller=None; lv_name=x1}, Address a))) |> List.split in
+    let env0 = List.mapi (fun i v -> let x = {lv_caller=None; lv_name=local_name locals0 (i + 1)} in if List.mem_assoc x address_taken then [] else [x, Value v]) inputs |> List.flatten in
+    let env1 = List.mapi (fun i v -> let x = {lv_caller=None; lv_name=local_name locals1 (i + 1)} in if List.exists (fun (x0, x1) -> x1 = x) address_taken then [] else [x, Value v]) inputs |> List.flatten in
+    let address_taken0, address_taken1 = address_taken |> List.map (fun (x0, x1) -> let a = fresh_symbol () in ((x0, Address a), (x1, Address a))) |> List.split in
     let env0 = address_taken0 @ env0 in
     let env1 = address_taken1 @ env1 in
     let bblocks0_statuses: (basic_block_path, basic_block_status) Hashtbl.t = Hashtbl.create 100 in
@@ -1217,12 +1387,17 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
         None ->
           let loopInv = {
             consts=env0 |> List.map (function (x, Value t) -> [(x, t)] | _ -> []) |> List.flatten;
-            eqs=env1 |> List.map (fun (x, v1) -> (x, env0 |> List.concat_map (fun (y, v0) -> if v1 = v0 then [y] else []) ))
+            eqs=env1 |> List.map (fun (x, v1) -> (x, env0 |> List.concat_map (fun (y, v0) -> if v1 = v0 then [y] else []) ));
+            address_taken=address_taken
           } in
           Hashtbl.replace bblocks0_statuses i_bb0#id (Checking (i_bb1#id, loopInv));
           let rec iter loopInv =
             try
               Printf.printf "Loop invariant = [%s]\n" (string_of_loop_inv loopInv);
+              loopInv.address_taken |> List.iter begin fun (x0, x1) ->
+                if List.assoc x0 env0 <> List.assoc x1 env1 then
+                  failwith (Printf.sprintf "The states of the two locals %s and %s whose address is taken are not equal" (string_of_lv_path x0) (string_of_lv_path x1))
+              end;
               (* Havoc all locals of the original crate *)
               let env0, env1 = produce_loop_inv env0 env1 loopInv in
               Printf.printf "INFO: In function %s, checking loop body at basic block %s against basic block %s, with env0 = [%s] and env1 = [%s]\n" def_path i_bb0#to_string i_bb1#to_string (string_of_env env0) (string_of_env env1);
@@ -1246,7 +1421,12 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
             let v = List.assoc x env0 in
             match v with Value t' -> t = t' | Address _ -> false
         in
-        if consts_hold && loopInv.eqs |> List.for_all @@ fun (x, ys) ->
+        let address_taken_ok =
+          (* All variables whose address is taken are in loopInv.address_taken *)
+          env0 |> List.for_all @@ fun (x, v) ->
+            match v with Address a -> List.exists (fun (x0, x1) -> x = x0) loopInv.address_taken | _ -> true
+        in
+        if consts_hold && address_taken_ok && loopInv.eqs |> List.for_all @@ fun (x, ys) ->
           let v = List.assoc x env1 in
           ys |> List.for_all @@ fun y -> List.assoc y env0 = v
         then begin
@@ -1263,7 +1443,13 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
             let v = List.assoc x env1 in
             (x, ys |> List.filter @@ fun y -> List.assoc y env0 = v)
           in
-          Hashtbl.replace bblocks0_statuses i_bb0#id (Checking (i_bb1#id, {consts; eqs})); (* Weaken the candidate loop invariant *)
+          let address_taken = env0 |> List.concat_map @@ fun (x0, v0) ->
+            match v0 with Address _ ->
+              let [x1, _] = env1 |> List.filter (fun (x1, v1) -> v1 = v0) in
+              [x0, x1]
+            | _ -> []
+          in
+          Hashtbl.replace bblocks0_statuses i_bb0#id (Checking (i_bb1#id, {consts; eqs; address_taken})); (* Weaken the candidate loop invariant *)
           raise (RecheckLoop i_bb0#id)
         end
       | Some (Checked (i_bb1', loopInv)) ->
@@ -1272,7 +1458,12 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
             loopInv.consts |> List.for_all @@ fun (x, t) ->
               match List.assoc_opt x env0 with Some (Value t') when t' = t -> true | _ -> false
           in
-          consts_hold &&
+          let address_taken_ok =
+            (* All variables whose address is taken are in loopInv.address_taken *)
+            env0 |> List.for_all @@ fun (x, v) ->
+              match v with Address a -> List.exists (fun (x0, x1) -> x = x0) loopInv.address_taken | _ -> true
+          in
+          consts_hold && address_taken_ok &&
           loopInv.eqs |> List.for_all @@ fun (x, ys) ->
           match List.assoc_opt x env1 with None -> false | Some v ->
           ys |> List.for_all @@ fun y -> match List.assoc_opt y env0 with None -> false | Some v' -> v' = v
@@ -1285,9 +1476,7 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
           check_basic_block_refines_basic_block env0 i_bb0 env1 i_bb1
         end
     (* Checks whether for each behavior of code position (bb0, s0), code position (bb1, s1) has a matching behavior *)
-    and check_codepos_refines_codepos env0 i_bb0 i_s0 ss_i0 env1 i_bb1 i_s1 ss_i1 =
-      let (env0, i_bb0, i_s0, ss_i0) = process_assignments bodies0 env0 i_bb0 i_s0 ss_i0 in
-      let (env1, i_bb1, i_s1, ss_i1) = process_assignments bodies1 env1 i_bb1 i_s1 ss_i1 in
+    and check_codepos_refines_codepos_core env0 (i_bb0 : basic_block_info) i_s0 (ss_i0 : statement list) env1 (i_bb1 : basic_block_info) i_s1 (ss_i1 : statement list) =
       let caller0 = i_bb0#id.bb_caller in
       let caller1 = i_bb1#id.bb_caller in
       let check_terminator_refines_terminator env1 =
@@ -1373,7 +1562,18 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
             end
           end
           (* TODO: Check that unwindAction0 refines unwindAction1 *)
-        | Drop drop_data0, Drop drop_data1 -> failwith "Drop not supported"
+        | Drop drop_data0, Drop drop_data1 ->
+          let env0, env1 =
+            match check_place_refines_place env0 caller0 drop_data0.place env1 caller1 drop_data1.place with
+              Local x0, Local x1 ->
+              if List.assoc x0 env0 <> List.assoc x1 env1 then failwith "The two drop terminators drop different values";
+              List.remove_assoc x0 env0, List.remove_assoc x1 env1
+            | Nonlocal, Nonlocal -> env0, env1
+          in
+          let i_bb_target0 = i_bb0#sibling (Stdint.Uint32.to_int drop_data0.target.index) in
+          let i_bb_target1 = i_bb1#sibling (Stdint.Uint32.to_int drop_data1.target.index) in
+          (* Todo: follow unwind path *)
+          check_basic_block_refines_basic_block env0 i_bb_target0 env1 i_bb_target1
         | TailCall, TailCall -> failwith "TailCall not supported"
         | Assert, Assert -> failwith "Assert not supported"
         | Yield, Yield -> failwith "Yield not supported"
@@ -1431,12 +1631,27 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
         end
       | [], _ -> failwith (Printf.sprintf "In function %s, cannot prove that the terminator of basic block %s in the original version refines statement %d of basic block %s in the verified version" def_path i_bb0#to_string i_s1 i_bb1#to_string)
       | _ -> check_statement_refines_statement ()
+    and check_codepos_refines_codepos env0 i_bb0 i_s0 ss_i0 env1 i_bb1 i_s1 ss_i1 =
+      let (env0, i_bb0, i_s0, ss_i0) = process_assignments bodies0 env0 i_bb0 i_s0 ss_i0 in
+      let (env1, i_bb1, i_s1, ss_i1) = process_assignments bodies1 env1 i_bb1 i_s1 ss_i1 in
+      let rec iter env0 env1 =
+        try
+          check_codepos_refines_codepos_core env0 i_bb0 i_s0 ss_i0 env1 i_bb1 i_s1 ss_i1
+        with LocalAddressTaken (x0, x1) ->
+          if List.assoc x0 env0 <> List.assoc x1 env1 then failwith (Printf.sprintf "The states of the two locals %s and %s whose address is taken are not equal" (string_of_lv_path x0) (string_of_lv_path x1));
+          Printf.printf "Caught LocalAddressTaken; restarting codepos check\n";
+          let a = fresh_symbol () in
+          let env0 = update_env x0 (Address a) env0 in
+          let env1 = update_env x1 (Address a) env1 in
+          iter env0 env1
+      in
+      iter env0 env1
     in
     try
       check_basic_block_refines_basic_block env0 (basic_block_info_of root_genv0 (Array.of_list body0.basic_blocks) 0) env1 (basic_block_info_of root_genv1 (Array.of_list body1.basic_blocks) 0)
     with LocalAddressTaken (x0, x1) ->
       let address_taken = (x0, x1) :: address_taken in
-      Printf.printf "Caught LocalAddressTaken; restarting with address_taken = %s\n" (String.concat ", " (List.map (fun (x0, x1) -> Printf.sprintf "%s = %s" x0 x1) address_taken));
+      Printf.printf "Caught LocalAddressTaken; restarting with address_taken = %s\n" (String.concat ", " (List.map (fun (x0, x1) -> Printf.sprintf "%s = %s" (string_of_lv_path x0) (string_of_lv_path x1)) address_taken));
       check_body_refines_body_core address_taken
   in
   check_body_refines_body_core []

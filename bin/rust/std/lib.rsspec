@@ -105,10 +105,37 @@ mod marker {
 
 mod intrinsics {
 
+    unsafe fn copy<T>(src: *mut T, dst: *mut T, count: usize);
+    /*@
+    req src[..count] |-> ?vs &*&
+        if src <= dst {
+            ((src + count) as *u8)[..dst as *u8 - src as *u8] |-> _
+        } else {
+            (dst as *u8)[..src as *u8 - dst as *u8] |-> _
+        };
+    @*/
+    /*@
+    ens dst[..count] |-> vs &*&
+        if src <= dst {
+            (src as *u8)[..dst as *u8 - src as *u8] |-> _
+        } else {
+            ((dst + count) as *u8)[..src as *u8 - dst as *u8] |-> _
+        };
+    @*/
+    //@ on_unwind_ens false;
+    //@ terminates;
+
     unsafe fn copy_nonoverlapping<T>(src: *mut T, dst: *mut T, count: usize);
     //@ req [?f]src[..count] |-> ?vs &*& dst[..count] |-> _;
     //@ ens [f]src[..count] |-> vs &*& dst[..count] |-> vs;
     //@ on_unwind_ens false;
+    //@ terminates;
+    
+    unsafe fn write_bytes<T>(dst: *mut T, val: u8, count: usize);
+    //@ req dst[..count] |-> _ &*& (dst as usize % std::mem::align_of::<T>()) == 0;
+    //@ ens (dst as *u8)[..count * std::mem::size_of::<T>()] |-> repeat(nat_of_int(count * std::mem::size_of::<T>()), val);
+    //@ on_unwind_ens false;
+    //@ terminates;
 
     unsafe fn ptr_offset_from<T>(ptr: *const T, base: *const T) -> isize;
     /*@
@@ -761,6 +788,18 @@ mod vec {
         req thread_token(?t) &*& Vec::<T, A>(self, ?capacity, ?elems) &*& foreach(elems, own::<T>(t));
         ens thread_token(t) &*& <Vec<T, A>>.own(t, self);
     
+    lem own_to_Vec<T, A>(self: Vec<T, A>);
+        req thread_token(?t) &*& <Vec<T, A>>.own(t, self);
+        ens thread_token(t) &*& Vec::<T, A>(self, ?capacity, ?elems) &*& foreach(elems, own::<T>(t));
+    
+    lem init_ref_Vec<T, A>(p: *Vec<T, A>);
+        req ref_init_perm(p, ?x) &*& [?f](*x |-> ?v);
+        ens ref_end_token(p, x, f/2) &*& [f/2](*x |-> v) &*& [f/2](*p |-> v) &*& ref_initialized(p);
+    
+    lem end_ref_Vec<T, A>(p: *Vec<T, A>);
+        req ref_end_token(p, ?x, ?f) &*& [f](*p |-> ?v) &*& ref_initialized(p);
+        ens [f](*x |-> v);
+    
     @*/
     
     impl<T> Vec<T> {
@@ -775,8 +814,8 @@ mod vec {
     impl<T, A> Vec<T, A> {
     
         fn len<'a>(self: &'a Vec<T, A>) -> usize;
-        //@ req [?f](*self |-> ?self_) &*& [f]Vec::<T, A>(self_, ?capacity, ?elems);
-        //@ ens [f](*self |-> self_) &*& [f]Vec::<T, A>(self_, capacity, elems) &*& result == length(elems);
+        //@ req [?f](*self |-> ?self_) &*& [?fv]Vec::<T, A>(self_, ?capacity, ?elems);
+        //@ ens [f](*self |-> self_) &*& [fv]Vec::<T, A>(self_, capacity, elems) &*& result == length(elems);
         //@ on_unwind_ens false;
     
         fn push<'a>(self: &'a Vec<T, A>, elem: T);
