@@ -315,7 +315,6 @@ impl<T> Drop for RefCell<T> {
     // When the RefCell is dropped, check if it is still mutably borrowed.
     // If it is, abort.
     fn drop(&mut self) {
-        //@ assume(self == ref_origin(self)); // TODO: eliminate, VeriFast extension
         //@ open RefCell_full_borrow_content::<T>(_t, self)();
         //@ open RefCell_own::<T>(_t, ?s);
         unsafe {

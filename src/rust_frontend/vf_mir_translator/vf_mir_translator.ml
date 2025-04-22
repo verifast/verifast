@@ -1819,7 +1819,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | FnDef fn_def_ty_cpn -> translate_fn_def_ty fn_def_ty_cpn loc
     | FnPtr fn_ptr_ty_cpn -> translate_fn_ptr_ty fn_ptr_ty_cpn loc
     | Dynamic -> Ast.static_error loc "Dynamic types are not yet supported" None
-    | Closure _ -> Ast.static_error loc "Closure types are not yet supported" None (* CAVEAT: Once we allow closure types to appear as function call generic arguments, we must also verify closure bodies. *)
+    | Closure _ ->
+        Ast.static_error loc "Closure types are not yet supported" None
+        (* CAVEAT: Once we allow closure types to appear as function call generic arguments, we must also verify closure bodies. *)
     | CoroutineClosure ->
         Ast.static_error loc "Coroutine closure types are not yet supported"
           None
@@ -2860,7 +2862,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           let substs_cpn = gen_args_get_list adt_data_cpn in
           let field_names = field_names_get_list adt_data_cpn in
           Ok Mir.(AggKindAdt { adt_kind; adt_name; variant_name; field_names })
-      | Closure _ -> failwith "Todo: AggregateKind::Closure" (* CAVEAT: Once we allow closure values, we must also check closure bodies. *)
+      | Closure _ ->
+          failwith "Todo: AggregateKind::Closure"
+          (* CAVEAT: Once we allow closure values, we must also check closure bodies. *)
       | Coroutine -> failwith "Todo: AggregateKind::Coroutine"
       | CoroutineClosure -> failwith "Todo: AggregateKind::CoroutineClosure"
       | RawPtr -> failwith "Todo: AggregateKind::RawPtr"
@@ -3948,7 +3952,21 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     in
     let (Some pre) =
       AstAux.list_to_sep_conj
-        (List.map (fun e -> (limpl, e)) pre_lft_tks)
+        (( ls,
+           Operation
+             ( ls,
+               Eq,
+               [
+                 CallExpr
+                   ( ls,
+                     "ref_origin",
+                     [],
+                     [],
+                     [ LitPat (Var (ls, "self")) ],
+                     Static );
+                 Var (ls, "self");
+               ] ) )
+        :: List.map (fun e -> (limpl, e)) pre_lft_tks)
         (Some
            (Ast.Sep
               ( ls,
@@ -6844,7 +6862,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       iter segments
     else d
 
-  let translate_vf_mir (extern_specs : string list) (vf_mir_cpn : VfMirRd.VfMir.t) =
+  let translate_vf_mir (extern_specs : string list)
+      (vf_mir_cpn : VfMirRd.VfMir.t) =
     let job _ =
       let directives_cpn = VfMirRd.VfMir.directives_get_list vf_mir_cpn in
       let* directives = ListAux.try_map translate_annotation directives_cpn in
@@ -6856,7 +6875,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       |> List.iter (fun ({ span; raw } : Mir.annot) ->
              Args.report_should_fail raw (Ast.lexed_loc span));
       let* module_decls =
-        ListAux.try_map translate_module (VfMirRd.VfMir.modules_get_list vf_mir_cpn)
+        ListAux.try_map translate_module
+          (VfMirRd.VfMir.modules_get_list vf_mir_cpn)
       in
       let module_imports_map =
         let rec iter moduleName module_decls =
@@ -6938,7 +6958,13 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       in
       let traits_decls = List.flatten traits_decls in
       let bodies_cpn = VfMirRd.VfMir.bodies_get_list vf_mir_cpn in
-      let bodies_cpn = bodies_cpn |> List.filter (fun body_cpn -> BodyRd.DefKind.get (BodyRd.def_kind_get body_cpn) <> BodyRd.DefKind.Closure) in (* It's okay to ignore closure bodies so long as we crash when we encounter closure types as function call generic arguments. *)
+      let bodies_cpn =
+        bodies_cpn
+        |> List.filter (fun body_cpn ->
+               BodyRd.DefKind.get (BodyRd.def_kind_get body_cpn)
+               <> BodyRd.DefKind.Closure)
+      in
+      (* It's okay to ignore closure bodies so long as we crash when we encounter closure types as function call generic arguments. *)
       let bodies_cpn =
         if Args.skip_specless_fns then
           List.filter
