@@ -152,6 +152,13 @@ and parse_type_with_opt_name = function%parser
 and parse_type_args = function%parser
   [ (_, Kwd "<"); [%let targs = rep_comma parse_type]; parse_right_angle_bracket as dummy ] -> targs
 
+let mk_outcome_post l post unwind_post =
+  "outcome",
+  SwitchExpr (l, Var (l, "outcome"), [
+    SwitchExprClause (expr_loc post, "returning", ["result"], post);
+    SwitchExprClause (expr_loc unwind_post, "unwinding", [], unwind_post)
+  ], None) 
+
 let rec parse_expr_funcs allowStructExprs =
 
   let parse_expr stream = fst (parse_expr_funcs true) stream in
@@ -330,6 +337,11 @@ let rec parse_expr_funcs allowStructExprs =
   | [ (l, Kwd "typeid"); (_, Kwd "("); parse_type as t; (_, Kwd ")") ] -> Typeid (l, TypeExpr t)
   | [ (_, Kwd "<"); parse_type as t; (_, Kwd ">"); (l, Kwd "."); (_, Ident x) ] -> TypePredExpr (l, t, x)
   | [ (l, PrimePrefixedIdent a) ] -> expr_of_lft_param l ("'" ^ a)
+  | [ (l, Kwd "ens"); parse_expr as post;
+      [%let unwind_post = function%parser [ (_, Kwd "on_unwind_ens"); parse_expr as a ] -> a | [ ] -> EmpAsn l ]
+    ] ->
+    let (x, a) = mk_outcome_post l post unwind_post in
+    EnsuresAsn (l, x, a)
   and parse_match_arm = function%parser
     [ parse_expr as pat; (l, Kwd "=>"); parse_expr as rhs ] ->
     let lpat, lrhs = expr_loc pat, expr_loc rhs in
@@ -439,16 +451,54 @@ let parse_spec_clause = function%parser
     [ parse_pure_spec_clause as c; (_, Kwd "@*/") ] -> c ] ] -> c
 | [ parse_pure_spec_clause as c ] -> c
 
-let mk_outcome_post l post unwind_post =
-  "outcome",
-  SwitchExpr (l, Var (l, "outcome"), [
-    SwitchExprClause (expr_loc post, "returning", ["result"], post);
-    SwitchExprClause (expr_loc unwind_post, "unwinding", [], unwind_post)
-  ], None) 
-
 let result_post_of_outcome_post ("outcome", SwitchExpr (_, _, [SwitchExprClause (_, "returning", ["result"], post); _], _)) = ("result", post)
 
-let result_spec_of_outcome_spec (pre, post) = (pre, result_post_of_outcome_post post)
+let rec result_pre_of_outcome_pre = function
+  EnsuresAsn (l, x, post) ->
+  let (x, post) = result_post_of_outcome_post (x, post) in
+  EnsuresAsn (l, x, post)
+| Sep (l, e1, e2) as e ->
+  let e2' = result_pre_of_outcome_pre e2 in
+  if e2' == e2 then
+    e
+  else
+    Sep (l, e1, e2')
+| IfExpr (l, cond, trueBranch, falseBranch) as e ->
+  let trueBranch' = result_pre_of_outcome_pre trueBranch in
+  let falseBranch' = result_pre_of_outcome_pre falseBranch in
+  if trueBranch' == trueBranch && falseBranch' == falseBranch then
+    e
+  else
+    IfExpr (l, cond, trueBranch', falseBranch')
+| SwitchExpr (l, scrutinee, arms, default) as e ->
+  let rec iter = function
+    [] -> []
+  | SwitchExprClause (l, x, pats, body) as c::arms0 as arms ->
+    let body' = result_pre_of_outcome_pre body in
+    let c' = if body' == body then c else SwitchExprClause (l, x, pats, body') in
+    let arms0' = iter arms0 in
+    if c' == c && arms0' == arms0 then
+      arms
+    else
+      c'::arms0'
+  in
+  let arms' = iter arms in
+  let default' = match default with
+    Some (l, e) ->
+      let e' = result_pre_of_outcome_pre e in
+      if e' == e then
+        default
+      else
+        Some (l, e')
+  | None -> default
+  in
+  if arms' == arms && default' == default then
+    e
+  else
+    SwitchExpr (l, scrutinee, arms', default')
+| a -> a
+
+let result_spec_of_outcome_spec (pre, post) = (result_pre_of_outcome_pre pre, result_post_of_outcome_post post)
 
 let result_decl_of_outcome_decl = function
   Func (l, Regular, tparams, rt, g, ps, nonghost_callers_only, ft, pre_post, terminates, body, is_virtual, overrides) ->
@@ -456,7 +506,7 @@ let result_decl_of_outcome_decl = function
   Func (l, Regular, tparams, rt, g, ps, nonghost_callers_only, ft, Option.map result_spec_of_outcome_spec pre_post, terminates, body, is_virtual, overrides)
 | FuncTypeDecl (l, Real, rt, ftn, tparams, ftps, ps, (pre, post, terminates)) ->
   let rt = Option.map (fun (ConstructedTypeExpr (_, "fn_outcome", [rt])) -> rt) rt in
-  FuncTypeDecl (l, Real, rt, ftn, tparams, ftps, ps, (pre, result_post_of_outcome_post post, terminates))
+  FuncTypeDecl (l, Real, rt, ftn, tparams, ftps, ps, (result_pre_of_outcome_pre pre, result_post_of_outcome_post post, terminates))
 | d -> d
 
 let result_package_of_outcome_package (PackageDecl (l, pn, ilist, ds)) =
