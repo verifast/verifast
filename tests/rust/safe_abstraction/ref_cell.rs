@@ -13,6 +13,7 @@ pub struct RefCell<T> {
 }
 
 /*@
+
 lem init_ref_RefCell<T>(p: *RefCell<T>)
     req type_interp::<T>() &*& atomic_mask(Nlft) &*& ref_init_perm(p, ?x) &*& [_]RefCell_share::<T>(?k, ?t, x) &*& [?q]lifetime_token(k);
     ens type_interp::<T>() &*& atomic_mask(Nlft) &*& [q]lifetime_token(k) &*& [_]RefCell_share::<T>(k, t, p) &*& [_]frac_borrow(k, ref_initialized_(p));
@@ -29,13 +30,13 @@ lem RefCell_send<T>(t1: thread_id_t)
     close RefCell_own::<T>(t1, v);
 }
 
-pred_ctor refcell_inv_<T>(cell: *RefCell<T>)() = RefCell_mutably_borrowed(cell, ?borrowed) &*& RefCell_immutable_borrows(cell, ?immutables) &*& (borrowed == false || immutables == 0) &*& immutables >= 0 &*& immutables <= usize::MAX;
+pred_ctor refcell_inv_<T>(cell: *RefCell<T>)() =
+    (*cell).mutably_borrowed |-> ?borrowed &*& (*cell).immutable_borrows |-> ?immutables &*& (borrowed == false || immutables == 0);
 
 pred_ctor RefCell_padding<T>(l: *RefCell<T>)(;) = struct_RefCell_padding(l);
 
-pred dlft_pred(gid: i32; o_dlft_max: Option<lifetime_t>) = ghost_cell(gid, o_dlft_max) &*& if o_dlft_max != Option::None { o_dlft_max == Option::Some(?dlft_max) &*& lifetime_token(dlft_max) } else { true };
-
-
+pred dlft_pred(gid: i32; o_dlft_max: Option<lifetime_t>) =
+    ghost_cell(gid, o_dlft_max) &*& if o_dlft_max != Option::None { o_dlft_max == Option::Some(?dlft_max) &*& lifetime_token(dlft_max) } else { true };
 
 pred<T> <RefCell<T>>.own(t, cell) = <T>.own(t, cell.value) &*& cell.mutably_borrowed == false || cell.immutable_borrows == 0;
 
@@ -46,13 +47,11 @@ pred<T> <RefCell<T>>.share(k, t, l) =
     [_]nonatomic_borrow(k, t, MaskNshrSingle(ref_origin(l)), na_borrow_content(ref_origin(l), t, klong, gid));
 
 pred_ctor na_borrow_content<T>(ptr: *RefCell<T>, t: thread_id_t, klong: lifetime_t, gid: i32)() =
-    RefCell_mutably_borrowed(ptr, ?borrowed) &*&
-    RefCell_immutable_borrows(ptr, ?immutables) &*&
+    (*ptr).mutably_borrowed |-> ?borrowed &*&
+    (*ptr).immutable_borrows |-> ?immutables &*&
     pointer_within_limits(&(*ptr).immutable_borrows) == true &*&
     pointer_within_limits(&(*ptr).mutably_borrowed) == true &*&
     pointer_within_limits(&(*ptr).value) == true &*&
-    immutables >= 0 &*&
-    immutables <= usize::MAX &*&
     borrowed == false || immutables == 0 &*&
     counting(dlft_pred, gid, immutables, ?o_dlft_max) &*&
     if !borrowed {
@@ -66,7 +65,6 @@ pred_ctor na_borrow_content<T>(ptr: *RefCell<T>, t: thread_id_t, klong: lifetime
     } else {
         immutables == 0
     };
-
 
 lem RefCell_share_mono<T>(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *RefCell<T>)
     req type_interp::<T>() &*& lifetime_inclusion(k1, k) == true &*& [_]RefCell_share::<T>(k, t, l);
@@ -195,6 +193,7 @@ lem RefCell_share_full<T>(k: lifetime_t, t: thread_id_t, l: *RefCell<T>)
         leak full_borrow(k, RefCell_padding(l));
     }
 }
+
 @*/
 
 impl<T> RefCell<T> {
@@ -353,7 +352,9 @@ lem RefMut_own_mono<'a0, 'a1, T>()
     nonatomic_borrow_mono('a0, 'a1, t, MaskNshrSingle(ref_origin(v.refcell)), na_borrow_content::<T>(ref_origin(v.refcell), t, klong, gid));
     close RefMut_own::<'a1, T>(t, v);
 }
+
 @*/
+
 pub struct RefMut<'a, T> {
     refcell: &'a RefCell<T>,
 }
@@ -449,6 +450,7 @@ impl<'a, T> Deref for RefMut<'a, T> {
 }
 
 /*@
+
 lem init_ref_Ref<'a, T>(p: *Ref<'a, T>)
     req type_interp::<T>() &*& atomic_mask(Nlft) &*& ref_init_perm(p, ?x) &*& [_]Ref_share::<'a, T>(?k, ?t, x) &*& [?q]lifetime_token(k);
     ens type_interp::<T>() &*& atomic_mask(Nlft) &*& [q]lifetime_token(k) &*& [_]Ref_share::<'a, T>(k, t, p) &*& [_]frac_borrow(k, ref_initialized_(p));
@@ -527,20 +529,20 @@ lem Ref_share_full<'a, T>(k: lifetime_t, t: thread_id_t, l: *Ref<'a, T>)
     close sep(ticket_(dlft_max, gid, frac), lifetime_token_(frac, dlft_max))();
     {
         produce_lem_ptr_chunk full_borrow_convert_strong(Ctx(dlft_max, klong, t, gid, l, cell), sep(points_to__(l, cell), sep(ticket_(dlft_max, gid, frac), lifetime_token_(frac, dlft_max))), kborrow, Ref_full_borrow_content(t, l))() {
-               open sep(points_to__(l, cell), sep(ticket_(dlft_max, gid, frac), lifetime_token_(frac, dlft_max)))();
-               open sep(ticket_(dlft_max, gid, frac), lifetime_token_(frac, dlft_max))();
-               open ticket_(dlft_max, gid, frac)();
-               open points_to__::<'a, T>(l, cell)();
-               open Ctx::<'a, T>(dlft_max, klong, t, gid, l, cell)();
-               close [frac]dlft_pred(gid, Option::Some(dlft_max));
-               close Ref_own::<'a, T>(t, refcell);
-               close Ref_full_borrow_content::<'a, T>(t, l)();
-            } {
-                close Ctx::<'a, T>(dlft_max, klong, t, gid, l, cell)();
-                close points_to__::<'a, T>(l, cell)();
-                close sep(points_to__(l, cell), sep(ticket_(dlft_max, gid, frac), lifetime_token_(frac, dlft_max)))();
-                close_full_borrow_strong_m(kborrow, Ref_full_borrow_content(t, l), sep(points_to__(l, cell), sep(ticket_(dlft_max, gid, frac), lifetime_token_(frac, dlft_max))));
-            }
+            open sep(points_to__(l, cell), sep(ticket_(dlft_max, gid, frac), lifetime_token_(frac, dlft_max)))();
+            open sep(ticket_(dlft_max, gid, frac), lifetime_token_(frac, dlft_max))();
+            open ticket_(dlft_max, gid, frac)();
+            open points_to__::<'a, T>(l, cell)();
+            open Ctx::<'a, T>(dlft_max, klong, t, gid, l, cell)();
+            close [frac]dlft_pred(gid, Option::Some(dlft_max));
+            close Ref_own::<'a, T>(t, refcell);
+            close Ref_full_borrow_content::<'a, T>(t, l)();
+        } {
+            close Ctx::<'a, T>(dlft_max, klong, t, gid, l, cell)();
+            close points_to__::<'a, T>(l, cell)();
+            close sep(points_to__(l, cell), sep(ticket_(dlft_max, gid, frac), lifetime_token_(frac, dlft_max)))();
+            close_full_borrow_strong_m(kborrow, Ref_full_borrow_content(t, l), sep(points_to__(l, cell), sep(ticket_(dlft_max, gid, frac), lifetime_token_(frac, dlft_max))));
+        }
         close exists(pair(klong, dlft_max));
         full_borrow_mono(kborrow, k, sep(points_to__(l, cell), sep(ticket_(dlft_max, gid, frac), lifetime_token_(frac, dlft_max))));
         full_borrow_split_m(k, points_to__(l, cell), sep(ticket_(dlft_max, gid, frac), lifetime_token_(frac, dlft_max)));
@@ -555,7 +557,9 @@ lem Ref_share_full<'a, T>(k: lifetime_t, t: thread_id_t, l: *Ref<'a, T>)
     close Ref_share::<'a, T>(k, t, l);
     leak Ref_share::<'a, T>(k, t, l);
 }
+
 @*/
+
 pub struct Ref<'a, T> {
     refcell: &'a RefCell<T>,
 }
