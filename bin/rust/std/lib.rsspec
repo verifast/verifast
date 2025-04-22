@@ -75,6 +75,11 @@ mod num {
         //@ req true;
         //@ ens if self < other { result == std::option::Option::None } else { result == std::option::Option::Some(self - other) };
         //@ on_unwind_ens false;
+
+        fn checked_add(self: usize, other: usize) -> std::option::Option<usize>;
+        //@ req true;
+        //@ ens if self + other > usize::MAX { result == std::option::Option::None } else { result == std::option::Option::Some(self + other) };
+        //@ on_unwind_ens false;
         
     }
 
