@@ -293,6 +293,7 @@ type term =
 | FnDef of string * gen_arg list
 | ScalarInt of literal_const_expr
 | AddressOfNonMutLocal of local_variable_path
+| FieldTerm of term * int
 
 let rec string_of_term = function
   Symbol id -> Printf.sprintf "Symbol %d" id
@@ -303,6 +304,7 @@ let rec string_of_term = function
 | ScalarInt literal -> Printf.sprintf "ScalarInt %s" (string_of_literal_const_expr literal)
 | Closure ts -> Printf.sprintf "Closure %s" (string_of_terms ts)
 | AddressOfNonMutLocal lv_path -> Printf.sprintf "AddressOfNonMutLocal %s" (string_of_lv_path lv_path)
+| FieldTerm (term, i) -> Printf.sprintf "FieldTerm %s %d" (string_of_term term) i
 and string_of_terms ts =
   Printf.sprintf "[%s]" (String.concat "; " (List.map string_of_term ts))
 
@@ -1044,9 +1046,13 @@ let rec process_commands bodies (env: env) opnds (i_bb: basic_block_info) i_s (s
       begin match List.assoc returnLocalPath env with
         Value v ->
           let destinationLocalPath = {lv_caller=destinationBb#id.bb_caller; lv_name=destinationPlace.local.name} in
-          let env = update_env destinationLocalPath (Value v) env in
-          process_commands bodies env [] destinationBb 0 (List.concat_map commands_of_statement destinationBb#statements)
-      | Address _ -> failwith "Locals whose address is taken are not yet supported as return value destinations of inlined calls"
+          begin match List.assoc_opt destinationLocalPath env with
+            Some (Address _) -> failwith "Locals whose address is taken are not yet supported as return value destinations of inlined calls"
+          | _ ->
+            let env = update_env destinationLocalPath (Value v) env in
+            process_commands bodies env [] destinationBb 0 (List.concat_map commands_of_statement destinationBb#statements)
+          end
+      | Address _ -> failwith "The scenario where the result variable's address is taken is not yet supported for inlined calls"
       end
     | _ -> done_ ()
     end
@@ -1086,7 +1092,7 @@ let rec process_commands bodies (env: env) opnds (i_bb: basic_block_info) i_s (s
       | EnumValue (variant_id, vs) -> cont env (List.nth vs index::opnds)
       | Tuple vs -> cont env (List.nth vs index::opnds)
       | Closure vs -> cont env (List.nth vs index::opnds)
-      | _ -> done_ ()
+      | _ -> cont env (FieldTerm (v, index)::opnds)
       end
     | Aggregate (Adt {adt_kind=StructKind; adt_id={name}}, n) ->
       let vs, opnds = popn n opnds in
@@ -1287,7 +1293,8 @@ let check_rvalue_refines_rvalue genv0 env0 span0 caller0 rhsRvalue0 genv1 env1 s
 | ShallowInitBox, ShallowInitBox -> failwith "Rvalue::ShallowInitBox not supported"
 
 type loop_invariant = {
-  consts: (local_variable_path * term) list; (* (lv_path, t) means the value of local `lv_path` of the original program equals t *)
+  consts0: (local_variable_path * term) list; (* (lv_path, t) means the value of local `lv_path` of the original program equals t *)
+  consts1: (local_variable_path * term) list; (* (lv_path, t) means the value of local `lv_path` of the verified program equals t *)
   eqs: (local_variable_path * local_variable_path list) list (* For each local of the verified program, a list of the locals of the original program that have the same value at each iteration *);
   address_taken: (local_variable_path * local_variable_path) list (* (lv_path0, lv_path1) means the address of local `lv_path0` of the original program equals the address of local `lv_path1` of the verified program *)
 }
@@ -1299,8 +1306,9 @@ type basic_block_status =
 exception RecheckLoop of basic_block_path (* i_bb0 *) (* When this is raised, the specified basic block's status has already been updated with a weakened candidate loop invariant *)
 
 let string_of_loop_inv (loopInv: loop_invariant) =
-  Printf.sprintf "{consts: %s; eqs: %s}"
-    (String.concat "; " (List.map (fun (x, t) -> Printf.sprintf "%s: %s" (string_of_lv_path x) (string_of_term t)) loopInv.consts))
+  Printf.sprintf "{consts0: %s; consts1: %s; eqs: %s}"
+    (String.concat "; " (List.map (fun (x, t) -> Printf.sprintf "%s: %s" (string_of_lv_path x) (string_of_term t)) loopInv.consts0))
+    (String.concat "; " (List.map (fun (x, t) -> Printf.sprintf "%s: %s" (string_of_lv_path x) (string_of_term t)) loopInv.consts1))
     (String.concat "; " (List.map (fun (x, ys) -> Printf.sprintf "%s: [%s]" (string_of_lv_path x) (String.concat ", " (List.map string_of_lv_path ys))) loopInv.eqs))
 
 let havoc_local_var_state = function
@@ -1323,7 +1331,7 @@ let unify v v' =
 let produce_loop_inv env0 env1 (loopInv: loop_invariant) =
   let env0 = env0 |> List.map @@ fun (x, v) ->
     let value =
-      match List.assoc_opt x loopInv.consts with
+      match List.assoc_opt x loopInv.consts0 with
         None ->
           if List.exists (fun (x0, x1) -> x = x0) loopInv.address_taken then
             Address (fresh_symbol ())
@@ -1334,7 +1342,15 @@ let produce_loop_inv env0 env1 (loopInv: loop_invariant) =
     (x, {unified_with=None; value})
   in
   (* Havoc all locals of the verified crate that are not known to be equal to any locals of the original crate *)
-  let env1 = List.map2 (fun (x, v) (x, ys) -> (x, let v = {unified_with=None; value=havoc_local_var_state v} in List.iter (fun y -> unify v (List.assoc y env0)) ys; v)) env1 loopInv.eqs in
+  let env1 = List.map2 (fun (x, v) (x, ys) ->
+      let v =
+        match List.assoc_opt x loopInv.consts1 with
+          None -> havoc_local_var_state v
+        | Some t -> Value t
+      in
+      (x, let v = {unified_with=None; value=v} in List.iter (fun y -> unify v (List.assoc y env0)) ys; v)
+    ) env1 loopInv.eqs
+  in
   let env0 = List.map (fun (x, v) -> (x, (unwrap_unif_var v).value)) env0 in
   let env1 = List.map (fun (x, v) -> (x, (unwrap_unif_var v).value)) env1 in
   env0, env1
@@ -1470,7 +1486,8 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
       match Hashtbl.find_opt bblocks0_statuses i_bb0#id with
         None ->
           let loopInv = {
-            consts=env0 |> List.map (function (x, Value t) -> [(x, t)] | _ -> []) |> List.flatten;
+            consts0=env0 |> List.map (function (x, Value t) -> [(x, t)] | _ -> []) |> List.flatten;
+            consts1=env1 |> List.map (function (x, Value t) -> [(x, t)] | _ -> []) |> List.flatten;
             eqs=env1 |> List.map (fun (x, v1) -> (x, env0 |> List.concat_map (fun (y, v0) -> if v1 = v0 then [y] else []) ));
             address_taken=address_taken
           } in
@@ -1500,9 +1517,14 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
       | Some (Checking (i_bb1', loopInv)) ->
         Printf.printf "INFO: In function %s, loop detected with head = basic block %s\n" def_path i_bb0#to_string;
         if i_bb1' <> i_bb1#id then failwith (Printf.sprintf "In function %s, loop head %s in the original crate is being checked for refinement against basic block %s in the verified crate, but it is already being checked for refinement against loop head %s in the verified crate" def_path i_bb0#to_string i_bb1#to_string (string_of_basic_block_path i_bb1'));
-        let consts_hold =
-          loopInv.consts |> List.for_all @@ fun (x, t) ->
+        let consts0_hold =
+          loopInv.consts0 |> List.for_all @@ fun (x, t) ->
             let v = List.assoc x env0 in
+            match v with Value t' -> t = t' | Address _ -> false
+        in
+        let consts1_hold =
+          loopInv.consts1 |> List.for_all @@ fun (x, t) ->
+            let v = List.assoc x env1 in
             match v with Value t' -> t = t' | Address _ -> false
         in
         let address_taken_ok =
@@ -1510,7 +1532,7 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
           env0 |> List.for_all @@ fun (x, v) ->
             match v with Address a -> List.exists (fun (x0, x1) -> x = x0) loopInv.address_taken | _ -> true
         in
-        if consts_hold && address_taken_ok && loopInv.eqs |> List.for_all @@ fun (x, ys) ->
+        if consts0_hold && consts1_hold && address_taken_ok && loopInv.eqs |> List.for_all @@ fun (x, ys) ->
           let v = List.assoc x env1 in
           ys |> List.for_all @@ fun y -> List.assoc y env0 = v
         then begin
@@ -1519,8 +1541,12 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
         end else begin
           Printf.printf "Loop with head %s failed to verify; trying again with weaker invariant\n" i_bb0#to_string;
           (* Forget about the earlier result; try from scratch *)
-          let consts = loopInv.consts |> List.filter @@ fun (x, t) ->
+          let consts0 = loopInv.consts0 |> List.filter @@ fun (x, t) ->
             let v = List.assoc x env0 in
+            match v with Value t' -> t' = t | Address _ -> false
+          in
+          let consts1 = loopInv.consts1 |> List.filter @@ fun (x, t) ->
+            let v = List.assoc x env1 in
             match v with Value t' -> t' = t | Address _ -> false
           in
           let eqs = loopInv.eqs |> List.map @@ fun (x, ys) ->
@@ -1533,21 +1559,25 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
               [x0, x1]
             | _ -> []
           in
-          Hashtbl.replace bblocks0_statuses i_bb0#id (Checking (i_bb1#id, {consts; eqs; address_taken})); (* Weaken the candidate loop invariant *)
+          Hashtbl.replace bblocks0_statuses i_bb0#id (Checking (i_bb1#id, {consts0; consts1; eqs; address_taken})); (* Weaken the candidate loop invariant *)
           raise (RecheckLoop i_bb0#id)
         end
       | Some (Checked (i_bb1', loopInv)) ->
         if i_bb1' = i_bb1#id && 
-          let consts_hold =
-            loopInv.consts |> List.for_all @@ fun (x, t) ->
+          let consts0_hold =
+            loopInv.consts0 |> List.for_all @@ fun (x, t) ->
               match List.assoc_opt x env0 with Some (Value t') when t' = t -> true | _ -> false
+          in
+          let consts1_hold =
+            loopInv.consts1 |> List.for_all @@ fun (x, t) ->
+              match List.assoc_opt x env1 with Some (Value t') when t' = t -> true | _ -> false
           in
           let address_taken_ok =
             (* All variables whose address is taken are in loopInv.address_taken *)
             env0 |> List.for_all @@ fun (x, v) ->
               match v with Address a -> List.exists (fun (x0, x1) -> x = x0) loopInv.address_taken | _ -> true
           in
-          consts_hold && address_taken_ok &&
+          consts0_hold && consts1_hold && address_taken_ok &&
           loopInv.eqs |> List.for_all @@ fun (x, ys) ->
           match List.assoc_opt x env1 with None -> false | Some v ->
           ys |> List.for_all @@ fun y -> match List.assoc_opt y env0 with None -> false | Some v' -> v' = v
