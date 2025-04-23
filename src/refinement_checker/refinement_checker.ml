@@ -3,6 +3,13 @@ type 'a option = 'a Option.t
 module VfMir = S
 module VfMirRd = VfMir.Reader
 
+let popn n xs =
+  let rec iter n vs xs =
+    if n <= 0 then vs, xs
+    else let v::xs = xs in iter (n - 1) (v::vs) xs
+  in
+  iter n [] xs
+
 let string_of_mutability: mutability -> string = function
   Mut -> "Mut"
 | Not -> "Not"
@@ -289,13 +296,15 @@ type term =
 
 let rec string_of_term = function
   Symbol id -> Printf.sprintf "Symbol %d" id
-| Tuple ts -> Printf.sprintf "Tuple [%s]" (String.concat "; " (List.map string_of_term ts))
-| StructValue ts -> Printf.sprintf "StructValue [%s]" (String.concat "; " (List.map string_of_term ts))
-| EnumValue (variant, ts) -> Printf.sprintf "EnumValue %s [%s]" variant (String.concat "; " (List.map string_of_term ts))
+| Tuple ts -> Printf.sprintf "Tuple %s" (string_of_terms ts)
+| StructValue ts -> Printf.sprintf "StructValue %s" (string_of_terms ts)
+| EnumValue (variant, ts) -> Printf.sprintf "EnumValue %s %s" variant (string_of_terms ts)
 | FnDef (fn, genArgs) -> Printf.sprintf "FnDef %s [%s]" fn (String.concat "; " (List.map string_of_gen_arg genArgs))
 | ScalarInt literal -> Printf.sprintf "ScalarInt %s" (string_of_literal_const_expr literal)
-| Closure ts -> Printf.sprintf "Closure [%s]" (String.concat "; " (List.map string_of_term ts))
+| Closure ts -> Printf.sprintf "Closure %s" (string_of_terms ts)
 | AddressOfNonMutLocal lv_path -> Printf.sprintf "AddressOfNonMutLocal %s" (string_of_lv_path lv_path)
+and string_of_terms ts =
+  Printf.sprintf "[%s]" (String.concat "; " (List.map string_of_term ts))
 
 let next_symbol_id = ref 0
 
@@ -866,7 +875,59 @@ let fns_to_be_inlined: (string * body) list =
   }
 ]
 
-let rec process_assignments bodies (env: env) (i_bb: basic_block_info) i_s (ss_i: statement list) =
+(* We translate the MIR basic block to an RCIR basic block, which uses more elementary instructions that interact with an operand stack. *)
+type command =
+  Store of place (* Pop a value from the top of the operand stack and store it at the specified place *)
+| LoadLocal of local_decl_id (* Push the value of the specified local variable onto the operand stack *)
+| Deref (* Pop a value from the top of the operand stack, which is an address, and push the value at that address *)
+| Field of int (* Pop a value from the top of the operand stack, which is an aggregate value, and push the specified field of the aggregate value *)
+| BoxAsPtr (* Pop a value from the top of the operand stack, which is a Box, and push a pointer to the contents of the Box *)
+| Downcast of int (* Pop a value from the top of the operand stack, which is an enum value, and push the specified variant of the enum value *)
+| Constant of const_operand (* Push a constant operand onto the operand stack *)
+| Ref of rvalue_ref_data
+| AddressOf of rvalue_address_of_data
+| Cast of Vf_mir_decoder.ty (* Pop a value from the top of the operand stack, cast it to the specified type, and push the result *)
+| BinaryOp of rvalue_binary_op_data_bin_op (* Pop two values from the top of the operand stack, apply the specified binary operator to them, and push the result *)
+| UnaryOp of rvalue_unary_op_data_un_op (* Pop a value from the top of the operand stack, apply the specified unary operator to it, and push the result *)
+| Aggregate of aggregate_kind * int (* Pop the specified number of values from the top of the operand stack and push an aggregate value *)
+| Discriminant (* Pop a value from the top of the operand stack, which is an enum value, and push the discriminant of the enum value *)
+| SourceInfo of source_info
+
+let commands_for_loading_place {local; projection}: command list =
+  let proj_cmds =
+    projection |> List.map @@ function
+      (Deref: place_elem) -> (Deref: command)
+    | Field {index} -> Field (Stdint.Uint32.to_int index)
+    | BoxAsPtr _ -> BoxAsPtr
+    | Downcast index -> Downcast (Stdint.Uint32.to_int index)
+  in
+  LoadLocal local::proj_cmds
+
+let commands_of_operand = function
+  Copy place | Move place -> commands_for_loading_place place
+| Constant c -> [Constant c]
+
+let commands_of_rvalue = function
+  Use operand -> commands_of_operand operand
+| Ref rvalue_ref_data -> [Ref rvalue_ref_data]
+| AddressOf rvalue_address_of_data -> [AddressOf rvalue_address_of_data]
+| Cast {operand; ty} -> commands_of_operand operand @ [Cast ty]
+| BinaryOp {operator; operandl; operandr} -> commands_of_operand operandl @ commands_of_operand operandr @ [BinaryOp operator]
+| UnaryOp {operator; operand} -> commands_of_operand operand @ [UnaryOp operator]
+| Aggregate {aggregate_kind; operands} -> List.concat_map commands_of_operand operands @ [Aggregate (aggregate_kind, List.length operands)]
+| Discriminant place -> commands_for_loading_place place @ [Discriminant]
+
+let commands_of_statement_kind = function
+  Assign {lhs_place; rhs_rvalue} ->
+  (* ASSUMPTION: It's fine to first evaluate the RHS and then the LHS.
+     Evaluating a place expression or an rvalue does not have "physical" side-effects but
+     it might have a side-effects on the Tree Borrows state? *)
+  commands_of_rvalue rhs_rvalue @ [Store lhs_place]
+| Nop -> []
+
+let commands_of_statement ({source_info; kind}: statement) = SourceInfo source_info::commands_of_statement_kind kind
+
+let rec process_commands bodies (env: env) opnds (i_bb: basic_block_info) i_s (ss_i: command list) =
   let load_from_lv_path: 'r. local_variable_path -> (string -> 'r) -> (term -> 'r) -> 'r = fun localPath fallback cont ->
     begin match List.assoc localPath env with
       Value v -> cont v
@@ -944,13 +1005,17 @@ let rec process_assignments bodies (env: env) (i_bb: basic_block_info) i_s (ss_i
       method sibling i = bb_info_of i
       method caller = caller_info
     end in
-    process_assignments bodies env (bb_info_of 0) 0 (bbs.(0).statements) (* TODO: deal with unwind_action *)
+    process_commands bodies env [] (bb_info_of 0) 0 (List.concat_map commands_of_statement bbs.(0).statements) (* TODO: deal with unwind_action *)
   in
   let inline_call funcName substs call (body: body) =
     inline_call0 funcName body.generics substs call body
   in
+  let done_ () = 
+    (env, opnds, i_bb, i_s, ss_i)
+  in
   match ss_i with
     [] ->
+    assert (opnds = []);
     begin match i_bb#terminator.kind with
       Call ({func=Constant {const=Val {const_value=ZeroSized; ty={kind=FnDef {id={name=funcName}; substs}}}}} as call) ->
       let substs = List.map (decode_gen_arg i_bb#genv) substs in
@@ -970,7 +1035,7 @@ let rec process_assignments bodies (env: env) (i_bb: basic_block_info) i_s (ss_i
         inline_call funcName substs call (List.assoc funcName bodies)
       else begin match List.assoc_opt funcName fns_to_be_inlined with
         Some body -> inline_call funcName substs call body
-      | None -> (env, i_bb, i_s, ss_i)
+      | None -> done_ ()
       end
     | Return when i_bb#caller <> None ->
       let Some (returnLocalName, destinationPlace, destinationBb) = i_bb#caller in
@@ -980,74 +1045,90 @@ let rec process_assignments bodies (env: env) (i_bb: basic_block_info) i_s (ss_i
         Value v ->
           let destinationLocalPath = {lv_caller=destinationBb#id.bb_caller; lv_name=destinationPlace.local.name} in
           let env = update_env destinationLocalPath (Value v) env in
-          process_assignments bodies env destinationBb 0 (destinationBb#statements)
+          process_commands bodies env [] destinationBb 0 (List.concat_map commands_of_statement destinationBb#statements)
       | Address _ -> failwith "Locals whose address is taken are not yet supported as return value destinations of inlined calls"
       end
-    | _ -> (env, i_bb, i_s, ss_i)
+    | _ -> done_ ()
     end
   | s::ss_i_plus_1 ->
-    match s.kind with
-      Assign assign_data ->
-        let lhsPlace = assign_data.lhs_place in
-        let rhsRvalue = assign_data.rhs_rvalue in
+    let cont env opnds =
+      process_commands bodies env opnds i_bb (i_s + 1) ss_i_plus_1
+    in
+    match s with
+      Store lhsPlace ->
+        let rhsValue::opnds = opnds in
         let lhsProjection = lhsPlace.projection in
         if lhsProjection <> [] then
-          (env, i_bb, i_s, ss_i)
+          done_ ()
         else
           let lhsLocalId = lhsPlace.local in
           let lhsLocalName = lhsLocalId.name in
           let lhsLocalPath = {lv_caller=i_bb#id.bb_caller; lv_name=lhsLocalName} in
           begin match List.assoc_opt lhsLocalPath env with
-            Some (Address _) -> (env, i_bb, i_s, ss_i)
+            Some (Address _) -> done_ ()
           | _ ->
-            let perform_assignment rhsValue =
-              let env = update_env lhsLocalPath (Value rhsValue) env in
-              process_assignments bodies env i_bb (i_s + 1) ss_i_plus_1
-            in
-            begin match rhsRvalue with
-              Use operand ->
-                eval_operand operand (fun msg -> (env, i_bb, i_s, ss_i)) @@ perform_assignment
-            | Aggregate {aggregate_kind=Adt {adt_kind=StructKind; adt_id={name}}; operands} ->
-              eval_operands operands (fun msg -> (env, i_bb, i_s, ss_i)) @@ fun rhsValues ->
-                perform_assignment @@ StructValue rhsValues
-            | Aggregate {aggregate_kind=Adt {adt_kind=EnumKind; variant_id; adt_id={name}}; operands} ->
-              eval_operands operands (fun msg -> (env, i_bb, i_s, ss_i)) @@ fun rhsValues ->
-                perform_assignment @@ EnumValue (variant_id, rhsValues)
-            | Aggregate {aggregate_kind=Tuple; operands} ->
-              eval_operands operands (fun msg -> (env, i_bb, i_s, ss_i)) @@ fun rhsValues ->
-                perform_assignment @@ Tuple rhsValues
-            | Aggregate {aggregate_kind=Closure _; operands} ->
-              eval_operands operands (fun msg -> (env, i_bb, i_s, ss_i)) @@ fun rhsValues ->
-                perform_assignment @@ Closure rhsValues
-            | AddressOf addr_of_data ->
-              begin match addr_of_data.place.projection with
-                [Deref] ->
-                  let placeLocalPath = {lv_caller=i_bb#id.bb_caller; lv_name=addr_of_data.place.local.name} in
-                  begin match List.assoc placeLocalPath env with
-                    Value placeValue ->
-                    perform_assignment placeValue
-                  | Address _ -> (env, i_bb, i_s, ss_i)
-                  end
-              | _ -> (env, i_bb, i_s, ss_i)
-              end
-            | Ref {bor_kind=Shared; place={local; local_is_mutable=false; projection=[]}} ->
-              let placeLocalPath = {lv_caller=i_bb#id.bb_caller; lv_name=local.name} in
-              perform_assignment (AddressOfNonMutLocal placeLocalPath)
-            | Ref {bor_kind=Shared; place={local; local_is_mutable=false; projection=[Deref]}} ->
-              load_from_local local (fun msg -> (env, i_bb, i_s, ss_i)) @@ fun v ->
-              begin match v with
-                AddressOfNonMutLocal lv_path ->
-                perform_assignment (AddressOfNonMutLocal lv_path)
-              | _ -> (env, i_bb, i_s, ss_i)
-              end
-            | _ -> (env, i_bb, i_s, ss_i)
-            end
+            let env = update_env lhsLocalPath (Value rhsValue) env in
+            cont env opnds
           end
-    | Nop -> process_assignments bodies env i_bb (i_s + 1) ss_i_plus_1
+    | LoadLocal localId ->
+      load_from_local localId (fun msg -> done_ ()) (fun v -> cont env (v::opnds))
+    | Deref ->
+      let v::opnds = opnds in
+      begin match v with
+        AddressOfNonMutLocal lv_path ->
+        load_from_lv_path lv_path (fun msg -> done_ ()) (fun v -> cont env (v::opnds))
+      | _ -> done_ ()
+      end
+    | Field index ->
+      let v::opnds = opnds in
+      begin match v with
+        StructValue vs -> cont env (List.nth vs index::opnds)
+      | EnumValue (variant_id, vs) -> cont env (List.nth vs index::opnds)
+      | Tuple vs -> cont env (List.nth vs index::opnds)
+      | Closure vs -> cont env (List.nth vs index::opnds)
+      | _ -> done_ ()
+      end
+    | Aggregate (Adt {adt_kind=StructKind; adt_id={name}}, n) ->
+      let vs, opnds = popn n opnds in
+      cont env (StructValue vs::opnds)
+    | Aggregate (Adt {adt_kind=EnumKind; variant_id; adt_id={name}}, n) ->
+      let vs, opnds = popn n opnds in
+      cont env (EnumValue (variant_id, vs)::opnds)
+    | Aggregate (Tuple, n) ->
+      let vs, opnds = popn n opnds in
+      cont env (Tuple vs::opnds)
+    | Aggregate (Closure _, n) ->
+      let vs, opnds = popn n opnds in
+      cont env (Closure vs::opnds)
+    | AddressOf addr_of_data ->
+      begin match addr_of_data.place.projection with
+        [Deref] ->
+          let placeLocalPath = {lv_caller=i_bb#id.bb_caller; lv_name=addr_of_data.place.local.name} in
+          begin match List.assoc placeLocalPath env with
+            Value placeValue ->
+            cont env (placeValue::opnds)
+          | Address _ -> done_ ()
+          end
+      | _ -> done_ ()
+      end
+    | Ref {bor_kind=Shared; place={local; local_is_mutable=false; projection=[]}} ->
+      let placeLocalPath = {lv_caller=i_bb#id.bb_caller; lv_name=local.name} in
+      cont env (AddressOfNonMutLocal placeLocalPath::opnds)
+    | Ref {bor_kind=Shared; place={local; local_is_mutable=false; projection=[Deref]}} ->
+      load_from_local local (fun msg -> done_ ()) @@ fun v ->
+      begin match v with
+        AddressOfNonMutLocal lv_path ->
+        cont env (AddressOfNonMutLocal lv_path::opnds)
+      | _ -> done_ ()
+      end
+    | SourceInfo sourceInfo ->
+      Printf.printf "INFO: at %s\n" (string_of_span sourceInfo.span);
+      cont env opnds
+    | _ -> done_ ()
 
 let values_equal (v0: term) (v1: term) = v0 = v1
 
-let check_place_element_refines_place_element elem0 elem1 =
+let check_place_element_refines_place_element (elem0: place_elem) (elem1: place_elem) =
   match elem0, elem1 with
   | Deref, Deref -> ()
   | Field field0, Field field1 ->
@@ -1122,13 +1203,7 @@ let check_operand_refines_operand i genv0 env0 span0 caller0 operand0 genv1 env1
     let term1 = eval_const_operand genv1 const_operand_cpn1 in
     if term0 <> term1 then failwith (Printf.sprintf "The constants %s at %s and %s at %s are not equal" (string_of_term term0) (string_of_span span0) (string_of_term term1) (string_of_span span1))
 
-let check_aggregate_refines_aggregate genv0 env0 span0 caller0 aggregate0 genv1 env1 span1 caller1 aggregate1 =
-  let operands0 = aggregate0.operands in
-  let operands1 = aggregate1.operands in
-  if List.length operands0 <> List.length operands1 then failwith "The two aggregate expressions have a different number of operands";
-  List.iteri (fun i (operand0, operand1) -> check_operand_refines_operand i genv0 env0 span0 caller0 operand0 genv1 env1 span1 caller1 operand1) (List.combine operands0 operands1);
-  let aggregate_kind0 = aggregate0.aggregate_kind in
-  let aggregate_kind1 = aggregate1.aggregate_kind in
+let check_aggregate_kind_refines_aggregate_kind genv0 (aggregate_kind0: aggregate_kind) genv1 (aggregate_kind1: aggregate_kind) =
   match aggregate_kind0, aggregate_kind1 with
     Array _, Array _ -> failwith "Aggregate::Array not supported"
   | Tuple, Tuple -> ()
@@ -1153,6 +1228,15 @@ let check_aggregate_refines_aggregate genv0 env0 span0 caller0 aggregate0 genv1 
   | CoroutineClosure, CoroutineClosure -> failwith "Aggregate::CoroutineClosure not supported"
   | RawPtr, RawPtr -> failwith "Aggregate::RawPtr not supported"
   | _ -> failwith "Aggregate kinds do not match"
+      
+let check_aggregate_refines_aggregate genv0 env0 span0 caller0 aggregate0 genv1 env1 span1 caller1 aggregate1 =
+  let operands0 = aggregate0.operands in
+  let operands1 = aggregate1.operands in
+  if List.length operands0 <> List.length operands1 then failwith "The two aggregate expressions have a different number of operands";
+  List.iteri (fun i (operand0, operand1) -> check_operand_refines_operand i genv0 env0 span0 caller0 operand0 genv1 env1 span1 caller1 operand1) (List.combine operands0 operands1);
+  let aggregate_kind0 = aggregate0.aggregate_kind in
+  let aggregate_kind1 = aggregate1.aggregate_kind in
+  check_aggregate_kind_refines_aggregate_kind genv0 aggregate_kind0 genv1 aggregate_kind1
 
 (* Checks that the two rvalues evaluate to the same value *)
 let check_rvalue_refines_rvalue genv0 env0 span0 caller0 rhsRvalue0 genv1 env1 span1 caller1 rhsRvalue1 =
@@ -1401,7 +1485,7 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
               (* Havoc all locals of the original crate *)
               let env0, env1 = produce_loop_inv env0 env1 loopInv in
               Printf.printf "INFO: In function %s, checking loop body at basic block %s against basic block %s, with env0 = [%s] and env1 = [%s]\n" def_path i_bb0#to_string i_bb1#to_string (string_of_env env0) (string_of_env env1);
-              check_codepos_refines_codepos env0 i_bb0 0 i_bb0#statements env1 i_bb1 0 i_bb1#statements;
+              check_codepos_refines_codepos env0 [] i_bb0 0 (List.concat_map commands_of_statement i_bb0#statements) env1 [] i_bb1 0 (List.concat_map commands_of_statement i_bb1#statements);
               let Checking (i_bb1, loopInv) = Hashtbl.find bblocks0_statuses i_bb0#id in
               Hashtbl.replace bblocks0_statuses i_bb0#id (Checked (i_bb1, loopInv))
             with RecheckLoop i_bb0' as e ->
@@ -1476,10 +1560,12 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
           check_basic_block_refines_basic_block env0 i_bb0 env1 i_bb1
         end
     (* Checks whether for each behavior of code position (bb0, s0), code position (bb1, s1) has a matching behavior *)
-    and check_codepos_refines_codepos_core env0 (i_bb0 : basic_block_info) i_s0 (ss_i0 : statement list) env1 (i_bb1 : basic_block_info) i_s1 (ss_i1 : statement list) =
+    and check_codepos_refines_codepos_core env0 opnds0 (i_bb0 : basic_block_info) i_s0 (ss_i0 : command list) env1 opnds1 (i_bb1 : basic_block_info) i_s1 (ss_i1 : command list) =
       let caller0 = i_bb0#id.bb_caller in
       let caller1 = i_bb1#id.bb_caller in
       let check_terminator_refines_terminator env1 =
+        if opnds0 <> [] then failwith "opnds0 <> [] at terminator";
+        if opnds1 <> [] then failwith "opnds1 <> [] at terminator";
         let terminator0 = i_bb0#terminator in
         let terminator1 = i_bb1#terminator in
         let span0 = terminator0.source_info.span in
@@ -1582,37 +1668,118 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
         | InlineAsm, InlineAsm -> failwith "InlineAsm not supported"
         | _ -> failwith "Terminator kinds do not match"
       in
-      let check_statement_refines_statement () =
+      let check_command_refines_command () =
         let stmt0::ss_i0_plus_1 = ss_i0 in
         let stmt1::ss_i1_plus_1 = ss_i1 in
-        let stmtSpan0 = stmt0.source_info.span in
-        let stmtSpan1 = stmt1.source_info.span in
-        Printf.printf "INFO: Checking that statement at %s refines statement at %s\n" (string_of_span stmtSpan0) (string_of_span stmtSpan1);
-        let stmtKind0 = stmt0.kind in
-        let stmtKind1 = stmt1.kind in
-        match (stmtKind0, stmtKind1) with
-          (Assign assign_data0, Assign assign_data1) ->
-            let rhsRvalue0 = assign_data0.rhs_rvalue in
-            let rhsRvalue1 = assign_data1.rhs_rvalue in
-            check_rvalue_refines_rvalue i_bb0#genv env0 stmtSpan0 caller0 rhsRvalue0 i_bb1#genv env1 stmtSpan1 caller1 rhsRvalue1;
-            let lhsPlace0 = assign_data0.lhs_place in
-            let lhsPlace1 = assign_data1.lhs_place in
+        let consume_operand opnds0 opnds1 =
+          let v0::opnds0 = opnds0 in
+          let v1::opnds1 = opnds1 in
+          if not (values_equal v0 v1) then 
+            failwith (Printf.sprintf "In function %s, at command %d of basic block %s in the original crate and command %d of basic block %s in the verified crate, the values %s and %s are not equal" def_path i_s0 i_bb0#to_string i_s1 i_bb1#to_string (string_of_term v0) (string_of_term v1));
+          v0, opnds0, opnds1
+        in
+        let consume_operands n opnds0 opnds1 =
+          let vs0, opnds0 = popn n opnds0 in
+          let vs1, opnds1 = popn n opnds1 in
+          if not (List.for_all2 values_equal vs0 vs1) then
+            failwith (Printf.sprintf "In function %s, at command %d of basic block %s in the original crate and command %d of basic block %s in the verified crate, the values %s and %s are not equal" def_path i_s0 i_bb0#to_string i_s1 i_bb1#to_string (string_of_terms vs0) (string_of_terms vs1));
+          vs0, opnds0, opnds1
+        in
+        let cont env0 opnds0 env1 opnds1 =
+          check_codepos_refines_codepos env0 opnds0 i_bb0 (i_s0 + 1) ss_i0_plus_1 env1 opnds1 i_bb1 (i_s1 + 1) ss_i1_plus_1
+        in
+        match stmt0, stmt1 with
+          Store lhsPlace0, Store lhsPlace1 ->
+            let v, opnds0, opnds1 = consume_operand opnds0 opnds1 in
             begin match check_place_refines_place env0 caller0 lhsPlace0 env1 caller1 lhsPlace1 with
               Local x0, Local x1 ->
-              let rhsValue = fresh_symbol () in
-              let env0 = update_env x0 (Value rhsValue) env0 in
-              let env1 = update_env x1 (Value rhsValue) env1 in
-              check_codepos_refines_codepos env0 i_bb0 (i_s0 + 1) ss_i0_plus_1 env1 i_bb1 (i_s1 + 1) ss_i1_plus_1
+              let env0 = update_env x0 (Value v) env0 in
+              let env1 = update_env x1 (Value v) env1 in
+              cont env0 opnds0 env1 opnds1
             | LocalProjection x0, LocalProjection x1 -> local_address_taken x0 x1
             | Nonlocal, Nonlocal ->
-              check_codepos_refines_codepos env0 i_bb0 (i_s0 + 1) ss_i0_plus_1 env1 i_bb1 (i_s1 + 1) ss_i1_plus_1
+              cont env0 opnds0 env1 opnds1
             end
+        | LoadLocal {name=local0}, LoadLocal {name=local1} ->
+            let localState0 = List.assoc {lv_caller=caller0; lv_name=local0} env0 in
+            let localState1 = List.assoc {lv_caller=caller1; lv_name=local1} env1 in
+            let v0, v1 =
+              match localState0, localState1 with
+                Address a1, Address a2 ->
+                  if not (values_equal a1 a2) then failwith "LoadLocal: The addresses of the two locals are not equal";
+                  let v = fresh_symbol () in
+                  v, v
+              | (Address _, _) | (_, Address _) ->
+                  failwith "LoadLocal: The address of exactly one of the locals is taken"
+              | Value v0, Value v1 ->
+                  v0, v1
+            in
+            cont env0 (v0::opnds0) env1 (v1::opnds1)
+        | Deref, Deref ->
+            let v, opnds0, opnds1 = consume_operand opnds0 opnds1 in
+            let v = fresh_symbol () in
+            cont env0 (v::opnds0) env1 (v::opnds1)
+        | Field i0, Field i1 ->
+            if i0 <> i1 then failwith "Field: The field indices do not match";
+            let v, opnds0, opnds1 = consume_operand opnds0 opnds1 in
+            let v = fresh_symbol () in
+            cont env0 (v::opnds0) env1 (v::opnds1)
+        | BoxAsPtr, BoxAsPtr ->
+            let v, opnds0, opnds1 = consume_operand opnds0 opnds1 in
+            let v = fresh_symbol () in
+            cont env0 (v::opnds0) env1 (v::opnds1)
+        | Downcast i0, Downcast i1 ->
+            let v, opnds0, opnds1 = consume_operand opnds0 opnds1 in
+            let v = fresh_symbol () in
+            cont env0 (v::opnds0) env1 (v::opnds1)
+        | Constant c0, Constant c1 ->
+            let v0 = eval_const_operand i_bb0#genv c0 in
+            let v1 = eval_const_operand i_bb1#genv c1 in
+            if not (values_equal v0 v1) then
+              failwith "Constant: The constant values do not match";
+            cont env0 (v0::opnds0) env1 (v1::opnds1)
+        | Ref ref0, Ref ref1 ->
+            if ref0.bor_kind <> ref1.bor_kind then failwith "Ref: The bor_kinds do not match";
+            begin match check_place_refines_place env0 caller0 ref0.place env1 caller1 ref1.place with
+              (Local x0, Local x1) | (LocalProjection x0, LocalProjection x1) -> local_address_taken x0 x1
+            | Nonlocal, Nonlocal ->
+              let v = fresh_symbol () in
+              cont env0 (v::opnds0) env1 (v::opnds1)
+            end
+        | AddressOf addrOfData0, AddressOf addrOfData1 -> failwith "AddressOf: not yet supported"
+        | Cast ty0, Cast ty1 ->
+            let v, opnds0, opnds1 = consume_operand opnds0 opnds1 in
+            if decode_ty i_bb0#genv ty0 <> decode_ty i_bb1#genv ty1 then
+              failwith "Cast: The types do not match";
+            let v = fresh_symbol () in
+            cont env0 (v::opnds0) env1 (v::opnds1)
+        | BinaryOp op0, BinaryOp op1 ->
+            let [vlhs; vrhs], opnds0, opnds1 = consume_operands 2 opnds0 opnds1 in
+            if op0 <> op1 then failwith "BinaryOp: The operators do not match";
+            let v = fresh_symbol () in
+            cont env0 (v::opnds0) env1 (v::opnds1)
+        | UnaryOp op0, UnaryOp op1 ->
+            let v, opnds0, opnds1 = consume_operand opnds0 opnds1 in
+            if op0 <> op1 then failwith "UnaryOp: The operators do not match";
+            let v = fresh_symbol () in
+            cont env0 (v::opnds0) env1 (v::opnds1)
+        | Aggregate (kind0, n0), Aggregate (kind1, n1) ->
+            if n0 <> n1 then failwith "Aggregate: The number of elements do not match";
+            check_aggregate_kind_refines_aggregate_kind i_bb0#genv kind0 i_bb1#genv kind1;
+            let vs, opnds0, opnds1 = consume_operands n0 opnds0 opnds1 in
+            let v = fresh_symbol () in
+            cont env0 (v::opnds0) env1 (v::opnds1)
+        | Discriminant, Discriminant ->
+            let v, opnds0, opnds1 = consume_operand opnds0 opnds1 in
+            let v = fresh_symbol () in
+            cont env0 (v::opnds0) env1 (v::opnds1)
+        | _ -> failwith "Command kinds do not match"
       in
       match ss_i0, ss_i1 with
         [], [] -> check_terminator_refines_terminator env1
       | _, [] -> failwith (Printf.sprintf "In function %s, cannot prove that statement %d of basic block %s in the original version refines the terminator of basic block %s in the verified version" def_path i_s0 i_bb0#to_string i_bb1#to_string)
-      | {kind=Assign {lhs_place={projection=[]}; rhs_rvalue=Ref {place={projection=[Deref]}}}}::_, _ -> check_statement_refines_statement ()
-      | _, {kind=Assign {lhs_place={projection=[]; local={name=lhsPlaceLocalName1}}; rhs_rvalue=Ref {place={projection=[Deref]; local={name=rhsPlaceLocalName1}}}}}::ss_i1_plus_1 ->
+      | Ref {place={projection=[Deref]}}::_, _ -> check_command_refines_command ()
+      | _, Ref {place={projection=[Deref]; local={name=rhsPlaceLocalName1}}}::ss_i1_plus_1 ->
         (* Process assignments of the form `x = &*y;` where x and y are locals whose address is not taken.
           * We are here using the property that inserting such statements can only cause a program to have more UB, so if it verifies, the original program is also safe.
           *)
@@ -1620,23 +1787,17 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
         let fail () = failwith (Printf.sprintf "In function %s, cannot prove that code position %d of basic block %s in the original version refines the statement at position %d of basic block %s in the verified version" def_path i_s0 i_bb0#to_string i_s1 i_bb1#to_string) in
         begin match List.assoc_opt rhsPlaceLocalPath1 env1 with
           Some (Value rhsValue) ->
-            let lhsPlaceLocalPath1 = {lv_caller=caller1; lv_name=lhsPlaceLocalName1} in
-            begin match List.assoc_opt lhsPlaceLocalPath1 env1 with
-              Some (Address _) -> fail ()
-            | _ ->
-              let env1 = update_env lhsPlaceLocalPath1 (Value rhsValue) env1 in
-              check_codepos_refines_codepos env0 i_bb0 i_s0 ss_i0 env1 i_bb1 (i_s1 + 1) ss_i1_plus_1
-            end
+            check_codepos_refines_codepos env0 opnds0 i_bb0 i_s0 ss_i0 env1 (rhsValue::opnds1) i_bb1 (i_s1 + 1) ss_i1_plus_1
         | _ -> fail ()
         end
       | [], _ -> failwith (Printf.sprintf "In function %s, cannot prove that the terminator of basic block %s in the original version refines statement %d of basic block %s in the verified version" def_path i_bb0#to_string i_s1 i_bb1#to_string)
-      | _ -> check_statement_refines_statement ()
-    and check_codepos_refines_codepos env0 i_bb0 i_s0 ss_i0 env1 i_bb1 i_s1 ss_i1 =
-      let (env0, i_bb0, i_s0, ss_i0) = process_assignments bodies0 env0 i_bb0 i_s0 ss_i0 in
-      let (env1, i_bb1, i_s1, ss_i1) = process_assignments bodies1 env1 i_bb1 i_s1 ss_i1 in
+      | _ -> check_command_refines_command ()
+    and check_codepos_refines_codepos env0 opnds0 i_bb0 i_s0 ss_i0 env1 opnds1 i_bb1 i_s1 ss_i1 =
+      let (env0, opnds0, i_bb0, i_s0, ss_i0) = process_commands bodies0 env0 opnds0 i_bb0 i_s0 ss_i0 in
+      let (env1, opnds1, i_bb1, i_s1, ss_i1) = process_commands bodies1 env1 opnds1 i_bb1 i_s1 ss_i1 in
       let rec iter env0 env1 =
         try
-          check_codepos_refines_codepos_core env0 i_bb0 i_s0 ss_i0 env1 i_bb1 i_s1 ss_i1
+          check_codepos_refines_codepos_core env0 opnds0 i_bb0 i_s0 ss_i0 env1 opnds1 i_bb1 i_s1 ss_i1
         with LocalAddressTaken (x0, x1) ->
           if List.assoc x0 env0 <> List.assoc x1 env1 then failwith (Printf.sprintf "The states of the two locals %s and %s whose address is taken are not equal" (string_of_lv_path x0) (string_of_lv_path x1));
           Printf.printf "Caught LocalAddressTaken; restarting codepos check\n";
