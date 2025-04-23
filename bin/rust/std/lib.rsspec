@@ -885,6 +885,7 @@ mod sync {
     mod atomic {
 
         enum Ordering {
+            Relaxed,
             SeqCst
         }
 
@@ -959,8 +960,13 @@ mod sync {
             //@ on_unwind_ens false;
 
             fn fetch_add<'a>(self: &'a AtomicUsize, val: usize, order: Ordering) -> usize;
-            //@ req order == std::sync::atomic::Ordering::SeqCst &*& is_AtomicUsize_fetch_add_ghop(?ghop, self, val, ?pre, ?post) &*& pre();
-            //@ ens post(result);
+            /*@
+            req match order {
+                    Ordering::Relaxed => false,
+                    Ordering::SeqCst => is_AtomicUsize_fetch_add_ghop(?ghop, self, val, ?pre, ?post) &*& pre() &*& ens post(result) on_unwind_ens false,
+                };
+            @*/
+            //@ ens true;
             //@ on_unwind_ens false;
 
             fn fetch_sub<'a>(self: &'a AtomicUsize, val: usize, order: Ordering) -> usize;
