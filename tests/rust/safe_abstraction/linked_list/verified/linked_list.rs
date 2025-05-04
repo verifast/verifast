@@ -1260,8 +1260,16 @@ impl<T> LinkedList<T> {
     #[rustc_const_stable(feature = "const_linked_list_new", since = "1.39.0")]
     #[stable(feature = "rust1", since = "1.0.0")]
     #[must_use]
-    pub const fn new() -> Self {
-        LinkedList { head: None, tail: None, len: 0, alloc: Global, marker: PhantomData }
+    pub const fn new() -> Self
+    //@ req thread_token(?t);
+    //@ ens thread_token(t) &*& <LinkedList<T, Global>>.own(t, result);
+    //@ on_unwind_ens thread_token(t);
+    {
+        let r = LinkedList { head: None, tail: None, len: 0, alloc: Global, marker: PhantomData };
+        //@ close foreach(nil, elem_fbc::<T>(t));
+        //@ std::alloc::produce_Allocator_Global(t);
+        //@ close <LinkedList<T, Global>>.own(t, r);
+        r
     }
 
     /// Moves all elements from `other` to the end of the list.
