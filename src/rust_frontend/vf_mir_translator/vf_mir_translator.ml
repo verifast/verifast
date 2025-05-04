@@ -2365,7 +2365,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                              (*decimal*) true,
                              (*U suffix*) false,
                              (*int literal*) Ast.NoLSuffix )) )
-              | "std::ptr::read" | "std::ptr::mut_ptr::<impl *mut T>::read" ->
+              | "std::ptr::read" | "std::ptr::mut_ptr::<impl *mut T>::read"
+              | "std::ptr::const_ptr::<impl *const T>::read" ->
                   let [ src_cpn ] = args_cpn in
                   let* tmp_rvalue_binders, [ src ] =
                     translate_operands [ (src_cpn, fn_loc) ]
