@@ -1253,6 +1253,14 @@ unsafe fn Allocator_clone__VeriFast_wrapper<'a, A: Allocator + Clone>(alloc: &'a
     alloc.clone()
 }
 
+fn mem_take_usize__VeriFast_wrapper(dest: &mut usize) -> usize
+//@ req *dest |-> ?v;
+//@ ens *dest |-> 0 &*& result == v;
+//@ assume_correct
+{
+    mem::take(dest)
+}
+
 #[stable(feature = "rust1", since = "1.0.0")]
 impl<T> Default for LinkedList<T> {
     /// Creates an empty `LinkedList<T>`.
@@ -1530,16 +1538,35 @@ impl<T, A: Allocator> LinkedList<T, A> {
     /// ```
     #[inline]
     #[stable(feature = "rust1", since = "1.0.0")]
-    pub fn clear(&mut self) {
+    pub fn clear(&mut self)
+    //@ req thread_token(?t) &*& *self |-> ?self0 &*& <LinkedList<T, A>>.own(t, self0);
+    //@ ens thread_token(t) &*& *self |-> ?self1 &*& <LinkedList<T, A>>.own(t, self1);
+    //@ on_unwind_ens thread_token(t) &*& *self |-> ?self1 &*& <LinkedList<T, A>>.own(t, self1);
+    {
+        //@ open_points_to(self);
+        //@ open <LinkedList<T, A>>.own(t, self0);
+        //@ let alloc_ref = precreate_ref(&(*self).alloc);
         // We need to drop the nodes while keeping self.alloc
         // We can do this by moving (head, tail, len) into a new list that borrows self.alloc
-        drop(LinkedList {
-            head: self.head.take(),
-            tail: self.tail.take(),
-            len: mem::take(&mut self.len),
-            alloc: &self.alloc,
-            marker: PhantomData,
-        });
+        //@ let k = begin_lifetime();
+        {
+            //@ let_lft 'a = k;
+            //@ std::alloc::init_ref_Allocator_at_lifetime::<'a, A>(alloc_ref);
+            let ll = LinkedList {
+                head: self.head.take(),
+                tail: self.tail.take(),
+                len: mem_take_usize__VeriFast_wrapper(&mut self.len),
+                alloc: &self.alloc,
+                marker: PhantomData,
+            };
+            //@ close <LinkedList<T, &'a A>>.own(t, ll);
+            drop/*@::<LinkedList<T, &'a A>> @*/(ll);
+        }
+        //@ end_lifetime(k);
+        //@ std::alloc::end_ref_Allocator_at_lifetime::<A>();
+        //@ close_points_to(self);
+        //@ close foreach(nil, elem_fbc::<T>(t));
+        //@ close <LinkedList<T, A>>.own(t, *self);
     }
 
     /// Returns `true` if the `LinkedList` contains an element equal to the
