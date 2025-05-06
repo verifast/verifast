@@ -3725,7 +3725,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         adt_name ^ "_drop",
         [],
         false (*nonghost_callers_only*),
-        None
+        (None, None)
         (*implemented function type, with function type type arguments and function type arguments*),
         Some (pre, ("result", post)) (*contract*),
         false (*terminates*),
@@ -4183,7 +4183,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let* annots = ListAux.try_map translate_annotation contract in
     let annots = List.map translate_annot_to_vf_parser_inp annots in
     let* ( ( (nonghost_callers_only : bool),
-             (fn_type_clause : _ option),
+             ((fn_type_clause : _ option), safetyProof),
              (pre_post : _ option),
              (terminates : bool) ),
            (assume_correct : bool) ) =
@@ -4207,7 +4207,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                (lifetime_params_get_list required_fn_cpn))
             [] [] [] params result
         in
-        Ok ((false, None, Some contract, false), false))
+        Ok ((false, (None, None), Some contract, false), false))
     in
     if assume_correct then
       Ast.static_error loc
@@ -4229,7 +4229,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           Printf.sprintf "%s::%s" trait_name name,
           vf_param_decls,
           nonghost_callers_only,
-          fn_type_clause,
+          (fn_type_clause, None),
           pre_post,
           terminates,
           None,
@@ -4565,7 +4565,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   (ret_place_loc, ret_ty_info)
             in
             let contract_template =
-              (false, None, Some pre_post_template, false)
+              (false, (None, None), Some pre_post_template, false)
             in
             match contract_opt with
             | None -> Ok (None, (contract_template, false))
@@ -4576,7 +4576,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         let* closing_cbrace_loc = LocAux.get_last_col_loc loc in
         let mk_fn_decl contract body =
           let ( (nonghost_callers_only : bool),
-                (fn_type_clause : _ option),
+                ((fn_type_clause : _ option), safetyProof),
                 (pre_post : _ option),
                 (terminates : bool) ) =
             contract
@@ -4593,7 +4593,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               name,
               vf_param_decls,
               nonghost_callers_only,
-              fn_type_clause,
+              (fn_type_clause, safetyProof),
               (if TranslatorArgs.ignore_unwind_paths then
                  Option.map Rust_parser.result_spec_of_outcome_spec pre_post
                else pre_post),
@@ -4876,7 +4876,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         name ^ "_send",
         params,
         false (*nonghost_callers_only*),
-        None
+        (None, None)
         (*implemented function type, with function type type arguments and function type arguments*),
         Some (pre, ("result", post)) (*contract*),
         false (*terminates*),
@@ -5082,7 +5082,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             name ^ "_own_mono",
             [],
             false (*nonghost_callers_only*),
-            None
+            (None, None)
             (*implemented function type, with function type type arguments and function type arguments*),
             Some (pre, ("result", post)) (*contract*),
             false (*terminates*),
@@ -5107,7 +5107,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             name ^ "_upcast",
             [ (tp0, "v") ],
             false (*nonghost_callers_only*),
-            None
+            (None, None)
             (*implemented function type, with function type type arguments and function type arguments*),
             Some (EmpAsn adt_def_loc, ("result", post)) (*contract*),
             false (*terminates*),
@@ -5183,7 +5183,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         name ^ "_sync",
         params,
         false (*nonghost_callers_only*),
-        None
+        (None, None)
         (*implemented function type, with function type type arguments and function type arguments*),
         Some (pre, ("result", post)) (*contract*),
         false (*terminates*),
@@ -5275,7 +5275,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               name ^ "_share_mono",
               params,
               false (*nonghost_callers_only*),
-              None
+              (None, None)
               (*implemented function type, with function type type arguments and function type arguments*),
               Some (pre, ("result", post)) (*contract*),
               false (*terminates*),
@@ -5396,7 +5396,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               name ^ "_share_full",
               params,
               false (*nonghost_callers_only*),
-              None
+              (None, None)
               (*implemented function type, with function type type arguments and function type arguments*),
               Some (pre, ("result", post)) (*contract*),
               false (*terminates*),
@@ -5513,7 +5513,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   "p" );
               ],
               false (*nonghost_callers_only*),
-              None
+              (None, None)
               (*implemented function type, with function type type arguments and function type arguments*),
               Some (pre, ("result", post)) (*contract*),
               false (*terminates*),
@@ -6158,7 +6158,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                     "p" );
                 ],
                 false (*nonghost_callers_only*),
-                None
+                (None, None)
                 (*implemented function type, with function type type arguments and function type arguments*),
                 Some (pre, ("result", post)) (*contract*),
                 false (*terminates*),
@@ -6312,7 +6312,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   (ManifestTypeExpr (def_loc, RealType), "coef");
                 ],
                 false (*nonghost_callers_only*),
-                None
+                (None, None)
                 (*implemented function type, with function type type arguments and function type arguments*),
                 Some (pre, ("result", post)) (*contract*),
                 false (*terminates*),
@@ -6394,7 +6394,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                     "p" );
                 ],
                 false (*nonghost_callers_only*),
-                None
+                (None, None)
                 (*implemented function type, with function type type arguments and function type arguments*),
                 Some (pre, ("result", post)) (*contract*),
                 false (*terminates*),
@@ -6493,7 +6493,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                     "p" );
                 ],
                 false (*nonghost_callers_only*),
-                None
+                (None, None)
                 (*implemented function type, with function type type arguments and function type arguments*),
                 Some (pre, ("result", post)) (*contract*),
                 false (*terminates*),
@@ -6589,7 +6589,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                     "p" );
                 ],
                 false (*nonghost_callers_only*),
-                None
+                (None, None)
                 (*implemented function type, with function type type arguments and function type arguments*),
                 Some (pre, ("result", post)) (*contract*),
                 false (*terminates*),
@@ -6737,7 +6737,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                                  name,
                                  ps,
                                  false,
-                                 None,
+                                 (None, None),
                                  Some (pre, (result_var, post)),
                                  terminates,
                                  body,
@@ -6778,7 +6778,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                                       impl_fn_name,
                                       ps,
                                       false,
-                                      None,
+                                      (None, None),
                                       Some (pre, ("result", post)),
                                       terminates,
                                       None,

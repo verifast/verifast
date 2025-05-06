@@ -951,7 +951,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       * (string * type_) list (* type environment after precondition *)
       * (string (* result variable *) * asn) (* postcondition *)
       * bool  (* terminates *)
-      * (string * pred_fam_info map * type_ list * (loc * string) list) option (* implemented function type, with function type type arguments and function type arguments *)
+      * ((string * pred_fam_info map * type_ list * (loc * string) list) option (* implemented function type, with function type type arguments and function type arguments *)
+         * ((func_kind * string list * type_ option * (string * type_) list * bool * (string * termnode) list * asn * (string * type_) list * (string * asn) * bool) option * (* Function prototype *)
+            (loc * stmt list) option)) (* Prototype implementation proof *)
       * (stmt list * loc (* closing brace *) ) option option (* body; None if prototype; Some None if ? *)
       * bool (* virtual *)
       * string list (* overrides *)
@@ -1078,7 +1080,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       * type_ map (* variables bound by invariant *)
       * box_action_info map
       * box_handle_predicate_info map
-    type abstract_type_info = loc
+    type abstract_type_info = AbstractTypeInfo of loc
     type type_pred_decl_info =
       loc *
       string * (* self type name*)
@@ -1704,7 +1706,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         if List.mem_assoc n atm || List.mem_assoc n abstract_types_map0 then
           static_error l "Duplicate abstract type name." None
         else
-          iter pn ((n, l)::atm) ds
+          iter pn ((n, AbstractTypeInfo l)::atm) ds
       | _::ds -> iter pn atm ds
     in
     let rec iter' atm ps =
@@ -2057,7 +2059,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         FuncType id
       | None ->
       match resolve Ghost (pn,ilist) l id abstract_types_map with
-        Some (n, ld) ->
+        Some (n, AbstractTypeInfo ld) ->
         reportUseSite DeclKind_AbstractType ld l;
         AbstractType n
       | None ->
@@ -2690,7 +2692,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | _ -> []
         in
         iter pni ((i, (l, tparams', List.rev ctormap, getters, setters, subtype))::imap) pfm pfprm fpm ds
-      | Func (l, Fixpoint, tparams, rto, g, ps, nonghost_callers_only, functype, contract, terminates, body_opt, _, _)::ds ->
+      | Func (l, Fixpoint, tparams, rto, g, ps, nonghost_callers_only, (functype, None), contract, terminates, body_opt, _, _)::ds ->
         let g = full_name pn g in
         if List.mem_assoc g pfm || List.mem_assoc g purefuncmap0 then static_error l ("Duplicate pure function name: "^g) None;
         check_tparams l [] tparams;

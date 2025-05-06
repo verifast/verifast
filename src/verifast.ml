@@ -257,7 +257,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           in
           match resolve Real (pn,ilist) l fn funcmap with
             None -> static_error l "No such function." None
-          | Some (fn, FuncInfo (funenv, fterm, lf, k, f_tparams, rt, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body', virt, overrides)) ->
+          | Some (fn, FuncInfo (funenv, fterm, lf, k, f_tparams, rt, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, (functype_opt, _), body', virt, overrides)) ->
             if stmt_ghostness = Ghost && not (is_lemma k) then static_error l "Not a lemma function." None;
             if stmt_ghostness = Real && k <> Regular then static_error l "Regular function expected." None;
             if f_tparams <> [] then static_error l "Taking the address of a function with type parameters is not yet supported." None;
@@ -2461,7 +2461,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 if List.mem_assoc (p, i) predinsts then static_error l "Duplicate predicate family instance." None;
                 (lems, ((p, i), (l, predinst_tparams, xs, body))::predinsts, localpreds, localpredinsts, typedecls)
               end
-            | Func (l, Lemma(auto, trigger), tparams, rt, fn, xs, nonghost_callers_only, functype_opt, contract_opt, terminates, Some body, is_virtual, overrides) ->
+            | Func (l, Lemma(auto, trigger), tparams, rt, fn, xs, nonghost_callers_only, (functype_opt, None), contract_opt, terminates, Some body, is_virtual, overrides) ->
               if List.mem_assoc fn funcmap || List.mem_assoc fn lems then static_error l "Duplicate function name." None;
               if List.mem_assoc fn tenv then static_error l "Local lemma name hides existing local variable name." None;
               let fterm = get_unique_var_symb fn (PtrType Void) in
@@ -2511,7 +2511,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let (rt, xmap, functype_opt, pre, pre_tenv, post) =
               check_func_header pn ilist tparams tenv env l (Lemma(auto, trigger)) tparams' rt fn (Some fterm) xs nonghost_callers_only functype_opt contract_opt terminates (Some body)
             in
-            (fn, FuncInfo (env, fterm, l, Lemma(auto, trigger), tparams', rt, xmap, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, Some (Some body), false, []))
+            (fn, FuncInfo (env, fterm, l, Lemma(auto, trigger), tparams', rt, xmap, nonghost_callers_only, pre, pre_tenv, post, terminates, (functype_opt, (None, None)), Some (Some body), false, []))
           end
           lems
       in
@@ -3767,7 +3767,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       verify_funcs (pn,ilist) boxes gs lems ds
     | Func (l, Regular, _, rt, g, ps, _, _, _, _, None, is_virtual, _)::ds ->
       let g = full_name pn g in
-      let FuncInfo ([], fterm, _, k, tparams', rt, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body, is_virtual, overrides) = List.assoc g funcmap in
+      let FuncInfo ([], fterm, _, k, tparams', rt, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, (functype_opt, _), body, is_virtual, overrides) = List.assoc g funcmap in
       let gs =
         if body = None then
           g::gs
@@ -3779,7 +3779,75 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let g = full_name pn g in
       let gs', lems' =
       record_fun_timing l g begin fun () ->
-      let FuncInfo ([], fterm, l, k, tparams', rt, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, _, Some (Some (ss, closeBraceLoc)), is_virtual, overrides) = (List.assoc g funcmap)in
+      let FuncInfo ([], fterm, l, k, tparams', rt, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, (_, (prototype_opt, prototypeImplementationProof_opt)), Some (Some (ss, closeBraceLoc)), is_virtual, overrides) = List.assoc g funcmap in
+      begin match prototype_opt, prototypeImplementationProof_opt with
+        None, None -> ()
+      | Some (k0, tparams0, rt0, ps0, nonghost_callers_only0, fenv, pre0, pre_tenv0, post0, terminates0), _ ->
+        let prolog =
+          match prototypeImplementationProof_opt with
+            None ->
+            let epilog h result cont = cont h in
+            let prolog h env cont = cont h epilog in
+            prolog
+          | Some (lproof, ss) ->
+            let pure = true in
+            let leminfo =
+              match k0 with
+                Regular -> RealFuncInfo (gs, g ^ "#prototype", terminates0)
+              | Lemma (_, _) -> LemInfo (lems, g ^ "#prototype", None, nonghost_callers_only0)
+            in
+            let return_cont _ _ = assert_false [] [] lproof "Return statements are not allowed in this position" None in
+            let econt _ _ _ _ = assert_false [] [] lproof "Exceptions are not allowed in this position" None in
+            let call lc tenv ghostenv h env x ss cont =
+              let epilog tenv ghostenv h env ss cont =
+                let cont sizemap tenv ghostenv h env = cont h in
+                verify_cont (pn,ilist) [] [] tparams0 boxes pure leminfo funcmap predinstmap [] tenv ghostenv h env ss cont return_cont econt
+              in
+              let epilog h result cont =
+                with_context PopSubcontext @@ fun () ->
+                match result, x with
+                  _, None -> epilog tenv ghostenv h env ss cont
+                | Some result, Some (x, tp) ->
+                  let tenv = (x, tp)::tenv in
+                  let ghostenv = x::ghostenv in
+                  let env = (x, result)::env in
+                  epilog tenv ghostenv h env ss cont
+              in
+              with_context (Executing (h, env, lc, "Verifying call")) @@ fun () ->
+              with_context PushSubcontext @@ fun () ->
+              cont h epilog
+            in
+            let prolog h env cont =
+              let rec iter tenv ghostenv h env ss =
+                match ss with
+                  [] -> static_error lproof "Missing 'call()' statement." None
+                | ExprStmt (CallExpr (lc, "call", [], [], [], Static))::ss ->
+                  call lc tenv ghostenv h env None ss cont
+                | DeclStmt (ld, [lx, tx, x, Some (CallExpr (lc, "call", [], [], [], Static)), _])::ss ->
+                  if List.mem_assoc x tenv then static_error lc "Duplicate variable name." None;
+                  let t = option_map (check_pure_type (pn,ilist) tparams0 Ghost) tx in
+                  let t =
+                    match t, rt with
+                      _, None -> static_error ld "Function does not return a value" None
+                    | Some t, Some rt ->
+                      expect_type ld (Some true) rt t;
+                      t
+                    | None, Some rt -> rt
+                  in
+                  call lc tenv ghostenv h env (Some (x, t)) ss cont
+                | s::ss ->
+                  with_context (Executing (h, env, stmt_loc s, "Executing statement")) @@ fun () ->
+                  verify_stmt (pn, ilist) [] [] tparams0 boxes pure leminfo funcmap predinstmap [] tenv ghostenv h env s (fun sizemap tenv ghostenv h env -> iter tenv ghostenv h env ss) return_cont econt
+              in
+              iter pre_tenv0 (List.map fst pre_tenv0) h env ss
+            in
+            prolog
+        in
+        check_func_header_compat_core l ("Function '" ^ g ^ "'") "Function prototype implementation check" fenv
+          (k, tparams', rt, ps, nonghost_callers_only, pre, post, [], terminates)
+          (k0, tparams0, rt0, ps0, nonghost_callers_only0, [], fenv, pre0, post0, [], terminates0)
+          prolog
+      end;
       let tparams = [] in
       let env = [] in
       verify_func pn ilist gs lems boxes predinstmap funcmap tparams env l k tparams' rt g ps nonghost_callers_only pre pre_tenv post terminates ss closeBraceLoc

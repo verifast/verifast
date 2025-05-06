@@ -182,7 +182,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     check_breakpoint [] env l;
     major_success ()
   
-  let check_func_header_compat l msg0 msg env00 (k, tparams, rt, xmap, nonghost_callers_only, pre, post, epost, terminates) (k0, tparams0, rt0, xmap0, nonghost_callers_only0, tpenv0, cenv0, pre0, post0, epost0, terminates0) =
+  let check_func_header_compat_core l msg0 msg env00 (k, tparams, rt, xmap, nonghost_callers_only, pre, post, epost, terminates) (k0, tparams0, rt0, xmap0, nonghost_callers_only0, tpenv0, cenv0, pre0, post0, epost0, terminates0) prolog =
     let msg1 = msg in
     let msg = msg ^ ": " in
     if k <> k0 then 
@@ -230,15 +230,17 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         assert_false h env l "Contract required" None
       | _ -> ()
       end;
+      prolog h env0 @@ fun h epilog ->
       consume_asn_with_post rules tpenv h tparam_typeid_env [] env pre true real_unit (fun _ h _ env _ post_opt ->
         let (result_var, post) = match post_opt with Some post -> post | None -> post in
-        let (env, env0) =
+        let (result, env, env0) =
           match rt with
-            None -> (env, env0)
-          | Some t -> let result = get_unique_var_symb result_var t in ((result_var, result)::env, (result_var0, result)::env0)
+            None -> (None, env, env0)
+          | Some t -> let result = get_unique_var_symb result_var t in (Some result, (result_var, result)::env, (result_var0, result)::env0)
         in
         execute_branch begin fun () ->
           produce_asn tparam_typeid_env tpenv h [] env post real_unit None None (fun h _ _ ->
+            epilog h result @@ fun h ->
             consume_asn rules tpenv0 h tparam_typeid_env [] env0 post0 true real_unit (fun _ h _ env0 _ ->
               check_leaks h env0 l (msg ^ "Implementation leaks heap chunks.")
             )
@@ -274,6 +276,11 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       )
     )
     end
+  
+  let check_func_header_compat l msg0 msg env00 (k, tparams, rt, xmap, nonghost_callers_only, pre, post, epost, terminates) (k0, tparams0, rt0, xmap0, nonghost_callers_only0, tpenv0, cenv0, pre0, post0, epost0, terminates0) =
+    let epilog h result cont = cont h in
+    let prolog h env cont = cont h epilog in
+    check_func_header_compat_core l msg0 msg env00 (k, tparams, rt, xmap, nonghost_callers_only, pre, post, epost, terminates) (k0, tparams0, rt0, xmap0, nonghost_callers_only0, tpenv0, cenv0, pre0, post0, epost0, terminates0) prolog
   
   (** Adds the assumption of the form "is_x(y) == true" to the set
     * of symbolic assumptions, where y is a name of a function that
@@ -458,7 +465,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let rec iter pn ilist funcmap prototypes_implemented ds =
       match ds with
         [] -> (funcmap, List.rev prototypes_implemented)
-      | Func (l, k, tparams, rt, fn, xs, nonghost_callers_only, functype_opt, contract_opt, terminates, body, is_virtual, overrides)::ds when k <> Fixpoint ->
+      | Func (l, k, tparams, rt, fn, xs, nonghost_callers_only, (functype_opt, prototypeImplementationProof_opt), contract_opt, terminates, body, is_virtual, overrides)::ds when k <> Fixpoint ->
         let fn = full_name pn fn in
         let fterm = List.assoc fn funcnameterms in
         if body <> None then
@@ -476,20 +483,26 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             ["thisType", ctxt#mk_app type_info []]
           | _ -> []
         in
+        begin match body, prototypeImplementationProof_opt with
+          None, Some (l, ss) -> static_error l "Function prototype implementation must have a body." None
+        | _ -> ()
+        end;
         begin fun cont ->
           match try_assoc2 fn funcmap funcmap0 with
-            None -> cont (fn, FuncInfo ([], fterm, l, k, tparams, rt, xmap, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body', is_virtual, overrides)) prototypes_implemented
+            None ->
+            begin match prototypeImplementationProof_opt with
+              None -> ()
+            | Some (l, ss) -> static_error l "This function does not have a prototype." None
+            end;
+            cont (fn, FuncInfo ([], fterm, l, k, tparams, rt, xmap, nonghost_callers_only, pre, pre_tenv, post, terminates, (functype_opt, (None, None)), body', is_virtual, overrides)) prototypes_implemented
           | Some (FuncInfo ([], fterm0, l0, k0, tparams0, rt0, xmap0, nonghost_callers_only0, pre0, pre_tenv0, post0, terminates0, _, Some _, is_virtual0, overrides0)) ->
             if body = None then
               static_error l "Function prototype must precede function implementation." None
             else
               static_error l "Duplicate function implementation." None
-          | Some (FuncInfo ([], fterm0, l0, k0, tparams0, rt0, xmap0, nonghost_callers_only0, pre0, pre_tenv0, post0, terminates0, functype_opt0, None, is_virtual, overrides0)) ->
+          | Some (FuncInfo ([], fterm0, l0, k0, tparams0, rt0, xmap0, nonghost_callers_only0, pre0, pre_tenv0, post0, terminates0, (functype_opt0, (None, None)), None, is_virtual, overrides0)) ->
             if body = None then static_error l "Duplicate function prototype." None;
-            check_func_header_compat l ("Function '" ^ fn ^ "'") "Function prototype implementation check" fenv 
-              (k, tparams, rt, xmap, nonghost_callers_only, pre, post, [], terminates) 
-              (k0, tparams0, rt0, xmap0, nonghost_callers_only0, [], fenv, pre0, post0, [], terminates0);
-            cont (fn, FuncInfo ([], fterm, l, k, tparams, rt, xmap, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body', is_virtual, overrides)) ((fn, l0)::prototypes_implemented)
+            cont (fn, FuncInfo ([], fterm, l, k, tparams, rt, xmap, nonghost_callers_only, pre, pre_tenv, post, terminates, (functype_opt, (Some (k0, tparams0, rt0, xmap0, nonghost_callers_only0, fenv, pre0, pre_tenv0, post0, terminates0), prototypeImplementationProof_opt)), body', is_virtual, overrides)) ((fn, l0)::prototypes_implemented)
         end @@ fun func_info protos_implemented ->
         let () = check_cxx_spec_overrides fenv func_info (fun name -> assoc2 name funcmap funcmap0) in
         iter pn ilist (func_info :: funcmap) protos_implemented ds

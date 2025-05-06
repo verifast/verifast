@@ -927,7 +927,10 @@ and
       string *  (* name *)
       (type_expr * string) list *  (* parameters *)
       bool (* nonghost_callers_only *) *
-      (string * type_expr list * (loc * string) list) option (* implemented function type, with function type type arguments and function type arguments *) *
+      (
+        (string * type_expr list * (loc * string) list) option (* implemented function type, with function type type arguments and function type arguments *) *
+        (loc * stmt list) option (* prototype implementation proof *)
+      ) *
       (asn * (string (* result variable *) * asn)) option *  (* contract *)
       bool *  (* terminates *)
       (stmt list * loc (* Close brace *)) option *  (* body *)
@@ -1247,8 +1250,12 @@ let stmt_fold_open f state s =
     List.fold_left f state ssf
   | BlockStmt (l, ds, ss, _, _) ->
     let process_decl state = function
-      Func (_, _, _, _, _, _, _, _, _, _, Some (ss, _), _, _) ->
-      List.fold_left f state ss
+      Func (_, _, _, _, _, _, _, (_, prototypeImplementationProof), _, _, body, _, _) ->
+      let state = match body with None -> state | Some (ss, _) -> List.fold_left f state ss in
+      begin match prototypeImplementationProof with
+        None -> state
+      | Some (_, ss) -> List.fold_left f state ss
+      end
     | _ -> state
     in
     let state = List.fold_left process_decl state ds in

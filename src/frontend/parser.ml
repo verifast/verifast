@@ -110,7 +110,7 @@ let rust_ghost_keywords = [
   "producing_box_pred"; "producing_handle_pred"; "producing_fresh_handle_pred"; "handle"; "any"; "split_fraction"; "by"; "merge_fractions";
   "unloadable_module"; "decreases"; "forall_"; "import_module"; "require_module"; ".."; "extends"; "permbased";
   "terminates"; "abstract_type"; "fix_auto"; "typeid"; "activating"; "truncating"; "typedef"; "fn_type"; "lem_type";
-  "type_pred_decl"; "type_pred_def"; "let_lft"; "on_unwind_ens"
+  "type_pred_decl"; "type_pred_def"; "let_lft"; "on_unwind_ens"; "safety_proof"
 ]
 
 let java_keywords = [
@@ -221,6 +221,7 @@ type spec_clause = (* ?spec_clause *)
 | OnUnwindEnsuresClause of asn
 | TerminatesClause of loc
 | AssumeCorrectClause of loc
+| PrototypeImplementationProofClause of loc * stmt list
 
 let next_body_rank =
   let counter = ref 0 in
@@ -1105,18 +1106,18 @@ and
       let gmeasure = g ^ "__measure" in
       let call g args = CallExpr (l, g, [], [], List.map (fun e -> LitPat e) args, Static) in
       [
-        Func (l, Fixpoint, tparams, Some rt, gdef, (PureFuncTypeExpr (l, List.map (fun (tp, x) -> (tp, None)) ps @ [(rt, None)], None), g) :: ps, false, None, None, false, body, false, []);
+        Func (l, Fixpoint, tparams, Some rt, gdef, (PureFuncTypeExpr (l, List.map (fun (tp, x) -> (tp, None)) ps @ [(rt, None)], None), g) :: ps, false, (None, None), None, false, body, false, []);
         Inductive (l, iargs, tparams, [Ctor (l, iargs, List.map (fun (t, x) -> (x, t)) ps)]);
-        Func (l, Fixpoint, tparams, Some rt, g_uncurry, (PureFuncTypeExpr (l, [iargsType, None; rt, None], None), g) :: ps, false, None, None, false,
+        Func (l, Fixpoint, tparams, Some rt, g_uncurry, (PureFuncTypeExpr (l, [iargsType, None; rt, None], None), g) :: ps, false, (None, None), None, false,
           Some ([ReturnStmt (l, Some (call g [call iargs (List.map (fun (t, x) -> Var (l, x)) ps)]))], l), false, []);
-        Func (l, Fixpoint, tparams, Some rt, gdef_curried, [PureFuncTypeExpr (l, [iargsType, None; rt, None], None), g; iargsType, "__args"], false, None, None, false,
+        Func (l, Fixpoint, tparams, Some rt, gdef_curried, [PureFuncTypeExpr (l, [iargsType, None; rt, None], None), g; iargsType, "__args"], false, (None, None), None, false,
           Some ([SwitchStmt (l, Var (l, "__args"), [SwitchStmtClause (l, call iargs (List.map (fun (t, x) -> Var (l, x)) ps),
             [ReturnStmt (l, Some (call gdef ([ExprCallExpr (l, Var (l, g_uncurry), [LitPat (Var (l, g))])] @ List.map (fun (t, x) -> Var (l, x)) ps)))])])], l), false, []);
-        Func (l, Fixpoint, tparams, Some (ManifestTypeExpr (l, intType)), gmeasure, [iargsType, "__args"], false, None, None, false,
+        Func (l, Fixpoint, tparams, Some (ManifestTypeExpr (l, intType)), gmeasure, [iargsType, "__args"], false, (None, None), None, false,
           Some ([SwitchStmt (l, Var (l, "__args"), [SwitchStmtClause (l, call iargs (List.map (fun (t, x) -> Var (l, x)) ps),
             [ReturnStmt (l, Some measure)])])], l), false, []);
-        Func (l, Fixpoint, tparams, Some rt, g, ps, false, None, None, false, Some ([ReturnStmt (l, Some (call "fix" [Var (l, gdef_curried); Var (l, gmeasure); call iargs (List.map (fun (t, x) -> Var (l, x)) ps)]))], l), false, []);
-        Func (l, Lemma (kwd = "fixpoint_auto", None), tparams, None, g ^ "_def", ps, false, None,
+        Func (l, Fixpoint, tparams, Some rt, g, ps, false, (None, None), None, false, Some ([ReturnStmt (l, Some (call "fix" [Var (l, gdef_curried); Var (l, gmeasure); call iargs (List.map (fun (t, x) -> Var (l, x)) ps)]))], l), false, []);
+        Func (l, Lemma (kwd = "fixpoint_auto", None), tparams, None, g ^ "_def", ps, false, (None, None),
           Some (Operation (l, Le, [IntLit (l, zero_big_int, true, false, NoLSuffix); measure]), ("result", Operation (l, Eq, [call g (List.map (fun (t, x) -> Var (l, x)) ps); bodyExpr]))),
           false,
           Some ([
@@ -1133,7 +1134,7 @@ and
       ]
     | _ ->
       if kwd = "fixpoint_auto" then raise (ParseException (l, "Keyword 'fixpoint_auto' does not make sense here because this type of fixpoint definition is always unfolded automatically"));
-      [Func (l, Fixpoint, tparams, rt, g, ps, false, None, None, false, body, false, [])]
+      [Func (l, Fixpoint, tparams, rt, g, ps, false, (None, None), None, false, body, false, [])]
     end
 | [ (l, Kwd "type_pred_decl"); parse_type as te; (_, Kwd "<"); (_, Ident selfTypeName); (_, Kwd ">"); (_, Kwd "."); (_, Ident predName); (_, Kwd ";") ] ->
   [TypePredDecl (l, te, selfTypeName, predName)]
@@ -1258,12 +1259,12 @@ and
         f = function%parser
         | [ (_, Kwd ";"); 
             [%l (nonghost_callers_only, ft, co, terminates) = parse_spec_clauses] 
-          ] -> Func (l, k, tparams, t, g, ps, nonghost_callers_only, ft, Option.map (fun (pre, post) -> (pre, ("result", post))) co, terminates, None, false, [])
+          ] -> Func (l, k, tparams, t, g, ps, nonghost_callers_only, (ft, None), Option.map (fun (pre, post) -> (pre, ("result", post))) co, terminates, None, false, [])
         | [ [%l (nonghost_callers_only, ft, co, terminates) = parse_spec_clauses]; 
             (_, Kwd "{"); 
             parse_stmts as ss; 
             (closeBraceLoc, Kwd "}") 
-          ] -> Func (l, k, tparams, t, g, ps, nonghost_callers_only, ft, Option.map (fun (pre, post) -> (pre, ("result", post))) co, terminates, Some (ss, closeBraceLoc), false, [])
+          ] -> Func (l, k, tparams, t, g, ps, nonghost_callers_only, (ft, None), Option.map (fun (pre, post) -> (pre, ("result", post))) co, terminates, Some (ss, closeBraceLoc), false, [])
         ]
       ] -> pop_typedef_scope (); f
     | [ [%l () = (fun s -> if k = Regular && tparams = [] && t <> None then () else raise Stream.Failure)];
