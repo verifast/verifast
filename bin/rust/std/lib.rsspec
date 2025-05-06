@@ -557,6 +557,10 @@ mod boxed {
     
     pred Box_in<T, A>(t: thread_id_t, self: Box<T, A>, alloc_id: any, value: T);
     
+    lem own_to_Box_in<T, A>(self: Box<T, A>);
+        req <Box<T, A>>.own(?t, self);
+        ens Box_in::<T, A>(t, self, ?alloc_id, ?value) &*& <T>.own(t, value);
+    
     lem Box_in_to_own<T, A>(self: Box<T, A>);
         req Box_in::<T, A>(?t, self, ?alloc_id, ?value) &*& <T>.own(t, value);
         ens <Box<T, A>>.own(t, self);

@@ -339,7 +339,14 @@ let eval_const_operand genv const_operand_cpn =
     | ZeroSized ->
       begin match ty with
         Tuple [] -> Tuple []
-      | FnDef (fn, genArgs) -> FnDef (fn, genArgs)
+      | FnDef (fn, genArgs) ->
+        let fn =
+          if String.starts_with ~prefix:"core::" fn then
+            "std::" ^ String.sub fn 6 (String.length fn - 6)
+          else
+            fn
+        in
+        FnDef (fn, genArgs)
       | _ -> failwith "Zero-sized constants are not yet supported"
       end
     | Slice slice_cpn -> failwith "MIR slice constants are not yet supported"

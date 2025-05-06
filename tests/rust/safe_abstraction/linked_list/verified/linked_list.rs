@@ -856,8 +856,20 @@ impl<T> Node<T> {
         Node { next: None, prev: None, element }
     }
 
-    fn into_element<A: Allocator>(self: Box<Self, A>) -> T {
-        self.element
+    fn into_element<A: Allocator>(self: Box<Self, A>) -> T
+    //@ req thread_token(?t) &*& Box_in::<Node<T>, A>(t, self, ?alloc_id, ?node);
+    //@ ens thread_token(t) &*& result == node.element &*& Allocator::<A>(t, _, alloc_id);
+    //@ on_unwind_ens thread_token(t);
+    /*@
+    safety_proof {
+        std::boxed::own_to_Box_in(self);
+        call();
+        open Node_own::<T>(_, _);
+        leak Allocator(_, _, _);
+    }
+    @*/
+    {
+        Box::into_inner(self).element
     }
 }
 
