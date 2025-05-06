@@ -4286,13 +4286,13 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
   let compute_send_tparams preds =
     preds
     |> Util.flatmap (function
-         | `Trait ("std::marker::Send", [ `Type (`Param tparam) ]) -> [ tparam ]
+         | `Trait (("std::marker::Send"|"core::marker::Send"), [ `Type (`Param tparam) ]) -> [ tparam ]
          | _ -> [])
 
   let compute_sync_tparams preds =
     preds
     |> Util.flatmap (function
-         | `Trait ("std::marker::Sync", [ `Type (`Param tparam) ]) -> [ tparam ]
+         | `Trait (("std::marker::Sync"|"core::marker::Sync"), [ `Type (`Param tparam) ]) -> [ tparam ]
          | _ -> [])
 
   let translate_projection_pred (loc : Ast.loc)
@@ -5776,6 +5776,74 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
              If sync_preds = Some xs, then xs is a list of type parameters such that if any of them are not Sync, then this ADT is not Sync.
              xs may contain duplicates. *)
           let send_preds, sync_preds =
+            (* Computes the map from impl generic params to ADT generic params *)
+            let get_impl_generic_param_map loc trait_impl_cpn =
+              let impl_generics =
+                TraitImplRd.generics_get_list trait_impl_cpn
+                |> List.map decode_generic_param
+              in
+              let impl_generic_type_params =
+                List.filter_map
+                  (function `Type x -> Some x | _ -> None)
+                  impl_generics
+              in
+              let adt_generic_type_params =
+                List.filter_map
+                  (function `Type x -> Some x | _ -> None)
+                  generics
+              in
+              let impl_generic_lifetime_params =
+                List.filter_map
+                  (function `Lifetime x -> Some x | _ -> None)
+                  impl_generics
+              in
+              let adt_generic_lifetime_params =
+                List.filter_map
+                  (function `Lifetime x -> Some x | _ -> None)
+                  generics
+              in
+              let impl_type_param_map =
+                match Util.zip impl_generic_type_params adt_generic_type_params with
+                  Some bs -> bs
+                | None -> 
+                    Ast.static_error loc
+                      "Number of impl generic type parameters does not match \
+                       number of ADT generic type parameters"
+                      None
+              in
+              let impl_lifetime_param_map =
+                match Util.zip impl_generic_lifetime_params
+                        adt_generic_lifetime_params with
+                | Some bs -> bs
+                | None ->
+                    Ast.static_error loc
+                      "Number of impl generic lifetime parameters does not \
+                       match number of ADT generic lifetime parameters"
+                      None
+              in
+              let [ `Type (`Adt (_, _, self_ty_gen_args)) ] =
+                TraitImplRd.gen_args_get_list trait_impl_cpn
+                |> List.map decode_generic_arg
+              in
+              begin match Util.zip impl_generics self_ty_gen_args with
+              | None ->
+                  Ast.static_error loc
+                    "Number of trait self type generic arguments does not \
+                    match impl generic parameter list"
+                    None
+              | Some bs -> (
+                  bs
+                  |> List.iter @@ function
+                    | `Type x, `Type (`Param y) when x = y -> ()
+                    | `Lifetime x, `Lifetime y when x = y -> ()
+                    | _ ->
+                        Ast.static_error loc
+                          "Trait self type generic arguments do not match \
+                            impl generic parameter list"
+                          None)
+              end;
+              impl_type_param_map, impl_lifetime_param_map
+            in
             let check_impl_generics_matches_adt loc trait_impl_cpn =
               let impl_generics =
                 TraitImplRd.generics_get_list trait_impl_cpn
@@ -5828,7 +5896,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                      None
             in
             let get_impl_preds { loc; trait_impl_cpn } =
-              check_impl_generics_matches_adt loc trait_impl_cpn;
+              let impl_type_param_map, impl_lifetime_param_map = get_impl_generic_param_map loc trait_impl_cpn in
               let impl_preds =
                 TraitImplRd.predicates_get_list trait_impl_cpn
                 |> List.map decode_predicate
@@ -5836,7 +5904,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               impl_preds
               |> Util.flatmap (function
                    | `Trait (trait_name', `Type (`Param x) :: _) ->
-                       [ (x, trait_name') ]
+                       [ (List.assoc x impl_type_param_map, canonicalize_item_name trait_name') ]
                    | _ -> [])
             in
             let preds_union preds1 preds2 =
@@ -5889,7 +5957,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             let send_impls =
               trait_impls
               |> List.filter (fun { of_trait; self_ty } ->
-                     of_trait = "std::marker::Send" && self_ty = name)
+                     (of_trait = "std::marker::Send" || of_trait = "core::marker::Send") && self_ty = name)
             in
             let negative_send_impls, positive_send_impls =
               send_impls |> List.partition (fun { is_negative } -> is_negative)
@@ -5943,7 +6011,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             let sync_impls =
               trait_impls
               |> List.filter (fun { of_trait; self_ty } ->
-                     of_trait = "std::marker::Sync" && self_ty = name)
+                     (of_trait = "std::marker::Sync" || of_trait = "core::marker::Sync") && self_ty = name)
             in
             let negative_sync_impls, positive_sync_impls =
               sync_impls |> List.partition (fun { is_negative } -> is_negative)
