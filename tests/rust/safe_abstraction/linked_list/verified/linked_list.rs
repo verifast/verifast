@@ -1261,6 +1261,14 @@ fn mem_take_usize__VeriFast_wrapper(dest: &mut usize) -> usize
     mem::take(dest)
 }
 
+unsafe fn NonNull_from_ref_mut__VeriFast_wrapper<T>(value: &mut T) -> NonNull<T>
+//@ req true;
+//@ ens NonNull_ptr(result) == value;
+//@ assume_correct
+{
+    NonNull::from(value)
+}
+
 #[stable(feature = "rust1", since = "1.0.0")]
 impl<T> Default for LinkedList<T> {
     /// Creates an empty `LinkedList<T>`.
@@ -1718,14 +1726,27 @@ impl<T, A: Allocator> LinkedList<T, A> {
     /// assert_eq!(dl.front().unwrap(), &1);
     /// ```
     #[stable(feature = "rust1", since = "1.0.0")]
-    pub fn push_front(&mut self, elt: T) {
-        let node = Box::new_in(Node::new(elt), &self.alloc);
-        let node_ptr = NonNull::from(Box::leak(node));
-        // SAFETY: node_ptr is a unique pointer to a node we boxed with self.alloc and leaked
+    pub fn push_front(&mut self, elt: T) 
+    //@ req thread_token(?t) &*& *self |-> ?ll0 &*& <LinkedList<T, A>>.own(t, ll0) &*& <T>.own(t, elt);
+    //@ ens thread_token(t) &*& *self |-> ?ll1 &*& <LinkedList<T, A>>.own(t, ll1);
+    //@ on_unwind_ens thread_token(t) &*& *self |-> ?ll1 &*& <LinkedList<T, A>>.own(t, ll1);
+    {
         unsafe {
+            //@ open_points_to(self);
+            //@ open <LinkedList<T, A>>.own(t, ll0);
+            //@ let alloc_ref = precreate_ref(&(*self).alloc);
+            //@ std::alloc::init_ref_Allocator::<'static, A>(alloc_ref);
+            let node0 = Node::new(elt);
+            //@ close drop_perm::<Node<T>>(false, True, t, node0);
+            let node = Box::new_in(node0, &self.alloc);
+            //@ open drop_perm::<Node<T>>(false, True, t, node0);
+            let node_ptr = NonNull_from_ref_mut__VeriFast_wrapper(Box::leak(node));
+            //@ std::alloc::end_ref_Allocator::<'static, A>();
+            //@ close_points_to(self);
+            // SAFETY: node_ptr is a unique pointer to a node we boxed with self.alloc and leaked
             self.push_front_node(node_ptr);
-        }
-    }
+        }           
+    }               
 
     /// Removes the first element and returns it, or `None` if the list is
     /// empty.
