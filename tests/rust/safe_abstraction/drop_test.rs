@@ -12,8 +12,7 @@ pred <Foo>.own(t, foo) = true;
 impl Drop for Foo {
     fn drop<'a>(&'a mut self) {
         //@ open Foo_full_borrow_content(_t, self)();
-        //@ close i32_full_borrow_content(_t, &(*self).field1)();
-        //@ close u8_full_borrow_content(_t, &(*self).field2)();
+        //@ open Foo_own(_, _);
     }
 }
 
@@ -29,7 +28,9 @@ pred <Bar>.own(t, bar) = true;
 
 impl Bar {
     pub fn new() -> Bar {
-        Bar { fd: std::ptr::null_mut() }
+        let r = Bar { fd: std::ptr::null_mut() };
+        //@ close Bar_own(_t, r);
+        r
     }
 }
 

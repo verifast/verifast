@@ -69,5 +69,5 @@ let rec string_of_asn = function
 
 let string_of_decl (d: decl) =
   match d with
-  | Func (l, Lemma (false, None), tparams, rt, f, ps, nonghost_callers_only, None, Some (pre, (result_var, post)), false, None, false, []) ->
+  | Func (l, Lemma (false, None), tparams, rt, f, ps, nonghost_callers_only, (None, None), Some (pre, (result_var, post)), false, None, false, []) ->
     Printf.sprintf "lem %s%s(%s)%s\n    req %s;\n    ens %s;\n{\n    assume(false);\n}" f (string_of_tparams tparams) (string_of_params ps) (string_of_ret rt) (string_of_asn pre) (string_of_asn post)

@@ -848,7 +848,11 @@ impl<T: fmt::Debug, A: Allocator> fmt::Debug for IntoIter<T, A> {
 }
 
 impl<T> Node<T> {
-    fn new(element: T) -> Self {
+    fn new(element: T) -> Self
+    //@ req thread_token(?t);
+    //@ ens thread_token(t) &*& result == Node::<T> { next: None, prev: None, element };
+    //@ safety_proof { let r = call(); close Node_own::<T>(_, r); }
+    {
         Node { next: None, prev: None, element }
     }
 

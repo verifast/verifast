@@ -980,7 +980,7 @@ and of_decl = function
     of_option i inputParamCount;
     of_expr body
   ])
-| Func (l, k, tparams, rt, g, xs, nonghostCallersOnly, funcTypeClause, spec, terminates, body, isVirtual, overrides) ->
+| Func (l, k, tparams, rt, g, xs, nonghostCallersOnly, (funcTypeClause, prototypeImplementationProof), spec, terminates, body, isVirtual, overrides) ->
   C ("Func", [
     of_loc l;
     of_func_kind k;
@@ -989,13 +989,21 @@ and of_decl = function
     S g;
     of_params xs;
     B nonghostCallersOnly;
-    of_option begin fun (ftn, targs, args) ->
-      T [
-        S ftn;
-        of_list of_type_expr targs;
-        of_list (fun (l, x) -> T [of_loc l; S x]) args
-      ]
-    end funcTypeClause;
+    T [
+      of_option begin fun (ftn, targs, args) ->
+        T [
+          S ftn;
+          of_list of_type_expr targs;
+          of_list (fun (l, x) -> T [of_loc l; S x]) args
+        ]
+      end funcTypeClause;
+      of_option begin fun (l, ss) ->
+        T [
+          of_loc l;
+          of_list of_stmt ss
+        ]
+      end prototypeImplementationProof
+    ];
     of_option of_spec spec;
     B terminates;
     of_option of_body_ss body;
