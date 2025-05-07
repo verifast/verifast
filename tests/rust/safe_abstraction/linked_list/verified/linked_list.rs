@@ -772,6 +772,90 @@ pub struct Iter<'a, T: 'a> {
     marker: PhantomData<&'a Node<T>>,
 }
 
+/*@
+
+inductive Iter_info<T> = Iter_info(
+        alloc_id: any,
+        head0: Option<NonNull<Node<T>>>,
+        prev: Option<NonNull<Node<T>>>,
+        next: Option<NonNull<Node<T>>>,
+        tail0: Option<NonNull<Node<T>>>,
+        nodes_before: list<NonNull<Node<T>>>,
+        nodes: list<NonNull<Node<T>>>,
+        nodes_after: list<NonNull<Node<T>>>,
+        prevs_before: list<Option<NonNull<Node<T>>>>,
+        prevs: list<Option<NonNull<Node<T>>>>,
+        prevs_after: list<Option<NonNull<Node<T>>>>,
+        nexts_before: list<Option<NonNull<Node<T>>>>,
+        nexts: list<Option<NonNull<Node<T>>>>,
+        nexts_after: list<Option<NonNull<Node<T>>>>);
+
+pred_ctor Iter_frac_borrow_content<T>(
+        alloc_id: any,
+        head0: Option<NonNull<Node<T>>>,
+        head: Option<NonNull<Node<T>>>,
+        prev: Option<NonNull<Node<T>>>,
+        tail: Option<NonNull<Node<T>>>,
+        next: Option<NonNull<Node<T>>>,
+        tail0: Option<NonNull<Node<T>>>,
+        nodes_before: list<NonNull<Node<T>>>,
+        nodes: list<NonNull<Node<T>>>,
+        nodes_after: list<NonNull<Node<T>>>,
+        prevs_before: list<Option<NonNull<Node<T>>>>,
+        prevs: list<Option<NonNull<Node<T>>>>,
+        prevs_after: list<Option<NonNull<Node<T>>>>,
+        nexts_before: list<Option<NonNull<Node<T>>>>,
+        nexts: list<Option<NonNull<Node<T>>>>,
+        nexts_after: list<Option<NonNull<Node<T>>>>
+    )(;) =
+    Nodes1(alloc_id, head0, None, prev, head, nodes_before, prevs_before, nexts_before) &*&
+    Nodes1(alloc_id, head, prev, tail, next, nodes, prevs, nexts) &*&
+    Nodes1(alloc_id, next, tail, tail0, None, nodes_after, prevs_after, nexts_after);
+
+pred<'a, T> <Iter<'a, T>>.own(t, iter) =
+    exists(Iter_info(?alloc_id, ?head0, ?prev, ?next, ?tail0, ?nodes_before, ?nodes, ?nodes_after, ?prevs_before, ?prevs, ?prevs_after, ?nexts_before, ?nexts, ?nexts_after)) &*&
+    [_]frac_borrow('a, Iter_frac_borrow_content::<T>(alloc_id, head0, iter.head, prev, iter.tail, next, tail0, nodes_before, nodes, nodes_after, prevs_before, prevs, prevs_after, nexts_before, nexts, nexts_after)) &*&
+    iter.len == length(nodes) &*&
+    [_]foreach(nodes, elem_share::<T>('a, t));
+
+lem Iter_own_mono<'a0, 'a1, T0, T1>()
+    req type_interp::<T0>() &*& type_interp::<T1>() &*& Iter_own::<'a0, T0>(?t, ?v) &*& lifetime_inclusion('a1, 'a0) == true &*& is_subtype_of::<T0, T1>() == true;
+    ens type_interp::<T0>() &*& type_interp::<T1>() &*& Iter_own::<'a1, T1>(t, Iter::<'a1, T1> { head: upcast(v.head), tail: upcast(v.tail), len: upcast(v.len), marker: upcast(v.marker) });
+{
+    assume(false);
+}
+
+lem Iter_send<'a, T>(t1: thread_id_t)
+    req type_interp::<T>() &*& Iter_own::<'a, T>(?t0, ?v) &*& is_Sync(typeid(T)) == true;
+    ens type_interp::<T>() &*& Iter_own::<'a, T>(t1, v);
+{
+    open <Iter<'a, T>>.own(t0, v);
+    let k = 'a;
+    {
+        lem iter()
+            req [_]foreach(?nodes, elem_share::<T>(k, t0)) &*& type_interp::<T>();
+            ens foreach(nodes, elem_share::<T>(k, t1)) &*& type_interp::<T>();
+        {
+            open foreach(nodes, elem_share::<T>(k, t0));
+            match nodes {
+                nil => {}
+                cons(n, nodes0) => {
+                    open elem_share::<T>(k, t0)(n);
+                    Sync::sync::<T>(k, t0, t1, &(*NonNull_ptr(n)).element);
+                    close elem_share::<T>(k, t1)(n);
+                    iter();
+                }
+            }
+            close foreach(nodes, elem_share::<T>(k, t1));
+        }
+        iter();
+    }
+    leak foreach(_, _);
+    close <Iter<'a, T>>.own(t1, v);
+}
+
+@*/
+
 #[stable(feature = "collection_debug", since = "1.17.0")]
 impl<T: fmt::Debug> fmt::Debug for Iter<'_, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -1401,8 +1485,42 @@ impl<T, A: Allocator> LinkedList<T, A> {
     /// ```
     #[inline]
     #[stable(feature = "rust1", since = "1.0.0")]
-    pub fn iter(&self) -> Iter<'_, T> {
-        Iter { head: self.head, tail: self.tail, len: self.len, marker: PhantomData }
+    pub fn iter<'a>(&'a self) -> Iter<'a, T>
+    //@ req thread_token(?t) &*& [?q]lifetime_token('a) &*& [_](<LinkedList<T, A>>.share('a, t, self));
+    //@ ens thread_token(t) &*& [q]lifetime_token('a) &*& <Iter<'a, T>>.own(t, result);
+    //@ on_unwind_ens thread_token(t) &*& [q]lifetime_token('a);
+    {
+        //@ open <LinkedList<T, A>>.share('a, t, self);
+        //@ assert [_]exists(LinkedList_share_info(?alloc_id, ?head, ?tail, ?nodes, ?prevs, ?nexts));
+        //@ open_frac_borrow('a, LinkedList_frac_borrow_content::<T, A>(alloc_id, self, head, tail, nodes, prevs, nexts), q);
+        //@ open [?qll]LinkedList_frac_borrow_content::<T, A>(alloc_id, self, head, tail, nodes, prevs, nexts)();
+        let r = Iter { head: self.head, tail: self.tail, len: self.len, marker: PhantomData };
+        //@ close [qll]LinkedList_frac_borrow_content::<T, A>(alloc_id, self, head, tail, nodes, prevs, nexts)();
+        //@ close_frac_borrow(qll, LinkedList_frac_borrow_content::<T, A>(alloc_id, self, head, tail, nodes, prevs, nexts));
+        //@ close exists(Iter_info(alloc_id, head, None, None, tail, nil, nodes, nil, nil, prevs, nil, nil, nexts, nil));
+        /*@
+        {
+            pred R(;) = (*self).head |-> head &*& (*self).tail |-> tail &*& (*self).len |-> length(nodes) &*& struct_LinkedList_padding(self);
+            produce_lem_ptr_chunk implies_frac(LinkedList_frac_borrow_content::<T, A>(alloc_id, self, head, tail, nodes, prevs, nexts), sep_(R, Iter_frac_borrow_content(alloc_id, head, head, None, tail, None, tail, nil, nodes, nil, nil, prevs, nil, nil, nexts, nil)))() {
+                open [?f]LinkedList_frac_borrow_content::<T, A>(alloc_id, self, head, tail, nodes, prevs, nexts)();
+                close [f]R();
+                close [f]Iter_frac_borrow_content::<T>(alloc_id, head, head, None, tail, None, tail, nil, nodes, nil, nil, prevs, nil, nil, nexts, nil)();
+                close [f]sep_(R, Iter_frac_borrow_content::<T>(alloc_id, head, head, None, tail, None, tail, nil, nodes, nil, nil, prevs, nil, nil, nexts, nil))();
+            } {
+                produce_lem_ptr_chunk implies_frac(sep_(R, Iter_frac_borrow_content(alloc_id, head, head, None, tail, None, tail, nil, nodes, nil, nil, prevs, nil, nil, nexts, nil)), LinkedList_frac_borrow_content::<T, A>(alloc_id, self, head, tail, nodes, prevs, nexts))() {
+                    open [?f]sep_(R, Iter_frac_borrow_content::<T>(alloc_id, head, head, None, tail, None, tail, nil, nodes, nil, nil, prevs, nil, nil, nexts, nil))();
+                    open [f]R();
+                    open [f]Iter_frac_borrow_content::<T>(alloc_id, head, head, None, tail, None, tail, nil, nodes, nil, nil, prevs, nil, nil, nexts, nil)();
+                    close [f]LinkedList_frac_borrow_content::<T, A>(alloc_id, self, head, tail, nodes, prevs, nexts)();
+                } {
+                    frac_borrow_implies('a, LinkedList_frac_borrow_content::<T, A>(alloc_id, self, head, tail, nodes, prevs, nexts), sep_(R, Iter_frac_borrow_content(alloc_id, head, head, None, tail, None, tail, nil, nodes, nil, nil, prevs, nil, nil, nexts, nil)));
+                }
+            }
+            frac_borrow_split('a, R, Iter_frac_borrow_content(alloc_id, head, head, None, tail, None, tail, nil, nodes, nil, nil, prevs, nil, nil, nexts, nil));
+        }
+        @*/
+        //@ close <Iter<'a, T>>.own(t, r);
+        r
     }
 
     /// Provides a forward iterator with mutable references.
