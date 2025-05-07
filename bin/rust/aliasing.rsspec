@@ -72,7 +72,7 @@ lem precreate_ref<T>(x: *T) -> *T;
 
 fn create_ref<T>(x: *T) -> *T;
 //@ req ref_precreated_token(x, ?p) &*& [?f]ref_initialized(p);
-//@ ens [f]ref_initialized(p) &*& result == p;
+//@ ens [f]ref_initialized(p) &*& result == p &*& ref_origin(result) == ref_origin(x);
 //@ on_unwind_ens false;
 
 fn reborrow_ref<T>(x: *T) -> *T;
