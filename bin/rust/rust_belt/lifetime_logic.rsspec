@@ -326,7 +326,7 @@ pred close_frac_borrow_token_strong(k1: lifetime_t, P: pred(;), q: real, k: life
 lem open_frac_borrow_strong(k: lifetime_t, P: pred(;), q: real) -> lifetime_t;
     nonghost_callers_only
     req [_]frac_borrow(k, P) &*& [q]lifetime_token(k);
-    ens lifetime_inclusion(k, result) == true &*& [?f]P() &*& close_frac_borrow_token_strong(result, P, q, k, f);
+    ens lifetime_inclusion(k, result) == true &*& [?f]P() &*& close_frac_borrow_token_strong(result, P, q, k, f) &*& f < 1;
 
 lem_type frac_borrow_convert_strong(Ctx: pred(), Q: pred(), k1: lifetime_t, f: real, P: pred()) = lem();
     req Ctx() &*& Q() &*& [_]lifetime_dead_token(k1); // Empty mask
