@@ -936,6 +936,12 @@ let commands_of_statement_kind = function
 
 let commands_of_statement ({source_info; kind}: statement) = SourceInfo source_info::commands_of_statement_kind kind
 
+let canonicalize_item_name name =
+  if String.starts_with ~prefix:"core::" name then
+    "std::" ^ String.sub name 6 (String.length name - 6)
+  else
+    name
+
 let rec process_commands bodies (env: env) opnds (i_bb: basic_block_info) i_s (ss_i: command list) =
   let load_from_lv_path: 'r. local_variable_path -> (string -> 'r) -> (term -> 'r) -> 'r = fun localPath fallback cont ->
     begin match List.assoc localPath env with
@@ -1027,6 +1033,7 @@ let rec process_commands bodies (env: env) opnds (i_bb: basic_block_info) i_s (s
     assert (opnds = []);
     begin match i_bb#terminator.kind with
       Call ({func=Constant {const=Val {const_value=ZeroSized; ty={kind=FnDef {id={name=funcName}; substs}}}}} as call) ->
+      let funcName = canonicalize_item_name funcName in
       let substs = List.map (decode_gen_arg i_bb#genv) substs in
       if funcName = "std::ops::FnOnce::call_once--VeriFast" then
         let [Type (Closure (closureName, closureGenArgs)); Type (Tuple paramTypes)] = substs in
@@ -1440,6 +1447,12 @@ let check_predicate_refines_predicate genv0 pred0 genv1 pred1 =
   | _ -> failwith "The two predicates have different kinds"
 
 let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
+  let error msg =
+    Printf.printf "ERROR: %s\n" msg;
+    Printf.printf "======== Original body ========\n%s\n" (Stringifier.string_of_body body0);
+    Printf.printf "======== Verified body ========\n%s\n" (Stringifier.string_of_body body1);
+    failwith msg
+  in
   Printf.printf "Checking function body %s\n" def_path;
   let visibility0 = body0.visibility in
   let visibility1 = body1.visibility in
@@ -1827,7 +1840,7 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
             check_codepos_refines_codepos env0 opnds0 i_bb0 i_s0 ss_i0 env1 (rhsValue::opnds1) i_bb1 (i_s1 + 1) ss_i1_plus_1
         | _ -> fail ()
         end
-      | [], _ -> failwith (Printf.sprintf "In function %s, cannot prove that the terminator of basic block %s in the original version refines statement %d of basic block %s in the verified version" def_path i_bb0#to_string i_s1 i_bb1#to_string)
+      | [], _ -> error (Printf.sprintf "In function %s, cannot prove that the terminator of basic block %s in the original version refines statement %d of basic block %s in the verified version" def_path i_bb0#to_string i_s1 i_bb1#to_string)
       | _ -> check_command_refines_command ()
     and check_codepos_refines_codepos env0 opnds0 i_bb0 i_s0 ss_i0 env1 opnds1 i_bb1 i_s1 ss_i1 =
       let (env0, opnds0, i_bb0, i_s0, ss_i0) = process_commands bodies0 env0 opnds0 i_bb0 i_s0 ss_i0 in

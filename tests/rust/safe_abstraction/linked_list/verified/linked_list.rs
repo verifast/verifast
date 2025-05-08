@@ -2204,17 +2204,136 @@ impl<'a, T> Iterator for Iter<'a, T> {
     type Item = &'a T;
 
     #[inline]
-    fn next(&mut self) -> Option<&'a T> {
+    fn next(&mut self) -> Option<&'a T>
+    //@ req thread_token(?t) &*& [?q]lifetime_token('a) &*& *self |-> ?self0 &*& <Iter<'a, T>>.own(t, self0);
+    //@ ens thread_token(t) &*& [q]lifetime_token('a) &*& *self |-> ?self1 &*& <Iter<'a, T>>.own(t, self1) &*& <Option<&'a T>>.own(t, result);
+    //@ on_unwind_ens thread_token(t) &*& [q]lifetime_token('a) &*& *self |-> ?self1 &*& <Iter<'a, T>>.own(t, self1);
+    {
         if self.len == 0 {
+            //@ close std::option::Option_own::<&'a T>(t, Option::None);
             None
         } else {
-            self.head.map(|node| unsafe {
-                // Need an unbound lifetime to get 'a
-                let node = &*node.as_ptr();
-                self.len -= 1;
-                self.head = node.next;
-                &node.element
-            })
+            //@ open <Iter<'a, T>>.own(t, self0);
+            //@ open_points_to(self);
+            //@ close_points_to(self);
+            let head = self.head;
+            let head_ref = &mut self.head;
+            let len_ref = &mut self.len;
+            match head { //.map(|node| unsafe {
+                None => {
+                    //@ close <Iter<'a, T>>.own(t, self0);
+                    //@ close std::option::Option_own::<&'a T>(t, Option::None);
+                    None
+                }
+                Some(node) => unsafe {
+                    //@ open exists(Iter_info(?alloc_id, ?head0, ?prev, ?next, ?tail0, ?nodes_before, ?nodes, ?nodes_after, ?prevs_before, ?prevs, ?prevs_after, ?nexts_before, ?nexts, ?nexts_after));
+                    //@ open_frac_borrow('a, Iter_frac_borrow_content::<T>(alloc_id, head0, self0.head, prev, self0.tail, next, tail0, nodes_before, nodes, nodes_after, prevs_before, prevs, prevs_after, nexts_before, nexts, nexts_after), q);
+                    //@ open [?f0]Iter_frac_borrow_content::<T>(alloc_id, head0, self0.head, prev, self0.tail, next, tail0, nodes_before, nodes, nodes_after, prevs_before, prevs, prevs_after, nexts_before, nexts, nexts_after)();
+                    //@ open Nodes1::<T>(alloc_id, self0.head, prev, self0.tail, next, nodes, prevs, nexts);
+                    //@ close [f0]Nodes1::<T>(alloc_id, self0.head, prev, self0.tail, next, nodes, prevs, nexts);
+                    //@ close [f0]Iter_frac_borrow_content::<T>(alloc_id, head0, self0.head, prev, self0.tail, next, tail0, nodes_before, nodes, nodes_after, prevs_before, prevs, prevs_after, nexts_before, nexts, nexts_after)();
+                    //@ close_frac_borrow(f0, Iter_frac_borrow_content::<T>(alloc_id, head0, self0.head, prev, self0.tail, next, tail0, nodes_before, nodes, nodes_after, prevs_before, prevs, prevs_after, nexts_before, nexts, nexts_after));
+                    //@ let node_ref = precreate_ref(NonNull_ptr(node));
+                    //@ open_ref_init_perm_Node(node_ref);
+                    //@ produce_type_interp::<T>();
+                    //@ open foreach(_, _);
+                    //@ open elem_share::<T>('a, t)(node);
+                    //@ init_ref_share::<T>('a, t, &(*node_ref).element);
+                    //@ frac_borrow_sep('a, Iter_frac_borrow_content::<T>(alloc_id, head0, self0.head, prev, self0.tail, next, tail0, nodes_before, nodes, nodes_after, prevs_before, prevs, prevs_after, nexts_before, nexts, nexts_after), ref_initialized_(&(*node_ref).element));
+                    //@ let k1 = open_frac_borrow_strong('a, sep_(Iter_frac_borrow_content::<T>(alloc_id, head0, self0.head, prev, self0.tail, next, tail0, nodes_before, nodes, nodes_after, prevs_before, prevs, prevs_after, nexts_before, nexts, nexts_after), ref_initialized_(&(*node_ref).element)), q/2);
+                    //@ open [?f]sep_(Iter_frac_borrow_content::<T>(alloc_id, head0, self0.head, prev, self0.tail, next, tail0, nodes_before, nodes, nodes_after, prevs_before, prevs, prevs_after, nexts_before, nexts, nexts_after), ref_initialized_(&(*node_ref).element))();
+                    //@ open [f]Iter_frac_borrow_content::<T>(alloc_id, head0, self0.head, prev, self0.tail, next, tail0, nodes_before, nodes, nodes_after, prevs_before, prevs, prevs_after, nexts_before, nexts, nexts_after)();
+                    //@ open [f]ref_initialized_::<T>(&(*node_ref).element)();
+                    //@ open Nodes1::<T>(alloc_id, self0.head, prev, self0.tail, next, nodes, prevs, nexts);
+                    // Need an unbound lifetime to get 'a
+                    //@ init_ref_Option_NonNull(&(*node_ref).prev);
+                    //@ init_ref_Option_NonNull(&(*node_ref).next);
+                    //@ init_ref_padding_Node(node_ref, 1/2);
+                    //@ close [1 - f]ref_padding_initialized_::<Node<T>>(node_ref)(); // We want to close only fraction f of ref_initialized(node_ref)
+                    //@ close_ref_initialized_Node(node_ref);
+                    //@ open [1 - f]ref_padding_initialized_::<Node<T>>(node_ref)();
+                    //@ let node0 = node;
+                    //@ note(pointer_within_limits(&(*ref_origin(NonNull_ptr(node0))).element));
+                    let node = &*node.as_ptr();
+                    let len = *len_ref;
+                    //@ produce_limits(len);
+                    *len_ref = len - 1;
+                    //@ let nodeNext = (*node_ref).next;
+                    *head_ref = (*node).next;
+                    //@ let self1 = *self;
+                    /*@
+                    {
+                        pred Ctx() = true;
+                        pred Q() =
+                            [f]Nodes1(alloc_id, head0, None, prev, self0.head, nodes_before, prevs_before, nexts_before) &*&
+                            [f]alloc_block_in(alloc_id, NonNull_ptr(node0) as *u8, Layout::new_::<Node<T>>()) &*&
+                            [f/2]struct_Node_padding(node_ref) &*&
+                            [f/2]struct_Node_padding(NonNull_ptr(node0)) &*&
+                            [f/2](*node_ref).prev |-> prev &*& ref_end_token_Option_NonNull(&(*node_ref).prev, &(*NonNull_ptr(node0)).prev, f, prev) &*&
+                            [f/2](*node_ref).next |-> nodeNext &*& ref_end_token_Option_NonNull(&(*node_ref).next, &(*NonNull_ptr(node0)).next, f, nodeNext) &*&
+                            [f]ref_initialized(node_ref) &*&
+                            [1-f]ref_initialized(&(*node_ref).next) &*&
+                            [1-f]ref_initialized(&(*node_ref).prev) &*&
+                            ref_padding_end_token(node_ref, NonNull_ptr(node0), f/2) &*&
+                            [1-f]ref_padding_initialized::<Node<T>>(node_ref) &*&
+                            [f]Nodes1(alloc_id, nodeNext, self0.head, self0.tail, next, tail(nodes), tail(prevs), tail(nexts)) &*&
+                            [f]Nodes1(alloc_id, next, self0.tail, tail0, None, nodes_after, prevs_after, nexts_after);
+                        close Ctx();
+                        close Q();
+                        produce_lem_ptr_chunk frac_borrow_convert_strong(Ctx, Q, k1, f, sep_(Iter_frac_borrow_content::<T>(alloc_id, head0, self0.head, prev, self0.tail, next, tail0, nodes_before, nodes, nodes_after, prevs_before, prevs, prevs_after, nexts_before, nexts, nexts_after), ref_initialized_(&(*node_ref).element)))() {
+                            open Ctx();
+                            open Q();
+                            open_ref_initialized_Node(node_ref);
+                            end_ref_padding_Node(node_ref);
+                            end_ref_Option_NonNull(&(*node_ref).prev);
+                            end_ref_Option_NonNull(&(*node_ref).next);
+                            close [f]Nodes1(alloc_id, self0.head, prev, self0.tail, next, nodes, prevs, nexts);
+                            close [f]Iter_frac_borrow_content::<T>(alloc_id, head0, self0.head, prev, self0.tail, next, tail0, nodes_before, nodes, nodes_after, prevs_before, prevs, prevs_after, nexts_before, nexts, nexts_after)();
+                            close [f]ref_initialized_::<T>(&(*node_ref).element)();
+                            close [f]sep_(Iter_frac_borrow_content::<T>(alloc_id, head0, self0.head, prev, self0.tail, next, tail0, nodes_before, nodes, nodes_after, prevs_before, prevs, prevs_after, nexts_before, nexts, nexts_after), ref_initialized_(&(*node_ref).element))();
+                        } {
+                            close_frac_borrow_strong(k1, sep_(Iter_frac_borrow_content::<T>(alloc_id, head0, self0.head, prev, self0.tail, next, tail0, nodes_before, nodes, nodes_after, prevs_before, prevs, prevs_after, nexts_before, nexts, nexts_after), ref_initialized_(&(*node_ref).element)), Q);
+                            leak full_borrow(k1, Q);
+                        }
+                    }
+                    @*/
+                    /*@
+                    produce_lem_ptr_chunk implies_frac(Iter_frac_borrow_content::<T>(alloc_id, head0, self0.head, prev, self0.tail, next, tail0, nodes_before, nodes, nodes_after, prevs_before, prevs, prevs_after, nexts_before, nexts, nexts_after), Iter_frac_borrow_content::<T>(alloc_id, head0, self1.head, self0.head, self1.tail, next, tail0, append(nodes_before, [node]), tail(nodes), nodes_after, append(prevs_before, [prev]), tail(prevs), prevs_after, append(nexts_before, [self1.head]), tail(nexts), nexts_after))() {
+                        open [?f1]Iter_frac_borrow_content::<T>(alloc_id, head0, self0.head, prev, self0.tail, next, tail0, nodes_before, nodes, nodes_after, prevs_before, prevs, prevs_after, nexts_before, nexts, nexts_after)();
+                        open Nodes1::<T>(alloc_id, self0.head, prev, self0.tail, next, nodes, prevs, nexts);
+                        close [f1]Nodes1::<T>(alloc_id, self1.head, self0.head, self0.head, self1.head, [], [], []);
+                        assert self0.head == Option::Some(node) &*& [f1](*NonNull_ptr(node)).next |-> self1.head;
+                        close [f1]Nodes1::<T>(alloc_id, self0.head, prev, self0.head, self1.head, [node], [prev], [self1.head]);
+                        Nodes1_append::<T>(head0);
+                        close [f1]Iter_frac_borrow_content::<T>(alloc_id, head0, self1.head, self0.head, self1.tail, next, tail0, append(nodes_before, [node]), tail(nodes), nodes_after, append(prevs_before, [prev]), tail(prevs), prevs_after, append(nexts_before, [self1.head]), tail(nexts), nexts_after)();
+                    } {
+                        produce_lem_ptr_chunk implies_frac(Iter_frac_borrow_content::<T>(alloc_id, head0, self1.head, self0.head, self1.tail, next, tail0, append(nodes_before, [node]), tail(nodes), nodes_after, append(prevs_before, [prev]), tail(prevs), prevs_after, append(nexts_before, [self1.head]), tail(nexts), nexts_after), Iter_frac_borrow_content::<T>(alloc_id, head0, self0.head, prev, self0.tail, next, tail0, nodes_before, nodes, nodes_after, prevs_before, prevs, prevs_after, nexts_before, nexts, nexts_after))() {
+                            open [?f1]Iter_frac_borrow_content::<T>(alloc_id, head0, self1.head, self0.head, self1.tail, next, tail0, append(nodes_before, [node]), tail(nodes), nodes_after, append(prevs_before, [prev]), tail(prevs), prevs_after, append(nexts_before, [self1.head]), tail(nexts), nexts_after)();
+                            Nodes1_split::<T>(nodes_before, [node], prevs_before, [prev], nexts_before, [self1.head]);
+                            open Nodes1::<T>(alloc_id, _, _, _, _, [node], [prev], [self1.head]);
+                            open Nodes1::<T>(alloc_id, self1.head, _, _, _, [], [], []);
+                            close [f1]Nodes1::<T>(alloc_id, self0.head, prev, self0.tail, next, nodes, prevs, nexts);
+                            close [f1]Iter_frac_borrow_content::<T>(alloc_id, head0, self0.head, prev, self0.tail, next, tail0, nodes_before, nodes, nodes_after, prevs_before, prevs, prevs_after, nexts_before, nexts, nexts_after)();
+                        } {
+                            frac_borrow_implies('a, Iter_frac_borrow_content::<T>(alloc_id, head0, self0.head, prev, self0.tail, next, tail0, nodes_before, nodes, nodes_after, prevs_before, prevs, prevs_after, nexts_before, nexts, nexts_after), Iter_frac_borrow_content::<T>(alloc_id, head0, self1.head, self0.head, self1.tail, next, tail0, append(nodes_before, [node]), tail(nodes), nodes_after, append(prevs_before, [prev]), tail(prevs), prevs_after, append(nexts_before, [self1.head]), tail(nexts), nexts_after));
+                        }
+                    }
+                    @*/
+                    //@ close exists(Iter_info(alloc_id, head0, self0.head, next, tail0, append(nodes_before, [node]), tail(nodes), nodes_after, append(prevs_before, [prev]), tail(prevs), prevs_after, append(nexts_before, [self1.head]), tail(nexts), nexts_after));
+                    //@ close <Iter<'a, T>>.own(t, *self);
+                    //@ let elem_ref = precreate_ref(&(*node_1).element);
+                    //@ init_ref_share::<T>('a, t, elem_ref);
+                    //@ leak type_interp::<T>();
+                    //@ close_ref_own::<'a, T>(elem_ref);
+                    //@ close <std::option::Option<&'a T>>.own(t, Option::Some(elem_ref));
+                    //@ open_frac_borrow('a, ref_initialized_(elem_ref), q);
+                    //@ open [?fr]ref_initialized_::<T>(elem_ref)();
+                    let r = &(*node).element;
+                    //@ close [fr]ref_initialized_::<T>(elem_ref)();
+                    //@ close_frac_borrow(fr, ref_initialized_(elem_ref));
+                    Some(r)
+                }
+            }
         }
     }
 
