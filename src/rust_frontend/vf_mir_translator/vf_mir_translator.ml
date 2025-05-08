@@ -1938,6 +1938,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       | Deref
       | Field of string option * int
       | Downcast of int
+      | BoxAsPtr
 
     let decode_place_element (place_elm : PlaceElementRd.t) : place_element =
       let open PlaceElementRd in
@@ -1955,6 +1956,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           in
           Field (name, Stdint.Uint32.to_int index)
       | Downcast variant_index -> Downcast (Stdint.Uint32.to_int variant_index)
+      | BoxAsPtr _ -> BoxAsPtr
 
     let translate_projection (loc : Ast.loc) (elems : place_element list)
         (e : Ast.expr) (e_is_mutable : bool) :
@@ -1985,6 +1987,18 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         | Field (None, _) :: _ ->
             failwith "Not yet supported: Field(None, _)::_"
         | Downcast _ :: _ -> failwith "Not yet supported: Downcast _::_"
+        | BoxAsPtr :: elems ->
+            let e1, e1_is_mutable = iter elems in
+            ( Ast.CallExpr
+                ( loc,
+                  "std::boxed::Box::<T, A>::as_mut_ptr",
+                  [],
+                  [],
+                  [
+                    LitPat (AddressOf (loc, e1));
+                  ],
+                  Static ),
+              e1_is_mutable )
       in
       iter elems
 

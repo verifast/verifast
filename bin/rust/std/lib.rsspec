@@ -565,33 +565,33 @@ mod boxed {
     /*@
     
     // This takes a pointer to a Box because moving the Box invalidates the pointer to the contents! https://github.com/verifast/verifast/issues/685#issuecomment-2626864223
-    pred Box_minus_contents_in<T, A>(t: thread_id_t, self: *Box<T, A>, alloc_id: any; contents_ptr: *T);
+    pred Box_minus_contents_in<T, A>(boxFrac: real, t: thread_id_t, placeFrac: real, self: *Box<T, A>, alloc_id: any; contents_ptr: *T);
     
     lem Box_separate_contents<T, A>(self: *Box<T, A>) -> *T;
-        req [?f](*self |-> ?self0) &*& [f]Box_in::<T, A>(?t, self0, ?alloc_id, ?value);
-        ens [f]Box_minus_contents_in(t, self, alloc_id, result) &*& [f](*result |-> value);
+        req [?fs](*self |-> ?self0) &*& [?f]Box_in::<T, A>(?t, self0, ?alloc_id, ?value);
+        ens Box_minus_contents_in(f, t, fs, self, alloc_id, result) &*& [f](*result |-> value);
     
     lem Box_unseparate_contents<T, A>(self: *Box<T, A>);
-        req [?f]Box_minus_contents_in(?t, self, ?alloc_id, ?contents_ptr) &*& [f](*contents_ptr |-> ?value);
-        ens [f](*self |-> ?self1) &*& [f]Box_in(t, self1, alloc_id, value);
+        req Box_minus_contents_in(?f, ?t, ?fs, self, ?alloc_id, ?contents_ptr) &*& [f](*contents_ptr |-> ?value);
+        ens [fs](*self |-> ?self1) &*& [f]Box_in(t, self1, alloc_id, value);
     
     @*/
     
     /*@
     
-    pred init_ref_Box_in_token<T, A>(t: thread_id_t, p: *Box<T, A>, x: *Box<T, A>, alloc_id: any, p_contents_ptr: *T, x_contents_ptr: *T, f: real);
+    pred init_ref_Box_in_token<T, A>(t: thread_id_t, p: *Box<T, A>, fs: real, x: *Box<T, A>, alloc_id: any, p_contents_ptr: *T, x_contents_ptr: *T, f: real);
     
     lem open_ref_init_perm_Box_in<T, A>(p: *Box<T, A>) -> *T;
-        req ref_init_perm::<Box<T, A>>(p, ?x) &*& [?f]Box_minus_contents_in::<T, A>(?t, x, ?alloc_id, ?x_contents_ptr);
-        ens init_ref_Box_in_token::<T, A>(t, p, x, alloc_id, result, x_contents_ptr, f) &*& ref_init_perm::<T>(result, x_contents_ptr);
+        req ref_init_perm::<Box<T, A>>(p, ?x) &*& Box_minus_contents_in::<T, A>(?f, ?t, ?fs, x, ?alloc_id, ?x_contents_ptr);
+        ens init_ref_Box_in_token::<T, A>(t, p, fs, x, alloc_id, result, x_contents_ptr, f) &*& ref_init_perm::<T>(result, x_contents_ptr);
     
     lem init_ref_Box_in<T, A>(p: *Box<T, A>, coef: real);
-        req init_ref_Box_in_token::<T, A>(?t, p, ?x, ?alloc_id, ?p_contents_ptr, ?x_contents_ptr, ?f) &*& ref_initialized::<T>(p_contents_ptr) &*& 0 < coef &*& coef < 1;
-        ens ref_initialized::<Box<T, A>>(p) &*& [(1-coef)*f]Box_minus_contents_in::<T, A>(t, x, alloc_id, x_contents_ptr) &*& [coef*f]Box_minus_contents_in::<T, A>(t, p, alloc_id, p_contents_ptr) &*& ref_end_token(p, x, coef*f);
+        req init_ref_Box_in_token::<T, A>(?t, p, ?fs, ?x, ?alloc_id, ?p_contents_ptr, ?x_contents_ptr, ?f) &*& ref_initialized::<T>(p_contents_ptr) &*& 0 < coef &*& coef < 1;
+        ens ref_initialized::<Box<T, A>>(p) &*& Box_minus_contents_in::<T, A>((1-coef)*f, t, (1-coef)*fs, x, alloc_id, x_contents_ptr) &*& Box_minus_contents_in::<T, A>(coef*f, t, coef*fs, p, alloc_id, p_contents_ptr) &*& ref_end_token(p, x, coef*f);
     
     lem end_ref_Box_in<T, A>(p: *Box<T, A>);
-        req ref_initialized::<Box<T, A>>(p) &*& ref_end_token(p, ?x, ?f) &*& [f]Box_minus_contents_in::<T, A>(?t, p, ?alloc_id, ?p_contents_ptr);
-        ens [f]Box_minus_contents_in::<T, A>(t, x, alloc_id, _) &*& ref_initialized::<T>(p_contents_ptr);
+        req ref_initialized::<Box<T, A>>(p) &*& ref_end_token(p, ?x, ?f) &*& Box_minus_contents_in::<T, A>(f, ?t, ?fs, p, ?alloc_id, ?p_contents_ptr);
+        ens Box_minus_contents_in::<T, A>(f, t, fs, x, alloc_id, _) &*& ref_initialized::<T>(p_contents_ptr);
     
     @*/
 
@@ -642,8 +642,8 @@ mod boxed {
         //@ on_unwind_ens thread_token(t);
         
         fn as_mut_ptr<'a>(self: &'a mut Box<T, A>) -> *mut T;
-        //@ req Box_minus_contents_in(?t, self, ?alloc_id, ?contents_ptr);
-        //@ ens Box_minus_contents_in(t, self, alloc_id, contents_ptr) &*& result == contents_ptr;
+        //@ req Box_minus_contents_in(?f, ?t, ?fs, self, ?alloc_id, ?contents_ptr);
+        //@ ens Box_minus_contents_in(f, t, fs, self, alloc_id, contents_ptr) &*& result == contents_ptr;
         
     }
     
