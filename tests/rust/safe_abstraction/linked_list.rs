@@ -25,6 +25,7 @@
 #![feature(exact_size_is_empty)]
 #![feature(hasher_prefixfree_extras)]
 #![feature(box_into_inner)]
+#![feature(box_as_ptr)]
 
 use std as core;
 
@@ -1056,8 +1057,10 @@ impl<T, A: Allocator> LinkedList<T, A> {
                 //@ open elem_fbc::<T>(t)(node);
                 //@ let alloc_ref = precreate_ref(&(*self).alloc);
                 //@ std::alloc::init_ref_Allocator::<'static, A>(alloc_ref);
-                self.head = (*node.as_ptr()).next;
                 let node = Box::from_raw_in(node.as_ptr(), &self.alloc);
+                //@ std::boxed::Box_separate_contents(&node_1);
+                self.head = node.next;
+                //@ std::boxed::Box_unseparate_contents(&node_1);
 
                 //@ open Nodes(_, ?next, _, ?tail, _, _);
             match self.head {

@@ -2095,7 +2095,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     if dialect = Some Rust then
       List.iter begin fun (x, tp) ->
         if String.starts_with ~prefix:"'" x then begin
-          if not (is_lifetime tp) then
+          if not (is_lifetime tp || unify tp StaticLifetime) then
             static_error l (Printf.sprintf "Type argument for type parameter %s must be a lifetime variable" x) None
         end else
           if is_lifetime tp then
