@@ -902,6 +902,24 @@ type command =
 | Discriminant (* Pop a value from the top of the operand stack, which is an enum value, and push the discriminant of the enum value *)
 | SourceInfo of source_info
 
+let string_of_command c =
+  let open Stringifier in
+  match c with
+    Store place -> Printf.sprintf "Store %s" (string_of_place place)
+  | LoadLocal {name} -> Printf.sprintf "LoadLocal %s" name
+  | Deref -> "Deref"
+  | Field i -> Printf.sprintf "Field %d" i
+  | BoxAsPtr -> "BoxAsPtr"
+  | Downcast i -> Printf.sprintf "Downcast %d" i
+  | Constant {const} -> Printf.sprintf "Constant %s" (string_of_const_operand const)
+  | Ref data -> string_of_rvalue_ref_data data
+  | AddressOf {place} -> Printf.sprintf "AddressOf %s" (string_of_place place)
+  | Cast ty -> Printf.sprintf "Cast %s" (string_of_ty ty)
+  | BinaryOp operator -> Printf.sprintf "BinaryOp %s" (string_of_bin_op operator)
+  | Aggregate (aggregate_kind, n) -> Printf.sprintf "Aggregate %s %d" (string_of_aggregate_kind aggregate_kind) n
+  | Discriminant -> "Discriminant"
+  | SourceInfo {span} -> Printf.sprintf "SourceInfo %s" (string_of_span span)
+
 let commands_for_loading_place {local; projection}: command list =
   let proj_cmds =
     projection |> List.map @@ function
@@ -1038,6 +1056,7 @@ let rec process_commands bodies (env: env) opnds (i_bb: basic_block_info) i_s (s
       if funcName = "std::ops::FnOnce::call_once--VeriFast" then
         let [Type (Closure (closureName, closureGenArgs)); Type (Tuple paramTypes)] = substs in
         let body = List.assoc closureName bodies in
+        Printf.printf "======== Inlined function ========\n%s" (Stringifier.string_of_body body);
         let closureGenArgs = Array.of_list closureGenArgs in
         let closureGenArgs = Array.to_list @@ Array.sub closureGenArgs 0 (Array.length closureGenArgs - 3) in
         let genericParams = closureGenArgs |> List.map @@ fun arg ->
@@ -1200,11 +1219,17 @@ let check_place_refines_place (env0: env) caller0 place0 (env1: env) caller1 pla
   | Some (Address _), _ | _, Some (Address _) -> failwith "Place expressions do not match"
   | _, _ ->
     (* OK, neither local has its address taken *)
-    if placeProjection0 <> [] then
+    match placeProjection0 with
+      [] -> Local placeLocalPath0, Local placeLocalPath1
+    | es when List.mem (Deref: place_elem) es ->
+      begin match placeLocalState0, placeLocalState1 with
+        Some (Value v0), Some (Value v1) when values_equal v0 v1 -> ()
+      | _ -> failwith "The addresses being dereferenced are not equal"
+      end;
+      Nonlocal, Nonlocal
+    | _ ->
       (* if a local is projected, give up trying to track its value *)
       LocalProjection placeLocalPath0, LocalProjection placeLocalPath1
-    else
-      Local placeLocalPath0, Local placeLocalPath1
 
 let check_operand_refines_operand i genv0 env0 span0 caller0 operand0 genv1 env1 span1 caller1 operand1 =
   match operand0, operand1 with
@@ -1522,7 +1547,16 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
               (* Havoc all locals of the original crate *)
               let env0, env1 = produce_loop_inv env0 env1 loopInv in
               Printf.printf "INFO: In function %s, checking loop body at basic block %s against basic block %s, with env0 = [%s] and env1 = [%s]\n" def_path i_bb0#to_string i_bb1#to_string (string_of_env env0) (string_of_env env1);
-              check_codepos_refines_codepos env0 [] i_bb0 0 (List.concat_map commands_of_statement i_bb0#statements) env1 [] i_bb1 0 (List.concat_map commands_of_statement i_bb1#statements);
+              let cmds0 = List.concat_map commands_of_statement i_bb0#statements in
+              let cmds1 = List.concat_map commands_of_statement i_bb1#statements in
+              begin try
+                check_codepos_refines_codepos env0 [] i_bb0 0 cmds0 env1 [] i_bb1 0 cmds1
+              with
+                | Failure msg as e ->
+                  Printf.printf "======== Commands of basic block %s of original program ========\n%s\n" i_bb0#to_string (String.concat "\n" (List.mapi (fun i c -> Printf.sprintf "%3d: %s" i (string_of_command c)) cmds0));
+                  Printf.printf "======== Commands of basic block %s of verified program ========\n%s\n" i_bb1#to_string (String.concat "\n" (List.mapi (fun i c -> Printf.sprintf "%3d: %s" i (string_of_command c)) cmds1));
+                  raise e
+              end;
               let Checking (i_bb1, loopInv) = Hashtbl.find bblocks0_statuses i_bb0#id in
               Hashtbl.replace bblocks0_statuses i_bb0#id (Checked (i_bb1, loopInv))
             with RecheckLoop i_bb0' as e ->
@@ -1611,6 +1645,7 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
         end
     (* Checks whether for each behavior of code position (bb0, s0), code position (bb1, s1) has a matching behavior *)
     and check_codepos_refines_codepos_core env0 opnds0 (i_bb0 : basic_block_info) i_s0 (ss_i0 : command list) env1 opnds1 (i_bb1 : basic_block_info) i_s1 (ss_i1 : command list) =
+      Printf.printf "INFO: In function %s, checking code position %s:%d against code position %s:%d\n" def_path i_bb0#to_string i_s0 i_bb1#to_string i_s1;
       let caller0 = i_bb0#id.bb_caller in
       let caller1 = i_bb1#id.bb_caller in
       let check_terminator_refines_terminator env1 =
@@ -1823,18 +1858,18 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
             let v, opnds0, opnds1 = consume_operand opnds0 opnds1 in
             let v = fresh_symbol () in
             cont env0 (v::opnds0) env1 (v::opnds1)
-        | _ -> failwith "Command kinds do not match"
+        | _ -> error "Command kinds do not match"
       in
       match ss_i0, ss_i1 with
         [], [] -> check_terminator_refines_terminator env1
-      | _, [] -> failwith (Printf.sprintf "In function %s, cannot prove that statement %d of basic block %s in the original version refines the terminator of basic block %s in the verified version" def_path i_s0 i_bb0#to_string i_bb1#to_string)
+      | _, [] -> error (Printf.sprintf "In function %s, cannot prove that statement %d of basic block %s in the original version refines the terminator of basic block %s in the verified version" def_path i_s0 i_bb0#to_string i_bb1#to_string)
       | Ref {place={projection=[Deref]}}::_, _ -> check_command_refines_command ()
       | _, Ref {place={projection=[Deref]; local={name=rhsPlaceLocalName1}}}::ss_i1_plus_1 ->
         (* Process assignments of the form `x = &*y;` where x and y are locals whose address is not taken.
           * We are here using the property that inserting such statements can only cause a program to have more UB, so if it verifies, the original program is also safe.
           *)
         let rhsPlaceLocalPath1 = {lv_caller=caller1; lv_name=rhsPlaceLocalName1} in
-        let fail () = failwith (Printf.sprintf "In function %s, cannot prove that code position %d of basic block %s in the original version refines the statement at position %d of basic block %s in the verified version" def_path i_s0 i_bb0#to_string i_s1 i_bb1#to_string) in
+        let fail () = error (Printf.sprintf "In function %s, cannot prove that code position %d of basic block %s in the original version refines the statement at position %d of basic block %s in the verified version" def_path i_s0 i_bb0#to_string i_s1 i_bb1#to_string) in
         begin match List.assoc_opt rhsPlaceLocalPath1 env1 with
           Some (Value rhsValue) ->
             check_codepos_refines_codepos env0 opnds0 i_bb0 i_s0 ss_i0 env1 (rhsValue::opnds1) i_bb1 (i_s1 + 1) ss_i1_plus_1
@@ -1850,7 +1885,7 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
           check_codepos_refines_codepos_core env0 opnds0 i_bb0 i_s0 ss_i0 env1 opnds1 i_bb1 i_s1 ss_i1
         with LocalAddressTaken (x0, x1) ->
           if List.assoc x0 env0 <> List.assoc x1 env1 then failwith (Printf.sprintf "The states of the two locals %s and %s whose address is taken are not equal" (string_of_lv_path x0) (string_of_lv_path x1));
-          Printf.printf "Caught LocalAddressTaken; restarting codepos check\n";
+          Printf.printf "Caught LocalAddressTaken (%s, %s); restarting codepos check\n" (string_of_lv_path x0) (string_of_lv_path x1);
           let a = fresh_symbol () in
           let env0 = update_env x0 (Address a) env0 in
           let env1 = update_env x1 (Address a) env1 in

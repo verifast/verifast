@@ -40,61 +40,64 @@ let string_of_const_value ({kind}: ty) = function
   | Slice _ -> "slice"
   | ZeroSized ->
     match kind with
+      | Tuple _ -> "()"
       | FnDef {id={name}} -> name
+
+let string_of_const_operand = function
+| Ty {ty; const} -> Printf.sprintf "TyConst"
+| Val {const_value; ty} -> string_of_const_value ty const_value
+| Unevaluated -> Printf.sprintf "UnevaluatedConst"
 
 let string_of_operand = function
   | Copy place -> Printf.sprintf "copy %s" (string_of_place place)
   | Move place -> Printf.sprintf "move %s" (string_of_place place)
-  | Constant {const} ->
-    begin match const with
-    | Ty {ty; const} -> Printf.sprintf "TyConst"
-    | Val {const_value; ty} -> string_of_const_value ty const_value
-    | Unevaluated -> Printf.sprintf "UnevaluatedConst"
+  | Constant {const} -> string_of_const_operand const
+
+let string_of_rvalue_ref_data {region; bor_kind; place} =
+  Printf.sprintf "&%s%s %s" (match bor_kind with Shared -> "" | Mut -> "mut ") region.id (string_of_place place)
+
+let string_of_bin_op = function
+  | Add -> "+"
+  | Sub -> "-"
+  | Mul -> "*"
+  | Div -> "/"
+  | Rem -> "%"
+  | BitAnd -> "&"
+  | BitOr -> "|"
+  | BitXor -> "^"
+  | Shl -> "<<"
+  | Shr -> ">>"
+  | Eq -> "=="
+  | Ne -> "!="
+  | Lt -> "<"
+  | Le -> "<="
+  | Gt -> ">"
+  | Ge -> ">="
+  | Offset -> "offset"
+
+let string_of_aggregate_kind = function
+  | Array ty -> Printf.sprintf "array(%s)" (string_of_ty ty)
+  | Tuple -> "tuple"
+  | Adt {adt_id; adt_kind; variant_id} ->
+    begin match adt_kind with
+      | StructKind -> Printf.sprintf "%s" adt_id.name
+      | EnumKind -> Printf.sprintf "%s::%s" adt_id.name variant_id
+      | UnionKind -> Printf.sprintf "%s::%s" adt_id.name variant_id
     end
+  | Closure {closure_id} -> Printf.sprintf "closure(%s)" closure_id
 
 let string_of_rvalue = function
   | Use operand -> string_of_operand operand
   | Repeat -> "<repeat>"
-  | Ref {region; bor_kind; place} ->
-    Printf.sprintf "&%s%s %s" (match bor_kind with Shared -> "" | Mut -> "mut ") region.id (string_of_place place)
+  | Ref data -> string_of_rvalue_ref_data data
   | AddressOf {place} -> Printf.sprintf "&raw %s" (string_of_place place)
   | Len -> "len"
   | Cast {operand; ty} ->
     Printf.sprintf "(%s as %s)" (string_of_operand operand) (string_of_ty ty)
   | BinaryOp {operator; operandl; operandr} ->
-    let op = match operator with
-      | Add -> "+"
-      | Sub -> "-"
-      | Mul -> "*"
-      | Div -> "/"
-      | Rem -> "%"
-      | BitAnd -> "&"
-      | BitOr -> "|"
-      | BitXor -> "^"
-      | Shl -> "<<"
-      | Shr -> ">>"
-      | Eq -> "=="
-      | Ne -> "!="
-      | Lt -> "<"
-      | Le -> "<="
-      | Gt -> ">"
-      | Ge -> ">="
-      | Offset -> "offset"
-    in
-    Printf.sprintf "%s %s %s" (string_of_operand operandl) op (string_of_operand operandr)
+    Printf.sprintf "%s %s %s" (string_of_operand operandl) (string_of_bin_op operator) (string_of_operand operandr)
   | Aggregate {aggregate_kind; operands} ->
-    let kind_str = match aggregate_kind with
-      | Array ty -> Printf.sprintf "array(%s)" (string_of_ty ty)
-      | Tuple -> "tuple"
-      | Adt {adt_id; adt_kind; variant_id} ->
-        begin match adt_kind with
-          | StructKind -> Printf.sprintf "%s" adt_id.name
-          | EnumKind -> Printf.sprintf "%s::%s" adt_id.name variant_id
-          | UnionKind -> Printf.sprintf "%s::%s" adt_id.name variant_id
-        end
-      | Closure {closure_id} -> Printf.sprintf "closure(%s)" closure_id
-    in
-    Printf.sprintf "%s(%s)" kind_str (String.concat ", " (List.map string_of_operand operands))
+    Printf.sprintf "%s(%s)" (string_of_aggregate_kind aggregate_kind) (String.concat ", " (List.map string_of_operand operands))
   | Discriminant place ->
     Printf.sprintf "discriminant(%s)" (string_of_place place)
 

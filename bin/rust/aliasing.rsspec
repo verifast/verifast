@@ -68,6 +68,10 @@ lem precreate_ref<T>(x: *T) -> *T;
    req true;
    ens ref_precreated_token(x, result) &*& ref_init_perm(result, x);
 
+lem reborrow_ref_<T>(x: *T); // Creating a shared reference from a shared reference is a no-op
+    req [?f]ref_initialized(x);
+    ens [f]ref_initialized(x) &*& ref_precreated_token(x, x);
+
 @*/
 
 fn create_ref<T>(x: *T) -> *T;
