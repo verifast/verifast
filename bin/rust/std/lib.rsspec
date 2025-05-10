@@ -406,6 +406,7 @@ mod alloc {
     /*@
     
     pred Allocator<A>(t: thread_id_t, alloc: A, alloc_id: any);
+    pred Allocator_share<A>(k: lifetime_t, t: thread_id_t, l: *A, alloc_id: any);
     
     lem Allocator_upcast<A0, A1>(alloc: A0);
         req Allocator::<A0>(?t, alloc, ?alloc_id) &*& is_subtype_of::<A0, A1>() == true;
@@ -434,28 +435,26 @@ mod alloc {
         ens *l |-> ?alloc &*& Allocator::<A>(t, alloc, alloc_id);
     
     lem share_Allocator_full_borrow_content_<A>(k: lifetime_t, t: thread_id_t, l: *A, alloc_id: any);
+        nonghost_callers_only
+        req full_borrow(k, Allocator_full_borrow_content_::<A>(t, l, alloc_id)) &*& [?q]lifetime_token(k);
+        ens [_]Allocator_share(k, t, l, alloc_id) &*& [q]lifetime_token(k);
+    
+    lem share_Allocator_full_borrow_content_m<A>(k: lifetime_t, t: thread_id_t, l: *A, alloc_id: any);
         req type_interp::<A>() &*& atomic_mask(MaskTop) &*& full_borrow(k, Allocator_full_borrow_content_::<A>(t, l, alloc_id)) &*& [?q]lifetime_token(k);
-        ens type_interp::<A>() &*& atomic_mask(MaskTop) &*& [_](<A>.share(k, t, l)) &*& [q]lifetime_token(k);
+        ens type_interp::<A>() &*& atomic_mask(MaskTop) &*& [_]Allocator_share(k, t, l, alloc_id) &*& [q]lifetime_token(k);
     
-    pred share_allocator_end_token<A>(l: *A, alloc_id: any);
+    lem close_Allocator_share<A>(k: lifetime_t, t: thread_id_t, l: *A);
+        req [_]Allocator_share(k, t, l, _);
+        ens [_](<A>.share(k, t, l));
     
-    lem share_allocator<'a, A>(l: *A);
-        req *l |-> ?alloc &*& Allocator(?t, alloc, ?alloc_id);
-        ens Allocator::<&'a A>(t, l, alloc_id) &*& share_allocator_end_token(l, alloc_id);
+    lem init_ref_Allocator_share<A>(k: lifetime_t, t: thread_id_t, p: *A);
+        nonghost_callers_only
+        req ref_init_perm(p, ?x) &*& [_]Allocator_share(k, t, x, ?allocId) &*& [?q]lifetime_token(k);
+        ens [q]lifetime_token(k) &*& [_]Allocator_share(k, t, p, allocId) &*& [_]frac_borrow(k, ref_initialized_(p));
     
-    lem end_share_allocator<'a, A>();
-        req share_allocator_end_token::<A>(?l, ?alloc_id) &*& Allocator::<&'a A>(?t, _, alloc_id);
-        ens *l |-> ?alloc &*& Allocator::<A>(t, alloc, alloc_id);
-    
-    pred ref_Allocator_end_token<A>(p: *A, x: *A, alloc_id: any);
-    
-    lem init_ref_Allocator<'a, A>(p: *A);
-        req ref_init_perm(p, ?x) &*& *x |-> ?alloc &*& Allocator(?t, alloc, ?alloc_id);
-        ens ref_initialized(p) &*& Allocator::<&'a A>(t, p, alloc_id) &*& ref_Allocator_end_token(p, x, alloc_id);
-    
-    lem end_ref_Allocator<'a, A>();
-        req ref_Allocator_end_token::<A>(?p, ?x, ?alloc_id) &*& ref_initialized(p) &*& Allocator::<&'a A>(?t, _, alloc_id);
-        ens *x |-> ?alloc &*& Allocator::<A>(t, alloc, alloc_id);
+    lem close_Allocator_ref<'a, A>(t: thread_id_t, l: *A);
+        req [_]Allocator_share('a, t, l, ?alloc_id);
+        ens Allocator::<&'a A>(t, l, alloc_id);
     
     pred share_allocator_at_lifetime_end_token<A>(t: thread_id_t, l: *A, alloc_id: any, k: lifetime_t);
     
@@ -628,12 +627,12 @@ mod boxed {
         
         fn into_inner(b: Box<T, A>) -> T;
         //@ req thread_token(?t) &*& Box_in::<T, A>(t, b, ?alloc_id, ?value);
-        //@ ens thread_token(t) &*& std::alloc::Allocator::<A>(t, _, alloc_id) &*& result == value;
+        //@ ens thread_token(t) &*& result == value;
         //@ on_unwind_ens thread_token(t);
     
         fn leak<'a>(b: Box<T, A>) -> &'a mut T;
         //@ req Box_in::<T, A>(?t, b, ?alloc_id, ?value);
-        //@ ens *result |-> value &*& std::alloc::alloc_block_in(alloc_id, result as *u8, std::alloc::Layout::new_::<T>()) &*& result as *_ as usize != 0 &*& std::alloc::Allocator::<A>(t, _, alloc_id);
+        //@ ens *result |-> value &*& std::alloc::alloc_block_in(alloc_id, result as *u8, std::alloc::Layout::new_::<T>()) &*& result as *_ as usize != 0;
         //@ on_unwind_ens false;
     
         fn new_uninit_in(alloc: A) -> Box<std::mem::MaybeUninit<T>, A>;
