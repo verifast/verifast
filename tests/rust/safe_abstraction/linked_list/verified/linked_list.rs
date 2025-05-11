@@ -563,7 +563,8 @@ lem LinkedList_share_full<T, A>(k: lifetime_t, t: thread_id_t, l: *LinkedList<T,
         iter(nodes);
     }
     close exists(LinkedList_share_info(alloc_id, head, tail, nodes, prevs, nexts));
-    std::alloc::share_Allocator_full_borrow_content_::<A>(k, t, &(*l).alloc, alloc_id);
+    std::alloc::share_Allocator_full_borrow_content_m::<A>(k, t, &(*l).alloc, alloc_id);
+    std::alloc::close_Allocator_share(k, t, &(*l).alloc);
     leak foreach(nodes, _);
     close <LinkedList<T, A>>.share()(k, t, l);
     leak <LinkedList<T, A>>.share(k, t, l);
@@ -942,14 +943,13 @@ impl<T> Node<T> {
 
     fn into_element<A: Allocator>(self: Box<Self, A>) -> T
     //@ req thread_token(?t) &*& Box_in::<Node<T>, A>(t, self, ?alloc_id, ?node);
-    //@ ens thread_token(t) &*& result == node.element &*& Allocator::<A>(t, _, alloc_id);
+    //@ ens thread_token(t) &*& result == node.element;
     //@ on_unwind_ens thread_token(t);
     /*@
     safety_proof {
         std::boxed::own_to_Box_in(self);
         call();
         open Node_own::<T>(_, _);
-        leak Allocator(_, _, _);
     }
     @*/
     {
@@ -1010,70 +1010,112 @@ impl<T, A: Allocator> LinkedList<T, A> {
     /// Removes and returns the node at the front of the list.
     #[inline]
     fn pop_front_node<'a>(&'a mut self) -> Option<Box<Node<T>, &'a A>>
-    /*@
-    req thread_token(?t) &*&
-        *self |-> ?self0 &*&
-        Allocator(t, self0.alloc, ?alloc_id) &*&
-        Nodes(alloc_id, self0.head, None, self0.tail, None, ?nodes0) &*&
-        length(nodes0) == self0.len &*&
-        foreach(nodes0, elem_fbc::<T>(t));
-    @*/
-    /*@
-    ens thread_token(t) &*&
-        (*self).head |-> ?head1 &*&
-        (*self).tail |-> ?tail1 &*&
-        Nodes(alloc_id, head1, None, tail1, None, ?nodes1) &*&
-        (*self).len |-> length(nodes1) &*&
-        struct_LinkedList_padding::<T, A>(self) &*&
-        foreach(nodes1, elem_fbc::<T>(t)) &*&
-        match result {
-            Option::None => (*self).alloc |-> ?alloc1 &*& Allocator(t, alloc1, alloc_id),
-            Option::Some(b) => std::alloc::ref_Allocator_end_token::<A>(?p, &(*self).alloc, alloc_id) &*& ref_initialized(p) &*& Box_in::<Node<T>, &'a A>(t, b, alloc_id, ?node) &*& <T>.own(t, node.element)
-        };
-    @*/
-    /*@
-    safety_proof {
-        assume(false);
-    }
-    @*/
+    //@ req thread_token(?t) &*& [?qa]lifetime_token('a) &*& full_borrow('a, <LinkedList<T, A>>.full_borrow_content(t, self));
+    //@ ens thread_token(t) &*& [qa]lifetime_token('a) &*& <Option<std::boxed::Box<Node<T>, &'a A>>>.own(t, result);
     {
         // This method takes care not to create mutable references to whole nodes,
         // to maintain validity of aliasing pointers into `element`.
-        //@ open_points_to(self);
-        let head = self.head;
-        let head_ref = &mut self.head;
-        let tail_ref = &mut self.tail;
-        let len_ref = &mut self.len;
-        //@ let alloc_ref0 = precreate_ref(&(*self).alloc);
-        //@ std::alloc::init_ref_Allocator::<'static, A>(alloc_ref0);
-        let alloc_ref = &self.alloc;
-        match head {
-            None => {
-                //@ std::alloc::end_ref_Allocator::<'static, A>();
-                None
-            }
-            Some(node) => unsafe {
-                //@ open Nodes(_, _, _, _, _, _);
-                //@ open foreach(nodes0, elem_fbc::<T>(t));
-                //@ open elem_fbc::<T>(t)(node);
-                let node = Box::from_raw_in(node.as_ptr(), &*alloc_ref);
-                //@ std::boxed::Box_separate_contents(&node_1);
-                *head_ref = node.next;
-                //@ std::boxed::Box_unseparate_contents(&node_1);
-
-                //@ open Nodes(_, ?next, _, ?tail, _, _);
-                match *head_ref {
-                    None => *tail_ref = None,
-                    // Not creating new mutable (unique!) references overlapping `element`.
-                    Some(head) => (*head.as_ptr()).prev = None,
+        //@ let klong = open_full_borrow_strong('a, <LinkedList<T, A>>.full_borrow_content(t, self), qa);
+        //@ open LinkedList_full_borrow_content::<T, A>(t, self)();
+        //@ open <LinkedList<T, A>>.own(t, *self);
+        //@ assert Nodes(?alloc_id, _, _, _, _, _);
+        let r;
+        {
+            /*@
+            pred fbc1() =
+                (*self).head |-> ?head_ &*&
+                (*self).tail |-> ?tail_ &*&
+                Nodes(alloc_id, head_, None, tail_, None, ?nodes) &*&
+                (*self).len |-> length(nodes) &*&
+                (*self).marker |-> ?_ &*&
+                struct_LinkedList_padding(self) &*&
+                foreach(nodes, elem_fbc::<T>(t));
+            @*/
+            //@ close fbc1();
+            //@ std::alloc::close_Allocator_full_borrow_content_::<A>(t, &(*self).alloc);
+            //@ close sep(fbc1, std::alloc::Allocator_full_borrow_content_::<A>(t, &(*self).alloc, alloc_id))();
+            /*@
+            {
+                pred Ctx() = true;
+                produce_lem_ptr_chunk full_borrow_convert_strong(Ctx, sep(fbc1, std::alloc::Allocator_full_borrow_content_::<A>(t, &(*self).alloc, alloc_id)), klong, <LinkedList<T, A>>.full_borrow_content(t, self))() {
+                    open Ctx();
+                    open sep(fbc1, std::alloc::Allocator_full_borrow_content_::<A>(t, &(*self).alloc, alloc_id))();
+                    open fbc1();
+                    std::alloc::open_Allocator_full_borrow_content_::<A>(t, &(*self).alloc, alloc_id);
+                    close <LinkedList<T, A>>.own(t, *self);
+                    close <LinkedList<T, A>>.full_borrow_content(t, self)();
+                } {
+                    close Ctx();
+                    close_full_borrow_strong(klong, <LinkedList<T, A>>.full_borrow_content(t, self), sep(fbc1, std::alloc::Allocator_full_borrow_content_::<A>(t, &(*self).alloc, alloc_id)));
+                    full_borrow_mono(klong, 'a, sep(fbc1, std::alloc::Allocator_full_borrow_content_::<A>(t, &(*self).alloc, alloc_id)));
+                    full_borrow_split('a, fbc1, std::alloc::Allocator_full_borrow_content_::<A>(t, &(*self).alloc, alloc_id));
                 }
-                //@ close LinkedList_tail(self, _);
-                //@ close Nodes(alloc_id, next, None, (*self).tail, None, _);
-
-                *len_ref -= 1;
-                Some(node)
             }
+            @*/
+            //@ open_full_borrow(qa/2, 'a, fbc1);
+            //@ open fbc1();
+            let head = self.head;
+            let head_ref = &mut self.head;
+            let tail_ref = &mut self.tail;
+            let len_ref = &mut self.len;
+            //@ std::alloc::share_Allocator_full_borrow_content_('a, t, &(*self).alloc, alloc_id);
+            //@ let alloc_ref1 = precreate_ref(&(*self).alloc);
+            //@ std::alloc::init_ref_Allocator_share('a, t, alloc_ref1);
+            //@ open_frac_borrow('a, ref_initialized_(alloc_ref1), qa/2);
+            //@ open [?f]ref_initialized_::<A>(alloc_ref1)();
+            let alloc_ref = &self.alloc;
+            
+            r = match  head {
+                None => {
+                    //@ close [f]ref_initialized_::<A>(alloc_ref)();
+                    //@ close_frac_borrow(f, ref_initialized_(alloc_ref));
+                    
+                    //@ close fbc1();
+                    //@ close_full_borrow(fbc1);
+                    //@ close std::option::Option_own::<std::boxed::Box<Node<T>, &'a A>>(t, Option::None);
+                    //@ leak full_borrow(_, _);
+                    None
+                }
+                Some(node) => unsafe {
+                    //@ std::alloc::close_Allocator_ref::<'a, A>(t, alloc_ref1);
+                    
+                    //@ open Nodes(alloc_id, ?head1, None, ?tail1, None, ?nodes1);
+                    //@ open foreach(nodes1, elem_fbc::<T>(t));
+                    //@ open elem_fbc::<T>(t)(node);
+                    let node = Box::from_raw_in(node.as_ptr(), &*alloc_ref);
+                    //@ close [f]ref_initialized_::<A>(alloc_ref)();
+                    //@ close_frac_borrow(f, ref_initialized_(alloc_ref));
+                    //@ std::boxed::Box_separate_contents(&node_1);
+                    *head_ref = node.next;
+                    //@ std::boxed::Box_unseparate_contents(&node_1);
+
+                    //@ open Nodes(_, ?next, _, ?tail, _, _);
+                    match *head_ref {
+                        None => {
+                            *tail_ref = None;
+                            //@ close Nodes(alloc_id, next, None, *tail_ref, None, _);
+                        }
+                        // Not creating new mutable (unique!) references overlapping `element`.
+                        Some(head) => {
+                            (*head.as_ptr()).prev = None;
+                            //@ close Nodes(alloc_id, next, None, (*self).tail, None, _);
+                        }
+                    }
+
+                    *len_ref -= 1;
+                    //@ close fbc1();
+                    //@ close_full_borrow(fbc1);
+                    //@ leak full_borrow(_, _);
+                    //@ let b = node_1;
+                    //@ assert std::boxed::Box_in(t, b, alloc_id, ?v_node);
+                    //@ close <Node<T>>.own(t, v_node);
+                    //@ std::boxed::Box_in_to_own::<Node<T>, &'a A>(node_1);
+                    //@ close std::option::Option_own::<std::boxed::Box<Node<T>, &'a A>>(t, Option::Some(node_1));
+                    Some(node)
+                }
+            };
         }
+        r
     }
 
     /// Adds the given node to the back of the list.
@@ -1339,15 +1381,21 @@ impl<T, A: Allocator> LinkedList<T, A> {
             }
 
             //@ let alloc_ref = precreate_ref(&(*self).alloc);
-            //@ std::alloc::init_ref_Allocator::<'static, A>(alloc_ref);
-            let second_part = LinkedList {
-                head: second_part_head,
-                tail: second_part_tail,
-                len: self.len - at,
-                alloc: Allocator_clone__VeriFast_wrapper(&self.alloc),
-                marker: PhantomData,
-            };
-            //@ std::alloc::end_ref_Allocator::<'static, A>();
+            //@ let k = begin_lifetime();
+            let second_part;
+            {
+                //@ let_lft 'a = k;
+                //@ std::alloc::init_ref_Allocator_at_lifetime::<'a, A>(alloc_ref);
+                second_part = LinkedList {
+                    head: second_part_head,
+                    tail: second_part_tail,
+                    len: self.len - at,
+                    alloc: Allocator_clone__VeriFast_wrapper(&self.alloc),
+                    marker: PhantomData,
+                };
+            }
+            //@ end_lifetime(k);
+            //@ std::alloc::end_ref_Allocator_at_lifetime::<A>();
 
             // Fix the tail ptr of the first part
             self.tail = Some(split_node);
@@ -1362,25 +1410,32 @@ impl<T, A: Allocator> LinkedList<T, A> {
             //@ close <LinkedList<T, A>>.own(t, second_part);
             second_part
         } else {
-            let self_ref = &mut *self as *mut LinkedList<T, A>;
             //@ let alloc_ref = precreate_ref(&(*self).alloc);
-            //@ std::alloc::init_ref_Allocator::<'static, A>(alloc_ref);
-            let alloc = Allocator_clone__VeriFast_wrapper(&self.alloc);
-            //@ std::alloc::end_ref_Allocator::<'static, A>();
+            //@ let k = begin_lifetime();
+            let self_ref = &mut *(self as *mut LinkedList<T, A>);
+            let alloc;
+            {
+                //@ let_lft 'a = k;
+                //@ std::alloc::init_ref_Allocator_at_lifetime::<'a, A>(alloc_ref);
+                alloc = Allocator_clone__VeriFast_wrapper(&self.alloc);
+            }
+            //@ end_lifetime(k);
+            //@ std::alloc::end_ref_Allocator_at_lifetime::<A>();
+            
             //@ std::alloc::Allocator_to_own::<A>(alloc);
             //@ close_points_to(self);
             //@ Nodes_append(head0);
             //@ foreach_append(nodes1, nodes2);
             //@ close <LinkedList<T, A>>.own(t, *self);
             let r = LinkedList::new_in(alloc);
-            mem::replace(unsafe { &mut *self_ref }, r)
+            mem::replace(self_ref, r)
         }
     }
 }
 
 unsafe fn Allocator_clone__VeriFast_wrapper<'a, A: Allocator + Clone>(alloc: &'a A) -> A
 //@ req thread_token(?t) &*& Allocator::<&'a A>(t, alloc, ?alloc_id);
-//@ ens thread_token(t) &*& Allocator::<&'a A>(t, _, alloc_id) &*& Allocator::<A>(t, result, alloc_id);
+//@ ens thread_token(t) &*& Allocator::<A>(t, result, alloc_id);
 //@ assume_correct
 {
     alloc.clone()
@@ -2006,7 +2061,7 @@ impl<T, A: Allocator> LinkedList<T, A> {
     /// assert_eq!(dl.front().unwrap(), &1);
     /// ```
     #[stable(feature = "rust1", since = "1.0.0")]
-    pub fn push_front(&mut self, elt: T) 
+    pub fn push_front(&mut self, elt: T)
     //@ req thread_token(?t) &*& *self |-> ?ll0 &*& <LinkedList<T, A>>.own(t, ll0) &*& <T>.own(t, elt);
     //@ ens thread_token(t) &*& *self |-> ?ll1 &*& <LinkedList<T, A>>.own(t, ll1);
     //@ on_unwind_ens thread_token(t) &*& *self |-> ?ll1 &*& <LinkedList<T, A>>.own(t, ll1);
@@ -2015,18 +2070,25 @@ impl<T, A: Allocator> LinkedList<T, A> {
             //@ open_points_to(self);
             //@ open <LinkedList<T, A>>.own(t, ll0);
             //@ let alloc_ref = precreate_ref(&(*self).alloc);
-            //@ std::alloc::init_ref_Allocator::<'static, A>(alloc_ref);
             let node0 = Node::new(elt);
-            //@ close drop_perm::<Node<T>>(false, True, t, node0);
-            let node = Box::new_in(node0, &self.alloc);
-            //@ open drop_perm::<Node<T>>(false, True, t, node0);
-            let node_ptr = NonNull_from_ref_mut__VeriFast_wrapper(Box::leak(node));
-            //@ std::alloc::end_ref_Allocator::<'static, A>();
+            //@ let k = begin_lifetime();
+            let node_ptr;
+            {
+                //@ let_lft 'a = k;
+                //@ std::alloc::init_ref_Allocator_at_lifetime::<'a, A>(alloc_ref);
+                //@ close drop_perm::<Node<T>>(false, True, t, node0);
+                let node = Box::new_in(node0, &self.alloc);
+                //@ open drop_perm::<Node<T>>(false, True, t, node0);
+                node_ptr = NonNull_from_ref_mut__VeriFast_wrapper(Box::leak(node));
+            }
+            //@ end_lifetime(k);
+            //@ std::alloc::end_ref_Allocator_at_lifetime::<A>();
+            
             //@ close_points_to(self);
             // SAFETY: node_ptr is a unique pointer to a node we boxed with self.alloc and leaked
             self.push_front_node(node_ptr);
-        }           
-    }               
+        }
+    }
 
     /// Removes the first element and returns it, or `None` if the list is
     /// empty.

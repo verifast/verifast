@@ -294,6 +294,7 @@ type term =
 | ScalarInt of literal_const_expr
 | AddressOfNonMutLocal of local_variable_path
 | FieldTerm of term * int
+| ConstTerm of mir_const
 
 let rec string_of_term = function
   Symbol id -> Printf.sprintf "Symbol %d" id
@@ -305,6 +306,7 @@ let rec string_of_term = function
 | Closure ts -> Printf.sprintf "Closure %s" (string_of_terms ts)
 | AddressOfNonMutLocal lv_path -> Printf.sprintf "AddressOfNonMutLocal %s" (string_of_lv_path lv_path)
 | FieldTerm (term, i) -> Printf.sprintf "FieldTerm %s %d" (string_of_term term) i
+| ConstTerm const -> Printf.sprintf "ConstTerm %s" (Stringifier.string_of_mir_const const)
 and string_of_terms ts =
   Printf.sprintf "[%s]" (String.concat "; " (List.map string_of_term ts))
 
@@ -911,7 +913,7 @@ let string_of_command c =
   | Field i -> Printf.sprintf "Field %d" i
   | BoxAsPtr -> "BoxAsPtr"
   | Downcast i -> Printf.sprintf "Downcast %d" i
-  | Constant {const} -> Printf.sprintf "Constant %s" (string_of_const_operand const)
+  | Constant {const} -> Printf.sprintf "Constant %s" (string_of_mir_const const)
   | Ref data -> string_of_rvalue_ref_data data
   | AddressOf {place} -> Printf.sprintf "AddressOf %s" (string_of_place place)
   | Cast ty -> Printf.sprintf "Cast %s" (string_of_ty ty)
@@ -1111,6 +1113,7 @@ let rec process_commands bodies (env: env) opnds (i_bb: basic_block_info) i_s (s
           end
     | LoadLocal localId ->
       load_from_local localId (fun msg -> done_ ()) (fun v -> cont env (v::opnds))
+    | Constant {const} -> cont env (ConstTerm const::opnds)
     | Deref ->
       let v::opnds = opnds in
       begin match v with

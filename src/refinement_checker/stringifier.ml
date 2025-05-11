@@ -43,7 +43,7 @@ let string_of_const_value ({kind}: ty) = function
       | Tuple _ -> "()"
       | FnDef {id={name}} -> name
 
-let string_of_const_operand = function
+let string_of_mir_const = function
 | Ty {ty; const} -> Printf.sprintf "TyConst"
 | Val {const_value; ty} -> string_of_const_value ty const_value
 | Unevaluated -> Printf.sprintf "UnevaluatedConst"
@@ -51,7 +51,7 @@ let string_of_const_operand = function
 let string_of_operand = function
   | Copy place -> Printf.sprintf "copy %s" (string_of_place place)
   | Move place -> Printf.sprintf "move %s" (string_of_place place)
-  | Constant {const} -> string_of_const_operand const
+  | Constant {const} -> string_of_mir_const const
 
 let string_of_rvalue_ref_data {region; bor_kind; place} =
   Printf.sprintf "&%s%s %s" (match bor_kind with Shared -> "" | Mut -> "mut ") region.id (string_of_place place)
