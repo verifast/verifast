@@ -287,9 +287,8 @@ struct TyKind {
 
     struct FnDefTy {
         id @0: FnDefId;
-        idMono @1: Option(FnDefId);
-        substs @2: List(GenericArg);
-        lateBoundGenericParamCount @3: UInt16; # The generic args are only for the early-bound params.
+        substs @1: List(GenericArg);
+        lateBoundGenericParamCount @2: UInt16; # The generic args are only for the early-bound params.
     }
 
     struct FnPtrTy {
@@ -781,6 +780,11 @@ struct Trait {
     requiredFns @1: IndList(RequiredFn);
 }
 
+struct TraitImplItem {
+    name @0: Text;
+    defId @1: Text;
+}
+
 struct TraitImpl {
     span @3: SpanData;
     isUnsafe @4: Bool;
@@ -790,7 +794,7 @@ struct TraitImpl {
     selfTy @1: Text;
     generics @6: List(GenericParamDef);
     predicates @7: List(Predicate);
-    items @2: List(Text);
+    items @2: List(TraitImplItem);
 }
 
 struct Module {
