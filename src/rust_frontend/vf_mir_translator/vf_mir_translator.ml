@@ -1,3 +1,16 @@
+module D = Vf_mir_decoder
+
+module DecoderAux = struct
+  let uint128_get (n : D.uint128) =
+    let open Stdint.Uint128 in
+    let h = n.h in
+    let l = n.l in
+    let r = of_uint64 h in
+    let r = shift_left r 64 in
+    let r = add r (of_uint64 l) in
+    r
+end
+
 module RustBelt = Rustbelt
 module LocAux = Src_loc_aux
 
@@ -763,8 +776,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | "'static" | "'<erased>" -> Ast.ManifestTypeExpr (loc, StaticLifetime)
     | x -> Ast.IdentTypeExpr (loc, None, x)
 
-  let translate_region_expr loc (reg_cpn : RegionRd.t) =
-    vf_ty_arg_of_region loc (RegionRd.id_get reg_cpn)
+  let translate_region_expr loc (reg_cpn : D.region) =
+    vf_ty_arg_of_region loc reg_cpn.id
 
   let int_size_rank = Ast.PtrRank
 
@@ -791,7 +804,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       (Ast.CallExpr
          (loc, "simple_share", [], [], [ LitPat (Var (loc, fbc_name)) ], Static))
 
-  let translate_int_ty (int_ty_cpn : IntTyRd.t) (loc : Ast.loc) =
+  let translate_int_ty (int_ty_cpn : D.int_ty) (loc : Ast.loc) =
     let open Ast in
     let sz_rank_name i =
       let open SizeAux in
@@ -810,7 +823,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       Ok (sz_expr, rank, Mir.int_ty_to_string i)
     in
     let* sz_expr, rank, ty_name =
-      match IntTyRd.get int_ty_cpn with
+      match int_ty_cpn with
       | ISize ->
           (* isize is pointer-sized *)
           let ptr_sz_expr =
@@ -822,7 +835,6 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       | I32 -> sz_rank_name Mir.I32
       | I64 -> sz_rank_name Mir.I64
       | I128 -> sz_rank_name Mir.I128
-      | Undefined _ -> Error (`TrIntTy "Unknown Rust int type")
     in
     let own tid vs = Ok (True loc) in
     let fbc_name = ty_name ^ "_full_borrow_content" in
@@ -850,7 +862,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     in
     Ok ty_info
 
-  let translate_u_int_ty (u_int_ty_cpn : UIntTyRd.t) (loc : Ast.loc) =
+  let translate_u_int_ty (u_int_ty_cpn : D.uint_ty) (loc : Ast.loc) =
     let open Ast in
     let sz_rank_name ui =
       let open SizeAux in
@@ -869,7 +881,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       Ok (sz_expr, rank, Mir.u_int_ty_to_string ui)
     in
     let* sz_expr, rank, ty_name =
-      match UIntTyRd.get u_int_ty_cpn with
+      match u_int_ty_cpn with
       | USize ->
           (* usize is pointer-sized *)
           let ptr_sz_expr =
@@ -881,7 +893,6 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       | U32 -> sz_rank_name Mir.U32
       | U64 -> sz_rank_name Mir.U64
       | U128 -> sz_rank_name Mir.U128
-      | Undefined _ -> Error (`TrUIntTy "Unknown Rust unsigned int type")
     in
     let own tid vs = Ok (True loc) in
     let fbc_name = ty_name ^ "_full_borrow_content" in
@@ -909,11 +920,11 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     in
     Ok ty_info
 
-  let translate_scalar_int (scalar_int_cpn : VfMirRd.ScalarInt.t)
-      (ty : Ast.type_expr) (loc : Ast.loc) =
+  let translate_scalar_int (scalar_int_cpn : D.scalar_int) (ty : Ast.type_expr)
+      (loc : Ast.loc) =
     let open VfMirRd.ScalarInt in
     let value =
-      IntAux.Uint128.to_big_int (CapnpAux.uint128_get (data_get scalar_int_cpn))
+      IntAux.Uint128.to_big_int (DecoderAux.uint128_get scalar_int_cpn.data)
     in
     let mk_const v =
       let open Ast in
@@ -931,7 +942,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       in
       mk_const v
     in
-    match (ty, size_get scalar_int_cpn) with
+    match (ty, scalar_int_cpn.size) with
     | ManifestTypeExpr (_, Bool), _ ->
         Ok
           (if Big_int.sign_big_int value <> 0 then Ast.True loc
@@ -951,16 +962,16 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       "std::" ^ String.sub name 6 (String.length name - 6)
     else name
 
-  let translate_adt_def_id (adt_def_id_cpn : AdtDefIdRd.t) =
-    canonicalize_item_name @@ AdtDefIdRd.name_get adt_def_id_cpn
+  let translate_adt_def_id (adt_def_id_cpn : D.adt_def_id) =
+    canonicalize_item_name @@ adt_def_id_cpn.name
 
-  let rec translate_adt_ty (adt_ty_cpn : AdtTyRd.t) (loc : Ast.loc) =
+  let rec translate_adt_ty (adt_ty_cpn : D.ty_kind_adt_ty) (loc : Ast.loc) =
     let open AdtTyRd in
     let open Ast in
-    let def_path = translate_adt_def_id @@ id_get @@ adt_ty_cpn in
+    let def_path = translate_adt_def_id @@ adt_ty_cpn.id in
     let name = TrName.translate_def_path def_path in
-    let kind = AdtKindRd.get @@ kind_get @@ adt_ty_cpn in
-    let substs_cpn = substs_get_list adt_ty_cpn in
+    let kind = adt_ty_cpn.kind in
+    let substs_cpn = adt_ty_cpn.substs in
     match kind with
     | StructKind | UnionKind -> (
         match def_path with
@@ -1100,9 +1111,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         in
         let ty_info = { Mir.vf_ty; interp } in
         Ok ty_info
-    | Undefined _ -> Error (`TrAdtTy "Unknown ADT kind")
 
-  and translate_tuple_ty (tys_cpn : TyRd.t list) (loc : Ast.loc) =
+  and translate_tuple_ty (tys_cpn : D.ty list) (loc : Ast.loc) =
     let open Ast in
     let* tys =
       ListAux.try_map (fun ty_cpn -> translate_ty ty_cpn loc) tys_cpn
@@ -1281,11 +1291,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       static_error loc "Mutable slice references are not yet supported" None;
     let vf_ty =
       StructTypeExpr
-        ( loc,
-          Some "slice_ref",
-          None,
-          [],
-          [ lft; elem_ty_info.Mir.vf_ty ] )
+        (loc, Some "slice_ref", None, [], [ lft; elem_ty_info.Mir.vf_ty ])
     in
     let size = SizeofExpr (loc, TypeExpr vf_ty) in
     let own tid vs =
@@ -1310,19 +1316,17 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           { size; own; shr; full_bor_content; points_to; pointee_fbc = None };
     }
 
-  and translate_generic_arg (gen_arg_cpn : GenArgRd.t) (loc : Ast.loc) =
-    let open GenArgRd in
-    let kind_cpn = kind_get gen_arg_cpn in
+  and translate_generic_arg (gen_arg_cpn : D.generic_arg) (loc : Ast.loc) =
+    let kind_cpn = gen_arg_cpn.kind in
     let open GenArgKindRd in
-    match get kind_cpn with
+    match kind_cpn with
     | Lifetime region_cpn ->
-        let region = translate_region region_cpn in
+        let region = region_cpn.id in
         Ok (Mir.GenArgLifetime region)
     | Type ty_cpn ->
         let* ty_info = translate_ty ty_cpn loc in
         Ok (Mir.GenArgType ty_info)
     | Const _ -> Ok Mir.GenArgConst
-    | Undefined _ -> Error (`TrGenArg "Unknown generic arg. kind")
 
   and decode_generic_param (gen_param_cpn : VfMirRd.GenericParamDef.t) =
     let open VfMirRd.GenericParamDef in
@@ -1333,12 +1337,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | Lifetime -> `Lifetime name
     | Const -> failwith "Const generic parameters are not yet supported"
 
-  and decode_generic_arg (gen_arg_cpn : GenArgRd.t) =
-    let open GenArgRd in
-    let kind_cpn = kind_get gen_arg_cpn in
-    let open GenArgKindRd in
-    match get kind_cpn with
-    | Lifetime region -> `Lifetime (translate_region region)
+  and decode_generic_arg (gen_arg_cpn : D.generic_arg) =
+    let kind_cpn = gen_arg_cpn.kind in
+    match kind_cpn with
+    | Lifetime region -> `Lifetime region.id
     | Type ty_cpn -> `Type (decode_ty ty_cpn)
     | Const _ -> `Const
 
@@ -1355,25 +1357,35 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | `Type ty -> extract_implicit_outlives_preds regions ty
     | _ -> []
 
-  and translate_fn_name (name : string) (substs_cpn : GenArgRd.t list) =
-    match (name, lazy (List.map decode_generic_arg substs_cpn)) with
+  and translate_fn_name (name : string) (substs_cpn : D.generic_arg list) =
+    match (name, substs_cpn) with
     | ( "std::ops::Deref::deref",
-        (lazy [ `Type (`Adt ("std::mem::ManuallyDrop", _, _)) ]) ) ->
+        [
+          {
+            kind =
+              Type { kind = Adt { id = { name = "std::mem::ManuallyDrop" } } };
+          };
+        ] ) ->
         "std::mem::ManuallyDrop::deref"
     | ( "std::ops::DerefMut::deref_mut",
-        (lazy [ `Type (`Adt ("std::mem::ManuallyDrop", _, _)) ]) ) ->
+        [
+          {
+            kind =
+              Type { kind = Adt { id = { name = "std::mem::ManuallyDrop" } } };
+          };
+        ] ) ->
         "std::mem::ManuallyDrop::deref_mut"
     | _ -> name
 
-  and translate_fn_def_ty (fn_def_ty_cpn : FnDefTyRd.t) (loc : Ast.loc) =
-    let open FnDefTyRd in
-    let id_cpn = id_get fn_def_ty_cpn in
-    let id = FnDefIdRd.name_get id_cpn in
+  and translate_fn_def_ty (fn_def_ty_cpn : D.ty_kind_fn_def_ty) (loc : Ast.loc)
+      =
+    let id_cpn = fn_def_ty_cpn.id in
+    let id = id_cpn.name in
     let name = TrName.translate_def_path id in
     let late_bound_generic_param_count =
-      late_bound_generic_param_count_get fn_def_ty_cpn
+      fn_def_ty_cpn.late_bound_generic_param_count
     in
-    let substs_cpn = substs_get_list fn_def_ty_cpn in
+    let substs_cpn = fn_def_ty_cpn.substs in
     let* substs =
       ListAux.try_map
         (fun subst_cpn -> translate_generic_arg subst_cpn loc)
@@ -1391,9 +1403,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     if substs = [] then Ok { Mir.vf_ty; interp = RustBelt.emp_ty_interp loc }
     else Ok { Mir.vf_ty; interp = RustBelt.emp_ty_interp loc }
 
-  and translate_fn_ptr_ty (fn_ptr_ty_cpn : FnPtrTyRd.t) (loc : Ast.loc) =
-    let open FnPtrTyRd in
-    let output_cpn = output_get fn_ptr_ty_cpn in
+  and translate_fn_ptr_ty (fn_ptr_ty_cpn : D.ty_kind_fn_ptr_ty) (loc : Ast.loc)
+      =
+    let output_cpn = fn_ptr_ty_cpn.output in
     let* { Mir.vf_ty = output_ty } = translate_ty output_cpn loc in
     let rt =
       if Args.ignore_unwind_paths then output_ty
@@ -1406,12 +1418,12 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         interp = RustBelt.emp_ty_interp loc;
       }
 
-  and translate_raw_ptr_ty (raw_ptr_ty_cpn : RawPtrTyRd.t) (loc : Ast.loc) =
-    let open RawPtrTyRd in
+  and translate_raw_ptr_ty (raw_ptr_ty_cpn : D.ty_kind_raw_ptr_ty)
+      (loc : Ast.loc) =
     let open Ast in
-    let mut_cpn = mutability_get raw_ptr_ty_cpn in
-    let* mutability = translate_mutability mut_cpn in
-    let ty_cpn = ty_get raw_ptr_ty_cpn in
+    let mut_cpn = raw_ptr_ty_cpn.mutability in
+    let mutability = mut_cpn in
+    let ty_cpn = raw_ptr_ty_cpn.ty in
     let* pointee_ty_info = translate_ty ty_cpn loc in
     let pointee_ty = pointee_ty_info.vf_ty in
     let vf_ty = PtrTypeExpr (loc, pointee_ty) in
@@ -1440,16 +1452,15 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     in
     Ok ty_info
 
-  and translate_ref_ty (ref_ty_cpn : RefTyRd.t) (loc : Ast.loc) =
-    let open RefTyRd in
+  and translate_ref_ty (ref_ty_cpn : D.ty_kind_ref_ty) (loc : Ast.loc) =
     let open Ast in
-    let region_cpn = region_get ref_ty_cpn in
+    let region_cpn = ref_ty_cpn.region in
     let region = translate_region_expr loc region_cpn in
     let lft = Rust_parser.expr_of_lft_param_expr loc region in
-    let mut_cpn = mutability_get ref_ty_cpn in
-    let* mut = translate_mutability mut_cpn in
-    let ty_cpn = ty_get ref_ty_cpn in
-    match TyKindRd.get @@ TyRd.kind_get ty_cpn with
+    let mut_cpn = ref_ty_cpn.mutability in
+    let mut = match mut_cpn with Mut -> Mir.Mut | Not -> Mir.Not in
+    let ty_cpn = ref_ty_cpn.ty in
+    match ty_cpn.kind with
     | Str -> Ok (str_ref_ty_info loc region mut)
     | Slice elem_ty_cpn ->
         let* elem_ty_info = translate_ty elem_ty_cpn loc in
@@ -1558,29 +1569,24 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         in
         Ok ty_info
 
-  and decode_adt_ty (adt_ty_cpn : AdtTyRd.t) =
-    let open AdtTyRd in
-    let def_path = translate_adt_def_id @@ id_get @@ adt_ty_cpn in
-    let kind = AdtKindRd.get @@ kind_get @@ adt_ty_cpn in
-    let substs_cpn = substs_get_list adt_ty_cpn in
+  and decode_adt_ty (adt_ty_cpn : D.ty_kind_adt_ty) =
+    let def_path = translate_adt_def_id adt_ty_cpn.id in
+    let kind = adt_ty_cpn.kind in
+    let substs_cpn = adt_ty_cpn.substs in
     (def_path, kind, List.map decode_generic_arg substs_cpn)
 
-  and decode_ref_ty (ref_ty_cpn : TyKindRd.RefTy.t) =
-    let open TyKindRd.RefTy in
-    let region_cpn = region_get ref_ty_cpn in
-    let region = translate_region region_cpn in
-    let mut_cpn = mutability_get ref_ty_cpn in
-    let mut =
-      match MutabilityRd.get mut_cpn with Mut -> true | Not -> false
-    in
-    let ty_cpn = ty_get ref_ty_cpn in
+  and decode_ref_ty (ref_ty_cpn : D.ty_kind_ref_ty) =
+    let region_cpn = ref_ty_cpn.region in
+    let region = region_cpn.id in
+    let mut_cpn = ref_ty_cpn.mutability in
+    let mut = match mut_cpn with Mut -> true | Not -> false in
+    let ty_cpn = ref_ty_cpn.ty in
     let ty = decode_ty ty_cpn in
     (region, mut, ty)
 
-  and decode_ty (ty_cpn : TyRd.t) =
-    let open TyRd in
-    let kind_cpn = kind_get ty_cpn in
-    match TyKindRd.get kind_cpn with
+  and decode_ty (ty_cpn : D.ty) =
+    let kind_cpn = ty_cpn.kind in
+    match kind_cpn with
     | Bool -> `Bool
     | Int int_ty_cpn -> `Int
     | UInt u_int_ty_cpn -> `Uint
@@ -1598,7 +1604,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | Coroutine -> `Coroutine
     | CoroutineWitness -> `CoroutineWitness
     | Never -> `Never
-    | Tuple substs_cpn -> `Tuple (Capnp.Array.map_list substs_cpn ~f:decode_ty)
+    | Tuple substs_cpn -> `Tuple (List.map decode_ty substs_cpn)
     | Alias _ -> `Alias
     | Param name -> `Param name
     | Bound -> `Bound
@@ -1676,9 +1682,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     in
     Ok { Mir.vf_ty; interp }
 
-  and translate_ty_const_kind (ck_cpn : VfMirRd.ConstKind.t) (loc : Ast.loc) =
+  and translate_ty_const_kind (ck_cpn : D.const_kind) (loc : Ast.loc) =
     let open VfMirRd.ConstKind in
-    match get ck_cpn with
+    match ck_cpn with
     | Param _ -> Ast.static_error loc "Todo: ConstKind::Param" None
     | Infer -> Ast.static_error loc "Todo: ConstKind::Infer" None
     | Bound -> Ast.static_error loc "Todo: ConstKind::Bound" None
@@ -1686,26 +1692,24 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | Unevaluated -> Ast.static_error loc "Todo: ConstKind::Unevaluated" None
     | Value v_cpn -> (
         let open VfMirRd.Value in
-        let* ty = translate_ty (ty_get v_cpn) loc in
-        let val_tree = val_tree_get v_cpn in
+        let* ty = translate_ty v_cpn.ty loc in
+        let val_tree = v_cpn.val_tree in
         let open VfMirRd.ValTree in
-        match get val_tree with
+        match val_tree with
         | Leaf scalar_int_cpn ->
-            translate_scalar_int scalar_int_cpn (ty.vf_ty) loc
+            translate_scalar_int scalar_int_cpn ty.vf_ty loc
         | Branch -> failwith "Todo: ConstKind::ValTree::Branch")
     | Error -> Ast.static_error loc "Todo: ConstKind::Error" None
     | Expr -> Ast.static_error loc "Todo: ConstKind::Expr" None
 
-  and translate_ty_const (ty_const_cpn : VfMirRd.TyConst.t) (loc : Ast.loc) =
-    let open VfMirRd.TyConst in
-    translate_ty_const_kind (kind_get ty_const_cpn) loc
+  and translate_ty_const (ty_const_cpn : D.ty_const) (loc : Ast.loc) =
+    translate_ty_const_kind ty_const_cpn.kind loc
 
-  and translate_array_ty (array_ty_cpn : TyKindRd.ArrayTy.t) (loc : Ast.loc) =
-    let open TyKindRd.ArrayTy in
-    let elem_ty_cpn = elem_ty_get array_ty_cpn in
+  and translate_array_ty (array_ty_cpn : D.ty_kind_array_ty) (loc : Ast.loc) =
+    let elem_ty_cpn = array_ty_cpn.elem_ty in
     let* elem_ty_info = translate_ty elem_ty_cpn loc in
     let elem_ty = elem_ty_info.vf_ty in
-    let len_cpn = size_get array_ty_cpn in
+    let len_cpn = array_ty_cpn.size in
     let* (CastExpr (_, _, IntLit (_, len, _, _, _))) =
       translate_ty_const len_cpn loc
     in
@@ -1742,11 +1746,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     in
     Ok { Mir.vf_ty; interp }
 
-  and translate_ty (ty_cpn : TyRd.t) (loc : Ast.loc) =
+  and translate_ty (ty_cpn : D.ty) (loc : Ast.loc) =
     let open Ast in
-    let open TyRd in
-    let kind_cpn = kind_get ty_cpn in
-    match TyKindRd.get kind_cpn with
+    let kind_cpn = ty_cpn.kind in
+    match kind_cpn with
     | Bool -> Ok (bool_ty_info loc)
     | Int int_ty_cpn -> translate_int_ty int_ty_cpn loc
     | UInt u_int_ty_cpn -> translate_u_int_ty u_int_ty_cpn loc
@@ -1772,9 +1775,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         Ast.static_error loc "Coroutine witness types are not yet supported"
           None
     | Never -> Ok (never_ty_info loc)
-    | Tuple tys_cpn ->
-        let tys_cpn = Capnp.Array.to_list tys_cpn in
-        translate_tuple_ty tys_cpn loc
+    | Tuple tys_cpn -> translate_tuple_ty tys_cpn loc
     | Alias _ -> Ast.static_error loc "Alias types are not yet supported" None
     | Param name -> translate_param_ty name loc
     | Bound -> Ast.static_error loc "Bound types are not yet supported" None
@@ -1786,7 +1787,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | Array array_ty_cpn -> translate_array_ty array_ty_cpn loc
     | Pattern -> Ast.static_error loc "Pattern types are not yet supported" None
     | Slice _ -> Ast.static_error loc "Slice types are not yet supported" None
-    | Undefined _ -> Error (`TrTy "Unknown Rust type kind")
+
+  let translate_ty (ty_cpn : TyRd.t) (loc : Ast.loc) =
+    translate_ty (D.decode_ty ty_cpn) loc
 
   type body_tr_defs_ctx = {
     adt_defs : Mir.adt_def_tr list;
@@ -1954,10 +1957,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
            (Ast.Var (loc, id))
            local_is_mutable)
 
-    let translate_scalar (s_cpn : ScalarRd.t) (ty : Ast.type_expr)
-        (loc : Ast.loc) =
+    let translate_scalar (s_cpn : D.scalar) (ty : Ast.type_expr) (loc : Ast.loc)
+        =
       let open ScalarRd in
-      match get s_cpn with
+      match s_cpn with
       | Int scalar_int_cpn -> translate_scalar_int scalar_int_cpn ty loc
       | Ptr ->
           Ast.static_error loc "Pointer constants are not yet supported" None
@@ -1970,10 +1973,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
 
     let translate_unit_constant (loc : Ast.loc) = Ok `TrUnitConstant
 
-    let translate_const_value (cv_cpn : ConstValueRd.t) (ty : Ast.type_expr)
+    let translate_const_value (cv_cpn : D.const_value) (ty : Ast.type_expr)
         (loc : Ast.loc) =
       let open ConstValueRd in
-      match get cv_cpn with
+      match cv_cpn with
       | Scalar scalar_cpn ->
           let* expr = translate_scalar scalar_cpn ty loc in
           Ok (`TrTypedConstantScalar expr)
@@ -1984,19 +1987,18 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               translate_unit_constant loc
           | _ -> failwith "Todo: ConstValue::ZeroSized")
       | Slice _ -> failwith "Todo: ConstValue::Slice"
-      | Undefined _ -> Error (`TrConstValue "Unknown ConstValue")
 
     let translate_mir_ty_const (ty_const_cpn : VfMirRd.MirConst.TyData.t)
         (loc : Ast.loc) =
       let open VfMirRd.MirConst.TyData in
       let ty_cpn = ty_get ty_const_cpn in
-      let ty = decode_ty ty_cpn in
+      let ty = decode_ty (D.decode_ty ty_cpn) in
       match ty with
       | `Tuple [] -> translate_unit_constant loc
       | `FnDef fn_def_ty_cpn -> Ok (`TrTypedConstantFn fn_def_ty_cpn)
       | `Int | `Uint | `Bool ->
           let const_cpn = const_get ty_const_cpn in
-          let* e = translate_ty_const const_cpn loc in
+          let* e = translate_ty_const (D.decode_ty_const const_cpn) loc in
           Ok (`TrTypedConstantScalar e)
       | _ -> failwith "Todo: Constant of unsupported type"
 
@@ -2007,7 +2009,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       | Ty ty_const_cpn -> translate_mir_ty_const ty_const_cpn loc
       | Val val_cpn -> (
           let open VfMirRd.MirConst.Val in
-          let ty = decode_ty (ty_get val_cpn) in
+          let ty = decode_ty (D.decode_ty (ty_get val_cpn)) in
           match ty with
           | `FnDef fn_def_ty_cpn -> Ok (`TrTypedConstantFn fn_def_ty_cpn)
           | `Ref (_, _, `Str) -> (
@@ -2040,7 +2042,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           | _ ->
               let* ty_info = translate_ty (ty_get val_cpn) loc in
               let ty_expr = ty_info.vf_ty in
-              translate_const_value (const_value_get val_cpn) ty_expr loc)
+              translate_const_value
+                (D.decode_const_value (const_value_get val_cpn))
+                ty_expr loc)
       | Undefined _ -> Error (`TrConstantKind "Unknown ConstantKind")
 
     let translate_const_operand (constant_cpn : ConstOperandRd.t) =
@@ -2139,8 +2143,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       | `TrOperandMove (Var (_, fn_name), place_is_mutable) ->
           translate_regular_fn_call [] fn_name
       | `TrTypedConstantFn fn_def_ty_cpn -> (
-          let fn_name = FnDefIdRd.name_get @@ FnDefTyRd.id_get fn_def_ty_cpn in
-          let substs_cpn = FnDefTyRd.substs_get_list fn_def_ty_cpn in
+          let fn_name = fn_def_ty_cpn.id.name in
+          let substs_cpn = fn_def_ty_cpn.substs in
           let fn_name = translate_fn_name fn_name substs_cpn in
           let* substs =
             ListAux.try_map
@@ -2149,9 +2153,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           in
           let substs =
             substs
-            @ List.init
-                (FnDefTyRd.late_bound_generic_param_count_get fn_def_ty_cpn)
-                (fun i -> Mir.GenArgLifetime "'erased")
+            @ List.init fn_def_ty_cpn.late_bound_generic_param_count (fun i ->
+                  Mir.GenArgLifetime "'erased")
           in
           if substs = [] then translate_regular_fn_call [] fn_name
           else
@@ -2197,8 +2200,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                     FnCallResult
                       (Ast.CastExpr
                          ( fn_loc,
-                           PtrTypeExpr
-                             (fn_loc, gen_arg_ty_info.vf_ty),
+                           PtrTypeExpr (fn_loc, gen_arg_ty_info.vf_ty),
                            arg )) )
             | "std::ptr::const_ptr::<impl *const T>::offset"
             | "std::ptr::mut_ptr::<impl *mut T>::offset" -> (
@@ -2787,7 +2789,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       | Adt adt_data_cpn ->
           let open AdtData in
           let adt_id_cpn = adt_id_get adt_data_cpn in
-          let adt_def_path = translate_adt_def_id adt_id_cpn in
+          let adt_def_path =
+            translate_adt_def_id (D.decode_adt_def_id adt_id_cpn)
+          in
           let adt_name = TrName.translate_def_path adt_def_path in
           let adt_kind =
             match AdtKindRd.get (adt_kind_get adt_data_cpn) with
@@ -2968,7 +2972,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           if ignore_ref_creation then
             Ok (`TrRvalueExpr (Ast.AddressOf (loc, place_expr)))
           else
-            let place_ty = decode_ty (place_ty_get ref_data_cpn) in
+            let place_ty =
+              decode_ty (D.decode_ty (place_ty_get ref_data_cpn))
+            in
             let is_implicit = is_implicit_get ref_data_cpn in
             let place_kind =
               VfMirRd.PlaceKind.get (VfMirRd.Place.kind_get place_cpn)
@@ -3036,9 +3042,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               failwith "Todo: Rvalue::Cast"
               (*Todo @Nima: We need a better design (refactor) for passing different results of operand translation*)
           | `TrTypedConstantFn fn_def_ty_cpn ->
-              let fn_name =
-                FnDefIdRd.name_get @@ FnDefTyRd.id_get fn_def_ty_cpn
-              in
+              let fn_name = fn_def_ty_cpn.id.name in
               Ok (`TrRvalueExpr (Ast.CastExpr (loc, ty, Var (loc, fn_name)))))
       | BinaryOp bin_op_data_cpn ->
           let* operator, operandl, operandr =
@@ -4196,7 +4200,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | Trait trait_pred_cpn ->
         let open Trait in
         let args =
-          args_get_list trait_pred_cpn |> List.map decode_generic_arg
+          args_get_list trait_pred_cpn
+          |> List.map D.decode_generic_arg
+          |> List.map decode_generic_arg
         in
         `Trait (def_id_get trait_pred_cpn, args)
     | Projection proj_pred_cpn -> `Projection proj_pred_cpn
@@ -4240,7 +4246,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let* trait_args =
         args_get_list projection_term_cpn
         |> ListAux.try_map (fun genarg_cpn ->
-               let* arg = translate_generic_arg genarg_cpn loc in
+               let* arg =
+                 translate_generic_arg (D.decode_generic_arg genarg_cpn) loc
+               in
                match arg with
                | Mir.GenArgLifetime _ -> assert false
                | Mir.GenArgType ty -> Ok ty.vf_ty
@@ -4399,7 +4407,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         let implicit_outlives_preds =
           output_get body_cpn :: inputs_get_list body_cpn
           |> Util.flatmap @@ fun ty_cpn ->
-             ty_cpn |> decode_ty |> extract_implicit_outlives_preds []
+             ty_cpn |> D.decode_ty |> decode_ty
+             |> extract_implicit_outlives_preds []
         in
         let outlives_preds = implicit_outlives_preds @ outlives_preds in
         let send_tparams = compute_send_tparams preds in
@@ -4480,7 +4489,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                 in
                 let (input0 :: _) = inputs_get_list body_cpn in
                 let self_gen_args =
-                  match decode_ty input0 with
+                  match decode_ty @@ D.decode_ty input0 with
                   | `Ref (_, _, `Adt (_, _, self_gen_args)) -> self_gen_args
                   | _ -> assert false
                 in
@@ -5545,7 +5554,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       (adt_def_cpn : AdtDefRd.t) =
     let open AdtDefRd in
     let id_cpn = id_get adt_def_cpn in
-    let def_path = translate_adt_def_id id_cpn in
+    let def_path = translate_adt_def_id @@ D.decode_adt_def_id id_cpn in
     if TrName.is_from_std_lib def_path then Ok None
     else
       let name = TrName.translate_def_path def_path in
@@ -5643,8 +5652,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                 |> List.map @@ fun Mir.{ loc; name = variant_name; fields } ->
                    let ps =
                      fields
-                     |> List.map @@ fun Mir.{ name; ty } ->
-                        (name, ty.vf_ty)
+                     |> List.map @@ fun Mir.{ name; ty } -> (name, ty.vf_ty)
                    in
                    Ast.Ctor (loc, name ^ "::" ^ variant_name, ps)
             in
@@ -5703,7 +5711,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             |> Util.flatmap @@ fun variant_cpn ->
                VfMirRd.VariantDef.fields_get_list variant_cpn
                |> List.map @@ fun field_cpn ->
-                  VfMirRd.VariantDef.FieldDef.ty_get field_cpn |> decode_ty
+                  VfMirRd.VariantDef.FieldDef.ty_get field_cpn
+                  |> D.decode_ty |> decode_ty
           in
           (* If send_preds = None, it means this ADT is never Send.
              If send_preds = Some xs, then xs is a list of type parameters such that if any of them are not Send, then this ADT is not Send.
@@ -5763,6 +5772,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               in
               let [ `Type (`Adt (_, _, self_ty_gen_args)) ] =
                 TraitImplRd.gen_args_get_list trait_impl_cpn
+                |> List.map D.decode_generic_arg
                 |> List.map decode_generic_arg
               in
               (match Util.zip impl_generics self_ty_gen_args with
@@ -5795,6 +5805,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   None;
               let [ `Type (`Adt (_, _, self_ty_gen_args)) ] =
                 TraitImplRd.gen_args_get_list trait_impl_cpn
+                |> List.map D.decode_generic_arg
                 |> List.map decode_generic_arg
               in
               match Util.zip impl_generics self_ty_gen_args with
