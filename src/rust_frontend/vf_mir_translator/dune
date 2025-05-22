@@ -2,4 +2,4 @@
  (name vf_mir_translator)
  (preprocess
   (pps ppx_parser))
- (libraries stdint capnp frontend vf_mir))
+ (libraries stdint capnp frontend vf_mir vf_mir_decoder))
