@@ -298,23 +298,11 @@ module Mir = struct
     | GenArgType of ty_info
     | GenArgConst
 
-  and ty_info =
-    | TyInfoBasic of { vf_ty : Ast.type_expr; interp : RustBelt.ty_interp }
-    | TyInfoGeneric of {
-        vf_ty : Ast.type_expr;
-        interp : RustBelt.ty_interp;
-      }
+  and ty_info = { vf_ty : Ast.type_expr; interp : RustBelt.ty_interp }
 
-  let basic_type_of (ti : ty_info) =
-    match ti with
-    | TyInfoBasic { vf_ty } -> vf_ty
-    | TyInfoGeneric { vf_ty } -> vf_ty
-
-  let interp_of (ti : ty_info) =
-    match ti with TyInfoBasic { interp } | TyInfoGeneric { interp } -> interp
-
-  let raw_type_of (ti : ty_info) =
-    match ti with TyInfoBasic { vf_ty } | TyInfoGeneric { vf_ty } -> vf_ty
+  let basic_type_of { vf_ty } = vf_ty
+  let interp_of { interp } = interp
+  let raw_type_of { vf_ty } = vf_ty
 
   type annot = { span : Ast.loc; raw : string }
 
@@ -850,20 +838,19 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       Ok (PointsTo (loc, l, RegularPointsTo, pat))
     in
     let ty_info =
-      Mir.TyInfoBasic
-        {
-          vf_ty = ManifestTypeExpr (loc, Int (Signed, rank));
-          interp =
-            RustBelt.
-              {
-                size = sz_expr;
-                own;
-                shr = simple_shr loc fbc_name;
-                full_bor_content;
-                points_to;
-                pointee_fbc = None;
-              };
-        }
+      {
+        Mir.vf_ty = ManifestTypeExpr (loc, Int (Signed, rank));
+        interp =
+          RustBelt.
+            {
+              size = sz_expr;
+              own;
+              shr = simple_shr loc fbc_name;
+              full_bor_content;
+              points_to;
+              pointee_fbc = None;
+            };
+      }
     in
     Ok ty_info
 
@@ -910,20 +897,19 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       Ok (PointsTo (loc, l, RegularPointsTo, pat))
     in
     let ty_info =
-      Mir.TyInfoBasic
-        {
-          vf_ty = ManifestTypeExpr (loc, Int (Unsigned, rank));
-          interp =
-            RustBelt.
-              {
-                size = sz_expr;
-                own;
-                shr = simple_shr loc fbc_name;
-                full_bor_content;
-                points_to;
-                pointee_fbc = None;
-              };
-        }
+      {
+        Mir.vf_ty = ManifestTypeExpr (loc, Int (Unsigned, rank));
+        interp =
+          RustBelt.
+            {
+              size = sz_expr;
+              own;
+              shr = simple_shr loc fbc_name;
+              full_bor_content;
+              points_to;
+              pointee_fbc = None;
+            };
+      }
     in
     Ok ty_info
 
@@ -1061,10 +1047,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   pointee_fbc = None;
                 }
             in
-            let ty_info =
-              Mir.TyInfoGeneric
-                { vf_ty; interp }
-            in
+            let ty_info = { Mir.vf_ty; interp } in
             Ok ty_info)
     | EnumKind ->
         let* targs =
@@ -1119,7 +1102,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               pointee_fbc = None;
             }
         in
-        let ty_info = Mir.TyInfoBasic { vf_ty; interp } in
+        let ty_info = { Mir.vf_ty; interp } in
         Ok ty_info
     | Undefined _ -> Error (`TrAdtTy "Unknown ADT kind")
 
@@ -1158,20 +1141,12 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       Ok (PointsTo (loc, l, RegularPointsTo, pat))
     in
     let ty_info =
-      Mir.TyInfoBasic
-        {
-          vf_ty;
-          interp =
-            RustBelt.
-              {
-                size;
-                own;
-                shr;
-                full_bor_content;
-                points_to;
-                pointee_fbc = None;
-              };
-        }
+      {
+        Mir.vf_ty;
+        interp =
+          RustBelt.
+            { size; own; shr; full_bor_content; points_to; pointee_fbc = None };
+      }
     in
     Ok ty_info
 
@@ -1186,20 +1161,19 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let* pat = RustBelt.Aux.vid_op_to_var_pat vid_op loc in
       Ok (PointsTo (loc, l, RegularPointsTo, pat))
     in
-    Mir.TyInfoBasic
-      {
-        vf_ty;
-        interp =
-          RustBelt.
-            {
-              size;
-              own;
-              shr = simple_shr loc fbc_name;
-              full_bor_content;
-              points_to;
-              pointee_fbc = None;
-            };
-      }
+    {
+      Mir.vf_ty;
+      interp =
+        RustBelt.
+          {
+            size;
+            own;
+            shr = simple_shr loc fbc_name;
+            full_bor_content;
+            points_to;
+            pointee_fbc = None;
+          };
+    }
 
   and char_ty_info loc =
     let open Ast in
@@ -1234,20 +1208,19 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           Ok (Sep (loc, PointsTo (loc, l, RegularPointsTo, var_pat), own))
       | _ -> Error "char points_to needs a value id"
     in
-    Mir.TyInfoBasic
-      {
-        vf_ty;
-        interp =
-          RustBelt.
-            {
-              size;
-              own;
-              shr = simple_shr loc fbc_name;
-              full_bor_content;
-              points_to;
-              pointee_fbc = None;
-            };
-      }
+    {
+      Mir.vf_ty;
+      interp =
+        RustBelt.
+          {
+            size;
+            own;
+            shr = simple_shr loc fbc_name;
+            full_bor_content;
+            points_to;
+            pointee_fbc = None;
+          };
+    }
 
   and never_ty_info loc =
     let open Ast in
@@ -1271,13 +1244,12 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
          supported"
     in
     let points_to _ _ _ = Ok (False loc) in
-    Mir.TyInfoBasic
-      {
-        vf_ty;
-        interp =
-          RustBelt.
-            { size; own; shr; full_bor_content; points_to; pointee_fbc = None };
-      }
+    {
+      Mir.vf_ty;
+      interp =
+        RustBelt.
+          { size; own; shr; full_bor_content; points_to; pointee_fbc = None };
+    }
 
   and str_ref_ty_info loc lft mut =
     let open Ast in
@@ -1300,13 +1272,12 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         "Expressing a points-to assertion for a &str object is not yet \
          supported"
     in
-    Mir.TyInfoBasic
-      {
-        vf_ty;
-        interp =
-          RustBelt.
-            { size; own; shr; full_bor_content; points_to; pointee_fbc = None };
-      }
+    {
+      Mir.vf_ty;
+      interp =
+        RustBelt.
+          { size; own; shr; full_bor_content; points_to; pointee_fbc = None };
+    }
 
   and slice_ref_ty_info loc lft mut elem_ty_info =
     let open Ast in
@@ -1336,13 +1307,12 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         "Expressing a points-to assertion for a &[_] object is not yet \
          supported"
     in
-    Mir.TyInfoBasic
-      {
-        vf_ty;
-        interp =
-          RustBelt.
-            { size; own; shr; full_bor_content; points_to; pointee_fbc = None };
-      }
+    {
+      Mir.vf_ty;
+      interp =
+        RustBelt.
+          { size; own; shr; full_bor_content; points_to; pointee_fbc = None };
+    }
 
   and translate_generic_arg (gen_arg_cpn : GenArgRd.t) (loc : Ast.loc) =
     let open GenArgRd in
@@ -1422,26 +1392,23 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       Ast.ManifestTypeExpr
         (loc, Ast.FuncType (translate_fn_name name substs_cpn))
     in
-    if substs = [] then
-      Ok (Mir.TyInfoBasic { vf_ty; interp = RustBelt.emp_ty_interp loc })
-    else
-      Ok (Mir.TyInfoGeneric { vf_ty; interp = RustBelt.emp_ty_interp loc })
+    if substs = [] then Ok { Mir.vf_ty; interp = RustBelt.emp_ty_interp loc }
+    else Ok { Mir.vf_ty; interp = RustBelt.emp_ty_interp loc }
 
   and translate_fn_ptr_ty (fn_ptr_ty_cpn : FnPtrTyRd.t) (loc : Ast.loc) =
     let open FnPtrTyRd in
     let output_cpn = output_get fn_ptr_ty_cpn in
-    let* (TyInfoBasic { vf_ty = output_ty }) = translate_ty output_cpn loc in
+    let* { Mir.vf_ty = output_ty } = translate_ty output_cpn loc in
     let rt =
       if Args.ignore_unwind_paths then output_ty
       else ConstructedTypeExpr (loc, "fn_outcome", [ output_ty ])
     in
     Ok
-      (Mir.TyInfoBasic
-         {
-           vf_ty = FuncTypeExpr (loc, rt, []);
-           (* Only the return type matters *)
-           interp = RustBelt.emp_ty_interp loc;
-         })
+      {
+        Mir.vf_ty = FuncTypeExpr (loc, rt, []);
+        (* Only the return type matters *)
+        interp = RustBelt.emp_ty_interp loc;
+      }
 
   and translate_raw_ptr_ty (raw_ptr_ty_cpn : RawPtrTyRd.t) (loc : Ast.loc) =
     let open RawPtrTyRd in
@@ -1461,20 +1428,19 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       Ok (PointsTo (loc, l, RegularPointsTo, pat))
     in
     let ty_info =
-      Mir.TyInfoBasic
-        {
-          vf_ty;
-          interp =
-            RustBelt.
-              {
-                size = size_expr;
-                own;
-                shr = simple_shr loc fbc_name;
-                full_bor_content;
-                points_to;
-                pointee_fbc = None;
-              };
-        }
+      {
+        Mir.vf_ty;
+        interp =
+          RustBelt.
+            {
+              size = size_expr;
+              own;
+              shr = simple_shr loc fbc_name;
+              full_bor_content;
+              points_to;
+              pointee_fbc = None;
+            };
+      }
     in
     Ok ty_info
 
@@ -1580,20 +1546,19 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               Ok (own, shr, full_bor_content, points_to, None)
         in
         let ty_info =
-          Mir.TyInfoBasic
-            {
-              vf_ty;
-              interp =
-                RustBelt.
-                  {
-                    size = sz_expr;
-                    own;
-                    shr;
-                    full_bor_content;
-                    points_to;
-                    pointee_fbc;
-                  };
-            }
+          {
+            Mir.vf_ty;
+            interp =
+              RustBelt.
+                {
+                  size = sz_expr;
+                  own;
+                  shr;
+                  full_bor_content;
+                  points_to;
+                  pointee_fbc;
+                };
+          }
         in
         Ok ty_info
 
@@ -1713,7 +1678,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         pointee_fbc = None;
       }
     in
-    Ok (Mir.TyInfoBasic { vf_ty; interp })
+    Ok { Mir.vf_ty; interp }
 
   and translate_ty_const_kind (ck_cpn : VfMirRd.ConstKind.t) (loc : Ast.loc) =
     let open VfMirRd.ConstKind in
@@ -1779,7 +1744,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           pointee_fbc = None;
         }
     in
-    Ok (Mir.TyInfoBasic { vf_ty; interp })
+    Ok { Mir.vf_ty; interp }
 
   and translate_ty (ty_cpn : TyRd.t) (loc : Ast.loc) =
     let open Ast in
@@ -1974,9 +1939,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   "std::boxed::Box::<T, A>::as_mut_ptr",
                   [],
                   [],
-                  [
-                    LitPat (AddressOf (loc, e1));
-                  ],
+                  [ LitPat (AddressOf (loc, e1)) ],
                   Static ),
               e1_is_mutable )
       in
@@ -2033,8 +1996,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let ty_cpn = ty_get ty_const_cpn in
       let ty = decode_ty ty_cpn in
       match ty with
-      | `Tuple [] ->
-          translate_unit_constant loc
+      | `Tuple [] -> translate_unit_constant loc
       | `FnDef fn_def_ty_cpn -> Ok (`TrTypedConstantFn fn_def_ty_cpn)
       | `Int | `Uint | `Bool ->
           let const_cpn = const_get ty_const_cpn in
@@ -2051,8 +2013,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           let open VfMirRd.MirConst.Val in
           let ty = decode_ty (ty_get val_cpn) in
           match ty with
-          | `FnDef fn_def_ty_cpn ->
-              Ok (`TrTypedConstantFn fn_def_ty_cpn)
+          | `FnDef fn_def_ty_cpn -> Ok (`TrTypedConstantFn fn_def_ty_cpn)
           | `Ref (_, _, `Str) -> (
               match ConstValueRd.get @@ const_value_get val_cpn with
               | Slice bytes ->
@@ -2081,9 +2042,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                                ] ) )))
               | _ -> failwith "TODO")
           | _ ->
-            let* ty_info = translate_ty (ty_get val_cpn) loc in
-            let ty_expr = Mir.raw_type_of ty_info in
-            translate_const_value (const_value_get val_cpn) ty_expr loc)
+              let* ty_info = translate_ty (ty_get val_cpn) loc in
+              let ty_expr = Mir.raw_type_of ty_info in
+              translate_const_value (const_value_get val_cpn) ty_expr loc)
       | Undefined _ -> Error (`TrConstantKind "Unknown ConstantKind")
 
     let translate_const_operand (constant_cpn : ConstOperandRd.t) =
@@ -2185,258 +2146,257 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           let fn_name = FnDefIdRd.name_get @@ FnDefTyRd.id_get fn_def_ty_cpn in
           let substs_cpn = FnDefTyRd.substs_get_list fn_def_ty_cpn in
           let fn_name = translate_fn_name fn_name substs_cpn in
-          let* substs = ListAux.try_map (fun arg -> translate_generic_arg arg call_loc) substs_cpn in
+          let* substs =
+            ListAux.try_map
+              (fun arg -> translate_generic_arg arg call_loc)
+              substs_cpn
+          in
           let substs =
             substs
-            @ List.init (FnDefTyRd.late_bound_generic_param_count_get fn_def_ty_cpn) (fun i ->
-                  Mir.GenArgLifetime "'erased")
+            @ List.init
+                (FnDefTyRd.late_bound_generic_param_count_get fn_def_ty_cpn)
+                (fun i -> Mir.GenArgLifetime "'erased")
           in
-          if substs = [] then
-              translate_regular_fn_call [] fn_name
+          if substs = [] then translate_regular_fn_call [] fn_name
           else
-              match fn_name with
-              (* Todo @Nima: For cases where we inline an expression instead of a function call,
-                 there is a problem with extending the implementation for clean-up paths *)
-              | "std::ptr::mut_ptr::<impl *mut T>::is_null" -> (
-                  match (substs, args_cpn) with
-                  | [ Mir.GenArgType gen_arg_ty_info ], [ arg_cpn ] ->
-                      let* tmp_rvalue_binders, [ arg ] =
-                        translate_operands [ (arg_cpn, fn_loc) ]
-                      in
-                      Ok
-                        ( tmp_rvalue_binders,
-                          FnCallResult
-                            (Ast.Operation
-                               ( fn_loc,
-                                 Ast.Eq,
-                                 [
-                                   arg;
-                                   IntLit
-                                     ( fn_loc,
-                                       Big_int.zero_big_int,
-                                       (*decimal*) true,
-                                       (*U suffix*) false,
-                                       (*int literal*) Ast.NoLSuffix );
-                                 ] )) )
-                  | _ ->
-                      Error
-                        (`TrFnCallRExpr
-                          "Invalid (generic) arg(s) for \
-                           std::ptr::mut_ptr::<impl *mut T>::is_null"))
-              | "std::ptr::mut_ptr::<impl *const T>::cast"
-              | "std::ptr::mut_ptr::<impl *mut T>::cast" ->
-                  let [ _; Mir.GenArgType gen_arg_ty_info ], [ arg_cpn ] =
-                    (substs, args_cpn)
-                  in
-                  let* tmp_rvalue_binders, [ arg ] =
-                    translate_operands [ (arg_cpn, fn_loc) ]
-                  in
-                  Ok
-                    ( tmp_rvalue_binders,
-                      FnCallResult
-                        (Ast.CastExpr
-                           ( fn_loc,
-                             PtrTypeExpr
-                               (fn_loc, Mir.basic_type_of gen_arg_ty_info),
-                             arg )) )
-              | "std::ptr::const_ptr::<impl *const T>::offset"
-              | "std::ptr::mut_ptr::<impl *mut T>::offset" -> (
-                  match (substs, args_cpn) with
-                  | [ Mir.GenArgType gen_arg_ty_info ], [ arg1_cpn; arg2_cpn ]
-                    ->
-                      let* tmp_rvalue_binders, [ arg1; arg2 ] =
-                        translate_operands
-                          [ (arg1_cpn, fn_loc); (arg2_cpn, fn_loc) ]
-                      in
-                      Ok
-                        ( tmp_rvalue_binders,
-                          FnCallResult
-                            (Ast.Operation (fn_loc, Ast.Add, [ arg1; arg2 ])) )
-                  | _ ->
-                      Error
-                        (`TrFnCallRExpr
-                          (Printf.sprintf "Invalid (generic) arg(s) for %s"
-                             fn_name)))
-              | "std::ptr::const_ptr::<impl *const T>::offset_from"
-              | "std::ptr::mut_ptr::<impl *mut T>::offset_from" -> (
-                  match (substs, args_cpn) with
-                  | [ Mir.GenArgType gen_arg_ty_info ], [ arg1_cpn; arg2_cpn ]
-                    ->
-                      let* tmp_rvalue_binders, [ arg1; arg2 ] =
-                        translate_operands
-                          [ (arg1_cpn, fn_loc); (arg2_cpn, fn_loc) ]
-                      in
-                      Ok
-                        ( tmp_rvalue_binders,
-                          FnCallOutcome
-                            (Ast.CallExpr
-                               ( fn_loc,
-                                 "std::intrinsics::ptr_offset_from",
-                                 [ Mir.basic_type_of gen_arg_ty_info ],
-                                 [],
-                                 [ LitPat arg1; LitPat arg2 ],
-                                 Static )) )
-                  | _ ->
-                      Error
-                        (`TrFnCallRExpr
-                          (Printf.sprintf "Invalid (generic) arg(s) for %s"
-                             fn_name)))
-              | "std::ptr::const_ptr::<impl *const T>::add"
-              | "std::ptr::mut_ptr::<impl *mut T>::add" -> (
-                  match (substs, args_cpn) with
-                  | [ Mir.GenArgType gen_arg_ty_info ], [ arg1_cpn; arg2_cpn ]
-                    ->
-                      let* tmp_rvalue_binders, [ arg1; arg2 ] =
-                        translate_operands
-                          [ (arg1_cpn, fn_loc); (arg2_cpn, fn_loc) ]
-                      in
-                      Ok
-                        ( tmp_rvalue_binders,
-                          FnCallResult
-                            (Ast.Operation
-                               ( fn_loc,
-                                 Ast.Add,
-                                 [
-                                   arg1;
-                                   CastExpr
-                                     ( fn_loc,
-                                       ManifestTypeExpr
-                                         (fn_loc, Int (Signed, PtrRank)),
-                                       arg2 );
-                                 ] )) )
-                  | _ ->
-                      Error
-                        (`TrFnCallRExpr
-                          (Printf.sprintf "Invalid (generic) arg(s) for %s"
-                             fn_name)))
-              | "std::ptr::const_ptr::<impl *const T>::sub"
-              | "std::ptr::mut_ptr::<impl *mut T>::sub" -> (
-                  match (substs, args_cpn) with
-                  | [ Mir.GenArgType gen_arg_ty_info ], [ arg1_cpn; arg2_cpn ]
-                    ->
-                      let* tmp_rvalue_binders, [ arg1; arg2 ] =
-                        translate_operands
-                          [ (arg1_cpn, fn_loc); (arg2_cpn, fn_loc) ]
-                      in
-                      Ok
-                        ( tmp_rvalue_binders,
-                          FnCallResult
-                            (Ast.Operation
-                               ( fn_loc,
-                                 Ast.Sub,
-                                 [
-                                   arg1;
-                                   CastExpr
-                                     ( fn_loc,
-                                       ManifestTypeExpr
-                                         (fn_loc, Int (Signed, PtrRank)),
-                                       arg2 );
-                                 ] )) )
-                  | _ ->
-                      Error
-                        (`TrFnCallRExpr
-                          (Printf.sprintf "Invalid (generic) arg(s) for %s"
-                             fn_name)))
-              | "std::ptr::null_mut" ->
-                  Ok
-                    ( [],
-                      FnCallResult
-                        (IntLit
-                           ( fn_loc,
-                             Big_int.zero_big_int,
-                             (*decimal*) true,
-                             (*U suffix*) false,
-                             (*int literal*) Ast.NoLSuffix )) )
-              | "std::ptr::read" | "std::ptr::mut_ptr::<impl *mut T>::read"
-              | "std::ptr::const_ptr::<impl *const T>::read" ->
-                  let [ src_cpn ] = args_cpn in
-                  let* tmp_rvalue_binders, [ src ] =
-                    translate_operands [ (src_cpn, fn_loc) ]
-                  in
-                  Ok (tmp_rvalue_binders, FnCallResult (Ast.Deref (fn_loc, src)))
-              | "std::ptr::write" | "std::ptr::mut_ptr::<impl *mut T>::write" ->
-                  let [ dst_cpn; src_cpn ] = args_cpn in
-                  let* tmp_rvalue_binders, [ dst; src ] =
-                    translate_operands [ (dst_cpn, fn_loc); (src_cpn, fn_loc) ]
-                  in
-                  Ok
-                    ( tmp_rvalue_binders
-                      @ [
-                          Ast.ExprStmt
-                            (AssignExpr
-                               (fn_loc, Deref (fn_loc, dst), Mutation, src));
-                        ],
-                      FnCallResult (mk_unit_expr fn_loc) )
-              | "std::cell::UnsafeCell::<T>::new"
-              | "std::mem::ManuallyDrop::<T>::new"
-              | "std::mem::ManuallyDrop::deref"
-              | "std::mem::ManuallyDrop::deref_mut" ->
-                  let [ arg_cpn ] = args_cpn in
-                  let* tmp_rvalue_binders, [ arg ] =
-                    translate_operands [ (arg_cpn, fn_loc) ]
-                  in
-                  Ok (tmp_rvalue_binders, FnCallResult arg)
-              | "std::cell::UnsafeCell::<T>::get" ->
-                  let [ arg_cpn ] = args_cpn in
-                  let* tmp_rvalue_binders, [ arg ] =
-                    translate_operands [ (arg_cpn, fn_loc) ]
-                  in
-                  Ok
-                    ( tmp_rvalue_binders,
-                      FnCallResult
-                        (CallExpr
-                           (fn_loc, "ref_origin", [], [], [ LitPat arg ], Static))
-                    )
-              | "core::str::<impl str>::as_ptr"
-              | "core::slice::<impl [T]>::as_ptr" ->
-                  let [ arg_cpn ] = args_cpn in
-                  let* tmp_rvalue_binders, [ arg ] =
-                    translate_operands [ (arg_cpn, fn_loc) ]
-                  in
-                  Ok
-                    ( tmp_rvalue_binders,
-                      FnCallResult (Ast.Select (fn_loc, arg, "ptr")) )
-              | "core::str::<impl str>::len" | "core::slice::<impl [T]>::len" ->
-                  let [ arg_cpn ] = args_cpn in
-                  let* tmp_rvalue_binders, [ arg ] =
-                    translate_operands [ (arg_cpn, fn_loc) ]
-                  in
-                  Ok
-                    ( tmp_rvalue_binders,
-                      FnCallResult (Ast.Select (fn_loc, arg, "len")) )
-              | "core::str::<impl str>::as_bytes" ->
-                  let [ arg_cpn ] = args_cpn in
-                  let* tmp_rvalue_binders, [ arg ] =
-                    translate_operands [ (arg_cpn, fn_loc) ]
-                  in
-                  let slice_u8_ref_ty =
-                    Ast.StructTypeExpr
-                      ( fn_loc,
-                        Some "slice_ref",
-                        None,
-                        [],
-                        [
-                          ManifestTypeExpr (fn_loc, StaticLifetime);
-                          ManifestTypeExpr
-                            (fn_loc, Int (Unsigned, FixedWidthRank 0));
-                        ] )
-                  in
-                  Ok
-                    ( tmp_rvalue_binders,
-                      FnCallResult
-                        (Ast.CastExpr
-                           ( fn_loc,
-                             slice_u8_ref_ty,
-                             InitializerList
-                               ( fn_loc,
-                                 [
-                                   (None, Select (fn_loc, arg, "ptr"));
-                                   (None, Select (fn_loc, arg, "len"));
-                                 ] ) )) )
-              | _ -> translate_regular_fn_call substs fn_name)
-          | _ ->
-              Error
-                (`TrFnCallRExpr "Invalid function definition type translation")
+            match fn_name with
+            (* Todo @Nima: For cases where we inline an expression instead of a function call,
+               there is a problem with extending the implementation for clean-up paths *)
+            | "std::ptr::mut_ptr::<impl *mut T>::is_null" -> (
+                match (substs, args_cpn) with
+                | [ Mir.GenArgType gen_arg_ty_info ], [ arg_cpn ] ->
+                    let* tmp_rvalue_binders, [ arg ] =
+                      translate_operands [ (arg_cpn, fn_loc) ]
+                    in
+                    Ok
+                      ( tmp_rvalue_binders,
+                        FnCallResult
+                          (Ast.Operation
+                             ( fn_loc,
+                               Ast.Eq,
+                               [
+                                 arg;
+                                 IntLit
+                                   ( fn_loc,
+                                     Big_int.zero_big_int,
+                                     (*decimal*) true,
+                                     (*U suffix*) false,
+                                     (*int literal*) Ast.NoLSuffix );
+                               ] )) )
+                | _ ->
+                    Error
+                      (`TrFnCallRExpr
+                        "Invalid (generic) arg(s) for std::ptr::mut_ptr::<impl \
+                         *mut T>::is_null"))
+            | "std::ptr::mut_ptr::<impl *const T>::cast"
+            | "std::ptr::mut_ptr::<impl *mut T>::cast" ->
+                let [ _; Mir.GenArgType gen_arg_ty_info ], [ arg_cpn ] =
+                  (substs, args_cpn)
+                in
+                let* tmp_rvalue_binders, [ arg ] =
+                  translate_operands [ (arg_cpn, fn_loc) ]
+                in
+                Ok
+                  ( tmp_rvalue_binders,
+                    FnCallResult
+                      (Ast.CastExpr
+                         ( fn_loc,
+                           PtrTypeExpr
+                             (fn_loc, Mir.basic_type_of gen_arg_ty_info),
+                           arg )) )
+            | "std::ptr::const_ptr::<impl *const T>::offset"
+            | "std::ptr::mut_ptr::<impl *mut T>::offset" -> (
+                match (substs, args_cpn) with
+                | [ Mir.GenArgType gen_arg_ty_info ], [ arg1_cpn; arg2_cpn ] ->
+                    let* tmp_rvalue_binders, [ arg1; arg2 ] =
+                      translate_operands
+                        [ (arg1_cpn, fn_loc); (arg2_cpn, fn_loc) ]
+                    in
+                    Ok
+                      ( tmp_rvalue_binders,
+                        FnCallResult
+                          (Ast.Operation (fn_loc, Ast.Add, [ arg1; arg2 ])) )
+                | _ ->
+                    Error
+                      (`TrFnCallRExpr
+                        (Printf.sprintf "Invalid (generic) arg(s) for %s"
+                           fn_name)))
+            | "std::ptr::const_ptr::<impl *const T>::offset_from"
+            | "std::ptr::mut_ptr::<impl *mut T>::offset_from" -> (
+                match (substs, args_cpn) with
+                | [ Mir.GenArgType gen_arg_ty_info ], [ arg1_cpn; arg2_cpn ] ->
+                    let* tmp_rvalue_binders, [ arg1; arg2 ] =
+                      translate_operands
+                        [ (arg1_cpn, fn_loc); (arg2_cpn, fn_loc) ]
+                    in
+                    Ok
+                      ( tmp_rvalue_binders,
+                        FnCallOutcome
+                          (Ast.CallExpr
+                             ( fn_loc,
+                               "std::intrinsics::ptr_offset_from",
+                               [ Mir.basic_type_of gen_arg_ty_info ],
+                               [],
+                               [ LitPat arg1; LitPat arg2 ],
+                               Static )) )
+                | _ ->
+                    Error
+                      (`TrFnCallRExpr
+                        (Printf.sprintf "Invalid (generic) arg(s) for %s"
+                           fn_name)))
+            | "std::ptr::const_ptr::<impl *const T>::add"
+            | "std::ptr::mut_ptr::<impl *mut T>::add" -> (
+                match (substs, args_cpn) with
+                | [ Mir.GenArgType gen_arg_ty_info ], [ arg1_cpn; arg2_cpn ] ->
+                    let* tmp_rvalue_binders, [ arg1; arg2 ] =
+                      translate_operands
+                        [ (arg1_cpn, fn_loc); (arg2_cpn, fn_loc) ]
+                    in
+                    Ok
+                      ( tmp_rvalue_binders,
+                        FnCallResult
+                          (Ast.Operation
+                             ( fn_loc,
+                               Ast.Add,
+                               [
+                                 arg1;
+                                 CastExpr
+                                   ( fn_loc,
+                                     ManifestTypeExpr
+                                       (fn_loc, Int (Signed, PtrRank)),
+                                     arg2 );
+                               ] )) )
+                | _ ->
+                    Error
+                      (`TrFnCallRExpr
+                        (Printf.sprintf "Invalid (generic) arg(s) for %s"
+                           fn_name)))
+            | "std::ptr::const_ptr::<impl *const T>::sub"
+            | "std::ptr::mut_ptr::<impl *mut T>::sub" -> (
+                match (substs, args_cpn) with
+                | [ Mir.GenArgType gen_arg_ty_info ], [ arg1_cpn; arg2_cpn ] ->
+                    let* tmp_rvalue_binders, [ arg1; arg2 ] =
+                      translate_operands
+                        [ (arg1_cpn, fn_loc); (arg2_cpn, fn_loc) ]
+                    in
+                    Ok
+                      ( tmp_rvalue_binders,
+                        FnCallResult
+                          (Ast.Operation
+                             ( fn_loc,
+                               Ast.Sub,
+                               [
+                                 arg1;
+                                 CastExpr
+                                   ( fn_loc,
+                                     ManifestTypeExpr
+                                       (fn_loc, Int (Signed, PtrRank)),
+                                     arg2 );
+                               ] )) )
+                | _ ->
+                    Error
+                      (`TrFnCallRExpr
+                        (Printf.sprintf "Invalid (generic) arg(s) for %s"
+                           fn_name)))
+            | "std::ptr::null_mut" ->
+                Ok
+                  ( [],
+                    FnCallResult
+                      (IntLit
+                         ( fn_loc,
+                           Big_int.zero_big_int,
+                           (*decimal*) true,
+                           (*U suffix*) false,
+                           (*int literal*) Ast.NoLSuffix )) )
+            | "std::ptr::read" | "std::ptr::mut_ptr::<impl *mut T>::read"
+            | "std::ptr::const_ptr::<impl *const T>::read" ->
+                let [ src_cpn ] = args_cpn in
+                let* tmp_rvalue_binders, [ src ] =
+                  translate_operands [ (src_cpn, fn_loc) ]
+                in
+                Ok (tmp_rvalue_binders, FnCallResult (Ast.Deref (fn_loc, src)))
+            | "std::ptr::write" | "std::ptr::mut_ptr::<impl *mut T>::write" ->
+                let [ dst_cpn; src_cpn ] = args_cpn in
+                let* tmp_rvalue_binders, [ dst; src ] =
+                  translate_operands [ (dst_cpn, fn_loc); (src_cpn, fn_loc) ]
+                in
+                Ok
+                  ( tmp_rvalue_binders
+                    @ [
+                        Ast.ExprStmt
+                          (AssignExpr
+                             (fn_loc, Deref (fn_loc, dst), Mutation, src));
+                      ],
+                    FnCallResult (mk_unit_expr fn_loc) )
+            | "std::cell::UnsafeCell::<T>::new"
+            | "std::mem::ManuallyDrop::<T>::new"
+            | "std::mem::ManuallyDrop::deref"
+            | "std::mem::ManuallyDrop::deref_mut" ->
+                let [ arg_cpn ] = args_cpn in
+                let* tmp_rvalue_binders, [ arg ] =
+                  translate_operands [ (arg_cpn, fn_loc) ]
+                in
+                Ok (tmp_rvalue_binders, FnCallResult arg)
+            | "std::cell::UnsafeCell::<T>::get" ->
+                let [ arg_cpn ] = args_cpn in
+                let* tmp_rvalue_binders, [ arg ] =
+                  translate_operands [ (arg_cpn, fn_loc) ]
+                in
+                Ok
+                  ( tmp_rvalue_binders,
+                    FnCallResult
+                      (CallExpr
+                         (fn_loc, "ref_origin", [], [], [ LitPat arg ], Static))
+                  )
+            | "core::str::<impl str>::as_ptr"
+            | "core::slice::<impl [T]>::as_ptr" ->
+                let [ arg_cpn ] = args_cpn in
+                let* tmp_rvalue_binders, [ arg ] =
+                  translate_operands [ (arg_cpn, fn_loc) ]
+                in
+                Ok
+                  ( tmp_rvalue_binders,
+                    FnCallResult (Ast.Select (fn_loc, arg, "ptr")) )
+            | "core::str::<impl str>::len" | "core::slice::<impl [T]>::len" ->
+                let [ arg_cpn ] = args_cpn in
+                let* tmp_rvalue_binders, [ arg ] =
+                  translate_operands [ (arg_cpn, fn_loc) ]
+                in
+                Ok
+                  ( tmp_rvalue_binders,
+                    FnCallResult (Ast.Select (fn_loc, arg, "len")) )
+            | "core::str::<impl str>::as_bytes" ->
+                let [ arg_cpn ] = args_cpn in
+                let* tmp_rvalue_binders, [ arg ] =
+                  translate_operands [ (arg_cpn, fn_loc) ]
+                in
+                let slice_u8_ref_ty =
+                  Ast.StructTypeExpr
+                    ( fn_loc,
+                      Some "slice_ref",
+                      None,
+                      [],
+                      [
+                        ManifestTypeExpr (fn_loc, StaticLifetime);
+                        ManifestTypeExpr
+                          (fn_loc, Int (Unsigned, FixedWidthRank 0));
+                      ] )
+                in
+                Ok
+                  ( tmp_rvalue_binders,
+                    FnCallResult
+                      (Ast.CastExpr
+                         ( fn_loc,
+                           slice_u8_ref_ty,
+                           InitializerList
+                             ( fn_loc,
+                               [
+                                 (None, Select (fn_loc, arg, "ptr"));
+                                 (None, Select (fn_loc, arg, "len"));
+                               ] ) )) )
+            | _ -> translate_regular_fn_call substs fn_name)
+      | _ ->
+          Error (`TrFnCallRExpr "Invalid function definition type translation")
 
     let translate_basic_block_id (bblock_id_cpn : BasicBlockIdRd.t) =
       Stdint.Uint32.to_string (BasicBlockIdRd.index_get bblock_id_cpn)
@@ -3079,10 +3039,11 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           | `TrTypedConstantRvalueBinderBuilder rvalue_binder_builder ->
               failwith "Todo: Rvalue::Cast"
               (*Todo @Nima: We need a better design (refactor) for passing different results of operand translation*)
-          | `TrTypedConstantFn fn_def_ty_cpn -> (
-              let fn_name = FnDefIdRd.name_get @@ FnDefTyRd.id_get fn_def_ty_cpn in
-              Ok
-                (`TrRvalueExpr (Ast.CastExpr (loc, ty, Var (loc, fn_name))))))
+          | `TrTypedConstantFn fn_def_ty_cpn ->
+              let fn_name =
+                FnDefIdRd.name_get @@ FnDefTyRd.id_get fn_def_ty_cpn
+              in
+              Ok (`TrRvalueExpr (Ast.CastExpr (loc, ty, Var (loc, fn_name)))))
       | BinaryOp bin_op_data_cpn ->
           let* operator, operandl, operandr =
             translate_binary_operation bin_op_data_cpn loc
@@ -4259,13 +4220,19 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
   let compute_send_tparams preds =
     preds
     |> Util.flatmap (function
-         | `Trait (("std::marker::Send"|"core::marker::Send"), [ `Type (`Param tparam) ]) -> [ tparam ]
+         | `Trait
+             ( ("std::marker::Send" | "core::marker::Send"),
+               [ `Type (`Param tparam) ] ) ->
+             [ tparam ]
          | _ -> [])
 
   let compute_sync_tparams preds =
     preds
     |> Util.flatmap (function
-         | `Trait (("std::marker::Sync"|"core::marker::Sync"), [ `Type (`Param tparam) ]) -> [ tparam ]
+         | `Trait
+             ( ("std::marker::Sync" | "core::marker::Sync"),
+               [ `Type (`Param tparam) ] ) ->
+             [ tparam ]
          | _ -> [])
 
   let translate_projection_pred (loc : Ast.loc)
@@ -5776,17 +5743,21 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   generics
               in
               let impl_type_param_map =
-                match Util.zip impl_generic_type_params adt_generic_type_params with
-                  Some bs -> bs
-                | None -> 
+                match
+                  Util.zip impl_generic_type_params adt_generic_type_params
+                with
+                | Some bs -> bs
+                | None ->
                     Ast.static_error loc
                       "Number of impl generic type parameters does not match \
                        number of ADT generic type parameters"
                       None
               in
               let impl_lifetime_param_map =
-                match Util.zip impl_generic_lifetime_params
-                        adt_generic_lifetime_params with
+                match
+                  Util.zip impl_generic_lifetime_params
+                    adt_generic_lifetime_params
+                with
                 | Some bs -> bs
                 | None ->
                     Ast.static_error loc
@@ -5798,24 +5769,23 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                 TraitImplRd.gen_args_get_list trait_impl_cpn
                 |> List.map decode_generic_arg
               in
-              begin match Util.zip impl_generics self_ty_gen_args with
+              (match Util.zip impl_generics self_ty_gen_args with
               | None ->
                   Ast.static_error loc
                     "Number of trait self type generic arguments does not \
-                    match impl generic parameter list"
+                     match impl generic parameter list"
                     None
               | Some bs -> (
                   bs
                   |> List.iter @@ function
-                    | `Type x, `Type (`Param y) when x = y -> ()
-                    | `Lifetime x, `Lifetime y when x = y -> ()
-                    | _ ->
-                        Ast.static_error loc
-                          "Trait self type generic arguments do not match \
+                     | `Type x, `Type (`Param y) when x = y -> ()
+                     | `Lifetime x, `Lifetime y when x = y -> ()
+                     | _ ->
+                         Ast.static_error loc
+                           "Trait self type generic arguments do not match \
                             impl generic parameter list"
-                          None)
-              end;
-              impl_type_param_map, impl_lifetime_param_map
+                           None));
+              (impl_type_param_map, impl_lifetime_param_map)
             in
             let check_impl_generics_matches_adt loc trait_impl_cpn =
               let impl_generics =
@@ -5869,7 +5839,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                      None
             in
             let get_impl_preds { loc; trait_impl_cpn } =
-              let impl_type_param_map, impl_lifetime_param_map = get_impl_generic_param_map loc trait_impl_cpn in
+              let impl_type_param_map, impl_lifetime_param_map =
+                get_impl_generic_param_map loc trait_impl_cpn
+              in
               let impl_preds =
                 TraitImplRd.predicates_get_list trait_impl_cpn
                 |> List.map decode_predicate
@@ -5877,7 +5849,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               impl_preds
               |> Util.flatmap (function
                    | `Trait (trait_name', `Type (`Param x) :: _) ->
-                       [ (List.assoc x impl_type_param_map, canonicalize_item_name trait_name') ]
+                       [
+                         ( List.assoc x impl_type_param_map,
+                           canonicalize_item_name trait_name' );
+                       ]
                    | _ -> [])
             in
             let preds_union preds1 preds2 =
@@ -5930,7 +5905,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             let send_impls =
               trait_impls
               |> List.filter (fun { of_trait; self_ty } ->
-                     (of_trait = "std::marker::Send" || of_trait = "core::marker::Send") && self_ty = name)
+                     (of_trait = "std::marker::Send"
+                     || of_trait = "core::marker::Send")
+                     && self_ty = name)
             in
             let negative_send_impls, positive_send_impls =
               send_impls |> List.partition (fun { is_negative } -> is_negative)
@@ -5984,7 +5961,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             let sync_impls =
               trait_impls
               |> List.filter (fun { of_trait; self_ty } ->
-                     (of_trait = "std::marker::Sync" || of_trait = "core::marker::Sync") && self_ty = name)
+                     (of_trait = "std::marker::Sync"
+                     || of_trait = "core::marker::Sync")
+                     && self_ty = name)
             in
             let negative_sync_impls, positive_sync_impls =
               sync_impls |> List.partition (fun { is_negative } -> is_negative)
