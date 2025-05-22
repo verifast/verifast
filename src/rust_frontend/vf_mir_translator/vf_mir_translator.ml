@@ -303,14 +303,13 @@ module Mir = struct
     | TyInfoGeneric of {
         vf_ty : Ast.type_expr;
         substs : generic_arg list;
-        vf_ty_mono : Ast.type_expr;
         interp : RustBelt.ty_interp;
       }
 
   let basic_type_of (ti : ty_info) =
     match ti with
     | TyInfoBasic { vf_ty } -> vf_ty
-    | TyInfoGeneric { vf_ty_mono } -> vf_ty_mono
+    | TyInfoGeneric { vf_ty } -> vf_ty
 
   let interp_of (ti : ty_info) =
     match ti with TyInfoBasic { interp } | TyInfoGeneric { interp } -> interp
@@ -1065,7 +1064,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             in
             let ty_info =
               Mir.TyInfoGeneric
-                { vf_ty; interp; substs = gen_args; vf_ty_mono = vf_ty }
+                { vf_ty; interp; substs = gen_args }
             in
             Ok ty_info)
     | EnumKind ->
@@ -1424,28 +1423,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       Ast.ManifestTypeExpr
         (loc, Ast.FuncType (translate_fn_name name substs_cpn))
     in
-    let id_mono_cpn = id_mono_get fn_def_ty_cpn in
-    match OptionRd.get id_mono_cpn with
-    | Nothing ->
-        if not (ListAux.is_empty substs) then
-          Error (`TrFnDefTy "Simple function type with generic arg(s)")
-        else Ok (Mir.TyInfoBasic { vf_ty; interp = RustBelt.emp_ty_interp loc })
-    | Something ptr_cpn ->
-        if ListAux.is_empty substs then
-          Error (`TrFnDefTy "Generic function type without generic arg(s)")
-        else
-          let id_mono_cpn = VfMirRd.of_pointer ptr_cpn in
-          let id_mono = FnDefIdRd.name_get id_mono_cpn in
-          let name_mono = TrName.translate_def_path id_mono in
-          let vf_ty_mono = Ast.ManifestTypeExpr (loc, Ast.FuncType name_mono) in
-          Ok
-            (Mir.TyInfoGeneric
-               {
-                 vf_ty;
-                 substs;
-                 vf_ty_mono;
-                 interp = RustBelt.emp_ty_interp loc;
-               })
+    if substs = [] then
+      Ok (Mir.TyInfoBasic { vf_ty; interp = RustBelt.emp_ty_interp loc })
+    else
+      Ok (Mir.TyInfoGeneric { vf_ty; interp = RustBelt.emp_ty_interp loc; substs })
 
   and translate_fn_ptr_ty (fn_ptr_ty_cpn : FnPtrTyRd.t) (loc : Ast.loc) =
     let open FnPtrTyRd in
@@ -2223,8 +2204,6 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               {
                 vf_ty = Ast.ManifestTypeExpr ((*loc*) _, Ast.FuncType fn_name);
                 substs;
-                vf_ty_mono =
-                  Ast.ManifestTypeExpr ((*loc*) _, Ast.FuncType fn_name_mono);
               } -> (
               match fn_name with
               (* Todo @Nima: For cases where we inline an expression instead of a function call,
