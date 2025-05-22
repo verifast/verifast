@@ -302,7 +302,6 @@ module Mir = struct
     | TyInfoBasic of { vf_ty : Ast.type_expr; interp : RustBelt.ty_interp }
     | TyInfoGeneric of {
         vf_ty : Ast.type_expr;
-        substs : generic_arg list;
         interp : RustBelt.ty_interp;
       }
 
@@ -1064,7 +1063,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             in
             let ty_info =
               Mir.TyInfoGeneric
-                { vf_ty; interp; substs = gen_args }
+                { vf_ty; interp }
             in
             Ok ty_info)
     | EnumKind ->
@@ -1426,7 +1425,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     if substs = [] then
       Ok (Mir.TyInfoBasic { vf_ty; interp = RustBelt.emp_ty_interp loc })
     else
-      Ok (Mir.TyInfoGeneric { vf_ty; interp = RustBelt.emp_ty_interp loc; substs })
+      Ok (Mir.TyInfoGeneric { vf_ty; interp = RustBelt.emp_ty_interp loc })
 
   and translate_fn_ptr_ty (fn_ptr_ty_cpn : FnPtrTyRd.t) (loc : Ast.loc) =
     let open FnPtrTyRd in
@@ -1630,7 +1629,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | Foreign -> `Foreign
     | RawPtr raw_ptr_ty_cpn -> `RawPtr
     | Ref ref_ty_cpn -> `Ref (decode_ref_ty ref_ty_cpn)
-    | FnDef fn_def_ty_cpn -> `FnDef
+    | FnDef fn_def_ty_cpn -> `FnDef fn_def_ty_cpn
     | FnPtr fn_ptr_ty_cpn -> `FnPtr
     | Dynamic -> `Dynamic
     | Closure _ -> `Closure
@@ -1638,7 +1637,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | Coroutine -> `Coroutine
     | CoroutineWitness -> `CoroutineWitness
     | Never -> `Never
-    | Tuple substs_cpn -> `Tuple
+    | Tuple substs_cpn -> `Tuple (Capnp.Array.map_list substs_cpn ~f:decode_ty)
     | Alias _ -> `Alias
     | Param name -> `Param name
     | Bound -> `Bound
@@ -2032,26 +2031,12 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         (loc : Ast.loc) =
       let open VfMirRd.MirConst.TyData in
       let ty_cpn = ty_get ty_const_cpn in
-      let* ty_info = translate_ty ty_cpn loc in
-      let ty_expr = Mir.raw_type_of ty_info in
-      let ty =
-        match ty_expr with
-        | Ast.ManifestTypeExpr ((*loc*) _, ty) -> ty
-        | _ ->
-            failwith
-              ("Todo: Unsupported type_expr: "
-              ^ Ocaml_expr_formatter.string_of_ocaml_expr false
-                  (Ocaml_expr_of_ast.of_type_expr ty_expr))
-      in
+      let ty = decode_ty ty_cpn in
       match ty with
-      | Ast.StructType (st_name, _) ->
-          if st_name != TrTyTuple.make_tuple_type_name 0 then
-            failwith
-              ("Todo: Constants of type struct " ^ st_name
-             ^ " are not supported yet")
-          else translate_unit_constant loc
-      | Ast.FuncType _ -> Ok (`TrTypedConstantFn ty_info)
-      | Ast.Int (_, _) | Ast.Bool ->
+      | `Tuple [] ->
+          translate_unit_constant loc
+      | `FnDef fn_def_ty_cpn -> Ok (`TrTypedConstantFn fn_def_ty_cpn)
+      | `Int | `Uint | `Bool ->
           let const_cpn = const_get ty_const_cpn in
           let* e = translate_ty_const const_cpn loc in
           Ok (`TrTypedConstantScalar e)
@@ -2064,12 +2049,11 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       | Ty ty_const_cpn -> translate_mir_ty_const ty_const_cpn loc
       | Val val_cpn -> (
           let open VfMirRd.MirConst.Val in
-          let* ty_info = translate_ty (ty_get val_cpn) loc in
-          let ty_expr = Mir.raw_type_of ty_info in
-          match ty_expr with
-          | Ast.ManifestTypeExpr (_, Ast.FuncType _) ->
-              Ok (`TrTypedConstantFn ty_info)
-          | Ast.StructTypeExpr (_, Some "str_ref", _, _, [ lft ]) -> (
+          let ty = decode_ty (ty_get val_cpn) in
+          match ty with
+          | `FnDef fn_def_ty_cpn ->
+              Ok (`TrTypedConstantFn fn_def_ty_cpn)
+          | `Ref (_, _, `Str) -> (
               match ConstValueRd.get @@ const_value_get val_cpn with
               | Slice bytes ->
                   Ok
@@ -2096,7 +2080,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                                        NoLSuffix ) );
                                ] ) )))
               | _ -> failwith "TODO")
-          | _ -> translate_const_value (const_value_get val_cpn) ty_expr loc)
+          | _ ->
+            let* ty_info = translate_ty (ty_get val_cpn) loc in
+            let ty_expr = Mir.raw_type_of ty_info in
+            translate_const_value (const_value_get val_cpn) ty_expr loc)
       | Undefined _ -> Error (`TrConstantKind "Unknown ConstantKind")
 
     let translate_const_operand (constant_cpn : ConstOperandRd.t) =
@@ -2194,17 +2181,19 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       match callee with
       | `TrOperandMove (Var (_, fn_name), place_is_mutable) ->
           translate_regular_fn_call [] fn_name
-      | `TrTypedConstantFn ty_info -> (
-          match ty_info with
-          | Mir.TyInfoBasic
-              { vf_ty = Ast.ManifestTypeExpr ((*loc*) _, Ast.FuncType fn_name) }
-            ->
+      | `TrTypedConstantFn fn_def_ty_cpn -> (
+          let fn_name = FnDefIdRd.name_get @@ FnDefTyRd.id_get fn_def_ty_cpn in
+          let substs_cpn = FnDefTyRd.substs_get_list fn_def_ty_cpn in
+          let fn_name = translate_fn_name fn_name substs_cpn in
+          let* substs = ListAux.try_map (fun arg -> translate_generic_arg arg call_loc) substs_cpn in
+          let substs =
+            substs
+            @ List.init (FnDefTyRd.late_bound_generic_param_count_get fn_def_ty_cpn) (fun i ->
+                  Mir.GenArgLifetime "'erased")
+          in
+          if substs = [] then
               translate_regular_fn_call [] fn_name
-          | Mir.TyInfoGeneric
-              {
-                vf_ty = Ast.ManifestTypeExpr ((*loc*) _, Ast.FuncType fn_name);
-                substs;
-              } -> (
+          else
               match fn_name with
               (* Todo @Nima: For cases where we inline an expression instead of a function call,
                  there is a problem with extending the implementation for clean-up paths *)
@@ -2447,8 +2436,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               | _ -> translate_regular_fn_call substs fn_name)
           | _ ->
               Error
-                (`TrFnCallRExpr "Invalid function definition type translation"))
-      | _ -> Error (`TrFnCall "Invalid callee operand for function call")
+                (`TrFnCallRExpr "Invalid function definition type translation")
 
     let translate_basic_block_id (bblock_id_cpn : BasicBlockIdRd.t) =
       Stdint.Uint32.to_string (BasicBlockIdRd.index_get bblock_id_cpn)
@@ -3091,18 +3079,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           | `TrTypedConstantRvalueBinderBuilder rvalue_binder_builder ->
               failwith "Todo: Rvalue::Cast"
               (*Todo @Nima: We need a better design (refactor) for passing different results of operand translation*)
-          | `TrTypedConstantFn ty_info -> (
-              match ty_info with
-              | Mir.TyInfoBasic
-                  {
-                    vf_ty =
-                      Ast.ManifestTypeExpr ((*loc*) _, Ast.FuncType fn_name);
-                  } ->
-                  Ok
-                    (`TrRvalueExpr (Ast.CastExpr (loc, ty, Var (loc, fn_name))))
-              | _ ->
-                  Error
-                    (`TrRvalue "Invalid operand translation for Rvalue::Cast")))
+          | `TrTypedConstantFn fn_def_ty_cpn -> (
+              let fn_name = FnDefIdRd.name_get @@ FnDefTyRd.id_get fn_def_ty_cpn in
+              Ok
+                (`TrRvalueExpr (Ast.CastExpr (loc, ty, Var (loc, fn_name))))))
       | BinaryOp bin_op_data_cpn ->
           let* operator, operandl, operandr =
             translate_binary_operation bin_op_data_cpn loc
