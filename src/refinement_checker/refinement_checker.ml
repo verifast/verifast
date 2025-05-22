@@ -1702,7 +1702,7 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
             let retVal0 = List.assoc {lv_caller=None; lv_name=locals0.(0).id.name} env0 in
             let retVal1 = List.assoc {lv_caller=None; lv_name=locals1.(0).id.name} env1 in
             if retVal0 <> retVal1 then
-              failwith (Printf.sprintf "In function %s, at basic block %s in the original crate and basic block %s in the verified crate, the return values %s and %s are not equal" def_path i_bb0#to_string i_bb1#to_string (string_of_local_var_state retVal0) (string_of_local_var_state retVal1))
+              error (Printf.sprintf "In function %s, at basic block %s in the original crate and basic block %s in the verified crate, the return values %s and %s are not equal" def_path i_bb0#to_string i_bb1#to_string (string_of_local_var_state retVal0) (string_of_local_var_state retVal1))
         | _, Unreachable -> ()
         | (Call call0, Call call1) ->
           let func0 = call0.func in
@@ -1740,7 +1740,7 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
           let env0, env1 =
             match check_place_refines_place env0 caller0 drop_data0.place env1 caller1 drop_data1.place with
               Local x0, Local x1 ->
-              if List.assoc x0 env0 <> List.assoc x1 env1 then failwith "The two drop terminators drop different values";
+              if List.assoc x0 env0 <> List.assoc x1 env1 then error "The two drop terminators drop different values";
               List.remove_assoc x0 env0, List.remove_assoc x1 env1
             | Nonlocal, Nonlocal -> env0, env1
           in
@@ -1748,13 +1748,13 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
           let i_bb_target1 = i_bb1#sibling (Stdint.Uint32.to_int drop_data1.target.index) in
           (* Todo: follow unwind path *)
           check_basic_block_refines_basic_block env0 i_bb_target0 env1 i_bb_target1
-        | TailCall, TailCall -> failwith "TailCall not supported"
-        | Assert, Assert -> failwith "Assert not supported"
-        | Yield, Yield -> failwith "Yield not supported"
-        | CoroutineDrop, CoroutineDrop -> failwith "CoroutineDrop not supported"
-        | FalseEdge, FalseEdge -> failwith "FalseEdge not supported"
-        | InlineAsm, InlineAsm -> failwith "InlineAsm not supported"
-        | _ -> failwith "Terminator kinds do not match"
+        | TailCall, TailCall -> error "TailCall not supported"
+        | Assert, Assert -> error "Assert not supported"
+        | Yield, Yield -> error "Yield not supported"
+        | CoroutineDrop, CoroutineDrop -> error "CoroutineDrop not supported"
+        | FalseEdge, FalseEdge -> error "FalseEdge not supported"
+        | InlineAsm, InlineAsm -> error "InlineAsm not supported"
+        | _ -> error "Terminator kinds do not match"
       in
       let check_command_refines_command () =
         let stmt0::ss_i0_plus_1 = ss_i0 in
@@ -1763,14 +1763,14 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
           let v0::opnds0 = opnds0 in
           let v1::opnds1 = opnds1 in
           if not (values_equal v0 v1) then 
-            failwith (Printf.sprintf "In function %s, at command %d of basic block %s in the original crate and command %d of basic block %s in the verified crate, the values %s and %s are not equal" def_path i_s0 i_bb0#to_string i_s1 i_bb1#to_string (string_of_term v0) (string_of_term v1));
+            error (Printf.sprintf "In function %s, at command %d of basic block %s in the original crate and command %d of basic block %s in the verified crate, the values %s and %s are not equal" def_path i_s0 i_bb0#to_string i_s1 i_bb1#to_string (string_of_term v0) (string_of_term v1));
           v0, opnds0, opnds1
         in
         let consume_operands n opnds0 opnds1 =
           let vs0, opnds0 = popn n opnds0 in
           let vs1, opnds1 = popn n opnds1 in
           if not (List.for_all2 values_equal vs0 vs1) then
-            failwith (Printf.sprintf "In function %s, at command %d of basic block %s in the original crate and command %d of basic block %s in the verified crate, the values %s and %s are not equal" def_path i_s0 i_bb0#to_string i_s1 i_bb1#to_string (string_of_terms vs0) (string_of_terms vs1));
+            error (Printf.sprintf "In function %s, at command %d of basic block %s in the original crate and command %d of basic block %s in the verified crate, the values %s and %s are not equal" def_path i_s0 i_bb0#to_string i_s1 i_bb1#to_string (string_of_terms vs0) (string_of_terms vs1));
           vs0, opnds0, opnds1
         in
         let cont env0 opnds0 env1 opnds1 =
@@ -1794,11 +1794,11 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
             let v0, v1 =
               match localState0, localState1 with
                 Address a1, Address a2 ->
-                  if not (values_equal a1 a2) then failwith "LoadLocal: The addresses of the two locals are not equal";
+                  if not (values_equal a1 a2) then error "LoadLocal: The addresses of the two locals are not equal";
                   let v = fresh_symbol () in
                   v, v
               | (Address _, _) | (_, Address _) ->
-                  failwith "LoadLocal: The address of exactly one of the locals is taken"
+                error "LoadLocal: The address of exactly one of the locals is taken"
               | Value v0, Value v1 ->
                   v0, v1
             in
@@ -1808,7 +1808,7 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
             let v = fresh_symbol () in
             cont env0 (v::opnds0) env1 (v::opnds1)
         | Field i0, Field i1 ->
-            if i0 <> i1 then failwith "Field: The field indices do not match";
+            if i0 <> i1 then error "Field: The field indices do not match";
             let v, opnds0, opnds1 = consume_operand opnds0 opnds1 in
             let v = fresh_symbol () in
             cont env0 (v::opnds0) env1 (v::opnds1)
@@ -1824,7 +1824,7 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
             let v0 = eval_const_operand i_bb0#genv c0 in
             let v1 = eval_const_operand i_bb1#genv c1 in
             if not (values_equal v0 v1) then
-              failwith "Constant: The constant values do not match";
+              error "Constant: The constant values do not match";
             cont env0 (v0::opnds0) env1 (v1::opnds1)
         | Ref ref0, Ref ref1 ->
             if ref0.bor_kind <> ref1.bor_kind then failwith "Ref: The bor_kinds do not match";
@@ -1834,25 +1834,25 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
               let v = fresh_symbol () in
               cont env0 (v::opnds0) env1 (v::opnds1)
             end
-        | AddressOf addrOfData0, AddressOf addrOfData1 -> failwith "AddressOf: not yet supported"
+        | AddressOf addrOfData0, AddressOf addrOfData1 -> error "AddressOf: not yet supported"
         | Cast ty0, Cast ty1 ->
             let v, opnds0, opnds1 = consume_operand opnds0 opnds1 in
             if decode_ty i_bb0#genv ty0 <> decode_ty i_bb1#genv ty1 then
-              failwith "Cast: The types do not match";
+              error "Cast: The types do not match";
             let v = fresh_symbol () in
             cont env0 (v::opnds0) env1 (v::opnds1)
         | BinaryOp op0, BinaryOp op1 ->
             let [vlhs; vrhs], opnds0, opnds1 = consume_operands 2 opnds0 opnds1 in
-            if op0 <> op1 then failwith "BinaryOp: The operators do not match";
+            if op0 <> op1 then error "BinaryOp: The operators do not match";
             let v = fresh_symbol () in
             cont env0 (v::opnds0) env1 (v::opnds1)
         | UnaryOp op0, UnaryOp op1 ->
             let v, opnds0, opnds1 = consume_operand opnds0 opnds1 in
-            if op0 <> op1 then failwith "UnaryOp: The operators do not match";
+            if op0 <> op1 then error "UnaryOp: The operators do not match";
             let v = fresh_symbol () in
             cont env0 (v::opnds0) env1 (v::opnds1)
         | Aggregate (kind0, n0), Aggregate (kind1, n1) ->
-            if n0 <> n1 then failwith "Aggregate: The number of elements do not match";
+            if n0 <> n1 then error "Aggregate: The number of elements do not match";
             check_aggregate_kind_refines_aggregate_kind i_bb0#genv kind0 i_bb1#genv kind1;
             let vs, opnds0, opnds1 = consume_operands n0 opnds0 opnds1 in
             let v = fresh_symbol () in
