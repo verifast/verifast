@@ -460,7 +460,6 @@ let fns_to_be_inlined: (string * body) list =
                   ty={
                     kind=FnDef {
                       id={name="std::ops::Drop::drop"};
-                      id_mono=Nothing;
                       substs=[
                         {kind=Type {kind=Adt {id={name="std::boxed::Box"}; kind=StructKind; substs=[{kind=Type {kind=Param "T"}}; {kind=Type {kind=Param "A"}}]}}};
                       ];
@@ -777,7 +776,6 @@ let fns_to_be_inlined: (string * body) list =
                 ty={
                   kind=FnDef {
                     id={name="std::ops::FnOnce::call_once--VeriFast"};
-                    id_mono=Nothing;
                     substs=[
                       {kind=Type {kind=Param "F"}};
                       {kind=Type {kind=Tuple [{kind=Param "T"}]}};

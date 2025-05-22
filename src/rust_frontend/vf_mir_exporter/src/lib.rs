@@ -315,6 +315,11 @@ impl rustc_driver::Callbacks for CompilerCalls {
 //     original_mir_borrowck(tcx, def_id)
 // }
 
+struct TraitImplItemInfo {
+    name: String,
+    def_id: String,
+}
+
 struct TraitImplInfo {
     def_id: LocalDefId,
     span: Span,
@@ -322,7 +327,7 @@ struct TraitImplInfo {
     is_negative: bool,
     of_trait: rustc_hir::def_id::DefId,
     self_ty: rustc_hir::def_id::DefId,
-    items: Vec<String>,
+    items: Vec<TraitImplItemInfo>,
 }
 
 /// Visitor that collects all body definition ids mentioned in the program.
@@ -361,9 +366,14 @@ impl<'tcx> rustc_hir::intravisit::Visitor<'tcx> for HirVisitor<'tcx> {
                                 self_ty,
                             ) = self_ty_path.res
                             {
-                                let mut items = Vec::<String>::new();
+                                let mut items = Vec::<TraitImplItemInfo>::new();
                                 for item in impl_.items {
-                                    items.push(item.ident.to_string());
+                                    items.push(
+                                        TraitImplItemInfo {
+                                            name: item.ident.to_string(),
+                                            def_id: self.tcx.def_path_str(item.id.owner_id.to_def_id())
+                                        }
+                                    );
                                 }
                                 self.trait_impls.push(TraitImplInfo {
                                     def_id: item.owner_id.def_id,
@@ -722,7 +732,10 @@ mod vf_mir_builder {
                 );
                 trait_impl_cpn.set_of_trait(&self.tcx.def_path_str(trait_impl.of_trait));
                 trait_impl_cpn.set_self_ty(&self.tcx.def_path_str(trait_impl.self_ty));
-                trait_impl_cpn.fill_items(&trait_impl.items);
+                trait_impl_cpn.fill_items(&trait_impl.items, |mut item_cpn, item| {
+                    item_cpn.set_name(&item.name); 
+                    item_cpn.set_def_id(&item.def_id);
+                });
             });
         }
 
@@ -1809,15 +1822,6 @@ mod vf_mir_builder {
             );
             let mut id_cpn = fn_def_ty_cpn.reborrow().init_id();
             id_cpn.set_name(&def_path);
-            let mut id_mono_cpn = fn_def_ty_cpn.reborrow().init_id_mono();
-            if substs.is_empty() && late_bound_generic_param_count == 0 {
-                id_mono_cpn.set_nothing(());
-            } else {
-                let def_path_mono = tcx.def_path_str_with_args(*def_id, substs);
-                debug!("Mono: {}", def_path_mono);
-                let mut id_mono_cpn = id_mono_cpn.init_something();
-                id_mono_cpn.set_name(&def_path_mono);
-            }
 
             let substs_cpn = fn_def_ty_cpn.init_substs(substs.len());
             Self::encode_ty_args(enc_ctx, substs, substs_cpn);
