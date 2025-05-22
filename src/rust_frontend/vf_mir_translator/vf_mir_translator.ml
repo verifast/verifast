@@ -300,10 +300,6 @@ module Mir = struct
 
   and ty_info = { vf_ty : Ast.type_expr; interp : RustBelt.ty_interp }
 
-  let basic_type_of { vf_ty } = vf_ty
-  let interp_of { interp } = interp
-  let raw_type_of { vf_ty } = vf_ty
-
   type annot = { span : Ast.loc; raw : string }
 
   type local_decl = {
@@ -981,7 +977,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             let targs =
               gen_args
               |> Util.flatmap @@ function
-                 | Mir.GenArgType arg_ty -> [ Mir.basic_type_of arg_ty ]
+                 | Mir.GenArgType arg_ty -> [ arg_ty.vf_ty ]
                  | _ -> []
             in
             let lft_args =
@@ -1064,7 +1060,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                       ( loc,
                         "Lifetime arguments are not yet supported here",
                         None ))
-             | Mir.GenArgType arg_ty -> Mir.basic_type_of arg_ty
+             | Mir.GenArgType arg_ty -> arg_ty.vf_ty
              | Mir.GenArgConst ->
                  raise
                    (Ast.StaticError
@@ -1112,7 +1108,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       ListAux.try_map (fun ty_cpn -> translate_ty ty_cpn loc) tys_cpn
     in
     let name = TrTyTuple.make_tuple_type_name (List.length tys) in
-    let tys = List.map Mir.basic_type_of tys in
+    let tys = List.map (fun { Mir.vf_ty } -> vf_ty) tys in
     let vf_ty =
       if tys = [] then ManifestTypeExpr (loc, StructType (name, []))
       else StructTypeExpr (loc, Some name, None, [], tys)
@@ -1289,7 +1285,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           Some "slice_ref",
           None,
           [],
-          [ lft; Mir.basic_type_of elem_ty_info ] )
+          [ lft; elem_ty_info.Mir.vf_ty ] )
     in
     let size = SizeofExpr (loc, TypeExpr vf_ty) in
     let own tid vs =
@@ -1417,7 +1413,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let* mutability = translate_mutability mut_cpn in
     let ty_cpn = ty_get raw_ptr_ty_cpn in
     let* pointee_ty_info = translate_ty ty_cpn loc in
-    let pointee_ty = Mir.basic_type_of pointee_ty_info in
+    let pointee_ty = pointee_ty_info.vf_ty in
     let vf_ty = PtrTypeExpr (loc, pointee_ty) in
     let size_expr = SizeofExpr (loc, TypeExpr vf_ty) in
     let own tid vs = Ok (True loc) in
@@ -1460,7 +1456,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         Ok (slice_ref_ty_info loc region mut elem_ty_info)
     | _ ->
         let* pointee_ty_info = translate_ty ty_cpn loc in
-        let pointee_ty = Mir.basic_type_of pointee_ty_info in
+        let pointee_ty = pointee_ty_info.vf_ty in
         let rust_ref_kind = match mut with Mut -> Mutable | Not -> Shared in
         let vf_ty = RustRefTypeExpr (loc, region, rust_ref_kind, pointee_ty) in
         let sz_expr = SizeofExpr (loc, TypeExpr vf_ty) in
@@ -1472,7 +1468,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                 full_bor_content = ptee_fbc;
                 points_to = ptee_points_to;
               } =
-          Mir.interp_of pointee_ty_info
+          pointee_ty_info.interp
         in
         let* own, shr, full_bor_content, points_to, pointee_fbc =
           match mut with
@@ -1695,7 +1691,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         let open VfMirRd.ValTree in
         match get val_tree with
         | Leaf scalar_int_cpn ->
-            translate_scalar_int scalar_int_cpn (Mir.basic_type_of ty) loc
+            translate_scalar_int scalar_int_cpn (ty.vf_ty) loc
         | Branch -> failwith "Todo: ConstKind::ValTree::Branch")
     | Error -> Ast.static_error loc "Todo: ConstKind::Error" None
     | Expr -> Ast.static_error loc "Todo: ConstKind::Expr" None
@@ -1708,7 +1704,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let open TyKindRd.ArrayTy in
     let elem_ty_cpn = elem_ty_get array_ty_cpn in
     let* elem_ty_info = translate_ty elem_ty_cpn loc in
-    let elem_ty = Mir.basic_type_of elem_ty_info in
+    let elem_ty = elem_ty_info.vf_ty in
     let len_cpn = size_get array_ty_cpn in
     let* (CastExpr (_, _, IntLit (_, len, _, _, _))) =
       translate_ty_const len_cpn loc
@@ -1866,7 +1862,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
 
     let translate_to_vf_local_decl
         ({ mutability = mut; id; ty = (lazy ty_info); loc } : Mir.local_decl) =
-      let ty = Mir.basic_type_of ty_info in
+      let ty = ty_info.vf_ty in
       Ast.DeclStmt
         ( loc,
           [
@@ -2043,7 +2039,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               | _ -> failwith "TODO")
           | _ ->
               let* ty_info = translate_ty (ty_get val_cpn) loc in
-              let ty_expr = Mir.raw_type_of ty_info in
+              let ty_expr = ty_info.vf_ty in
               translate_const_value (const_value_get val_cpn) ty_expr loc)
       | Undefined _ -> Error (`TrConstantKind "Unknown ConstantKind")
 
@@ -2114,7 +2110,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         let targs =
           substs
           |> Util.flatmap @@ function
-             | Mir.GenArgType ty -> [ Mir.raw_type_of ty ]
+             | Mir.GenArgType ty -> [ ty.vf_ty ]
              | Mir.GenArgLifetime region ->
                  [ Ast.ManifestTypeExpr (call_loc, StaticLifetime) ]
              | _ -> []
@@ -2202,7 +2198,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                       (Ast.CastExpr
                          ( fn_loc,
                            PtrTypeExpr
-                             (fn_loc, Mir.basic_type_of gen_arg_ty_info),
+                             (fn_loc, gen_arg_ty_info.vf_ty),
                            arg )) )
             | "std::ptr::const_ptr::<impl *const T>::offset"
             | "std::ptr::mut_ptr::<impl *mut T>::offset" -> (
@@ -2235,7 +2231,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                           (Ast.CallExpr
                              ( fn_loc,
                                "std::intrinsics::ptr_offset_from",
-                               [ Mir.basic_type_of gen_arg_ty_info ],
+                               [ gen_arg_ty_info.vf_ty ],
                                [],
                                [ LitPat arg1; LitPat arg2 ],
                                Static )) )
@@ -2577,7 +2573,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             Some otherwise
       in
       let* main_stmt, targets =
-        match Mir.basic_type_of discr_ty with
+        match discr_ty.vf_ty with
         | Ast.ManifestTypeExpr ((*loc*) _, Ast.Bool) -> (
             match (branches, otherwise_op) with
             | [ (v, false_tgt) ], Some true_tgt when Stdint.Uint128.(zero = v)
@@ -3030,7 +3026,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           let* operand = translate_operand operand_cpn loc in
           let ty_cpn = ty_get cast_data_cpn in
           let* ty_info = translate_ty ty_cpn loc in
-          let ty = Mir.basic_type_of ty_info in
+          let ty = ty_info.vf_ty in
           match operand with
           | `TrOperandCopy expr
           | `TrOperandMove (expr, _ (*place_is_mutable*))
@@ -3585,8 +3581,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
 
   let gen_own_asn (adt_defs : Mir.adt_def_tr list) (thread_id : Ast.expr)
       (loc : Ast.loc) (v : Ast.expr) (ty_info : Mir.ty_info) =
-    let raw_ty = Mir.raw_type_of ty_info in
-    let RustBelt.{ size; own; shr } = Mir.interp_of ty_info in
+    let raw_ty = ty_info.vf_ty in
+    let RustBelt.{ size; own; shr } = ty_info.interp in
     match own thread_id v with
     | Ok asn -> Ok asn
     | Error estr ->
@@ -3643,7 +3639,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
            (Var (adt_def_loc, "_t"))
            (Util.flatmap
               (fun (loc, id, ty) ->
-                if type_is_trivially_droppable (Mir.basic_type_of ty) then []
+                if type_is_trivially_droppable ty.Mir.vf_ty then []
                 else [ (loc, Select (loc, Var (loc, "_v"), id), ty) ])
               adt_fields)
     in
@@ -3695,10 +3691,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         | ManifestTypeExpr (_, tp) -> false
         | _ -> type_expr_fold_open check_type_expr state te
       in
-      check_type_expr false (Mir.basic_type_of ret_ty)
+      check_type_expr false ret_ty.vf_ty
     in
     let is_in_out_param (_, _, ty) =
-      match Mir.basic_type_of ty with
+      match ty.Mir.vf_ty with
       | RustRefTypeExpr (_, IdentTypeExpr (_, _, x), Mutable, _)
         when (not ret_ty_has_elided_lifetimes)
              && String.starts_with ~prefix:"'_" x ->
@@ -3709,7 +3705,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let add_in_out_param_asns suffix asn =
       List.fold_right
         (fun (loc, id, ty) asn ->
-          let (Some pointee_fbc) = (Mir.interp_of ty).pointee_fbc in
+          let (Some pointee_fbc) = ty.Mir.interp.pointee_fbc in
           let (Ok pointee_fbc) =
             pointee_fbc (Var (loc, thread_id_name)) id suffix
           in
@@ -3949,7 +3945,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                 List.fold_right
                   (fun ({ name; ty; loc } : Mir.field_def_tr) asn ->
                     match
-                      let ty_interp = Mir.interp_of ty in
+                      let ty_interp = ty.interp in
                       let* points_to_asn =
                         ty_interp.points_to tid
                           (Read (loc, Var (loc, "self"), name))
@@ -4107,9 +4103,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       inputs_get_list required_fn_cpn
       |> ListAux.try_map (fun ty_cpn -> translate_ty ty_cpn loc)
     in
-    let inputs = input_infos |> List.map Mir.basic_type_of in
+    let inputs = input_infos |> List.map (fun { Mir.vf_ty } -> vf_ty) in
     let* output = translate_ty (output_get required_fn_cpn) loc in
-    let ret_ty = Mir.basic_type_of output in
+    let ret_ty = output.vf_ty in
     let arg_names = arg_names_get_list required_fn_cpn in
     let (Some vf_param_decls) = Util.zip inputs arg_names in
     let* unsafe = translate_unsafety (unsafety_get required_fn_cpn) in
@@ -4247,7 +4243,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                let* arg = translate_generic_arg genarg_cpn loc in
                match arg with
                | Mir.GenArgLifetime _ -> assert false
-               | Mir.GenArgType ty -> Ok (Mir.basic_type_of ty)
+               | Mir.GenArgType ty -> Ok ty.vf_ty
                | Mir.GenArgConst -> assert false)
       in
       Ok (def_id_get projection_term_cpn, trait_args)
@@ -4264,7 +4260,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       match get term with
       | Ty ty_cpn ->
           let* ty = translate_ty ty_cpn loc in
-          Ok (Mir.basic_type_of ty)
+          Ok ty.vf_ty
       | Const const_cpn -> assert false
     in
     Ok
@@ -4429,7 +4425,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               : Mir.local_decl) =
           ret_place_decl
         in
-        let ret_ty = Mir.basic_type_of ret_ty_info in
+        let ret_ty = ret_ty_info.vf_ty in
         let param_decls, local_decls =
           ListAux.partitioni (fun idx _ -> idx < arg_count) local_decls
         in
@@ -4447,7 +4443,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         let vf_param_decls =
           List.map
             (fun (loc, id, ty_info) ->
-              let ty = Mir.basic_type_of ty_info in
+              let ty = ty_info.Mir.vf_ty in
               (ty, id))
             param_decls
         in
@@ -4480,7 +4476,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                           _,
                           StructTypeExpr (_, Some self_ty, _, _, self_ty_targs)
                         ) ) =
-                  Mir.basic_type_of self_ty
+                  self_ty.vf_ty
                 in
                 let (input0 :: _) = inputs_get_list body_cpn in
                 let self_gen_args =
@@ -4621,7 +4617,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     Ast.Field
       ( loc,
         Ast.Real (*ghostness*),
-        Mir.basic_type_of ty_info,
+        ty_info.vf_ty,
         name,
         Ast.Instance (*method_binding*),
         Ast.Public (*visibility*),
@@ -4674,7 +4670,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         in
         let field_chunk (f : Mir.field_def_tr) =
           let* fc =
-            (Mir.interp_of f.ty).points_to
+            f.ty.interp.points_to
               (Var (f.loc, tid_param_name))
               (Read (f.loc, Var (f.loc, ptr_param_name), f.name))
               (Some f.name)
@@ -4968,7 +4964,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     in
     let init_for_fd ({ name = f; ty; vis; loc = l } : Mir.field_def_tr) =
       let e =
-        match Mir.basic_type_of ty with
+        match ty.vf_ty with
         | PtrTypeExpr (_, _) | RustRefTypeExpr (_, _, _, _) ->
             CastExpr
               ( l,
@@ -5496,7 +5492,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let field_own_asns =
       fds
       |> List.map @@ fun (fd : Mir.field_def_tr) ->
-         let interp = Mir.interp_of fd.ty in
+         let interp = fd.ty.interp in
          match
            interp.own
              (Ast.Var (loc, "t"))
@@ -5528,7 +5524,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let field_share_asns =
       fds
       |> List.map @@ fun (fd : Mir.field_def_tr) ->
-         let interp = Mir.interp_of fd.ty in
+         let interp = fd.ty.interp in
          let lf =
            Ast.AddressOf (loc, Read (loc, Ast.Var (loc, "l"), fd.name))
          in
@@ -5648,7 +5644,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                    let ps =
                      fields
                      |> List.map @@ fun Mir.{ name; ty } ->
-                        (name, Mir.basic_type_of ty)
+                        (name, ty.vf_ty)
                    in
                    Ast.Ctor (loc, name ^ "::" ^ variant_name, ps)
             in
@@ -6091,7 +6087,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               let is_trivially_droppable =
                 fds
                 |> List.for_all @@ fun (fd : Mir.field_def_tr) ->
-                   type_is_trivially_droppable (Mir.basic_type_of fd.ty)
+                   type_is_trivially_droppable fd.ty.vf_ty
               in
               if is_trivially_droppable || implements_drop_get adt_def_cpn then
                 []
