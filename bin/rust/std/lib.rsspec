@@ -44,6 +44,35 @@ mod ops {
         
     }
     
+    struct Range<Idx> {
+        start: Idx,
+        end: Idx,
+    }
+    
+    impl std::iter::IntoIterator for std::ops::Range<usize> {
+    
+        fn into_iter(self: Range<usize>) -> Range<usize>;
+        //@ req true;
+        //@ ens result == self;
+        //@ on_unwind_ens false;
+    
+    }
+    
+    impl std::iter::Iterator for std::ops::Range<usize> {
+    
+        fn next<'a>(self: &'a mut Range<usize>) -> std::option::Option<usize>;
+        //@ req *self |-> ?self0;
+        /*@
+        ens if self0.start < self0.end {
+                *self |-> Range::<usize> { start: self0.start + 1, end: self0.end } &*& result == std::option::Option::Some(self0.start)
+            } else {
+                *self |-> self0 &*& result == std::option::Option::None
+            };
+        @*/
+        //@ on_unwind_ens false;
+        
+    }
+    
 }
 
 mod rt {

@@ -921,11 +921,15 @@ let prefix_decl_name l prefix = function
   PredFamilyDecl (l, prefix ^ g, tparams, indexCount, pts, inputParamCount, inductiveness)
 | PredFamilyInstanceDecl (l, g, tparams, indices, pts, body) ->
   PredFamilyInstanceDecl (l, prefix ^ g, tparams, indices, pts, body)
+| FuncSpecializationDecl (l, g_generic, g_specialized, tparams, targs) ->
+  FuncSpecializationDecl (l, g_generic, prefix ^ g_specialized, tparams, targs)
 | _ -> static_error l "Some of these kinds of items are not yet supported here" None
 
 let decl_add_type_params l tparams = function
   Func (l, k, tparams', rt, g, ps, nonghost_callers_only, ft, co, terminates, body, isVirtual, overrides) ->
   Func (l, k, tparams @ tparams', rt, g, ps, nonghost_callers_only, ft, co, terminates, body, isVirtual, overrides)
+| FuncSpecializationDecl (l, g_generic, g_specialized, tparams', targs) ->
+  FuncSpecializationDecl (l, g_generic, g_specialized, tparams @ tparams', targs)
 | _ -> static_error l "Some of these kinds of items are not yet supported here" None
 
 let parse_enum_ctor enum_name = function%parser
@@ -942,25 +946,46 @@ let parse_enum_ctor enum_name = function%parser
 
 let parse_decls parse_rsspec_file =
 let rec parse_decl = function%parser
-  [ (l, Kwd "impl"); parse_type_params as tparams; parse_type as tp; (_, Kwd "{");
+  [ (l, Kwd "impl"); parse_type_params as tparams; parse_type as tp;
+    [%let forClause = function%parser
+      [ (_, Kwd "for"); parse_type as tp ] -> Some tp
+    | [ ] -> None
+    ];
+    (_, Kwd "{");
     [%let ds = rep parse_decl];
     (_, Kwd "}")
   ] ->
+  let rec string_of_type_expr = function
+    IdentTypeExpr (_, None, x) -> x
+  | ConstructedTypeExpr (_, x, targs) -> Printf.sprintf "%s<%s>" x (String.concat ", " (List.map string_of_type_expr targs))
+  | ManifestTypeExpr (_, tp) -> Verifast0.rust_string_of_type tp
+  | tp -> static_error (type_expr_loc tp) "This form of type is not supported here" None
+  in
   let (lx, x, targs) =
     match tp with
     | IdentTypeExpr (lx, None, x) -> (lx, x, [])
     | ManifestTypeExpr (lx, tp) -> (lx, Printf.sprintf "<impl %s>" (Verifast0.rust_string_of_type tp), [])
     | ConstructedTypeExpr (lx, x, targs) ->
-      let rec string_of_type_expr = function
-        IdentTypeExpr (_, None, x) -> x
-      | ConstructedTypeExpr (_, x, targs) -> Printf.sprintf "%s<%s>" x (String.concat ", " (List.map string_of_type_expr targs))
-      | tp -> static_error (type_expr_loc tp) "This form of type is not supported here" None
-      in
-      (lx, x, List.map string_of_type_expr targs)
+      (lx, x, targs)
     | _ -> static_error (type_expr_loc tp) "This form of type is not supported here" None
   in
-  let prefix = x ^ (if targs = [] then "" else "::<" ^ String.concat ", " targs ^ ">") ^ "::" in
-  let ds = ds |> List.flatten |> List.map (prefix_decl_name l prefix) in
+  let tpText = x ^ (if targs = [] then "" else "::<" ^ String.concat ", " (List.map string_of_type_expr targs) ^ ">") in
+  let prefix = match forClause with None -> tpText | Some tp -> Printf.sprintf "<%s as %s>" tpText (string_of_type_expr tp) in
+  let prefix = prefix ^ "::" in
+  let ds = ds |> List.flatten in
+  let specializations =
+    match forClause with
+      None -> []
+    | Some tp ->
+      ds |> List.concat_map begin function
+        Func (l, k, tparams', rt, g, ps, nonghost_callers_only, ft, co, terminates, body, isVirtual, overrides) ->
+          [FuncSpecializationDecl (l, x ^ "::" ^ g, g, tparams', tp::targs @ List.map (fun x -> IdentTypeExpr (lx, None, x)) tparams')]
+      | _ -> []
+    end
+  in
+  let ds = specializations @ ds in
+  (* Prefix the names of the declarations with the impl name *)
+  let ds = ds |> List.map (prefix_decl_name l prefix) in
   List.map (decl_add_type_params l tparams) ds
 | [ (l, Kwd "trait"); (lx, Ident x); parse_type_params as tparams; (_, Kwd "{");
     [%let ds = rep parse_decl];

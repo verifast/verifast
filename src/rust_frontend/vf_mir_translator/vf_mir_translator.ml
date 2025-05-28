@@ -6762,7 +6762,12 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
   let rec match_gen_args env (arg1 : Vf_mir_decoder.generic_arg)
       (arg2 : Vf_mir_decoder.generic_arg) =
     match (arg1.kind, arg2.kind) with
-    | Lifetime { id = id1 }, Lifetime { id = id2 } -> None (* TODO *)
+    | Lifetime { id = "'static'" }, Lifetime { id = "'static'" } -> Some env
+    | Lifetime { id = id1 }, Lifetime { id = id2 } ->
+        begin match List.assoc_opt id1 env.lifetime_env with
+        | None -> Some { env with lifetime_env = (id1, id2) :: env.lifetime_env }
+        | Some id1' -> if id1' = id2 then Some env else None
+        end
     | Type ty1, Type ty2 -> match_types env ty1 ty2
     | Const c1, Const c2 -> None (* TODO *)
 
@@ -6818,7 +6823,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                     match
                       match_gen_arg_lists empty_match_env gen_args trait_substs
                     with
-                    | None -> (trait_fn_name, substs)
+                    | None -> None
                     | Some env ->
                         let substs' : Vf_mir_decoder.generic_arg list =
                           generics
@@ -6855,7 +6860,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                                Printf.printf
                                  "WARNING: fn_specializer: rerouting call of %s to %s: ignoring predicate %s\n"
                                  trait_fn_name item_def_id (string_of_predicate @@ decode_predicate pred));
-                        (item_def_id, substs' @ fn_substs)
+                        Some (item_def_id, substs' @ fn_substs)
                   in
                   (trait_fn_name, specializer)))
 
@@ -7022,9 +7027,106 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       iter segments
     else d
 
+  let package_extract_fn_specialization_decls (Ast.PackageDecl (l, pn, ilist, ds)) =
+    let ds, fn_specialization_decls =
+      ds |> List.partition_map @@ fun d ->
+          match d with
+          | Ast.FuncSpecializationDecl (l, g_generic, g_specialized, tparams, targs) -> Right (l, g_generic, (if pn = "" then "" else pn ^ "::") ^ g_specialized, tparams, targs)
+          | _ -> Left d
+    in
+    Ast.PackageDecl (l, pn, ilist, ds), fn_specialization_decls
+
+  (* Extracts fn_specialization_decls from a header and returns them separately *)
+  let header_extract_fn_specialization_decls (l, incl, hs, ps) =
+    let ps, fn_specialization_decls = List.split @@ List.map package_extract_fn_specialization_decls ps in
+    (l, incl, hs, ps), List.flatten fn_specialization_decls
+
+  let rec generic_arg_of_type_expr tparams: Ast.type_expr -> D.generic_arg = function
+    | Ast.IdentTypeExpr (_, None, x) ->
+      if List.mem x tparams then
+        if String.starts_with ~prefix:"'" x then
+          { kind = Lifetime { id = x } }
+        else
+          { kind = Type {kind=Param x} }
+      else
+        { kind = Type {kind=Adt { id = {name=x}; kind=StructKind; substs = [] }} }
+    | Ast.ConstructedTypeExpr (_, x, targs) ->
+      { kind = Type {kind=Adt { id = {name=x}; kind=StructKind; substs = List.map (generic_arg_of_type_expr tparams) targs }} }
+    | Ast.ManifestTypeExpr (_, Int (Unsigned, FixedWidthRank 0)) -> {kind = Type {kind=UInt U8}}
+    | Ast.ManifestTypeExpr (_, Int (Unsigned, FixedWidthRank 1)) -> {kind = Type {kind=UInt U16}}
+    | Ast.ManifestTypeExpr (_, Int (Unsigned, FixedWidthRank 2)) -> {kind = Type {kind=UInt U32}}
+    | Ast.ManifestTypeExpr (_, Int (Unsigned, FixedWidthRank 3)) -> {kind = Type {kind=UInt U64}}
+    | Ast.ManifestTypeExpr (_, Int (Unsigned, FixedWidthRank 4)) -> {kind = Type {kind=UInt U128}}
+    | Ast.ManifestTypeExpr (_, Int (Unsigned, PtrRank)) -> {kind = Type {kind=UInt USize}}
+    | Ast.ManifestTypeExpr (_, Int (Signed, FixedWidthRank 0)) -> {kind = Type {kind=Int I8}}
+    | Ast.ManifestTypeExpr (_, Int (Signed, FixedWidthRank 1)) -> {kind = Type {kind=Int I16}}
+    | Ast.ManifestTypeExpr (_, Int (Signed, FixedWidthRank 2)) -> {kind = Type {kind=Int I32}}
+    | Ast.ManifestTypeExpr (_, Int (Signed, FixedWidthRank 3)) -> {kind = Type {kind=Int I64}}
+    | Ast.ManifestTypeExpr (_, Int (Signed, FixedWidthRank 4)) -> {kind = Type {kind=Int I128}}
+    | Ast.ManifestTypeExpr (_, Int (Signed, PtrRank)) -> {kind = Type {kind=Int ISize}}
+    | te -> Ast.static_error (Ast.type_expr_loc te) "This type expression is not supported in function specializations" None
+
   let translate_vf_mir (extern_specs : string list)
       (vf_mir_cpn : VfMirRd.VfMir.t) =
     let job _ =
+      (* Todo @Nima: we should add necessary inclusions during translation *)
+      let extern_header_names =
+        extern_specs
+        |> List.map @@ fun extern_spec ->
+           match String.split_on_char '=' extern_spec with
+           | [ crateName; header_path ] -> (crateName, header_path)
+           | _ ->
+               failwith
+                 (Printf.sprintf
+                    "-extern_spec argument '%s' should be of the form \
+                     `crateName=path/to/spec_file.rsspec`"
+                    extern_spec)
+      in
+      let header_names =
+        [
+          ( "std",
+            Filename.concat
+              (Filename.dirname Sys.executable_name)
+              "rust/std/lib.rsspec" );
+        ]
+        @ extern_header_names
+      in
+      let headers =
+        parse_prelude ()
+        @ Util.flatmap
+            (fun (crateName, header_path) -> parse_header crateName header_path)
+            header_names
+      in
+      let headers =
+        if TranslatorArgs.ignore_unwind_paths then
+          List.map Rust_parser.result_header_of_outcome_header headers
+        else headers
+      in
+      let headers, fn_specialization_decls =
+        List.split (List.map header_extract_fn_specialization_decls headers)
+      in
+      let fn_specialization_decls = List.flatten fn_specialization_decls in
+      let fn_specializations = fn_specialization_decls |> List.map @@ fun (l, g_generic, g_specialized, tparams, targs) ->
+        let targs = List.map (generic_arg_of_type_expr tparams) targs in
+        let specialize substs =
+          let string_of_generic_arg t = string_of_generic_arg (decode_generic_arg t) in
+          match match_gen_arg_lists empty_match_env targs substs with
+          | None ->
+            Printf.printf "INFO: Function specialization resolver: did not specialize call of %s::<%s> to %s::<%s>: generic arguments do not match <%s>\n" g_generic (String.concat ", " (List.map string_of_generic_arg substs)) g_specialized (String.concat ", " tparams) (String.concat ", " (List.map string_of_generic_arg targs));
+            None
+          | Some env ->
+              let substs' : Vf_mir_decoder.generic_arg list =
+                tparams
+                |> List.map @@ fun x: D.generic_arg ->
+                    if String.starts_with ~prefix:"'" x then
+                      { kind = Lifetime { id = List.assoc x env.lifetime_env } }
+                    else
+                      { kind = Type (List.assoc x env.type_env) }
+              in
+              Some (g_specialized, substs')
+        in
+        g_generic, specialize
+      in
       let directives_cpn = VfMirRd.VfMir.directives_get_list vf_mir_cpn in
       let* directives = ListAux.try_map translate_annotation directives_cpn in
       let vf_mir_translator_directives, vf_directives =
@@ -7073,15 +7175,20 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         translate_trait_impls (VfMirRd.VfMir.trait_impls_get_list vf_mir_cpn)
       in
       let fn_specialisations =
-        compute_trait_impl_fn_specialisations trait_impls
+        compute_trait_impl_fn_specialisations trait_impls @
+        fn_specializations
       in
-      let fn_specialisations_table =
-        Hashtbl.of_seq (List.to_seq fn_specialisations)
-      in
+      let fn_specialisations_table = Hashtbl.create 10 in
+      Hashtbl.add_seq fn_specialisations_table (List.to_seq fn_specialisations);
       let fn_specializer trait_fn substs =
-        match Hashtbl.find_opt fn_specialisations_table trait_fn with
-        | None -> (trait_fn, substs)
-        | Some specializer -> specializer substs
+        let rec iter = function
+          [] -> (trait_fn, substs)
+        | f::fs ->
+          match f substs with
+            None -> iter fs
+          | Some result -> result
+        in
+        iter (Hashtbl.find_all fn_specialisations_table trait_fn)
       in
       let adt_defs_cpn = VfMirRd.VfMir.adt_defs_get vf_mir_cpn in
       let* adt_defs_cpn = CapnpAux.ind_list_get_list adt_defs_cpn in
@@ -7179,39 +7286,6 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         @ List.map
             (modularize_fn_decl module_imports_map)
             (body_sigs @ body_decls)
-      in
-      (* Todo @Nima: we should add necessary inclusions during translation *)
-      let extern_header_names =
-        extern_specs
-        |> List.map @@ fun extern_spec ->
-           match String.split_on_char '=' extern_spec with
-           | [ crateName; header_path ] -> (crateName, header_path)
-           | _ ->
-               failwith
-                 (Printf.sprintf
-                    "-extern_spec argument '%s' should be of the form \
-                     `crateName=path/to/spec_file.rsspec`"
-                    extern_spec)
-      in
-      let header_names =
-        [
-          ( "std",
-            Filename.concat
-              (Filename.dirname Sys.executable_name)
-              "rust/std/lib.rsspec" );
-        ]
-        @ extern_header_names
-      in
-      let headers =
-        parse_prelude ()
-        @ Util.flatmap
-            (fun (crateName, header_path) -> parse_header crateName header_path)
-            header_names
-      in
-      let headers =
-        if TranslatorArgs.ignore_unwind_paths then
-          List.map Rust_parser.result_header_of_outcome_header headers
-        else headers
       in
       Ok
         ( headers,
