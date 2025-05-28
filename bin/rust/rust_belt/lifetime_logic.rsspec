@@ -252,7 +252,7 @@ lem close_nonatomic_borrow();
 VeriFast checks the declaration of precise predicates so they satisfy the precondition of LftL-fract-acc.
 Therefore the precondition does not need to be checked in the `req` clause of the rule. */
 
-pred frac_borrow(k: lifetime_t, P: pred(;));
+pred frac_borrow(k: lifetime_t, P: pred(;););
 
 // LftL-bor-fracture
 lem full_borrow_into_frac(k: lifetime_t, P: pred(;));
