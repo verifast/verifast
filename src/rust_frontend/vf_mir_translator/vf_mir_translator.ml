@@ -1788,12 +1788,15 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | Pattern -> Ast.static_error loc "Pattern types are not yet supported" None
     | Slice _ -> Ast.static_error loc "Slice types are not yet supported" None
 
+  let translate_decoded_ty = translate_ty
+
   let translate_ty (ty_cpn : TyRd.t) (loc : Ast.loc) =
     translate_ty (D.decode_ty ty_cpn) loc
 
   type body_tr_defs_ctx = {
     adt_defs : Mir.adt_def_tr list;
     directives : Mir.annot list;
+    fn_specializer : string -> D.generic_arg list -> string * D.generic_arg list;
   }
 
   type var_id_trs_entry = { id : string; internal_name : string }
@@ -2146,15 +2149,19 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           let fn_name = fn_def_ty_cpn.id.name in
           let substs_cpn = fn_def_ty_cpn.substs in
           let fn_name = translate_fn_name fn_name substs_cpn in
+          let substs_cpn =
+            substs_cpn
+            @ List.init fn_def_ty_cpn.late_bound_generic_param_count
+                (fun i : D.generic_arg ->
+                  { kind = Lifetime { id = "'erased" } })
+          in
+          let fn_name, substs_cpn =
+            Args.body_tr_defs_ctx.fn_specializer fn_name substs_cpn
+          in
           let* substs =
             ListAux.try_map
               (fun arg -> translate_generic_arg arg call_loc)
               substs_cpn
-          in
-          let substs =
-            substs
-            @ List.init fn_def_ty_cpn.late_bound_generic_param_count (fun i ->
-                  Mir.GenArgLifetime "'erased")
           in
           if substs = [] then translate_regular_fn_call [] fn_name
           else
@@ -4189,22 +4196,13 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     in
     ListAux.try_map (translate_trait_required_fn adt_defs name) required_fns
 
-  let decode_predicate (pred_cpn : VfMirRd.Predicate.t) =
-    let open VfMirRd.Predicate in
-    match get pred_cpn with
+  let decode_predicate (pred_cpn : D.predicate) =
+    match pred_cpn with
     | Outlives outlives_pred_cpn ->
-        let open Outlives in
-        `Outlives
-          ( translate_region (region1_get outlives_pred_cpn),
-            translate_region (region2_get outlives_pred_cpn) )
+        `Outlives (outlives_pred_cpn.region1.id, outlives_pred_cpn.region2.id)
     | Trait trait_pred_cpn ->
-        let open Trait in
-        let args =
-          args_get_list trait_pred_cpn
-          |> List.map D.decode_generic_arg
-          |> List.map decode_generic_arg
-        in
-        `Trait (def_id_get trait_pred_cpn, args)
+        let args = trait_pred_cpn.args |> List.map decode_generic_arg in
+        `Trait (trait_pred_cpn.def_id, args)
     | Projection proj_pred_cpn -> `Projection proj_pred_cpn
     | _ -> `Ignored
 
@@ -4238,23 +4236,19 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
          | _ -> [])
 
   let translate_projection_pred (loc : Ast.loc)
-      (proj_pred_cpn : VfMirRd.Predicate.Projection.t) =
-    let open VfMirRd.Predicate.Projection in
+      (proj_pred_cpn : D.predicate_projection) =
     let* assoc_type_def_id, tparam :: trait_args =
-      let projection_term_cpn = projection_term_get proj_pred_cpn in
-      let open AliasTerm in
+      let projection_term_cpn = proj_pred_cpn.projection_term in
       let* trait_args =
-        args_get_list projection_term_cpn
+        projection_term_cpn.args
         |> ListAux.try_map (fun genarg_cpn ->
-               let* arg =
-                 translate_generic_arg (D.decode_generic_arg genarg_cpn) loc
-               in
+               let* arg = translate_generic_arg genarg_cpn loc in
                match arg with
                | Mir.GenArgLifetime _ -> assert false
                | Mir.GenArgType ty -> Ok ty.vf_ty
                | Mir.GenArgConst -> assert false)
       in
-      Ok (def_id_get projection_term_cpn, trait_args)
+      Ok (projection_term_cpn.def_id, trait_args)
     in
     let trait_name, assoc_type_name =
       String.rindex assoc_type_def_id ':' |> fun i ->
@@ -4263,11 +4257,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           (String.length assoc_type_def_id - i - 1) )
     in
     let* rhs =
-      let term = term_get proj_pred_cpn in
-      let open Term in
-      match get term with
+      let term = proj_pred_cpn.term in
+      match term with
       | Ty ty_cpn ->
-          let* ty = translate_ty ty_cpn loc in
+          let* ty = translate_decoded_ty ty_cpn loc in
           Ok ty.vf_ty
       | Const const_cpn -> assert false
     in
@@ -4385,6 +4378,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         in
         let preds =
           impl_block_predicates_get_list body_cpn @ predicates_get_list body_cpn
+          |> List.map D.decode_predicate
           |> List.map decode_predicate
         in
         let projection_preds =
@@ -5488,8 +5482,11 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     is_unsafe : bool;
     is_negative : bool;
     of_trait : string;
+    gen_args : Vf_mir_decoder.generic_arg list;
     self_ty : string;
-    items : string list;
+    generics : Vf_mir_decoder.generic_param_def list;
+    predicates : Vf_mir_decoder.predicate list;
+    items : D.trait_impl_item list;
   }
 
   let sep loc = function
@@ -5603,7 +5600,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let span_cpn = def_span_get adt_def_cpn in
       let* def_loc = translate_span_data span_cpn in
       let preds =
-        predicates_get_list adt_def_cpn |> List.map decode_predicate
+        predicates_get_list adt_def_cpn
+        |> List.map D.decode_predicate
+        |> List.map decode_predicate
       in
       let send_tparams = compute_send_tparams preds in
       let tparams_targs =
@@ -5829,6 +5828,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               check_impl_generics_matches_adt loc trait_impl_cpn;
               let impl_preds =
                 TraitImplRd.predicates_get_list trait_impl_cpn
+                |> List.map D.decode_predicate
                 |> List.map decode_predicate
               in
               impl_preds
@@ -5851,6 +5851,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               in
               let impl_preds =
                 TraitImplRd.predicates_get_list trait_impl_cpn
+                |> List.map D.decode_predicate
                 |> List.map decode_predicate
               in
               impl_preds
@@ -6716,8 +6717,22 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
            let is_unsafe = is_unsafe_get trait_impl_cpn in
            let is_negative = is_negative_get trait_impl_cpn in
            let of_trait = of_trait_get trait_impl_cpn in
+           let gen_args =
+             List.map Vf_mir_decoder.decode_generic_arg
+             @@ gen_args_get_list trait_impl_cpn
+           in
            let self_ty = self_ty_get trait_impl_cpn in
-           let items = items_get_list trait_impl_cpn in
+           let generics =
+             List.map Vf_mir_decoder.decode_generic_param_def
+             @@ generics_get_list trait_impl_cpn
+           in
+           let predicates =
+             List.map Vf_mir_decoder.decode_predicate
+             @@ predicates_get_list trait_impl_cpn
+           in
+           let items =
+             items_get_list trait_impl_cpn |> List.map D.decode_trait_impl_item
+           in
            Ok
              ({
                 trait_impl_cpn;
@@ -6725,15 +6740,132 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                 is_unsafe;
                 is_negative;
                 of_trait;
+                gen_args;
                 self_ty;
+                generics;
+                predicates;
                 items;
               }
                : trait_impl))
+
+  let ( >>= ) = Option.bind
+
+  type match_env = {
+    type_env : (string * Vf_mir_decoder.ty) list;
+    lifetime_env : (string * string) list;
+    const_env : (string * Vf_mir_decoder.ty_const) list;
+  }
+
+  let empty_match_env = { type_env = []; lifetime_env = []; const_env = [] }
+
+  (* Returns an extension of env such that arg1[env] = arg2, or None if none exists. *)
+  let rec match_gen_args env (arg1 : Vf_mir_decoder.generic_arg)
+      (arg2 : Vf_mir_decoder.generic_arg) =
+    match (arg1.kind, arg2.kind) with
+    | Lifetime { id = id1 }, Lifetime { id = id2 } -> None (* TODO *)
+    | Type ty1, Type ty2 -> match_types env ty1 ty2
+    | Const c1, Const c2 -> None (* TODO *)
+
+  and match_gen_arg_lists env args1 args2 =
+    match (args1, args2) with
+    | [], [] -> Some env
+    | arg1 :: rest1, arg2 :: rest2 ->
+        match_gen_args env arg1 arg2 >>= fun env' ->
+        match_gen_arg_lists env' rest1 rest2
+    | _ -> None
+
+  and match_types env ty1 ty2 =
+    match (ty1.kind, ty2.kind) with
+    | Param x, _ -> (
+        match List.assoc_opt x env.type_env with
+        | None -> Some { env with type_env = (x, ty2) :: env.type_env }
+        | Some ty1' -> match_types env ty1' ty2)
+    | Bool, Bool -> Some env
+    | Int intTy1, Int intTy2 -> if intTy1 = intTy2 then Some env else None
+    | UInt uintTy1, UInt uintTy2 -> if uintTy1 = uintTy2 then Some env else None
+    | Adt { id = id1; substs = substs1 }, Adt { id = id2; substs = substs2 } ->
+        if id1 = id2 then match_gen_arg_lists env substs1 substs2 else None
+    | ( RawPtr { ty = ty1; mutability = mut1 },
+        RawPtr { ty = ty2; mutability = mut2 } ) ->
+        if mut1 = mut2 then match_types env ty1 ty2 else None
+    | _ -> None
+
+  and match_type_lists env tys1 tys2 =
+    match (tys1, tys2) with
+    | [], [] -> Some env
+    | ty1 :: rest1, ty2 :: rest2 ->
+        match_types env ty1 ty2 >>= fun env' ->
+        match_type_lists env' rest1 rest2
+    | _ -> None
+
+  let compute_trait_impl_fn_specialisations trait_impls =
+    trait_impls
+    |> Util.flatmap
+         (fun { of_trait; gen_args; self_ty; generics; predicates; items } ->
+           items
+           |> List.map
+                (fun
+                  ({ name = item_name; def_id = item_def_id } :
+                    D.trait_impl_item)
+                ->
+                  let trait_fn_name =
+                    Printf.sprintf "%s::%s" of_trait item_name
+                  in
+                  let specializer substs =
+                    let trait_substs, fn_substs =
+                      Util.take_drop (List.length gen_args) substs
+                    in
+                    match
+                      match_gen_arg_lists empty_match_env gen_args trait_substs
+                    with
+                    | None -> (trait_fn_name, substs)
+                    | Some env ->
+                        let substs' : Vf_mir_decoder.generic_arg list =
+                          generics
+                          |> List.map
+                               (fun
+                                 ({ name; kind } :
+                                   Vf_mir_decoder.generic_param_def)
+                                 :
+                                 Vf_mir_decoder.generic_arg
+                               ->
+                                 match kind with
+                                 | Lifetime ->
+                                     {
+                                       kind =
+                                         Lifetime
+                                           {
+                                             id =
+                                               List.assoc name env.lifetime_env;
+                                           };
+                                     }
+                                 | Type ->
+                                     {
+                                       kind =
+                                         Type (List.assoc name env.type_env);
+                                     }
+                                 | Const ->
+                                     {
+                                       kind =
+                                         Const (List.assoc name env.const_env);
+                                     })
+                        in
+                        predicates
+                        |> List.iter (fun pred ->
+                               Printf.printf
+                                 "WARNING: fn_specializer: rerouting call of %s to %s: ignoring predicate %s\n"
+                                 trait_fn_name item_def_id (string_of_predicate @@ decode_predicate pred));
+                        (item_def_id, substs' @ fn_substs)
+                  in
+                  (trait_fn_name, specializer)))
 
   let compute_trait_impl_prototypes (adt_defs : Mir.adt_def_tr list)
       traits_and_body_decls trait_impls =
     trait_impls
     |> Util.flatmap (fun { loc = limpl; of_trait; self_ty; items } ->
+           let items =
+             List.map (fun ({ name } : D.trait_impl_item) -> name) items
+           in
            if of_trait = "std::ops::Drop" then (
              assert (items = [ "drop" ]);
              [] (* drop is safe *))
@@ -6940,6 +7072,17 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let* trait_impls =
         translate_trait_impls (VfMirRd.VfMir.trait_impls_get_list vf_mir_cpn)
       in
+      let fn_specialisations =
+        compute_trait_impl_fn_specialisations trait_impls
+      in
+      let fn_specialisations_table =
+        Hashtbl.of_seq (List.to_seq fn_specialisations)
+      in
+      let fn_specializer trait_fn substs =
+        match Hashtbl.find_opt fn_specialisations_table trait_fn with
+        | None -> (trait_fn, substs)
+        | Some specializer -> specializer substs
+      in
       let adt_defs_cpn = VfMirRd.VfMir.adt_defs_get vf_mir_cpn in
       let* adt_defs_cpn = CapnpAux.ind_list_get_list adt_defs_cpn in
       let* adt_defs =
@@ -7004,7 +7147,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         else bodies_cpn
       in
       let body_tr_defs_ctx =
-        { adt_defs; directives = vf_mir_translator_directives }
+        { adt_defs; directives = vf_mir_translator_directives; fn_specializer }
       in
       let* bodies_tr_res =
         ListAux.try_map (translate_body body_tr_defs_ctx) bodies_cpn
