@@ -994,6 +994,12 @@ and
       loc *
       string *
       expr
+  | FuncSpecializationDecl of (* A function specialization declaration, used to declare a specialization of a function for a specific type. *)
+      loc *
+      string * (* name of the generic function, e.g. "std::iter::IntoIterator::into_iter" *)
+      string (* name of the specialized function, e.g. "std::ops::<Range<usize> as std::iter::IntoIterator>::into_iter" *) *
+      string list (* type parameters of the specialized function *) *
+      type_expr list (* type arguments for the generic function, e.g. Range<usize> *)
 and (* shared box is deeltje ghost state, waarde kan enkel via actions gewijzigd worden, handle predicates geven info over de ghost state, zelfs als er geen eigendom over de box is*)
   action_decl = (* ?action_decl *)
   | ActionDecl of loc * string * bool (* does performing this action require a corresponding action permission? *) * (type_expr * string) list * expr * expr
