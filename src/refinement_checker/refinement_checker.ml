@@ -21,12 +21,14 @@ let error msg =
 let decode_path (path: source_file) =
   let name = path.name in
   match name with
-  | Real real_file_name -> (
-      match
+  | Real real_file_name ->
+      begin match
         real_file_name
       with
       | LocalPath path -> path
-      | Remapped _ -> failwith "Remapped file names are not yet supported")
+      | Remapped {local_path; virtual_name} ->
+        "<" ^ virtual_name ^ (match local_path with Nothing -> "" | Something {text} -> "#" ^ text) ^ ">"
+      end
   | QuoteExpansion _ -> failwith "Quote expansions are not yet supported"
 
 let decode_loc (loc: loc) =

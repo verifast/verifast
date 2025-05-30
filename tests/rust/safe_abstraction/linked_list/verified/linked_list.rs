@@ -2193,29 +2193,59 @@ impl<T, A: Allocator> LinkedList<T, A> {
         let len = self.len();
         assert!(at <= len, "Cannot split off at a nonexistent index");
         if at == 0 {
-            return mem::replace(self, Self::new_in(self.alloc.clone()));
+            let alloc1;
+            let self_ref1 = &mut *self as *mut LinkedList<T, A>;
+            unsafe {
+                alloc1 = Allocator_clone__VeriFast_wrapper(&self.alloc);
+            }
+            return mem::replace(unsafe { &mut *self_ref1 }, Self::new_in(alloc1));
         } else if at == len {
-            return Self::new_in(self.alloc.clone());
+            let alloc2;
+            unsafe {
+                alloc2 = Allocator_clone__VeriFast_wrapper(&self.alloc);
+            }
+            return Self::new_in(alloc2);
         }
 
         // Below, we iterate towards the `i-1`th node, either from the start or the end,
         // depending on which would be faster.
         let split_node = if at - 1 <= len - 1 - (at - 1) {
-            let mut iter = self.iter_mut();
+            let mut iter1 = self.iter_mut();
             // instead of skipping using .skip() (which creates a new struct),
             // we skip manually so we can access the head field without
             // depending on implementation details of Skip
-            for _ in 0..at - 1 {
-                iter.next();
+            let r1 = 0..at - 1;
+            let mut r1_iter = r1.into_iter();
+            loop { // for _ in 0..at - 1 {
+                let r1_iter_ref = &mut r1_iter;
+                match r1_iter_ref.next() {
+                    None => {
+                        break;
+                    }
+                    Some(_) => {
+                        iter1.next();
+                    }
+                }
             }
-            iter.head
+            iter1.head
         } else {
             // better off starting from the end
-            let mut iter = self.iter_mut();
-            for _ in 0..len - 1 - (at - 1) {
-                iter.next_back();
+            let mut iter2 = self.iter_mut();
+            
+            let r2 = 0..len - 1 - (at - 1);
+            let mut r2_iter = r2.into_iter();
+            loop { // for _ in 0..len - 1 - (at - 1) {
+                let r2_iter_ref = &mut r2_iter;
+                match r2_iter_ref.next() {
+                    None => {
+                        break;
+                    }
+                    Some(_) => {
+                        iter2.next_back();
+                    }
+                }
             }
-            iter.tail
+            iter2.tail
         };
         unsafe { self.split_off_after_node(split_node, at) }
     }
