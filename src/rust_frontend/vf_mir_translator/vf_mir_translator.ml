@@ -4637,7 +4637,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     Ok Mir.{ loc; name; fields }
 
   let gen_adt_full_borrow_content adt_kind name tparams lft_params
-      (variants : Mir.variant_def_tr list) adt_def_loc =
+      (variants : Mir.variant_def_tr list) adt_def_loc preciseness =
     let open Ast in
     match adt_kind with
     | Mir.Enum | Mir.Union ->
@@ -4742,7 +4742,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               vf_tparams (* type parameters*),
               fbor_content_params,
               [],
-              None
+              (if preciseness then Some 0 else None)
               (* (Some n) means the predicate is precise and the first n parameters are input parameters *),
               body_asn )
         in
@@ -6011,7 +6011,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           in
           let* full_bor_content =
             gen_adt_full_borrow_content kind name tparams lft_params variants
-              def_loc
+              def_loc (match user_provided_own_defs with [ Right(_, Some _, _) ] -> true | _ -> false)
           in
           let own_proof_obligs =
             match send_preds with
