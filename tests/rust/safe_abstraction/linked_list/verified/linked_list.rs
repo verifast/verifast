@@ -2645,17 +2645,25 @@ impl<'a, T> Iterator for IterMut<'a, T> {
     type Item = &'a mut T;
 
     #[inline]
-    fn next(&mut self) -> Option<&'a mut T> {
+    fn next(&mut self) -> Option<&'a mut T>
+    {
         if self.len == 0 {
             None
         } else {
-            self.head.map(|node| unsafe {
-                // Need an unbound lifetime to get 'a
-                let node = &mut *node.as_ptr();
-                self.len -= 1;
-                self.head = node.next;
-                &mut node.element
-            })
+            let head = self.head;
+            let head_ref = &mut self.head;
+            let len_ref = &mut self.len;
+            match head {
+                None => None,
+                Some(node) => unsafe {
+                    // Need an unbound lifetime to get 'a
+                    let node = &mut *node.as_ptr();
+                    let len = *len_ref;
+                    *len_ref = len - 1;
+                    *head_ref = node.next;
+                    Some(&mut node.element)
+                }
+            }
         }
     }
 
@@ -2673,17 +2681,25 @@ impl<'a, T> Iterator for IterMut<'a, T> {
 #[stable(feature = "rust1", since = "1.0.0")]
 impl<'a, T> DoubleEndedIterator for IterMut<'a, T> {
     #[inline]
-    fn next_back(&mut self) -> Option<&'a mut T> {
+    fn next_back(&mut self) -> Option<&'a mut T>
+    {
         if self.len == 0 {
             None
         } else {
-            self.tail.map(|node| unsafe {
-                // Need an unbound lifetime to get 'a
-                let node = &mut *node.as_ptr();
-                self.len -= 1;
-                self.tail = node.prev;
-                &mut node.element
-            })
+            let tail = self.tail;
+            let tail_ref = &mut self.tail;
+            let len_ref = &mut self.len;
+            match tail {
+                None => None,
+                Some(node) =>  unsafe {
+                    // Need an unbound lifetime to get 'a
+                    let node = &mut *node.as_ptr();
+                    let len = *len_ref;
+                    *len_ref = len - 1;
+                    *tail_ref = node.prev;
+                    Some(&mut node.element)
+                }
+            }
         }
     }
 }
