@@ -1859,7 +1859,12 @@ impl<T, A: Allocator> LinkedList<T, A> {
     #[must_use]
     #[stable(feature = "rust1", since = "1.0.0")]
     #[rustc_confusables("length", "size")]
-    pub fn len(&self) -> usize {
+    pub fn len(&self) -> usize
+    //@ req [?f](*self).len |-> ?len;
+    //@ ens [f](*self).len |-> len &*& result == len;
+    //@ on_unwind_ens false;
+    //@ safety_proof { assume(false); }
+    {
         self.len
     }
 
@@ -2193,34 +2198,97 @@ impl<T, A: Allocator> LinkedList<T, A> {
     pub fn split_off(&mut self, at: usize) -> LinkedList<T, A>
     where
         A: Clone,
+    //@ req thread_token(?t) &*& *self |-> ?self0 &*& <LinkedList<T, A>>.own(t, self0);
+    //@ ens thread_token(t) &*& *self |-> ?self1 &*& <LinkedList<T, A>>.own(t, self1) &*& <LinkedList<T, A>>.own(t, result);
+    //@ on_unwind_ens thread_token(t) &*& *self |-> ?self1 &*& <LinkedList<T, A>>.own(t, self1);
     {
-        let len = self.len();
+        //@ open <LinkedList<T, A>>.own(t, self0);
+        //@ open_points_to(self);
+        //@ let self_ref = precreate_ref(self);
+        //@ open_ref_init_perm_LinkedList(self_ref);
+        //@ init_ref_Option_NonNull(&(*self_ref).head);
+        //@ init_ref_Option_NonNull(&(*self_ref).tail);
+        //@ std::num::init_ref_usize(&(*self_ref).len, 1/2);
+        //@ init_ref_padding_LinkedList(self_ref, 1/2);
+        //@ let k1 = begin_lifetime();
+        //@ std::marker::close_ref_initialized_PhantomData(&(*self_ref).marker, 1);
+        let len;
+        {
+            //@ let_lft 'a = k1;
+            //@ std::alloc::init_ref_Allocator_at_lifetime::<'a, A>(&(*self_ref).alloc);
+            //@ close_ref_initialized_LinkedList(self_ref);
+            len = self.len();
+        }
+        //@ end_lifetime(k1);
+        //@ open_ref_initialized_LinkedList(self_ref);
+        //@ end_ref_Option_NonNull(&(*self_ref).head);
+        //@ end_ref_Option_NonNull(&(*self_ref).tail);
+        //@ std::alloc::end_ref_Allocator_at_lifetime::<A>();
+        //@ std::num::end_ref_usize(&(*self_ref).len);
+        //@ end_ref_padding_LinkedList(self_ref);
+        //@ leak ref_init_perm(&(*self_ref).marker, _) &*& ref_initialized(&(*self_ref).marker);
+        
+        //@ assert (*self).head |-> ?head &*& (*self).tail |-> ?tail &*& Nodes(?alloc_id, _, _, _, _, _);
         assert!(at <= len, "Cannot split off at a nonexistent index");
         if at == 0 {
+            //@ let alloc_ref = precreate_ref(&(*self).alloc);
             let alloc1;
             let self_ref1 = &mut *self as *mut LinkedList<T, A>;
+            //@ let k = begin_lifetime();
             unsafe {
+                //@ let_lft 'a = k;
+                //@ std::alloc::init_ref_Allocator_at_lifetime::<'a, A>(alloc_ref);
                 alloc1 = Allocator_clone__VeriFast_wrapper(&self.alloc);
             }
+            //@ end_lifetime(k);
+            //@ std::alloc::end_ref_Allocator_at_lifetime::<A>();
+            
+            //@ std::alloc::Allocator_to_own::<A>(alloc1);
+            //@ close_points_to(self);
+            //@ assert *self |-> ?self1;
+            //@ close <LinkedList<T, A>>.own(t, self1);
             return mem::replace(unsafe { &mut *self_ref1 }, Self::new_in(alloc1));
         } else if at == len {
+            //@ let alloc_ref = precreate_ref(&(*self).alloc);
+            //@ let k = begin_lifetime();
             let alloc2;
             unsafe {
+                //@ let_lft 'a = k;
+                //@ std::alloc::init_ref_Allocator_at_lifetime::<'a, A>(alloc_ref);
                 alloc2 = Allocator_clone__VeriFast_wrapper(&self.alloc);
             }
+            //@ end_lifetime(k);
+            //@ std::alloc::end_ref_Allocator_at_lifetime::<A>();
+            
+            //@ std::alloc::Allocator_to_own::<A>(alloc2);
+            //@ close_points_to(self);
+            //@ assert *self |-> ?self1;
+            //@ close <LinkedList<T, A>>.own(t, self1);
             return Self::new_in(alloc2);
         }
 
+        //@ assert Nodes(alloc_id, head, None, tail, None, ?nodes);
+        
         // Below, we iterate towards the `i-1`th node, either from the start or the end,
         // depending on which would be faster.
         let split_node = if at - 1 <= len - 1 - (at - 1) {
+            //@ close_points_to(self);
             let mut iter1 = self.iter_mut();
+            //@ open_points_to(self);
+            //@ close_points_to(&iter1);
             // instead of skipping using .skip() (which creates a new struct),
             // we skip manually so we can access the head field without
             // depending on implementation details of Skip
             let r1 = 0..at - 1;
             let mut r1_iter = r1.into_iter();
+            //@ close Nodes(alloc_id, head, None, None, head, []);
             loop { // for _ in 0..at - 1 {
+                /*@
+                inv r1_iter |-> ?r1_iter_ &*& r1_iter_.end == at - 1 &*&
+                    iter1 |-> ?iter1_ &*& iter1_.tail == tail &*& iter1_.len == self0.len - r1_iter_.start &*&
+                    Nodes(alloc_id, head, None, ?prev, iter1_.head, ?nodes1) &*& Nodes(alloc_id, iter1_.head, prev, tail, None, ?nodes2) &*&
+                    length(nodes1) == r1_iter_.start &*& append(nodes1, nodes2) == nodes &*& r1_iter_.start < at &*& at < length(nodes);
+                @*/
                 let r1_iter_ref = &mut r1_iter;
                 match r1_iter_ref.next() {
                     None => {
@@ -2228,28 +2296,64 @@ impl<T, A: Allocator> LinkedList<T, A> {
                     }
                     Some(_) => {
                         iter1.next();
+                        //@ assert iter1_.head == Option::Some(?iter_);                 
+                        //@ open Nodes(alloc_id, ?next, iter1_.head, tail, None, tail(nodes2));
+                        //@ close Nodes(alloc_id, next, iter1_.head, tail, None, tail(nodes2));
+                        //@ close Nodes(alloc_id, next, Some(iter_), Some(iter_), next, []);
+                        //@ close Nodes(alloc_id, Some(iter_), prev, Some(iter_), next, [iter_]);
+                        //@ Nodes_append_(head);
+                        //@ append_assoc(nodes1, [iter_], tail(nodes2));
                     }
                 }
             }
-            iter1.head
+            //@ open Nodes(alloc_id, iter1_.head, prev, tail, None, nodes2);
+            //@ assert iter1_.head == Option::Some(?iter_);
+            //@ open Nodes(alloc_id, ?next, iter1_.head, tail, None, tail(nodes2));
+            //@ close Nodes(alloc_id, next, iter1_.head, tail, None, tail(nodes2));
+            //@ close Nodes::<T>(alloc_id, next, iter1_.head, iter1_.head, next, []);
+            //@ close Nodes::<T>(alloc_id, iter1_.head, prev, iter1_.head, next, [iter_]);
+            //@ Nodes_append_(head);
+            //@ append_assoc(nodes1, [iter_], tail(nodes2));
+            //@ foreach_unappend(append(nodes1, [iter_]), tail(nodes2), elem_fbc::<T>(t));
+            let r = iter1.head;
+            //@ open_points_to(&iter1);
+            r
         } else {
             // better off starting from the end
+            //@ close_points_to(self);
             let mut iter2 = self.iter_mut();
+            //@ open_points_to(self);
+            //@ close_points_to(&iter2);
             
             let r2 = 0..len - 1 - (at - 1);
             let mut r2_iter = r2.into_iter();
+            //@ close Nodes(alloc_id, None, self0.tail, self0.tail, None, []);
             loop { // for _ in 0..len - 1 - (at - 1) {
+                /*@
+                inv r2_iter |-> ?r2_iter_ &*& r2_iter_.end == len - 1 - (at - 1) &*&
+                    iter2 |-> ?iter2_ &*& iter2_.head == head &*& iter2_.len == len - r2_iter_.start &*&
+                    Nodes(alloc_id, head, None, iter2_.tail, ?next, ?nodes1) &*& Nodes(alloc_id, next, iter2_.tail, tail, None, ?nodes2) &*&
+                    length(nodes2) == r2_iter_.start &*& append(nodes1, nodes2) == nodes &*& r2_iter_.start <= len - at;
+                @*/
                 let r2_iter_ref = &mut r2_iter;
                 match r2_iter_ref.next() {
                     None => {
                         break;
                     }
                     Some(_) => {
+                        //@ let old_iter = iter2_.tail;
                         iter2.next_back();
+                        //@ assert iter2_.tail == Option::Some(?iter_);
+                        //@ assert Nodes(_, head, _, ?last, old_iter, ?nodes11);
+                        //@ close Nodes(alloc_id, old_iter, last, tail, None, _);
+                        //@ append_assoc(nodes11, [iter_], nodes2);
                     }
                 }
             }
-            iter2.tail
+            //@ foreach_unappend(nodes1, nodes2, elem_fbc::<T>(t));
+            let r = iter2.tail;
+            //@ open_points_to(&iter2);
+            r
         };
         unsafe { self.split_off_after_node(split_node, at) }
     }

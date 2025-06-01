@@ -1607,8 +1607,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let kind_cpn = ty_cpn.kind in
     match kind_cpn with
     | Bool -> `Bool
-    | Int int_ty_cpn -> `Int
-    | UInt u_int_ty_cpn -> `Uint
+    | Int int_ty_cpn -> `Int int_ty_cpn
+    | UInt u_int_ty_cpn -> `Uint u_int_ty_cpn
     | Char -> `Char
     | Float -> `Float
     | Adt adt_ty_cpn -> `Adt (decode_adt_ty adt_ty_cpn)
@@ -1643,6 +1643,18 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         else
           Printf.sprintf "%s<%s>" name
             (String.concat ", " (List.map string_of_generic_arg args))
+    | `Int D.I8 -> "i8"
+    | `Int D.I16 -> "i16"
+    | `Int D.I32 -> "i32"
+    | `Int D.I64 -> "i64"
+    | `Int D.I128 -> "i128"
+    | `Int D.ISize -> "isize"
+    | `Uint D.U8 -> "u8"
+    | `Uint D.U16 -> "u16"
+    | `Uint D.U32 -> "u32"
+    | `Uint D.U64 -> "u64"
+    | `Uint D.U128 -> "u128"
+    | `Uint D.USize -> "usize"
     | _ -> "(type)"
 
   and extract_implicit_outlives_preds regions ty =
@@ -2028,7 +2040,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       match ty with
       | `Tuple [] -> translate_unit_constant loc
       | `FnDef fn_def_ty_cpn -> Ok (`TrTypedConstantFn fn_def_ty_cpn)
-      | `Int | `Uint | `Bool ->
+      | `Int _ | `Uint _ | `Bool ->
           let const_cpn = const_get ty_const_cpn in
           let* e = translate_ty_const (D.decode_ty_const const_cpn) loc in
           Ok (`TrTypedConstantScalar e)
@@ -2382,8 +2394,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                       (CallExpr
                          (fn_loc, "ref_origin", [], [], [ LitPat arg ], Static))
                   )
-            | "core::str::<impl str>::as_ptr"
-            | "core::slice::<impl [T]>::as_ptr" ->
+            | "std::str::<impl str>::as_ptr"
+            | "std::slice::<impl [T]>::as_ptr" ->
                 let [ arg_cpn ] = args_cpn in
                 let* tmp_rvalue_binders, [ arg ] =
                   translate_operands [ (arg_cpn, fn_loc) ]
@@ -2391,7 +2403,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                 Ok
                   ( tmp_rvalue_binders,
                     FnCallResult (Ast.Select (fn_loc, arg, "ptr")) )
-            | "core::str::<impl str>::len" | "core::slice::<impl [T]>::len" ->
+            | "std::str::<impl str>::len" | "std::slice::<impl [T]>::len" ->
                 let [ arg_cpn ] = args_cpn in
                 let* tmp_rvalue_binders, [ arg ] =
                   translate_operands [ (arg_cpn, fn_loc) ]
@@ -2399,7 +2411,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                 Ok
                   ( tmp_rvalue_binders,
                     FnCallResult (Ast.Select (fn_loc, arg, "len")) )
-            | "core::str::<impl str>::as_bytes" ->
+            | "std::str::<impl str>::as_bytes" ->
                 let [ arg_cpn ] = args_cpn in
                 let* tmp_rvalue_binders, [ arg ] =
                   translate_operands [ (arg_cpn, fn_loc) ]
@@ -6818,7 +6830,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | Int intTy1, Int intTy2 -> if intTy1 = intTy2 then Some env else None
     | UInt uintTy1, UInt uintTy2 -> if uintTy1 = uintTy2 then Some env else None
     | Adt { id = id1; substs = substs1 }, Adt { id = id2; substs = substs2 } ->
-        if id1 = id2 then match_gen_arg_lists env substs1 substs2 else None
+        if canonicalize_item_name id1.name = canonicalize_item_name id2.name then match_gen_arg_lists env substs1 substs2 else None
     | ( RawPtr { ty = ty1; mutability = mut1 },
         RawPtr { ty = ty2; mutability = mut2 } ) ->
         if mut1 = mut2 then match_types env ty1 ty2 else None
@@ -6891,7 +6903,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                                  trait_fn_name item_def_id (string_of_predicate @@ decode_predicate pred));
                         Some (item_def_id, substs' @ fn_substs)
                   in
-                  (trait_fn_name, specializer)))
+                  (canonicalize_item_name trait_fn_name, specializer)))
 
   let compute_trait_impl_prototypes (adt_defs : Mir.adt_def_tr list)
       traits_and_body_decls trait_impls =
@@ -7210,6 +7222,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let fn_specialisations_table = Hashtbl.create 10 in
       Hashtbl.add_seq fn_specialisations_table (List.to_seq fn_specialisations);
       let fn_specializer trait_fn substs =
+        let trait_fn = canonicalize_item_name trait_fn in
         let rec iter = function
           [] -> (trait_fn, substs)
         | f::fs ->
