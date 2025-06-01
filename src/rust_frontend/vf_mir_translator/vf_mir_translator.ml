@@ -309,7 +309,7 @@ module Mir = struct
   type generic_arg =
     | GenArgLifetime of string
     | GenArgType of ty_info
-    | GenArgConst
+    | GenArgConst of Ast.type_expr
 
   and ty_info = { vf_ty : Ast.type_expr; interp : RustBelt.ty_interp }
 
@@ -1072,7 +1072,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                         "Lifetime arguments are not yet supported here",
                         None ))
              | Mir.GenArgType arg_ty -> arg_ty.vf_ty
-             | Mir.GenArgConst ->
+             | Mir.GenArgConst _ ->
                  raise
                    (Ast.StaticError
                       (loc, "Const arguments are not yet supported here", None))
@@ -1326,7 +1326,26 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | Type ty_cpn ->
         let* ty_info = translate_ty ty_cpn loc in
         Ok (Mir.GenArgType ty_info)
-    | Const _ -> Ok Mir.GenArgConst
+    | Const ty_const_cpn ->
+      let ty_expr =
+        match ty_const_cpn.kind with
+        | Value {ty; val_tree} -> 
+          begin match val_tree with
+          | Leaf {data; size} ->
+              let v = DecoderAux.uint128_get data in
+              begin match ty, size with
+                {kind=UInt USize}, 8 ->
+                  Ast.LiteralConstTypeExpr (loc, Stdint.Uint128.to_int v)
+              | _ -> 
+                  failwith "Unsupported constant type or size"
+              end
+          | _ -> 
+              failwith "Unsupported constant value tree"
+          end
+        | _ -> 
+            failwith "Unsupported constant kind"
+      in
+      Ok (Mir.GenArgConst ty_expr)
 
   and decode_generic_param (gen_param_cpn : VfMirRd.GenericParamDef.t) =
     let open VfMirRd.GenericParamDef in
@@ -1966,7 +1985,17 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       match s_cpn with
       | Int scalar_int_cpn -> translate_scalar_int scalar_int_cpn ty loc
       | Ptr ->
-          Ast.static_error loc "Pointer constants are not yet supported" None
+          match ty with
+          | Ast.RustRefTypeExpr (_, _, Shared, pointee_ty) ->
+            let expr = Ast.CallExpr (loc, "std::verifast::produce_const_ref", [pointee_ty], [], [], Static) in
+            let expr =
+              if TranslatorArgs.ignore_unwind_paths then expr
+              else
+                Ast.CallExpr
+                  (loc, "fn_outcome_result", [], [], [ LitPat expr ], Static)
+            in
+            Ok expr
+          | _ -> Ast.static_error loc "TODO: Scalar::Ptr with non-ref type" None
 
     let mk_unit_expr loc =
       Ast.CastExpr
@@ -2120,7 +2149,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
              | Mir.GenArgType ty -> [ ty.vf_ty ]
              | Mir.GenArgLifetime region ->
                  [ Ast.ManifestTypeExpr (call_loc, StaticLifetime) ]
-             | _ -> []
+             | Mir.GenArgConst ty -> [ ty ]
         in
         let* targs =
           match OptionRd.get ghost_generic_arg_list_opt_cpn with
@@ -4246,7 +4275,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                match arg with
                | Mir.GenArgLifetime _ -> assert false
                | Mir.GenArgType ty -> Ok ty.vf_ty
-               | Mir.GenArgConst -> assert false)
+               | Mir.GenArgConst _ -> assert false)
       in
       Ok (projection_term_cpn.def_id, trait_args)
     in

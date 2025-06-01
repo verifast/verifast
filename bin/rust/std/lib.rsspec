@@ -4,6 +4,16 @@ abstract_type type_info;
 
 @*/
 
+mod verifast {
+
+    // Used to translate Rust array literals of the form &[V1, V2, V3]
+    fn produce_const_ref<T>() -> &'static T;
+    //@ req thread_token(?t);
+    //@ ens thread_token(t) &*& <&'static T>.own(t, result) &*& [_]ref_initialized(result);
+    //@ on_unwind_ens false;
+
+}
+
 mod hint {
 
     fn assert_unchecked(b: bool);
@@ -1054,4 +1064,28 @@ mod iter {
         
     }
     
+}
+
+mod fmt {
+
+    struct Arguments<'a>;
+    
+    impl<'a> Arguments<'a> {
+    
+        fn new_const<N>(pieces: &'a [&'a str; N]) -> Arguments<'a>;
+        //@ req thread_token(?t) &*& <&'a [&'a str; N]>.own(t, pieces);
+        //@ ens thread_token(t) &*& <Arguments<'a>>.own(t, result);
+        //@ on_unwind_ens thread_token(t);
+    
+    }
+
+}
+
+mod rt {
+
+    fn panic_fmt<'a>(args: std::fmt::Arguments<'a>);
+    //@ req thread_token(?t) &*& <std::fmt::Arguments<'a>>.own(t, args);
+    //@ ens false;
+    //@ on_unwind_ens thread_token(t);
+
 }
