@@ -1081,6 +1081,15 @@ mod fmt {
 
 }
 
+mod panicking {
+
+    fn panic_fmt<'a>(args: std::fmt::Arguments<'a>);
+    //@ req thread_token(?t) &*& <std::fmt::Arguments<'a>>.own(t, args);
+    //@ ens false;
+    //@ on_unwind_ens thread_token(t);
+
+}
+
 mod rt {
 
     fn panic_fmt<'a>(args: std::fmt::Arguments<'a>);

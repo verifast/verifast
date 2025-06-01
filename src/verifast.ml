@@ -2558,7 +2558,18 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           in
           consume_lifetime_tokens [] h typedecls
       end @@ fun h consumed_lifetime_token_chunks ->
+      let rec type_mentions_typedecl_type b tp =
+        match unfold_inferred_type tp with
+          GhostTypeParam x when List.mem_assoc x typedecls -> true
+        | tp -> type_fold_open b type_mentions_typedecl_type tp
+      in
       let produce_consumed_lifetime_token_chunks h cont =
+        let h =
+          if typedecls <> [] then
+            h |> List.filter (fun (Chunk (_, targs, _, _, _)) -> not @@ List.fold_left type_mentions_typedecl_type false targs)
+          else
+            h
+        in
         let rec iter h = function
           [] -> cont h
         | Chunk (symb, targs, coef, ts, size)::chunks ->
@@ -2568,18 +2579,13 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         iter h consumed_lifetime_token_chunks
       in
       check_block_declarations ss;
-      let rec check_heap_targ () tp =
-        match unfold_inferred_type tp with
-          GhostTypeParam x when List.mem_assoc x typedecls ->
-          assert_false h env l "Local type appears in heap chunk type argument at end of block" None
-        | tp -> type_fold_open () check_heap_targ tp
-      in
       let cont h env =
-        h |> List.iter (fun (Chunk (_, targs, _, _, _)) -> List.fold_left check_heap_targ () targs);
-        produce_consumed_lifetime_token_chunks h $. fun h ->
         cont h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env)
       in
-      let cont h tenv env = free_locals closeBraceLoc h tenv env !locals_to_free cont in
+      let cont h tenv env =
+        produce_consumed_lifetime_token_chunks h $. fun h ->
+        free_locals closeBraceLoc h tenv env !locals_to_free cont
+      in
       let return_cont h tenv env retval =
         produce_consumed_lifetime_token_chunks h $. fun h ->
         free_locals closeBraceLoc h tenv env !locals_to_free (fun h env -> return_cont h tenv env retval)
