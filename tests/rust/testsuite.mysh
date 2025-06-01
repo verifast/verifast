@@ -70,6 +70,7 @@ cd purely_unsafe
   verifast -ignore_unwind_paths -target LP64 -ignore_ref_creation -extern ../unverified/platform atomics_example.rs
   verifast -ignore_unwind_paths -ignore_ref_creation -disable_overflow_check type_projections.rs
   verifast for-range.rs
+  verifast -rustc_args "--edition 2021" assert_with_msg.rs
 cd ..
 cd safe_abstraction
   verifast -allow_should_fail public_fields.rs

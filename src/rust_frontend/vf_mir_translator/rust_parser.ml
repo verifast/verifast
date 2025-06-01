@@ -103,9 +103,19 @@ let rec parse_type = function%parser
     ];
     [%let mutability = function%parser [ (_, Kwd "mut") ] -> Mutable | [ ] -> Shared];
     [%let tp = function%parser
-       [ (ls, Kwd "["); parse_type as elemTp; (_, Kwd "]") ] ->
-       if mutability <> Shared then raise (ParseException (l, "Mutable slice references are not yet supported"));
-       StructTypeExpr (ls, Some "slice_ref", None, [], [lft; elemTp])
+       [ (ls, Kwd "[");
+         parse_type as elemTp;
+         [%let tp = function%parser
+            [ (_, Kwd "]") ] ->
+            if mutability <> Shared then raise (ParseException (l, "Mutable slice references are not yet supported"));
+            StructTypeExpr (ls, Some "slice_ref", None, [], [lft; elemTp])
+          | [ (_, Kwd ";"); parse_type as size; (_, Kwd "]") ] ->
+            RustRefTypeExpr (l, lft, mutability, StaticArrayTypeExpr (ls, elemTp, size))
+         ]
+       ] -> tp
+     | [ (l, Ident "str") ] ->
+       if mutability <> Shared then raise (ParseException (l, "Mutable string references are not yet supported"));
+       StructTypeExpr (l, Some "str_ref", None, [], [lft])
      | [ parse_type as tp ] ->
        RustRefTypeExpr (l, lft, mutability, tp)
     ]
