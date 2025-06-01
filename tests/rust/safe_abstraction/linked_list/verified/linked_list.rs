@@ -1652,7 +1652,11 @@ impl<T, A: Allocator> LinkedList<T, A> {
     /// ```
     #[inline]
     #[stable(feature = "rust1", since = "1.0.0")]
-    pub fn iter_mut(&mut self) -> IterMut<'_, T> {
+    pub fn iter_mut(&mut self) -> IterMut<'_, T>
+    //@ req *self |-> ?ll;
+    //@ ens *self |-> ll &*& result.head == ll.head &*& result.tail == ll.tail &*& result.len == ll.len;
+    //@ safety_proof { assume(false); }
+    {
         IterMut { head: self.head, tail: self.tail, len: self.len, marker: PhantomData }
     }
 
@@ -2646,21 +2650,43 @@ impl<'a, T> Iterator for IterMut<'a, T> {
 
     #[inline]
     fn next(&mut self) -> Option<&'a mut T>
+    //@ req *self |-> ?self0 &*& Nodes(?alloc_id, self0.head, ?prev, self0.tail, ?next, ?nodes) &*& self0.len == length(nodes);
+    /*@
+    ens if self0.len == 0 {
+            Nodes(alloc_id, self0.head, prev, self0.tail, next, nodes) &*&
+            *self |-> self0 &*& result == Option::None
+        } else {
+            self0.head == Option::Some(?head) &*&
+            alloc_block_in(alloc_id, NonNull_ptr(head) as *u8, Layout::new_::<Node<T>>()) &*& struct_Node_padding(NonNull_ptr(head)) &*&
+            (*NonNull_ptr(head)).prev |-> prev &*&
+            (*NonNull_ptr(head)).next |-> ?next0 &*&
+            pointer_within_limits(&(*NonNull_ptr(head)).element) == true &*&
+            Nodes(alloc_id, next0, Option::Some(head), self0.tail, next, ?nodes0) &*&
+            nodes == cons(head, nodes0) &*&
+            *self |-> ?self1 &*& self1.head == next0 &*& self1.tail == self0.tail &*& self1.len == self0.len - 1 &*&
+            result == Option::Some(&(*NonNull_ptr(head)).element)
+        };
+    @*/
+    //@ safety_proof { assume(false); }
     {
         if self.len == 0 {
             None
         } else {
+            //@ open Nodes(_, _, _, _, _, _);
             let head = self.head;
+            //@ open_points_to(self);
             let head_ref = &mut self.head;
             let len_ref = &mut self.len;
             match head {
-                None => None,
+                None => None, //~allow_dead_code
                 Some(node) => unsafe {
                     // Need an unbound lifetime to get 'a
                     let node = &mut *node.as_ptr();
                     let len = *len_ref;
+                    //@ produce_limits(len);
                     *len_ref = len - 1;
                     *head_ref = node.next;
+                    //@ close_points_to(self);
                     Some(&mut node.element)
                 }
             }
@@ -2682,21 +2708,44 @@ impl<'a, T> Iterator for IterMut<'a, T> {
 impl<'a, T> DoubleEndedIterator for IterMut<'a, T> {
     #[inline]
     fn next_back(&mut self) -> Option<&'a mut T>
+    //@ req *self |-> ?self0 &*& Nodes(?alloc_id, self0.head, ?prev, self0.tail, ?next, ?nodes) &*& self0.len == length(nodes);
+    /*@
+    ens if self0.len == 0 {
+            Nodes(alloc_id, self0.head, prev, self0.tail, next, nodes) &*&
+            *self |-> self0 &*& result == Option::None
+        } else {
+            self0.tail == Option::Some(?tail) &*&
+            alloc_block_in(alloc_id, NonNull_ptr(tail) as *u8, Layout::new_::<Node<T>>()) &*& struct_Node_padding(NonNull_ptr(tail)) &*&
+            (*NonNull_ptr(tail)).prev |-> ?prev0 &*&
+            (*NonNull_ptr(tail)).next |-> next &*&
+            pointer_within_limits(&(*NonNull_ptr(tail)).element) == true &*&
+            Nodes(alloc_id, self0.head, prev, prev0, self0.tail, ?nodes0) &*&
+            nodes == append(nodes0, [tail]) &*&
+            *self |-> ?self1 &*& self1.head == self0.head &*& self1.tail == prev0 &*& self1.len == self0.len - 1
+        };
+    @*/
+    //@ safety_proof { assume(false); }
     {
         if self.len == 0 {
             None
         } else {
+            //@ Nodes_last_lemma(self0.head);
+            //@ if self0.head == next { open Nodes(_, _, _, _, _, _); assert false; }
+            //@ Nodes_split_off_last(self0.head);
+            //@ open_points_to(self);
             let tail = self.tail;
             let tail_ref = &mut self.tail;
             let len_ref = &mut self.len;
             match tail {
-                None => None,
+                None => None, //~allow_dead_code
                 Some(node) =>  unsafe {
                     // Need an unbound lifetime to get 'a
                     let node = &mut *node.as_ptr();
                     let len = *len_ref;
+                    //@ produce_limits(len);
                     *len_ref = len - 1;
                     *tail_ref = node.prev;
+                    //@ close_points_to(self);
                     Some(&mut node.element)
                 }
             }
