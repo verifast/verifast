@@ -1431,7 +1431,7 @@ let check_operand_refines_operand i genv0 env0 span0 caller0 operand0 genv1 env1
       begin match check_place_refines_place env0 caller0 placeExpr0 env1 caller1 placeExpr1 with
         (Local x0, Local x1) | (LocalProjection x0, LocalProjection x1) ->
           begin match List.assoc x0 env0, List.assoc x1 env1 with
-            Value v0, Value v1 -> if not (values_equal v0 v1) then failwith (Printf.sprintf "The values of the %d'th operand of %s and %s are not equal" i (string_of_span span0) (string_of_span span1))
+            Value v0, Value v1 -> if not (values_equal v0 v1) then failwith (Printf.sprintf "The values of the %d'th operand of %s and %s are not equal: %s versus %s" i (string_of_span span0) (string_of_span span1) (string_of_term v0) (string_of_term v1))
           | Address a1, Address a2 -> if not (values_equal a1 a2) then failwith (Printf.sprintf "The addresses of the %d'th operand of %s and %s are not equal" i (string_of_span span0) (string_of_span span1))
           | _ -> failwith "Operand mismatch"
           end
@@ -1643,6 +1643,13 @@ let check_predicate_refines_predicate genv0 pred0 genv1 pred1 =
       let trait_id0 = trait_pred0.def_id in
       let trait_id1 = trait_pred1.def_id in
       if trait_id0 <> trait_id1 then failwith "The two trait predicates have different trait IDs";
+      let bound_regions_map =
+        match List.combine trait_pred0.bound_regions trait_pred1.bound_regions with
+          exception Invalid_argument _ -> failwith "The two trait predicates have different numbers of bound regions"
+        | map -> map
+      in
+      let genv0 = {genv0 with lifetimes=List.map (fun (x, y) -> (x, Region y)) bound_regions_map @ genv0.lifetimes} in
+      let genv1 = {genv1 with lifetimes=List.map (fun (_, y) -> (y, Region y)) bound_regions_map @ genv1.lifetimes} in
       let generic_args0 = trait_pred0.args in
       let generic_args1 = trait_pred1.args in
       if List.map (decode_gen_arg genv0) generic_args0 <> List.map (decode_gen_arg genv1) generic_args1 then failwith "The two trait predicates have different generic arguments"
@@ -1652,6 +1659,13 @@ let check_predicate_refines_predicate genv0 pred0 genv1 pred1 =
       let proj_term_def_id0 = proj_term0.def_id in
       let proj_term_def_id1 = proj_term1.def_id in
       if proj_term_def_id0 <> proj_term_def_id1 then failwith "The two projection predicates have different alias identifiers";
+      let bound_regions_map =
+        match List.combine projection_pred0.bound_regions projection_pred1.bound_regions with
+          exception Invalid_argument _ -> failwith "The two trait predicates have different numbers of bound regions"
+        | map -> map
+      in
+      let genv0 = {genv0 with lifetimes=List.map (fun (x, y) -> (x, Region y)) bound_regions_map @ genv0.lifetimes} in
+      let genv1 = {genv1 with lifetimes=List.map (fun (_, y) -> (y, Region y)) bound_regions_map @ genv1.lifetimes} in
       let proj_term_generic_args0 = proj_term0.args in
       let proj_term_generic_args1 = proj_term1.args in
       if List.map (decode_gen_arg genv0) proj_term_generic_args0 <> List.map (decode_gen_arg genv1) proj_term_generic_args1 then failwith "The two projection predicates have different alias generic arguments";
@@ -1687,6 +1701,8 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
   if List.length generics0 <> List.length generics1 then failwith "The two functions have a different number of generic parameters";
   let generics0 = List.map decode_hir_generic_param generics0 in
   let generics1 = List.map decode_hir_generic_param generics1 in
+  let lft_params0, generics0 = List.partition (fun (_, kind) -> kind = Lifetime) generics0 in
+  let lft_params1, generics1 = List.partition (fun (_, kind) -> kind = Lifetime) generics1 in
   let root_genv0, root_genv1 =
     let rec iter lifetimes0 lifetimes1 types0 types1 consts0 consts1 generics0 generics1 =
       match generics0, generics1 with
@@ -1697,14 +1713,27 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
         iter lifetimes0 lifetimes1 ((name0, Param name0)::types0) ((name1, Param name0)::types1) consts0 consts1 generics0 generics1
       | (name0, Const)::generics0, (name1, Const)::generics1 ->
         iter lifetimes0 lifetimes1 types0 types1 ((name0, ParamConstExpr name0)::consts0) ((name1, ParamConstExpr name0)::consts1) generics0 generics1
-      | _ -> failwith "The two functions have different kinds of generic parameters"
+      | _ -> failwith (Printf.sprintf "The two functions have different kinds of generic parameters: %s and %s" (String.concat ", " (List.map fst generics0)) (String.concat ", " (List.map fst generics1)))
     in
-    iter [] [] [] [] [] [] generics0 generics1
+    let {lifetimes=lifetimes0}, {lifetimes=lifetimes1} = iter [] [] [] [] [] [] lft_params0 lft_params1 in
+    iter lifetimes0 lifetimes1 [] [] [] [] generics0 generics1
   in
   let preds0 = body0.predicates in
   let preds1 = body1.predicates in
   if List.length preds0 <> List.length preds1 then failwith "The two functions have a different number of predicates";
-  List.iter2 (fun pred0 pred1 -> check_predicate_refines_predicate root_genv0 pred0 root_genv1 pred1) preds0 preds1;
+  let trait_preds0, preds0 = List.partition (function Trait _ -> true | _ -> false) preds0 in
+  let trait_preds1, preds1 = List.partition (function Trait _ -> true | _ -> false) preds1 in
+  if List.length trait_preds0 <> List.length trait_preds1 then failwith "The two functions have a different number of trait predicates";
+  List.iter2 (fun pred0 pred1 -> check_predicate_refines_predicate root_genv0 pred0 root_genv1 pred1) trait_preds0 trait_preds1;
+  let outlives_preds0, preds0 = List.partition (function Outlives _ -> true | _ -> false) preds0 in
+  let outlives_preds1, preds1 = List.partition (function Outlives _ -> true | _ -> false) preds1 in
+  if List.length outlives_preds0 <> List.length outlives_preds1 then failwith "The two functions have a different number of outlives predicates";
+  List.iter2 (fun pred0 pred1 -> check_predicate_refines_predicate root_genv0 pred0 root_genv1 pred1) outlives_preds0 outlives_preds1;
+  let projection_preds0, preds0 = List.partition (function Projection _ -> true | _ -> false) preds0 in
+  let projection_preds1, preds1 = List.partition (function Projection _ -> true | _ -> false) preds1 in
+  if List.length projection_preds0 <> List.length projection_preds1 then failwith "The two functions have a different number of projection predicates";
+  List.iter2 (fun pred0 pred1 -> check_predicate_refines_predicate root_genv0 pred0 root_genv1 pred1) projection_preds0 projection_preds1;
+  if preds0 <> [] || preds1 <> [] then failwith "Predicate kind not supported";
   let inputs0 = body0.inputs in
   let inputs1 = body1.inputs in
   let inputs0 = List.map (decode_ty root_genv0) inputs0 in

@@ -4425,7 +4425,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         let projection_preds =
           preds
           |> Util.flatmap (function
-               | `Projection proj_pred_cpn -> [ proj_pred_cpn ]
+               | `Projection proj_pred_cpn when proj_pred_cpn.D.bound_regions = [] -> [ proj_pred_cpn ]
                | _ -> [])
         in
         let* projection_pred_stmts =
