@@ -664,7 +664,7 @@ let fns_to_be_inlined: (string * body) list =
     visibility=Public;
   }
   );
-  "std::option::Option::<T>::map",
+  ("std::option::Option::<T>::map",
   let span =
     {
       lo={file={name=Real (LocalPath "<core>/option.rs:map")}; line=Stdint.Uint64.of_int 1; col={pos=Stdint.Uint64.of_int 1}};
@@ -883,6 +883,190 @@ let fns_to_be_inlined: (string * body) list =
     is_trait_fn=false;
     is_drop_fn=false;
     visibility=Public;
+  });
+  "std::option::Option::<T>::unwrap_or_else",
+  let span =
+    {
+      lo={file={name=Real (LocalPath "<core>/option.rs:unwrap_or_else")}; line=Stdint.Uint64.of_int 1; col={pos=Stdint.Uint64.of_int 1}};
+      hi={file={name=Real (LocalPath "<core>/option.rs:unwrap_or_else")}; line=Stdint.Uint64.of_int 1; col={pos=Stdint.Uint64.of_int 1}}
+    }
+  in
+  let local_decls: local_decl list =
+    [
+      {id={name="result"}; ty={kind=Param "T"}; mutability=Not; source_info={span}};
+      {id={name="self"}; ty={kind=Adt {id={name="std::option::Option"}; kind=StructKind; substs=[{kind=Type {kind=Param "T"}}]}}; mutability=Not; source_info={span}};
+      {id={name="f"}; ty={kind=Param "F"}; mutability=Not; source_info={span}};
+      {id={name="discr"}; ty={kind=Int ISize}; mutability=Not; source_info={span}};
+    ]
+  in
+  let basic_blocks: basic_block list =
+    [
+      {
+        id={index=Stdint.Uint32.of_int 0};
+        statements=[
+          {kind=Assign {lhs_place=local "discr"; rhs_rvalue=Discriminant (local "self")}; source_info={span}}
+        ];
+        terminator={
+          kind=SwitchInt {
+            discr=Move (local "discr");
+            discr_ty={kind=Int ISize};
+            targets={
+              branches=[
+                {val_=encode_uint128 (Stdint.Uint128.of_int 0); target={index=Stdint.Uint32.of_int 2}};
+                {val_=encode_uint128 (Stdint.Uint128.of_int 1); target={index=Stdint.Uint32.of_int 3}};
+              ];
+              otherwise=Something {index=Stdint.Uint32.of_int 1}
+            }
+          };
+          source_info={span}
+        };
+        is_cleanup=false;
+      };
+      {
+        id={index=Stdint.Uint32.of_int 1};
+        statements=[];
+        terminator={kind=Unreachable; source_info={span}};
+        is_cleanup=false;
+      };
+      {
+        id={index=Stdint.Uint32.of_int 2};
+        statements=[];
+        terminator={
+          kind=Call {
+            func=Constant {
+              const=Val {
+                const_value=ZeroSized;
+                ty={
+                  kind=FnDef {
+                    id={name="std::ops::FnOnce::call_once--VeriFast"};
+                    substs=[
+                      {kind=Type {kind=Param "F"}};
+                      {kind=Type {kind=Tuple []}};
+                    ];
+                    late_bound_generic_param_count=0;
+                  }
+                }
+              };
+              span
+            };
+            args=[
+              Move (local "f")(*;
+              Constant {
+                const=Val {
+                  const_value=ZeroSized;
+                  ty={kind=Tuple []}
+                };
+                span
+              }*)
+            ];
+            destination=Something {
+              place=local "result";
+              basic_block_id={index=Stdint.Uint32.of_int 6}
+            };
+            unwind_action=Cleanup {index=Stdint.Uint32.of_int 5};
+            call_span=span;
+            ghost_generic_arg_list=Nothing
+          };
+          source_info={span}
+        };
+        is_cleanup=false;
+      };
+      {
+        id={index=Stdint.Uint32.of_int 3};
+        statements=[
+          {
+            kind=Assign {
+              lhs_place=local "result";
+              rhs_rvalue=Use (Copy {
+                local={name="self"};
+                projection=[
+                  Downcast (Stdint.Uint32.of_int 1);
+                  Field {
+                    index=Stdint.Uint32.of_int 0;
+                    ty={kind=Param "T"};
+                    name=Nothing;
+                  }
+                ];
+                local_is_mutable=false;
+                kind=Other;
+              })
+            };
+            source_info={span}
+          };
+          (* {
+            kind=Assign {
+              lhs_place=local "argsTuple";
+              rhs_rvalue=Aggregate {
+                aggregate_kind=Tuple;
+                operands=[Move (local "payload")]
+              }
+            };
+            source_info={span}
+          } *)
+        ];
+        terminator={
+          kind=Goto {index=Stdint.Uint32.of_int 4};
+          source_info={span}
+        };
+        is_cleanup=false;
+      };
+      {
+        id={index=Stdint.Uint32.of_int 4};
+        statements=[];
+        terminator={kind=Return; source_info={span}};
+        is_cleanup=false;
+      };
+      {
+        id={index=Stdint.Uint32.of_int 5};
+        statements=[];
+        terminator={kind=UnwindResume; source_info={span}};
+        is_cleanup=true;
+      };
+      {
+        id={index=Stdint.Uint32.of_int 6};
+        statements=[];
+        terminator={kind=Goto {index=Stdint.Uint32.of_int 4}; source_info={span}};
+        is_cleanup=false;
+      };
+    ]
+  in
+  {
+    fn_sig_span=span;
+    def_kind=Fn;
+    def_path="std::option::Option::unwrap_or_else";
+    module_def_path="std::option";
+    contract={annotations=[]; span};
+    output={kind=Param "U"};
+    inputs=[
+      {kind=Adt {id={name="std::option::Option"}; kind=StructKind; substs=[{kind=Type {kind=Param "T"}}]}};
+      {kind=Param "F"};
+    ];
+    local_decls;
+    basic_blocks;
+    span;
+    imp_span=span;
+    var_debug_info=[];
+    ghost_stmts=[];
+    ghost_decl_blocks=[];
+    unsafety=Safe;
+    impl_block_hir_generics=Nothing;
+    impl_block_predicates=[];
+    hir_generics={
+      params=[
+        {name=Plain {name={name="T"}; span}; bounds=(); span; pure_wrt_drop=false; kind=Type};
+        {name=Plain {name={name="F"}; span}; bounds=(); span; pure_wrt_drop=false; kind=Type};
+      ];
+      where_clause=();
+      span
+    };
+    generics=[
+      {name="T"; kind=Type};
+      {name="F"; kind=Type};
+    ];
+    predicates=[];
+    is_trait_fn=false;
+    is_drop_fn=false;
+    visibility=Public;
   }
 ]
 
@@ -993,6 +1177,13 @@ let rec process_commands bodies (env: env) opnds (i_bb: basic_block_info) i_s (s
         end
       | _ -> fallback "Place projections"
       end
+    | Constant {
+        const=Val {
+          const_value=ZeroSized;
+          ty={kind=Tuple []}
+        }
+      } ->
+      cont (Tuple [])
     | Constant constant -> fallback "Constants"
   in
   let rec eval_operands operands fallback cont =
