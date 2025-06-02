@@ -83,6 +83,11 @@ mod ops {
         
     }
     
+    enum ControlFlow<B, C> {
+        Continue(C),
+        Break(B)
+    }
+    
 }
 
 mod rt {
@@ -779,6 +784,29 @@ mod option {
         //@ on_unwind_ens false;
         
     }
+    
+    impl<T> std::ops::Try for std::option::Option<T> {
+    
+        fn branch(self: Option<T>) -> std::ops::ControlFlow<Option<std::convert::Infallible>, T>;
+        //@ req true;
+        /*@
+        ens match self {
+                Option::None => result == std::ops::ControlFlow::Break(Option::None),
+                Option::Some(v) => result == std::ops::ControlFlow::Continue(v)
+            };
+        @*/
+        //@ on_unwind_ens false;
+    
+    }
+    
+    impl<T> std::ops::FromResidual<std::option::Option<std::convert::Infallible>> for std::option::Option<T> {
+    
+        fn from_residual(residual: Option<std::convert::Infallible>) -> Option<T>;
+        //@ req true;
+        //@ ens result == Option::None;
+        //@ on_unwind_ens false;
+        
+    }
 
 }
 
@@ -1096,5 +1124,11 @@ mod rt {
     //@ req thread_token(?t) &*& <std::fmt::Arguments<'a>>.own(t, args);
     //@ ens false;
     //@ on_unwind_ens thread_token(t);
+
+}
+
+mod convert {
+
+    struct Infallible {}
 
 }

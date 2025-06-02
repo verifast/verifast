@@ -1433,6 +1433,15 @@ impl<T, A: Allocator> LinkedList<T, A> {
     }
 }
 
+unsafe fn Box_into_inner_with_ref_Allocator__VeriFast_wrapper<'a, T, A: Allocator>(b: Box<T, &'a A>) -> T
+//@ req thread_token(?t) &*& Box_in::<T, &'a A>(t, b, ?alloc_id, ?value);
+//@ ens thread_token(t) &*& result == value;
+//@ on_unwind_ens thread_token(t);
+//@ assume_correct
+{
+    *b
+}
+
 unsafe fn Allocator_clone__VeriFast_wrapper<'a, A: Allocator + Clone>(alloc: &'a A) -> A
 //@ req thread_token(?t) &*& Allocator::<&'a A>(t, alloc, ?alloc_id);
 //@ ens thread_token(t) &*& Allocator::<A>(t, result, alloc_id);
@@ -3633,13 +3642,76 @@ impl<'a, T, A: Allocator> CursorMut<'a, T, A> {
     /// If the cursor is currently pointing to the "ghost" non-element then no element
     /// is removed and `None` is returned.
     #[unstable(feature = "linked_list_cursors", issue = "58533")]
-    pub fn remove_current(&mut self) -> Option<T> {
-        let unlinked_node = self.current?;
-        unsafe {
-            self.current = unlinked_node.as_ref().next;
-            self.list.unlink_node(unlinked_node);
-            let unlinked_node = Box::from_raw_in(unlinked_node.as_ptr(), &self.list.alloc);
-            Some(unlinked_node.element)
+    pub fn remove_current(&mut self) -> Option<T>
+    //@ req thread_token(?t) &*& [?q]lifetime_token('a) &*& *self |-> ?self0 &*& <CursorMut<'a, T, A>>.own(t, self0);
+    //@ ens thread_token(t) &*& [q]lifetime_token('a) &*& *self |-> ?self1 &*& <CursorMut<'a, T, A>>.own(t, self1) &*& <Option<T>>.own(t, result);
+    //@ on_unwind_ens thread_token(t) &*& [q]lifetime_token('a) &*& *self |-> ?self1 &*& <CursorMut<'a, T, A>>.own(t, self1);
+    {
+        //let unlinked_node = self.current?;
+        match core::ops::Try::branch(self.current) {
+            core::ops::ControlFlow::Break(residual) => {
+                //@ close <std::option::Option<T>>.own(t, None);
+                core::ops::FromResidual::from_residual(residual)
+            }
+            core::ops::ControlFlow::Continue(unlinked_node) => unsafe {
+                //@ open <CursorMut<'a, T, A>>.own(t, self0);
+                //@ assert [1/2]ghost_cell(?ghost_cell_id, _);
+                //@ let t1 = if is_Send(typeid(T)) && is_Send(typeid(A)) { default_tid } else { t };
+                //@ open_full_borrow(q, 'a, CursorMut_fbc::<T, A>(t1, ghost_cell_id, self0.list));
+                //@ open CursorMut_fbc::<T, A>(t1, ghost_cell_id, self0.list)();
+                //@ open Nodes::<T>(?alloc_id, self0.current, ?before_current, ?tail, None, ?nodes2);
+                
+                //@ let unlinked_node_ref = precreate_ref(&unlinked_node);
+                //@ std::ptr::init_ref_NonNull(unlinked_node_ref, 1/2);
+                self.current = unlinked_node.as_ref().next;
+                //@ std::ptr::end_ref_NonNull(unlinked_node_ref);
+                
+                //@ let current1 = (*self).current;
+                //@ open foreach(nodes2, elem_fbc::<T>(t1));
+                //@ open elem_fbc::<T>(t1)(unlinked_node);
+                self.list.unlink_node(unlinked_node);
+                /*@
+                if t1 != t {
+                    std::alloc::Allocator_send(t, (*self0.list).alloc);
+                }
+                @*/
+                //@ std::alloc::close_Allocator_full_borrow_content_(t, &(*self0.list).alloc);
+                //@ let k = begin_lifetime();
+                //@ borrow(k, std::alloc::Allocator_full_borrow_content_::<A>(t, &(*self0.list).alloc, alloc_id));
+                //@ std::alloc::share_Allocator_full_borrow_content_(k, t, &(*self0.list).alloc, alloc_id);
+                //@ let alloc_ref = precreate_ref(&(*self0.list).alloc);
+                //@ std::alloc::init_ref_Allocator_share(k, t, alloc_ref);
+                //@ open_frac_borrow(k, ref_initialized_(alloc_ref), 1/4);
+                //@ open [?f]ref_initialized_::<A>(alloc_ref)();
+                let r;
+                {
+                    //@ let_lft 'b = k;
+                    //@ std::alloc::close_Allocator_ref::<'b, A>(t, alloc_ref);
+                    let unlinked_node = Box::from_raw_in/*@::<Node<T>, &'b A>@*/(unlinked_node.as_ptr(), &self.list.alloc);
+                    r = Some(Box_into_inner_with_ref_Allocator__VeriFast_wrapper(unlinked_node).element); // Some(unlinked_node_.element)
+                }
+                //@ close [f]ref_initialized_::<A>(alloc_ref)();
+                //@ close_frac_borrow(f, ref_initialized_(alloc_ref));
+                //@ end_lifetime(k);
+                //@ borrow_end(k, std::alloc::Allocator_full_borrow_content_::<A>(t, &(*self0.list).alloc, alloc_id));
+                //@ std::alloc::open_Allocator_full_borrow_content_(t, &(*self0.list).alloc, alloc_id);
+                
+                //@ ghost_cell_mutate(ghost_cell_id, pair(self0.index, current1));
+                /*@
+                if t1 != t {
+                    std::alloc::Allocator_send(t1, (*self0.list).alloc);
+                    assert r == Option::Some(?e);
+                    produce_type_interp::<T>();
+                    Send::send(t1, t, e);
+                    leak type_interp::<T>();
+                }
+                @*/
+                //@ close CursorMut_fbc::<T, A>(t1, ghost_cell_id, self0.list)();
+                //@ close_full_borrow(CursorMut_fbc::<T, A>(t1, ghost_cell_id, self0.list));
+                //@ close <CursorMut<'a, T, A>>.own(t, *self);
+                //@ close <std::option::Option<T>>.own(t, r);
+                r
+            }
         }
     }
 
