@@ -1108,21 +1108,47 @@ mod vf_mir_builder {
             pred: &(ty::Clause<'tcx>, rustc_span::Span),
             mut pred_cpn: predicate_cpn::Builder<'_>,
         ) {
-            match pred.0.kind().no_bound_vars() {
-                Some(ty::ClauseKind::RegionOutlives(outlives_pred)) => {
+            match pred.0.kind().skip_binder() {
+                ty::ClauseKind::RegionOutlives(outlives_pred) => {
                     let mut outlives_cpn = pred_cpn.init_outlives();
                     Self::encode_region(outlives_pred.0, outlives_cpn.reborrow().init_region1());
                     Self::encode_region(outlives_pred.1, outlives_cpn.reborrow().init_region2());
                 }
-                Some(ty::ClauseKind::Trait(trait_pred)) => {
+                ty::ClauseKind::Trait(trait_pred) => {
+                    let bound_vars = pred.0.kind().bound_vars();
                     let mut trait_cpn = pred_cpn.init_trait();
+                    trait_cpn.fill_bound_regions(bound_vars.iter().map(|v| {
+                        match v {
+                            ty::BoundVariableKind::Region(ty::BoundRegionKind::Named(def_id, symbol)) => {
+                                if symbol.as_str() == "'_" {
+                                    format!("'_{}", def_id.index.as_usize())
+                                } else {
+                                    symbol.as_str().to_string()
+                                }
+                            }
+                            _ => todo!()
+                        }
+                    }));
                     trait_cpn.set_def_id(&enc_ctx.tcx.def_path_str(trait_pred.trait_ref.def_id));
                     trait_cpn.fill_args(trait_pred.trait_ref.args, |arg_cpn, arg| {
                         Self::encode_gen_arg(enc_ctx.tcx, enc_ctx, arg, arg_cpn);
                     });
                 }
-                Some(ty::ClauseKind::Projection(projection_pred)) => {
+                ty::ClauseKind::Projection(projection_pred) => {
+                    let bound_vars = pred.0.kind().bound_vars();
                     let mut proj_cpn = pred_cpn.init_projection();
+                    proj_cpn.fill_bound_regions(bound_vars.iter().map(|v| {
+                        match v {
+                            ty::BoundVariableKind::Region(ty::BoundRegionKind::Named(def_id, symbol)) => {
+                                if symbol.as_str() == "'_" {
+                                    format!("'_{}", def_id.index.as_usize())
+                                } else {
+                                    symbol.as_str().to_string()
+                                }
+                            }
+                            _ => todo!()
+                        }
+                    }));
                     let mut proj_term_cpn = proj_cpn.reborrow().init_projection_term();
                     proj_term_cpn.set_def_id(&enc_ctx.tcx.def_path_str(projection_pred.projection_term.def_id));
                     proj_term_cpn.fill_args(projection_pred.projection_term.args, |arg_cpn, arg| {

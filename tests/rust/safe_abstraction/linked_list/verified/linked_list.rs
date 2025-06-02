@@ -2529,15 +2529,53 @@ impl<T, A: Allocator> LinkedList<T, A> {
     /// assert_eq!(odds.into_iter().collect::<Vec<_>>(), vec![1, 3, 5, 9, 11, 13, 15]);
     /// ```
     #[unstable(feature = "extract_if", reason = "recently added", issue = "43244")]
-    pub fn extract_if<F>(&mut self, filter: F) -> ExtractIf<'_, T, F, A>
+    pub fn extract_if<'a, F>(&'a mut self, filter: F) -> ExtractIf<'a, T, F, A>
     where
         F: FnMut(&mut T) -> bool,
+    //@ req thread_token(?t) &*& [?q]lifetime_token('a) &*& full_borrow('a, <LinkedList<T, A>>.full_borrow_content(t, self)) &*& <F>.own(t, filter);
+    //@ ens thread_token(t) &*& [q]lifetime_token('a) &*& <ExtractIf<'a, T, F, A>>.own(t, result);
+    //@ on_unwind_ens thread_token(t) &*& [q]lifetime_token('a);
     {
+        //@ let klong = open_full_borrow_strong('a, <LinkedList<T, A>>.full_borrow_content(t, self), q);
+        //@ open <LinkedList<T, A>>.full_borrow_content(t, self)();
+        //@ open <LinkedList<T, A>>.own(t, ?self0);
+        //@ open_points_to(self);
+        //@ assert Nodes(?alloc_id, _, _, _, _, _);
+        
         // avoid borrow issues.
         let it = self.head;
         let old_len = self.len;
 
-        ExtractIf { list: self, it, pred: filter, idx: 0, old_len }
+        //@ let ghost_cell_id = create_ghost_cell::<pair<Option<NonNull<Node<T>>>, usize>>(pair(it, 0));
+
+        /*@
+        {
+            pred Ctx() = struct_LinkedList_padding(self);
+            produce_lem_ptr_chunk full_borrow_convert_strong(Ctx, ExtractIf_fbc(t, self, ghost_cell_id, self0.len), klong, <LinkedList<T, A>>.full_borrow_content(t, self))() {
+                open Ctx();
+                open ExtractIf_fbc::<T, A>(t, self, ghost_cell_id, self0.len)();
+                let head1 = (*self).head;
+                assert Nodes(_, head1, None, _, _, ?nodes1) &*& Nodes(_, _, _, _, _, ?nodes2);
+                Nodes_append((*self).head);
+                foreach_append(nodes1, nodes2);
+                close <LinkedList<T, A>>.own(t, *self);
+                close_points_to(self);
+                close <LinkedList<T, A>>.full_borrow_content(t, self)();
+                leak [1/2]ghost_cell(_, _);
+            } {
+                close Ctx();
+                close Nodes::<T>(alloc_id, it, None, None, it, []);
+                close foreach([], elem_fbc::<T>(t));
+                close ExtractIf_fbc::<T, A>(t, self, ghost_cell_id, self0.len)();
+                close_full_borrow_strong(klong, <LinkedList<T, A>>.full_borrow_content(t, self), ExtractIf_fbc(t, self, ghost_cell_id, self0.len));
+                full_borrow_mono(klong, 'a, ExtractIf_fbc(t, self, ghost_cell_id, self0.len));
+            }
+        }
+        @*/
+        
+        let r = ExtractIf { list: self, it, pred: filter, idx: 0, old_len };
+        //@ close <ExtractIf<'a, T, F, A>>.own(t, r);
+        r
     }
 }
 
@@ -3543,6 +3581,44 @@ pub struct ExtractIf<
     idx: usize,
     old_len: usize,
 }
+
+/*@
+
+pred_ctor ExtractIf_fbc<T, A>(t: thread_id_t, list: *LinkedList<T, A>, ghost_cell_id: i32, old_len: usize)() =
+    [1/2]ghost_cell::<pair<Option<NonNull<Node<T>>>, usize>>(ghost_cell_id, pair(?it, ?idx)) &*&
+    (*list).alloc |-> ?alloc &*& Allocator::<A>(t, alloc, ?alloc_id) &*&
+    (*list).head |-> ?head &*&
+    (*list).tail |-> ?tail &*&
+    Nodes::<T>(alloc_id, head, None, ?prev, it, ?nodes1) &*&
+    Nodes::<T>(alloc_id, it, prev, tail, None, ?nodes2) &*&
+    foreach(nodes1, elem_fbc::<T>(t)) &*&
+    foreach(nodes2, elem_fbc::<T>(t)) &*&
+    (*list).len |-> length(append(nodes1, nodes2)) &*&
+    old_len <= usize::MAX &*&
+    old_len - idx == length(nodes2);
+
+pred<'a, T, F, A> <ExtractIf<'a, T, F, A>>.own(t, ex) =
+    <F>.own(t, ex.`pred`) &*& 0 <= ex.idx &*&
+    [1/2]ghost_cell::<pair<Option<NonNull<Node<T>>>, usize>>(?ghost_cell_id, pair(ex.it, ex.idx)) &*&
+    full_borrow('a, ExtractIf_fbc::<T, A>(t, ex.list, ghost_cell_id, ex.old_len));
+
+lem ExtractIf_drop<'a, T, F, A>()
+    req ExtractIf_own::<'a, T, F, A>(?_t, ?_v);
+    ens <F>.own(_t, _v.`pred`);
+{
+    open <ExtractIf<'a, T, F, A>>.own(_t, _v);
+    leak full_borrow(_, _);
+    leak [1/2]ghost_cell(_, _);
+}
+
+lem ExtractIf_own_mono<'a0, 'a1, T, F0, F1, A>()
+    req type_interp::<T>() &*& type_interp::<F0>() &*& type_interp::<F1>() &*& type_interp::<A>() &*& ExtractIf_own::<'a0, T, F0, A>(?t, ?v) &*& lifetime_inclusion('a1, 'a0) == true &*& is_subtype_of::<F0, F1>() == true;
+    ens type_interp::<T>() &*& type_interp::<F0>() &*& type_interp::<F1>() &*& type_interp::<A>() &*& ExtractIf_own::<'a1, T, F1, A>(t, ExtractIf::<'a1, T, F1, A> { list: v.list as *_, it: upcast(v.it), `pred`: upcast(v.`pred`), idx: upcast(v.idx), old_len: upcast(v.old_len) });
+{
+    assume(false);
+}
+
+@*/
 
 #[unstable(feature = "extract_if", reason = "recently added", issue = "43244")]
 impl<T, F, A: Allocator> Iterator for ExtractIf<'_, T, F, A>

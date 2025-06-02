@@ -380,6 +380,7 @@ struct Predicate {
         region2 @1: Region;
     }
     struct Trait { # T : Foo<A, B, C>
+        boundRegions @2: List(Text);
         defId @0: Text; # DefId of the trait (Foo)
         args @1: List(GenericArg); # The Self type (T) followed by the trait type args (A, B, C)
     }
@@ -394,6 +395,7 @@ struct Predicate {
                 const @1: TyConst;
             }
         }
+        boundRegions @2: List(Text);
         projectionTerm @0: AliasTerm;
         term @1: Term; # G
     }
