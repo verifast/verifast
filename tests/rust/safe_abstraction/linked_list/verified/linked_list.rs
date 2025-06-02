@@ -3155,20 +3155,56 @@ impl<'a, T, A: Allocator> CursorMut<'a, T, A> {
     /// the first element of the `LinkedList`. If it is pointing to the last
     /// element of the `LinkedList` then this will move it to the "ghost" non-element.
     #[unstable(feature = "linked_list_cursors", issue = "58533")]
-    pub fn move_next(&mut self) {
+    pub fn move_next(&mut self)
+    //@ req thread_token(?t) &*& [?q]lifetime_token('a) &*& *self |-> ?self0 &*& <CursorMut<'a, T, A>>.own(t, self0);
+    //@ ens thread_token(t) &*& [q]lifetime_token('a) &*& *self |-> ?self1 &*& <CursorMut<'a, T, A>>.own(t, self1);
+    //@ on_unwind_ens thread_token(t) &*& [q]lifetime_token('a) &*& *self |-> ?self1 &*& <CursorMut<'a, T, A>>.own(t, self1);
+    {
+        //@ open_points_to(self);
+        //@ open <CursorMut<'a, T, A>>.own(t, self0);
+        //@ let t1 = if is_Send(typeid(T)) && is_Send(typeid(A)) { default_tid } else { t };
+        //@ assert [1/2]ghost_cell(?ghost_cell_id, _);
+        //@ open_full_borrow(q, 'a, CursorMut_fbc::<T, A>(t1, ghost_cell_id, self0.list));
+        //@ open CursorMut_fbc::<T, A>(t1, ghost_cell_id, self0.list)();
+        //@ let head = (*self0.list).head;
+        //@ let tail = (*self0.list).tail;
         match self.current.take() {
             // We had no current element; the cursor was sitting at the start position
             // Next element should be the head of the list
             None => {
+                //@ close CursorMut_current(self, _);
                 self.current = self.list.head;
                 self.index = 0;
+                //@ open Nodes(?alloc_id, None, ?before_current, tail, None, ?nodes2);
+                //@ close Nodes(alloc_id, head, None, None, head, nil);
             }
             // We had a previous element, so let's go to its next
             Some(current) => unsafe {
+                //@ open Nodes(?alloc_id, self0.current, ?before_current, tail, None, ?nodes2);
+                //@ close CursorMut_current(self, _);
+                //@ let current_ref = precreate_ref(&current);
+                //@ std::ptr::init_ref_NonNull(current_ref, 1/2);
                 self.current = current.as_ref().next;
+                //@ std::ptr::end_ref_NonNull(current_ref);
                 self.index += 1;
+                //@ let self1_= *self;
+                //@ assert Nodes(alloc_id, head, None, _, _, ?nodes1);
+                //@ open Nodes(alloc_id, self1_.current, self0.current, tail, None, tail(nodes2));
+                //@ close Nodes(alloc_id, self1_.current, self0.current, tail, None, tail(nodes2));
+                //@ close Nodes(alloc_id, self1_.current, self0.current, self0.current, self1_.current, nil);
+                //@ close Nodes(alloc_id, self0.current, before_current, self0.current, self1_.current, [current]);
+                //@ Nodes_append_(head);
+                //@ open foreach(nodes2, _);
+                //@ close foreach([], elem_fbc::<T>(t1));
+                //@ close foreach([current], elem_fbc::<T>(t1));
+                //@ foreach_append(nodes1, [current]);
             },
-        }
+        };
+        //@ let self1 = *self;
+        //@ ghost_cell_mutate(ghost_cell_id, pair(self1.index, self1.current));
+        //@ close CursorMut_fbc::<T, A>(t1, ghost_cell_id, self1.list)();
+        //@ close_full_borrow(CursorMut_fbc::<T, A>(t1, ghost_cell_id, self1.list));
+        //@ close <CursorMut<'a, T, A>>.own(t, self1);
     }
 
     /// Moves the cursor to the previous element of the `LinkedList`.

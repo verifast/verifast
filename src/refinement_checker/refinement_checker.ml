@@ -294,7 +294,7 @@ type term =
 | Closure of term list
 | FnDef of string * gen_arg list
 | ScalarInt of literal_const_expr
-| AddressOfNonMutLocal of local_variable_path
+| AddressOfNonMutLocal of < > * local_variable_path (* The object serves to ensure two AddressOfNonMutLocal values do not compare equal even if their variable names happen to match. *)
 | FieldTerm of term * int
 | ConstTerm of mir_const
 
@@ -306,7 +306,7 @@ let rec string_of_term = function
 | FnDef (fn, genArgs) -> Printf.sprintf "FnDef %s [%s]" fn (String.concat "; " (List.map string_of_gen_arg genArgs))
 | ScalarInt literal -> Printf.sprintf "ScalarInt %s" (string_of_literal_const_expr literal)
 | Closure ts -> Printf.sprintf "Closure %s" (string_of_terms ts)
-| AddressOfNonMutLocal lv_path -> Printf.sprintf "AddressOfNonMutLocal %s" (string_of_lv_path lv_path)
+| AddressOfNonMutLocal (_, lv_path) -> Printf.sprintf "AddressOfNonMutLocal %s" (string_of_lv_path lv_path)
 | FieldTerm (term, i) -> Printf.sprintf "FieldTerm %s %d" (string_of_term term) i
 | ConstTerm const -> Printf.sprintf "ConstTerm %s" (Stringifier.string_of_mir_const const)
 and string_of_terms ts =
@@ -1165,7 +1165,7 @@ let rec process_commands bodies (env: env) opnds (i_bb: basic_block_info) i_s (s
       | [Deref] ->
         load_from_local place.local fallback @@ fun v ->
         begin match v with
-          AddressOfNonMutLocal lv_path ->
+          AddressOfNonMutLocal (_, lv_path) ->
           load_from_lv_path lv_path fallback cont
         | _ -> fallback "Dereferences"
         end
@@ -1308,7 +1308,7 @@ let rec process_commands bodies (env: env) opnds (i_bb: basic_block_info) i_s (s
     | Deref ->
       let v::opnds = opnds in
       begin match v with
-        AddressOfNonMutLocal lv_path ->
+        AddressOfNonMutLocal (_, lv_path) ->
         load_from_lv_path lv_path (fun msg -> done_ ()) (fun v -> cont env (v::opnds))
       | _ -> done_ ()
       end
@@ -1346,12 +1346,12 @@ let rec process_commands bodies (env: env) opnds (i_bb: basic_block_info) i_s (s
       end
     | Ref {bor_kind=Shared; place={local; local_is_mutable=false; projection=[]}} ->
       let placeLocalPath = {lv_caller=i_bb#id.bb_caller; lv_name=local.name} in
-      cont env (AddressOfNonMutLocal placeLocalPath::opnds)
+      cont env (AddressOfNonMutLocal (object end, placeLocalPath)::opnds)
     | Ref {bor_kind=Shared; place={local; local_is_mutable=false; projection=[Deref]}} ->
       load_from_local local (fun msg -> done_ ()) @@ fun v ->
       begin match v with
-        AddressOfNonMutLocal lv_path ->
-        cont env (AddressOfNonMutLocal lv_path::opnds)
+        AddressOfNonMutLocal (o, lv_path) ->
+        cont env (AddressOfNonMutLocal (o, lv_path)::opnds)
       | _ -> done_ ()
       end
     | SourceInfo sourceInfo ->
@@ -1359,7 +1359,22 @@ let rec process_commands bodies (env: env) opnds (i_bb: basic_block_info) i_s (s
       cont env opnds
     | _ -> done_ ()
 
-let values_equal (v0: term) (v1: term) = v0 = v1
+(* When this is raised, both variables did not yet have their address taken *)
+exception LocalAddressTaken of local_variable_path (* x0 *) * local_variable_path (* x1 *)
+
+let local_address_taken path0 path1 =
+  raise (LocalAddressTaken (path0, path1))
+
+let rec values_equal (env0: env) (env1: env) (v0: term) (v1: term): bool =
+  match v0, v1 with
+  | AddressOfNonMutLocal (_, lv_path0), AddressOfNonMutLocal (_, lv_path1) ->
+      begin match List.assoc lv_path0 env0, List.assoc lv_path1 env1 with
+        Value v0, Value v1 when values_equal env0 env1 v0 v1 ->
+          local_address_taken lv_path0 lv_path1
+      | Address a1, Address a2 when values_equal env0 env1 a1 a2 -> true
+      | _ -> false
+      end
+  | _, _ -> v0 = v1
 
 let check_place_element_refines_place_element (elem0: place_elem) (elem1: place_elem) =
   match elem0, elem1 with
@@ -1377,12 +1392,6 @@ let check_place_element_refines_place_element (elem0: place_elem) (elem1: place_
   | OpaqueCast, OpaqueCast -> failwith "PlaceElement::OpaqueCast not supported"
   | Subtype, Subtype -> failwith "PlaceElement::Subtype not supported"
   | _ -> failwith "Place elements do not match"
-
-(* When this is raised, both variables did not yet have their address taken *)
-exception LocalAddressTaken of local_variable_path (* x0 *) * local_variable_path (* x1 *)
-
-let local_address_taken path0 path1 =
-  raise (LocalAddressTaken (path0, path1))
 
 type place =
   Local of local_variable_path (* This place is a local variable whose address is never taken in this function *)
@@ -1408,7 +1417,7 @@ let check_place_refines_place (env0: env) caller0 place0 (env1: env) caller1 pla
   List.iter2 check_place_element_refines_place_element placeProjection0 placeProjection1;
   match placeLocalState0, placeLocalState1 with
     Some (Address a1), Some (Address a2) ->
-      if not (values_equal a1 a2) then failwith "The addresses of the two places are not equal";
+      if not (values_equal env0 env1 a1 a2) then failwith "The addresses of the two places are not equal";
       Nonlocal, Nonlocal
   | Some (Address _), _ | _, Some (Address _) -> failwith "Place expressions do not match"
   | _, _ ->
@@ -1417,7 +1426,7 @@ let check_place_refines_place (env0: env) caller0 place0 (env1: env) caller1 pla
       [] -> Local placeLocalPath0, Local placeLocalPath1
     | es when List.mem (Deref: place_elem) es ->
       begin match placeLocalState0, placeLocalState1 with
-        Some (Value v0), Some (Value v1) when values_equal v0 v1 -> ()
+        Some (Value v0), Some (Value v1) when values_equal env0 env1 v0 v1 -> ()
       | _ -> failwith "The addresses being dereferenced are not equal"
       end;
       Nonlocal, Nonlocal
@@ -1431,8 +1440,8 @@ let check_operand_refines_operand i genv0 env0 span0 caller0 operand0 genv1 env1
       begin match check_place_refines_place env0 caller0 placeExpr0 env1 caller1 placeExpr1 with
         (Local x0, Local x1) | (LocalProjection x0, LocalProjection x1) ->
           begin match List.assoc x0 env0, List.assoc x1 env1 with
-            Value v0, Value v1 -> if not (values_equal v0 v1) then failwith (Printf.sprintf "The values of the %d'th operand of %s and %s are not equal: %s versus %s" i (string_of_span span0) (string_of_span span1) (string_of_term v0) (string_of_term v1))
-          | Address a1, Address a2 -> if not (values_equal a1 a2) then failwith (Printf.sprintf "The addresses of the %d'th operand of %s and %s are not equal" i (string_of_span span0) (string_of_span span1))
+            Value v0, Value v1 -> if not (values_equal env0 env1 v0 v1) then failwith (Printf.sprintf "The values of the %d'th operand of %s and %s are not equal: %s versus %s" i (string_of_span span0) (string_of_span span1) (string_of_term v0) (string_of_term v1))
+          | Address a1, Address a2 -> if not (values_equal env0 env1 a1 a2) then failwith (Printf.sprintf "The addresses of the %d'th operand of %s and %s are not equal" i (string_of_span span0) (string_of_span span1))
           | _ -> failwith "Operand mismatch"
           end
       | Nonlocal, Nonlocal -> ()
@@ -1982,14 +1991,14 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
         let consume_operand opnds0 opnds1 =
           let v0::opnds0 = opnds0 in
           let v1::opnds1 = opnds1 in
-          if not (values_equal v0 v1) then 
+          if not (values_equal env0 env1 v0 v1) then 
             error (Printf.sprintf "In function %s, at command %d of basic block %s in the original crate and command %d of basic block %s in the verified crate, the values %s and %s are not equal" def_path i_s0 i_bb0#to_string i_s1 i_bb1#to_string (string_of_term v0) (string_of_term v1));
           v0, opnds0, opnds1
         in
         let consume_operands n opnds0 opnds1 =
           let vs0, opnds0 = popn n opnds0 in
           let vs1, opnds1 = popn n opnds1 in
-          if not (List.for_all2 values_equal vs0 vs1) then
+          if not (List.for_all2 (values_equal env0 env1) vs0 vs1) then
             error (Printf.sprintf "In function %s, at command %d of basic block %s in the original crate and command %d of basic block %s in the verified crate, the values %s and %s are not equal" def_path i_s0 i_bb0#to_string i_s1 i_bb1#to_string (string_of_terms vs0) (string_of_terms vs1));
           vs0, opnds0, opnds1
         in
@@ -2014,7 +2023,7 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
             let v0, v1 =
               match localState0, localState1 with
                 Address a1, Address a2 ->
-                  if not (values_equal a1 a2) then error "LoadLocal: The addresses of the two locals are not equal";
+                  if not (values_equal env0 env1 a1 a2) then error "LoadLocal: The addresses of the two locals are not equal";
                   let v = fresh_symbol () in
                   v, v
               | (Address _, _) | (_, Address _) ->
@@ -2043,7 +2052,7 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
         | Constant c0, Constant c1 ->
             let v0 = eval_const_operand i_bb0#genv c0 in
             let v1 = eval_const_operand i_bb1#genv c1 in
-            if not (values_equal v0 v1) then
+            if not (values_equal env0 env1 v0 v1) then
               error "Constant: The constant values do not match";
             cont env0 (v0::opnds0) env1 (v1::opnds1)
         | Ref ref0, Ref ref1 ->
