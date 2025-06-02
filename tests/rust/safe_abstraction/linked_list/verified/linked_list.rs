@@ -3213,19 +3213,146 @@ impl<'a, T, A: Allocator> CursorMut<'a, T, A> {
     /// the last element of the `LinkedList`. If it is pointing to the first
     /// element of the `LinkedList` then this will move it to the "ghost" non-element.
     #[unstable(feature = "linked_list_cursors", issue = "58533")]
-    pub fn move_prev(&mut self) {
+    pub fn move_prev(&mut self)
+    //@ req thread_token(?t) &*& [?q]lifetime_token('a) &*& *self |-> ?self0 &*& <CursorMut<'a, T, A>>.own(t, self0);
+    //@ ens thread_token(t) &*& [q]lifetime_token('a) &*& *self |-> ?self1 &*& <CursorMut<'a, T, A>>.own(t, self1);
+    //@ on_unwind_ens thread_token(t) &*& [q]lifetime_token('a) &*& *self |-> ?self1 &*& <CursorMut<'a, T, A>>.own(t, self1);
+    {
+        //@ let t1 = if is_Send(typeid(T)) && is_Send(typeid(A)) { default_tid } else { t };
+        //@ open_points_to(self);
+        //@ open <CursorMut<'a, T, A>>.own(t, self0);
+        //@ assert [1/2]ghost_cell(?ghost_cell_id, _);
+        //@ open_full_borrow(q, 'a, CursorMut_fbc::<T, A>(t1, ghost_cell_id, self0.list));
+        //@ open CursorMut_fbc::<T, A>(t1, ghost_cell_id, self0.list)();
+        //@ let head = (*self0.list).head;
+        //@ let tail = (*self0.list).tail;
+        //@ open Nodes(?alloc_id, self0.current, ?before_current, tail, None, ?nodes2);
         match self.current.take() {
             // No current. We're at the start of the list. Yield None and jump to the end.
             None => {
+                //@ close CursorMut_current(self, _);
                 self.current = self.list.tail;
-                self.index = self.list.len().checked_sub(1).unwrap_or(0);
+                //@ let list_ref = precreate_ref(self0.list);
+                //@ open_ref_init_perm_LinkedList(list_ref);
+                //@ init_ref_Option_NonNull(&(*list_ref).head);
+                //@ init_ref_Option_NonNull(&(*list_ref).tail);
+                //@ std::num::init_ref_usize(&(*list_ref).len, 1/2);
+                //@ init_ref_padding_LinkedList(list_ref, 1/2);
+                //@ let k1 = begin_lifetime();
+                //@ std::marker::close_ref_initialized_PhantomData(&(*list_ref).marker, 1);
+                let len;
+                {
+                    //@ let_lft 'b = k1;
+                    //@ std::alloc::init_ref_Allocator_at_lifetime::<'b, A>(&(*list_ref).alloc);
+                    //@ close_ref_initialized_LinkedList(list_ref);
+                    len = self.list.len();
+                }
+                //@ end_lifetime(k1);
+                //@ open_ref_initialized_LinkedList(list_ref);
+                //@ end_ref_Option_NonNull(&(*list_ref).head);
+                //@ end_ref_Option_NonNull(&(*list_ref).tail);
+                //@ std::alloc::end_ref_Allocator_at_lifetime::<A>();
+                //@ std::num::end_ref_usize(&(*list_ref).len);
+                //@ end_ref_padding_LinkedList(list_ref);
+                //@ leak ref_init_perm(&(*list_ref).marker, _) &*& ref_initialized(&(*list_ref).marker);
+                
+                self.index = len.checked_sub(1).unwrap_or(0);
+                
+                //@ assert nodes2 == [];
+                //@ open foreach([], elem_fbc::<T>(t1));
+                /*@
+                match tail {
+                    Option::None => {
+                        Nodes_last_lemma(head);
+                        close Nodes(alloc_id, self0.current, tail, tail, None, nodes2);
+                        close foreach([], elem_fbc::<T>(t1));
+                        assert len == 0;
+                    }
+                    Option::Some(tail_) => {
+                        Nodes_last_lemma(head);
+                        Nodes_split_off_last(head);
+                        assert Nodes(alloc_id, head, None, ?before_tail, tail, ?nodes10);
+                        close Nodes::<T>(alloc_id, None, tail, tail, None, []);
+                        close Nodes::<T>(alloc_id, tail, _, tail, None, [tail_]);
+                        foreach_unappend(nodes10, [tail_], elem_fbc::<T>(t1));
+                    }
+                }
+                @*/
             }
             // Have a prev. Yield it and go to the previous element.
             Some(current) => unsafe {
+                //@ close CursorMut_current(self, _);
+                //@ let current_ref = precreate_ref(&current);
+                //@ std::ptr::init_ref_NonNull(current_ref, 1/2);
                 self.current = current.as_ref().prev;
-                self.index = self.index.checked_sub(1).unwrap_or_else(|| self.list.len());
+                //@ std::ptr::end_ref_NonNull(current_ref);
+                
+                let index = self.index.checked_sub(1);
+                
+                let list;
+                
+                //@ let list_ref = precreate_ref(self0.list);
+                //@ open_ref_init_perm_LinkedList(list_ref);
+                //@ init_ref_Option_NonNull(&(*list_ref).head);
+                //@ init_ref_Option_NonNull(&(*list_ref).tail);
+                //@ std::num::init_ref_usize(&(*list_ref).len, 1/2);
+                //@ init_ref_padding_LinkedList(list_ref, 1/2);
+                //@ let k1 = begin_lifetime();
+                //@ std::marker::close_ref_initialized_PhantomData(&(*list_ref).marker, 1);
+                {
+                    //@ let_lft 'b = k1;
+                    //@ std::alloc::init_ref_Allocator_at_lifetime::<'b, A>(&(*list_ref).alloc);
+                    //@ close_ref_initialized_LinkedList(list_ref);
+                    list = &*self.list;
+                    
+                    //@ close ref_initialized_::<LinkedList<T, A>>(list_ref)();
+                    //@ borrow(k1, ref_initialized_::<LinkedList<T, A>>(list_ref));
+                    //@ full_borrow_into_frac(k1, ref_initialized_::<LinkedList<T, A>>(list_ref));
+                
+                    let index2;
+                    match index {
+                        None => {
+                            //@ open Nodes(_, head, None, _, _, ?nodes1);
+                            //@ assert nodes1 == [];
+                            
+                            let len = list.len();
+                            
+                            index2 = len;
+                            
+                            //@ close Nodes(alloc_id, self0.current, before_current, tail, None, nodes2);
+                            //@ close Nodes::<T>(alloc_id, None, tail, tail, None, []);
+                        }
+                        Some(index1) => {
+                            //@ close Nodes(alloc_id, self0.current, before_current, tail, None, nodes2);
+                            //@ Nodes_last_lemma(head);
+                            //@ Nodes_split_off_last(head);
+                            //@ assert before_current == Option::Some(?current1);
+                            //@ assert Nodes(_, head, None, ?last, before_current, ?nodes10);
+                            //@ close Nodes::<T>(alloc_id, before_current, last, tail, None, cons(current1, nodes2));
+                            //@ foreach_unappend(nodes10, [current1], elem_fbc::<T>(t1));
+                            //@ foreach_append([current1], nodes2);
+                            index2 = index1;
+                        }
+                    };
+                    self.index = index2;
+                }
+                //@ end_lifetime(k1);
+                //@ borrow_end(k1, ref_initialized_(list_ref));
+                //@ open ref_initialized_::<LinkedList<T, A>>(list_ref)();
+                //@ open_ref_initialized_LinkedList(list_ref);
+                //@ end_ref_Option_NonNull(&(*list_ref).head);
+                //@ end_ref_Option_NonNull(&(*list_ref).tail);
+                //@ std::alloc::end_ref_Allocator_at_lifetime::<A>();
+                //@ std::num::end_ref_usize(&(*list_ref).len);
+                //@ end_ref_padding_LinkedList(list_ref);
+                //@ leak ref_init_perm(&(*list_ref).marker, _) &*& ref_initialized(&(*list_ref).marker);
             },
         }
+        //@ let self1 = *self;
+        //@ ghost_cell_mutate(ghost_cell_id, pair(self1.index, self1.current));
+        //@ close CursorMut_fbc::<T, A>(t1, ghost_cell_id, self1.list)();
+        //@ close_full_borrow(CursorMut_fbc::<T, A>(t1, ghost_cell_id, self1.list));
+        //@ close <CursorMut<'a, T, A>>.own(t, self1);
     }
 
     /// Returns a reference to the element that the cursor is currently
