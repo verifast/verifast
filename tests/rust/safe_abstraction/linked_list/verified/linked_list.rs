@@ -3362,8 +3362,126 @@ impl<'a, T, A: Allocator> CursorMut<'a, T, A> {
     /// "ghost" non-element.
     #[must_use]
     #[unstable(feature = "linked_list_cursors", issue = "58533")]
-    pub fn current(&mut self) -> Option<&mut T> {
-        unsafe { self.current.map(|current| &mut (*current.as_ptr()).element) }
+    pub fn current<'b>(&'b mut self) -> Option<&'b mut T>
+    //@ req thread_token(?t) &*& [?qa]lifetime_token('a) &*& [?qb]lifetime_token('b) &*& full_borrow('b, <CursorMut<'a, T, A>>.full_borrow_content(t, self)) &*& lifetime_inclusion('b, 'a) == true;
+    //@ ens thread_token(t) &*& [qa]lifetime_token('a) &*& [qb]lifetime_token('b) &*& <Option<&'b mut T>>.own(t, result);
+    //@ on_unwind_ens thread_token(t) &*& [qa]lifetime_token('a) &*& [qb]lifetime_token('b);
+    {
+        unsafe {
+            //@ let t1 = if is_Send(typeid(T)) && is_Send(typeid(A)) { default_tid } else { t };
+            //@ let klongb = open_full_borrow_strong('b, <CursorMut<'a, T, A>>.full_borrow_content(t, self), qb);
+            //@ open <CursorMut<'a, T, A>>.full_borrow_content(t, self)();
+            let current0 = self.current;
+            match current0 { //self.current.map(|current| &mut (*current.as_ptr()).element)
+                None => {
+                    /*@
+                    {
+                        pred Ctx() = true;
+                        produce_lem_ptr_chunk full_borrow_convert_strong(Ctx, <CursorMut<'a, T, A>>.full_borrow_content(t, self), klongb, <CursorMut<'a, T, A>>.full_borrow_content(t, self))() {
+                            open Ctx();
+                        } {
+                            close Ctx();
+                            close <CursorMut<'a, T, A>>.full_borrow_content(t, self)();
+                            close_full_borrow_strong(klongb, <CursorMut<'a, T, A>>.full_borrow_content(t, self), <CursorMut<'a, T, A>>.full_borrow_content(t, self));
+                            leak full_borrow(_, _);
+                        }
+                    }
+                    @*/
+                    //@ close <std::option::Option<&'b mut T>>.own(t, None);
+                    None
+                }
+                Some(current) => {
+                    //@ open <CursorMut<'a, T, A>>.own(t, ?self0);
+                    //@ let list = self0.list;
+                    //@ assert [1/2]ghost_cell(?ghost_cell_id, pair(?index, ?current_));
+                    /*@
+                    {
+                        pred Ctx1() =
+                            *self |-> self0 &*&
+                            [1/2]ghost_cell(ghost_cell_id, pair(index, current_));
+                        {
+                            pred Ctx() = true;
+                            produce_lem_ptr_chunk full_borrow_convert_strong(Ctx, sep(Ctx1, full_borrow_('a, CursorMut_fbc::<T, A>(t1, ghost_cell_id, list))), klongb, <CursorMut<'a, T, A>>.full_borrow_content(t, self))() {
+                                open Ctx();
+                                open sep(Ctx1, full_borrow_('a, CursorMut_fbc::<T, A>(t1, ghost_cell_id, list)))();
+                                open Ctx1();
+                                close <CursorMut<'a, T, A>>.own(t, self0);
+                                close <CursorMut<'a, T, A>>.full_borrow_content(t, self)();
+                            } {
+                                close Ctx();
+                                close Ctx1();
+                                close sep(Ctx1, full_borrow_('a, CursorMut_fbc::<T, A>(t1, ghost_cell_id, list)))();
+                                close_full_borrow_strong(klongb, <CursorMut<'a, T, A>>.full_borrow_content(t, self), sep(Ctx1, full_borrow_('a, CursorMut_fbc::<T, A>(t1, ghost_cell_id, list))));
+                            }
+                            full_borrow_mono(klongb, 'b, sep(Ctx1, full_borrow_('a, CursorMut_fbc::<T, A>(t1, ghost_cell_id, list))));
+                            full_borrow_split('b, Ctx1, full_borrow_('a, CursorMut_fbc::<T, A>(t1, ghost_cell_id, list)));
+                            full_borrow_unnest('b, 'a, CursorMut_fbc::<T, A>(t1, ghost_cell_id, list));
+                            lifetime_inclusion_refl('b);
+                            lifetime_inclusion_glb('b, 'b, 'a);
+                            full_borrow_mono(lifetime_intersection('b, 'a), 'b, CursorMut_fbc::<T, A>(t1, ghost_cell_id, list));
+                        }
+                        open_full_borrow(qb/2, 'b, Ctx1);
+                        open Ctx1();
+                        let klongb2 = open_full_borrow_strong('b, CursorMut_fbc::<T, A>(t1, ghost_cell_id, list), qb/2);
+                        open CursorMut_fbc::<T, A>(t1, ghost_cell_id, list)();
+                        close Ctx1();
+                        close_full_borrow(Ctx1);
+                        leak full_borrow('b, Ctx1);
+                        open Nodes::<T>(?alloc_id, Some(current), ?before_current, ?tail, None, ?nodes2);
+                        close Nodes::<T>(alloc_id, Some(current), before_current, tail, None, nodes2);
+                        open foreach(nodes2, elem_fbc::<T>(t1));
+                        open elem_fbc::<T>(t1)(current);
+                        produce_type_interp::<T>();
+                        if t1 != t {
+                            Send::send(t1, t, (*NonNull_ptr(current)).element);
+                        }
+                        close_full_borrow_content::<T>(t, &(*NonNull_ptr(current)).element);
+                        assert
+                            (*list).alloc |-> ?alloc &*&
+                            Allocator::<A>(t1, alloc, alloc_id) &*&
+                            (*list).head |-> ?head &*&
+                            (*list).tail |-> tail &*&
+                            Nodes::<T>(alloc_id, head, None, before_current, current_, ?nodes1);
+                        {
+                            pred Ctx() =
+                                type_interp::<T>() &*&
+                                [1/2]ghost_cell::<pair<usize, Option<NonNull<Node<T>>>>>(ghost_cell_id, pair(index, current_)) &*&
+                                (*list).alloc |-> alloc &*&
+                                Allocator::<A>(t1, alloc, alloc_id) &*&
+                                (*list).head |-> head &*&
+                                (*list).tail |-> tail &*&
+                                Nodes::<T>(alloc_id, head, None, before_current, current_, nodes1) &*&
+                                Nodes::<T>(alloc_id, current_, before_current, tail, None, nodes2) &*&
+                                foreach(nodes1, elem_fbc::<T>(t1)) &*&
+                                foreach(tail(nodes2), elem_fbc::<T>(t1)) &*&
+                                (*list).len |-> length(nodes1) + length(nodes2) &*&
+                                index == length(nodes1) &*&
+                                (*list).marker |-> ?_ &*&
+                                struct_LinkedList_padding(list);
+                            produce_lem_ptr_chunk full_borrow_convert_strong(Ctx, <T>.full_borrow_content(t, &(*NonNull_ptr(current)).element), klongb2, CursorMut_fbc::<T, A>(t1, ghost_cell_id, self0.list))() {
+                                open Ctx();
+                                open_full_borrow_content::<T>(t, &(*NonNull_ptr(current)).element);
+                                if t1 != t {
+                                    Send::send(t, t1, (*NonNull_ptr(current)).element);
+                                }
+                                leak type_interp::<T>();
+                                close elem_fbc::<T>(t1)(current);
+                                close foreach(nodes2, elem_fbc::<T>(t1));
+                                close CursorMut_fbc::<T, A>(t1, ghost_cell_id, self0.list)();
+                            } {
+                                close Ctx();
+                                close_full_borrow_strong(klongb2, CursorMut_fbc::<T, A>(t1, ghost_cell_id, self0.list), <T>.full_borrow_content(t, &(*NonNull_ptr(current)).element));
+                                full_borrow_mono(klongb2, 'b, <T>.full_borrow_content(t, &(*NonNull_ptr(current)).element));
+                            }
+                        }
+                    }
+                    @*/
+                    //@ close_ref_mut_own::<'b, T>(t, &(*NonNull_ptr(current)).element);
+                    //@ close <std::option::Option<&'b mut T>>.own(t, Some(&(*NonNull_ptr(current)).element));
+                    Some(&mut (*current.as_ptr()).element)
+                }
+            }
+        }
     }
 
     /// Returns a reference to the next element.
