@@ -2122,7 +2122,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           | None -> static_error l "Incorrect number of type arguments" None
         in
         instantiate_type tpenv t
-      | None -> static_error l ("No such inductive type, class, or interface.") None
+      | None -> static_error l (Printf.sprintf "No such inductive type, class, or interface: '%s'" id) None
       end
     | StructTypeExpr (l, sn, Some _, _, _) ->
       static_error l "A struct type with a body is not supported in this position." None
