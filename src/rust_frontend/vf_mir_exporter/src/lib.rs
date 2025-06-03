@@ -1121,7 +1121,7 @@ mod vf_mir_builder {
                         match v {
                             ty::BoundVariableKind::Region(ty::BoundRegionKind::Named(def_id, symbol)) => {
                                 if symbol.as_str() == "'_" {
-                                    format!("'_{}", def_id.index.as_usize())
+                                    Self::anonymous_late_bound_lifetime_name(def_id.index.as_usize())
                                 } else {
                                     symbol.as_str().to_string()
                                 }
@@ -1141,7 +1141,7 @@ mod vf_mir_builder {
                         match v {
                             ty::BoundVariableKind::Region(ty::BoundRegionKind::Named(def_id, symbol)) => {
                                 if symbol.as_str() == "'_" {
-                                    format!("'_{}", def_id.index.as_usize())
+                                    Self::anonymous_late_bound_lifetime_name(def_id.index.as_usize())
                                 } else {
                                     symbol.as_str().to_string()
                                 }
@@ -1166,11 +1166,23 @@ mod vf_mir_builder {
             }
         }
 
+        fn anonymous_early_bound_lifetime_name(index: u32) -> String {
+            format!("'_{}", index)
+        }
+
+        fn anonymous_late_bound_lifetime_name(index: usize) -> String {
+            format!("'__{}", index)
+        }
+
         fn encode_generic_param_def(
             generic_param: &GenericParamDef,
             mut generic_param_cpn: crate::vf_mir_capnp::generic_param_def::Builder<'_>,
         ) {
-            generic_param_cpn.set_name(generic_param.name.as_str());
+            if generic_param.is_anonymous_lifetime() {
+                generic_param_cpn.set_name(&Self::anonymous_early_bound_lifetime_name(generic_param.index));
+            } else {
+                generic_param_cpn.set_name(generic_param.name.as_str());
+            }
             let mut kind_cpn = generic_param_cpn.init_kind();
             match generic_param.kind {
                 GenericParamDefKind::Lifetime => kind_cpn.set_lifetime(()),
@@ -1240,9 +1252,17 @@ mod vf_mir_builder {
 
             if let Some(impl_did) = tcx.impl_of_method(def_id) {
                 let impl_hir_gens = tcx.hir().get_generics(impl_did.expect_local()).unwrap();
-                let impl_generics_cpn = body_cpn.reborrow().init_impl_block_hir_generics();
-                let impl_generics_some_cpn = impl_generics_cpn.init_something();
-                Self::encode_hir_generics(enc_ctx, impl_hir_gens, impl_generics_some_cpn);
+                let impl_hir_generics_cpn = body_cpn.reborrow().init_impl_block_hir_generics();
+                let impl_hir_generics_some_cpn = impl_hir_generics_cpn.init_something();
+                Self::encode_hir_generics(enc_ctx, impl_hir_gens, impl_hir_generics_some_cpn);
+
+                let impl_gens = tcx.generics_of(impl_did);
+                body_cpn.reborrow().fill_impl_block_generics(
+                    &impl_gens.own_params,
+                    |generic_param_cpn, generic_param| {
+                        Self::encode_generic_param_def(generic_param, generic_param_cpn);
+                    },
+                );
 
                 let impl_preds = tcx.predicates_of(impl_did).predicates;
                 body_cpn.fill_impl_block_predicates(impl_preds, |pred_cpn, pred| {
@@ -1856,14 +1876,19 @@ mod vf_mir_builder {
         fn encode_region(region: ty::Region<'tcx>, mut region_cpn: region_cpn::Builder<'_>) {
             debug!("Encoding region {:?}", region);
             match region.kind() {
-                ty::RegionKind::ReEarlyParam(_early_bound_region) => {
-                    region_cpn.set_id(_early_bound_region.name.as_str())
+                ty::RegionKind::ReEarlyParam(early_bound_region) => {
+                    if early_bound_region.name.as_str() == "'_" {
+                        let id = Self::anonymous_early_bound_lifetime_name(early_bound_region.index);
+                        region_cpn.set_id(&id);
+                    } else {
+                        region_cpn.set_id(early_bound_region.name.as_str());
+                    }
                 }
                 ty::RegionKind::ReBound(de_bruijn_index, bound_region) => match bound_region.kind {
                     ty::BoundRegionKind::Anon => todo!(),
                     ty::BoundRegionKind::Named(def_id, symbol) => {
                         if symbol.as_str() == "'_" {
-                            let id = format!("'_{}", def_id.index.as_usize());
+                            let id = Self::anonymous_late_bound_lifetime_name(def_id.index.as_usize());
                             region_cpn.set_id(&id);
                         } else {
                             region_cpn.set_id(symbol.as_str());

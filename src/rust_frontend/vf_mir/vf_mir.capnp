@@ -757,6 +757,7 @@ struct Body {
     ghostDeclBlocks @15: List(GhostDeclBlock); # A Rust block starting with a ghost range containing ghost declarations (local predicates and lemmas)
     unsafety @10: Unsafety;
     implBlockHirGenerics @14: Option(Hir.Generics);
+    implBlockGenerics @23: List(GenericParamDef);
     implBlockPredicates @19: List(Predicate);
     hirGenerics @11: Hir.Generics;
     generics @20: List(GenericParamDef); # Has only the early-bound generic params
