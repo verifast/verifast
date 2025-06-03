@@ -3973,6 +3973,15 @@ lem ExtractIf_own_mono<'a0, 'a1, T, F0, F1, A>()
 
 @*/
 
+fn call_pred__VeriFast_wrapper<T, F: FnMut(&mut T) -> bool>(f: &mut F, element: &mut T) -> bool
+//@ req thread_token(?t) &*& *f |-> ?f0 &*& <F>.own(t, f0) &*& *element |-> ?element0 &*& <T>.own(t, element0);
+//@ ens thread_token(t) &*& *f |-> ?f1 &*& <F>.own(t, f1) &*& *element |-> ?element1 &*& <T>.own(t, element1);
+//@ on_unwind_ens thread_token(t) &*& *f |-> ?f1 &*& <F>.own(t, f1) &*& *element |-> ?element1 &*& <T>.own(t, element1);
+//@ assume_correct
+{
+    f(element)
+}
+
 #[unstable(feature = "extract_if", reason = "recently added", issue = "43244")]
 impl<T, F, A: Allocator> Iterator for ExtractIf<'_, T, F, A>
 where
@@ -3980,20 +3989,80 @@ where
 {
     type Item = T;
 
-    fn next(&mut self) -> Option<T> {
-        while let Some(mut node) = self.it {
-            unsafe {
-                self.it = node.as_ref().next;
-                self.idx += 1;
+    fn next(&mut self) -> Option<T>
+    //@ req thread_token(?t) &*& [?q]lifetime_token('_0) &*& *self |-> ?self0 &*& <ExtractIf<'_0, T, F, A>>.own(t, self0);
+    //@ ens thread_token(t) &*& [q]lifetime_token('_0) &*& *self |-> ?self1 &*& <ExtractIf<'_0, T, F, A>>.own(t, self1) &*& <Option<T>>.own(t, result);
+    //@ on_unwind_ens thread_token(t) &*& [q]lifetime_token('_0) &*& *self |-> ?self1 &*& <ExtractIf<'_0, T, F, A>>.own(t, self1);
+    {
+        loop { //while let Some(mut node) = self.it {
+            //@ inv thread_token(t) &*& [q]lifetime_token('_0) &*& *self |-> ?self1 &*& <ExtractIf<'_0, T, F, A>>.own(t, self1) &*& node |-> _;
+            //@ open_points_to(self);
+            if let Some(mut node) = self.it {
+                unsafe {
+                    //@ open <ExtractIf<'_0, T, F, A>>.own(t, self1);
+                    //@ assert [1/2]ghost_cell(?ghost_cell_id, _);
+                    //@ open_full_borrow(q, '_0, ExtractIf_fbc(t, self1.list, ghost_cell_id, self1.old_len));
+                    //@ open ExtractIf_fbc::<T, A>(t, self1.list, ghost_cell_id, self1.old_len)();
+                    //@ assert Allocator::<A>(t, ?alloc, _);
+                    //@ open Nodes(?alloc_id, self1.it, ?prev, ?tail, None, ?nodes2);
+                    
+                    //@ let node_ref = precreate_ref(&node);
+                    //@ std::ptr::init_ref_NonNull(node_ref, 1/2);
+                    self.it = node.as_ref().next;
+                    //@ std::ptr::end_ref_NonNull(node_ref);
+                    
+                    self.idx += 1;
+                    //@ ghost_cell_mutate(ghost_cell_id, pair((*self).it, (*self).idx));
 
-                if (self.pred)(&mut node.as_mut().element) {
-                    // `unlink_node` is okay with aliasing `element` references.
-                    self.list.unlink_node(node);
-                    return Some(Box::from_raw_in(node.as_ptr(), &self.list.alloc).element);
+                    //@ open foreach(nodes2, elem_fbc::<T>(t));
+                    //@ open elem_fbc::<T>(t)(node);
+
+                    if call_pred__VeriFast_wrapper(&mut self.pred, &mut node.as_mut().element) {
+                        // `unlink_node` is okay with aliasing `element` references.
+                        self.list.unlink_node(node);
+                        
+                        //@ std::alloc::close_Allocator_full_borrow_content_(t, &(*(*self).list).alloc);
+                        //@ let k = begin_lifetime();
+                        //@ borrow(k, std::alloc::Allocator_full_borrow_content_::<A>(t, &(*(*self).list).alloc, alloc_id));
+                        //@ std::alloc::share_Allocator_full_borrow_content_(k, t, &(*(*self).list).alloc, alloc_id);
+                        //@ let alloc_ref = precreate_ref(&(*(*self).list).alloc);
+                        //@ std::alloc::init_ref_Allocator_share(k, t, alloc_ref);
+                        //@ open_frac_borrow(k, ref_initialized_(alloc_ref), 1/4);
+                        //@ open [?f]ref_initialized_::<A>(alloc_ref)();
+                        let r;
+                        {
+                            //@ let_lft 'b = k;
+                            //@ std::alloc::close_Allocator_ref::<'b, A>(t, alloc_ref);
+                            r = Some(Box_into_inner_with_ref_Allocator__VeriFast_wrapper(Box::from_raw_in/*@::<Node<T>, &'b A>@*/(node.as_ptr(), &self.list.alloc)).element);
+                        }
+                        //@ close [f]ref_initialized_::<A>(alloc_ref)();
+                        //@ close_frac_borrow(f, ref_initialized_(alloc_ref));
+                        //@ end_lifetime(k);
+                        //@ borrow_end(k, std::alloc::Allocator_full_borrow_content_::<A>(t, &(*(*self).list).alloc, alloc_id));
+                        //@ std::alloc::open_Allocator_full_borrow_content_(t, &(*(*self).list).alloc, alloc_id);
+                        
+                        //@ close ExtractIf_fbc::<T, A>(t, self1.list, ghost_cell_id, self1.old_len)();
+                        //@ close_full_borrow(ExtractIf_fbc(t, self1.list, ghost_cell_id, self1.old_len));
+                        //@ close <ExtractIf<'_0, T, F, A>>.own(t, *self);
+                        //@ close <std::option::Option<T>>.own(t, r);
+                        return r
+                    }
+                    
+                    //@ assert Nodes(_, ?head, None, _, self1.it, ?nodes1);
+                    //@ Nodes_append_one_(head);
+                    //@ close foreach([], elem_fbc::<T>(t));
+                    //@ close elem_fbc::<T>(t)(node);
+                    //@ close foreach([node], elem_fbc::<T>(t));
+                    //@ foreach_append(nodes1, [node]);
+                    //@ close ExtractIf_fbc::<T, A>(t, self1.list, ghost_cell_id, self1.old_len)();
+                    //@ close_full_borrow(ExtractIf_fbc(t, self1.list, ghost_cell_id, self1.old_len));
+                    //@ close <ExtractIf<'_0, T, F, A>>.own(t, *self);
                 }
+            } else {
+                break;
             }
         }
-
+        //@ close <std::option::Option<T>>.own(t, None);
         None
     }
 

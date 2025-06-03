@@ -4114,7 +4114,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                (loc, "Type parameters must start with an uppercase letter", None));
         Ok (name, loc)
     | Fresh id_cpn ->
-        Ok ("'_" ^ Stdint.Uint128.to_string (CapnpAux.uint128_get id_cpn), loc)
+        Ok ("'__" ^ Stdint.Uint128.to_string (CapnpAux.uint128_get id_cpn), loc)
     | Undefined _ -> Error (`TrHirGenericParamName "Unknown ParamName kind")
 
   let translate_hir_generic_param_kind (kind_cpn : HirGenericParamKindRd.t) =
@@ -4124,6 +4124,13 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | Type -> Ok Hir.GenParamType
     | Const -> Ok Hir.GenParamConst
     | Undefined _ -> Error (`TrHirGenericParamKind "Unknown GenericParamKind")
+
+  let translate_generic_param_def_kind (kind_cpn : VfMirRd.GenericParamDefKind.t) =
+    let open VfMirRd.GenericParamDefKind in
+    match get kind_cpn with
+    | Lifetime -> Hir.GenParamLifetime
+    | Type -> Hir.GenParamType
+    | Const -> Hir.GenParamConst
 
   let translate_hir_generic_param (p_cpn : HirGenericParamRd.t) =
     let open HirGenericParamRd in
@@ -4136,7 +4143,14 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       translate_hir_generic_param_name loc (kind = Hir.GenParamType) name_cpn
     in
     let pure_wrt_drop = pure_wrt_drop_get p_cpn in
-    Ok (name, kind, loc)
+    Ok (name, kind)
+
+  let translate_generic_param_def (p_cpn : VfMirRd.GenericParamDef.t) =
+    let open VfMirRd.GenericParamDef in
+    let kind_cpn = kind_get p_cpn in
+    let kind = translate_generic_param_def_kind kind_cpn in
+    let name = name_get p_cpn in
+    name, kind
 
   let translate_hir_generics (gens_cpn : HirGenericsRd.t) =
     let open HirGenericsRd in
@@ -4382,14 +4396,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         let moduleName = module_def_path_get body_cpn in
         (* print_endline ("Translating Mod: " ^ moduleName ^ " --- Body: " ^ name); *)
         let split_name = TrName.split_def_path moduleName name in
-        let* impl_block_gens =
-          match impl_block_hir_generics_get body_cpn |> OptionRd.get with
-          | Nothing -> Ok []
-          | Something hir_gens_cpn_ptr ->
-              let hir_gens_cpn = VfMirRd.of_pointer hir_gens_cpn_ptr in
-              let* gens, gens_loc = translate_hir_generics hir_gens_cpn in
-              Ok gens
-        in
+        let impl_block_gens = impl_block_generics_get_list body_cpn |> List.map translate_generic_param_def in
         let hir_gens_cpn = hir_generics_get body_cpn in
         let* gens, gens_loc = translate_hir_generics hir_gens_cpn in
         let early_bound_generic_param_names =
@@ -4399,15 +4406,15 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         in
         let early_gens, late_gens =
           List.partition
-            (fun (name, kind, loc) ->
+            (fun (name, kind) ->
               List.mem name early_bound_generic_param_names)
             gens
         in
         let gens = impl_block_gens @ early_gens @ late_gens in
-        let vf_tparams = List.map (fun (name, _, _) -> name) gens in
+        let vf_tparams = List.map (fun (name, _) -> name) gens in
         let* primed_lft_param_names =
           ListAux.try_filter_map
-            (fun (name, kind, loc) ->
+            (fun (name, kind) ->
               if kind = Hir.GenParamLifetime then Ok (Some name) else Ok None)
             gens
         in

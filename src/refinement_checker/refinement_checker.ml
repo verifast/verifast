@@ -3,6 +3,12 @@ type 'a option = 'a Option.t
 module VfMir = S
 module VfMirRd = VfMir.Reader
 
+let canonicalize_def_path_re = Str.regexp "'[a-zA-Z_][a-zA-Z0-9_]*"
+
+let canonicalize_def_path def_path =
+  (* Use a regex to replace each lifetime (of the form 'abc) in def_path by '_ *)
+  Str.global_replace canonicalize_def_path_re "'_" def_path
+
 let popn n xs =
   let rec iter n vs xs =
     if n <= 0 then vs, xs
@@ -188,7 +194,7 @@ let decode_lifetime genv: Vf_mir_decoder.region -> region = function
   {id="'<erased>"} -> Region "'<erased>"
 | {id} ->
   try List.assoc id genv.lifetimes
-  with Not_found -> failwith ("No such lifetime: " ^ id)
+  with Not_found -> failwith (Printf.sprintf "No such lifetime: %s (known lifetimes: %s)" id (String.concat ", " (List.map fst genv.lifetimes)))
 
 let rec decode_ty (genv: generic_env) (ty_cpn: Vf_mir_decoder.ty) =
   match ty_cpn.kind with
@@ -555,6 +561,7 @@ let fns_to_be_inlined: (string * body) list =
       ghost_decl_blocks=[];
       unsafety=Safe;
       impl_block_hir_generics=Nothing;
+      impl_block_generics=[];
       impl_block_predicates=[];
       hir_generics={
         params=[
@@ -645,6 +652,7 @@ let fns_to_be_inlined: (string * body) list =
     ghost_decl_blocks=[];
     unsafety=Safe;
     impl_block_hir_generics=Nothing;
+    impl_block_generics=[];
     impl_block_predicates=[];
     hir_generics={
       params=[
@@ -864,6 +872,7 @@ let fns_to_be_inlined: (string * body) list =
     ghost_decl_blocks=[];
     unsafety=Safe;
     impl_block_hir_generics=Nothing;
+    impl_block_generics=[];
     impl_block_predicates=[];
     hir_generics={
       params=[
@@ -1050,6 +1059,7 @@ let fns_to_be_inlined: (string * body) list =
     ghost_decl_blocks=[];
     unsafety=Safe;
     impl_block_hir_generics=Nothing;
+    impl_block_generics=[];
     impl_block_predicates=[];
     hir_generics={
       params=[
@@ -1248,7 +1258,7 @@ let rec process_commands bodies (env: env) opnds (i_bb: basic_block_info) i_s (s
       let substs = List.map (decode_gen_arg i_bb#genv) substs in
       if funcName = "std::ops::FnOnce::call_once--VeriFast" then
         let [Type (Closure (closureName, closureGenArgs)); Type (Tuple paramTypes)] = substs in
-        let body = List.assoc closureName bodies in
+        let body = List.assoc (canonicalize_def_path closureName) bodies in
         Printf.printf "======== Inlined function ========\n%s" (Stringifier.string_of_body body);
         let closureGenArgs = Array.of_list closureGenArgs in
         let closureGenArgs = Array.to_list @@ Array.sub closureGenArgs 0 (Array.length closureGenArgs - 3) in
@@ -1625,11 +1635,21 @@ let decode_generic_param (generic_param: generic_param_def) =
   in
   name, kind
 
+let decode_generic_param_def (generic_param_def: generic_param_def) =
+  let name = generic_param_def.name in
+  let kind =
+    match generic_param_def.kind with
+      Lifetime -> Lifetime
+    | Type -> Type
+    | Const -> Const
+  in
+  name, kind
+
 let decode_hir_generic_param (hir_generic_param: hir_generics_generic_param) =
   let name =
     match hir_generic_param.name with
       Plain ident -> ident.name.name
-    | Fresh k -> Printf.sprintf "'_%s" (Stdint.Uint128.to_string (decode_uint128 k))
+    | Fresh k -> Printf.sprintf "'__%s" (Stdint.Uint128.to_string (decode_uint128 k))
   in
   let kind =
     match hir_generic_param.kind with
@@ -1703,13 +1723,11 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
   let unsafety1 = body1.unsafety in
   (* We allow private functions to have different unsafety *)
   if visibility0 = Public && unsafety0 = Safe && unsafety1 = Unsafe then failwith "The two functions have different unsafety";
-  let generics0 = match body0.impl_block_hir_generics with Nothing -> [] | Something generics -> generics.params in
-  let generics1 = match body1.impl_block_hir_generics with Nothing -> [] | Something generics -> generics.params in
-  let generics0 = generics0 @ body0.hir_generics.params in
-  let generics1 = generics1 @ body1.hir_generics.params in
+  let generics0 = List.map decode_generic_param_def body0.impl_block_generics in
+  let generics1 = List.map decode_generic_param_def body1.impl_block_generics in
+  let generics0 = generics0 @ List.map decode_hir_generic_param body0.hir_generics.params in
+  let generics1 = generics1 @ List.map decode_hir_generic_param body1.hir_generics.params in
   if List.length generics0 <> List.length generics1 then failwith "The two functions have a different number of generic parameters";
-  let generics0 = List.map decode_hir_generic_param generics0 in
-  let generics1 = List.map decode_hir_generic_param generics1 in
   let lft_params0, generics0 = List.partition (fun (_, kind) -> kind = Lifetime) generics0 in
   let lft_params1, generics1 = List.partition (fun (_, kind) -> kind = Lifetime) generics1 in
   let root_genv0, root_genv1 =
@@ -1773,7 +1791,7 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
             try
               Printf.printf "Loop invariant = [%s]\n" (string_of_loop_inv loopInv);
               loopInv.address_taken |> List.iter begin fun (x0, x1) ->
-                if List.assoc x0 env0 <> List.assoc x1 env1 then
+                if List.assoc_opt x0 env0 <> List.assoc_opt x1 env1 then
                   failwith (Printf.sprintf "The states of the two locals %s and %s whose address is taken are not equal" (string_of_lv_path x0) (string_of_lv_path x1))
               end;
               (* Havoc all locals of the original crate *)
@@ -1903,11 +1921,11 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
           let targets1 = switch_int_data1.targets in
           let branches0 = targets0.branches in
           let branches1 = targets1.branches in
-          if List.length branches0 <> List.length branches1 then failwith "The two switch statements have a different number of branches";
+          if List.length branches0 <> List.length branches1 then error "The two switch statements have a different number of branches";
           List.combine branches0 branches1 |> List.iter (fun (branch0, branch1) ->
             let val0 = decode_uint128 @@ branch0.val_ in
             let val1 = decode_uint128 @@ branch1.val_ in
-            if val0 <> val1 then failwith "SwitchInt branch values do not match";
+            if val0 <> val1 then error "SwitchInt branch values do not match";
             let target0 = branch0.target in
             let target1 = branch1.target in
             let target0bbid = target0.index in

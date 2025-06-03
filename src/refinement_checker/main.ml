@@ -46,11 +46,11 @@ let verified_vf_mir =
 (* Check, for each function body in original_vf_mir, that there is a matching function body in verified_vf_mir *)
 let original_bodies =
   original_vf_mir.bodies
-  |> List.map (fun body -> (body.def_path, body))
+  |> List.map (fun body -> (canonicalize_def_path body.def_path, body))
 
 let verified_bodies =
   verified_vf_mir.bodies
-  |> List.map (fun body -> (body.def_path, body))
+  |> List.map (fun body -> (canonicalize_def_path body.def_path, body))
 
 let get_line_offsets text =
   let rec get_line_offsets' text offset acc =
