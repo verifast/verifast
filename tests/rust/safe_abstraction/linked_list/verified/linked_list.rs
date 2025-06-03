@@ -1872,7 +1872,18 @@ impl<T, A: Allocator> LinkedList<T, A> {
     //@ req [?f](*self).len |-> ?len;
     //@ ens [f](*self).len |-> len &*& result == len;
     //@ on_unwind_ens false;
-    //@ safety_proof { assume(false); }
+    /*@
+    safety_proof {
+        assert [?q]lifetime_token(?k);
+        open <LinkedList<T, A>>.share(k, _t, self);
+        assert [_]exists(LinkedList_share_info(?alloc_id, ?head, ?tail, ?nodes, ?prevs, ?nexts));
+        open_frac_borrow(k, LinkedList_frac_borrow_content::<T, A>(alloc_id, self, head, tail, nodes, prevs, nexts), q);
+        open [?f]LinkedList_frac_borrow_content::<T, A>(alloc_id, self, head, tail, nodes, prevs, nexts)();
+        call();
+        close [f]LinkedList_frac_borrow_content::<T, A>(alloc_id, self, head, tail, nodes, prevs, nexts)();
+        close_frac_borrow(f, LinkedList_frac_borrow_content::<T, A>(alloc_id, self, head, tail, nodes, prevs, nexts));
+    }
+    @*/
     {
         self.len
     }
