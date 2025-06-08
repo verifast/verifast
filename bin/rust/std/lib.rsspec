@@ -317,6 +317,15 @@ mod mem {
     
     @*/
     
+    impl<T> MaybeUninit<T> {
+    
+        fn write<'a>(self: &'a mut MaybeUninit<T>, value: T) -> &'a mut T;
+        //@ req *self |-> _;
+        //@ ens *self |-> MaybeUninit::new_(value);
+        //@ on_unwind_ens false;
+        
+    }
+    
     mod verifast {
     
         fn unfreeze<T>(ptr: *T);
