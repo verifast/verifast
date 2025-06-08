@@ -856,7 +856,11 @@ impl<BorrowType, K, V, Type> NodeRef<BorrowType, K, V, Type> {
     /// Exposes the leaf portion of any leaf or internal node.
     ///
     /// Returns a raw ptr to avoid invalidating other references to this node.
-    fn as_leaf_ptr(this: &Self) -> *mut LeafNode<K, V> {
+    fn as_leaf_ptr(this: &Self) -> *mut LeafNode<K, V>
+    //@ req [?f](*this).node |-> ?node;
+    //@ ens [f](*this).node |-> node &*& result == NonNull_ptr(node);
+    //@ safety_proof { assume(false); }
+    {
         // The node must be valid for at least the LeafNode portion.
         // This is not a reference in the NodeRef type because we don't know if
         // it should be unique or shared.
@@ -1121,10 +1125,32 @@ impl<'a, K, V> NodeRef<marker::Mut<'a>, K, V, marker::Internal> {
 impl<'a, K: 'a, V: 'a> NodeRef<marker::Mut<'a>, K, V, marker::LeafOrInternal> {
     /// Sets the node's link to its parent edge,
     /// without invalidating other references to the node.
-    fn set_parent_link(&mut self, parent: NonNull<InternalNode<K, V>>, parent_idx: usize) {
-        let leaf = Self::as_leaf_ptr(self);
+    fn set_parent_link(&mut self, parent: NonNull<InternalNode<K, V>>, parent_idx: usize)
+    //@ req *self |-> ?self0 &*& (*NonNull_ptr(self0.node)).parent |-> _ &*& (*NonNull_ptr(self0.node)).parent_idx |-> _ &*& parent_idx <= u16::MAX;
+    //@ ens *self |-> self0 &*& (*NonNull_ptr(self0.node)).parent |-> Option::Some(parent) &*& (*NonNull_ptr(self0.node)).parent_idx |-> MaybeUninit::new_(parent_idx as u16);
+    //@ safety_proof { assume(false); }
+    {
+        //@ open_points_to(self);
+        //@ let self_ref = precreate_ref(self);
+        //@ open_ref_init_perm_NodeRef(self_ref);
+        //@ std::ptr::init_ref_NonNull(&(*self_ref).node, 1/2);
+        //@ std::num::init_ref_usize(&(*self_ref).height, 1/2);
+        //@ init_ref_padding_NodeRef(self_ref, 1/2);
+        //@ std::marker::close_ref_initialized_PhantomData(&(*self_ref)._marker, 1);
+        //@ close_ref_initialized_NodeRef(self_ref);
+        // close [1/2]NodeRef_node(self_ref, _);
+        let leaf = Self::as_leaf_ptr/*@::<marker::Mut<'a>, K, V, marker::LeafOrInternal, 'a>@*/(self);
         unsafe { (*leaf).parent = Some(parent) };
+        //@ open LeafNode_parent_idx_(leaf, _);
+        //@ points_to__limits(&(*leaf).parent_idx);
         unsafe { (*leaf).parent_idx.write(parent_idx as u16) };
+        //@ open_ref_initialized_NodeRef(self_ref);
+        //@ end_ref_padding_NodeRef(self_ref);
+        //@ std::ptr::end_ref_NonNull(&(*self_ref).node);
+        //@ std::num::end_ref_usize(&(*self_ref).height);
+        //@ close_points_to(self);
+        //@ leak ref_init_perm(&(*self_ref)._marker, _);
+        //@ leak ref_initialized(&(*self_ref)._marker);
     }
 }
 
