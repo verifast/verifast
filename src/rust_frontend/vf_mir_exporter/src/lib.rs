@@ -1,5 +1,4 @@
 #![feature(rustc_private)]
-#![feature(extract_if)]
 #![feature(box_patterns)]
 #![feature(split_array)]
 #![allow(unused_imports)]
@@ -217,14 +216,13 @@ impl rustc_driver::Callbacks for CompilerCalls {
         /*** Collecting MIR bodies */
         trace!("Collecting MIR bodies");
         // Collect definition ids of bodies.
-        let hir = tcx.hir();
         let mut visitor = HirVisitor {
             tcx,
             structs: Vec::new(),
             trait_impls: Vec::new(),
             bodies: Vec::new(),
         };
-        hir.visit_all_item_likes_in_crate(&mut visitor);
+        tcx.hir_visit_all_item_likes_in_crate(&mut visitor);
 
         let mut bodies = Vec::new();
         // Trigger borrow checking of all bodies.
@@ -340,8 +338,8 @@ impl<'tcx> rustc_hir::intravisit::Visitor<'tcx> for HirVisitor<'tcx> {
 
     type NestedFilter = rustc_middle::hir::nested_filter::All;
 
-    fn nested_visit_map(&mut self) -> rustc_middle::hir::map::Map<'tcx> {
-        self.tcx.hir()
+    fn maybe_tcx(&mut self) -> TyCtxt<'tcx> {
+        self.tcx
     }
 
     fn visit_item(&mut self, item: &'tcx rustc_hir::Item<'tcx>) {
@@ -590,7 +588,7 @@ mod vf_mir_builder {
             submodules: Vec::new(),
             annots,
         };
-        tcx.hir().visit_item_likes_in_module(mod_id, &mut visitor);
+        tcx.hir_visit_item_likes_in_module(mod_id, &mut visitor);
         visitor.submodules
     }
 
@@ -1001,9 +999,11 @@ mod vf_mir_builder {
             let span_cpn = adt_def_cpn.reborrow().init_span();
             let span = tcx.def_span(adt_def.did());
             Self::encode_span_data(tcx, &span.data(), span_cpn);
-            if let Some(rustc_hir::Node::Item(item)) = tcx.hir().get_if_local(adt_def.did()) {
-                let def_span = item.span.data();
-                Self::encode_span_data(tcx, &def_span, adt_def_cpn.reborrow().init_def_span());
+            if adt_def.did().is_local() {
+                if let rustc_hir::Node::Item(item) = tcx.hir_node_by_def_id(adt_def.did().expect_local()) {
+                    let def_span = item.span.data();
+                    Self::encode_span_data(tcx, &def_span, adt_def_cpn.reborrow().init_def_span());
+                }
             }
             let vis_cpn = adt_def_cpn.reborrow().init_vis();
             let vis = tcx.visibility(adt_def.did());
@@ -1016,8 +1016,7 @@ mod vf_mir_builder {
             );
             let hir_gens_cpn = adt_def_cpn.reborrow().init_hir_generics();
             let hir_gens = tcx
-                .hir()
-                .get_generics(adt_def.did().expect_local())
+                .hir_get_generics(adt_def.did().expect_local())
                 .expect(&format!("Failed to get HIR generics data"));
             Self::encode_hir_generics(enc_ctx, hir_gens, hir_gens_cpn);
 
@@ -1252,7 +1251,7 @@ mod vf_mir_builder {
             }
 
             if let Some(impl_did) = tcx.impl_of_method(def_id) {
-                let impl_hir_gens = tcx.hir().get_generics(impl_did.expect_local()).unwrap();
+                let impl_hir_gens = tcx.hir_get_generics(impl_did.expect_local()).unwrap();
                 let impl_hir_generics_cpn = body_cpn.reborrow().init_impl_block_hir_generics();
                 let impl_hir_generics_some_cpn = impl_hir_generics_cpn.init_something();
                 Self::encode_hir_generics(enc_ctx, impl_hir_gens, impl_hir_generics_some_cpn);
@@ -1274,8 +1273,7 @@ mod vf_mir_builder {
             if !is_closure {
                 let hir_gens_cpn = body_cpn.reborrow().init_hir_generics();
                 let hir_gens = tcx
-                    .hir()
-                    .get_generics(def_id.expect_local())
+                    .hir_get_generics(def_id.expect_local())
                     .expect(&format!("Failed to get HIR generics data"));
                 Self::encode_hir_generics(enc_ctx, hir_gens, hir_gens_cpn);
             }
@@ -2556,8 +2554,8 @@ mod vf_mir_builder {
             val_tree: &ty::ValTree<'tcx>,
             val_tree_cpn: val_tree_cpn::Builder<'_>,
         ) {
-            use ty::ValTree as VT;
-            match val_tree {
+            use ty::ValTreeKind as VT;
+            match **val_tree {
                 // Used only for types with `layout::abi::Scalar` ABI and ZSTs.
                 VT::Leaf(scalar_int) => {
                     let scalar_int_cpn = val_tree_cpn.init_leaf();
@@ -2619,14 +2617,13 @@ mod vf_mir_builder {
             place: &mir::Place<'tcx>,
             mut place_cpn: place_cpn::Builder<'_>,
         ) {
-            use mir::tcx::PlaceTy;
             let local_decl_id_cpn = place_cpn.reborrow().init_local();
             Self::encode_local_decl_id(place.local, local_decl_id_cpn);
             let decl = &enc_ctx.body().local_decls()[place.local];
             place_cpn.set_local_is_mutable(decl.mutability == mir::Mutability::Mut);
 
             let local = &enc_ctx.body().local_decls()[place.local];
-            let mut pty = PlaceTy::from_ty(local.ty);
+            let mut pty = mir::PlaceTy::from_ty(local.ty);
             let mut kind = PlaceKind::Other;
             if place.projection.len() == 2 && local.ty.is_box() {
                 // The only projection that can be applied to a Box is (X.0: std::ptr::Unique<T>).0: std::ptr::NonNull<T>
