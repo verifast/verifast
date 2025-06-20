@@ -1331,6 +1331,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | Select(_, e, f) -> expr_mark_addr_taken e locals
     | ArrayLengthExpr(_, e) -> expr_mark_addr_taken e locals
     | WRead(_, e, _, _, _, _, _, _, _, _) -> expr_mark_addr_taken e locals
+    | WReadInductiveField (_, e, _, _, _, _, _, _) -> expr_mark_addr_taken e locals
     | WSelect(_, e, _, _, _, _, _) -> expr_mark_addr_taken e locals
     | ReadArray(_, e1, e2) -> (expr_mark_addr_taken e1 locals); (expr_mark_addr_taken e2 locals)
     | WReadArray(_, e1, _, e2) -> (expr_mark_addr_taken e1 locals); (expr_mark_addr_taken e2 locals)
@@ -1395,6 +1396,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | TypeExpr _ -> ()
     | Typeid (_, e) -> expr_mark_addr_taken e locals
     | TypePredExpr (_, _, _) | WTypePredExpr (_, _, _) -> ()
+    | e -> failwith (Printf.sprintf "expr_mark_addr_taken: unexpected expression %s" (Ocaml_expr_formatter.string_of_ocaml_expr false (Ocaml_expr_of_ast.of_expr e)))
   and pat_expr_mark_addr_taken pat locals = 
     match pat with
     | LitPat(e) -> expr_mark_addr_taken e locals

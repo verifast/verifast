@@ -1960,11 +1960,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   ],
                   Static ),
               e1_is_mutable )
-        | Field (Some name, _) :: elems ->
+        | Field (name, field_idx) :: elems ->
+            let name = match name with Some name -> name | None -> string_of_int field_idx in
             let e1, e1_is_mutable = iter elems in
             (Ast.Select (loc, e1, name), e1_is_mutable)
-        | Field (None, _) :: _ ->
-            failwith "Not yet supported: Field(None, _)::_"
         | Downcast _ :: _ -> failwith "Not yet supported: Downcast _::_"
       in
       iter elems
