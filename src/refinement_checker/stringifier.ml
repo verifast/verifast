@@ -12,8 +12,8 @@ let string_of_place {local; projection} =
       iter (Printf.sprintf "*(%s)" inner) rest
     | Field {index}::rest ->
       iter (Printf.sprintf "%s.%s" inner (Stdint.Uint32.to_string index)) rest
-    | BoxAsPtr _::rest ->
-      iter (Printf.sprintf "box_as_ptr(%s)" inner) rest
+    | BoxAsNonNull _::rest ->
+      iter (Printf.sprintf "box_as_NonNull(%s)" inner) rest
     | Index::rest ->
       iter (Printf.sprintf "%s[?]" inner) rest
     | ConstantIndex::rest ->

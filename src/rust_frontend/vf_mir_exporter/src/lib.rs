@@ -47,7 +47,7 @@ use rustc_borrowck::consumers::BodyWithBorrowckFacts;
 use rustc_driver::Compilation;
 use rustc_hir::def_id::LocalDefId;
 use rustc_interface::interface::Compiler;
-use rustc_interface::{Config, Queries};
+use rustc_interface::Config;
 use rustc_middle::mir;
 use rustc_middle::ty::{self, TyCtxt};
 use rustc_session::Session;
@@ -94,7 +94,8 @@ pub fn run_compiler() -> i32 {
         };
         // Call the Rust compiler with our callbacks.
         trace!("Calling the Rust Compiler with args: {:?}", rustc_args);
-        rustc_driver::RunCompiler::new(&rustc_args, &mut callbacks).run()
+        rustc_driver::RunCompiler::new(&rustc_args, &mut callbacks).run();
+        Ok(())
     })
 }
 
@@ -208,74 +209,72 @@ impl rustc_driver::Callbacks for CompilerCalls {
     fn after_analysis<'tcx>(
         &mut self,
         compiler: &Compiler,
-        queries: &'tcx Queries<'tcx>,
+        tcx: TyCtxt<'tcx>,
     ) -> Compilation {
         compiler.sess.psess.dcx().abort_if_errors();
-        queries.global_ctxt().unwrap().enter(|tcx| {
-            /*** Collecting Annotations */
-            // TODO: Get comments from preprocessor
+        /*** Collecting Annotations */
+        // TODO: Get comments from preprocessor
 
-            /*** Collecting MIR bodies */
-            trace!("Collecting MIR bodies");
-            // Collect definition ids of bodies.
-            let hir = tcx.hir();
-            let mut visitor = HirVisitor {
-                tcx,
-                structs: Vec::new(),
-                trait_impls: Vec::new(),
-                bodies: Vec::new(),
-            };
-            hir.visit_all_item_likes_in_crate(&mut visitor);
+        /*** Collecting MIR bodies */
+        trace!("Collecting MIR bodies");
+        // Collect definition ids of bodies.
+        let hir = tcx.hir();
+        let mut visitor = HirVisitor {
+            tcx,
+            structs: Vec::new(),
+            trait_impls: Vec::new(),
+            bodies: Vec::new(),
+        };
+        hir.visit_all_item_likes_in_crate(&mut visitor);
 
-            let mut bodies = Vec::new();
-            // Trigger borrow checking of all bodies.
-            for (def_id, span) in visitor.bodies {
-                //let _ = tcx.optimized_mir(def_id);
-                let body = tcx.mir_drops_elaborated_and_const_checked(def_id);
-                if body.is_stolen() {
-                    trace!("Skipping body for {}; it's already been stolen", tcx.def_path_str(def_id));
-                } else {
-                    bodies.push((
-                        body.steal(),
-                        span,
-                    ))
-                }
+        let mut bodies = Vec::new();
+        // Trigger borrow checking of all bodies.
+        for (def_id, span) in visitor.bodies {
+            //let _ = tcx.optimized_mir(def_id);
+            let body = tcx.mir_drops_elaborated_and_const_checked(def_id);
+            if body.is_stolen() {
+                trace!("Skipping body for {}; it's already been stolen", tcx.def_path_str(def_id));
+            } else {
+                bodies.push((
+                    body.steal(),
+                    span,
+                ))
             }
+        }
 
-            // See what bodies were borrow checked.
-            // let bodies_and_facts = get_bodies(tcx);
+        // See what bodies were borrow checked.
+        // let bodies_and_facts = get_bodies(tcx);
 
-            // let bodies: Vec<_> = bodies_and_facts
-            //     .iter()
-            //     .map(|(def_path, body)| {
-            //         assert!(body.input_facts.as_ref().unwrap().cfg_edge.len() > 0);
-            //         debug!("We have body for {}", def_path);
-            //         &body.body
-            //     })
-            //     .collect();
+        // let bodies: Vec<_> = bodies_and_facts
+        //     .iter()
+        //     .map(|(def_path, body)| {
+        //         assert!(body.input_facts.as_ref().unwrap().cfg_edge.len() > 0);
+        //         debug!("We have body for {}", def_path);
+        //         &body.body
+        //     })
+        //     .collect();
 
-            let mut vf_mir_capnp_builder = vf_mir_builder::VfMirCapnpBuilder::new(tcx);
-            let mut directives = Vec::new();
-            let mut ghost_ranges = Vec::new();
-            self.source_files.lock().unwrap().export_data(
-                &mut directives,
-                &mut ghost_ranges,
-                tcx.sess.source_map(),
-            );
+        let mut vf_mir_capnp_builder = vf_mir_builder::VfMirCapnpBuilder::new(tcx);
+        let mut directives = Vec::new();
+        let mut ghost_ranges = Vec::new();
+        self.source_files.lock().unwrap().export_data(
+            &mut directives,
+            &mut ghost_ranges,
+            tcx.sess.source_map(),
+        );
 
-            trace!("Ghost Ranges:\n{:#?}", ghost_ranges);
-            for gr in &ghost_ranges {
-                debug!("{:?}", gr.span());
-            }
-            vf_mir_capnp_builder.add_comments(&mut ghost_ranges);
-            vf_mir_capnp_builder.set_directives(std::mem::replace(&mut directives, Vec::new()));
-            vf_mir_capnp_builder.set_structs(visitor.structs);
-            vf_mir_capnp_builder.set_trait_impls(visitor.trait_impls);
-            vf_mir_capnp_builder.add_bodies(bodies);
-            let msg_cpn = vf_mir_capnp_builder.build(compiler);
-            capnp::serialize::write_message(&mut ::std::io::stdout(), msg_cpn.borrow_inner())
-                .unwrap();
-        });
+        trace!("Ghost Ranges:\n{:#?}", ghost_ranges);
+        for gr in &ghost_ranges {
+            debug!("{:?}", gr.span());
+        }
+        vf_mir_capnp_builder.add_comments(&mut ghost_ranges);
+        vf_mir_capnp_builder.set_directives(std::mem::replace(&mut directives, Vec::new()));
+        vf_mir_capnp_builder.set_structs(visitor.structs);
+        vf_mir_capnp_builder.set_trait_impls(visitor.trait_impls);
+        vf_mir_capnp_builder.add_bodies(bodies);
+        let msg_cpn = vf_mir_capnp_builder.build(compiler);
+        capnp::serialize::write_message(&mut ::std::io::stdout(), msg_cpn.borrow_inner())
+            .unwrap();
         Compilation::Stop
     }
 }
@@ -348,8 +347,8 @@ impl<'tcx> rustc_hir::intravisit::Visitor<'tcx> for HirVisitor<'tcx> {
 
     fn visit_item(&mut self, item: &'tcx rustc_hir::Item<'tcx>) {
         match &item.kind {
-            rustc_hir::ItemKind::Fn(fn_sig, _, _) => {
-                self.bodies.push((item.owner_id.def_id, fn_sig.span))
+            rustc_hir::ItemKind::Fn{sig, generics, body, has_body} => {
+                self.bodies.push((item.owner_id.def_id, sig.span))
             }
             // We cannot send DefId of a struct to optimize_mir query
             rustc_hir::ItemKind::Struct(..) => self.structs.push(item.owner_id.def_id),
@@ -669,7 +668,7 @@ mod vf_mir_builder {
         pub fn add_comments(&mut self, annots: &mut Vec<Box<GhostRange>>) {
             self.annots.extend(
                 annots
-                    .extract_if(|annot| !annot.is_dummy())
+                    .extract_if(.., |annot| !annot.is_dummy())
                     .collect::<LinkedList<_>>(),
             );
         }
@@ -778,7 +777,10 @@ mod vf_mir_builder {
                                         required_fn_cpn.reborrow().init_name_span(),
                                     );
                                     Self::encode_unsafety(
-                                        fn_sig.header.safety,
+                                        match fn_sig.header.safety {
+                                            hir::HeaderSafety::SafeTargetFeatures => todo!(),
+                                            hir::HeaderSafety::Normal(safety) => safety,
+                                        },
                                         required_fn_cpn.reborrow().init_unsafety(),
                                     );
                                     required_fn_cpn.fill_lifetime_params(
@@ -1474,7 +1476,7 @@ mod vf_mir_builder {
                         id_cpn,
                     );
                 }
-                hir::ParamName::Error => bug!(),
+                hir::ParamName::Error(_) => bug!(),
             }
         }
 
@@ -1775,6 +1777,7 @@ mod vf_mir_builder {
                     let elem_ty_cpn = ty_kind_cpn.init_slice();
                     Self::encode_ty(tcx, enc_ctx, *elem_ty, elem_ty_cpn);
                 }
+                ty::TyKind::UnsafeBinder(_) => todo!()
             }
         }
 
@@ -2621,11 +2624,11 @@ mod vf_mir_builder {
             let local = &enc_ctx.body().local_decls()[place.local];
             let mut pty = PlaceTy::from_ty(local.ty);
             let mut kind = PlaceKind::Other;
-            if place.projection.len() == 3 && local.ty.is_box() {
-                // The only projection that can be applied to a Box is (((X.0: std::ptr::Unique<T>).0: std::ptr::NonNull<T>).0: *const T)
+            if place.projection.len() == 2 && local.ty.is_box() {
+                // The only projection that can be applied to a Box is (X.0: std::ptr::Unique<T>).0: std::ptr::NonNull<T>
                 let place_projection_cpn = place_cpn.reborrow().init_projection(1);
                 let place_elem_cpn = place_projection_cpn.get(0);
-                let ty_cpn = place_elem_cpn.init_box_as_ptr();
+                let ty_cpn = place_elem_cpn.init_box_as_non_null();
                 Self::encode_ty(enc_ctx.tcx, enc_ctx, local.ty.boxed_ty().unwrap(), ty_cpn);
             } else {
                 place_cpn.reborrow().fill_projection(place.projection, |place_elm_cpn, place_elm| {

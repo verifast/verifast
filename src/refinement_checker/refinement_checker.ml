@@ -423,14 +423,17 @@ let fns_to_be_inlined: (string * body) list =
             {
               kind=Assign {
                 lhs_place=local "contents_ptr";
-                rhs_rvalue=Use (Copy {
-                  local={name="self"};
-                  projection=[
-                    BoxAsPtr {kind=Param "T"}
-                  ];
-                  local_is_mutable=false;
-                  kind=Other
-                })
+                rhs_rvalue=Cast {
+                  operand=Copy {
+                    local={name="self"};
+                    projection=[
+                      BoxAsNonNull {kind=Param "T"}
+                    ];
+                    local_is_mutable=false;
+                    kind=Other
+                  };
+                  ty={kind=RawPtr {mutability=Not; ty={kind=Param "T"}}}
+                }
               };
               source_info={span}
             };
@@ -616,14 +619,17 @@ let fns_to_be_inlined: (string * body) list =
           {
             kind=Assign {
               lhs_place=local "result";
-              rhs_rvalue=Use (Copy {
-                local={name="b"};
-                projection=[
-                  BoxAsPtr {kind=Param "T"}
-                ];
-                local_is_mutable=false;
-                kind=Other
-              })
+              rhs_rvalue=Cast {
+                operand=Copy {
+                  local={name="b"};
+                  projection=[
+                    BoxAsNonNull {kind=Param "T"}
+                  ];
+                  local_is_mutable=false;
+                  kind=Other
+                };
+                ty={kind=RawPtr {mutability=Not; ty={kind=Param "T"}}}
+              }
             };
             source_info={span}
           }
@@ -1121,7 +1127,6 @@ let commands_for_loading_place {local; projection}: command list =
     projection |> List.map @@ function
       (Deref: place_elem) -> (Deref: command)
     | Field {index} -> Field (Stdint.Uint32.to_int index)
-    | BoxAsPtr _ -> BoxAsPtr
     | Downcast index -> Downcast (Stdint.Uint32.to_int index)
   in
   LoadLocal local::proj_cmds
@@ -1134,6 +1139,7 @@ let commands_of_rvalue = function
   Use operand -> commands_of_operand operand
 | Ref rvalue_ref_data -> [Ref rvalue_ref_data]
 | AddressOf rvalue_address_of_data -> [AddressOf rvalue_address_of_data]
+| Cast {operand=Copy {local; projection=[BoxAsNonNull _]}} -> [LoadLocal local; BoxAsPtr]
 | Cast {operand; ty} -> commands_of_operand operand @ [Cast ty]
 | BinaryOp {operator; operandl; operandr} -> commands_of_operand operandl @ commands_of_operand operandr @ [BinaryOp operator]
 | UnaryOp {operator; operand} -> commands_of_operand operand @ [UnaryOp operator]
@@ -1393,7 +1399,7 @@ let check_place_element_refines_place_element (elem0: place_elem) (elem1: place_
       let fieldIndex0 = field0.index in
       let fieldIndex1 = field1.index in
       if fieldIndex0 <> fieldIndex1 then failwith "Field indices do not match"
-  | BoxAsPtr _, BoxAsPtr _ -> ()
+  | BoxAsNonNull _, BoxAsNonNull _ -> ()
   | Index, Index -> failwith "PlaceElement::Index not supported"
   | ConstantIndex, ConstantIndex -> failwith "PlaceElement::ConstantIndex not supported"
   | Subslice, Subslice -> failwith "PlaceElement::Subslice not supported"

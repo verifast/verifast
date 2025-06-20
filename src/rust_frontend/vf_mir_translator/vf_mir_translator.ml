@@ -1867,8 +1867,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
              body_tr_defs_ctx.adt_defs)
     end
 
-    let translate_local_decl_id (local_decl_id_cpn : LocalDeclIdRd.t) =
-      let id = TrName.tag_internal (LocalDeclIdRd.name_get local_decl_id_cpn) in
+    let translate_local_decl_id_ (name : string) =
+      let id = TrName.tag_internal name in
       match
         List.find_opt
           (fun ({ id = id1; _ } : var_id_trs_entry) -> id = id1)
@@ -1877,6 +1877,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       | None -> id
       | Some { id; internal_name } -> internal_name
 
+    let translate_local_decl_id (local_decl_id_cpn : LocalDeclIdRd.t) =
+      translate_local_decl_id_ (LocalDeclIdRd.name_get local_decl_id_cpn)
+    
     let translate_local_decl (local_decl_cpn : LocalDeclRd.t) =
       let open LocalDeclRd in
       let mutability_cpn = mutability_get local_decl_cpn in
@@ -1916,7 +1919,6 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       | Deref
       | Field of string option * int
       | Downcast of int
-      | BoxAsPtr
 
     let decode_place_element (place_elm : PlaceElementRd.t) : place_element =
       let open PlaceElementRd in
@@ -1934,7 +1936,6 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           in
           Field (name, Stdint.Uint32.to_int index)
       | Downcast variant_index -> Downcast (Stdint.Uint32.to_int variant_index)
-      | BoxAsPtr _ -> BoxAsPtr
 
     let translate_projection (loc : Ast.loc) (elems : place_element list)
         (e : Ast.expr) (e_is_mutable : bool) :
@@ -1965,16 +1966,6 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         | Field (None, _) :: _ ->
             failwith "Not yet supported: Field(None, _)::_"
         | Downcast _ :: _ -> failwith "Not yet supported: Downcast _::_"
-        | BoxAsPtr :: elems ->
-            let e1, e1_is_mutable = iter elems in
-            ( Ast.CallExpr
-                ( loc,
-                  "std::boxed::Box::<T, A>::as_mut_ptr",
-                  [],
-                  [],
-                  [ LitPat (AddressOf (loc, e1)) ],
-                  Static ),
-              e1_is_mutable )
       in
       iter elems
 
@@ -3075,6 +3066,20 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           let expr = Ast.AddressOf (loc, place_expr) in
           Ok (`TrRvalueExpr expr)
       | Cast cast_data_cpn -> (
+          match D.decode_rvalue_cast_data cast_data_cpn with
+            {operand=Copy {local; projection=[BoxAsNonNull _]}} ->
+            let id = translate_local_decl_id_ local.name in
+            let e =
+              ( Ast.CallExpr
+                ( loc,
+                  "std::boxed::Box::<T, A>::as_mut_ptr",
+                  [],
+                  [],
+                  [ LitPat (AddressOf (loc, Var (loc, id))) ],
+                  Static ))
+            in
+            Ok (`TrRvalueExpr e)
+          | _ ->
           let open CastData in
           let operand_cpn = operand_get cast_data_cpn in
           let* operand = translate_operand operand_cpn loc in

@@ -235,7 +235,7 @@ pub struct RawBrandedStructSchema {
 
 impl core::cmp::PartialEq for RawBrandedStructSchema {
     fn eq(&self, other: &Self) -> bool {
-        core::ptr::eq(self.generic, other.generic) && self.field_types == other.field_types
+        core::ptr::eq(self.generic, other.generic) && std::ptr::fn_addr_eq(self.field_types, other.field_types)
         // don't need to compare annotation_types.
         // that field is equal iff field_types is.
     }
