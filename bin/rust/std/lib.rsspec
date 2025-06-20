@@ -126,6 +126,12 @@ mod num {
         //@ on_unwind_ens false;
         
     }
+    
+    mod niche_types {
+    
+        struct UsizeNoHighBit;
+    
+    }
 
 }
 
@@ -409,6 +415,9 @@ mod ptr {
         //@ req true;
         //@ ens result == NonNull::new_(NonNull_ptr(self) as *U);
     }
+    
+    struct Unique<T>;
+    
 }
 
 mod alloc {
