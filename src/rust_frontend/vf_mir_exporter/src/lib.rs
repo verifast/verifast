@@ -94,8 +94,7 @@ pub fn run_compiler() -> i32 {
         };
         // Call the Rust compiler with our callbacks.
         trace!("Calling the Rust Compiler with args: {:?}", rustc_args);
-        rustc_driver::RunCompiler::new(&rustc_args, &mut callbacks).run();
-        Ok(())
+        rustc_driver::run_compiler(&rustc_args, &mut callbacks)
     })
 }
 
@@ -2041,10 +2040,14 @@ mod vf_mir_builder {
                     }
                 }
                 mir::Rvalue::ThreadLocalRef(def_id) => rvalue_cpn.set_thread_local_ref(()),
-                mir::Rvalue::RawPtr(mutability, place) => {
+                mir::Rvalue::RawPtr(raw_ptr_kind, place) => {
                     let mut ao_data_cpn = rvalue_cpn.init_address_of();
                     let mutability_cpn = ao_data_cpn.reborrow().init_mutability();
-                    Self::encode_mutability(*mutability, mutability_cpn);
+                    Self::encode_mutability(match raw_ptr_kind {
+                        mir::RawPtrKind::Mut => mir::Mutability::Mut,
+                        mir::RawPtrKind::Const => mir::Mutability::Not,
+                        mir::RawPtrKind::FakeForPtrMetadata => todo!(),
+                    }, mutability_cpn);
                     let place_cpn = ao_data_cpn.init_place();
                     Self::encode_place(enc_ctx, place, place_cpn);
                 }
@@ -2109,6 +2112,7 @@ mod vf_mir_builder {
                     let place_cpn = operand_cpn.init_copy();
                     Self::encode_place(enc_ctx, place, place_cpn);
                 }
+                mir::Rvalue::WrapUnsafeBinder(_, _) => todo!(),
             }
         }
 
@@ -2535,10 +2539,10 @@ mod vf_mir_builder {
                 // variants when the code is monomorphic enough for that.
                 CK::Unevaluated(unevaluated) => const_kind_cpn.set_unevaluated(()),
                 // Used to hold computed value.
-                CK::Value(ty, val_tree) => {
+                CK::Value(value) => {
                     let mut value_cpn = const_kind_cpn.init_value();
-                    Self::encode_ty(tcx, enc_ctx, *ty, value_cpn.reborrow().init_ty());
-                    Self::encode_val_tree(tcx, val_tree, value_cpn.init_val_tree());
+                    Self::encode_ty(tcx, enc_ctx, value.ty, value_cpn.reborrow().init_ty());
+                    Self::encode_val_tree(tcx, &value.valtree, value_cpn.init_val_tree());
                 }
                 // A placeholder for a const which could not be computed; this is
                 // propagated to avoid useless error messages.
@@ -2711,6 +2715,7 @@ mod vf_mir_builder {
                     place_elm_cpn.set_subtype(());
                     PlaceKind::Other
                 }
+                mir::ProjectionElem::UnwrapUnsafeBinder(_) => todo!(),
             }
         }
     }
