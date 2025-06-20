@@ -344,7 +344,7 @@ impl<'tcx> rustc_hir::intravisit::Visitor<'tcx> for HirVisitor<'tcx> {
 
     fn visit_item(&mut self, item: &'tcx rustc_hir::Item<'tcx>) {
         match &item.kind {
-            rustc_hir::ItemKind::Fn{sig, generics, body, has_body} => {
+            rustc_hir::ItemKind::Fn{ident, sig, generics, body, has_body} => {
                 self.bodies.push((item.owner_id.def_id, sig.span))
             }
             // We cannot send DefId of a struct to optimize_mir query
@@ -559,7 +559,7 @@ mod vf_mir_builder {
                 header_span: rustc_span::Span,
                 n: rustc_hir::HirId,
             ) {
-                let name = self.tcx.hir().ident(n).as_str().into();
+                let name = self.tcx.hir_ident(n).as_str().into();
                 let mut body_span = m.spans.inner_span;
                 if Arc::as_ptr(&self.tcx.sess.source_map().lookup_source_file(header_span.lo())) ==
                     Arc::as_ptr(&self.tcx.sess.source_map().lookup_source_file(body_span.lo())) {
@@ -757,7 +757,7 @@ mod vf_mir_builder {
                     .in_definition_order()
                 {
                     if item.kind.as_def_kind() == rustc_hir::def::DefKind::AssocFn {
-                        let hir_item = self.tcx.hir().expect_trait_item(item.def_id.expect_local());
+                        let hir_item = self.tcx.hir_expect_trait_item(item.def_id.expect_local());
                         match &hir_item.kind {
                             hir::TraitItemKind::Fn(fn_sig, trait_fn) => {
                                 if let hir::TraitFn::Required(arg_names) = trait_fn {
@@ -814,7 +814,7 @@ mod vf_mir_builder {
                                         required_fn_cpn.reborrow().init_output(),
                                     );
                                     required_fn_cpn
-                                        .fill_arg_names(arg_names.iter().map(|n| n.as_str()));
+                                        .fill_arg_names(arg_names.iter().map(|n| n.as_ref().map(|i| i.as_str()).unwrap_or("_")));
                                     let contract: Vec<Box<GhostRange>> = self
                                         .annots
                                         .extract_if(|annot| {
