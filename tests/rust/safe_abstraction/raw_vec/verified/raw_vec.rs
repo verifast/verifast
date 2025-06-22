@@ -1,8 +1,8 @@
 #![unstable(feature = "raw_vec_internals", reason = "unstable const warnings", issue = "none")]
 #![cfg_attr(test, allow(dead_code))]
 
-//@ use std::num::niche_types::UsizeNoHighBit;
-//@ use std::ptr::{NonNull, NonNull_ptr, Unique};
+//@ use std::num::{niche_types::UsizeNoHighBit, NonZero};
+//@ use std::ptr::{NonNull, NonNull_ptr, Unique, Alignment};
 //@ use std::alloc::{Layout, Allocator, alloc_block_in};
 //@ use std::option::Option;
 
@@ -122,7 +122,6 @@ lem mul_zero(x: i32, y: i32)
 
 pred RawVecInner0(alloc_id: any, u: Unique<u8>, cap: UsizeNoHighBit, elemLayout: Layout; ptr: *u8, allocSize: usize) =
     allocSize == Layout::size_(elemLayout) * Cap_as_inner_(cap) &*&
-    Layout::size_(elemLayout) == 0 || cap == Cap_new_(usize::MAX) &*&
     ptr == NonNull_ptr(Unique::non_null_(u)) &*&
     ptr != 0 &*&
     ptr as usize % Layout::align_(elemLayout) == 0 &*&
@@ -455,10 +454,29 @@ unsafe impl<#[may_dangle] T, A: Allocator> Drop for RawVec<T, A> {
 impl<A: Allocator> RawVecInner<A> {
     #[inline]
     const fn new_in(alloc: A, align: Alignment) -> Self
+    //@ req exists::<usize>(?elemSize) &*& thread_token(?t) &*& Allocator(t, alloc, ?alloc_id) &*& std::alloc::is_valid_layout(elemSize, NonZero::get_(Alignment::as_nonzero_(align))) == true;
+    //@ ens thread_token(t) &*& RawVecInner(t, result, Layout::from_size_align_(elemSize, NonZero::get_(Alignment::as_nonzero_(align))), ?ptr, 0) &*& ptr[..0] |-> _;
+    //@ on_unwind_ens false;
+    //@ safety_proof { assume(false); }
     {
         let ptr = Unique::from_non_null(NonNull::without_provenance(align.as_nonzero()));
         // `cap: 0` means "unallocated". zero-sized types are ignored.
-        Self { ptr, cap: ZERO_CAP, alloc }
+        let cap = ZERO_CAP;
+        //@ let layout = Layout::from_size_align_(elemSize, NonZero::get_(Alignment::as_nonzero_(align)));
+        let r = Self { ptr, cap, alloc };
+        //@ std::ptr::NonNull_ptr_nonnull(Unique::non_null_(ptr));
+        //@ std::ptr::Unique_non_null__from_non_null_(NonNull::without_provenance_::<u8>(Alignment::as_nonzero_(align)));
+        //@ std::ptr::NonNull_ptr_NonNull_without_provenance_::<u8>(Alignment::as_nonzero_(align));
+        //@ std::ptr::Alignment_is_power_of_2(align);
+        //@ is_power_of_2_pos(NonZero::get_(Alignment::as_nonzero_(align)));
+        //@ std::alloc::Layout_align__Layout_from_size_align_(elemSize, NonZero::get_(Alignment::as_nonzero_(align)));
+        //@ div_rem_nonneg_unique(NonZero::get_(Alignment::as_nonzero_(align)), NonZero::get_(Alignment::as_nonzero_(align)), 1, 0);
+        //@ std::num::niche_types::UsizeNoHighBit_as_inner__transmute_uint(0);
+        //@ close RawVecInner0(alloc_id, ptr, cap, layout, _, 0);
+        //@ close RawVecInner(t, r, layout, _, 0);
+        //@ std::num::NonZero_usize_limits(Alignment::as_nonzero_(align));
+        //@ close array::<u8>(NonNull_ptr(Unique::non_null_(ptr)), 0, nil);
+        r
     }
 
     #[cfg(not(no_global_oom_handling))]

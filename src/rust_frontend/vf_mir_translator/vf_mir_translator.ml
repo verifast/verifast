@@ -956,6 +956,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                IntLit (loc, value, true, true, LLSuffix) ))
     | ManifestTypeExpr (_, Ast.Int (Signed, _)), size -> mk_signed_const size
     | ManifestTypeExpr (_, Ast.Int (Unsigned, _)), size -> mk_const value
+    | ty, _ ->
+      let value = Ast.IntLit (loc, value, (*decimal*) true, (*U suffix*) false, LLSuffix) in
+      Ok (Ast.CallExpr (loc, "transmute_uint", [ty], [], [ LitPat value ], Static))
 
   let canonicalize_item_name (name : string) =
     if String.starts_with ~prefix:"core::" name then
