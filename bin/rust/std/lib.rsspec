@@ -145,6 +145,10 @@ mod num {
             req 0 <= n && n <= isize::MAX;
             ens UsizeNoHighBit::as_inner_(UsizeNoHighBit::new_(n)) == n;
         
+        lem_auto(UsizeNoHighBit::as_inner_(transmute_uint(n))) UsizeNoHighBit_as_inner__transmute_uint(n: usize);
+            req 0 <= n && n <= isize::MAX;
+            ens UsizeNoHighBit::as_inner_(transmute_uint(n)) == n;
+        
         pred end_ref_UsizeNoHighBit_token(p: *UsizeNoHighBit, x: *UsizeNoHighBit, f: real);
         
         lem init_ref_UsizeNoHighBit(p: *UsizeNoHighBit, coef: real);
@@ -167,6 +171,18 @@ mod num {
         }
     
     }
+    
+    struct NonZero<T>;
+    
+    //@ fix NonZero::get_<T>(nz: NonZero<T>) -> T;
+    
+    /*@
+    
+    lem NonZero_usize_limits(nz: NonZero<usize>);
+        req true;
+        ens 0 <= NonZero::get_(nz) &*& NonZero::get_(nz) <= usize::MAX;
+    
+    @*/
 
 }
 
@@ -394,6 +410,12 @@ mod ptr {
     
     /*@
     
+    fix NonNull::without_provenance_<T>(addr: std::num::NonZero<usize>) -> NonNull<T>;
+    
+    lem NonNull_ptr_NonNull_without_provenance_<T>(addr: std::num::NonZero<usize>);
+        req true;
+        ens NonNull_ptr(NonNull::without_provenance_::<T>(addr)) == std::num::NonZero::get_(addr) as *T;
+    
     lem close_NonNull_own<T>(t: thread_id_t, v: NonNull<T>);
         req true;
         ens (NonNull_own::<T>())(t, v);
@@ -411,6 +433,10 @@ mod ptr {
         req ptr != 0;
         ens NonNull_ptr(NonNull::new_(ptr)) == ptr;
     
+    lem NonNull_ptr_nonnull<T>(v: NonNull<T>);
+        req true;
+        ens NonNull_ptr(v) != 0;
+    
     lem NonNull_upcast<T0, T1>(v: NonNull<T0>);
         req true;
         ens NonNull_ptr::<T1>(upcast(v)) == NonNull_ptr::<T0>(v) as *_;
@@ -426,6 +452,11 @@ mod ptr {
     @*/
 
     impl<T> NonNull<T> {
+        fn without_provenance(addr: std::num::NonZero<usize>) -> NonNull<T>;
+        //@ req true;
+        //@ ens result == NonNull::without_provenance_(addr);
+        //@ on_unwind_ens false;
+        
         unsafe fn new_unchecked(ptr: *mut T) -> NonNull<T>;
         //@ req ptr as usize != 0;
         //@ ens NonNull_ptr(result) == ptr;
@@ -475,11 +506,41 @@ mod ptr {
     
     @*/
     
+    impl<T> Unique<T> {
+    
+        fn from_non_null(ptr: NonNull<T>) -> Unique<T>;
+        //@ req true;
+        //@ ens result == Unique::from_non_null_(ptr);
+        //@ on_unwind_ens false;
+        
+    }
+    
     impl<T> std::convert::Into<std::ptr::NonNull<T>> for std::ptr::Unique<T> {
     
         fn into(self: Unique<T>) -> NonNull<T>;
         //@ req true;
         //@ ens result == Unique::non_null_(self);
+        //@ on_unwind_ens false;
+        
+    }
+    
+    struct Alignment;
+    
+    //@ fix Alignment::as_nonzero_(align: Alignment) -> std::num::NonZero<usize>;
+    
+    /*@
+    
+    lem Alignment_is_power_of_2(align: Alignment);
+        req true;
+        ens is_power_of_2(std::num::NonZero::get_(Alignment::as_nonzero_(align))) == true;
+    
+    @*/
+    
+    impl Alignment {
+    
+        fn as_nonzero(self: Alignment) -> std::num::NonZero<usize>;
+        //@ req true;
+        //@ ens result == Alignment::as_nonzero_(self);
         //@ on_unwind_ens false;
         
     }
