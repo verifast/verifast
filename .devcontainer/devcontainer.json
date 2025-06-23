@@ -1,5 +1,5 @@
 {
-  "image": "mcr.microsoft.com/devcontainers/universal:2",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-22.04",
   "onCreateCommand": "./setup-devcontainer.sh",
   "postCreateCommand": ". ./config.sh && . ./install-vfdeps.sh",
   "postStartCommand": ". ./config.sh && . ./install-vfdeps.sh",
