@@ -412,7 +412,7 @@ mod ptr {
     
     fix NonNull::without_provenance_<T>(addr: std::num::NonZero<usize>) -> NonNull<T>;
     
-    lem NonNull_ptr_NonNull_without_provenance_<T>(addr: std::num::NonZero<usize>);
+    lem_auto(NonNull_ptr(NonNull::without_provenance_::<T>(addr))) NonNull_ptr_NonNull_without_provenance_<T>(addr: std::num::NonZero<usize>);
         req true;
         ens NonNull_ptr(NonNull::without_provenance_::<T>(addr)) == std::num::NonZero::get_(addr) as *T;
     
@@ -489,8 +489,7 @@ mod ptr {
     
     /*@
     
-    lem Unique_non_null__from_non_null_<T>(nn: NonNull<T>);
-    //lem_auto(Unique::non_null_(Unique::from_non_null_(nn))) Unique_non_null__from_non_null_<T>(nn: NonNull<T>);
+    lem_auto(Unique::non_null_(Unique::from_non_null_(nn))) Unique_non_null__from_non_null_<T>(nn: NonNull<T>);
         req true;
         ens Unique::non_null_(Unique::from_non_null_(nn)) == nn;
     
