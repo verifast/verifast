@@ -2952,9 +2952,51 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   and create_auto_lemma l (pn,ilist) g trigger pre (_, post) ps pre_tenv tparams' =
     match (pre, post) with
     (ExprAsn(_, pre), ExprAsn(_, post)) ->
+      ctxt#begin_formal;
+      let typeid_tparams = tparams' |> List.filter tparam_carries_typeid in
+      let typeid_env = typeid_tparams |> List.map @@ fun x -> (x ^ "_typeid", ctxt#type_inductive) in 
+      let ps_env = ps |> List.map @@ fun (x, tp) -> (x, typenode_of_type tp) in
+      let tn_env = typeid_env @ ps_env in
+      let env = tn_env |> List.mapi @@ fun i (x, tn) -> (x, ctxt#mk_bound i tn) in
+      let t_pre = eval None env pre in
+      let t_post = eval None env post in
+      let tps = List.map snd tn_env in
+      (* The protected autolemma parameters are the parameters that appear in the trigger in a position that determines their type.
+         In other words, a protected parameter is such that if a term matches the trigger, then the subterm that matches the parameter
+         is necessarily of the type of the parameter. An example where this is *not* the case is the following:
+         
+         lem_auto(head(xs)) head_list_unit(xs: list<unit>)
+             req true;
+             ens head(xs) == unit;
+         {
+             match head(xs) { unit => {} }
+         }
+       *)
+      let trigger, protected_params = (
+      match trigger with
+        None -> [], []
+      | Some(trigger) -> 
+          let (trigger, tp) = check_expr (pn,ilist) tparams' pre_tenv (Some true) trigger in
+          let rec find_protected_params trigger =
+            match trigger with
+              WPureFunCall (_, g, targs, args) -> (* Function calls with only typeid-carrying type arguments fix their arguments' types. *)
+                let all_tparams_carry_typeid =
+                  targs = [] ||
+                  let (_, g_tparams, g_rt, g_ps, _) = List.assoc g purefuncmap in
+                  List.for_all tparam_carries_typeid g_tparams
+                in
+                args |> List.concat_map begin function
+                  WVar (_, x, _) when all_tparams_carry_typeid -> [x]
+                | e -> find_protected_params e
+                end
+            | _ -> []
+          in
+          [eval None env trigger], find_protected_params trigger
+      ) in
       List.iter
         begin fun (x, tp) ->
-          if not (is_universal_type tp) then
+          if not (List.mem x protected_params || is_universal_type tp) then begin
+            ctxt#end_formal;
             static_error l
               begin
                 Printf.sprintf
@@ -2967,24 +3009,9 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   x
               end
               None
+          end
         end
         ps;
-      ctxt#begin_formal;
-      let typeid_tparams = tparams' |> List.filter tparam_carries_typeid in
-      let typeid_env = typeid_tparams |> List.map @@ fun x -> (x ^ "_typeid", ctxt#type_inductive) in 
-      let ps_env = ps |> List.map @@ fun (x, tp) -> (x, typenode_of_type tp) in
-      let tn_env = typeid_env @ ps_env in
-      let env = tn_env |> List.mapi @@ fun i (x, tn) -> (x, ctxt#mk_bound i tn) in
-      let t_pre = eval None env pre in
-      let t_post = eval None env post in
-      let tps = List.map snd tn_env in
-      let trigger = (
-      match trigger with
-        None -> []
-      | Some(trigger) -> 
-          let (trigger, tp) = check_expr (pn,ilist) tparams' pre_tenv (Some true) trigger in
-          [eval None env trigger]
-      ) in
       let body = ctxt#mk_implies t_pre t_post in
       ctxt#end_formal;
       ctxt#assume_forall g trigger tps body
@@ -3760,7 +3787,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let FuncInfo ([], fterm, _, k, tparams', rt, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body, virt, overrides) = List.assoc g funcmap in
       if body = None && dialect = Some Rust && not (Filename.check_suffix g_file_name ".rsspec") then
         static_error l "A lemma function outside a .rsspec file must have a body. To assume a lemma, use the body '{ assume(false); }'." None;
-      if auto && (Filename.check_suffix g_file_name ".c" || is_import_spec || language = CLang && Filename.chop_extension (Filename.basename g_file_name) <> Filename.chop_extension (Filename.basename program_path)) then begin
+      if auto && (Filename.check_suffix g_file_name ".c" || is_import_spec || is_rust || language = CLang && Filename.chop_extension (Filename.basename g_file_name) <> Filename.chop_extension (Filename.basename program_path)) then begin
         register_prototype_used l g (Some fterm);
         create_auto_lemma l (pn,ilist) g trigger pre post ps pre_tenv tparams'
       end;

@@ -40,7 +40,7 @@ lem_auto is_power_of_2_lem();
     req true;
     ens is_power_of_2(1) && is_power_of_2(2) && is_power_of_2(4) && is_power_of_2(8) && is_power_of_2(16) && is_power_of_2(32);
 
-lem is_power_of_2_pos(n: i32);
+lem_auto is_power_of_2_pos(n: i32);
     req is_power_of_2(n) == true;
     ens 1 <= n;
 

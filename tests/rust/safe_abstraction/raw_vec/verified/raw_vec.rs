@@ -464,14 +464,7 @@ impl<A: Allocator> RawVecInner<A> {
         let cap = ZERO_CAP;
         //@ let layout = Layout::from_size_align_(elemSize, NonZero::get_(Alignment::as_nonzero_(align)));
         let r = Self { ptr, cap, alloc };
-        //@ std::ptr::NonNull_ptr_nonnull(Unique::non_null_(ptr));
-        //@ std::ptr::Unique_non_null__from_non_null_(NonNull::without_provenance_::<u8>(Alignment::as_nonzero_(align)));
-        //@ std::ptr::NonNull_ptr_NonNull_without_provenance_::<u8>(Alignment::as_nonzero_(align));
-        //@ std::ptr::Alignment_is_power_of_2(align);
-        //@ is_power_of_2_pos(NonZero::get_(Alignment::as_nonzero_(align)));
-        //@ std::alloc::Layout_align__Layout_from_size_align_(elemSize, NonZero::get_(Alignment::as_nonzero_(align)));
         //@ div_rem_nonneg_unique(NonZero::get_(Alignment::as_nonzero_(align)), NonZero::get_(Alignment::as_nonzero_(align)), 1, 0);
-        //@ std::num::niche_types::UsizeNoHighBit_as_inner__transmute_uint(0);
         //@ close RawVecInner0(alloc_id, ptr, cap, layout, _, 0);
         //@ close RawVecInner(t, r, layout, _, 0);
         //@ std::num::NonZero_usize_limits(Alignment::as_nonzero_(align));
