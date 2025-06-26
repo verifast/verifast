@@ -185,6 +185,10 @@ let adt_ty_name (adt : type_expr) =
   | StructTypeExpr (_, Some name, _, _, _) -> Ok name
   | _ -> failwith "adt_ty_name: Not an ADT"
 
+let adt_type_name = function StructType (n, _) | InductiveType (n, _) -> Some n | _ -> None
+
+let is_adt_type_ tp = Option.is_some @@ adt_type_name @@ tp
+
 let sort_decls_lexically ds =
   List.sort
     (fun d d1 ->

@@ -2,6 +2,10 @@ let ( let* ) = Result.bind
 
 exception AuxExcp of string
 
+module OptionAux = struct
+  let value_or_else ~opt ~none = match opt with Some v -> v | None -> none ()
+end
+
 module ListAux = struct
   let is_empty l = match l with [] -> true | _ :: _ -> false
   let first l = match l with [] -> None | fst :: _ -> Some fst
@@ -76,6 +80,15 @@ module ListAux = struct
           else f_aux (h2 :: merged) l1 t2
     in
     f_aux [] l1 l2
+
+  let rec fold_left2_opt f init xs ys =
+    match (xs, ys) with
+    | [], [] -> Some init
+    | x :: xs, y :: ys -> (
+        match f init x y with
+        | Some init -> fold_left2_opt f init xs ys
+        | None -> None)
+    | _, _ -> None
 
   let try_sort err_desc try_compare l =
     let compare elm1 elm2 =
