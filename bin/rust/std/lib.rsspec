@@ -1,7 +1,7 @@
 /*@
 
 abstract_type type_info;
-
+pred alloc_block_<T>(l: *T;) = std::alloc::alloc_block(l as *u8, std::alloc::Layout::new_::<T>());
 @*/
 
 mod verifast {
@@ -613,6 +613,10 @@ mod alloc {
         //@ ens [f](*self |-> l) &*& result == Layout::align_(l) &*& is_power_of_2(result) == true;
         //@ on_unwind_ens false;
 
+        fn size<'a>(self: &'a Layout) -> usize;
+        //@ req [?q](*self |-> ?layout);
+        //@ ens [q](*self |-> layout) &*& result == Layout::size_(layout);
+
     }
     
     //@ pred alloc_block(ptr: *u8; layout: Layout);
@@ -833,7 +837,7 @@ mod boxed {
         //@ ens thread_token(t) &*& Box(result, x) &*& drop_perm::<T>(charged, R, t, x);
         //@ on_unwind_ens thread_token(t);
         
-        fn from_raw(x: *T) -> Box<T, std::alloc::Global>;
+        unsafe fn from_raw(x: *T) -> Box<T, std::alloc::Global>;
         //@ req *x |-> ?value &*& std::alloc::alloc_block(x as *u8, std::alloc::Layout::new_::<T>());
         //@ ens Box(result, value);
         //@ on_unwind_ens false;
