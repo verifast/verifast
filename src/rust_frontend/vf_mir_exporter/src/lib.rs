@@ -2161,7 +2161,11 @@ mod vf_mir_builder {
                     );
                     adt_data_cpn
                         .reborrow()
-                        .fill_field_names(variant.fields.iter().map(|f| f.name.as_str()));
+                        .fill_fields(&variant.fields, |mut f_cpn, f| {
+                            f_cpn.set_name(f.name.as_str());
+                            let ty = enc_ctx.tcx.type_of(f.did).instantiate_identity();
+                            f_cpn.set_is_zero_size(ty.is_phantom_data());
+                        });
 
                     let gen_args_cpn = adt_data_cpn.reborrow().init_gen_args(gen_args.len());
                     Self::encode_ty_args(enc_ctx, gen_args, gen_args_cpn);

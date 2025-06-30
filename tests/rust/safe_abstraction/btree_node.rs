@@ -1136,7 +1136,6 @@ impl<'a, K: 'a, V: 'a> NodeRef<marker::Mut<'a>, K, V, marker::LeafOrInternal> {
         //@ std::ptr::init_ref_NonNull(&(*self_ref).node, 1/2);
         //@ std::num::init_ref_usize(&(*self_ref).height, 1/2);
         //@ init_ref_padding_NodeRef(self_ref, 1/2);
-        //@ std::marker::close_ref_initialized_PhantomData(&(*self_ref)._marker, 1);
         //@ close_ref_initialized_NodeRef(self_ref);
         // close [1/2]NodeRef_node(self_ref, _);
         let leaf = Self::as_leaf_ptr/*@::<marker::Mut<'a>, K, V, marker::LeafOrInternal, 'a>@*/(self);
@@ -1149,8 +1148,6 @@ impl<'a, K: 'a, V: 'a> NodeRef<marker::Mut<'a>, K, V, marker::LeafOrInternal> {
         //@ std::ptr::end_ref_NonNull(&(*self_ref).node);
         //@ std::num::end_ref_usize(&(*self_ref).height);
         //@ close_points_to(self);
-        //@ leak ref_init_perm(&(*self_ref)._marker, _);
-        //@ leak ref_initialized(&(*self_ref)._marker);
     }
 }
 

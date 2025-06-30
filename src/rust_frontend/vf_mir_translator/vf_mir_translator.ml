@@ -422,7 +422,7 @@ module Mir = struct
         adt_kind : adt_kind;
         adt_name : string;
         variant_name : string;
-        field_names : string list;
+        fields : D.aggregate_kind_adt_data_field_info list;
       }
     | AggKindTuple
 
@@ -444,7 +444,8 @@ module Mir = struct
     name : string;
     tparams : string list;
     lft_params : string list;
-    fds : field_def_tr list;
+    (* The fields of the Rust struct, minus those fields F such that that sizeof(F) = 0 && F.ty.OWN = True *)
+    fds_no_zst : field_def_tr list;
     def : Ast.decl;
     aux_decls : Ast.decl list;
     full_bor_content : Ast.decl option;
@@ -627,61 +628,43 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
 
   module VF0 = Verifast0
 
-  let translate_real_file_name (real_fname_cpn : RealFileNameRd.t) =
-    let open RealFileNameRd in
-    match get real_fname_cpn with
+  let translate_real_file_name (real_fname : D.real_file_name) =
+    match real_fname with
     | LocalPath path -> Ok path
-    | Remapped remapped_data_cpn -> (
-        let open RemappedData in
-        let local_path_opt_cpn = local_path_get remapped_data_cpn in
-        let virtual_name = virtual_name_get remapped_data_cpn in
-        match OptionRd.get local_path_opt_cpn with
+    | Remapped {local_path=local_path_opt_cpn; virtual_name} ->
+        match local_path_opt_cpn with
         | Nothing -> Ok virtual_name
-        | Something ptr_cpn ->
-            let text_wrapper_cpn = VfMirRd.of_pointer ptr_cpn in
-            Ok (TextWrapperRd.text_get text_wrapper_cpn)
-        | Undefined _ ->
-            Error (`TrRealFileName "Unknown RealFileName::Remapped"))
-    | Undefined _ -> Error (`TrRealFileName "Unknown RealFileName kind")
+        | Something {text} ->
+            Ok text
 
-  let translate_file_name (fname_cpn : FileNameRd.t) =
-    let open FileNameRd in
-    match get fname_cpn with
-    | Real real_fname_cpn -> translate_real_file_name real_fname_cpn
+  let translate_file_name (fname : D.file_name) =
+    match fname with
+    | Real real_fname -> translate_real_file_name real_fname
     | QuoteExpansion _ -> failwith "Todo: FileName QuoteExpansion"
-    | Undefined _ -> Error (`TrFileName "Unknown FileName kind")
 
-  let translate_source_file (src_file_cpn : SourceFileRd.t) =
-    let open SourceFileRd in
-    let name_cpn = name_get src_file_cpn in
-    translate_file_name name_cpn
+  let translate_source_file ({name} : D.source_file) =
+    translate_file_name name
 
-  let translate_char_pos (cpos_cpn : CharPosRd.t) =
-    let open CharPosRd in
-    let cpos = pos_get cpos_cpn in
+  let translate_char_pos ({pos} : D.char_pos) =
     (* Make it 1-based *)
-    let cpos = IntAux.Uint64.try_add cpos Stdint.Uint64.one in
+    let cpos = IntAux.Uint64.try_add pos Stdint.Uint64.one in
     cpos
 
-  let translate_loc (loc_cpn : LocRd.t) =
-    let open LocRd in
-    let file_cpn = file_get loc_cpn in
-    let* file = translate_source_file file_cpn in
-    let line = line_get loc_cpn in
-    let col_cpn = col_get loc_cpn in
-    let* col = translate_char_pos col_cpn in
+  let translate_loc ({file; line; col} : D.loc) =
+    let* file = translate_source_file file in
+    let* col = translate_char_pos col in
     let* line = IntAux.Uint64.try_to_int line in
     let* col = IntAux.Uint64.try_to_int col in
     let src_pos = (file, line, col) in
     Ok src_pos
 
-  let translate_span_data (span_cpn : SpanDataRd.t) =
-    let open SpanDataRd in
-    let lo_cpn = lo_get span_cpn in
-    let* lo = translate_loc lo_cpn in
-    let hi_cpn = hi_get span_cpn in
-    let* hi = translate_loc hi_cpn in
+  let translate_decoded_span_data ({lo; hi} : D.span_data) =
+    let* lo = translate_loc lo in
+    let* hi = translate_loc hi in
     Ok (Ast.Lexed (lo, hi))
+  
+  let translate_span_data (span_data_cpn: SpanDataRd.t) =
+    translate_decoded_span_data (D.decode_span_data span_data_cpn)
 
   let translate_source_info (src_info_cpn : SourceInfoRd.t) =
     let open SourceInfoRd in
@@ -2843,8 +2826,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           let variant_idx_cpn = variant_idx_get adt_data_cpn in
           let variant_name = variant_id_get adt_data_cpn in
           let substs_cpn = gen_args_get_list adt_data_cpn in
-          let field_names = field_names_get_list adt_data_cpn in
-          Ok Mir.(AggKindAdt { adt_kind; adt_name; variant_name; field_names })
+          let fields = fields_get_list adt_data_cpn |> List.map D.decode_aggregate_kind_adt_data_field_info in
+          Ok Mir.(AggKindAdt { adt_kind; adt_name; variant_name; fields })
       | Closure _ ->
           failwith "Todo: AggregateKind::Closure"
           (* CAVEAT: Once we allow closure values, we must also check closure bodies. *)
@@ -2907,7 +2890,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             tmp_rvalue_binders @ field_init_stmts
           in
           Ok (`TrRvalueAggregate init_stmts_builder)
-      | AggKindAdt { adt_kind; adt_name; variant_name; field_names } -> (
+      | AggKindAdt { adt_kind; adt_name; variant_name; fields } -> (
           match adt_kind with
           | Enum ->
               let init_stmts_builder (lhs_place, lhs_place_is_mutable) =
@@ -2932,7 +2915,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               Ok (`TrRvalueAggregate init_stmts_builder)
           | Union -> failwith "Todo: Unsupported Adt kind for aggregate"
           | Struct ->
-              if List.length operands_cpn <> List.length field_names then
+              if List.length operands_cpn <> List.length fields then
                 Error
                   (`TrAggregate
                     "The number of struct fields and initializing operands are \
@@ -2940,17 +2923,19 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               else
                 let init_stmts_builder (lhs_place, lhs_place_is_mutable) =
                   let field_init_stmts =
-                    List.map
-                      (fun (field_name, init_expr) ->
+                    List.concat_map
+                      (fun (({name; is_zero_size}: D.aggregate_kind_adt_data_field_info), init_expr) ->
+                        if is_zero_size then [] else [
                         let open Ast in
                         ExprStmt
                           (AssignExpr
                              ( loc,
-                               Select (loc, lhs_place, field_name),
+                               Select (loc, lhs_place, name),
                                (if lhs_place_is_mutable then Mutation
                                 else Initialization),
-                               init_expr )))
-                      (List.combine field_names operand_exprs)
+                               init_expr ))
+                        ])
+                      (List.combine fields operand_exprs)
                   in
                   tmp_rvalue_binders @ field_init_stmts
                 in
@@ -3871,7 +3856,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
   let gen_drop_contract adt_defs self_ty self_ty_targs self_lft_args limpl =
     let outlives_preds = [] in
     let open Ast in
-    let ({ loc = ls; tparams; lft_params; fds } : Mir.adt_def_tr) =
+    let ({ loc = ls; tparams; lft_params; fds_no_zst } : Mir.adt_def_tr) =
       List.find
         (function ({ name } : Mir.adt_def_tr) -> name = self_ty)
         adt_defs
@@ -4023,7 +4008,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                                "Could not generate drop postcondition \
                                 conjuncts for this field",
                                None )))
-                  fds
+                  fds_no_zst
                   (Ast.CallExpr
                      ( limpl,
                        padding_pred_name self_ty,
@@ -4650,24 +4635,16 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | DefKind.AssocFn -> failwith "Todo: MIR Body kind AssocFn"
     | _ -> Error (`TrBodyFatal "Unknown MIR Body kind")
 
-  let translate_visibility (vis_cpn : VisibilityRd.t) =
-    let open VisibilityRd in
-    match get vis_cpn with
+  let translate_visibility (vis : D.visibility) =
+    match vis with
     | Public -> Ok Mir.Public
     | Restricted -> Ok Mir.Restricted
-    | Undefined _ -> Error (`TrVisibility "Unknown visibility kind")
 
-  let translate_field_def (fdef_cpn : FieldDefRd.t) =
-    let open FieldDefRd in
-    let name_cpn = name_get fdef_cpn in
-    let name = translate_symbol name_cpn in
-    let span_cpn = span_get fdef_cpn in
-    let* loc = translate_span_data span_cpn in
+  let translate_field_def ({name={name}; span; ty; vis} : D.variant_def_field_def) =
+    let* loc = translate_decoded_span_data span in
     (* Todo @Nima: We are using the whole field definition span as the type span which should be corrected *)
-    let ty_cpn = ty_get fdef_cpn in
-    let* ty_info = translate_ty ty_cpn loc in
-    let vis_cpn = vis_get fdef_cpn in
-    let* vis = translate_visibility vis_cpn in
+    let* ty_info = translate_decoded_ty ty loc in
+    let* vis = translate_visibility vis in
     Ok Mir.{ name; ty = ty_info; vis; loc }
 
   let translate_to_vf_field_def
@@ -4682,12 +4659,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         true (*final*),
         None (*expr option*) )
 
-  let translate_variant_def (vdef_cpn : VariantDefRd.t) =
+  let translate_variant_def ({span; name; fields} : D.variant_def) =
     let open VariantDefRd in
-    let* loc = translate_span_data (span_get vdef_cpn) in
-    let name = name_get vdef_cpn in
-    let fields_cpn = fields_get_list vdef_cpn in
-    let* fields = ListAux.try_map translate_field_def fields_cpn in
+    let* loc = translate_decoded_span_data span in
+    let* fields = ListAux.try_map translate_field_def fields in
     let open Mir in
     Ok Mir.{ loc; name; fields }
 
@@ -4879,7 +4854,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         [] (*overrides*) )
 
   let gen_own_variance_proof_oblig adt_def_loc name lft_params tparams variances
-      fds =
+      fds_no_zst =
     let open Ast in
     assert (List.length variances = List.length lft_params + List.length tparams);
     let lft_param_variances, tparam_variances =
@@ -5052,7 +5027,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       CastExpr
         ( adt_def_loc,
           tp1,
-          InitializerList (adt_def_loc, List.map init_for_fd fds) )
+          InitializerList (adt_def_loc, List.map init_for_fd fds_no_zst) )
     in
     let post =
       CallExpr
@@ -5651,7 +5626,16 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let vf_tparams = lft_params @ tparams in
       let variances = variances_get_list adt_def_cpn in
       let variants_cpn = variants_get_list adt_def_cpn in
-      let* variants = ListAux.try_map translate_variant_def variants_cpn in
+      let decoded_variants = List.map D.decode_variant_def variants_cpn in
+      (* The variants, with some fields F such that sizeof(F) = 0 && F.ty.OWN = True filtered out
+       * The latter condition is exploited in gen_drop_contract.
+       *)
+      let decoded_variants_no_zst = decoded_variants |> List.map @@ function ({span; name; fields}: D.variant_def) ->
+        let fields = fields |> List.filter (function ({ty={kind=Adt {id={name=("std::marker::PhantomData"|"core::marker::PhantomData")}}}}: D.variant_def_field_def) -> false | _ -> true) in
+        ({span; name; fields}: D.variant_def)
+      in
+      let* variants = ListAux.try_map translate_variant_def decoded_variants in
+      let* variants_no_zst = ListAux.try_map translate_variant_def decoded_variants_no_zst in
       let span_cpn = def_span_get adt_def_cpn in
       let* def_loc = translate_span_data span_cpn in
       let preds =
@@ -5664,18 +5648,17 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         List.map (fun x -> Ast.IdentTypeExpr (def_loc, None, x)) vf_tparams
       in
       let vis_cpn = vis_get adt_def_cpn in
-      let* vis = translate_visibility vis_cpn in
+      let* vis = translate_visibility @@ D.decode_visibility vis_cpn in
       let is_local = is_local_get adt_def_cpn in
       let kind_cpn = kind_get adt_def_cpn in
-      let* kind, fds, def, aux_decls =
+      let* kind, fds, fds_no_zst, def, aux_decls =
         match AdtKindRd.get kind_cpn with
         | StructKind ->
-            let* fds =
-              match variants with
-              | [ variant_def ] -> Ok variant_def.fields
-              | _ -> Error (`TrAdtDef "Struct ADT kind should have one variant")
-            in
-            let field_defs = List.map translate_to_vf_field_def fds in
+            let [ variant_def ] = variants in
+            let fds = variant_def.fields in
+            let [ variant_def_no_zst ] = variants_no_zst in
+            let fds_no_zst = variant_def_no_zst.fields in
+            let field_defs_no_zst = List.map translate_to_vf_field_def fds_no_zst in
             let struct_decl =
               Ast.Struct
                 ( def_loc,
@@ -5683,7 +5666,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   vf_tparams,
                   Some
                     ( (*base_spec list*) [],
-                      (*field list*) field_defs,
+                      (*field list*) field_defs_no_zst,
                       (*instance_pred_decl list*) [],
                       (*is polymorphic*) false ),
                   (*struct_attr list*)
@@ -5696,7 +5679,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   name,
                   lft_params @ tparams )
             in
-            Ok (Mir.Struct, fds, struct_decl, [ struct_typedef_aux ])
+            Ok (Mir.Struct, fds, fds_no_zst, struct_decl, [ struct_typedef_aux ])
         | EnumKind ->
             let ctors =
               (* VeriFast does not support zero-ctor inductives, so add a dummy ctor. *)
@@ -5711,7 +5694,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                    Ast.Ctor (loc, name ^ "::" ^ variant_name, ps)
             in
             let decl = Ast.Inductive (def_loc, name, tparams, ctors) in
-            Ok (Mir.Enum, [], decl, [])
+            Ok (Mir.Enum, [], [], decl, [])
         | UnionKind -> failwith "Todo: AdtDef::Union"
         | Undefined _ -> Error (`TrAdtDef "Unknown ADT kind")
       in
@@ -5761,12 +5744,16 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                fields are not yet supported"
               None;
           let field_types =
-            variants_cpn
-            |> Util.flatmap @@ fun variant_cpn ->
-               VfMirRd.VariantDef.fields_get_list variant_cpn
-               |> List.map @@ fun field_cpn ->
-                  VfMirRd.VariantDef.FieldDef.ty_get field_cpn
-                  |> D.decode_ty |> decode_ty
+            decoded_variants
+            |> Util.flatmap @@ fun ({fields}: D.variant_def) ->
+               fields |> List.map @@ fun ({ty}: D.variant_def_field_def) ->
+                  decode_ty ty
+          in
+          let field_types_no_zst =
+            decoded_variants_no_zst
+            |> Util.flatmap @@ fun ({fields}: D.variant_def) ->
+               fields |> List.map @@ fun ({ty}: D.variant_def_field_def) ->
+                  decode_ty ty
           in
           (* If send_preds = None, it means this ADT is never Send.
              If send_preds = Some xs, then xs is a list of type parameters such that if any of them are not Send, then this ADT is not Send.
@@ -6065,7 +6052,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             (send_preds, sync_preds)
           in
           let* full_bor_content =
-            gen_adt_full_borrow_content kind name tparams lft_params variants
+            gen_adt_full_borrow_content kind name tparams lft_params variants_no_zst
               def_loc (match user_provided_own_defs with [ Right(_, Some _, _) ] -> true | _ -> false)
           in
           let own_proof_obligs =
@@ -6097,7 +6084,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                    variances
             then
               gen_own_variance_proof_oblig def_loc name lft_params tparams
-                variances fds
+                variances fds_no_zst
             else ([], [])
           in
           let own_proof_obligs = own_variance_proof_obligs @ own_proof_obligs in
@@ -6113,7 +6100,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                [
                  (let inputParamCount, body =
                     if has_public_fields then
-                      (None, default_struct_own def_loc fds "t" "v")
+                      (None, default_struct_own def_loc fds_no_zst "t" "v")
                     else (Some 2, False def_loc)
                   in
                   Ast.TypePredDef
@@ -6138,7 +6125,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               [
                 (let inputParamCount, body =
                    if has_public_fields then
-                     (None, default_struct_share def_loc fds "k" "t" "v")
+                     (None, default_struct_share def_loc fds_no_zst "k" "t" "v")
                    else (Some 3, True def_loc)
                  in
                  Ast.TypePredDef
@@ -6165,7 +6152,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                       (List.map
                          (fun (fd : Mir.field_def_tr) ->
                            (fd.loc, fd.name, fd.ty))
-                         fds));
+                         fds_no_zst));
                 ]
             else []
           in
@@ -6181,7 +6168,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             in
             let post =
               let fd_ref_init_perm_asns =
-                List.combine fds field_types
+                List.combine fds_no_zst field_types_no_zst
                 |> Util.flatmap (fun (fd, fd_ty) ->
                        match fd_ty with
                        | `Adt ("std::cell::UnsafeCell", _, _) -> []
@@ -6512,7 +6499,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                         Static ) )
               in
               let fd_ref_initialized_asns =
-                List.combine fds field_types
+                List.combine fds_no_zst field_types_no_zst
                 |> Util.flatmap (fun (fd, fd_ty) ->
                        match fd_ty with
                        | `Adt ("std::cell::UnsafeCell", _, _) -> []
@@ -6611,7 +6598,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             in
             let post =
               let fd_ref_initialized_asns =
-                List.combine fds field_types
+                List.combine fds_no_zst field_types_no_zst
                 |> Util.flatmap (fun (fd, fd_ty) ->
                        match fd_ty with
                        | `Adt ("std::cell::UnsafeCell", _, _) -> []
@@ -6710,7 +6697,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                name;
                tparams;
                lft_params;
-               fds;
+               fds_no_zst;
                def;
                aux_decls = aux_decls @ aux_decls';
                full_bor_content;
