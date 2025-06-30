@@ -757,7 +757,7 @@ let fns_to_be_inlined: (string * body) list =
                   user_type_annotation_index=();
                   union_active_field=Stdint.Uint32.of_int 0;
                   variant_id="None";
-                  field_names=[];
+                  fields=[];
                   adt_kind=EnumKind;
                 };
                 operands=[]
@@ -850,7 +850,7 @@ let fns_to_be_inlined: (string * body) list =
                   user_type_annotation_index=();
                   union_active_field=Stdint.Uint32.of_int 1;
                   variant_id="Some";
-                  field_names=[];
+                  fields=[];
                   adt_kind=EnumKind;
                 };
                 operands=[Move (local "fResult")]

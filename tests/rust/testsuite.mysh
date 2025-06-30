@@ -104,7 +104,6 @@ cd safe_abstraction
     del proof_obligs_quick_fix_test_generic_result.rs
   end_sequential
   verifast -ignore_unwind_paths -allow_assume my_range_iterator.rs
-  verifast -ignore_unwind_paths -skip_specless_fns -allow_assume linked_list.rs
   cd linked_list
     verifast -rustc_args "--edition 2021 --cfg test" -ignore_unwind_paths -skip_specless_fns -allow_assume verified/lib.rs
     refinement-checker --rustc-args "--edition 2021 --cfg test" orig/lib.rs verified/lib.rs

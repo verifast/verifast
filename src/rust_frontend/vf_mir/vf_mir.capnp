@@ -501,13 +501,17 @@ struct Operand {
 
 struct AggregateKind {
     struct AdtData {
+        struct FieldInfo {
+            name @0: Text;
+            isZeroSize @1: Bool; # if true, sizeof(field) = 0 && field.ty.OWN = True. This must match the fields treated as ZST (and dropped from the VeriFast struct definition) in translate_adt_def
+        }
         adtId @0: AdtDefId;
         variantIdx @1: UInt32;
         variantId @5: Text;
         genArgs @2: List(GenericArg);
         userTypeAnnotationIndex @3: Void;
         unionActiveField @4: UInt32;
-        fieldNames @6: List(Text);
+        fields @6: List(FieldInfo);
         adtKind @7: AdtKind;
     }
     struct ClosureData {

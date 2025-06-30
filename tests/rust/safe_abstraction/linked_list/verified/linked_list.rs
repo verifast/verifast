@@ -308,7 +308,7 @@ lem Nodes_upcast<T0, T1>()
 
 lem LinkedList_own_mono<T0, T1, A0, A1>()
     req type_interp::<T0>() &*& type_interp::<T1>() &*& type_interp::<A0>() &*& type_interp::<A1>() &*& LinkedList_own::<T0, A0>(?t, ?v) &*& is_subtype_of::<T0, T1>() == true &*& is_subtype_of::<A0, A1>() == true;
-    ens type_interp::<T0>() &*& type_interp::<T1>() &*& type_interp::<A0>() &*& type_interp::<A1>() &*& LinkedList_own::<T1, A1>(t, LinkedList::<T1, A1> { head: upcast(v.head), tail: upcast(v.tail), len: upcast(v.len), alloc: upcast(v.alloc), marker: upcast(v.marker) });
+    ens type_interp::<T0>() &*& type_interp::<T1>() &*& type_interp::<A0>() &*& type_interp::<A1>() &*& LinkedList_own::<T1, A1>(t, LinkedList::<T1, A1> { head: upcast(v.head), tail: upcast(v.tail), len: upcast(v.len), alloc: upcast(v.alloc) });
 {
     open <LinkedList<T0, A0>>.own(t, v);
     LinkedList_upcast::<T0, T1, A0, A1>(v);
@@ -502,7 +502,7 @@ lem LinkedList_share_full<T, A>(k: lifetime_t, t: thread_id_t, l: *LinkedList<T,
     close sep(LinkedList_frac_borrow_content::<T, A>(alloc_id, l, head, tail, nodes, prevs, nexts), elem_fbcs::<T>(t, nodes))();
     std::alloc::close_Allocator_full_borrow_content_::<A>(t, &(*l).alloc);
     {
-        pred Ctx() = (*l).marker |-> ?_;
+        pred Ctx() = true;
         close sep(std::alloc::Allocator_full_borrow_content_::<A>(t, &(*l).alloc, alloc_id), sep(LinkedList_frac_borrow_content::<T, A>(alloc_id, l, head, tail, nodes, prevs, nexts), elem_fbcs::<T>(t, nodes)))();
         produce_lem_ptr_chunk full_borrow_convert_strong(Ctx, sep(std::alloc::Allocator_full_borrow_content_::<A>(t, &(*l).alloc, alloc_id), sep(LinkedList_frac_borrow_content::<T, A>(alloc_id, l, head, tail, nodes, prevs, nexts), elem_fbcs::<T>(t, nodes))), klong, LinkedList_full_borrow_content::<T, A>(t, l))() {
             open Ctx();
@@ -654,7 +654,6 @@ lem init_ref_LinkedList<T, A>(p: *LinkedList<T, A>)
     assert [_]exists(LinkedList_share_info(?alloc_id, ?head, ?tail, ?nodes, ?prevs, ?nexts));
     close exists(LinkedList_share_info(alloc_id, head, tail, nodes, prevs, nexts));
     open_ref_init_perm_LinkedList(p);
-    leak ref_init_perm(&(*p).marker, _);
     
     {
         pred R(;) = ref_initialized(&(*p).head) &*& ref_initialized(&(*p).tail) &*& ref_initialized(&(*p).len) &*& ref_padding_initialized(p);
@@ -708,7 +707,6 @@ lem init_ref_LinkedList<T, A>(p: *LinkedList<T, A>)
             open [?f]sep_(ref_initialized_(&(*p).alloc), R)();
             open [f]ref_initialized_::<A>(&(*p).alloc)();
             open [f]R();
-            std::marker::close_ref_initialized_PhantomData(&(*p).marker, f);
             close_ref_initialized_LinkedList(p);
             close [f]ref_initialized_::<LinkedList<T, A>>(p)();
         } {
@@ -718,7 +716,6 @@ lem init_ref_LinkedList<T, A>(p: *LinkedList<T, A>)
                 close [f]ref_initialized_::<A>(&(*p).alloc)();
                 close [f]R();
                 close [f]sep_(ref_initialized_(&(*p).alloc), R)();
-                leak [f]ref_initialized(&(*p).marker);
             } {
                 frac_borrow_implies(k, sep_(ref_initialized_(&(*p).alloc), R), ref_initialized_(p));
             }
@@ -821,7 +818,7 @@ pred<'a, T> <Iter<'a, T>>.own(t, iter) =
 
 lem Iter_own_mono<'a0, 'a1, T0, T1>()
     req type_interp::<T0>() &*& type_interp::<T1>() &*& Iter_own::<'a0, T0>(?t, ?v) &*& lifetime_inclusion('a1, 'a0) == true &*& is_subtype_of::<T0, T1>() == true;
-    ens type_interp::<T0>() &*& type_interp::<T1>() &*& Iter_own::<'a1, T1>(t, Iter::<'a1, T1> { head: upcast(v.head), tail: upcast(v.tail), len: upcast(v.len), marker: upcast(v.marker) });
+    ens type_interp::<T0>() &*& type_interp::<T1>() &*& Iter_own::<'a1, T1>(t, Iter::<'a1, T1> { head: upcast(v.head), tail: upcast(v.tail), len: upcast(v.len) });
 {
     assume(false);
 }
@@ -1027,7 +1024,6 @@ impl<T, A: Allocator> LinkedList<T, A> {
                 (*self).tail |-> ?tail_ &*&
                 Nodes(alloc_id, head_, None, tail_, None, ?nodes) &*&
                 (*self).len |-> length(nodes) &*&
-                (*self).marker |-> ?_ &*&
                 struct_LinkedList_padding(self) &*&
                 foreach(nodes, elem_fbc::<T>(t));
             @*/
@@ -2231,7 +2227,6 @@ impl<T, A: Allocator> LinkedList<T, A> {
         //@ std::num::init_ref_usize(&(*self_ref).len, 1/2);
         //@ init_ref_padding_LinkedList(self_ref, 1/2);
         //@ let k1 = begin_lifetime();
-        //@ std::marker::close_ref_initialized_PhantomData(&(*self_ref).marker, 1);
         let len;
         {
             //@ let_lft 'a = k1;
@@ -2246,7 +2241,6 @@ impl<T, A: Allocator> LinkedList<T, A> {
         //@ std::alloc::end_ref_Allocator_at_lifetime::<A>();
         //@ std::num::end_ref_usize(&(*self_ref).len);
         //@ end_ref_padding_LinkedList(self_ref);
-        //@ leak ref_init_perm(&(*self_ref).marker, _) &*& ref_initialized(&(*self_ref).marker);
         
         //@ assert (*self).head |-> ?head &*& (*self).tail |-> ?tail &*& Nodes(?alloc_id, _, _, _, _, _);
         assert!(at <= len, "Cannot split off at a nonexistent index");
@@ -2998,7 +2992,6 @@ pred_ctor CursorMut_fbc<T, A>(t: thread_id_t, ghost_cell_id: i32, list: *LinkedL
     foreach(nodes2, elem_fbc::<T>(t)) &*&
     (*list).len |-> length(nodes1) + length(nodes2) &*&
     index == length(nodes1) &*&
-    (*list).marker |-> ?_ &*&
     struct_LinkedList_padding(list);
 
 pred<'a, T, A> <CursorMut<'a, T, A>>.own(t, cursor) =
@@ -3259,7 +3252,6 @@ impl<'a, T, A: Allocator> CursorMut<'a, T, A> {
                 //@ std::num::init_ref_usize(&(*list_ref).len, 1/2);
                 //@ init_ref_padding_LinkedList(list_ref, 1/2);
                 //@ let k1 = begin_lifetime();
-                //@ std::marker::close_ref_initialized_PhantomData(&(*list_ref).marker, 1);
                 let len;
                 {
                     //@ let_lft 'b = k1;
@@ -3274,7 +3266,6 @@ impl<'a, T, A: Allocator> CursorMut<'a, T, A> {
                 //@ std::alloc::end_ref_Allocator_at_lifetime::<A>();
                 //@ std::num::end_ref_usize(&(*list_ref).len);
                 //@ end_ref_padding_LinkedList(list_ref);
-                //@ leak ref_init_perm(&(*list_ref).marker, _) &*& ref_initialized(&(*list_ref).marker);
                 
                 self.index = len.checked_sub(1).unwrap_or(0);
                 
@@ -3318,7 +3309,6 @@ impl<'a, T, A: Allocator> CursorMut<'a, T, A> {
                 //@ std::num::init_ref_usize(&(*list_ref).len, 1/2);
                 //@ init_ref_padding_LinkedList(list_ref, 1/2);
                 //@ let k1 = begin_lifetime();
-                //@ std::marker::close_ref_initialized_PhantomData(&(*list_ref).marker, 1);
                 {
                     //@ let_lft 'b = k1;
                     //@ std::alloc::init_ref_Allocator_at_lifetime::<'b, A>(&(*list_ref).alloc);
@@ -3365,7 +3355,6 @@ impl<'a, T, A: Allocator> CursorMut<'a, T, A> {
                 //@ std::alloc::end_ref_Allocator_at_lifetime::<A>();
                 //@ std::num::end_ref_usize(&(*list_ref).len);
                 //@ end_ref_padding_LinkedList(list_ref);
-                //@ leak ref_init_perm(&(*list_ref).marker, _) &*& ref_initialized(&(*list_ref).marker);
             },
         }
         //@ let self1 = *self;
@@ -3476,7 +3465,6 @@ impl<'a, T, A: Allocator> CursorMut<'a, T, A> {
                                 foreach(tail(nodes2), elem_fbc::<T>(t1)) &*&
                                 (*list).len |-> length(nodes1) + length(nodes2) &*&
                                 index == length(nodes1) &*&
-                                (*list).marker |-> ?_ &*&
                                 struct_LinkedList_padding(list);
                             produce_lem_ptr_chunk full_borrow_convert_strong(Ctx, <T>.full_borrow_content(t, &(*NonNull_ptr(current)).element), klongb2, CursorMut_fbc::<T, A>(t1, ghost_cell_id, self0.list))() {
                                 open Ctx();
