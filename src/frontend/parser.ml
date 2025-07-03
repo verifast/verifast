@@ -764,7 +764,7 @@ and
     (ls, Ident s); 
     [%let targs = parse_type_args ls];
     [%l
-    d = function%parser
+    ds = function%parser
     | [ parse_fields as fs; 
         [%l
         attrs = begin function%parser
@@ -774,14 +774,24 @@ and
         | [ ] -> [] 
         end
         ];
-        (_, Kwd ";") 
-      ] -> Struct (l, s, reinterpret_targs_as_tparams targs, Some ([], fs, [], false), attrs)
-    | [ (_, Kwd ";") ] -> Struct (l, s, reinterpret_targs_as_tparams targs, None, [])
+        [%l ds = function%parser
+          | [ (_, Kwd ";") ] -> [Struct (l, s, reinterpret_targs_as_tparams targs, Some ([], fs, [], false), attrs)]
+          | [
+              [%l t = parse_type_suffix (StructTypeExpr (l, Some s, None, [], targs))]; 
+              [%l d = parse_func_rest Regular (Some t)]
+            ] ->
+            [
+              Struct (l, s, reinterpret_targs_as_tparams targs, Some ([], fs, [], false), attrs);
+              d
+            ]
+        ]
+      ] -> ds
+    | [ (_, Kwd ";") ] -> [Struct (l, s, reinterpret_targs_as_tparams targs, None, [])]
     | [ [%l t = parse_type_suffix (StructTypeExpr (l, Some s, None, [], targs))]; 
         [%l d = parse_func_rest Regular (Some t)]
-      ] -> d
+      ] -> [d]
     ]
-  ] -> check_function_for_contract d
+  ] -> List.concat_map check_function_for_contract ds
 | [ (l, Kwd "union"); 
     (_, Ident u); 
     [%l 

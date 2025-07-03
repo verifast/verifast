@@ -9,6 +9,12 @@ cd bin
   cd ..
 cd ..
 cd examples
+  cd tutorial
+    verifast -c lemptrs.c
+    cd finegrained
+      verifast -c finegrained.c
+    cd ..
+  cd ..
   verifast -c leftpad.c
   verifast -c -uppercase_type_params_carry_typeid generic_pred_ctors.c
   verifast -c -prover z3v4.5 -uppercase_type_params_carry_typeid generic_pred_ctors.c
