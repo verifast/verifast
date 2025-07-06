@@ -205,7 +205,7 @@ let _ =
           (fun _ -> ()), (fun _ -> ()), (fun _ -> ())
         else
           let stmtLocs = LocHashtbl.create 10000 in
-          let reportStmt l = LocHashtbl.replace stmtLocs l () in
+          let reportStmt l = if l != dummy_loc0 then LocHashtbl.replace stmtLocs l () in
           let reportStmtExec l = LocHashtbl.remove stmtLocs l in
           let reportDeadCode () =
             stmtLocs |> LocHashtbl.filter_map_inplace begin fun ((path, line, _), _) () ->

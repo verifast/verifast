@@ -68,8 +68,13 @@ struct Loc {
 }
 
 struct SpanData {
-    lo @0: Loc;
-    hi @1: Loc;
+    union {
+        dummy @0: Void;
+        regular :group {
+            lo @1: Loc;
+            hi @2: Loc;
+        }
+    }
 }
 
 # It is also possible to use `Enum`s here but it would be easier to add

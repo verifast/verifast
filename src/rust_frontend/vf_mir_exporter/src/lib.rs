@@ -1532,11 +1532,16 @@ mod vf_mir_builder {
             mut span_data_cpn: span_data_cpn::Builder<'_>,
         ) {
             //debug!("Encoding SpanData {:?}", span_data);
+            if span_data.is_dummy() {
+                span_data_cpn.set_dummy(());
+                return;
+            }
+            let mut span_data_regular_cpn = span_data_cpn.init_regular();
             let sm = tcx.sess.source_map();
-            let lo_cpn = span_data_cpn.reborrow().init_lo();
+            let lo_cpn = span_data_regular_cpn.reborrow().init_lo();
             let lo = sm.lookup_char_pos(span_data.lo);
             Self::encode_loc(&lo, lo_cpn);
-            let hi_cpn = span_data_cpn.init_hi();
+            let hi_cpn = span_data_regular_cpn.init_hi();
             let hi = sm.lookup_char_pos(span_data.hi);
             Self::encode_loc(&hi, hi_cpn);
         }

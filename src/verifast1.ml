@@ -2975,6 +2975,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             | GhostTypeParam x -> Some [x]
             | Int (_, _) | RustChar | RealType | PtrType _ | RustRefType _ | PredType (_, _, _, _) | ObjType _ | ArrayType _ | BoxIdType | HandleIdType | AnyType | AbstractType _ -> None
             | PureFuncType (_, _) -> None (* CAVEAT: This assumes we do *not* have extensionality *)
+            | StructType _ -> Some []
             | InductiveType (i0, targs) ->
               begin match try_assoc i0 infinite_map with
                 Some (info0, status0) ->
