@@ -2,6 +2,8 @@
 
 fix default_value<t>() -> t;
 
+fix eq<t>(x: t, y: t) -> bool { x == y } // Useful for partial application: forall(xs, (eq)(0)) == true.
+
 inductive unit = unit;
 
 inductive option<t> = none | some(t);

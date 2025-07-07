@@ -512,41 +512,128 @@ impl<A: Allocator> RawVecInner<A> {
         init: AllocInit,
         alloc: A,
         elem_layout: Layout,
-    ) -> Result<Self, TryReserveError> {
+    ) -> Result<Self, TryReserveError>
+    //@ req thread_token(?t) &*& Allocator(t, alloc, ?alloc_id) &*& t == currentThread &*& Layout::size_(elem_layout) % Layout::align_(elem_layout) == 0;
+    /*@
+    ens thread_token(t) &*&
+        match result {
+            Result::Ok(v) =>
+                RawVecInner(t, v, elem_layout, ?ptr, ?allocSize) &*&
+                match init {
+                    raw_vec::AllocInit::Uninitialized => ptr[..allocSize] |-> _,
+                    raw_vec::AllocInit::Zeroed => ptr[..allocSize] |-> ?bs &*& forall(bs, (eq)(0)) == true
+                },
+            Result::Err(e) => <std::collections::TryReserveError>.own(t, e)
+        };
+    @*/
+    //@ safety_proof { assume(false); }
+    {
+        //@ std::alloc::Layout_inv(elem_layout);
+        
         // We avoid `unwrap_or_else` here because it bloats the amount of
         // LLVM IR generated.
         let layout = match layout_array(capacity, elem_layout) {
             Ok(layout) => layout,
-            Err(_) => return Err(CapacityOverflow.into()),
+            Err(_) => {
+                //@ std::alloc::Allocator_to_own(alloc);
+                //@ close <std::collections::TryReserveErrorKind>.own(currentThread, std::collections::TryReserveErrorKind::CapacityOverflow);
+                return Err(CapacityOverflow.into())
+            },
         };
 
         // Don't allocate here because `Drop` will not deallocate when `capacity` is 0.
-        if layout.size() == 0 {
-            return Ok(Self::new_in(alloc, elem_layout.alignment()));
+        {
+            //@ let layout_ref = precreate_ref(&layout);
+            //@ std::alloc::init_ref_Layout(layout_ref, 1/2);
+            let layout_size = layout.size();
+            //@ std::alloc::end_ref_Layout(layout_ref);
+            if layout_size == 0 {
+                //@ let elem_layout_ref = precreate_ref(&elem_layout);
+                //@ std::alloc::init_ref_Layout(elem_layout_ref, 1/2);
+                let elem_layout_alignment = elem_layout.alignment();
+                //@ std::alloc::end_ref_Layout(elem_layout_ref);
+                //@ close exists(Layout::size_(elem_layout));
+                return Ok(Self::new_in(alloc, elem_layout_alignment));
+            }
         }
-
-        if let Err(err) = alloc_guard(layout.size()) {
-            return Err(err);
+        
+        {
+            //@ let layout_ref2 = precreate_ref(&layout);
+            //@ std::alloc::init_ref_Layout(layout_ref2, 1/2);
+            let layout_size = layout.size();
+            //@ std::alloc::end_ref_Layout(layout_ref2);
+            if let Err(err) = alloc_guard(layout_size) {
+                //@ std::alloc::Allocator_to_own(alloc);
+                return Err(err);
+            }
         }
 
         let result = match init {
-            AllocInit::Uninitialized => alloc.allocate(layout),
+            AllocInit::Uninitialized => {
+                let r;
+                //@ let alloc_ref = precreate_ref(&alloc);
+                //@ let k = begin_lifetime();
+                unsafe {
+                    //@ let_lft 'a = k;
+                    //@ std::alloc::init_ref_Allocator_at_lifetime::<'a, A>(alloc_ref);
+                    r = alloc.allocate(layout);
+                    //@ leak Allocator(_, _, _);
+                }
+                //@ end_lifetime(k);
+                //@ std::alloc::end_ref_Allocator_at_lifetime::<A>();
+                r
+            }
             #[cfg(not(no_global_oom_handling))]
-            AllocInit::Zeroed => alloc.allocate_zeroed(layout),
+            AllocInit::Zeroed => {
+                let r;
+                //@ let alloc_ref = precreate_ref(&alloc);
+                //@ let k = begin_lifetime();
+                {
+                    //@ let_lft 'a = k;
+                    //@ std::alloc::init_ref_Allocator_at_lifetime::<'a, A>(alloc_ref);
+                    r = alloc.allocate_zeroed(layout);
+                    //@ leak Allocator(_, _, _);
+                }
+                //@ end_lifetime(k);
+                //@ std::alloc::end_ref_Allocator_at_lifetime::<A>();
+                r
+            }
         };
         let ptr = match result {
             Ok(ptr) => ptr,
-            Err(_) => return Err(AllocError { layout, non_exhaustive: () }.into()),
+            Err(_) => {
+                //@ std::alloc::Allocator_to_own(alloc);
+                let err1 = AllocError { layout, non_exhaustive: () };
+                //@ std::alloc::close_Layout_own(currentThread, layout);
+                //@ close_tuple_0_own(currentThread);
+                //@ close <std::collections::TryReserveErrorKind>.own(currentThread, err1);
+                return Err(err1.into())
+            }
         };
 
         // Allocators currently return a `NonNull<[u8]>` whose length
         // matches the size requested. If that ever changes, the capacity
         // here should change to `ptr.len() / size_of::<T>()`.
-        Ok(Self {
+        //@ std::alloc::Layout_inv(elem_layout);
+        //@ assert 0 <= Layout::size_(elem_layout);
+        //@ assert Layout::size_(elem_layout) != 0;
+        //@ mul_mono_l(1, Layout::size_(elem_layout), capacity);
+        //@ assert capacity * Layout::size_(elem_layout) <= isize::MAX;
+        let res = Self {
             ptr: Unique::from(ptr.cast()),
             cap: unsafe { Cap::new_unchecked(capacity) },
             alloc,
-        })
+        };
+        //@ assert res.ptr == Unique::from_non_null_(NonNull::new_(NonNull_ptr(ptr.ptr)));
+        //@ std::ptr::NonNull_ptr_nonnull(ptr.ptr);
+        //@ std::ptr::Unique_non_null__from_non_null_(ptr.ptr);
+        //@ std::ptr::NonNull_new_ptr(ptr.ptr);
+        //@ assert Unique::non_null_(res.ptr) == ptr.ptr;
+        //@ assert Layout::align_(layout) == Layout::align_(elem_layout);
+        //@ std::alloc::alloc_block_in_aligned(NonNull_ptr(ptr.ptr));
+        //@ close RawVecInner0(alloc_id, res.ptr, res.cap, elem_layout, _, _);
+        //@ close RawVecInner(t, res, elem_layout, NonNull_ptr(ptr.ptr), _);
+        Ok(res)
     }
 
     #[inline]
@@ -934,15 +1021,37 @@ fn handle_error(e: TryReserveError) -> ! {
 // an extra guard for this in case we're running on a platform which can use
 // all 4GB in user-space, e.g., PAE or x32.
 #[inline]
-fn alloc_guard(alloc_size: usize) -> Result<(), TryReserveError> {
-    if usize::BITS < 64 && alloc_size > isize::MAX as usize {
-        Err(CapacityOverflow.into())
+fn alloc_guard(alloc_size: usize) -> Result<(), TryReserveError>
+//@ req thread_token(currentThread);
+/*@
+ens thread_token(currentThread) &*&
+    match result {
+        Result::Ok(dummy) => true,
+        Result::Err(err) => <std::collections::TryReserveError>.own(currentThread, err)
+    };
+@*/
+//@ safety_proof { assume(false); }
+{
+    if usize::BITS < 64 && alloc_size > isize::MAX as usize { //~allow_dead_code
+        Err(CapacityOverflow.into()) //~allow_dead_code
     } else {
         Ok(())
     }
 }
 
 #[inline]
-fn layout_array(cap: usize, elem_layout: Layout) -> Result<Layout, TryReserveError> {
+fn layout_array(cap: usize, elem_layout: Layout) -> Result<Layout, TryReserveError>
+//@ req Layout::size_(elem_layout) % Layout::align_(elem_layout) == 0;
+/*@
+ens match result {
+        Result::Ok(layout) =>
+            Layout::size_(layout) == cap * Layout::size_(elem_layout) &*&
+            Layout::align_(layout) == Layout::align_(elem_layout),
+        Result::Err(err) => true
+    };
+@*/
+//@ safety_proof { assume(false); }
+//@ assume_correct // TODO
+{
     elem_layout.repeat(cap).map(|(layout, _pad)| layout).map_err(|_| CapacityOverflow.into())
 }

@@ -168,6 +168,11 @@ mod num {
             //@ ens result == UsizeNoHighBit::as_inner_(self);
             //@ on_unwind_ens false;
             
+            fn new_unchecked(value: usize) -> UsizeNoHighBit;
+            //@ req value <= isize::MAX;
+            //@ ens result == UsizeNoHighBit::new_(value);
+            //@ on_unwind_ens false;
+            
         }
     
     }
@@ -429,9 +434,13 @@ mod ptr {
     // If ptr is 0, the result of NonNull::new_ is unspecified. (It is never the case that NonNull_ptr(nnp) == 0.)
     fix NonNull::new_<T>(ptr: *T) -> NonNull<T>;
     
-    lem NonNull_ptr_new<T>(ptr: *T);
+    lem_auto(NonNull_ptr(NonNull::new_(ptr))) NonNull_ptr_new<T>(ptr: *T);
         req ptr != 0;
         ens NonNull_ptr(NonNull::new_(ptr)) == ptr;
+    
+    lem NonNull_new_ptr<T>(v: NonNull<T>);
+        req true;
+        ens NonNull::new_(NonNull_ptr(v)) == v;
     
     lem NonNull_ptr_nonnull<T>(v: NonNull<T>);
         req true;
@@ -477,9 +486,19 @@ mod ptr {
         //@ ens result == NonNull_ptr(self);
         //@ on_unwind_ens false;
         
-        fn cast<U>(self:  NonNull<T>) -> NonNull<U>;
+        fn cast<U>(self: NonNull<T>) -> NonNull<U>;
         //@ req true;
         //@ ens result == NonNull::new_(NonNull_ptr(self) as *U);
+        
+        fn cast_slice<U>(self: NonNull_slice<T>) -> NonNull<U>;
+        //@ req true;
+        //@ ens result == NonNull::new_(NonNull_ptr(self.ptr) as *U);
+        
+    }
+    
+    struct NonNull_slice<T> { // Used by the MIR translator to represent NoNull<[T]> types
+        ptr: std::ptr::NonNull<T>,
+        len: usize,
     }
     
     struct Unique<T>;
@@ -523,11 +542,25 @@ mod ptr {
         
     }
     
+    impl<T> std::convert::From<std::ptr::NonNull<T>> for std::ptr::Unique<T> {
+    
+        fn from(value: NonNull<T>) -> Unique<T>;
+        //@ req true;
+        //@ ens result == Unique::from_non_null_(value) &*& Unique::non_null_(result) == value;
+        //@ on_unwind_ens false;
+    
+    }
+    
     struct Alignment;
     
     //@ fix Alignment::as_nonzero_(align: Alignment) -> std::num::NonZero<usize>;
+    //@ fix Alignment::new_(align: usize) -> Alignment;
     
     /*@
+    
+    lem Alignment_as_nonzero__new_(align: usize);
+        req is_power_of_2(align) == true;
+        ens std::num::NonZero::get_(Alignment::as_nonzero_(Alignment::new_(align))) == align;
     
     lem Alignment_is_power_of_2(align: Alignment);
         req true;
@@ -549,6 +582,15 @@ mod ptr {
 mod alloc {
 
     struct Layout;
+    
+    /*@
+    
+    lem close_Layout_own(t: thread_id_t, l: Layout);
+        req true;
+        ens <Layout>.own(t, l);
+    
+    @*/
+    
     //@ fix Layout::size_(layout: Layout) -> usize;
     //@ fix Layout::align_(layout: Layout) -> usize;
     //@ fix Layout::from_size_align_(size: usize, align: usize) -> Layout;
@@ -578,6 +620,10 @@ mod alloc {
     lem_auto Layout_is_valid_new<T>();
         req true;
         ens Layout::is_valid(Layout::new_::<T>()) == true;
+    
+    lem_auto(Layout::from_size_align_(Layout::size_(l), Layout::align_(l))) Layout_from_size_align__Layout_size__Layout_align_(l: Layout);
+        req true;
+        ens Layout::from_size_align_(Layout::size_(l), Layout::align_(l)) == l;
     
     pred end_ref_Layout_token(p: *Layout, x: *Layout, f: real);
     
@@ -612,6 +658,10 @@ mod alloc {
         //@ req [?f](*self |-> ?l);
         //@ ens [f](*self |-> l) &*& result == Layout::align_(l) &*& is_power_of_2(result) == true;
         //@ on_unwind_ens false;
+        
+        fn alignment<'a>(self: &'a Layout) -> std::ptr::Alignment;
+        //@ req [?f](*self |-> ?l);
+        //@ ens [f](*self |-> l) &*& result == std::ptr::Alignment::new_(Layout::align_(l)) &*& std::num::NonZero::get_(std::ptr::Alignment::as_nonzero_(result)) == Layout::align_(l);
 
     }
     
@@ -623,6 +673,10 @@ mod alloc {
     lem alloc_aligned(ptr: *mut u8);
         req [?f]alloc_block(ptr, ?layout);
         ens [f]alloc_block(ptr, layout) &*& (ptr as usize) % Layout::align_(layout) == 0 &*& ref_origin(ptr) == ptr;
+    
+    lem alloc_block_in_aligned(ptr: *mut u8);
+        req [?f]alloc_block_in(?alloc_id, ptr, ?layout);
+        ens [f]alloc_block_in(alloc_id, ptr, layout) &*& (ptr as usize) % Layout::align_(layout) == 0 &*& ref_origin(ptr) == ptr;
     
     @*/
     
@@ -748,6 +802,8 @@ mod alloc {
     
     struct Global {}
     
+    struct AllocError {}
+    
     /*@
     
     fix Global_alloc_id() -> any;
@@ -758,7 +814,44 @@ mod alloc {
     
     @*/
     
+    // SOUNDNESS ISSUE: We currently don't prevent blocks of memory allocated by an allocator from outliving the allocator itself!! https://github.com/verifast/verifast/issues/829
+    
     trait Allocator {
+    
+        // Note: for simplicity, this spec for fn `allocate` does not provide access to the extra bytes (at `ptr[layout.size()..]`).
+        // Our use case (RawVec) does not use these extra bytes anyway.
+        // TODO: Provide access to the extra bytes (probably by introducing a predicate `alloc_block_in_(alloc_id, ptr, requested_layout, actual_length)`
+        // and defining `alloc_block_in(alloc_id, ptr, layout) = alloc_block_in_(alloc_id, ptr, layout, ?len) &*& ptr[layout.size()..len] |-> _`).
+    
+        fn allocate<'a>(self: &'a Self, layout: Layout) -> std::result::Result<std::ptr::NonNull_slice<u8>, AllocError>;
+        //@ req thread_token(?t) &*& Allocator::<&'a Self>(t, self, ?alloc_id);
+        /*@
+        ens thread_token(t) &*& Allocator::<&'a Self>(t, self, alloc_id) &*& 
+            match result {
+                Result::Ok(ptr) =>
+                    alloc_block_in(alloc_id, std::ptr::NonNull_ptr(ptr.ptr), layout) &*&
+                    std::ptr::NonNull_ptr(ptr.ptr)[..Layout::size_(layout)] |-> _ &*&
+                    Layout::size_(layout) <= ptr.len &*&
+                    is_valid_layout(ptr.len, Layout::align_(layout)) == true,
+                Result::Err(e) => true
+            };
+        @*/
+        //@ on_unwind_ens thread_token(t) &*& Allocator::<&'a Self>(t, self, alloc_id);
+    
+        fn allocate_zeroed<'a>(self: &'a Self, layout: Layout) -> std::result::Result<std::ptr::NonNull_slice<u8>, AllocError>;
+        //@ req thread_token(?t) &*& Allocator::<&'a Self>(t, self, ?alloc_id);
+        /*@
+        ens thread_token(t) &*& Allocator::<&'a Self>(t, self, alloc_id) &*& 
+            match result {
+                Result::Ok(ptr) =>
+                    alloc_block_in(alloc_id, std::ptr::NonNull_ptr(ptr.ptr), layout) &*&
+                    std::ptr::NonNull_ptr(ptr.ptr)[..Layout::size_(layout)] |-> ?bs &*& forall(bs, (eq)(0)) == true &*&
+                    Layout::size_(layout) <= ptr.len &*&
+                    is_valid_layout(ptr.len, Layout::align_(layout)) == true,
+                Result::Err(e) => true
+            };
+        @*/
+        //@ on_unwind_ens thread_token(t) &*& Allocator::<&'a Self>(t, self, alloc_id);
     
         unsafe fn deallocate<'a>(self: &'a Self, ptr: std::ptr::NonNull<u8>, layout: Layout);
         //@ req thread_token(?t) &*& Allocator::<&'a Self>(t, self, ?alloc_id) &*& alloc_block_in(alloc_id, std::ptr::NonNull_ptr(ptr), layout) &*& std::ptr::NonNull_ptr(ptr)[..Layout::size_(layout)] |-> _;
@@ -1014,6 +1107,20 @@ mod result {
     
     }
 
+}
+
+mod collections {
+
+    struct TryReserveError;
+    
+    enum TryReserveErrorKind {
+        CapacityOverflow,
+        AllocError {
+            layout: std::alloc::Layout,
+            non_exhaustive: ()
+        }
+    }
+    
 }
 
 mod vec {
@@ -1318,5 +1425,13 @@ mod rt {
 mod convert {
 
     struct Infallible {}
-
+    
+    trait Into<T> {
+    
+        fn into(self: Self) -> T;
+        //@ req thread_token(currentThread) &*& <Self>.own(currentThread, self);
+        //@ ens thread_token(currentThread) &*& <T>.own(currentThread, result);
+    
+    }
+    
 }

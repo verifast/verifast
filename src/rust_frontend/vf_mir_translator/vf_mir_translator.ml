@@ -658,10 +658,13 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let src_pos = (file, line, col) in
     Ok src_pos
 
-  let translate_decoded_span_data ({lo; hi} : D.span_data) =
-    let* lo = translate_loc lo in
-    let* hi = translate_loc hi in
-    Ok (Ast.Lexed (lo, hi))
+  let translate_decoded_span_data (spanData : D.span_data) =
+    match spanData with
+      Dummy -> Ok Ast.dummy_loc
+    | Regular {lo; hi} ->
+      let* lo = translate_loc lo in
+      let* hi = translate_loc hi in
+      Ok (Ast.Lexed (lo, hi))
   
   let translate_span_data (span_data_cpn: SpanDataRd.t) =
     translate_decoded_span_data (D.decode_span_data span_data_cpn)
@@ -960,11 +963,13 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let substs_cpn = adt_ty_cpn.substs in
     match kind with
     | StructKind | UnionKind -> (
-        match def_path with
-        | "std::cell::UnsafeCell" | "std::mem::ManuallyDrop" ->
-            let [ arg_cpn ] = substs_cpn in
+        match def_path, substs_cpn with
+        | ("std::cell::UnsafeCell" | "std::mem::ManuallyDrop"), [ arg_cpn ] ->
             let* (Mir.GenArgType arg_ty) = translate_generic_arg arg_cpn loc in
             Ok arg_ty
+        | "std::ptr::NonNull", [ {kind=Type {kind=Slice ty}} ] ->
+            let* elem_ty_info = translate_ty ty loc in
+            Ok (slice_non_null_ty_info loc elem_ty_info)
         | _ ->
             let* gen_args =
               ListAux.try_map
@@ -1262,6 +1267,35 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let points_to tid l vid_op =
       Error
         "Expressing a points-to assertion for a &str object is not yet \
+         supported"
+    in
+    {
+      Mir.vf_ty;
+      interp =
+        RustBelt.
+          { size; own; shr; full_bor_content; points_to; pointee_fbc = None };
+    }
+
+  and slice_non_null_ty_info loc elem_ty_info = (* NonNull<[T]> *)
+    let open Ast in
+    let vf_ty =
+      StructTypeExpr
+        (loc, Some "std::ptr::NonNull_slice", None, [], [ elem_ty_info.Mir.vf_ty ])
+    in
+    let size = SizeofExpr (loc, TypeExpr vf_ty) in
+    let own tid vs =
+      Error "Expressing ownership of NonNull<[_]> values is not yet supported"
+    in
+    let shr lft tid l =
+      Error "Expressing shared ownership of NonNull<[_]> values is not yet supported"
+    in
+    let full_bor_content tid l =
+      Error
+        "Expressing the full borrow content of NonNull<[_]> values is not yet supported"
+    in
+    let points_to tid l vid_op =
+      Error
+        "Expressing a points-to assertion for a NonNull<[_]> object is not yet \
          supported"
     in
     {
@@ -2175,6 +2209,29 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           let fn_name, substs_cpn =
             Args.body_tr_defs_ctx.fn_specializer fn_name substs_cpn
           in
+          if substs_cpn |> List.exists @@ function
+            ({kind=Type {kind=Slice ty}}: D.generic_arg) -> true
+          | _ -> false
+          then
+            match fn_name, substs_cpn, args_cpn with
+            | "std::ptr::NonNull::<T>::cast", [ {kind=Type {kind=Slice ty0}}; subst1 ], [ arg_cpn ] ->
+                let* ty0_info = translate_decoded_ty ty0 call_loc in
+                let* Mir.GenArgType gen_arg_ty_info = translate_generic_arg subst1 call_loc in
+                let* tmp_rvalue_binders, [ arg ] =
+                  translate_operands [ (arg_cpn, fn_loc) ]
+                in
+                Ok
+                  ( tmp_rvalue_binders,
+                    FnCallResult
+                      (Ast.CallExpr
+                         ( fn_loc,
+                           "std::ptr::NonNull::<T>::cast_slice",
+                           [ ty0_info.vf_ty; gen_arg_ty_info.vf_ty ],
+                           [],
+                           [ LitPat arg ],
+                           Static )))
+            | _ -> Ast.static_error call_loc "Slice type are not yet supported as function call generic arguments" None
+          else
           let* substs =
             ListAux.try_map
               (fun arg -> translate_generic_arg arg call_loc)

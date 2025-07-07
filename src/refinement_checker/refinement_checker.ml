@@ -37,6 +37,8 @@ let decode_path (path: source_file) =
       end
   | QuoteExpansion _ -> failwith "Quote expansions are not yet supported"
 
+let dummy_loc = ("<dummy>", 1, 0)
+
 let decode_loc (loc: loc) =
   let path = decode_path @@ loc.file in
   let line = Stdint.Uint64.to_int @@ loc.line in
@@ -44,9 +46,12 @@ let decode_loc (loc: loc) =
   (path, line, col)
 
 let decode_span span =
-  let lo = span.lo in
-  let hi = span.hi in
-  (decode_loc lo, decode_loc hi)
+  match span with
+  | Dummy -> dummy_loc, dummy_loc
+  | Regular span ->
+    let lo = span.lo in
+    let hi = span.hi in
+    (decode_loc lo, decode_loc hi)
 
 let string_of_span span =
   let ((path_lo, line_lo, col_lo), (path_hi, line_hi, col_hi)) = decode_span span in
@@ -400,7 +405,7 @@ let fns_to_be_inlined: (string * body) list =
  [
   (
     "std::boxed::Box::<T, A>::into_inner",
-    let span =
+    let span = Regular
       {
         lo={file={name=Real (LocalPath "<core>/box.rs:into_inner")}; line=Stdint.Uint64.of_int 1; col={pos=Stdint.Uint64.of_int 1}};
         hi={file={name=Real (LocalPath "<core>/box.rs:into_inner")}; line=Stdint.Uint64.of_int 1; col={pos=Stdint.Uint64.of_int 1}}
@@ -604,7 +609,7 @@ let fns_to_be_inlined: (string * body) list =
   );
   (
   "std::boxed::Box::<T, A>::as_ptr",
-  let span =
+  let span = Regular
     {
       lo={file={name=Real (LocalPath "<core>/box.rs:as_ptr")}; line=Stdint.Uint64.of_int 1; col={pos=Stdint.Uint64.of_int 1}};
       hi={file={name=Real (LocalPath "<core>/box.rs:as_ptr")}; line=Stdint.Uint64.of_int 1; col={pos=Stdint.Uint64.of_int 1}}
@@ -697,7 +702,7 @@ let fns_to_be_inlined: (string * body) list =
   }
   );
   ("std::option::Option::<T>::map",
-  let span =
+  let span = Regular
     {
       lo={file={name=Real (LocalPath "<core>/option.rs:map")}; line=Stdint.Uint64.of_int 1; col={pos=Stdint.Uint64.of_int 1}};
       hi={file={name=Real (LocalPath "<core>/option.rs:map")}; line=Stdint.Uint64.of_int 1; col={pos=Stdint.Uint64.of_int 1}}
@@ -918,7 +923,7 @@ let fns_to_be_inlined: (string * body) list =
     visibility=Public;
   });
   "std::option::Option::<T>::unwrap_or_else",
-  let span =
+  let span = Regular
     {
       lo={file={name=Real (LocalPath "<core>/option.rs:unwrap_or_else")}; line=Stdint.Uint64.of_int 1; col={pos=Stdint.Uint64.of_int 1}};
       hi={file={name=Real (LocalPath "<core>/option.rs:unwrap_or_else")}; line=Stdint.Uint64.of_int 1; col={pos=Stdint.Uint64.of_int 1}}
