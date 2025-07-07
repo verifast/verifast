@@ -701,6 +701,492 @@ let fns_to_be_inlined: (string * body) list =
     visibility=Public;
   }
   );
+  ("std::result::Result::<T, E>::map",
+  let span = Regular
+    {
+      lo={file={name=Real (LocalPath "<core>/result.rs:map")}; line=Stdint.Uint64.of_int 1; col={pos=Stdint.Uint64.of_int 1}};
+      hi={file={name=Real (LocalPath "<core>/result.rs:map")}; line=Stdint.Uint64.of_int 1; col={pos=Stdint.Uint64.of_int 1}}
+    }
+  in
+  let local_decls: local_decl list =
+    [
+      {id={name="result"}; ty={kind=Adt {id={name="std::result::Result"}; kind=StructKind; substs=[{kind=Type {kind=Param "U"}}; {kind=Type {kind=Param "E"}}]}}; mutability=Not; source_info={span}};
+      {id={name="self"}; ty={kind=Adt {id={name="std::result::Result"}; kind=StructKind; substs=[{kind=Type {kind=Param "T"}}; {kind=Type {kind=Param "E"}}]}}; mutability=Not; source_info={span}};
+      {id={name="f"}; ty={kind=Param "F"}; mutability=Not; source_info={span}};
+      {id={name="discr"}; ty={kind=Int ISize}; mutability=Not; source_info={span}};
+      {id={name="payload"}; ty={kind=Param "T"}; mutability=Not; source_info={span}};
+      {id={name="error"}; ty={kind=Param "E"}; mutability=Not; source_info={span}};
+      (*{id={name="argsTuple"}; ty={kind=Tuple [{kind=Param "T"}]}; mutability=Not; source_info={span}};*)
+      {id={name="fResult"}; ty={kind=Param "U"}; mutability=Not; source_info={span}};
+    ]
+  in
+  let basic_blocks: basic_block list =
+    [
+      {
+        id={index=Stdint.Uint32.of_int 0};
+        statements=[
+          {kind=Assign {lhs_place=local "discr"; rhs_rvalue=Discriminant (local "self")}; source_info={span}}
+        ];
+        terminator={
+          kind=SwitchInt {
+            discr=Move (local "discr");
+            discr_ty={kind=Int ISize};
+            targets={
+              branches=[
+                {val_=encode_uint128 (Stdint.Uint128.of_int 0); target={index=Stdint.Uint32.of_int 3}};
+                {val_=encode_uint128 (Stdint.Uint128.of_int 1); target={index=Stdint.Uint32.of_int 2}};
+              ];
+              otherwise=Something {index=Stdint.Uint32.of_int 1}
+            }
+          };
+          source_info={span}
+        };
+        is_cleanup=false;
+      };
+      {
+        id={index=Stdint.Uint32.of_int 1};
+        statements=[];
+        terminator={kind=Unreachable; source_info={span}};
+        is_cleanup=false;
+      };
+      {
+        id={index=Stdint.Uint32.of_int 2};
+        statements=[
+          {
+            kind=Assign {
+              lhs_place=local "error";
+              rhs_rvalue=Use (Copy {
+                local={name="self"};
+                projection=[
+                  Downcast (Stdint.Uint32.of_int 1);
+                  Field {
+                    index=Stdint.Uint32.of_int 0;
+                    ty={kind=Param "E"};
+                    name=Nothing;
+                  }
+                ];
+                local_is_mutable=false;
+                kind=Other;
+              })
+            };
+            source_info={span}
+          };
+          {
+            kind=Assign {
+              lhs_place=local "result";
+              rhs_rvalue=Aggregate {
+                aggregate_kind=Adt {
+                  adt_id={name="std::result::Result"};
+                  variant_idx=Stdint.Uint32.of_int 1;
+                  gen_args=[{kind=Type {kind=Param "U"}}; {kind=Type {kind=Param "E"}}];
+                  user_type_annotation_index=();
+                  union_active_field=Stdint.Uint32.of_int 0;
+                  variant_id="Err";
+                  fields=[{name="0"; is_zero_size=false}];
+                  adt_kind=EnumKind;
+                };
+                operands=[Move (local "error")]
+              }
+            };
+            source_info={span}
+          }
+        ];
+        terminator={kind=Goto {index=Stdint.Uint32.of_int 6}; source_info={span}};
+        is_cleanup=false;
+      };
+      {
+        id={index=Stdint.Uint32.of_int 3};
+        statements=[
+          {
+            kind=Assign {
+              lhs_place=local "payload";
+              rhs_rvalue=Use (Copy {
+                local={name="self"};
+                projection=[
+                  Downcast (Stdint.Uint32.of_int 0);
+                  Field {
+                    index=Stdint.Uint32.of_int 0;
+                    ty={kind=Param "T"};
+                    name=Nothing;
+                  }
+                ];
+                local_is_mutable=false;
+                kind=Other;
+              })
+            };
+            source_info={span}
+          };
+          (* {
+            kind=Assign {
+              lhs_place=local "argsTuple";
+              rhs_rvalue=Aggregate {
+                aggregate_kind=Tuple;
+                operands=[Move (local "payload")]
+              }
+            };
+            source_info={span}
+          } *)
+        ];
+        terminator={
+          kind=Call {
+            func=Constant {
+              const=Val {
+                const_value=ZeroSized;
+                ty={
+                  kind=FnDef {
+                    id={name="std::ops::FnOnce::call_once--VeriFast"};
+                    substs=[
+                      {kind=Type {kind=Param "F"}};
+                      {kind=Type {kind=Tuple [{kind=Param "T"}]}};
+                    ];
+                    late_bound_generic_param_count=0;
+                  }
+                }
+              };
+              span
+            };
+            args=[
+              Move (local "f");
+              Move (local (*"argsTuple"*)"payload")
+            ];
+            destination=Something {
+              place=local "fResult";
+              basic_block_id={index=Stdint.Uint32.of_int 4}
+            };
+            unwind_action=Cleanup {index=Stdint.Uint32.of_int 5};
+            call_span=span;
+            ghost_generic_arg_list=Nothing
+          };
+          source_info={span}
+        };
+        is_cleanup=false;
+      };
+      {
+        id={index=Stdint.Uint32.of_int 4};
+        statements=[
+          {
+            kind=Assign {
+              lhs_place=local "result";
+              rhs_rvalue=Aggregate {
+                aggregate_kind=Adt {
+                  adt_id={name="std::result::Result"};
+                  variant_idx=Stdint.Uint32.of_int 0;
+                  gen_args=[{kind=Type {kind=Param "U"}}; {kind=Type {kind=Param "E"}}];
+                  user_type_annotation_index=();
+                  union_active_field=Stdint.Uint32.of_int 0;
+                  variant_id="Ok";
+                  fields=[{name="0"; is_zero_size=false}];
+                  adt_kind=EnumKind;
+                };
+                operands=[Move (local "fResult")]
+              }
+            };
+            source_info={span}
+          }
+        ];
+        terminator={kind=Goto {index=Stdint.Uint32.of_int 6}; source_info={span}};
+        is_cleanup=false;
+      };
+      {
+        id={index=Stdint.Uint32.of_int 5};
+        statements=[];
+        terminator={kind=UnwindResume; source_info={span}};
+        is_cleanup=true;
+      };
+      {
+        id={index=Stdint.Uint32.of_int 6};
+        statements=[];
+        terminator={kind=Return; source_info={span}};
+        is_cleanup=false;
+      }
+    ]
+  in
+  {
+    fn_sig_span=span;
+    def_kind=Fn;
+    def_path="std::result::Result::map";
+    module_def_path="std::result";
+    contract={annotations=[]; span};
+    output={kind=Adt {id={name="std::result::Result"}; kind=StructKind; substs=[{kind=Type {kind=Param "U"}}; {kind=Type {kind=Param "E"}}]}};
+    inputs=[
+      {kind=Adt {id={name="std::result::Result"}; kind=StructKind; substs=[{kind=Type {kind=Param "T"}}; {kind=Type {kind=Param "E"}}]}};
+      {kind=Param "F"};
+    ];
+    local_decls;
+    basic_blocks;
+    span;
+    imp_span=span;
+    var_debug_info=[];
+    ghost_stmts=[];
+    ghost_decl_blocks=[];
+    unsafety=Safe;
+    impl_block_hir_generics=Nothing;
+    impl_block_generics=[];
+    impl_block_predicates=[];
+    hir_generics={
+      params=[
+        {name=Plain {name={name="T"}; span}; bounds=(); span; pure_wrt_drop=false; kind=Type};
+        {name=Plain {name={name="E"}; span}; bounds=(); span; pure_wrt_drop=false; kind=Type};
+        {name=Plain {name={name="U"}; span}; bounds=(); span; pure_wrt_drop=false; kind=Type};
+        {name=Plain {name={name="F"}; span}; bounds=(); span; pure_wrt_drop=false; kind=Type};
+      ];
+      where_clause=();
+      span
+    };
+    generics=[
+      {name="T"; kind=Type};
+      {name="E"; kind=Type};
+      {name="U"; kind=Type};
+      {name="F"; kind=Type};
+    ];
+    predicates=[];
+    is_trait_fn=false;
+    is_drop_fn=false;
+    visibility=Public;
+  });
+  ("std::result::Result::<T, E>::map_err",
+  let span = Regular
+    {
+      lo={file={name=Real (LocalPath "<core>/result.rs:map_err")}; line=Stdint.Uint64.of_int 1; col={pos=Stdint.Uint64.of_int 1}};
+      hi={file={name=Real (LocalPath "<core>/result.rs:map_err")}; line=Stdint.Uint64.of_int 1; col={pos=Stdint.Uint64.of_int 1}}
+    }
+  in
+  let local_decls: local_decl list =
+    [
+      {id={name="result"}; ty={kind=Adt {id={name="std::result::Result"}; kind=StructKind; substs=[{kind=Type {kind=Param "T"}}; {kind=Type {kind=Param "F"}}]}}; mutability=Not; source_info={span}};
+      {id={name="self"}; ty={kind=Adt {id={name="std::result::Result"}; kind=StructKind; substs=[{kind=Type {kind=Param "T"}}; {kind=Type {kind=Param "E"}}]}}; mutability=Not; source_info={span}};
+      {id={name="op"}; ty={kind=Param "O"}; mutability=Not; source_info={span}};
+      {id={name="discr"}; ty={kind=Int ISize}; mutability=Not; source_info={span}};
+      {id={name="payload"}; ty={kind=Param "T"}; mutability=Not; source_info={span}};
+      {id={name="error"}; ty={kind=Param "E"}; mutability=Not; source_info={span}};
+      (*{id={name="argsTuple"}; ty={kind=Tuple [{kind=Param "T"}]}; mutability=Not; source_info={span}};*)
+      {id={name="opResult"}; ty={kind=Param "F"}; mutability=Not; source_info={span}};
+    ]
+  in
+  let basic_blocks: basic_block list =
+    [
+      {
+        id={index=Stdint.Uint32.of_int 0};
+        statements=[
+          {kind=Assign {lhs_place=local "discr"; rhs_rvalue=Discriminant (local "self")}; source_info={span}}
+        ];
+        terminator={
+          kind=SwitchInt {
+            discr=Move (local "discr");
+            discr_ty={kind=Int ISize};
+            targets={
+              branches=[
+                {val_=encode_uint128 (Stdint.Uint128.of_int 0); target={index=Stdint.Uint32.of_int 2}};
+                {val_=encode_uint128 (Stdint.Uint128.of_int 1); target={index=Stdint.Uint32.of_int 3}};
+              ];
+              otherwise=Something {index=Stdint.Uint32.of_int 1}
+            }
+          };
+          source_info={span}
+        };
+        is_cleanup=false;
+      };
+      {
+        id={index=Stdint.Uint32.of_int 1};
+        statements=[];
+        terminator={kind=Unreachable; source_info={span}};
+        is_cleanup=false;
+      };
+      {
+        id={index=Stdint.Uint32.of_int 2};
+        statements=[
+          {
+            kind=Assign {
+              lhs_place=local "payload";
+              rhs_rvalue=Use (Copy {
+                local={name="self"};
+                projection=[
+                  Downcast (Stdint.Uint32.of_int 0);
+                  Field {
+                    index=Stdint.Uint32.of_int 0;
+                    ty={kind=Param "T"};
+                    name=Nothing;
+                  }
+                ];
+                local_is_mutable=false;
+                kind=Other;
+              })
+            };
+            source_info={span}
+          };
+          {
+            kind=Assign {
+              lhs_place=local "result";
+              rhs_rvalue=Aggregate {
+                aggregate_kind=Adt {
+                  adt_id={name="std::result::Result"};
+                  variant_idx=Stdint.Uint32.of_int 0;
+                  gen_args=[{kind=Type {kind=Param "T"}}; {kind=Type {kind=Param "F"}}];
+                  user_type_annotation_index=();
+                  union_active_field=Stdint.Uint32.of_int 0;
+                  variant_id="Ok";
+                  fields=[{name="0"; is_zero_size=false}];
+                  adt_kind=EnumKind;
+                };
+                operands=[Move (local "payload")]
+              }
+            };
+            source_info={span}
+          }
+        ];
+        terminator={kind=Goto {index=Stdint.Uint32.of_int 6}; source_info={span}};
+        is_cleanup=false;
+      };
+      {
+        id={index=Stdint.Uint32.of_int 3};
+        statements=[
+          {
+            kind=Assign {
+              lhs_place=local "error";
+              rhs_rvalue=Use (Copy {
+                local={name="self"};
+                projection=[
+                  Downcast (Stdint.Uint32.of_int 1);
+                  Field {
+                    index=Stdint.Uint32.of_int 0;
+                    ty={kind=Param "E"};
+                    name=Nothing;
+                  }
+                ];
+                local_is_mutable=false;
+                kind=Other;
+              })
+            };
+            source_info={span}
+          };
+          (* {
+            kind=Assign {
+              lhs_place=local "argsTuple";
+              rhs_rvalue=Aggregate {
+                aggregate_kind=Tuple;
+                operands=[Move (local "payload")]
+              }
+            };
+            source_info={span}
+          } *)
+        ];
+        terminator={
+          kind=Call {
+            func=Constant {
+              const=Val {
+                const_value=ZeroSized;
+                ty={
+                  kind=FnDef {
+                    id={name="std::ops::FnOnce::call_once--VeriFast"};
+                    substs=[
+                      {kind=Type {kind=Param "O"}};
+                      {kind=Type {kind=Tuple [{kind=Param "E"}]}};
+                    ];
+                    late_bound_generic_param_count=0;
+                  }
+                }
+              };
+              span
+            };
+            args=[
+              Move (local "op");
+              Move (local (*"argsTuple"*)"error")
+            ];
+            destination=Something {
+              place=local "fResult";
+              basic_block_id={index=Stdint.Uint32.of_int 4}
+            };
+            unwind_action=Cleanup {index=Stdint.Uint32.of_int 5};
+            call_span=span;
+            ghost_generic_arg_list=Nothing
+          };
+          source_info={span}
+        };
+        is_cleanup=false;
+      };
+      {
+        id={index=Stdint.Uint32.of_int 4};
+        statements=[
+          {
+            kind=Assign {
+              lhs_place=local "result";
+              rhs_rvalue=Aggregate {
+                aggregate_kind=Adt {
+                  adt_id={name="std::result::Result"};
+                  variant_idx=Stdint.Uint32.of_int 1;
+                  gen_args=[{kind=Type {kind=Param "T"}}; {kind=Type {kind=Param "F"}}];
+                  user_type_annotation_index=();
+                  union_active_field=Stdint.Uint32.of_int 0;
+                  variant_id="Err";
+                  fields=[{name="0"; is_zero_size=false}];
+                  adt_kind=EnumKind;
+                };
+                operands=[Move (local "fResult")]
+              }
+            };
+            source_info={span}
+          }
+        ];
+        terminator={kind=Goto {index=Stdint.Uint32.of_int 6}; source_info={span}};
+        is_cleanup=false;
+      };
+      {
+        id={index=Stdint.Uint32.of_int 5};
+        statements=[];
+        terminator={kind=UnwindResume; source_info={span}};
+        is_cleanup=true;
+      };
+      {
+        id={index=Stdint.Uint32.of_int 6};
+        statements=[];
+        terminator={kind=Return; source_info={span}};
+        is_cleanup=false;
+      }
+    ]
+  in
+  {
+    fn_sig_span=span;
+    def_kind=Fn;
+    def_path="std::result::Result::map_err";
+    module_def_path="std::result";
+    contract={annotations=[]; span};
+    output={kind=Adt {id={name="std::result::Result"}; kind=StructKind; substs=[{kind=Type {kind=Param "T"}}; {kind=Type {kind=Param "F"}}]}};
+    inputs=[
+      {kind=Adt {id={name="std::result::Result"}; kind=StructKind; substs=[{kind=Type {kind=Param "T"}}; {kind=Type {kind=Param "E"}}]}};
+      {kind=Param "O"};
+    ];
+    local_decls;
+    basic_blocks;
+    span;
+    imp_span=span;
+    var_debug_info=[];
+    ghost_stmts=[];
+    ghost_decl_blocks=[];
+    unsafety=Safe;
+    impl_block_hir_generics=Nothing;
+    impl_block_generics=[];
+    impl_block_predicates=[];
+    hir_generics={
+      params=[
+        {name=Plain {name={name="T"}; span}; bounds=(); span; pure_wrt_drop=false; kind=Type};
+        {name=Plain {name={name="E"}; span}; bounds=(); span; pure_wrt_drop=false; kind=Type};
+        {name=Plain {name={name="F"}; span}; bounds=(); span; pure_wrt_drop=false; kind=Type};
+        {name=Plain {name={name="O"}; span}; bounds=(); span; pure_wrt_drop=false; kind=Type};
+      ];
+      where_clause=();
+      span
+    };
+    generics=[
+      {name="T"; kind=Type};
+      {name="E"; kind=Type};
+      {name="F"; kind=Type};
+      {name="O"; kind=Type};
+    ];
+    predicates=[];
+    is_trait_fn=false;
+    is_drop_fn=false;
+    visibility=Public;
+  });
   ("std::option::Option::<T>::map",
   let span = Regular
     {
