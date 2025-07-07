@@ -637,6 +637,8 @@ mod alloc {
     
     @*/
     
+    struct LayoutError;
+    
     impl Layout {
     
         fn new<T>() -> Layout;
@@ -663,6 +665,20 @@ mod alloc {
         //@ req [?f](*self |-> ?l);
         //@ ens [f](*self |-> l) &*& result == std::ptr::Alignment::new_(Layout::align_(l)) &*& std::num::NonZero::get_(std::ptr::Alignment::as_nonzero_(result)) == Layout::align_(l);
 
+        fn repeat<'a>(self: &'a Layout, n: usize) -> std::result::Result<(Layout, usize), LayoutError>;
+        //@ req [?f](*self |-> ?l) &*& Layout::size_(l) % Layout::align_(l) == 0;
+        /*@
+        ens [f](*self |-> l) &*&
+            match result {
+                Result::Ok(r) =>
+                    Layout::size_(r.0) == n * Layout::size_(l) &*&
+                    Layout::align_(r.0) == Layout::align_(l) &*&
+                    r.1 == Layout::size_(l),
+                Result::Err(e) => true
+            };
+        @*/
+        //@ on_unwind_ens false;
+        
     }
     
     //@ pred alloc_block(ptr: *u8; layout: Layout);

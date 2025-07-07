@@ -535,6 +535,7 @@ impl<A: Allocator> RawVecInner<A> {
         let layout = match layout_array(capacity, elem_layout) {
             Ok(layout) => layout,
             Err(_) => {
+                //@ leak <std::collections::TryReserveError>.own(_, _);
                 //@ std::alloc::Allocator_to_own(alloc);
                 //@ close <std::collections::TryReserveErrorKind>.own(currentThread, std::collections::TryReserveErrorKind::CapacityOverflow);
                 return Err(CapacityOverflow.into())
@@ -1041,17 +1042,33 @@ ens thread_token(currentThread) &*&
 
 #[inline]
 fn layout_array(cap: usize, elem_layout: Layout) -> Result<Layout, TryReserveError>
-//@ req Layout::size_(elem_layout) % Layout::align_(elem_layout) == 0;
+//@ req thread_token(currentThread) &*& Layout::size_(elem_layout) % Layout::align_(elem_layout) == 0;
 /*@
-ens match result {
+ens thread_token(currentThread) &*&
+    match result {
         Result::Ok(layout) =>
             Layout::size_(layout) == cap * Layout::size_(elem_layout) &*&
             Layout::align_(layout) == Layout::align_(elem_layout),
-        Result::Err(err) => true
+        Result::Err(err) => <std::collections::TryReserveError>.own(currentThread, err)
     };
 @*/
 //@ safety_proof { assume(false); }
-//@ assume_correct // TODO
 {
-    elem_layout.repeat(cap).map(|(layout, _pad)| layout).map_err(|_| CapacityOverflow.into())
+    //@ let elem_layout_ref = precreate_ref(&elem_layout);
+    //@ std::alloc::init_ref_Layout(elem_layout_ref, 1/2);
+    let array_layout = elem_layout.repeat(cap);
+    //@ std::alloc::end_ref_Layout(elem_layout_ref);
+    let r = match array_layout {
+        Ok(info) => Ok(info.0),
+        Err(err) => Err(err)
+    };
+    let r2 = match r {
+        Ok(l) => Ok(l),
+        Err(err) => {
+            let e = CapacityOverflow;
+            //@ close <std::collections::TryReserveErrorKind>.own(currentThread, e);
+            Err(e.into())
+        }
+    };
+    r2
 }

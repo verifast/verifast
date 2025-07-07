@@ -39,4 +39,6 @@ begin_parallel
   refinement-checker move-field-out-of-box_orig.rs move-field-out-of-box_verified.rs
   refinement-checker for-range_orig.rs for-range_verified.rs
   refinement-checker option-unwrap-or-else_orig.rs option-unwrap-or-else_verified.rs
+  refinement-checker result-map_orig.rs result-map_verified.rs
+  refinement-checker result-map_err_orig.rs result-map_err_verified.rs
 end_parallel
