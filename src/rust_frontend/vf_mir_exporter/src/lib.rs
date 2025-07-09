@@ -2041,6 +2041,8 @@ mod vf_mir_builder {
                         let is_identifier = source_text.chars().all(|c| c.is_alphanumeric() || c == '_');
                         ref_data_cpn.set_is_implicit(is_identifier);
                     }
+                    let typing_env = ty::TypingEnv { typing_mode: ty::TypingMode::PostAnalysis, param_env: ty::ParamEnv::empty() };
+                    ref_data_cpn.set_place_does_not_need_drop(!place_ty.ty.needs_drop(tcx, typing_env));
                 }
                 mir::Rvalue::ThreadLocalRef(def_id) => rvalue_cpn.set_thread_local_ref(()),
                 mir::Rvalue::RawPtr(raw_ptr_kind, place) => {

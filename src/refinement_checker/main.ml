@@ -20,6 +20,13 @@ let original_path, verified_path =
         match flag :: args with
         | "--" :: [ original_path; verified_path ] ->
             (original_path, verified_path)
+        | "--verbose" :: value :: args ->
+            verbosity :=
+              begin match int_of_string_opt value with
+                None -> failwith "--verbose expects an integer argument"
+              | Some n -> n
+              end;
+            process_args args
         | "--rustc-args" :: value :: args ->
             rustc_args := !rustc_args @ String.split_on_char ' ' value;
             process_args args
@@ -27,7 +34,7 @@ let original_path, verified_path =
     | [ original_path; verified_path ] -> (original_path, verified_path)
     | _ ->
         print_endline
-          "Usage: refinement_checker [--rustc-args ARGS] [--] <original_path> \
+          "Usage: refinement_checker [--verbose N] [--rustc-args ARGS] [--] <original_path> \
            <verified_path>\n\n\
            Checks that each behavior of each function in the original path is \
            also exhibited by the corresponding function in the verified path";
@@ -232,7 +239,7 @@ let rec check_module module0 module1 =
   let submodules1 = module1.submodules in
   List.iter2 check_module submodules0 submodules1
 
-let () =
+let check_bodies () =
   original_bodies
   |> List.iter @@ fun (def_path, body) ->
      match List.assoc_opt def_path verified_bodies with
@@ -246,10 +253,18 @@ let () =
                def_path)
      | Some verified_body -> check_body_refines_body def_path body verified_body
 
-let () =
+let check_modules () =
   check_files_match (original_path, verified_path);
   let modules0 = original_vf_mir.modules in
   let modules1 = verified_vf_mir.modules in
   List.iter2 check_module modules0 modules1
 
-let () = Printf.printf "No refinement errors found\n"
+let () =
+  try
+    check_bodies ();
+    check_modules ();
+    Printf.printf "No refinement errors found\n"
+  with RefinementCheckFailure msg ->
+    print_endline msg;
+    exit 1
+    

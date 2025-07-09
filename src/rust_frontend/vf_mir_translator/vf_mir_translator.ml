@@ -3022,10 +3022,13 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           let bor_kind_cpn = bor_kind_get ref_data_cpn in
           let bor_kind = BorrowKind.get bor_kind_cpn in
           let place_cpn = place_get ref_data_cpn in
+          let place_does_not_need_drop = place_does_not_need_drop_get ref_data_cpn in
           let* place_expr, place_is_mutable = translate_place place_cpn loc in
           let (path, line, _), _ = Ast.lexed_loc loc in
           let ignore_ref_creation =
             bor_kind = Mut
+            ||
+            not place_is_mutable && place_does_not_need_drop
             ||
             (* ignore &mut E for now *)
             if TranslatorArgs.ignore_ref_creation then true

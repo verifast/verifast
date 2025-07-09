@@ -3,6 +3,13 @@ type 'a option = 'a Option.t
 module VfMir = S
 module VfMirRd = VfMir.Reader
 
+let verbosity = ref 0
+let verbosity_call = 1
+let verbosity_basic_block = 2
+let verbosity_stmt = 3
+
+exception RefinementCheckFailure of string
+
 let canonicalize_def_path_re = Str.regexp "'[a-zA-Z_][a-zA-Z0-9_]*"
 
 let canonicalize_def_path def_path =
@@ -375,29 +382,6 @@ let string_of_env env =
 
 let update_env x v env = (x, v) :: List.remove_assoc x env
 
-type basic_block_info = <
-  id: basic_block_path;
-  genv: generic_env;
-  statements: statement list;
-  terminator: terminator;
-  to_string: string;
-  sibling: int -> basic_block_info;
-  caller: (string (* callee result variable *) * place (* destination place *) * basic_block_info (* destination basic block *)) option;
->
-
-let rec basic_block_info_of genv bbs bb_idx =
-  let bb = bbs.(bb_idx) in
-  let id = {bb_caller=None; bb_index=bb_idx} in
-  object
-    method id = id
-    method genv = genv
-    method statements = bb.statements
-    method terminator = bb.terminator
-    method to_string = string_of_basic_block_path id
-    method sibling i = basic_block_info_of genv bbs i
-    method caller = None
-  end
-
 let local_name (locals: local_decl array) i = locals.(i).id.name
 
 let fns_to_be_inlined: (string * body) list =
@@ -481,6 +465,7 @@ let fns_to_be_inlined: (string * body) list =
                   place=local "self";
                   place_ty={kind=Adt {id={name="std::boxed::Box"}; kind=StructKind; substs=[{kind=Type {kind=Param "T"}}; {kind=Type {kind=Param "A"}}]}};
                   is_implicit=false;
+                  place_does_not_need_drop=false;
                 }
               };
               source_info={span}
@@ -1665,6 +1650,32 @@ let commands_of_statement_kind = function
 
 let commands_of_statement ({source_info; kind}: statement) = SourceInfo source_info::commands_of_statement_kind kind
 
+type basic_block_info = <
+  id: basic_block_path;
+  genv: generic_env;
+  statements: statement list;
+  commands: command list;
+  terminator: terminator;
+  to_string: string;
+  sibling: int -> basic_block_info;
+  caller: (string (* callee result variable *) * place (* destination place *) * basic_block_info (* destination basic block *)) option;
+>
+
+let rec basic_block_info_of genv bbs bb_idx: basic_block_info =
+  let bb = bbs.(bb_idx) in
+  let id = {bb_caller=None; bb_index=bb_idx} in
+  let cmds = List.concat_map commands_of_statement bb.statements in
+  object
+    method id = id
+    method genv = genv
+    method statements = bb.statements
+    method commands = cmds
+    method terminator = bb.terminator
+    method to_string = string_of_basic_block_path id
+    method sibling i = basic_block_info_of genv bbs i
+    method caller = None
+  end
+
 let canonicalize_item_name name =
   if String.starts_with ~prefix:"core::" name then
     "std::" ^ String.sub name 6 (String.length name - 6)
@@ -1736,7 +1747,7 @@ let rec process_commands bodies (env: env) opnds (i_bb: basic_block_info) i_s (s
       in
       iter [] [] [] generic_params substs
     in
-    Printf.printf "Entering inlined call of %s with genv=%s\n" funcName (string_of_genv genv);
+    if !verbosity >= verbosity_call then Printf.printf "Entering inlined call of %s with genv=%s\n" funcName (string_of_genv genv);
     let bbs = Array.of_list body.basic_blocks in
     let locals = Array.of_list body.local_decls in
     let env = List.mapi (fun i v -> let x = local_name locals (i + 1) in {lv_caller=caller; lv_name=x}, Value v) args @ env in
@@ -1747,16 +1758,19 @@ let rec process_commands bodies (env: env) opnds (i_bb: basic_block_info) i_s (s
     in
     let rec bb_info_of i: basic_block_info =
       let callee_bb_id = {bb_caller=caller; bb_index=i} in
+      let cmds = List.concat_map commands_of_statement bbs.(i).statements in
       object
       method id = callee_bb_id
       method genv = genv
       method statements = bbs.(i).statements
+      method commands = cmds
       method terminator = bbs.(i).terminator
       method to_string = string_of_basic_block_path callee_bb_id
       method sibling i = bb_info_of i
       method caller = caller_info
     end in
-    process_commands bodies env [] (bb_info_of 0) 0 (List.concat_map commands_of_statement bbs.(0).statements) (* TODO: deal with unwind_action *)
+    let bb0 = bb_info_of 0 in
+    process_commands bodies env [] bb0 0 bb0#commands (* TODO: deal with unwind_action *)
   in
   let inline_call funcName substs call (body: body) =
     inline_call0 funcName body.generics substs call body
@@ -1774,7 +1788,7 @@ let rec process_commands bodies (env: env) opnds (i_bb: basic_block_info) i_s (s
       if funcName = "std::ops::FnOnce::call_once--VeriFast" then
         let [Type (Closure (closureName, closureGenArgs)); Type (Tuple paramTypes)] = substs in
         let body = List.assoc (canonicalize_def_path closureName) bodies in
-        Printf.printf "======== Inlined function ========\n%s" (Stringifier.string_of_body body);
+        if !verbosity >= verbosity_call then Printf.printf "======== Inlined function ========\n%s" (Stringifier.string_of_body body);
         let closureGenArgs = Array.of_list closureGenArgs in
         let closureGenArgs = Array.to_list @@ Array.sub closureGenArgs 0 (Array.length closureGenArgs - 3) in
         let genericParams = closureGenArgs |> List.map @@ fun arg ->
@@ -1880,7 +1894,7 @@ let rec process_commands bodies (env: env) opnds (i_bb: basic_block_info) i_s (s
       | _ -> done_ ()
       end
     | SourceInfo sourceInfo ->
-      Printf.printf "INFO: at %s\n" (string_of_span sourceInfo.span);
+      if !verbosity >= verbosity_stmt then Printf.printf "INFO: at %s\n" (string_of_span sourceInfo.span);
       cont env opnds
     | _ -> done_ ()
 
@@ -2228,9 +2242,9 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
     Printf.printf "ERROR: %s\n" msg;
     Printf.printf "======== Original body ========\n%s\n" (Stringifier.string_of_body body0);
     Printf.printf "======== Verified body ========\n%s\n" (Stringifier.string_of_body body1);
-    failwith msg
+    raise (RefinementCheckFailure msg)
   in
-  Printf.printf "Checking function body %s\n" def_path;
+  if !verbosity >= verbosity_call then Printf.printf "Checking function body %s\n" def_path;
   let visibility0 = body0.visibility in
   let visibility1 = body1.visibility in
   if visibility0 <> visibility1 then failwith "The two functions have different visibilities";
@@ -2292,7 +2306,7 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
     let env1 = address_taken1 @ env1 in
     let bblocks0_statuses: (basic_block_path, basic_block_status) Hashtbl.t = Hashtbl.create 100 in
     let rec check_basic_block_refines_basic_block (env0: env) (i_bb0: basic_block_info) (env1: env) (i_bb1: basic_block_info) =
-      Printf.printf "INFO: In function %s, checking basic block %s against basic block %s, with env0 = [%s] and env1 = [%s]\n" def_path i_bb0#to_string i_bb1#to_string (string_of_env env0) (string_of_env env1);
+      if !verbosity >= verbosity_basic_block then Printf.printf "INFO: In function %s, checking basic block %s against basic block %s, with env0 = [%s] and env1 = [%s]\n" def_path i_bb0#to_string i_bb1#to_string (string_of_env env0) (string_of_env env1);
       match Hashtbl.find_opt bblocks0_statuses i_bb0#id with
         None ->
           let loopInv = {
@@ -2304,24 +2318,17 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
           Hashtbl.replace bblocks0_statuses i_bb0#id (Checking (i_bb1#id, loopInv));
           let rec iter loopInv =
             try
-              Printf.printf "Loop invariant = [%s]\n" (string_of_loop_inv loopInv);
+              if !verbosity >= verbosity_basic_block then Printf.printf "Loop invariant = [%s]\n" (string_of_loop_inv loopInv);
               loopInv.address_taken |> List.iter begin fun (x0, x1) ->
                 if List.assoc_opt x0 env0 <> List.assoc_opt x1 env1 then
                   failwith (Printf.sprintf "The states of the two locals %s and %s whose address is taken are not equal" (string_of_lv_path x0) (string_of_lv_path x1))
               end;
               (* Havoc all locals of the original crate *)
               let env0, env1 = produce_loop_inv env0 env1 loopInv in
-              Printf.printf "INFO: In function %s, checking loop body at basic block %s against basic block %s, with env0 = [%s] and env1 = [%s]\n" def_path i_bb0#to_string i_bb1#to_string (string_of_env env0) (string_of_env env1);
+              if !verbosity >= verbosity_basic_block then Printf.printf "INFO: In function %s, checking loop body at basic block %s against basic block %s, with env0 = [%s] and env1 = [%s]\n" def_path i_bb0#to_string i_bb1#to_string (string_of_env env0) (string_of_env env1);
               let cmds0 = List.concat_map commands_of_statement i_bb0#statements in
               let cmds1 = List.concat_map commands_of_statement i_bb1#statements in
-              begin try
-                check_codepos_refines_codepos env0 [] i_bb0 0 cmds0 env1 [] i_bb1 0 cmds1
-              with
-                | Failure msg as e ->
-                  Printf.printf "======== Commands of basic block %s of original program ========\n%s\n" i_bb0#to_string (String.concat "\n" (List.mapi (fun i c -> Printf.sprintf "%3d: %s" i (string_of_command c)) cmds0));
-                  Printf.printf "======== Commands of basic block %s of verified program ========\n%s\n" i_bb1#to_string (String.concat "\n" (List.mapi (fun i c -> Printf.sprintf "%3d: %s" i (string_of_command c)) cmds1));
-                  raise e
-              end;
+              check_codepos_refines_codepos env0 [] i_bb0 0 cmds0 env1 [] i_bb1 0 cmds1;
               let Checking (i_bb1, loopInv) = Hashtbl.find bblocks0_statuses i_bb0#id in
               Hashtbl.replace bblocks0_statuses i_bb0#id (Checked (i_bb1, loopInv))
             with RecheckLoop i_bb0' as e ->
@@ -2334,7 +2341,7 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
           in
           iter loopInv
       | Some (Checking (i_bb1', loopInv)) ->
-        Printf.printf "INFO: In function %s, loop detected with head = basic block %s\n" def_path i_bb0#to_string;
+        if !verbosity >= verbosity_basic_block then Printf.printf "INFO: In function %s, loop detected with head = basic block %s\n" def_path i_bb0#to_string;
         if i_bb1' <> i_bb1#id then failwith (Printf.sprintf "In function %s, loop head %s in the original crate is being checked for refinement against basic block %s in the verified crate, but it is already being checked for refinement against loop head %s in the verified crate" def_path i_bb0#to_string i_bb1#to_string (string_of_basic_block_path i_bb1'));
         let consts0_hold =
           loopInv.consts0 |> List.for_all @@ fun (x, t) ->
@@ -2355,10 +2362,10 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
           let v = List.assoc x env1 in
           ys |> List.for_all @@ fun y -> List.assoc y env0 = v
         then begin
-          Printf.printf "Loop with head %s verified, with loop invariant %s!\n" i_bb0#to_string (string_of_loop_inv loopInv);
+          if !verbosity >= verbosity_basic_block then Printf.printf "Loop with head %s verified, with loop invariant %s!\n" i_bb0#to_string (string_of_loop_inv loopInv);
           () (* Use the induction hypothesis; this path is done. *)
         end else begin
-          Printf.printf "Loop with head %s failed to verify; trying again with weaker invariant\n" i_bb0#to_string;
+          if !verbosity >= verbosity_basic_block then Printf.printf "Loop with head %s failed to verify; trying again with weaker invariant\n" i_bb0#to_string;
           (* Forget about the earlier result; try from scratch *)
           let consts0 = loopInv.consts0 |> List.filter @@ fun (x, t) ->
             let v = List.assoc x env0 in
@@ -2401,7 +2408,7 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
           match List.assoc_opt x env1 with None -> false | Some v ->
           ys |> List.for_all @@ fun y -> match List.assoc_opt y env0 with None -> false | Some v' -> v' = v
         then begin
-          Printf.printf "Re-reached loop with head %s, that was already verified; path is done.\n" i_bb0#to_string;
+          if !verbosity >= verbosity_basic_block then Printf.printf "Re-reached loop with head %s, that was already verified; path is done.\n" i_bb0#to_string;
           () (* Use the induction hypothesis; this path is done. *)
         end else begin
           (* Forget about the earlier result; try from scratch *)
@@ -2410,17 +2417,22 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
         end
     (* Checks whether for each behavior of code position (bb0, s0), code position (bb1, s1) has a matching behavior *)
     and check_codepos_refines_codepos_core env0 opnds0 (i_bb0 : basic_block_info) i_s0 (ss_i0 : command list) env1 opnds1 (i_bb1 : basic_block_info) i_s1 (ss_i1 : command list) =
-      Printf.printf "INFO: In function %s, checking code position %s:%d against code position %s:%d\n" def_path i_bb0#to_string i_s0 i_bb1#to_string i_s1;
+      if !verbosity >= verbosity_stmt then Printf.printf "INFO: In function %s, checking code position %s:%d against code position %s:%d\n" def_path i_bb0#to_string i_s0 i_bb1#to_string i_s1;
       let caller0 = i_bb0#id.bb_caller in
       let caller1 = i_bb1#id.bb_caller in
       let check_terminator_refines_terminator env1 =
-        if opnds0 <> [] then failwith "opnds0 <> [] at terminator";
-        if opnds1 <> [] then failwith "opnds1 <> [] at terminator";
         let terminator0 = i_bb0#terminator in
         let terminator1 = i_bb1#terminator in
         let span0 = terminator0.source_info.span in
         let span1 = terminator1.source_info.span in
-        Printf.printf "INFO: Checking that terminator at %s refines terminator at %s\n" (string_of_span span0) (string_of_span span1);
+        if !verbosity >= verbosity_basic_block then Printf.printf "INFO: Checking that terminator at %s refines terminator at %s\n" (string_of_span span0) (string_of_span span1);
+        let error msg =
+          let t0 = Stringifier.string_of_terminator terminator0 in
+          let t1 = Stringifier.string_of_terminator terminator1 in
+          error (Printf.sprintf "While checking that the terminator of basic block %s in the original program refines the terminator of basic block %s in the verified program: %s\nOriginal: %s\nVerified: %s" i_bb0#to_string i_bb1#to_string msg t0 t1)
+        in
+        if opnds0 <> [] then failwith "opnds0 <> [] at terminator";
+        if opnds1 <> [] then failwith "opnds1 <> [] at terminator";
         let terminatorKind0 = terminator0.kind in
         let terminatorKind1 = terminator1.kind in
         match (terminatorKind0, terminatorKind1) with
@@ -2519,6 +2531,11 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
         | _ -> error "Terminator kinds do not match"
       in
       let check_command_refines_command () =
+        let error msg =
+          let bb0 = Printf.sprintf "======== Commands of basic block %s of original program ========\n%s\n" i_bb0#to_string (String.concat "\n" (List.mapi (fun i c -> Printf.sprintf "%3d: %s" i (string_of_command c)) i_bb0#commands)) in
+          let bb1 = Printf.sprintf "======== Commands of basic block %s of verified program ========\n%s\n" i_bb1#to_string (String.concat "\n" (List.mapi (fun i c -> Printf.sprintf "%3d: %s" i (string_of_command c)) i_bb1#commands)) in
+          error (Printf.sprintf "While checking that the command at %s:%d in the original program refines the command at %s:%d in the verified program: %s\n%s\n%s" i_bb0#to_string i_s0 i_bb1#to_string i_s1 msg bb0 bb1)
+        in
         let stmt0::ss_i0_plus_1 = ss_i0 in
         let stmt1::ss_i1_plus_1 = ss_i1 in
         let consume_operand opnds0 opnds1 =
@@ -2650,7 +2667,7 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
           check_codepos_refines_codepos_core env0 opnds0 i_bb0 i_s0 ss_i0 env1 opnds1 i_bb1 i_s1 ss_i1
         with LocalAddressTaken (x0, x1) ->
           if List.assoc x0 env0 <> List.assoc x1 env1 then failwith (Printf.sprintf "The states of the two locals %s and %s whose address is taken are not equal" (string_of_lv_path x0) (string_of_lv_path x1));
-          Printf.printf "Caught LocalAddressTaken (%s, %s); restarting codepos check\n" (string_of_lv_path x0) (string_of_lv_path x1);
+          if !verbosity >= verbosity_basic_block then Printf.printf "Caught LocalAddressTaken (%s, %s); restarting codepos check\n" (string_of_lv_path x0) (string_of_lv_path x1);
           let a = fresh_symbol () in
           let env0 = update_env x0 (Address a) env0 in
           let env1 = update_env x1 (Address a) env1 in
@@ -2662,7 +2679,7 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
       check_basic_block_refines_basic_block env0 (basic_block_info_of root_genv0 (Array.of_list body0.basic_blocks) 0) env1 (basic_block_info_of root_genv1 (Array.of_list body1.basic_blocks) 0)
     with LocalAddressTaken (x0, x1) ->
       let address_taken = (x0, x1) :: address_taken in
-      Printf.printf "Caught LocalAddressTaken; restarting with address_taken = %s\n" (String.concat ", " (List.map (fun (x0, x1) -> Printf.sprintf "%s = %s" (string_of_lv_path x0) (string_of_lv_path x1)) address_taken));
+      if !verbosity >= verbosity_basic_block then Printf.printf "Caught LocalAddressTaken; restarting with address_taken = %s\n" (String.concat ", " (List.map (fun (x0, x1) -> Printf.sprintf "%s = %s" (string_of_lv_path x0) (string_of_lv_path x1)) address_taken));
       check_body_refines_body_core address_taken
   in
   check_body_refines_body_core []

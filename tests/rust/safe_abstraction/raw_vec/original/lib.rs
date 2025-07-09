@@ -23,6 +23,7 @@
 #![feature(std_internals)]
 #![feature(alloc_layout_extra)]
 #![feature(nonnull_provenance)]
+#![feature(panic_internals)]
 
 #![stable(feature = "rust1", since = "1.0.0")]
 

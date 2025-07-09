@@ -543,30 +543,15 @@ impl<A: Allocator> RawVecInner<A> {
         };
 
         // Don't allocate here because `Drop` will not deallocate when `capacity` is 0.
-        {
-            //@ let layout_ref = precreate_ref(&layout);
-            //@ std::alloc::init_ref_Layout(layout_ref, 1/2);
-            let layout_size = layout.size();
-            //@ std::alloc::end_ref_Layout(layout_ref);
-            if layout_size == 0 {
-                //@ let elem_layout_ref = precreate_ref(&elem_layout);
-                //@ std::alloc::init_ref_Layout(elem_layout_ref, 1/2);
-                let elem_layout_alignment = elem_layout.alignment();
-                //@ std::alloc::end_ref_Layout(elem_layout_ref);
-                //@ close exists(Layout::size_(elem_layout));
-                return Ok(Self::new_in(alloc, elem_layout_alignment));
-            }
+        if layout.size() == 0 {
+            let elem_layout_alignment = elem_layout.alignment();
+            //@ close exists(Layout::size_(elem_layout));
+            return Ok(Self::new_in(alloc, elem_layout_alignment));
         }
         
-        {
-            //@ let layout_ref2 = precreate_ref(&layout);
-            //@ std::alloc::init_ref_Layout(layout_ref2, 1/2);
-            let layout_size = layout.size();
-            //@ std::alloc::end_ref_Layout(layout_ref2);
-            if let Err(err) = alloc_guard(layout_size) {
-                //@ std::alloc::Allocator_to_own(alloc);
-                return Err(err);
-            }
+        if let Err(err) = alloc_guard(layout.size()) {
+            //@ std::alloc::Allocator_to_own(alloc);
+            return Err(err);
         }
 
         let result = match init {
@@ -682,31 +667,21 @@ impl<A: Allocator> RawVecInner<A> {
     //@ safety_proof { assume(false); }
     {
         //@ open RawVecInner0(alloc_id, u, cap, elem_layout, ptr, allocSize);
-        //@ let elem_layout_ref = precreate_ref(&elem_layout);
-        //@ std::alloc::init_ref_Layout(elem_layout_ref, 1/2);
         if elem_layout.size() == 0 || self.cap.as_inner() == 0 {
-            //@ std::alloc::end_ref_Layout(elem_layout_ref);
             //@ close [fv]RawVecInner0(alloc_id, u, cap, elem_layout, ptr, allocSize);
             None
         } else {
-            //@ std::alloc::end_ref_Layout(elem_layout_ref);
             // We could use Layout::array here which ensures the absence of isize and usize overflows
             // and could hypothetically handle differences between stride and size, but this memory
             // has already been allocated so we know it can't overflow and currently Rust does not
             // support such types. So we can do better by skipping some checks and avoid an unwrap.
             unsafe {
-                //@ let elem_layout_ref1 = precreate_ref(&elem_layout);
-                //@ std::alloc::init_ref_Layout(elem_layout_ref1, 1/2);
                 //@ std::alloc::Layout_inv(elem_layout);
                 //@ is_power_of_2_pos(Layout::align_(elem_layout));
                 //@ div_rem_nonneg(isize::MAX, Layout::align_(elem_layout));
                 let alloc_size = elem_layout.size().unchecked_mul(self.cap.as_inner());
                 //@ if allocSize == 0 { mul_zero(Layout::size_(elem_layout), Cap_as_inner_(cap)); assert false; }
-                //@ std::alloc::end_ref_Layout(elem_layout_ref1);
-                //@ let elem_layout_ref2 = precreate_ref(&elem_layout);
-                //@ std::alloc::init_ref_Layout(elem_layout_ref2, 1/2);
                 let layout = Layout::from_size_align_unchecked(alloc_size, elem_layout.align());
-                //@ std::alloc::end_ref_Layout(elem_layout_ref2);
                 //@ close [fv]RawVecInner0(alloc_id, u, cap, elem_layout, ptr, alloc_size);
                 Some((self.ptr.into(), layout))
             }
@@ -984,21 +959,88 @@ fn finish_grow<A>(
 ) -> Result<NonNull<[u8]>, TryReserveError>
 where
     A: Allocator,
+/*@
+req thread_token(?t) &*& t == currentThread &*&
+    *alloc |-> ?alloc0 &*& Allocator(t, alloc0, ?alloc_id) &*&
+    match current_memory {
+        Option::None => true,
+        Option::Some(memory) =>
+            alloc_block_in(alloc_id, NonNull_ptr(memory.0), memory.1) &*& NonNull_ptr(memory.0)[..Layout::size_(memory.1)] |-> _ &*&
+            Layout::size_(memory.1) <= Layout::size_(new_layout) &*&
+            Layout::align_(memory.1) == Layout::align_(new_layout)
+    };
+@*/
+/*@
+ens thread_token(t) &*& *alloc |-> ?alloc1 &*& Allocator(t, alloc1, alloc_id) &*&
+    match result {
+        Result::Ok(ptr) => alloc_block_in(alloc_id, NonNull_ptr(ptr.ptr), new_layout) &*& NonNull_ptr(ptr.ptr)[..Layout::size_(new_layout)] |-> _,
+        Result::Err(e) =>
+            match current_memory {
+                Option::None => true,
+                Option::Some(memory) =>
+                    alloc_block_in(alloc_id, NonNull_ptr(memory.0), memory.1) &*& NonNull_ptr(memory.0)[..Layout::size_(memory.1)] |-> _
+            } &*&
+            <std::collections::TryReserveError>.own(currentThread, e)
+    };
+@*/
+//@ safety_proof { assume(false); }
 {
     alloc_guard(new_layout.size())?;
 
     let memory = if let Some((ptr, old_layout)) = current_memory {
-        debug_assert_eq!(old_layout.align(), new_layout.align());
+        // debug_assert_eq!(old_layout.align(), new_layout.align());
+        if cfg!(debug_assertions) { //~allow_dead_code // FIXME: The source location associated
+                                    //with a dead `else` branch is the entire `if` statement :-(
+            match (&old_layout.align(), &new_layout.align()) {
+                (left_val, right_val) =>
+                if !(*left_val == *right_val) {
+                    let kind = core::panicking::AssertKind::Eq; //~allow_dead_code
+                    core::panicking::assert_failed(kind, &*left_val, &*right_val, None); //~allow_dead_code
+                }
+            }
+        }
         unsafe {
             // The allocator checks for alignment equality
             hint::assert_unchecked(old_layout.align() == new_layout.align());
-            alloc.grow(ptr, old_layout, new_layout)
+            let r;
+            //@ let alloc_ref = precreate_ref(alloc);
+            //@ let k1 = begin_lifetime();
+            {
+                //@ let_lft 'a = k1;
+                //@ std::alloc::init_ref_Allocator_at_lifetime::<'a, A>(alloc_ref);
+                r = alloc.grow(ptr, old_layout, new_layout);
+                //@ leak Allocator(_, _, _);
+            }
+            //@ end_lifetime(k1);
+            //@ std::alloc::end_ref_Allocator_at_lifetime::<A>();
+            r
         }
     } else {
-        alloc.allocate(new_layout)
+        let r;
+        //@ let alloc_ref = precreate_ref(alloc);
+        //@ let k1 = begin_lifetime();
+        {
+            //@ let_lft 'a = k1;
+            //@ std::alloc::init_ref_Allocator_at_lifetime::<'a, A>(alloc_ref);
+            r = alloc.allocate(new_layout);
+            //@ leak Allocator(_, _, _);
+        }
+        //@ end_lifetime(k1);
+        //@ std::alloc::end_ref_Allocator_at_lifetime::<A>();
+        r
     };
 
-    memory.map_err(|_| AllocError { layout: new_layout, non_exhaustive: () }.into())
+    let new_layout_ref = &new_layout;
+    match memory {
+        Ok(ptr) => Ok(ptr),
+        Err(err) => {
+            let e = AllocError { layout: *new_layout_ref, non_exhaustive: () };
+            //@ std::alloc::close_Layout_own(t, new_layout);
+            //@ close_tuple_0_own(t);
+            //@ close <std::collections::TryReserveErrorKind>.own(t, e);
+            Err(e.into())
+        }
+    }
 }
 
 // Central function for reserve error handling.
@@ -1054,11 +1096,7 @@ ens thread_token(currentThread) &*&
 @*/
 //@ safety_proof { assume(false); }
 {
-    //@ let elem_layout_ref = precreate_ref(&elem_layout);
-    //@ std::alloc::init_ref_Layout(elem_layout_ref, 1/2);
-    let array_layout = elem_layout.repeat(cap);
-    //@ std::alloc::end_ref_Layout(elem_layout_ref);
-    let r = match array_layout {
+    let r = match elem_layout.repeat(cap) {
         Ok(info) => Ok(info.0),
         Err(err) => Err(err)
     };
