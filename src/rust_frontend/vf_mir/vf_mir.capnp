@@ -590,6 +590,7 @@ struct Rvalue {
         placeTy @3: Ty;
         place @2: Place;
         isImplicit @4: Bool;
+        placeDoesNotNeedDrop @5: Bool;
     }
 
     struct CastData {

@@ -3195,10 +3195,7 @@ impl<'a, T, A: Allocator> CursorMut<'a, T, A> {
             Some(current) => unsafe {
                 //@ open Nodes(?alloc_id, self0.current, ?before_current, tail, None, ?nodes2);
                 //@ close CursorMut_current(self, _);
-                //@ let current_ref = precreate_ref(&current);
-                //@ std::ptr::init_ref_NonNull(current_ref, 1/2);
                 self.current = current.as_ref().next;
-                //@ std::ptr::end_ref_NonNull(current_ref);
                 self.index += 1;
                 //@ let self1_= *self;
                 //@ assert Nodes(alloc_id, head, None, _, _, ?nodes1);
@@ -3293,10 +3290,7 @@ impl<'a, T, A: Allocator> CursorMut<'a, T, A> {
             // Have a prev. Yield it and go to the previous element.
             Some(current) => unsafe {
                 //@ close CursorMut_current(self, _);
-                //@ let current_ref = precreate_ref(&current);
-                //@ std::ptr::init_ref_NonNull(current_ref, 1/2);
                 self.current = current.as_ref().prev;
-                //@ std::ptr::end_ref_NonNull(current_ref);
                 
                 let index = self.index.checked_sub(1);
                 
@@ -3660,10 +3654,7 @@ impl<'a, T, A: Allocator> CursorMut<'a, T, A> {
                 //@ open CursorMut_fbc::<T, A>(t1, ghost_cell_id, self0.list)();
                 //@ open Nodes::<T>(?alloc_id, self0.current, ?before_current, ?tail, None, ?nodes2);
                 
-                //@ let unlinked_node_ref = precreate_ref(&unlinked_node);
-                //@ std::ptr::init_ref_NonNull(unlinked_node_ref, 1/2);
                 self.current = unlinked_node.as_ref().next;
-                //@ std::ptr::end_ref_NonNull(unlinked_node_ref);
                 
                 //@ let current1 = (*self).current;
                 //@ open foreach(nodes2, elem_fbc::<T>(t1));
