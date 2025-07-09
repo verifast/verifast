@@ -1652,6 +1652,7 @@ let commands_of_statement ({source_info; kind}: statement) = SourceInfo source_i
 
 type basic_block_info = <
   id: basic_block_path;
+  predecessors: int list; (* indices of predecessor basic blocks *)
   genv: generic_env;
   statements: statement list;
   commands: command list;
@@ -1661,18 +1662,19 @@ type basic_block_info = <
   caller: (string (* callee result variable *) * place (* destination place *) * basic_block_info (* destination basic block *)) option;
 >
 
-let rec basic_block_info_of genv bbs bb_idx: basic_block_info =
+let rec basic_block_info_of genv bbs predecessors bb_idx: basic_block_info =
   let bb = bbs.(bb_idx) in
   let id = {bb_caller=None; bb_index=bb_idx} in
   let cmds = List.concat_map commands_of_statement bb.statements in
   object
     method id = id
+    method predecessors = predecessors
     method genv = genv
     method statements = bb.statements
     method commands = cmds
     method terminator = bb.terminator
     method to_string = string_of_basic_block_path id
-    method sibling i = basic_block_info_of genv bbs i
+    method sibling i = basic_block_info_of genv bbs (bb_idx::predecessors) i
     method caller = None
   end
 
@@ -1756,20 +1758,21 @@ let rec process_commands bodies (env: env) opnds (i_bb: basic_block_info) i_s (s
         Nothing -> failwith "Diverging inlined calls are not yet supported"
       | Something {place; basic_block_id={index}} -> Some (locals.(0).id.name, place, i_bb#sibling (Stdint.Uint32.to_int index))
     in
-    let rec bb_info_of i: basic_block_info =
+    let rec bb_info_of predecessors i: basic_block_info =
       let callee_bb_id = {bb_caller=caller; bb_index=i} in
       let cmds = List.concat_map commands_of_statement bbs.(i).statements in
       object
       method id = callee_bb_id
+      method predecessors = predecessors
       method genv = genv
       method statements = bbs.(i).statements
       method commands = cmds
       method terminator = bbs.(i).terminator
       method to_string = string_of_basic_block_path callee_bb_id
-      method sibling i = bb_info_of i
+      method sibling i' = bb_info_of (i::predecessors) i'
       method caller = caller_info
     end in
-    let bb0 = bb_info_of 0 in
+    let bb0 = bb_info_of [] 0 in
     process_commands bodies env [] bb0 0 bb0#commands (* TODO: deal with unwind_action *)
   in
   let inline_call funcName substs call (body: body) =
@@ -1819,6 +1822,10 @@ let rec process_commands bodies (env: env) opnds (i_bb: basic_block_info) i_s (s
           end
       | Address _ -> failwith "The scenario where the result variable's address is taken is not yet supported for inlined calls"
       end
+    | Goto {index} when not (List.mem (Stdint.Uint32.to_int index) i_bb#predecessors) -> (* Non-looping jump *)
+      assert (opnds = []);
+      let i_bb = i_bb#sibling (Stdint.Uint32.to_int index) in
+      process_commands bodies env [] i_bb 0 i_bb#commands
     | _ -> done_ ()
     end
   | s::ss_i_plus_1 ->
@@ -2676,7 +2683,7 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
       iter env0 env1
     in
     try
-      check_basic_block_refines_basic_block env0 (basic_block_info_of root_genv0 (Array.of_list body0.basic_blocks) 0) env1 (basic_block_info_of root_genv1 (Array.of_list body1.basic_blocks) 0)
+      check_basic_block_refines_basic_block env0 (basic_block_info_of root_genv0 (Array.of_list body0.basic_blocks) [] 0) env1 (basic_block_info_of root_genv1 (Array.of_list body1.basic_blocks) [] 0)
     with LocalAddressTaken (x0, x1) ->
       let address_taken = (x0, x1) :: address_taken in
       if !verbosity >= verbosity_basic_block then Printf.printf "Caught LocalAddressTaken; restarting with address_taken = %s\n" (String.concat ", " (List.map (fun (x0, x1) -> Printf.sprintf "%s = %s" (string_of_lv_path x0) (string_of_lv_path x1)) address_taken));

@@ -148,6 +148,10 @@ mod num {
         lem_auto(UsizeNoHighBit::as_inner_(transmute_uint(n))) UsizeNoHighBit_as_inner__transmute_uint(n: usize);
             req 0 <= n && n <= isize::MAX;
             ens UsizeNoHighBit::as_inner_(transmute_uint(n)) == n;
+            
+        lem UsizeNoHighBit_inv(n: UsizeNoHighBit);
+            req true;
+            ens 0 <= UsizeNoHighBit::as_inner_(n) &*& UsizeNoHighBit::as_inner_(n) <= isize::MAX;
         
         pred end_ref_UsizeNoHighBit_token(p: *UsizeNoHighBit, x: *UsizeNoHighBit, f: real);
         
@@ -1103,6 +1107,11 @@ mod option {
         //@ ens result == v;
         //@ on_unwind_ens false;
         
+        fn ok_or<E>(self: Option<T>, err: E) -> std::result::Result<T, E>;
+        //@ req true;
+        //@ ens result == match self { Option::None => std::result::Result::Err(err), Option::Some(v) => std::result::Result::Ok(v) };
+        //@ on_unwind_ens false;
+        
     }
     
     impl<T> std::ops::Try for std::option::Option<T> {
@@ -1181,6 +1190,15 @@ mod collections {
             layout: std::alloc::Layout,
             non_exhaustive: ()
         }
+    }
+    
+    impl<T> std::ops::FromResidual<std::result::Result<std::convert::Infallible, std::collections::TryReserveErrorKind>> for std::result::Result<T, std::collections::TryReserveError> {
+    
+        fn from_residual(residual: std::result::Result<std::convert::Infallible, TryReserveErrorKind>) -> std::result::Result<T, TryReserveError>;
+        //@ req residual == std::result::Result::Err(?e0) &*& <TryReserveErrorKind>.own(?t, e0);
+        //@ ens result == std::result::Result::Err(?e1) &*& <TryReserveError>.own(t, e1);
+        //@ on_unwind_ens false;
+
     }
     
 }

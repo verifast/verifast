@@ -5874,6 +5874,16 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         begin match rt with
           InductiveType (i, _) ->
           let (_, inductive_tparams, ctormap, _, _, _, _, _, _) = List.assoc i inductivemap in
+          let g =
+            match String.rindex_opt i item_path_separator.[0] with
+              None -> g
+            | Some k ->
+              let pn = String.sub i 0 (k + 1) in
+              if String.starts_with ~prefix:pn g then
+                String.sub g (String.length pn) (String.length g - String.length pn)
+              else
+                g
+          in
           begin match try_assoc g ctormap with
             Some (_, (ld, _, _, param_names_types, symb)) ->
             reportUseSite DeclKind_InductiveCtor ld l;
