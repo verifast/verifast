@@ -65,8 +65,8 @@ complies with the pointer aliasing rules, does not violate any of the `assume`
 ghost commands present in the program, and does not violate semantic
 well-typedness due to unwinding, respectively. Finally, note that since VeriFast
 for Rust uses the rustc frontend, which assumes a particular compilation target
-architecture, VeriFast for Rust's result will only hold for the current target
-architecture.
+architecture and particular [configuration options](https://doc.rust-lang.org/reference/conditional-compilation.html), VeriFast for Rust's result will only hold for the current target
+architecture and configuration options.
 
 ## The state of VeriFast
 
