@@ -450,6 +450,10 @@ mod mem {
 
 mod ptr {
 
+    fn without_provenance_mut<T>(addr: usize) -> *mut T;
+    //@ req true;
+    //@ ens result == addr as *T;
+
     unsafe fn drop_in_place<T>(to_drop: *mut T);
     //@ req thread_token(?t) &*& *to_drop |-> ?v &*& <T>.own(t, v);
     //@ ens thread_token(t) &*& *to_drop |-> _;
@@ -573,6 +577,11 @@ mod ptr {
         fn from_non_null(ptr: NonNull<T>) -> Unique<T>;
         //@ req true;
         //@ ens result == Unique::from_non_null_(ptr);
+        //@ on_unwind_ens false;
+        
+        fn new_unchecked(ptr: *mut T) -> Unique<T>;
+        //@ req ptr != 0;
+        //@ ens result == Unique::from_non_null_(NonNull::new_(ptr));
         //@ on_unwind_ens false;
         
     }
@@ -930,6 +939,29 @@ mod alloc {
             alloc_block_in(alloc_id, std::ptr::NonNull_ptr(ptr), old_layout) &*&
             std::ptr::NonNull_ptr(ptr)[..Layout::size_(old_layout)] |-?-> ?bs &*&
             Layout::size_(old_layout) <= Layout::size_(new_layout);
+        @*/
+        /*@
+        ens thread_token(t) &*& Allocator::<&'a Self>(t, self, alloc_id) &*& 
+            match result {
+                Result::Ok(new_ptr) =>
+                    alloc_block_in(alloc_id, std::ptr::NonNull_ptr(new_ptr.ptr), new_layout) &*&
+                    std::ptr::NonNull_ptr(new_ptr.ptr)[..Layout::size_(new_layout)] |-> _ &*&
+                    Layout::size_(new_layout) <= new_ptr.len &*&
+                    is_valid_layout(new_ptr.len, Layout::align_(new_layout)) == true,
+                Result::Err(e) =>
+                    alloc_block_in(alloc_id, std::ptr::NonNull_ptr(ptr), old_layout) &*&
+                    std::ptr::NonNull_ptr(ptr)[..Layout::size_(old_layout)] |-?-> bs
+            };
+        @*/
+        //@ on_unwind_ens thread_token(t) &*& Allocator::<&'a Self>(t, self, alloc_id);
+        
+        unsafe fn shrink<'a>(self: &'a Self, ptr: std::ptr::NonNull<u8>, old_layout: Layout, new_layout: Layout) -> std::result::Result<std::ptr::NonNull_slice<u8>, AllocError>;
+        /*@
+        req thread_token(?t) &*&
+            Allocator::<&'a Self>(t, self, ?alloc_id) &*&
+            alloc_block_in(alloc_id, std::ptr::NonNull_ptr(ptr), old_layout) &*&
+            std::ptr::NonNull_ptr(ptr)[..Layout::size_(old_layout)] |-?-> ?bs &*&
+            Layout::size_(new_layout) <= Layout::size_(old_layout);
         @*/
         /*@
         ens thread_token(t) &*& Allocator::<&'a Self>(t, self, alloc_id) &*& 
