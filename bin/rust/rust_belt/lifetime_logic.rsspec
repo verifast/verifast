@@ -268,10 +268,10 @@ lem frac_borrow_mono(k: lifetime_t, k1: lifetime_t, P: pred(;));
 pred close_frac_borrow_token(q_p: real, P: pred(;), q_lft: real, k: lifetime_t);
 
 // LftL-fract-acc
-lem open_frac_borrow(k: lifetime_t, P: pred(;), q_lft: real);
+lem open_frac_borrow(k: lifetime_t, P: pred(;), q_lft: real) -> real;
     nonghost_callers_only
     req [_]frac_borrow(k, P) &*& [q_lft]lifetime_token(k);
-    ens [?q_p]P() &*& close_frac_borrow_token(q_p, P, q_lft, k);
+    ens [result]P() &*& close_frac_borrow_token(result, P, q_lft, k);
 
 lem close_frac_borrow(q_p: real, P: pred(;));
     nonghost_callers_only

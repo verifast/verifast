@@ -62,6 +62,7 @@ pub enum GhostRangeKind {
     Regular,
     BlockDecls, // This ghost range contains the ghost decls of a block with ghost decls.
     GenericArgs,
+    Mut,
 }
 
 #[derive(Debug)]
@@ -140,6 +141,7 @@ const VF_GHOST_CMD_TAG_LEN: u32 = VF_GHOST_CMD_TAG.len() as u32;
 
 pub fn preprocess(
     input: &str,
+    read_only: bool,
     directives: &mut Vec<Box<GhostRange>>,
     ghost_ranges: &mut Vec<Box<GhostRange>>,
 ) -> String {
@@ -190,7 +192,9 @@ pub fn preprocess(
                         ghost_ranges[last.start_ghost_range_index].start.column
                     );
                 }
-                output.push_str("\n\nconst fn VeriFast_ghost_command() {}\n");
+                if !read_only {
+                    output.push_str("\n\nconst fn VeriFast_ghost_command() {}\n");
+                }
                 return output;
             }
             Some(c) => {
@@ -219,8 +223,10 @@ pub fn preprocess(
                             if last.brace_depth == brace_depth {
                                 ghost_ranges[last.start_ghost_range_index].block_end = Some(cs.pos);
                                 open_blocks.pop();
-                                output.push_str(VF_GHOST_CMD_TAG);
-                                cs.pos.byte_pos += VF_GHOST_CMD_TAG_LEN;
+                                if !read_only {
+                                    output.push_str(VF_GHOST_CMD_TAG);
+                                    cs.pos.byte_pos += VF_GHOST_CMD_TAG_LEN;
+                                }
                             }
                         }
                         cs.next();
@@ -260,12 +266,14 @@ pub fn preprocess(
                                         cs.pos.column -= 3;
                                         let start = cs.pos;
                                         let in_fn_body = fn_body_brace_depth != -1;
-                                        if in_fn_body {
-                                            output.push_str(VF_GHOST_CMD_TAG);
-                                            cs.pos.byte_pos += VF_GHOST_CMD_TAG_LEN;
-                                        } else if start_of_whitespace.byte_pos == 0 {
-                                            output.push_str(VF_SYNTHETIC_FIRST_TOKENS);
-                                            cs.pos.byte_pos += VF_SYNTHETIC_FIRST_TOKENS_LEN;
+                                        if !read_only {
+                                            if in_fn_body {
+                                                output.push_str(VF_GHOST_CMD_TAG);
+                                                cs.pos.byte_pos += VF_GHOST_CMD_TAG_LEN;
+                                            } else if start_of_whitespace.byte_pos == 0 {
+                                                output.push_str(VF_SYNTHETIC_FIRST_TOKENS);
+                                                cs.pos.byte_pos += VF_SYNTHETIC_FIRST_TOKENS_LEN;
+                                            }
                                         }
                                         let mut contents = String::new();
                                         output.push_str("//@");
@@ -303,11 +311,11 @@ pub fn preprocess(
                                             && ghost_range_contents_is_block_decls(
                                                 contents.strip_prefix("//@").unwrap(),
                                             );
-                                        if is_block_decls {
-                                            open_blocks.push(OpenBlock {
-                                                start_ghost_range_index: ghost_ranges.len(),
-                                                brace_depth: brace_depth,
-                                            });
+                                            if is_block_decls {
+                                                open_blocks.push(OpenBlock {
+                                                    start_ghost_range_index: ghost_ranges.len(),
+                                                    brace_depth: brace_depth,
+                                                });
                                         }
                                         ghost_ranges.push(Box::new(GhostRange {
                                             in_fn_body,
@@ -426,6 +434,7 @@ pub fn preprocess(
                                     block_end: None,
                                 });
                                 let mut is_ghost_range = false;
+                                let is_ghost_cmd;
                                 let mut is_generic_args = false;
                                 match cs.peek() {
                                     Some('@') => {
@@ -436,17 +445,26 @@ pub fn preprocess(
                                         ghost_range.in_fn_body = fn_body_brace_depth != -1;
                                         ghost_range.start = cs.pos;
                                         if ghost_range.in_fn_body {
-                                            is_generic_args = match cs.peek() {
-                                                Some(':') => true,
-                                                _ => false,
+                                            is_ghost_cmd = match cs.peek() {
+                                                Some(':'|'~') => false,
+                                                _ => true,
                                             };
-                                            if !is_generic_args {
-                                                output.push_str(VF_GHOST_CMD_TAG);
-                                                cs.pos.byte_pos += VF_GHOST_CMD_TAG_LEN;
+                                            if is_ghost_cmd {
+                                                if !read_only {
+                                                    output.push_str(VF_GHOST_CMD_TAG);
+                                                    cs.pos.byte_pos += VF_GHOST_CMD_TAG_LEN;
+                                                }
+                                            } else {
+                                                is_generic_args = match cs.peek() {
+                                                    Some(':') => true,
+                                                    _ => false,
+                                                };
                                             }
                                         } else if start_of_whitespace.byte_pos == 0 {
-                                            output.push_str(VF_SYNTHETIC_FIRST_TOKENS);
-                                            cs.pos.byte_pos += VF_SYNTHETIC_FIRST_TOKENS_LEN;
+                                            if !read_only {
+                                                output.push_str(VF_SYNTHETIC_FIRST_TOKENS);
+                                                cs.pos.byte_pos += VF_SYNTHETIC_FIRST_TOKENS_LEN;
+                                            }
                                         }
                                         output.push_str("/*@");
                                         ghost_range.contents.push_str("/*@");
@@ -521,6 +539,8 @@ pub fn preprocess(
                                         )
                                     {
                                         GhostRangeKind::BlockDecls
+                                    } else if ghost_range.contents == "/*@~mut@*/" {
+                                        GhostRangeKind::Mut
                                     } else {
                                         GhostRangeKind::Regular
                                     };

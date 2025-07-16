@@ -5,7 +5,7 @@ let string_of_ty ty = "<ty>"
 let string_of_basic_block_id bb_id =
   Printf.sprintf "bb_%s" (Stdint.Uint32.to_string bb_id.index)
 
-let string_of_place {local; projection} =
+let string_of_place {local; projection; local_is_mutable} =
   let rec iter inner = function
     | [] -> inner
     | Deref::rest ->
@@ -27,7 +27,8 @@ let string_of_place {local; projection} =
     | Subtype::rest ->
       iter (Printf.sprintf "subtype(%s)" inner) rest
   in
-  iter local.name projection
+  let mut = if local_is_mutable then "mut " else "" in
+  iter (Printf.sprintf "%s%s" mut local.name) projection
 
 let string_of_uint128 {h; l} =
   let v = Stdint.Uint128.shift_left (Stdint.Uint128.of_uint64 h) 64 in
@@ -90,16 +91,20 @@ let string_of_rvalue = function
   | Use operand -> string_of_operand operand
   | Repeat -> "<repeat>"
   | Ref data -> string_of_rvalue_ref_data data
+  | ThreadLocalRef -> "<ThreadLocalRef>"
   | AddressOf {place} -> Printf.sprintf "&raw %s" (string_of_place place)
   | Len -> "len"
   | Cast {operand; ty} ->
     Printf.sprintf "(%s as %s)" (string_of_operand operand) (string_of_ty ty)
   | BinaryOp {operator; operandl; operandr} ->
     Printf.sprintf "%s %s %s" (string_of_operand operandl) (string_of_bin_op operator) (string_of_operand operandr)
+  | NullaryOp -> "<NullaryOp>"
+  | UnaryOp _ -> "<UnaryOp>"
   | Aggregate {aggregate_kind; operands} ->
     Printf.sprintf "%s(%s)" (string_of_aggregate_kind aggregate_kind) (String.concat ", " (List.map string_of_operand operands))
   | Discriminant place ->
     Printf.sprintf "discriminant(%s)" (string_of_place place)
+  | ShallowInitBox -> "<ShallowInitBox>"
 
 let string_of_statement ({source_info; kind}: statement) =
   match kind with
