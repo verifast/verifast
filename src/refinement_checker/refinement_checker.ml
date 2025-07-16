@@ -312,6 +312,7 @@ type term =
 | Closure of term list
 | FnDef of string * gen_arg list
 | ScalarInt of literal_const_expr
+| SliceConstant of ty * string
 | AddressOfNonMutLocal of < > * local_variable_path (* The object serves to ensure two AddressOfNonMutLocal values do not compare equal even if their variable names happen to match. *)
 | FieldTerm of term * int
 | ConstTerm of mir_const
@@ -371,7 +372,7 @@ let eval_const_operand genv const_operand_cpn =
         FnDef (fn, genArgs)
       | _ -> failwith "Zero-sized constants are not yet supported"
       end
-    | Slice slice_cpn -> failwith "MIR slice constants are not yet supported"
+    | Slice bytes -> SliceConstant (ty, bytes)
     end
   | Unevaluated -> failwith "Unevaluated constant operands are not yet supported"
 
@@ -1893,7 +1894,7 @@ let rec process_commands bodies (env: env) opnds (i_bb: basic_block_info) i_s (s
     | Ref {bor_kind=Shared; place={local; local_is_mutable=false; projection=[]}} ->
       let placeLocalPath = {lv_caller=i_bb#id.bb_caller; lv_name=local.name} in
       cont env (AddressOfNonMutLocal (object end, placeLocalPath)::opnds)
-    | Ref {bor_kind=Shared; place={local; local_is_mutable=false; projection=[Deref]}} ->
+    | Ref {bor_kind=Shared; place={local; projection=[Deref]}} ->
       load_from_local local (fun msg -> done_ ()) @@ fun v ->
       begin match v with
         AddressOfNonMutLocal (o, lv_path) ->
@@ -2664,7 +2665,10 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
             check_codepos_refines_codepos env0 opnds0 i_bb0 i_s0 ss_i0 env1 (rhsValue::opnds1) i_bb1 (i_s1 + 1) ss_i1_plus_1
         | _ -> fail ()
         end
-      | [], _ -> error (Printf.sprintf "In function %s, cannot prove that the terminator of basic block %s in the original version refines statement %d of basic block %s in the verified version" def_path i_bb0#to_string i_s1 i_bb1#to_string)
+      | [], _ ->
+        let t0 = Stringifier.string_of_terminator i_bb0#terminator in
+        let bb1 = Printf.sprintf "======== Commands of basic block %s of verified program ========\n%s\n" i_bb1#to_string (String.concat "\n" (List.mapi (fun i c -> Printf.sprintf "%3d: %s" i (string_of_command c)) i_bb1#commands)) in
+        error (Printf.sprintf "In function %s, cannot prove that the terminator of basic block %s in the original version refines statement %d of basic block %s in the verified version\nTerminator: %s\n%s" def_path i_bb0#to_string i_s1 i_bb1#to_string t0 bb1)
       | _ -> check_command_refines_command ()
     and check_codepos_refines_codepos env0 opnds0 i_bb0 i_s0 ss_i0 env1 opnds1 i_bb1 i_s1 ss_i1 =
       let (env0, opnds0, i_bb0, i_s0, ss_i0) = process_commands bodies0 env0 opnds0 i_bb0 i_s0 ss_i0 in

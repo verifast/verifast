@@ -111,6 +111,8 @@ mod num {
         req ref_initialized(p) &*& ref_end_token(p, ?x, ?f) &*& [f](*p |-> ?v);
         ens [f](*x |-> v);
     
+    fix wrapping_sub_usize(a: usize, b: usize) -> usize { if b <= a { a - b } else { a + usize::MAX + 1 - b } }
+    
     @*/
 
     impl usize {
@@ -128,6 +130,11 @@ mod num {
         fn unchecked_mul(self: usize, other: usize) -> usize;
         //@ req self * other <= usize::MAX;
         //@ ens result == self * other;
+        //@ on_unwind_ens false;
+        
+        fn wrapping_sub(self: usize, other: usize) -> usize;
+        //@ req true;
+        //@ ens result == wrapping_sub_usize(self, other);
         //@ on_unwind_ens false;
         
     }
@@ -577,6 +584,11 @@ mod ptr {
         fn as_nonzero(self: Alignment) -> std::num::NonZero<usize>;
         //@ req true;
         //@ ens result == Alignment::as_nonzero_(self);
+        //@ on_unwind_ens false;
+        
+        fn of<T>() -> Alignment;
+        //@ req true;
+        //@ ens result == Alignment::new_(std::mem::align_of::<T>());
         //@ on_unwind_ens false;
         
     }
@@ -1192,6 +1204,15 @@ mod collections {
         }
     }
     
+    impl TryReserveError {
+    
+        fn kind<'a>(self: &'a TryReserveError) -> TryReserveErrorKind;
+        //@ req [?f](*self |-> ?err); // NOTE: This assumes that TryReserveError has no UnsafeCell inside.
+        //@ ens [f](*self |-> err);
+        //@ on_unwind_ens false;
+        
+    }
+    
     impl<T> std::ops::FromResidual<std::result::Result<std::convert::Infallible, std::collections::TryReserveErrorKind>> for std::result::Result<T, std::collections::TryReserveError> {
     
         fn from_residual(residual: std::result::Result<std::convert::Infallible, TryReserveErrorKind>) -> std::result::Result<T, TryReserveError>;
@@ -1491,6 +1512,11 @@ mod panicking {
         Ne,
         Match
     }
+    
+    fn panic<'a>(msg: &'a str);
+    //@ req [?f]msg.ptr[..msg.len] |-> ?cs;
+    //@ ens false;
+    //@ on_unwind_ens [f]msg.ptr[..msg.len] |-> cs;
 
     fn panic_fmt<'a>(args: std::fmt::Arguments<'a>);
     //@ req thread_token(?t) &*& <std::fmt::Arguments<'a>>.own(t, args);
