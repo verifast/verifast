@@ -997,6 +997,7 @@ and
   | FuncSpecializationDecl of (* A function specialization declaration, used to declare a specialization of a function for a specific type. *)
       loc *
       string * (* name of the generic function, e.g. "std::iter::IntoIterator::into_iter" *)
+      bool * (* the name of the generic function is relative to the current package *)
       string (* name of the specialized function, e.g. "std::ops::<Range<usize> as std::iter::IntoIterator>::into_iter" *) *
       string list (* type parameters of the specialized function *) *
       type_expr list (* type arguments for the generic function, e.g. Range<usize> *)

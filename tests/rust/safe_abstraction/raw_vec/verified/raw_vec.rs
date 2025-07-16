@@ -221,7 +221,11 @@ impl RawVecInner<Global> {
 //   to round up a request of less than 8 bytes to at least 8 bytes.
 // - 4 if elements are moderate-sized (<= 1 KiB).
 // - 1 otherwise, to avoid wasting too much space for very short Vecs.
-const fn min_non_zero_cap(size: usize) -> usize {
+const fn min_non_zero_cap(size: usize) -> usize
+//@ req true;
+//@ ens true;
+//@ on_unwind_ens false;
+{
     if size == 1 {
         8
     } else if size <= 1024 {
@@ -882,31 +886,116 @@ impl<A: Allocator> RawVecInner<A> {
         len: usize,
         additional: usize,
         elem_layout: Layout,
-    ) -> Result<(), TryReserveError> {
+    ) -> Result<(), TryReserveError>
+    /*@
+    req thread_token(?t) &*& t == currentThread &*&
+        Layout::size_(elem_layout) % Layout::align_(elem_layout) == 0 &*&
+        *self |-> ?self0 &*&
+        logical_capacity(self0.cap, Layout::size_(elem_layout)) < len + additional &*&
+        RawVecInner(t, self0, elem_layout, ?alloc_id, ?ptr0, ?allocSize0) &*& ptr0[..allocSize0] |-> _;
+    @*/
+    /*@
+    ens thread_token(t) &*&
+        *self |-> ?self1 &*&
+        match result {
+            Result::Ok(u) =>
+                RawVecInner(t, self1, elem_layout, alloc_id, ?ptr1, ?allocSize1) &*& ptr1[..allocSize1] |-> _,
+            Result::Err(e) =>
+                RawVecInner(t, self1, elem_layout, alloc_id, ptr0, allocSize0) &*& ptr0[..allocSize0] |-> _ &*&
+                <std::collections::TryReserveError>.own(t, e)
+        };
+    @*/
+    //@ safety_proof { assume(false); }
+    {
         // This is ensured by the calling contexts.
-        debug_assert!(additional > 0);
+        if cfg!(debug_assertions) { //~allow_dead_code // FIXME: The source location associated with a dead `else` branch is the entire `if` statement :-(
+            assert!(additional > 0);
+        }
 
         if elem_layout.size() == 0 {
             // Since we return a capacity of `usize::MAX` when `elem_size` is
             // 0, getting to here necessarily means the `RawVec` is overfull.
+            //@ close <std::collections::TryReserveErrorKind>.own(t, std::collections::TryReserveErrorKind::CapacityOverflow);
             return Err(CapacityOverflow.into());
         }
 
         // Nothing we can really do about these checks, sadly.
+        //@ close <std::collections::TryReserveErrorKind>.own(t, std::collections::TryReserveErrorKind::CapacityOverflow);
         let required_cap = len.checked_add(additional).ok_or(CapacityOverflow)?;
+        //@ leak <std::collections::TryReserveErrorKind>.own(t, std::collections::TryReserveErrorKind::CapacityOverflow);
 
+        //@ open_points_to(self);
+        //@ std::num::niche_types::UsizeNoHighBit_inv(self0.cap);
         // This guarantees exponential growth. The doubling cannot overflow
         // because `cap <= isize::MAX` and the type of `cap` is `usize`.
-        let cap = cmp::max(self.cap.as_inner() * 2, required_cap);
-        let cap = cmp::max(min_non_zero_cap(elem_layout.size()), cap);
+        let cap0 = cmp::max(self.cap.as_inner() * 2, required_cap);
+        let cap = cmp::max(min_non_zero_cap(elem_layout.size()), cap0);
 
         let new_layout = layout_array(cap, elem_layout)?;
-
-        let ptr = finish_grow(new_layout, self.current_memory(elem_layout), &mut self.alloc)?;
-        // SAFETY: finish_grow would have resulted in a capacity overflow if we tried to allocate more than `isize::MAX` items
-
-        unsafe { self.set_ptr_and_cap(ptr, cap) };
-        Ok(())
+        //@ let self_ref = precreate_ref(self);
+        //@ open_ref_init_perm_RawVecInner(self_ref);
+        //@ open_points_to(self);
+        //@ open RawVecInner(t, self0, elem_layout, alloc_id, ptr0, allocSize0);
+        //@ init_ref_padding_RawVecInner(self_ref, 1/2);
+        //@ std::ptr::init_ref_Unique(&(*self_ref).ptr, 1/2);
+        //@ std::num::niche_types::init_ref_UsizeNoHighBit(&(*self_ref).cap, 1/2);
+        //@ let k = begin_lifetime();
+        let current_memory;
+        {
+            //@ let_lft 'a = k;
+            //@ std::alloc::init_ref_Allocator_at_lifetime::<'a, A>(&(*self_ref).alloc);
+            //@ close_ref_initialized_RawVecInner(self_ref);
+            current_memory = self.current_memory/*@::<A, 'a>@*/(elem_layout);
+        }
+        //@ end_lifetime(k);
+        //@ open_ref_initialized_RawVecInner(self_ref);
+        //@ std::ptr::end_ref_Unique(&(*self_ref).ptr);
+        //@ std::num::niche_types::end_ref_UsizeNoHighBit(&(*self_ref).cap);
+        //@ std::alloc::end_ref_Allocator_at_lifetime::<A>();
+        //@ end_ref_padding_RawVecInner(self_ref);
+        
+        //@ open RawVecInner0(alloc_id, ?ptr0_, ?cap0_, elem_layout, ptr0, allocSize0);
+        //@ assert NonNull_ptr(Unique::non_null_(ptr0_)) == ptr0;
+        //@ std::alloc::Layout_inv(elem_layout);
+        //@ std::alloc::Layout_size__Layout_from_size_align_(allocSize0, Layout::align_(elem_layout));
+        //@ std::alloc::Layout_align__Layout_from_size_align_(allocSize0, Layout::align_(elem_layout));
+        
+        //@ if allocSize0 == 0 { leak ptr0[..0] |-> _; }
+        
+        //@ std::num::niche_types::UsizeNoHighBit_inv(self0.cap);
+        //@ assert cap >= len + additional;
+        //@ mul_mono_l(1, Layout::size_(elem_layout), Cap_as_inner_(self0.cap));
+        //@ mul_mono_l(1, Layout::size_(elem_layout), cap);
+        //@ assert Layout::size_(new_layout) == cap * Layout::size_(elem_layout);
+        //@ assert cap <= Layout::size_(new_layout);
+        //@ mul_mono_l(Cap_as_inner_(self0.cap), cap, Layout::size_(elem_layout));
+        
+        match core::ops::Try::branch(finish_grow(new_layout, current_memory, &mut self.alloc)) {
+            core::ops::ControlFlow::Break(residual) => {
+                //@ let self1 = *self;
+                //@ close RawVecInner0(alloc_id, ptr0_, cap0_, elem_layout, ptr0, allocSize0);
+                //@ close RawVecInner(t, self1, elem_layout, alloc_id, ptr0, allocSize0);
+                core::ops::FromResidual::from_residual(residual)
+            }
+            core::ops::ControlFlow::Continue(ptr) => {
+                // SAFETY: finish_grow would have resulted in a capacity overflow if we tried to allocate more than `isize::MAX` items
+                unsafe {
+                    self.set_ptr_and_cap(ptr, cap);
+                    //@ let self1 = *self;
+                    //@ std::ptr::NonNull_ptr_nonnull(ptr.ptr);
+                    //@ std::alloc::alloc_block_in_aligned(NonNull_ptr(ptr.ptr));
+                    //@ std::num::niche_types::UsizeNoHighBit_as_inner__new_(cap);
+                    //@ mul_zero(Layout::size_(elem_layout), cap);
+                    //@ assert 0 <= Cap_as_inner_(self0.cap);
+                    //@ assert 0 <= logical_capacity(self0.cap, Layout::size_(elem_layout));
+                    //@ assert cap != 0;
+                    //@ std::alloc::Layout_inv(new_layout);
+                    //@ close RawVecInner0(alloc_id, Unique::from_non_null_(ptr.ptr), UsizeNoHighBit::new_(cap), elem_layout, NonNull_ptr(ptr.ptr), _);
+                    //@ close RawVecInner::<A>(t, self1, elem_layout, alloc_id, _, _);
+                }
+                Ok(())
+            }
+        }
     }
 
     fn grow_exact(

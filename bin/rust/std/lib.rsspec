@@ -99,6 +99,25 @@ mod rt {
 
 }
 
+mod cmp {
+
+    enum Ordering {
+        Less,
+        Equal,
+        Greater,
+    }
+    
+    impl<T> for T = usize {
+    
+        fn max<T>(self: usize, other: usize) -> usize;
+        //@ req true;
+        //@ ens result == if self < other { other } else { self };
+        //@ on_unwind_ens false;
+
+    }        
+
+}
+
 mod num {
 
     /*@
@@ -137,6 +156,20 @@ mod num {
         //@ ens result == wrapping_sub_usize(self, other);
         //@ on_unwind_ens false;
         
+    }
+    
+    impl std::cmp::Ord for usize {
+    
+        fn cmp<'a>(self: &'a usize, other: &'a usize) -> std::cmp::Ordering;
+        //@ req [?fs](*self |-> ?vself) &*& [?fo](*other |-> ?vother);
+        //@ ens [fs](*self |-> vself) &*& [fo](*other |-> vother) &*& result == (if vself < vother { std::cmp::Ordering::Less } else if vself == vother { std::cmp::Ordering::Equal } else { std::cmp::Ordering::Greater });
+        //@ on_unwind_ens false;
+    
+        fn max(self: usize, other: usize) -> usize;
+        //@ req true;
+        //@ ens result == if self < other { other } else { self };
+        //@ on_unwind_ens false;
+    
     }
     
     mod niche_types {
