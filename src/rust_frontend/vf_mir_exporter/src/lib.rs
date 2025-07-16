@@ -144,6 +144,7 @@ impl SourceFiles {
 }
 
 struct FileLoader {
+    read_only: bool,
     source_files: &'static std::sync::Mutex<SourceFiles>,
 }
 
@@ -163,7 +164,10 @@ impl rustc_span::source_map::FileLoader for FileLoader {
             let mut directives = Vec::new();
             let mut ghost_ranges = Vec::new();
             let preprocessed_contents =
-                preprocessor::preprocess(contents.as_str(), &mut directives, &mut ghost_ranges);
+                preprocessor::preprocess(contents.as_str(), self.read_only, &mut directives, &mut ghost_ranges);
+            if self.read_only {
+                assert_eq!(preprocessed_contents, contents);
+            }
             self.source_files.lock().unwrap().push(SourceFile {
                 path: path.into(),
                 directives,
@@ -192,11 +196,10 @@ impl rustc_driver::Callbacks for CompilerCalls {
             None => {}
             Some(loader) => todo!(),
         }
-        if self.preprocess {
-            config.file_loader = Some(Box::from(FileLoader {
-                source_files: self.source_files,
-            }));
-        }
+        config.file_loader = Some(Box::from(FileLoader {
+            read_only: !self.preprocess,
+            source_files: self.source_files,
+        }));
 
         // assert!(config.override_queries.is_none());
         // config.override_queries = Some(override_queries);
@@ -605,6 +608,7 @@ mod vf_mir_builder {
         tcx: TyCtxt<'tcx>,
         mode: EncKind<'tcx, 'a>,
         annots: LinkedList<Box<GhostRange>>,
+        mut_annots: Vec<rustc_span::BytePos>,
     }
 
     impl<'tcx, 'a> EncCtx<'tcx, 'a> {
@@ -612,12 +616,14 @@ mod vf_mir_builder {
             tcx: TyCtxt<'tcx>,
             mode: EncKind<'tcx, 'a>,
             annots: LinkedList<Box<GhostRange>>,
+            mut_annots: Vec<rustc_span::BytePos>,
         ) -> Self {
             Self {
                 req_adts: Vec::new(),
                 tcx,
                 mode,
                 annots,
+                mut_annots,
             }
         }
         pub fn add_req_adt(&mut self, adt: ty::AdtDef<'tcx>) {
@@ -696,7 +702,7 @@ mod vf_mir_builder {
         }
 
         fn encode_trait_impls(&mut self, vf_mir_cpn: &mut vf_mir_cpn::Builder<'_>) {
-            let mut enc_ctx = EncCtx::new(self.tcx, EncKind::Other, LinkedList::new());
+            let mut enc_ctx = EncCtx::new(self.tcx, EncKind::Other, LinkedList::new(), Vec::new());
             vf_mir_cpn.fill_trait_impls(&self.trait_impls, |mut trait_impl_cpn, trait_impl| {
                 trace!("Encoding trait impl");
                 let trait_ref = self
@@ -740,7 +746,7 @@ mod vf_mir_builder {
             req_adt_defs: &mut Vec<ty::AdtDef<'tcx>>,
             mut vf_mir_cpn: vf_mir_cpn::Builder<'_>,
         ) {
-            let mut enc_ctx = EncCtx::new(self.tcx, EncKind::Adt, LinkedList::new());
+            let mut enc_ctx = EncCtx::new(self.tcx, EncKind::Adt, LinkedList::new(), Vec::new());
             let mut traits_cpn = vf_mir_cpn.reborrow().init_traits();
             for trait_def_id in self.tcx.all_traits() {
                 if trait_def_id.krate != rustc_hir::def_id::LOCAL_CRATE {
@@ -883,7 +889,7 @@ mod vf_mir_builder {
                     body_cpn.reborrow().init_fn_sig_span(),
                 );
                 let body_span = body.span.data();
-                let annots = self
+                let mut annots = self
                     .annots
                     .extract_if(|annot| {
                         body_span.contains(
@@ -894,7 +900,13 @@ mod vf_mir_builder {
                         )
                     })
                     .collect::<LinkedList<_>>();
-                let mut enc_ctx = EncCtx::new(self.tcx, EncKind::Body(body), annots);
+                let mut_annots = annots.extract_if(|annot| {
+                    annot.kind == GhostRangeKind::Mut
+                }).map(|annot| {
+                    trace!("Found mut annotation: {:?}", annot);
+                    annot.span().unwrap().data().hi
+                }).collect::<Vec<_>>();
+                let mut enc_ctx = EncCtx::new(self.tcx, EncKind::Body(body), annots, mut_annots);
                 Self::encode_body(&mut enc_ctx, body_cpn);
                 req_adt_defs.extend(enc_ctx.get_req_adts());
             });
@@ -959,7 +971,7 @@ mod vf_mir_builder {
                             let mut adt_defs_cons_cpn = adt_defs_cpn.init_cons();
                             let adt_def_cpn = adt_defs_cons_cpn.reborrow().init_h();
                             let mut enc_ctx =
-                                EncCtx::new(self.tcx, EncKind::Adt, LinkedList::new());
+                                EncCtx::new(self.tcx, EncKind::Adt, LinkedList::new(), Vec::new());
                             Self::encode_adt_def(self.tcx, &mut enc_ctx, &adt_def, adt_def_cpn);
                             req_adt_defs.extend(enc_ctx.get_req_adts());
                             encoded_adt_defs.push(adt_def);
@@ -1652,6 +1664,22 @@ mod vf_mir_builder {
             annot_cpn.set_end_col(annot.end_pos().column.try_into().unwrap());
         }
 
+        fn compute_local_decl_effective_mutability(enc_ctx: &mut EncCtx<'tcx, 'a>, local_decl: &mir::LocalDecl<'tcx>) -> mir::Mutability {
+            if local_decl.mutability == mir::Mutability::Mut {
+                return local_decl.mutability;
+            }
+            let local_span_start = local_decl.source_info.span.data().lo;
+            let mut_annot_end = local_span_start - rustc_span::BytePos(1);
+            let has_mut_annot = enc_ctx.mut_annots.contains(&mut_annot_end);
+            if has_mut_annot {
+                trace!("Found mut annotation for {:?} at {:?}", local_decl, mut_annot_end);
+                return mir::Mutability::Mut;
+            } else {
+                trace!("No mut annotation found for {:?} at {:?}", local_decl, mut_annot_end);
+            }
+            local_decl.mutability
+        }
+
         fn encode_local_decl(
             tcx: TyCtxt<'tcx>,
             enc_ctx: &mut EncCtx<'tcx, 'a>,
@@ -1661,7 +1689,7 @@ mod vf_mir_builder {
         ) {
             debug!("Encoding local decl {:?}", local_decl);
             let mutability_cpn = local_decl_cpn.reborrow().init_mutability();
-            Self::encode_mutability(local_decl.mutability, mutability_cpn);
+            Self::encode_mutability(Self::compute_local_decl_effective_mutability(enc_ctx, local_decl), mutability_cpn);
 
             let id_cpn = local_decl_cpn.reborrow().init_id();
             Self::encode_local_decl_id(local_decl_idx, id_cpn);
@@ -2631,7 +2659,7 @@ mod vf_mir_builder {
             let local_decl_id_cpn = place_cpn.reborrow().init_local();
             Self::encode_local_decl_id(place.local, local_decl_id_cpn);
             let decl = &enc_ctx.body().local_decls()[place.local];
-            place_cpn.set_local_is_mutable(decl.mutability == mir::Mutability::Mut);
+            place_cpn.set_local_is_mutable(Self::compute_local_decl_effective_mutability(enc_ctx, decl) == mir::Mutability::Mut);
 
             let local = &enc_ctx.body().local_decls()[place.local];
             let mut pty = mir::PlaceTy::from_ty(local.ty);
