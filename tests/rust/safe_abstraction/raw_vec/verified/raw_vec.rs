@@ -1126,31 +1126,123 @@ impl<A: Allocator> RawVecInner<A> {
         &mut self,
         cap: usize,
         elem_layout: Layout,
-    ) -> Result<(), TryReserveError> {
+    ) -> Result<(), TryReserveError>
+    /*@
+    req thread_token(?t) &*& t == currentThread &*&
+        Layout::size_(elem_layout) % Layout::align_(elem_layout) == 0 &*&
+        *self |-> ?self0 &*&
+        cap <= logical_capacity(self0.cap, Layout::size_(elem_layout)) &*&
+        RawVecInner(t, self0, elem_layout, ?alloc_id, ?ptr0, ?allocSize0) &*& ptr0[..allocSize0] |-> _;
+    @*/
+    /*@
+    ens thread_token(t) &*&
+        *self |-> ?self1 &*&
+        match result {
+            Result::Ok(u) =>
+                RawVecInner(t, self1, elem_layout, alloc_id, ?ptr1, ?allocSize1) &*& ptr1[..allocSize1] |-> _,
+            Result::Err(e) =>
+                RawVecInner(t, self1, elem_layout, alloc_id, ptr0, allocSize0) &*& ptr0[..allocSize0] |-> _ &*&
+                <std::collections::TryReserveError>.own(t, e)
+        };
+    @*/
+    {
+        //@ let self_ref = precreate_ref(self);
+        //@ open_ref_init_perm_RawVecInner(self_ref);
+        //@ open_points_to(self);
+        //@ open RawVecInner(t, self0, elem_layout, alloc_id, ptr0, allocSize0);
+        //@ init_ref_padding_RawVecInner(self_ref, 1/2);
+        //@ std::ptr::init_ref_Unique(&(*self_ref).ptr, 1/2);
+        //@ std::num::niche_types::init_ref_UsizeNoHighBit(&(*self_ref).cap, 1/2);
+        //@ let k = begin_lifetime();
+        let current_memory;
+        {
+            //@ let_lft 'a = k;
+            //@ std::alloc::init_ref_Allocator_at_lifetime::<'a, A>(&(*self_ref).alloc);
+            //@ close_ref_initialized_RawVecInner(self_ref);
+            current_memory = self.current_memory/*@::<A, 'a>@*/(elem_layout);
+        }
+        //@ end_lifetime(k);
+        //@ open_ref_initialized_RawVecInner(self_ref);
+        //@ std::ptr::end_ref_Unique(&(*self_ref).ptr);
+        //@ std::num::niche_types::end_ref_UsizeNoHighBit(&(*self_ref).cap);
+        //@ std::alloc::end_ref_Allocator_at_lifetime::<A>();
+        //@ end_ref_padding_RawVecInner(self_ref);
+        
         let (ptr, layout) =
-            if let Some(mem) = self.current_memory(elem_layout) { mem } else { return Ok(()) };
+            if let Some(mem) = current_memory { mem } else {
+                //@ close RawVecInner(t, *self, elem_layout, alloc_id, ptr0, allocSize0);
+                return Ok(())
+            };
 
+        //@ open RawVecInner0(alloc_id, self0.ptr, self0.cap, elem_layout, ptr0, allocSize0);
+        //@ assert NonNull_ptr(Unique::non_null_(self0.ptr)) == ptr0;
+        //@ std::alloc::Layout_inv(elem_layout);
+        //@ std::alloc::Layout_size__Layout_from_size_align_(allocSize0, Layout::align_(elem_layout));
+        //@ std::alloc::Layout_align__Layout_from_size_align_(allocSize0, Layout::align_(elem_layout));
+        
         // If shrinking to 0, deallocate the buffer. We don't reach this point
         // for the T::IS_ZST case since current_memory() will have returned
         // None.
         if cap == 0 {
-            unsafe { self.alloc.deallocate(ptr, layout) };
+            //@ let alloc_ref = precreate_ref(&(*self).alloc);
+            //@ let k1 = begin_lifetime();
+            unsafe {
+                //@ let_lft 'a = k1;
+                //@ std::alloc::init_ref_Allocator_at_lifetime::<'a, A>(alloc_ref);
+                self.alloc.deallocate(ptr, layout);
+                //@ leak Allocator(_, _, _);
+            };
+            //@ end_lifetime(k1);
+            //@ std::alloc::end_ref_Allocator_at_lifetime::<A>();
             self.ptr =
                 unsafe { Unique::new_unchecked(ptr::without_provenance_mut(elem_layout.align())) };
             self.cap = ZERO_CAP;
+            //@ let ptr1_ = (*self).ptr;
+            //@ assert NonNull_ptr(Unique::non_null_(ptr1_)) as usize == Layout::align_(elem_layout);
+            //@ div_rem_nonneg_unique(Layout::align_(elem_layout), Layout::align_(elem_layout), 1, 0);
+            //@ close RawVecInner0(alloc_id, (*self).ptr, (*self).cap, elem_layout, _, _);
+            //@ close RawVecInner(t, *self, elem_layout, alloc_id, _, _);
         } else {
             let ptr = unsafe {
                 // Layout cannot overflow here because it would have
                 // overflowed earlier when capacity was larger.
+                //@ mul_mono_l(cap, Cap_as_inner_(self0.cap), Layout::size_(elem_layout));
                 let new_size = elem_layout.size().unchecked_mul(cap);
                 let new_layout = Layout::from_size_align_unchecked(new_size, layout.align());
-                self.alloc
-                    .shrink(ptr, layout, new_layout)
-                    .map_err(|_| AllocError { layout: new_layout, non_exhaustive: () })?
+                //@ let alloc_ref = precreate_ref(&(*self).alloc);
+                //@ let k1 = begin_lifetime();
+                let r;
+                {
+                    //@ let_lft 'a = k1;
+                    //@ std::alloc::init_ref_Allocator_at_lifetime::<'a, A>(alloc_ref);
+                    r = self.alloc.shrink(ptr, layout, new_layout);
+                    //@ leak Allocator(_, _, _);
+                };
+                //@ end_lifetime(k1);
+                //@ std::alloc::end_ref_Allocator_at_lifetime::<A>();
+                let new_layout_ref = &new_layout;
+                match r {
+                    Ok(ptr1) => Ok(ptr1),
+                    Err(err) => {
+                        //@ close RawVecInner0(alloc_id, (*self).ptr, (*self).cap, elem_layout, ptr0, allocSize0);
+                        //@ close RawVecInner(t, *self, elem_layout, alloc_id, ptr0, allocSize0);
+                        let e = AllocError { layout: *new_layout_ref, non_exhaustive: () };
+                        //@ std::alloc::close_Layout_own(t, new_layout);
+                        //@ close_tuple_0_own(t);
+                        //@ close <std::collections::TryReserveErrorKind>.own(t, e);
+                        Err(e)
+                    }
+                }?
             };
             // SAFETY: if the allocation is valid, then the capacity is too
             unsafe {
+                //@ std::num::niche_types::UsizeNoHighBit_inv(self0.cap);
                 self.set_ptr_and_cap(ptr, cap);
+                //@ std::ptr::NonNull_ptr_nonnull(ptr_1.ptr);
+                //@ std::alloc::alloc_block_in_aligned(NonNull_ptr(ptr_1.ptr));
+                //@ mul_zero(cap, Layout::size_(elem_layout));
+                //@ close RawVecInner0(alloc_id, (*self).ptr, (*self).cap, elem_layout, _, _);
+                //@ close RawVecInner(t, *self, elem_layout, alloc_id, _, _);
             }
         }
         Ok(())
