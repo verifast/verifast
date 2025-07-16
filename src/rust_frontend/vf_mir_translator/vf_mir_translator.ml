@@ -7133,7 +7133,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let ds, fn_specialization_decls =
       ds |> List.partition_map @@ fun d ->
           match d with
-          | Ast.FuncSpecializationDecl (l, g_generic, g_specialized, tparams, targs) -> Right (l, g_generic, (if pn = "" then "" else pn ^ "::") ^ g_specialized, tparams, targs)
+          | Ast.FuncSpecializationDecl (l, g_generic, g_generic_is_relative, g_specialized, tparams, targs) -> Right (l, (if not g_generic_is_relative || pn = "" then "" else pn ^ "::") ^ g_generic, (if pn = "" then "" else pn ^ "::") ^ g_specialized, tparams, targs)
           | _ -> Left d
     in
     Ast.PackageDecl (l, pn, ilist, ds), fn_specialization_decls
