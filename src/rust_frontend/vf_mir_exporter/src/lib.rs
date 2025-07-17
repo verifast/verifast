@@ -2499,7 +2499,7 @@ mod vf_mir_builder {
             tcx: TyCtxt<'tcx>,
             enc_ctx: &mut EncCtx<'tcx, 'a>,
             const_: &mir::Const<'tcx>,
-            mut const_cpn: const_cpn::Builder<'_>,
+            const_cpn: const_cpn::Builder<'_>,
         ) {
             match const_ {
                 mir::Const::Ty(ty, ty_const) => {
@@ -2528,7 +2528,11 @@ mod vf_mir_builder {
                         );
                         Self::encode_ty(tcx, enc_ctx, *ty, val_cpn.init_ty());
                     } else {
-                        const_cpn.set_unevaluated(());
+                        let mut unevaluated_cpn = const_cpn.init_unevaluated();
+                        unevaluated_cpn.set_def(tcx.def_path_str(unevaluated_const.def).as_str());
+                        unevaluated_cpn.fill_args(unevaluated_const.args, |arg_cpn, arg| {
+                            Self::encode_gen_arg(tcx, enc_ctx, arg, arg_cpn);
+                        });
                     }
                 }
             }
