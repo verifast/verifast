@@ -2105,6 +2105,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         begin match def, args with
           "core::mem::SizedTypeProperties::IS_ZST", [ Mir.GenArgType ty ] ->
           Ok (`TrTypedConstantScalar (Ast.CallExpr (loc, "std::mem::IS_ZST", [ty.Mir.vf_ty], [], [], Static)))
+        | "core::mem::SizedTypeProperties::LAYOUT", [ Mir.GenArgType ty ] ->
+          Ok (`TrTypedConstantScalar (Ast.CallExpr (loc, "std::alloc::Layout::new", [ty.Mir.vf_ty], [], [], Static)))
         | _ -> Ast.static_error loc (Printf.sprintf "Unevaluated MIR constant %s is not yet supported" def) None
         end
       | Undefined _ -> Error (`TrConstantKind "Unknown ConstantKind")
