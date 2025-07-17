@@ -265,11 +265,18 @@ impl<T, A: Allocator> RawVec<T, A> {
     #[cfg(not(no_global_oom_handling))]
     #[inline]
     #[track_caller]
-    pub(crate) fn with_capacity_in(capacity: usize, alloc: A) -> Self {
-        Self {
+    pub(crate) fn with_capacity_in(capacity: usize, alloc: A) -> Self
+    //@ req thread_token(?t) &*& Allocator(t, alloc, ?alloc_id) &*& t == currentThread;
+    //@ ens thread_token(t) &*& RawVec(t, result, alloc_id, ?ptr, ?allocSize) &*& ptr[..allocSize] |-> _;
+    //@ safety_proof { assume(false); }
+    {
+        //@ size_align::<T>();
+        let r = Self {
             inner: RawVecInner::with_capacity_in(capacity, alloc, T::LAYOUT),
             _marker: PhantomData,
-        }
+        };
+        //@ close RawVec(t, r, alloc_id, _, _);
+        r
     }
 
     /// Like `try_with_capacity`, but parameterized over the choice of
