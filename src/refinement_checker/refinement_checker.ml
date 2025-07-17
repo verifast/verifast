@@ -374,7 +374,7 @@ let eval_const_operand genv const_operand_cpn =
       end
     | Slice bytes -> SliceConstant (ty, bytes)
     end
-  | Unevaluated -> failwith "Unevaluated constant operands are not yet supported"
+  | Unevaluated {def; args} -> ConstTerm mir_const_cpn
 
 type env = (local_variable_path * local_var_state) list
 

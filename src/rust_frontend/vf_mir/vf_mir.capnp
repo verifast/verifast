@@ -483,7 +483,10 @@ struct MirConst {
             constValue @1: ConstValue;
             ty @2: Ty;
         }
-        unevaluated @3: Void;
+        unevaluated :group {
+            def @3: Text;
+            args @4: List(GenericArg);
+        }
     }
 }
 

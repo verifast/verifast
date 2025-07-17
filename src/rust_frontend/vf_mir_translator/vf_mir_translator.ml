@@ -2099,6 +2099,14 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               translate_const_value
                 (D.decode_const_value (const_value_get val_cpn))
                 ty_expr loc)
+      | Unevaluated _ ->
+        let Unevaluated {def; args} = D.decode_mir_const constant_kind_cpn in
+        let* args = ListAux.try_map (fun arg -> translate_generic_arg arg loc) args in
+        begin match def, args with
+          "core::mem::SizedTypeProperties::IS_ZST", [ Mir.GenArgType ty ] ->
+          Ok (`TrTypedConstantScalar (Ast.CallExpr (loc, "std::mem::IS_ZST", [ty.Mir.vf_ty], [], [], Static)))
+        | _ -> Ast.static_error loc (Printf.sprintf "Unevaluated MIR constant %s is not yet supported" def) None
+        end
       | Undefined _ -> Error (`TrConstantKind "Unknown ConstantKind")
 
     let translate_const_operand (constant_cpn : ConstOperandRd.t) =

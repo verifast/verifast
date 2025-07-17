@@ -75,7 +75,11 @@ const ZERO_CAP: Cap = unsafe { Cap::new_unchecked(0) };
 /// `Cap(cap)`, except if `T` is a ZST then `Cap::ZERO`.
 ///
 /// # Safety: cap must be <= `isize::MAX`.
-unsafe fn new_cap<T>(cap: usize) -> Cap {
+unsafe fn new_cap<T>(cap: usize) -> Cap
+//@ req cap <= isize::MAX;
+//@ ens result == if std::mem::size_of::<T>() == 0 { Cap_new_(0) } else { Cap_new_(cap) };
+//@ on_unwind_ens false;
+{
     if T::IS_ZST { ZERO_CAP } else { unsafe { Cap::new_unchecked(cap) } }
 }
 

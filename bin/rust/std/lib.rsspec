@@ -188,7 +188,11 @@ mod num {
         lem_auto(UsizeNoHighBit::as_inner_(transmute_uint(n))) UsizeNoHighBit_as_inner__transmute_uint(n: usize);
             req 0 <= n && n <= isize::MAX;
             ens UsizeNoHighBit::as_inner_(transmute_uint(n)) == n;
-            
+        
+        lem_auto transmute_uint_UsizeNoHighBit(n: usize);
+            req 0 <= n && n <= isize::MAX;
+            ens transmute_uint::<UsizeNoHighBit>(n) == UsizeNoHighBit::new_(n);
+        
         lem UsizeNoHighBit_inv(n: UsizeNoHighBit);
             req true;
             ens 0 <= UsizeNoHighBit::as_inner_(n) &*& UsizeNoHighBit::as_inner_(n) <= isize::MAX;
@@ -354,6 +358,11 @@ mod mem {
     fn size_of<T>() -> usize;
     //@ req true;
     //@ ens result == std::mem::size_of_::<T>();
+    //@ on_unwind_ens false;
+    
+    fn IS_ZST<T>() -> bool; // The VeriFast MIR translator translates T::IS_ZST unevaluated constants to IS_ZST::<T>() calls.
+    //@ req true;
+    //@ ens result == (std::mem::size_of::<T>() == 0);
     //@ on_unwind_ens false;
     
     fn align_of<T>() -> usize;

@@ -2,6 +2,8 @@ open Vf_mir_decoder
 
 let string_of_ty ty = "<ty>"
 
+let string_of_gen_arg gen_arg = "<gen_arg>"
+
 let string_of_basic_block_id bb_id =
   Printf.sprintf "bb_%s" (Stdint.Uint32.to_string bb_id.index)
 
@@ -47,7 +49,7 @@ let string_of_const_value ({kind}: ty) = function
 let string_of_mir_const = function
 | Ty {ty; const} -> Printf.sprintf "TyConst"
 | Val {const_value; ty} -> string_of_const_value ty const_value
-| Unevaluated -> Printf.sprintf "UnevaluatedConst"
+| Unevaluated {def; args} -> Printf.sprintf "UnevaluatedConst %s::<%s>" def (String.concat ", " (List.map string_of_gen_arg args))
 
 let string_of_operand = function
   | Copy place -> Printf.sprintf "copy %s" (string_of_place place)
