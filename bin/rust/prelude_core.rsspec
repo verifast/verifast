@@ -264,11 +264,11 @@ lem to_u8s_<T>(p: *T);
     req [?f](*p |-> _);
     ens [f](p as *u8)[..std::mem::size_of::<T>()] |-> _ &*& p as usize % std::mem::align_of::<T>() == 0;
 
-lem u8s__to_array_<T>(p: *T, size: i32);
+lem u8s__to_array_<T>(p: *T, size: usize);
     req [?f](p as *u8)[..size * std::mem::size_of::<T>()] |-> _ &*& p as usize % std::mem::align_of::<T>() == 0;
     ens [f]p[..size] |-> _;
 
-lem array__to_u8s_<T>(p: *T, size: i32);
+lem array__to_u8s_<T>(p: *T, size: usize);
     req [?f]p[..size] |-> _;
     ens [f](p as *u8)[..size * std::mem::size_of::<T>()] |-> _ &*& p as usize % std::mem::align_of::<T>() == 0;
 
