@@ -28,6 +28,8 @@ pred<T1, T2> <(T1, T2)>.share(k, t, l) = <T1>.share(k, t, &(*l).0) &*& <T2>.shar
 
 @*/
 
+struct slice_ptr<T> { ptr: *T, len: usize }
+
 struct slice_ref<'a, T> { ptr: *T, len: usize }
 
 struct str_ref<'a> { ptr: *u8, len: usize }
