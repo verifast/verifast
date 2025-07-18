@@ -653,6 +653,11 @@ and parse_stmt = function%parser
     (closeBraceLoc, Kwd "}")
   ] ->
   ProduceFunctionPointerChunkStmt (l, ftn, fpe, targs, args, params, openBraceLoc, ss, closeBraceLoc)
+| [ (l, Kwd "merge_fractions"); 
+    parse_asn as a; 
+    (_, Kwd ";") 
+  ]
+  -> MergeFractionsStmt (l, a)
 | [ parse_block_stmt as s ] -> s
 | [ parse_expr as e; (_, Kwd ";") ] -> ExprStmt e
 | [ (Lexed(spos, _), Kwd "return"); [%let e = opt parse_expr]; (Lexed(_, epos), Kwd ";") ] -> ReturnStmt (Lexed(spos, epos), e)
