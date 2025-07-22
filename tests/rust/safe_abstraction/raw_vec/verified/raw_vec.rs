@@ -150,6 +150,33 @@ pred RawVecInner0(alloc_id: any, u: Unique<u8>, cap: UsizeNoHighBit, elemLayout:
 pred RawVecInner<A>(t: thread_id_t, self: RawVecInner<A>, elemLayout: Layout, alloc_id: any, ptr: *u8, capacity: usize) =
     Allocator(t, self.alloc, alloc_id) &*&
     RawVecInner0(alloc_id, self.ptr, self.cap, elemLayout, ptr, capacity);
+    
+pred<A> <RawVecInner<A>>.own(t, self_) = <A>.own(t, self_.alloc);
+
+lem RawVecInner_drop<A>()
+    req raw_vec::RawVecInner_own::<A>(?_t, ?_v);
+    ens std::ptr::Unique_own::<u8>(_t, _v.ptr) &*& std::num::niche_types::UsizeNoHighBit_own(_t, _v.cap) &*& <A>.own(_t, _v.alloc);
+{
+    open RawVecInner_own::<A>(_t, _v);
+    std::ptr::close_Unique_own::<u8>(_t, _v.ptr);
+    std::num::niche_types::close_UsizeNoHighBit_own(_t, _v.cap);
+}
+
+lem RawVecInner_own_mono<A0, A1>()
+    req type_interp::<A0>() &*& type_interp::<A1>() &*& raw_vec::RawVecInner_own::<A0>(?t, ?v) &*& is_subtype_of::<A0, A1>() == true;
+    ens type_interp::<A0>() &*& type_interp::<A1>() &*& raw_vec::RawVecInner_own::<A1>(t, raw_vec::RawVecInner::<A1> { ptr: upcast(v.ptr), cap: upcast(v.cap), alloc: upcast(v.alloc) });
+{
+    assume(false);
+}
+
+lem RawVecInner_send<A>(t1: thread_id_t)
+    req type_interp::<A>() &*& is_Send(typeid(A)) == true &*& raw_vec::RawVecInner_own::<A>(?t0, ?v);
+    ens type_interp::<A>() &*& raw_vec::RawVecInner_own::<A>(t1, v);
+{
+    open RawVecInner_own::<A>(t0, v);
+    Send::send::<A>(t0, t1, v.alloc);
+    close RawVecInner_own::<A>(t1, v);
+}
 
 lem RawVecInner_inv<A>()
     req RawVecInner::<A>(?t, ?self_, ?elemLayout, ?alloc_id, ?ptr, ?capacity);
@@ -293,7 +320,23 @@ lem init_ref_RawVecInner<A>(l: *RawVecInner<A>)
 
 pred RawVec<T, A>(t: thread_id_t, self: RawVec<T, A>, alloc_id: any, ptr: *T, capacity: usize) =
     RawVecInner(t, self.inner, Layout::new_::<T>, alloc_id, ?ptr_, capacity) &*& ptr == ptr_ as *T;
-    
+
+pred<T, A> <RawVec<T, A>>.own(t, self_) = RawVec(t, self_, ?alloc_id, ?ptr, ?capacity) &*& ptr[..capacity] |-> _;
+
+lem RawVec_own_mono<T0, T1, A0, A1>()
+    req type_interp::<T0>() &*& type_interp::<T1>() &*& type_interp::<A0>() &*& type_interp::<A1>() &*& raw_vec::RawVec_own::<T0, A0>(?t, ?v) &*& is_subtype_of::<T0, T1>() == true &*& is_subtype_of::<A0, A1>() == true;
+    ens type_interp::<T0>() &*& type_interp::<T1>() &*& type_interp::<A0>() &*& type_interp::<A1>() &*& raw_vec::RawVec_own::<T1, A1>(t, raw_vec::RawVec::<T1, A1> { inner: upcast(v.inner) });
+{
+    assume(false);
+}
+
+lem RawVec_send<T, A>(t1: thread_id_t)
+    req type_interp::<T>() &*& type_interp::<A>() &*& is_Send(typeid(T)) == true &*& raw_vec::RawVec_own::<T, A>(?t0, ?v);
+    ens type_interp::<T>() &*& type_interp::<A>() &*& raw_vec::RawVec_own::<T, A>(t1, v);
+{
+    assume(false); // TODO!
+}
+
 pred RawVec_share_<T, A>(k: lifetime_t, t: thread_id_t, l: *RawVec<T, A>, alloc_id: any, ptr: *T, capacity: usize) =
     [_]RawVecInner_share_(k, t, &(*l).inner, Layout::new_::<T>(), alloc_id, ptr as *u8, capacity);
 
@@ -891,7 +934,14 @@ impl<T, A: Allocator> RawVec<T, A> {
 
 unsafe impl<#[may_dangle] T, A: Allocator> Drop for RawVec<T, A> {
     /// Frees the memory owned by the `RawVec` *without* trying to drop its contents.
-    fn drop(&mut self) {
+    fn drop(&mut self)
+    //@ req thread_token(?t) &*& t == currentThread &*& RawVec_full_borrow_content::<T, A>(t, self)();
+    //@ ens thread_token(t) &*& (*self).inner |-> ?inner &*& <RawVecInner<A>>.own(t, inner);
+    {
+        //@ open RawVec_full_borrow_content::<T, A>(t, self)();
+        //@ open <RawVec<T, A>>.own(t, *self);
+        //@ open RawVec(t, *self, ?alloc_id, ?ptr, ?capacity);
+        //@ array__to_u8s_(ptr, capacity);
         // SAFETY: We are in a Drop impl, self.inner will not be used again.
         unsafe { self.inner.deallocate(T::LAYOUT) }
     }
@@ -1802,8 +1852,8 @@ impl<A: Allocator> RawVecInner<A> {
     /// called from a `Drop` impl.
     unsafe fn deallocate(&mut self, elem_layout: Layout)
     //@ req thread_token(?t) &*& *self |-> ?self0 &*& RawVecInner(t, self0, elem_layout, ?alloc_id, ?ptr_, ?capacity) &*& ptr_[..capacity * Layout::size_(elem_layout)] |-> _;
-    //@ ens thread_token(t) &*& (*self).ptr |-> _ &*& (*self).cap |-> _ &*& (*self).alloc |-> ?alloc &*& <A>.own(t, alloc) &*& struct_RawVecInner_padding(self);
-    //@ on_unwind_ens thread_token(t) &*& (*self).ptr |-> _ &*& (*self).cap |-> _ &*& (*self).alloc |-> ?alloc &*& <A>.own(t, alloc) &*& struct_RawVecInner_padding(self);
+    //@ ens thread_token(t) &*& *self |-> ?self1 &*& <RawVecInner<A>>.own(t, self1);
+    //@ on_unwind_ens thread_token(t) &*& *self |-> ?self1 &*& <RawVecInner<A>>.own(t, self1);
     {
         //@ let k = begin_lifetime();
         //@ share_RawVecInner(k, self);
@@ -1839,6 +1889,7 @@ impl<A: Allocator> RawVecInner<A> {
         }
         //@ if current_memory == Option::None { leak ptr_[..capacity * Layout::size_(elem_layout)] |-> _; }
         //@ std::alloc::Allocator_to_own((*self).alloc);
+        //@ close <RawVecInner<A>>.own(t, *self);
     }
 }
 

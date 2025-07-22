@@ -181,6 +181,10 @@ mod num {
         
         /*@
         
+        lem close_UsizeNoHighBit_own(t: thread_id_t, self_: UsizeNoHighBit);
+            req true;
+            ens <UsizeNoHighBit>.own(t, self_);
+        
         lem_auto(UsizeNoHighBit::as_inner_(UsizeNoHighBit::new_(n))) UsizeNoHighBit_as_inner__new_(n: usize);
             req 0 <= n && n <= isize::MAX;
             ens UsizeNoHighBit::as_inner_(UsizeNoHighBit::new_(n)) == n;
@@ -581,6 +585,10 @@ mod ptr {
     //@ fix Unique::from_non_null_<T>(nn: NonNull<T>) -> Unique<T>;
     
     /*@
+    
+    lem close_Unique_own<T>(t: thread_id_t, self_: Unique<T>);
+        req true;
+        ens <Unique<T>>.own(t, self_);
     
     lem_auto(Unique::non_null_(Unique::from_non_null_(nn))) Unique_non_null__from_non_null_<T>(nn: NonNull<T>);
         req true;
