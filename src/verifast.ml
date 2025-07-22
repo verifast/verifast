@@ -1188,10 +1188,10 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               | Var (_, cn) -> (cn, [])
               | _ -> static_error l "Case expression must be constructor pattern" None
             in
-            let pts =
+            let fqcn, pts =
               match try_assoc' Real (pn,ilist) cn ctormap with
                 None -> static_error lc ("Not a constructor of type " ^ tn) None
-              | Some (_, (l, _, _, pts, _)) -> pts
+              | Some (fqcn, (l, _, _, pts, _)) -> fqcn, pts
             in
             let _ = if not (List.mem_assoc cn ctors) then static_error lc "Constructor already handled in earlier clause." None in
             let verify_branch () =
@@ -1215,7 +1215,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               in
               iter [] [] [] pats pts
             in
-            let Some (_, (_, _, _, _, ctorsym)) = resolve Ghost (pn,ilist) l cn purefuncmap in
+            let (_, _, _, _, ctorsym) = List.assoc fqcn purefuncmap in
             let sizemap =
               match try_assq v sizemap with
                 None -> sizemap
