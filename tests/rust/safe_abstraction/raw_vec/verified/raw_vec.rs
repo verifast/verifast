@@ -753,8 +753,49 @@ impl<T, A: Allocator> RawVec<T, A> {
         &mut self,
         len: usize,
         additional: usize,
-    ) -> Result<(), TryReserveError> {
-        self.inner.try_reserve(len, additional, T::LAYOUT)
+    ) -> Result<(), TryReserveError>
+    /*@
+    req thread_token(?t) &*& t == currentThread &*&
+        *self |-> ?self0 &*&
+        RawVec(t, self0, ?alloc_id, ?ptr0, ?capacity0) &*& ptr0[..capacity0] |-> _;
+    @*/
+    /*@
+    ens thread_token(t) &*&
+        *self |-> ?self1 &*&
+        match result {
+            Result::Ok(u) =>
+                RawVec(t, self1, alloc_id, ?ptr1, ?capacity1) &*& ptr1[..capacity1] |-> _ &*&
+                len > capacity0 || len + additional <= capacity1,
+            Result::Err(e) =>
+                RawVec(t, self1, alloc_id, ptr0, capacity0) &*& ptr0[..capacity0] |-> _ &*&
+                <std::collections::TryReserveError>.own(t, e)
+        };
+    @*/
+    //@ safety_proof { assume(false); }
+    {
+        //@ size_align::<T>();
+        //@ open_points_to(self);
+        //@ close_points_to(&(*self).inner);
+        //@ open RawVec(t, self0, alloc_id, ptr0, capacity0);
+        //@ array__to_u8s_(ptr0, capacity0);
+        let r = self.inner.try_reserve(len, additional, T::LAYOUT);
+        //@ open_points_to(&(*self).inner);
+        //@ close_points_to(self);
+        //@ assert *self |-> ?self1;
+        /*@
+        match r {
+            Result::Ok(u) => {
+                RawVecInner_inv::<A>();
+                close RawVec(t, self1, alloc_id, ?ptr1, ?capacity1);
+                u8s__to_array_(ptr1, capacity1);
+            }
+            Result::Err(e) => {
+                close RawVec(t, self1, alloc_id, ptr0, capacity0);
+                u8s__to_array_(ptr0, capacity0);
+            }
+        }
+        @*/
+        r
     }
 
     /// Ensures that the buffer contains at least enough space to hold `len +
@@ -785,8 +826,49 @@ impl<T, A: Allocator> RawVec<T, A> {
         &mut self,
         len: usize,
         additional: usize,
-    ) -> Result<(), TryReserveError> {
-        self.inner.try_reserve_exact(len, additional, T::LAYOUT)
+    ) -> Result<(), TryReserveError>
+    /*@
+    req thread_token(?t) &*& t == currentThread &*&
+        *self |-> ?self0 &*&
+        RawVec(t, self0, ?alloc_id, ?ptr0, ?capacity0) &*& ptr0[..capacity0] |-> _;
+    @*/
+    /*@
+    ens thread_token(t) &*&
+        *self |-> ?self1 &*&
+        match result {
+            Result::Ok(u) =>
+                RawVec(t, self1, alloc_id, ?ptr1, ?capacity1) &*& ptr1[..capacity1] |-> _ &*&
+                len > capacity0 || len + additional <= capacity1,
+            Result::Err(e) =>
+                RawVec(t, self1, alloc_id, ptr0, capacity0) &*& ptr0[..capacity0] |-> _ &*&
+                <std::collections::TryReserveError>.own(t, e)
+        };
+    @*/
+    //@ safety_proof { assume(false); }
+    {
+        //@ size_align::<T>();
+        //@ open_points_to(self);
+        //@ close_points_to(&(*self).inner);
+        //@ open RawVec(t, self0, alloc_id, ptr0, capacity0);
+        //@ array__to_u8s_(ptr0, capacity0);
+        let r = self.inner.try_reserve_exact(len, additional, T::LAYOUT);
+        //@ open_points_to(&(*self).inner);
+        //@ close_points_to(self);
+        //@ assert *self |-> ?self1;
+        /*@
+        match r {
+            Result::Ok(u) => {
+                RawVecInner_inv::<A>();
+                close RawVec(t, self1, alloc_id, ?ptr1, ?capacity1);
+                u8s__to_array_(ptr1, capacity1);
+            }
+            Result::Err(e) => {
+                close RawVec(t, self1, alloc_id, ptr0, capacity0);
+                u8s__to_array_(ptr0, capacity0);
+            }
+        }
+        @*/
+        r
     }
 
     /// Shrinks the buffer down to the specified capacity. If the given amount
