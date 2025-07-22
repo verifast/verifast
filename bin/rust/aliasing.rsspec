@@ -40,6 +40,16 @@ pred ref_padding_initialized<T>(p: *T;);
 pred_ctor ref_initialized_<T>(p: *T)(;) = ref_initialized(p);
 pred_ctor ref_padding_initialized_<T>(p: *T)(;) = ref_padding_initialized(p);
 
+pred ref_readonly_end_token<T>(p: *T, x: *T, f: real);
+
+lem init_ref_readonly<T>(p: *T, coef: real); // Use this if you don't need interior mutability.
+    req ref_init_perm(p, ?x) &*& [?f](*x |-> ?v) &*& 0 < coef &*& coef < 1;
+    ens ref_readonly_end_token(p, x, coef*f) &*& [f*(1-coef)](*x |-> v) &*& [f*coef](*p |-> v) &*& ref_initialized(p);
+
+lem end_ref_readonly<T>(p: *T);
+    req ref_readonly_end_token(p, ?x, ?f) &*& [f](*p |-> ?v) &*& ref_initialized(p);
+    ens [f](*x |-> v);
+
 @*/
 
 fn create_ref_mut<T>(x: *T) -> *T;

@@ -111,13 +111,6 @@ pub(crate) struct RawVec<T, A: Allocator = Global> {
     _marker: PhantomData<T>,
 }
 
-/*@
-
-pred RawVec<T, A>(t: thread_id_t, self: RawVec<T, A>, alloc_id: any, ptr: *T, capacity: usize) =
-    RawVecInner(t, self.inner, Layout::new_::<T>, alloc_id, ?ptr_, capacity) &*& ptr == ptr_ as *T;
-
-@*/
-
 /// Like a `RawVec`, but only generic over the allocator, not the type.
 ///
 /// As such, all the methods need the layout passed-in as a parameter.
@@ -160,7 +153,7 @@ pred RawVecInner<A>(t: thread_id_t, self: RawVecInner<A>, elemLayout: Layout, al
 
 lem RawVecInner_inv<A>()
     req RawVecInner::<A>(?t, ?self_, ?elemLayout, ?alloc_id, ?ptr, ?capacity);
-    ens RawVecInner::<A>(t, self_, elemLayout, alloc_id, ptr, capacity) &*& ptr as usize % Layout::align_(elemLayout) == 0 &*& 0 <= capacity &*& capacity <= usize::MAX;
+    ens RawVecInner::<A>(t, self_, elemLayout, alloc_id, ptr, capacity) &*& ptr != 0 &*& ptr as usize % Layout::align_(elemLayout) == 0 &*& 0 <= capacity &*& capacity <= usize::MAX;
 {
     open RawVecInner(t, self_, elemLayout, alloc_id, ptr, capacity);
     open RawVecInner0(alloc_id, self_.ptr, self_.cap, elemLayout, ptr, capacity);
@@ -188,7 +181,14 @@ pred_ctor RawVecInner_frac_borrow_content<A>(l: *RawVecInner<A>, elemLayout: Lay
 
 pred RawVecInner_share_<A>(k: lifetime_t, t: thread_id_t, l: *RawVecInner<A>, elemLayout: Layout, alloc_id: any, ptr: *u8, capacity: usize) =
     [_]std::alloc::Allocator_share(k, t, &(*l).alloc, alloc_id) &*&
-    [_]frac_borrow(k, RawVecInner_frac_borrow_content(l, elemLayout, alloc_id, ptr, capacity));
+    [_]frac_borrow(k, RawVecInner_frac_borrow_content(l, elemLayout, alloc_id, ptr, capacity)) &*& ptr != 0;
+
+lem RawVecInner_share__inv<A>()
+    req [_]RawVecInner_share_::<A>(?k, ?t, ?l, ?elemLayout, ?alloc_id, ?ptr, ?capacity);
+    ens ptr != 0;
+{
+    open RawVecInner_share_(k, t, l, elemLayout, alloc_id, ptr, capacity);
+}
 
 pred RawVecInner_share_end_token<A>(k: lifetime_t, t: thread_id_t, l: *RawVecInner<A>, elemLayout: Layout, alloc_id: any, ptr: *u8, capacity: usize) =
     borrow_end_token(k, std::alloc::Allocator_full_borrow_content_(t, &(*l).alloc, alloc_id)) &*&
@@ -199,6 +199,7 @@ lem share_RawVecInner<A>(k: lifetime_t, l: *RawVecInner<A>)
     req [?q]lifetime_token(k) &*& *l |-> ?self_ &*& RawVecInner(?t, self_, ?elemLayout, ?alloc_id, ?ptr, ?capacity);
     ens [q]lifetime_token(k) &*& [_]RawVecInner_share_(k, t, l, elemLayout, alloc_id, ptr, capacity) &*& RawVecInner_share_end_token(k, t, l, elemLayout, alloc_id, ptr, capacity);
 {
+    RawVecInner_inv::<A>();
     open RawVecInner(t, self_, elemLayout, alloc_id, ptr, capacity);
     open_points_to(l);
     close RawVecInner_frac_borrow_content::<A>(l, elemLayout, alloc_id, ptr, capacity)();
@@ -284,6 +285,77 @@ lem init_ref_RawVecInner<A>(l: *RawVecInner<A>)
     frac_borrow_split(k, ref_initialized_(l), RawVecInner_frac_borrow_content(l, elemLayout, alloc_id, ptr, capacity));
     close RawVecInner_share_(k, t, l, elemLayout, alloc_id, ptr, capacity);
     leak RawVecInner_share_(k, t, l, elemLayout, alloc_id, ptr, capacity);
+}
+
+@*/
+
+/*@
+
+pred RawVec<T, A>(t: thread_id_t, self: RawVec<T, A>, alloc_id: any, ptr: *T, capacity: usize) =
+    RawVecInner(t, self.inner, Layout::new_::<T>, alloc_id, ?ptr_, capacity) &*& ptr == ptr_ as *T;
+    
+pred RawVec_share_<T, A>(k: lifetime_t, t: thread_id_t, l: *RawVec<T, A>, alloc_id: any, ptr: *T, capacity: usize) =
+    [_]RawVecInner_share_(k, t, &(*l).inner, Layout::new_::<T>(), alloc_id, ptr as *u8, capacity);
+
+pred RawVec_share_end_token<T, A>(k: lifetime_t, t: thread_id_t, l: *RawVec<T, A>, alloc_id: any, ptr: *T, capacity: usize) =
+    RawVecInner_share_end_token(k, t, &(*l).inner, Layout::new_::<T>(), alloc_id, ptr as *u8, capacity);
+
+lem share_RawVec<T, A>(k: lifetime_t, l: *RawVec<T, A>)
+    nonghost_callers_only
+    req [?q]lifetime_token(k) &*& *l |-> ?self_ &*& RawVec(?t, self_, ?alloc_id, ?ptr, ?capacity);
+    ens [q]lifetime_token(k) &*& [_]RawVec_share_(k, t, l, alloc_id, ptr, capacity) &*& RawVec_share_end_token(k, t, l, alloc_id, ptr, capacity);
+{
+    open RawVec(t, self_, alloc_id, ptr, capacity);
+    open_points_to(l);
+    share_RawVecInner(k, &(*l).inner);
+    close RawVec_share_(k, t, l, alloc_id, ptr, capacity);
+    leak RawVec_share_(k, t, l, alloc_id, ptr, capacity);
+    close RawVec_share_end_token(k, t, l, alloc_id, ptr, capacity);
+}
+
+lem end_share_RawVec<T, A>(l: *RawVec<T, A>)
+    nonghost_callers_only
+    req RawVec_share_end_token(?k, ?t, l, ?alloc_id, ?ptr, ?capacity) &*& [_]lifetime_dead_token(k);
+    ens *l |-> ?self_ &*& RawVec(t, self_, alloc_id, ptr, capacity);
+{
+    open RawVec_share_end_token(k, t, l, alloc_id, ptr, capacity);
+    end_share_RawVecInner(&(*l).inner);
+    close_points_to(l);
+    close RawVec(t, *l, alloc_id, ptr, capacity);
+}
+
+lem init_ref_RawVec<T, A>(l: *RawVec<T, A>)
+    nonghost_callers_only
+    req ref_init_perm(l, ?l0) &*& [_]RawVec_share_(?k, ?t, l0, ?alloc_id, ?ptr, ?capacity) &*& [?q]lifetime_token(k);
+    ens [q]lifetime_token(k) &*& [_]RawVec_share_(k, t, l, alloc_id, ptr, capacity) &*& [_]frac_borrow(k, ref_initialized_(l));
+{
+    open RawVec_share_(k, t, l0, alloc_id, ptr, capacity);
+    open_ref_init_perm_RawVec(l);
+    init_ref_RawVecInner(&(*l).inner);
+    close RawVec_share_(k, t, l, alloc_id, ptr, capacity);
+    leak RawVec_share_(k, t, l, alloc_id, ptr, capacity);
+    
+    let klong = open_frac_borrow_strong(k, ref_initialized_(&(*l).inner), q);
+    open [?f]ref_initialized_::<RawVecInner<A>>(&(*l).inner)();
+    close_ref_initialized_RawVec(l, f);
+    close [f]ref_initialized_::<RawVec<T, A>>(l)();
+    {
+        pred Ctx() = true;
+        produce_lem_ptr_chunk frac_borrow_convert_strong(Ctx, scaledp(f, ref_initialized_(l)), klong, f, ref_initialized_(&(*l).inner))() {
+            open Ctx();
+            open scaledp(f, ref_initialized_(l))();
+            open ref_initialized_::<RawVec<T, A>>(l)();
+            open_ref_initialized_RawVec(l);
+            close [f]ref_initialized_::<RawVecInner<A>>(&(*l).inner)();
+        } {
+            close Ctx();
+            close scaledp(f, ref_initialized_(l))();
+            close_frac_borrow_strong(klong, ref_initialized_(&(*l).inner), scaledp(f, ref_initialized_(l)));
+            full_borrow_mono(klong, k, scaledp(f, ref_initialized_(l)));
+            full_borrow_into_frac(k, scaledp(f, ref_initialized_(l)));
+            frac_borrow_implies_scaled(k, f, ref_initialized_(l));
+        }
+    }
 }
 
 @*/
@@ -445,17 +517,64 @@ impl<T, A: Allocator> RawVec<T, A> {
     ///
     /// Note, that the requested capacity and `self.capacity()` could differ, as
     /// an allocator could overallocate and return a greater memory block than requested.
-    pub(crate) unsafe fn into_box(self, len: usize) -> Box<[MaybeUninit<T>], A> {
+    pub(crate) unsafe fn into_box(self, len: usize) -> Box<[MaybeUninit<T>], A>
+    //@ req thread_token(?t) &*& RawVec(t, self, ?alloc_id, ?ptr, len) &*& (ptr as *T)[..len] |-?-> ?vs;
+    //@ ens thread_token(t) &*& std::boxed::Box_slice_in::<std::mem::MaybeUninit<T>, A>(t, result, alloc_id, map(std::mem::MaybeUninit::new_maybe_uninit, vs));
+    //@ on_unwind_ens thread_token(t);
+    {
         // Sanity-check one half of the safety requirement (we cannot check the other half).
-        debug_assert!(
-            len <= self.capacity(),
-            "`len` must be smaller than or equal to `self.capacity()`"
-        );
+        if cfg!(debug_assertions) { //~allow_dead_code
+            //@ let k = begin_lifetime();
+            //@ share_RawVec(k, &self);
+            //@ let self_ref = precreate_ref(&self);
+            //@ init_ref_RawVec(self_ref);
+            //@ open_frac_borrow(k, ref_initialized_(self_ref), 1/2);
+            //@ open [?f]ref_initialized_::<RawVec<T, A>>(self_ref)();
+            let capacity = self.capacity();
+            //@ close [f]ref_initialized_::<RawVec<T, A>>(self_ref)();
+            //@ close_frac_borrow(f, ref_initialized_(self_ref));
+            //@ end_lifetime(k);
+            //@ end_share_RawVec(&self);
+            //@ open_points_to(&self);
+            
+            if !(len <= capacity) {
+                core::panicking::panic("`len` must be smaller than or equal to `self.capacity()`"); //~allow_dead_code
+            }
+        }
 
-        let me = ManuallyDrop::new(self);
+        let mut me = ManuallyDrop::new(self);
+        //@ close_points_to(&self);
         unsafe {
-            let slice = ptr::slice_from_raw_parts_mut(me.ptr() as *mut MaybeUninit<T>, len);
-            Box::from_raw_in(slice, ptr::read(&me.inner.alloc))
+            //@ let k0 = begin_lifetime();
+            //@ close_points_to(&me);
+            //@ share_RawVec(k0, &me);
+            //@ let me_ref0 = precreate_ref(&me);
+            //@ init_ref_RawVec(me_ref0);
+            //@ open_frac_borrow(k0, ref_initialized_(me_ref0), 1/2);
+            //@ open [?f0]ref_initialized_::<RawVec<T, A>>(me_ref0)();
+            let me_ref = <ManuallyDrop<RawVec<T, A>> as core::ops::Deref>::deref(&me);
+            let ptr_ = me_ref.ptr();
+            let slice = ptr::slice_from_raw_parts_mut(ptr_ as *mut MaybeUninit<T>, len);
+            //@ close [f0]ref_initialized_::<RawVec<T, A>>(me_ref0)();
+            //@ close_frac_borrow(f0, ref_initialized_(me_ref0));
+            //@ end_lifetime(k0);
+            //@ end_share_RawVec(&me);
+            
+            //@ let me_ref1 = precreate_ref(&me);
+            //@ init_ref_readonly(me_ref1, 1/2);
+            //@ open_points_to(me_ref1);
+            //@ let alloc_ref = precreate_ref(&(*me_ref1).inner.alloc);
+            //@ init_ref_readonly(alloc_ref, 1/2);
+            let alloc = ptr::read(&me.inner.alloc);
+            //@ end_ref_readonly(alloc_ref);
+            //@ close_points_to(me_ref1, 1/2);
+            //@ end_ref_readonly(me_ref1);
+            //@ open_points_to(&me);
+            //@ std::mem::array__to_array_MaybeUninit(slice.ptr as *T);
+            //@ open RawVec(_, _, _, _, _);
+            //@ open RawVecInner(_, _, _, _, _, _);
+            //@ open RawVecInner0(_, _, _, _, _, _);
+            Box::from_raw_in(slice, alloc)
         }
     }
 
@@ -501,8 +620,20 @@ impl<T, A: Allocator> RawVec<T, A> {
     /// `Unique::dangling()` if `capacity == 0` or `T` is zero-sized. In the former case, you must
     /// be careful.
     #[inline]
-    pub(crate) const fn ptr(&self) -> *mut T {
-        self.inner.ptr()
+    pub(crate) const fn ptr(&self) -> *mut T
+    //@ req [_]RawVec_share_(?k, ?t, self, ?alloc_id, ?ptr, ?capacity) &*& [?q]lifetime_token(k) &*& [_]frac_borrow(k, ref_initialized_(self));
+    //@ ens [q]lifetime_token(k) &*& result == ptr;
+    //@ safety_proof { assume(false); }
+    {
+        //@ open RawVec_share_(k, t, self, alloc_id, ptr, capacity);
+        //@ let inner_ref = precreate_ref(&(*self).inner);
+        //@ init_ref_RawVecInner(inner_ref);
+        //@ open_frac_borrow(k, ref_initialized_(inner_ref), q/2);
+        //@ open [?f]ref_initialized_::<RawVecInner<A>>(inner_ref)();
+        let r = self.inner.ptr();
+        //@ close [f]ref_initialized_::<RawVecInner<A>>(inner_ref)();
+        //@ close_frac_borrow(f, ref_initialized_(inner_ref));
+        r
     }
 
     #[inline]
@@ -514,8 +645,20 @@ impl<T, A: Allocator> RawVec<T, A> {
     ///
     /// This will always be `usize::MAX` if `T` is zero-sized.
     #[inline]
-    pub(crate) const fn capacity(&self) -> usize {
-        self.inner.capacity(size_of::<T>())
+    pub(crate) const fn capacity(&self) -> usize
+    //@ req [_]RawVec_share_(?k, ?t, self, ?alloc_id, ?ptr, ?capacity) &*& [?q]lifetime_token(k);
+    //@ ens [q]lifetime_token(k) &*& result == capacity;
+    //@ safety_proof { assume(false); }
+    {
+        //@ open RawVec_share_(k, t, self, alloc_id, ptr, capacity);
+        //@ let inner_ref = precreate_ref(&(*self).inner);
+        //@ init_ref_RawVecInner(inner_ref);
+        //@ open_frac_borrow(k, ref_initialized_(inner_ref), q/2);
+        //@ open [?f]ref_initialized_::<RawVecInner<A>>(inner_ref)();
+        let r = self.inner.capacity(size_of::<T>());
+        //@ close [f]ref_initialized_::<RawVecInner<A>>(inner_ref)();
+        //@ close_frac_borrow(f, ref_initialized_(inner_ref));
+        r
     }
 
     /// Returns a shared reference to the allocator backing this `RawVec`.
@@ -846,13 +989,31 @@ impl<A: Allocator> RawVecInner<A> {
     }
 
     #[inline]
-    const fn ptr<T>(&self) -> *mut T {
-        self.non_null::<T>().as_ptr()
+    const fn ptr<T>(&self) -> *mut T
+    //@ req [_]RawVecInner_share_(?k, ?t, self, ?elem_layout, ?alloc_id, ?ptr, ?capacity) &*& [?q]lifetime_token(k) &*& [_]frac_borrow(k, ref_initialized_(self));
+    //@ ens [q]lifetime_token(k) &*& result == ptr as *T;
+    //@ safety_proof { assume(false); }
+    {
+        //@ RawVecInner_share__inv::<A>();
+        let r = self.non_null::<T>();
+        r.as_ptr()
     }
 
     #[inline]
-    const fn non_null<T>(&self) -> NonNull<T> {
-        self.ptr.cast().as_non_null_ptr()
+    const fn non_null<T>(&self) -> NonNull<T>
+    //@ req [_]RawVecInner_share_(?k, ?t, self, ?elem_layout, ?alloc_id, ?ptr, ?capacity) &*& [?q]lifetime_token(k);
+    //@ ens [q]lifetime_token(k) &*& result == NonNull::new_(ptr as *T);
+    //@ safety_proof { assume(false); }
+    {
+        //@ open RawVecInner_share_(k, t, self, elem_layout, alloc_id, ptr, capacity);
+        //@ open_frac_borrow(k, RawVecInner_frac_borrow_content(self, elem_layout, alloc_id, ptr, capacity), q);
+        //@ open [?f]RawVecInner_frac_borrow_content::<A>(self, elem_layout, alloc_id, ptr, capacity)();
+        //@ open RawVecInner0(alloc_id, (*self).ptr, (*self).cap, elem_layout, ptr, capacity);
+        let r = self.ptr.cast().as_non_null_ptr();
+        //@ close [f]RawVecInner0(alloc_id, (*self).ptr, (*self).cap, elem_layout, ptr, capacity);
+        //@ close [f]RawVecInner_frac_borrow_content::<A>(self, elem_layout, alloc_id, ptr, capacity)();
+        //@ close_frac_borrow(f, RawVecInner_frac_borrow_content(self, elem_layout, alloc_id, ptr, capacity));
+        r
     }
 
     #[inline]
