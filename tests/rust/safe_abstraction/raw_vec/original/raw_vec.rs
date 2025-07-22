@@ -233,7 +233,7 @@ impl<T, A: Allocator> RawVec<T, A> {
             "`len` must be smaller than or equal to `self.capacity()`"
         );
 
-        let me = ManuallyDrop::new(self);
+        let /*@~mut@*/ me = ManuallyDrop::new(self);
         unsafe {
             let slice = ptr::slice_from_raw_parts_mut(me.ptr() as *mut MaybeUninit<T>, len);
             Box::from_raw_in(slice, ptr::read(&me.inner.alloc))

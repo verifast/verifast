@@ -430,6 +430,18 @@ mod mem {
         req self[..?n] |-?-> ?elems_;
         ens self[..n] |-> map((unwrap_or_else)(MaybeUninit::uninit_), elems_);
     
+    lem array__to_array_MaybeUninit<T>(self: *T);
+        req self[..?n] |-?-> ?elems_;
+        ens (self as *MaybeUninit<T>)[..n] |-> map(MaybeUninit::new_maybe_uninit, elems_);
+    
+    lem_auto(std::mem::size_of::<MaybeUninit<T>>()) size_of_MaybeUninit<T>();
+        req true;
+        ens std::mem::size_of::<MaybeUninit<T>>() == std::mem::size_of::<T>();
+    
+    lem_auto(std::mem::align_of::<MaybeUninit<T>>()) align_of_MaybeUninit<T>();
+        req true;
+        ens std::mem::align_of::<MaybeUninit<T>>() == std::mem::align_of::<T>();
+    
     @*/
     
     impl<T> MaybeUninit<T> {
@@ -462,6 +474,11 @@ mod ptr {
     fn without_provenance_mut<T>(addr: usize) -> *mut T;
     //@ req true;
     //@ ens result == addr as *T;
+    
+    fn slice_from_raw_parts_mut<T>(data: *T, len: usize) -> slice_ptr<T>;
+    //@ req true;
+    //@ ens result == slice_ptr::<T> { ptr: data, len };
+    //@ on_unwind_ens false;
 
     unsafe fn drop_in_place<T>(to_drop: *mut T);
     //@ req thread_token(?t) &*& *to_drop |-> ?v &*& <T>.own(t, v);
@@ -588,9 +605,19 @@ mod ptr {
         //@ ens result == Unique::from_non_null_(ptr);
         //@ on_unwind_ens false;
         
+        fn as_non_null_ptr(self: Unique<T>) -> NonNull<T>;
+        //@ req true;
+        //@ ens result == Unique::non_null_(self);
+        //@ on_unwind_ens false;
+        
         fn new_unchecked(ptr: *mut T) -> Unique<T>;
         //@ req ptr != 0;
         //@ ens result == Unique::from_non_null_(NonNull::new_(ptr));
+        //@ on_unwind_ens false;
+        
+        fn cast<U>(self: Unique<T>) -> Unique<U>;
+        //@ req true;
+        //@ ens result == Unique::from_non_null_(NonNull::new_(NonNull_ptr(Unique::non_null_(self)) as *U));
         //@ on_unwind_ens false;
         
     }
@@ -994,6 +1021,7 @@ mod alloc {
 mod boxed {
 
     struct Box<T, A>;
+    struct Box_slice<T, A>; // The VeriFast MIR translator translates Box<[T], A> to Box_slice<T, A>
     
     /*@
     
@@ -1004,6 +1032,7 @@ mod boxed {
         ens thread_token(t) &*& <Box<T, std::alloc::Global>>.own(t, self);
     
     pred Box_in<T, A>(t: thread_id_t, self: Box<T, A>, alloc_id: any, value: T);
+    pred Box_slice_in<T, A>(t: thread_id_t, self: Box_slice<T, A>, alloc_id: any, values: list<T>);
     
     lem own_to_Box_in<T, A>(self: Box<T, A>);
         req <Box<T, A>>.own(?t, self);
@@ -1072,6 +1101,11 @@ mod boxed {
         fn from_raw_in(x: *T, alloc: A) -> Box<T, A>;
         //@ req *x |-> ?value &*& std::alloc::Allocator(?t, alloc, ?alloc_id) &*& std::alloc::alloc_block_in(alloc_id, x as *u8, std::alloc::Layout::new_::<T>());
         //@ ens Box_in(t, result, alloc_id, value);
+        //@ on_unwind_ens false;
+    
+        fn from_raw_slice_in(x: slice_ptr<T>, alloc: A) -> Box_slice<T, A>;
+        //@ req x.ptr[..x.len] |-> ?vs &*& std::alloc::Allocator(?t, alloc, ?alloc_id) &*& if x.len * std::mem::size_of::<T>() == 0 { true } else { std::alloc::alloc_block_in(alloc_id, x.ptr as *u8, std::alloc::Layout::from_size_align_(x.len * std::mem::size_of::<T>(), std::mem::align_of::<T>())) };
+        //@ ens Box_slice_in(t, result, alloc_id, vs);
         //@ on_unwind_ens false;
     
         fn into_raw(b: Box<T, std::alloc::Global>) -> *T;

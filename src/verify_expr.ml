@@ -1630,7 +1630,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       produce_points_to_chunk_ l h tp coef addr RegularPointsTo value $. fun h ->
       cont h env
     in
-    match tp with
+    match unfold_inferred_type tp with
       StaticArrayType (elemTp, elemCount) ->
       let elemSize = sizeof_core l env elemTp in
       let elemCountTerm = eval_const_type l env elemCount in
@@ -1851,7 +1851,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       consume_points_to_chunk_ rules h typeid_env [] [] [] l tp real_unit coefpat addr RegularPointsTo dummypat consumeUninitChunk $. fun chunk h _ value _ _ _ ->
         cont [chunk] h (Some value)
     in  
-    match tp with
+    match unfold_inferred_type tp with
       StaticArrayType (elemTp, elemCount) ->
       let elemCountTerm = eval_const_type l typeid_env elemCount in
       begin match dialect with

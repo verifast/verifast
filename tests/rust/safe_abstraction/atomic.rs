@@ -1,4 +1,4 @@
-// verifast_options{skip_specless_fns}
+// verifast_options{skip_specless_fns ignore_unwind_paths}
 
 //! Atomic types
 //!
@@ -340,14 +340,13 @@ lem init_ref_AtomicBool(p: *AtomicBool)
 {
     open AtomicBool_share(k, t, x);
     open_ref_init_perm_AtomicBool(p);
-    init_ref_padding_AtomicBool(p, 1/2);
-    close_ref_initialized_AtomicBool(p);
+    close_ref_initialized_AtomicBool(p, 1);
     close AtomicBool_share(k, t, p);
     leak AtomicBool_share(k, t, p);
     close ref_initialized_::<AtomicBool>(p)();
     borrow_m(k, ref_initialized_(p));
     full_borrow_into_frac_m(k, ref_initialized_(p));
-    leak ref_padding_end_token(_, _, _) &*& borrow_end_token(_, _);
+    leak borrow_end_token(_, _);
 }
 
 @*/

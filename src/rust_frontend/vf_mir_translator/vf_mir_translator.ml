@@ -970,6 +970,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         | "std::ptr::NonNull", [ {kind=Type {kind=Slice ty}} ] ->
             let* elem_ty_info = translate_ty ty loc in
             Ok (slice_non_null_ty_info loc elem_ty_info)
+        | "std::boxed::Box", [ {kind=Type {kind=Slice elem_ty}}; {kind=Type alloc_ty} ] ->
+            let* elem_ty_info = translate_ty elem_ty loc in
+            let* alloc_ty_info = translate_ty alloc_ty loc in
+            Ok (slice_box_ty_info loc elem_ty_info alloc_ty_info)
         | _ ->
             let* gen_args =
               ListAux.try_map
@@ -1305,6 +1309,35 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           { size; own; shr; full_bor_content; points_to; pointee_fbc = None };
     }
 
+  and slice_ptr_ty_info loc elem_ty_info = (* *const/mut [T] *)
+    let open Ast in
+    let vf_ty =
+      StructTypeExpr
+        (loc, Some "slice_ptr", None, [], [ elem_ty_info.Mir.vf_ty ])
+    in
+    let size = SizeofExpr (loc, TypeExpr vf_ty) in
+    let own tid vs =
+      Error "Expressing ownership of *const/mut [_] values is not yet supported"
+    in
+    let shr lft tid l =
+      Error "Expressing shared ownership of *const/mut [_] values is not yet supported"
+    in
+    let full_bor_content tid l =
+      Error
+        "Expressing the full borrow content of *const/mut [_] values is not yet supported"
+    in
+    let points_to tid l vid_op =
+      Error
+        "Expressing a points-to assertion for a *const/mut [_] object is not yet \
+         supported"
+    in
+    {
+      Mir.vf_ty;
+      interp =
+        RustBelt.
+          { size; own; shr; full_bor_content; points_to; pointee_fbc = None };
+    }
+
   and slice_ref_ty_info loc lft mut elem_ty_info =
     let open Ast in
     if mut <> Mir.Not then
@@ -1336,6 +1369,35 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           { size; own; shr; full_bor_content; points_to; pointee_fbc = None };
     }
 
+  and slice_box_ty_info loc elem_ty_info alloc_ty_info =
+    let open Ast in
+    let vf_ty =
+      StructTypeExpr
+        (loc, Some "std::boxed::Box_slice", None, [], [ elem_ty_info.Mir.vf_ty; alloc_ty_info.Mir.vf_ty ])
+    in
+    let size = SizeofExpr (loc, TypeExpr vf_ty) in
+    let own tid vs =
+      Error "Expressing ownership of Box<[_]> values is not yet supported"
+    in
+    let shr lft tid l =
+      Error "Expressing shared ownership of Box<[_]> values is not yet supported"
+    in
+    let full_bor_content tid l =
+      Error
+        "Expressing the full borrow content of Box<[_]> values is not yet supported"
+    in
+    let points_to tid l vid_op =
+      Error
+        "Expressing a points-to assertion for a Box<[_]> object is not yet \
+         supported"
+    in
+    {
+      Mir.vf_ty;
+      interp =
+        RustBelt.
+          { size; own; shr; full_bor_content; points_to; pointee_fbc = None };
+    }
+  
   and translate_generic_arg (gen_arg_cpn : D.generic_arg) (loc : Ast.loc) =
     let kind_cpn = gen_arg_cpn.kind in
     let open GenArgKindRd in
@@ -1398,19 +1460,19 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
 
   and translate_fn_name (name : string) (substs_cpn : D.generic_arg list) =
     match (name, substs_cpn) with
-    | ( "std::ops::Deref::deref",
+    | ( ("std::ops::Deref::deref"|"core::ops::Deref::deref"),
         [
           {
             kind =
-              Type { kind = Adt { id = { name = "std::mem::ManuallyDrop" } } };
+              Type { kind = Adt { id = { name = "std::mem::ManuallyDrop"|"core::mem::ManuallyDrop" } } };
           };
         ] ) ->
         "std::mem::ManuallyDrop::deref"
-    | ( "std::ops::DerefMut::deref_mut",
+    | ( ("std::ops::DerefMut::deref_mut"|"core::ops::DerefMut::deref_mut"),
         [
           {
             kind =
-              Type { kind = Adt { id = { name = "std::mem::ManuallyDrop" } } };
+              Type { kind = Adt { id = { name = "std::mem::ManuallyDrop"|"core::mem::ManuallyDrop" } } };
           };
         ] ) ->
         "std::mem::ManuallyDrop::deref_mut"
@@ -1463,6 +1525,11 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let mut_cpn = raw_ptr_ty_cpn.mutability in
     let mutability = mut_cpn in
     let ty_cpn = raw_ptr_ty_cpn.ty in
+    match ty_cpn with
+      {kind=Slice elem_ty_cpn} ->
+      let* elem_ty_info = translate_ty elem_ty_cpn loc in
+      Ok (slice_ptr_ty_info loc elem_ty_info)
+    | _ ->
     let* pointee_ty_info = translate_ty ty_cpn loc in
     let pointee_ty = pointee_ty_info.vf_ty in
     let vf_ty = PtrTypeExpr (loc, pointee_ty) in
@@ -2240,7 +2307,23 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                            [],
                            [ LitPat arg ],
                            Static )))
-            | _ -> Ast.static_error call_loc "Slice type are not yet supported as function call generic arguments" None
+            | "std::boxed::Box::<T, A>::from_raw_in", [ {kind=Type {kind=Slice ty0}}; subst1 ], [ arg1_cpn; arg2_cpn ] ->
+                let* ty0_info = translate_decoded_ty ty0 call_loc in
+                let* Mir.GenArgType gen_arg_ty_info = translate_generic_arg subst1 call_loc in
+                let* tmp_rvalue_binders, [ arg1; arg2 ] =
+                  translate_operands [ (arg1_cpn, fn_loc); (arg2_cpn, fn_loc) ]
+                in
+                Ok
+                  ( tmp_rvalue_binders,
+                    FnCallResult
+                      (Ast.CallExpr
+                         ( fn_loc,
+                           "std::boxed::Box::<T, A>::from_raw_slice_in",
+                           [ ty0_info.vf_ty; gen_arg_ty_info.vf_ty ],
+                           [],
+                           [ LitPat arg1; LitPat arg2 ],
+                           Static )))
+            | _ -> Ast.static_error call_loc (Printf.sprintf "Slice type are not yet supported as generic arguments to calls of function %s" fn_name) None
           else
           let* substs =
             ListAux.try_map
@@ -6269,6 +6352,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                            ])
               in
               let ref_padding_init_perm_asn =
+                match fds_no_zst with [_] -> Ast.EmpAsn def_loc | _ ->
                 Ast.CallExpr
                   ( def_loc,
                     "ref_padding_init_perm",
@@ -6557,6 +6641,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           let close_ref_initialized_lemma =
             let pre =
               let ref_padding_initialized_asn =
+                match fds_no_zst with [_] -> Ast.EmpAsn def_loc | _ ->
                 Ast.CoefAsn
                   ( def_loc,
                     VarPat (def_loc, "f"),
@@ -6616,6 +6701,14 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                       [ LitPat (Var (def_loc, "p")) ],
                       Static ) )
             in
+            let p_param =
+              ( Ast.PtrTypeExpr
+                  ( def_loc,
+                    StructTypeExpr
+                      (def_loc, Some name, None, [], tparams_targs) ),
+                "p" )
+            in
+            let params = match fds_no_zst with [_] -> [p_param; Ast.ManifestTypeExpr (def_loc, RealType), "f"] | _ -> [p_param] in
             Ast.Func
               ( def_loc,
                 Lemma
@@ -6625,13 +6718,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                 lft_params @ tparams (*type parameters*),
                 None (*return type*),
                 qualified_derived_name "close_ref_initialized_%s" name,
-                [
-                  ( PtrTypeExpr
-                      ( def_loc,
-                        StructTypeExpr
-                          (def_loc, Some name, None, [], tparams_targs) ),
-                    "p" );
-                ],
+                params,
                 false (*nonghost_callers_only*),
                 (None, None)
                 (*implemented function type, with function type type arguments and function type arguments*),
@@ -6697,6 +6784,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                            ])
               in
               let ref_padding_initialized_asn =
+                match fds_no_zst with [_] -> Ast.EmpAsn def_loc | _ ->
                 Ast.CoefAsn
                   ( def_loc,
                     LitPat (Var (def_loc, "f")),
