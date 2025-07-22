@@ -630,12 +630,35 @@ impl<T, A: Allocator> RawVec<T, A> {
     ///
     /// See [`RawVec::from_raw_parts_in`].
     #[inline]
-    pub(crate) unsafe fn from_nonnull_in(ptr: NonNull<T>, capacity: usize, alloc: A) -> Self {
+    pub(crate) unsafe fn from_nonnull_in(ptr: NonNull<T>, capacity: usize, alloc: A) -> Self
+    /*@
+    req Allocator(?t, alloc, ?alloc_id) &*&
+        NonNull_ptr(ptr) as usize % std::mem::align_of::<T>() == 0 &*&
+        if capacity * std::mem::size_of::<T>() == 0 {
+            true
+        } else {
+            capacity * std::mem::size_of::<T>() <= isize::MAX - isize::MAX % std::mem::align_of::<T>() &*&
+            alloc_block_in(alloc_id, NonNull_ptr(ptr) as *u8, Layout::from_size_align_(capacity * std::mem::size_of::<T>(), std::mem::align_of::<T>()))
+        };
+    @*/
+    //@ ens RawVec(t, result, alloc_id, NonNull_ptr(ptr), ?capacity_) &*& capacity <= capacity_;
+    {
         // SAFETY: Precondition passed to the caller
         unsafe {
             let ptr = ptr.cast();
+            //@ std::ptr::NonNull_ptr_nonnull(ptr);
+            //@ std::alloc::Layout_inv(Layout::new_::<T>());
+            /*@
+            if 1 <= std::mem::size_of::<T>() {
+                div_rem_nonneg(isize::MAX, std::mem::align_of::<T>());
+                mul_mono_l(1, std::mem::size_of::<T>(), capacity);
+            }
+            @*/
             let capacity = new_cap::<T>(capacity);
-            Self { inner: RawVecInner::from_nonnull_in(ptr, capacity, alloc), _marker: PhantomData }
+            //@ close exists(Layout::new_::<T>());
+            let r = Self { inner: RawVecInner::from_nonnull_in(ptr, capacity, alloc), _marker: PhantomData };
+            //@ close RawVec(t, r, alloc_id, _, _);
+            r
         }
     }
 
@@ -1024,8 +1047,25 @@ impl<A: Allocator> RawVecInner<A> {
     }
 
     #[inline]
-    unsafe fn from_nonnull_in(ptr: NonNull<u8>, cap: Cap, alloc: A) -> Self {
-        Self { ptr: Unique::from(ptr), cap, alloc }
+    unsafe fn from_nonnull_in(ptr: NonNull<u8>, cap: Cap, alloc: A) -> Self
+    /*@
+    req exists(?elem_layout) &*&
+        Allocator(?t, alloc, ?alloc_id) &*&
+        NonNull_ptr(ptr) as usize % Layout::align_(elem_layout) == 0 &*&
+        if Cap_as_inner_(cap) * Layout::size_(elem_layout) == 0 {
+            true
+        } else {
+            Cap_as_inner_(cap) * Layout::size_(elem_layout) <= isize::MAX - isize::MAX % Layout::align_(elem_layout) &*&
+            alloc_block_in(alloc_id, NonNull_ptr(ptr), Layout::from_size_align_(Cap_as_inner_(cap) * Layout::size_(elem_layout), Layout::align_(elem_layout)))
+        };
+    @*/
+    //@ ens RawVecInner(t, result, elem_layout, alloc_id, NonNull_ptr(ptr), logical_capacity(cap, Layout::size_(elem_layout)));
+    {
+        //@ std::ptr::NonNull_ptr_nonnull(ptr);
+        let r = Self { ptr: Unique::from(ptr), cap, alloc };
+        //@ close RawVecInner0(alloc_id, r.ptr, r.cap, elem_layout, _, _);
+        //@ close RawVecInner(t, r, elem_layout, alloc_id, _, _);
+        r
     }
 
     #[inline]
