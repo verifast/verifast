@@ -1707,8 +1707,39 @@ impl<A: Allocator> RawVecInner<A> {
 
     #[cfg(not(no_global_oom_handling))]
     #[inline]
-    fn shrink(&mut self, cap: usize, elem_layout: Layout) -> Result<(), TryReserveError> {
-        assert!(cap <= self.capacity(elem_layout.size()), "Tried to shrink to a larger capacity");
+    fn shrink(&mut self, cap: usize, elem_layout: Layout) -> Result<(), TryReserveError>
+    /*@
+    req thread_token(?t) &*& t == currentThread &*&
+        Layout::size_(elem_layout) % Layout::align_(elem_layout) == 0 &*&
+        *self |-> ?self0 &*&
+        RawVecInner(t, self0, elem_layout, ?alloc_id, ?ptr0, ?capacity0) &*& ptr0[..capacity0 * Layout::size_(elem_layout)] |-> _;
+    @*/
+    /*@
+    ens thread_token(t) &*&
+        *self |-> ?self1 &*&
+        match result {
+            Result::Ok(u) =>
+                RawVecInner(t, self1, elem_layout, alloc_id, ?ptr1, ?capacity1) &*& ptr1[..capacity1 * Layout::size_(elem_layout)] |-> _ &*&
+                cap <= capacity1,
+            Result::Err(e) =>
+                RawVecInner(t, self1, elem_layout, alloc_id, ptr0, capacity0) &*& ptr0[..capacity0 * Layout::size_(elem_layout)] |-> _ &*&
+                <std::collections::TryReserveError>.own(t, e)
+        };
+    @*/
+    //@ safety_proof { assume(false); }
+    {
+        //@ let k = begin_lifetime();
+        //@ share_RawVecInner(k, self);
+        //@ let self_ref = precreate_ref(self);
+        //@ init_ref_RawVecInner(self_ref);
+        //@ open_frac_borrow(k, ref_initialized_(self_ref), 1/2);
+        //@ open [?f]ref_initialized_::<RawVecInner<A>>(self_ref)();
+        let capacity = self.capacity(elem_layout.size());
+        //@ close [f]ref_initialized_::<RawVecInner<A>>(self_ref)();
+        //@ close_frac_borrow(f, ref_initialized_(self_ref));
+        //@ end_lifetime(k);
+        //@ end_share_RawVecInner(self);
+        assert!(cap <= capacity, "Tried to shrink to a larger capacity");
         // SAFETY: Just checked this isn't trying to grow
         unsafe { self.shrink_unchecked(cap, elem_layout) }
     }
