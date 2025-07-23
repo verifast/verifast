@@ -16,6 +16,10 @@ struct std_tuple_2_<T1, T2>(T1, T2)
 
 /*@
 
+lem tuple_0_eq(x: std_tuple_0_);
+    req true;
+    ens x == std_tuple_0_ {};
+
 lem open_tuple_0_own(t: thread_id_t);
     req <()>.own(_, _);
     ens true;
