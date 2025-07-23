@@ -5,7 +5,7 @@ open Parser
 open Big_int
 
 let expr_of_lft_param_expr loc e = CallExpr (loc, "lft_of", [], [], [LitPat (Typeid (loc, TypeExpr e))], Static)
-let expr_of_lft_param loc x = expr_of_lft_param_expr loc (IdentTypeExpr (loc, None, x))
+let expr_of_lft_param loc x = expr_of_lft_param_expr loc (match x with "'static" -> ManifestTypeExpr (loc, StaticLifetime) | _ -> IdentTypeExpr (loc, None, x))
 
 let is_expr_with_block = function
   IfExpr (_, _, _, _) -> true

@@ -52,7 +52,7 @@ use core::boxed::Box;
 //@ use std::ptr::{NonNull, NonNull_ptr, NonNull_new_};
 //@ use std::option::Option;
 //@ use std::mem::{MaybeUninit, MaybeUninit_inner};
-//@ use std::alloc::{Layout, alloc_block_in, Allocator};
+//@ use std::alloc::{Layout, alloc_id_t, alloc_block_in, Allocator};
 //@ use std::boxed::{Box_in};
 
 mod btree_mem {
@@ -152,6 +152,9 @@ impl<K, V> LeafNode<K, V> {
             let mut leaf = Box::new_uninit_in(alloc);
             let leaf_ref = &mut leaf;
             //@ let contents_ptr = std::boxed::Box_separate_contents(leaf_ref);
+            //@ assume(alloc_id.lft == 'static);
+            //@ produce_lifetime_token_static();
+            //@ open_points_to_at_lft(contents_ptr);
             //@ std::mem::open_MaybeUninit(contents_ptr);
             //@ let contents_ptr_ = contents_ptr as *LeafNode<K, V>;
             LeafNode::init(Box::as_mut_ptr(leaf_ref) as *mut LeafNode<K, V>);
@@ -161,6 +164,7 @@ impl<K, V> LeafNode<K, V> {
             //@ open LeafNode_vals_(contents_ptr_, _);
             //@ std::mem::Array__MaybeUninit_to_Array_MaybeUninit(&(*contents_ptr_).vals);
             //@ std::mem::close_MaybeUninit(contents_ptr);
+            //@ close_points_to_at_lft(contents_ptr);
             //@ std::boxed::Box_unseparate_contents(leaf_ref);
             leaf.assume_init()
         }
@@ -198,6 +202,9 @@ impl<K, V> InternalNode<K, V> {
             let mut node = Box::<Self, _>::new_uninit_in(alloc);
             let node_ref = &mut node;
             //@ let contents_ptr = std::boxed::Box_separate_contents(node_ref);
+            //@ assume(alloc_id.lft == 'static);
+            //@ produce_lifetime_token_static();
+            //@ open_points_to_at_lft(contents_ptr);
             //@ std::mem::open_MaybeUninit(contents_ptr);
             //@ let contents_ptr_ = contents_ptr as *InternalNode<K, V>;
             //@ open_points_to_(contents_ptr_);
@@ -209,6 +216,7 @@ impl<K, V> InternalNode<K, V> {
             //@ std::mem::array__MaybeUninit_to_array_MaybeUninit(&(*contents_ptr_).edges as *MaybeUninit<NonNull<LeafNode<K, V>>>);
             //@ close_points_to(contents_ptr_);
             //@ std::mem::close_MaybeUninit(contents_ptr);
+            //@ close_points_to_at_lft(contents_ptr);
             //@ std::boxed::Box_unseparate_contents(node_ref);
             node.assume_init()
         }
@@ -279,7 +287,7 @@ fix kv_ptrs_of_subtree<K, V>(
 // Asserts ownership of the subtree rooted in the given node, minus the memory storing the (initialized) keys and values.
 // Asserts ownership only of the descendant nodes between `range_start` and `range_end`.
 pred subtree<K, V>(
-    alloc_id: any,
+    alloc_id: alloc_id_t,
     root: *LeafNode<K, V>,
     height: usize,
     tree: tree<K, V>,
@@ -320,7 +328,7 @@ pred subtree<K, V>(
     };
 
 pred edges<K, V>(
-    alloc_id: any,
+    alloc_id: alloc_id_t,
     root: *InternalNode<K, V>,
     height: usize,
     idx: u16,
@@ -446,7 +454,7 @@ fix kv_ptrs_of_tree<K, V>(
 // To arrive at the first leaf edge from `node`, you need to ascend towards the root `range_start_up` hops, and then descend along path `range_start_down`.
 
 pred context<K, V>(
-    alloc_id: any,
+    alloc_id: alloc_id_t,
     node: *LeafNode<K, V>,
     height: usize,
     parent: Option<NonNull<InternalNode<K, V>>>,
@@ -504,7 +512,7 @@ pred context<K, V>(
 // Asserts ownership of the entire tree to which given node belongs,
 // minus the memory storing the (initialized) keys and values.
 pred tree<K, V>(
-    alloc_id: any,
+    alloc_id: alloc_id_t,
     node: *LeafNode<K, V>,
     height: usize,
     subtree: tree<K, V>,
@@ -526,7 +534,7 @@ pred tree<K, V>(
     context(alloc_id, node, height, parent, parent_idx, ctx, range_start_up, range_start_down, range_end_up, range_end_down);
 
 pred_ctor tree_<K, V>(
-    alloc_id: any,
+    alloc_id: alloc_id_t,
     node: *LeafNode<K, V>,
     height: usize,
     subtree: tree<K, V>,
@@ -677,7 +685,7 @@ pred_ctor full_borrow_content_<T>(t: thread_id_t)(l: *T) = <T>.full_borrow_conte
 
 pred NodeRef<BorrowType, K, V, Type>(
     t: thread_id_t,
-    alloc_id: any,
+    alloc_id: alloc_id_t,
     r: NodeRef<BorrowType, K, V, Type>,
     subtree: tree<K, V>,
     ctx: context<K, V>,
@@ -757,6 +765,10 @@ impl<K, V> NodeRef<marker::Owned, K, V, marker::Leaf> {
     //@ ens NodeRef(t, alloc_id, result, tree(_, [empty]), root_ctx, 0, [], 0, []);
     {
         let leaf_ptr = Box::leak(leaf) as *mut LeafNode<K, V>;
+        //@ assume(alloc_id.lft == 'static);
+        //@ produce_lifetime_token_static();
+        //@ open_points_to_at_lft(leaf_ptr);
+        //@ leak close_points_to_at_lft_token(_, _, _, _);
         //@ open_points_to(leaf_ptr);
         let r = NodeRef { height: 0, node: NonNull::new_unchecked(leaf_ptr), _marker: PhantomData };
         //@ array_to_array_(&(*leaf_ptr).keys as *MaybeUninit<K>);
@@ -1365,7 +1377,7 @@ lem_auto handle_type_of_edge()
 
 pred Handle<BorrowType, K, V, NodeType, Type>(
     t: thread_id_t,
-    alloc_id: any,
+    alloc_id: alloc_id_t,
     h: Handle<NodeRef<BorrowType, K, V, NodeType>, Type>,
     subtree: tree<K, V>,
     ctx: context<K, V>,

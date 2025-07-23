@@ -1,0 +1,88 @@
+/*@
+
+pred points_to_at_lft_<T>(k: lifetime_t, p: *T; v: option<T>);
+
+pred points_to_at_lft<T>(k: lifetime_t, p: *T; v: T) = points_to_at_lft_(k, p, some(v));
+
+pred points_to_at_lft_end_token<T>(k: lifetime_t, p: *T);
+
+lem borrow_points_to_at_lft<T>(k: lifetime_t, p: *T);
+    req *p |-> ?v;
+    ens points_to_at_lft(k, p, v) &*& points_to_at_lft_end_token(k, p);
+
+lem borrow_points_to_at_lft_end<T>(p: *T);
+    req points_to_at_lft_end_token(?k, p) &*& [_]lifetime_dead_token(k);
+    ens *p |-> _;
+
+pred close_points_to_at_lft_token<T>(f: real, k: lifetime_t, p: *T, q: real);
+
+lem open_points_to_at_lft_<T>(p: *T);
+    req [?f]points_to_at_lft_(?k, p, ?v) &*& [?q]lifetime_token(k);
+    ens close_points_to_at_lft_token(f, k, p, q) &*& [f](*p |-?-> v);
+
+lem open_points_to_at_lft<T>(p: *T);
+    req [?f]points_to_at_lft(?k, p, ?v) &*& [?q]lifetime_token(k);
+    ens close_points_to_at_lft_token(f, k, p, q) &*& [f](*p |-> v);
+
+lem close_points_to_at_lft_<T>(p: *T);
+    req close_points_to_at_lft_token(?f, ?k, p, ?q) &*& [f](*p |-?-> ?v);
+    ens [f]points_to_at_lft_(k, p, v) &*& [q]lifetime_token(k);
+
+lem close_points_to_at_lft<T>(p: *T);
+    req close_points_to_at_lft_token(?f, ?k, p, ?q) &*& [f](*p |-> ?v);
+    ens [f]points_to_at_lft(k, p, v) &*& [q]lifetime_token(k);
+
+pred array_at_lft_<T>(k: lifetime_t, p: *T, n: usize; vs: list<option<T>>) =
+    pointer_within_limits(p) == true &*&
+    if n == 0 {
+        vs == []
+    } else {
+        points_to_at_lft_(k, p, ?v) &*& array_at_lft_(k, p + 1, n - 1, ?vs0) &*&
+        vs == cons(v, vs0)
+    };
+
+pred array_at_lft<T>(k: lifetime_t, p: *T, n: usize; vs: list<T>) =
+    pointer_within_limits(p) == true &*&
+    if n == 0 {
+        vs == []
+    } else {
+        points_to_at_lft(k, p, ?v) &*& array_at_lft(k, p + 1, n - 1, ?vs0) &*&
+        vs == cons(v, vs0)
+    };
+
+lem_auto array_at_lft__inv<T>();
+    req [?f]array_at_lft_::<T>(?k, ?p, ?count, ?elems);
+    ens [f]array_at_lft_::<T>(k, p, count, elems) &*& count == length(elems) &*& count * std::mem::size_of::<T>() <= isize::MAX &*& pointer_within_limits(p) == true &*& pointer_within_limits(p + count) == true;
+    
+lem_auto array_at_lft_inv<T>();
+    req [?f]array_at_lft::<T>(?k, ?p, ?count, ?elems);
+    ens [f]array_at_lft::<T>(k, p, count, elems) &*& count == length(elems) &*& count * std::mem::size_of::<T>() <= isize::MAX &*& pointer_within_limits(p) == true &*& pointer_within_limits(p + count) == true;
+
+
+pred close_array_at_lft_token<T>(f: real, k: lifetime_t, p: *T, n: usize, q: real);
+
+lem open_array_at_lft_<T>(p: *T);
+    req [?f]array_at_lft_::<T>(?k, p, ?n, ?vs) &*& [?q]lifetime_token(k);
+    ens close_array_at_lft_token(f, k, p, n, q) &*& [f](p[..n] |-?-> vs);
+
+lem open_array_at_lft<T>(p: *T);
+    req [?f]array_at_lft::<T>(?k, p, ?n, ?vs) &*& [?q]lifetime_token(k);
+    ens close_array_at_lft_token(f, k, p, n, q) &*& [f](p[..n] |-> vs);
+
+lem close_array_at_lft_<T>(p: *T);
+    req close_array_at_lft_token(?f, ?k, p, ?n, ?q) &*& [f](p[..n] |-?-> ?vs);
+    ens [f]array_at_lft_(k, p, n, vs) &*& [q]lifetime_token(k);
+
+lem close_array_at_lft<T>(p: *T);
+    req close_array_at_lft_token(?f, ?k, p, ?n, ?q) &*& [f](p[..n] |-> ?vs);
+    ens [f]array_at_lft(k, p, n, vs) &*& [q]lifetime_token(k);
+
+lem u8s_at_lft__to_array_at_lft_<T>(p: *T, size: usize);
+    req [?f]array_at_lft_(?k, p as *u8, size * std::mem::size_of::<T>(), _) &*& p as usize % std::mem::align_of::<T>() == 0;
+    ens [f]array_at_lft_(k, p, size, _);
+
+lem array_at_lft__to_u8s_at_lft_<T>(p: *T, size: usize);
+    req [?f]array_at_lft_(?k, p, size, _);
+    ens [f]array_at_lft_(k, p as *u8, size * std::mem::size_of::<T>(), _) &*& p as usize % std::mem::align_of::<T>() == 0;
+
+@*/
