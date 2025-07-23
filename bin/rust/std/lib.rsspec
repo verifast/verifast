@@ -438,6 +438,10 @@ mod mem {
         req self[..?n] |-?-> ?elems_;
         ens (self as *MaybeUninit<T>)[..n] |-> map(MaybeUninit::new_maybe_uninit, elems_);
     
+    lem array_at_lft__to_array_at_lft_MaybeUninit<T>(self: *T);
+        req array_at_lft_(?k, self, ?n, ?elems_);
+        ens array_at_lft(k, self as *MaybeUninit<T>, n, map(MaybeUninit::new_maybe_uninit, elems_));
+    
     lem_auto(std::mem::size_of::<MaybeUninit<T>>()) size_of_MaybeUninit<T>();
         req true;
         ens std::mem::size_of::<MaybeUninit<T>>() == std::mem::size_of::<T>();
@@ -784,7 +788,10 @@ mod alloc {
     }
     
     //@ pred alloc_block(ptr: *u8; layout: Layout);
-    //@ pred alloc_block_in(alloc_id: any, ptr: *u8, layout: Layout;);
+    
+    //@ inductive alloc_id_t = alloc_id(id: any, lft: lifetime_t);
+    
+    //@ pred alloc_block_in(alloc_id: alloc_id_t, ptr: *u8, layout: Layout;);
     
     /*@
     
@@ -800,8 +807,8 @@ mod alloc {
     
     /*@
     
-    pred Allocator<A>(t: thread_id_t, alloc: A, alloc_id: any);
-    pred Allocator_share<A>(k: lifetime_t, t: thread_id_t, l: *A, alloc_id: any);
+    pred Allocator<A>(t: thread_id_t, alloc: A, alloc_id: alloc_id_t);
+    pred Allocator_share<A>(k: lifetime_t, t: thread_id_t, l: *A, alloc_id: alloc_id_t);
     
     lem Allocator_upcast<A0, A1>(alloc: A0);
         req Allocator::<A0>(?t, alloc, ?alloc_id) &*& is_subtype_of::<A0, A1>() == true;
@@ -819,22 +826,22 @@ mod alloc {
         req <A>.own(?t, alloc);
         ens Allocator::<A>(t, alloc, _);
     
-    fix Allocator_full_borrow_content_<A>(t: thread_id_t, l: *A, alloc_id: any) -> pred();
+    fix Allocator_full_borrow_content_<A>(t: thread_id_t, l: *A, alloc_id: alloc_id_t) -> pred();
     
     lem close_Allocator_full_borrow_content_<A>(t: thread_id_t, l: *A);
         req *l |-> ?alloc &*& Allocator::<A>(t, alloc, ?alloc_id);
         ens (Allocator_full_borrow_content_::<A>(t, l, alloc_id))();
     
-    lem open_Allocator_full_borrow_content_<A>(t: thread_id_t, l: *A, alloc_id: any);
+    lem open_Allocator_full_borrow_content_<A>(t: thread_id_t, l: *A, alloc_id: alloc_id_t);
         req (Allocator_full_borrow_content_::<A>(t, l, alloc_id))();
         ens *l |-> ?alloc &*& Allocator::<A>(t, alloc, alloc_id);
     
-    lem share_Allocator_full_borrow_content_<A>(k: lifetime_t, t: thread_id_t, l: *A, alloc_id: any);
+    lem share_Allocator_full_borrow_content_<A>(k: lifetime_t, t: thread_id_t, l: *A, alloc_id: alloc_id_t);
         nonghost_callers_only
         req full_borrow(k, Allocator_full_borrow_content_::<A>(t, l, alloc_id)) &*& [?q]lifetime_token(k);
         ens [_]Allocator_share(k, t, l, alloc_id) &*& [q]lifetime_token(k);
     
-    lem share_Allocator_full_borrow_content_m<A>(k: lifetime_t, t: thread_id_t, l: *A, alloc_id: any);
+    lem share_Allocator_full_borrow_content_m<A>(k: lifetime_t, t: thread_id_t, l: *A, alloc_id: alloc_id_t);
         req type_interp::<A>() &*& atomic_mask(MaskTop) &*& full_borrow(k, Allocator_full_borrow_content_::<A>(t, l, alloc_id)) &*& [?q]lifetime_token(k);
         ens type_interp::<A>() &*& atomic_mask(MaskTop) &*& [_]Allocator_share(k, t, l, alloc_id) &*& [q]lifetime_token(k);
     
@@ -851,7 +858,7 @@ mod alloc {
         req [_]Allocator_share('a, t, l, ?alloc_id);
         ens Allocator::<&'a A>(t, l, alloc_id);
     
-    pred share_allocator_at_lifetime_end_token<A>(t: thread_id_t, l: *A, alloc_id: any, k: lifetime_t);
+    pred share_allocator_at_lifetime_end_token<A>(t: thread_id_t, l: *A, alloc_id: alloc_id_t, k: lifetime_t);
     
     lem share_allocator_at_lifetime<'a, A>(l: *A);
         nonghost_callers_only
@@ -863,7 +870,7 @@ mod alloc {
         req share_allocator_at_lifetime_end_token::<A>(?t, ?l, ?alloc_id, ?k) &*& [_]lifetime_dead_token(k);
         ens *l |-> ?alloc &*& Allocator::<A>(t, alloc, alloc_id);
     
-    pred ref_Allocator_end_token_at_lifetime<A>(t: thread_id_t, p: *A, x: *A, alloc_id: any, k: lifetime_t);
+    pred ref_Allocator_end_token_at_lifetime<A>(t: thread_id_t, p: *A, x: *A, alloc_id: alloc_id_t, k: lifetime_t);
     
     lem init_ref_Allocator_at_lifetime<'a, A>(p: *A);
         nonghost_callers_only
@@ -924,7 +931,7 @@ mod alloc {
     
     /*@
     
-    fix Global_alloc_id() -> any;
+    fix Global_alloc_id() -> alloc_id_t;
     
     lem produce_Allocator_Global(t: thread_id_t);
         req true;
@@ -948,7 +955,7 @@ mod alloc {
             match result {
                 Result::Ok(ptr) =>
                     alloc_block_in(alloc_id, std::ptr::NonNull_ptr(ptr.ptr), layout) &*&
-                    std::ptr::NonNull_ptr(ptr.ptr)[..Layout::size_(layout)] |-> _ &*&
+                    array_at_lft_(alloc_id.lft, std::ptr::NonNull_ptr(ptr.ptr), Layout::size_(layout), _) &*&
                     Layout::size_(layout) <= ptr.len &*&
                     is_valid_layout(ptr.len, Layout::align_(layout)) == true,
                 Result::Err(e) => true
@@ -963,7 +970,7 @@ mod alloc {
             match result {
                 Result::Ok(ptr) =>
                     alloc_block_in(alloc_id, std::ptr::NonNull_ptr(ptr.ptr), layout) &*&
-                    std::ptr::NonNull_ptr(ptr.ptr)[..Layout::size_(layout)] |-> ?bs &*& forall(bs, (eq)(0)) == true &*&
+                    array_at_lft(alloc_id.lft, std::ptr::NonNull_ptr(ptr.ptr), Layout::size_(layout), ?bs) &*& forall(bs, (eq)(0)) == true &*&
                     Layout::size_(layout) <= ptr.len &*&
                     is_valid_layout(ptr.len, Layout::align_(layout)) == true,
                 Result::Err(e) => true
@@ -972,7 +979,7 @@ mod alloc {
         //@ on_unwind_ens thread_token(t) &*& Allocator::<&'a Self>(t, self, alloc_id);
     
         unsafe fn deallocate<'a>(self: &'a Self, ptr: std::ptr::NonNull<u8>, layout: Layout);
-        //@ req thread_token(?t) &*& Allocator::<&'a Self>(t, self, ?alloc_id) &*& alloc_block_in(alloc_id, std::ptr::NonNull_ptr(ptr), layout) &*& std::ptr::NonNull_ptr(ptr)[..Layout::size_(layout)] |-> _;
+        //@ req thread_token(?t) &*& Allocator::<&'a Self>(t, self, ?alloc_id) &*& alloc_block_in(alloc_id, std::ptr::NonNull_ptr(ptr), layout) &*& array_at_lft_(alloc_id.lft, std::ptr::NonNull_ptr(ptr), Layout::size_(layout), _);
         //@ ens thread_token(t) &*& Allocator::<&'a Self>(t, self, alloc_id);
         //@ on_unwind_ens thread_token(t) &*& Allocator::<&'a Self>(t, self, alloc_id);
         
@@ -981,7 +988,7 @@ mod alloc {
         req thread_token(?t) &*&
             Allocator::<&'a Self>(t, self, ?alloc_id) &*&
             alloc_block_in(alloc_id, std::ptr::NonNull_ptr(ptr), old_layout) &*&
-            std::ptr::NonNull_ptr(ptr)[..Layout::size_(old_layout)] |-?-> ?bs &*&
+            array_at_lft_(alloc_id.lft, std::ptr::NonNull_ptr(ptr), Layout::size_(old_layout), ?bs) &*&
             Layout::size_(old_layout) <= Layout::size_(new_layout);
         @*/
         /*@
@@ -989,12 +996,12 @@ mod alloc {
             match result {
                 Result::Ok(new_ptr) =>
                     alloc_block_in(alloc_id, std::ptr::NonNull_ptr(new_ptr.ptr), new_layout) &*&
-                    std::ptr::NonNull_ptr(new_ptr.ptr)[..Layout::size_(new_layout)] |-> _ &*&
+                    array_at_lft_(alloc_id.lft, std::ptr::NonNull_ptr(new_ptr.ptr), Layout::size_(new_layout), _) &*&
                     Layout::size_(new_layout) <= new_ptr.len &*&
                     is_valid_layout(new_ptr.len, Layout::align_(new_layout)) == true,
                 Result::Err(e) =>
                     alloc_block_in(alloc_id, std::ptr::NonNull_ptr(ptr), old_layout) &*&
-                    std::ptr::NonNull_ptr(ptr)[..Layout::size_(old_layout)] |-?-> bs
+                    array_at_lft_(alloc_id.lft, std::ptr::NonNull_ptr(ptr), Layout::size_(old_layout), bs)
             };
         @*/
         //@ on_unwind_ens thread_token(t) &*& Allocator::<&'a Self>(t, self, alloc_id);
@@ -1004,7 +1011,7 @@ mod alloc {
         req thread_token(?t) &*&
             Allocator::<&'a Self>(t, self, ?alloc_id) &*&
             alloc_block_in(alloc_id, std::ptr::NonNull_ptr(ptr), old_layout) &*&
-            std::ptr::NonNull_ptr(ptr)[..Layout::size_(old_layout)] |-?-> ?bs &*&
+            array_at_lft_(alloc_id.lft, std::ptr::NonNull_ptr(ptr), Layout::size_(old_layout), ?bs) &*&
             Layout::size_(new_layout) <= Layout::size_(old_layout);
         @*/
         /*@
@@ -1012,12 +1019,12 @@ mod alloc {
             match result {
                 Result::Ok(new_ptr) =>
                     alloc_block_in(alloc_id, std::ptr::NonNull_ptr(new_ptr.ptr), new_layout) &*&
-                    std::ptr::NonNull_ptr(new_ptr.ptr)[..Layout::size_(new_layout)] |-> _ &*&
+                    array_at_lft_(alloc_id.lft, std::ptr::NonNull_ptr(new_ptr.ptr), Layout::size_(new_layout), _) &*&
                     Layout::size_(new_layout) <= new_ptr.len &*&
                     is_valid_layout(new_ptr.len, Layout::align_(new_layout)) == true,
                 Result::Err(e) =>
                     alloc_block_in(alloc_id, std::ptr::NonNull_ptr(ptr), old_layout) &*&
-                    std::ptr::NonNull_ptr(ptr)[..Layout::size_(old_layout)] |-?-> bs
+                    array_at_lft_(alloc_id.lft, std::ptr::NonNull_ptr(ptr), Layout::size_(old_layout), bs)
             };
         @*/
         //@ on_unwind_ens thread_token(t) &*& Allocator::<&'a Self>(t, self, alloc_id);
@@ -1039,8 +1046,8 @@ mod boxed {
         req thread_token(?t) &*& Box::<T>(self, ?value) &*& <T>.own(t, value);
         ens thread_token(t) &*& <Box<T, std::alloc::Global>>.own(t, self);
     
-    pred Box_in<T, A>(t: thread_id_t, self: Box<T, A>, alloc_id: any, value: T);
-    pred Box_slice_in<T, A>(t: thread_id_t, self: Box_slice<T, A>, alloc_id: any, values: list<T>);
+    pred Box_in<T, A>(t: thread_id_t, self: Box<T, A>, alloc_id: std::alloc::alloc_id_t, value: T);
+    pred Box_slice_in<T, A>(t: thread_id_t, self: Box_slice<T, A>, alloc_id: std::alloc::alloc_id_t, values: list<T>);
     
     lem own_to_Box_in<T, A>(self: Box<T, A>);
         req <Box<T, A>>.own(?t, self);
@@ -1055,21 +1062,21 @@ mod boxed {
     /*@
     
     // This takes a pointer to a Box because moving the Box invalidates the pointer to the contents! https://github.com/verifast/verifast/issues/685#issuecomment-2626864223
-    pred Box_minus_contents_in<T, A>(boxFrac: real, t: thread_id_t, placeFrac: real, self: *Box<T, A>, alloc_id: any; contents_ptr: *T);
+    pred Box_minus_contents_in<T, A>(boxFrac: real, t: thread_id_t, placeFrac: real, self: *Box<T, A>, alloc_id: std::alloc::alloc_id_t; contents_ptr: *T);
     
     lem Box_separate_contents<T, A>(self: *Box<T, A>) -> *T;
         req [?fs](*self |-> ?self0) &*& [?f]Box_in::<T, A>(?t, self0, ?alloc_id, ?value);
-        ens Box_minus_contents_in(f, t, fs, self, alloc_id, result) &*& [f](*result |-> value);
+        ens Box_minus_contents_in(f, t, fs, self, alloc_id, result) &*& [f]points_to_at_lft(alloc_id.lft, result, value);
     
     lem Box_unseparate_contents<T, A>(self: *Box<T, A>);
-        req Box_minus_contents_in(?f, ?t, ?fs, self, ?alloc_id, ?contents_ptr) &*& [f](*contents_ptr |-> ?value);
+        req Box_minus_contents_in(?f, ?t, ?fs, self, ?alloc_id, ?contents_ptr) &*& [f]points_to_at_lft(alloc_id.lft, contents_ptr, ?value);
         ens [fs](*self |-> ?self1) &*& [f]Box_in(t, self1, alloc_id, value);
     
     @*/
     
     /*@
     
-    pred init_ref_Box_in_token<T, A>(t: thread_id_t, p: *Box<T, A>, fs: real, x: *Box<T, A>, alloc_id: any, p_contents_ptr: *T, x_contents_ptr: *T, f: real);
+    pred init_ref_Box_in_token<T, A>(t: thread_id_t, p: *Box<T, A>, fs: real, x: *Box<T, A>, alloc_id: std::alloc::alloc_id_t, p_contents_ptr: *T, x_contents_ptr: *T, f: real);
     
     lem open_ref_init_perm_Box_in<T, A>(p: *Box<T, A>) -> *T;
         req ref_init_perm::<Box<T, A>>(p, ?x) &*& Box_minus_contents_in::<T, A>(?f, ?t, ?fs, x, ?alloc_id, ?x_contents_ptr);
@@ -1107,12 +1114,12 @@ mod boxed {
         //@ on_unwind_ens thread_token(t);
         
         fn from_raw_in(x: *T, alloc: A) -> Box<T, A>;
-        //@ req *x |-> ?value &*& std::alloc::Allocator(?t, alloc, ?alloc_id) &*& std::alloc::alloc_block_in(alloc_id, x as *u8, std::alloc::Layout::new_::<T>());
+        //@ req std::alloc::Allocator(?t, alloc, ?alloc_id) &*& std::alloc::alloc_block_in(alloc_id, x as *u8, std::alloc::Layout::new_::<T>()) &*& points_to_at_lft(alloc_id.lft, x, ?value);
         //@ ens Box_in(t, result, alloc_id, value);
         //@ on_unwind_ens false;
     
         fn from_raw_slice_in(x: slice_ptr<T>, alloc: A) -> Box_slice<T, A>;
-        //@ req x.ptr[..x.len] |-> ?vs &*& std::alloc::Allocator(?t, alloc, ?alloc_id) &*& if x.len * std::mem::size_of::<T>() == 0 { true } else { std::alloc::alloc_block_in(alloc_id, x.ptr as *u8, std::alloc::Layout::from_size_align_(x.len * std::mem::size_of::<T>(), std::mem::align_of::<T>())) };
+        //@ req std::alloc::Allocator(?t, alloc, ?alloc_id) &*& array_at_lft(alloc_id.lft, x.ptr, x.len, ?vs) &*& if x.len * std::mem::size_of::<T>() == 0 { true } else { std::alloc::alloc_block_in(alloc_id, x.ptr as *u8, std::alloc::Layout::from_size_align_(x.len * std::mem::size_of::<T>(), std::mem::align_of::<T>())) };
         //@ ens Box_slice_in(t, result, alloc_id, vs);
         //@ on_unwind_ens false;
     
@@ -1128,7 +1135,7 @@ mod boxed {
     
         fn leak<'a>(b: Box<T, A>) -> &'a mut T;
         //@ req Box_in::<T, A>(?t, b, ?alloc_id, ?value);
-        //@ ens *result |-> value &*& std::alloc::alloc_block_in(alloc_id, result as *u8, std::alloc::Layout::new_::<T>()) &*& result as *_ as usize != 0;
+        //@ ens points_to_at_lft(alloc_id.lft, result, value) &*& std::alloc::alloc_block_in(alloc_id, result as *u8, std::alloc::Layout::new_::<T>()) &*& result as *_ as usize != 0;
         //@ on_unwind_ens false;
     
         fn new_uninit_in(alloc: A) -> Box<std::mem::MaybeUninit<T>, A>;

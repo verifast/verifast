@@ -63,6 +63,10 @@ lem lifetime_token_inv(k: lifetime_t);
     req [?q]lifetime_token(k);
     ens [q]lifetime_token(k) &*& 0 < q &*& q <= 1;
 
+lem produce_lifetime_token_static();
+    req true;
+    ens [_]lifetime_token('static);
+
 // LftL-begin
 lem begin_lifetime() -> lifetime_t;
     nonghost_callers_only
