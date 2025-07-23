@@ -492,7 +492,13 @@ impl<T, A: Allocator> RawVec<T, A> {
     pub(crate) const fn new_in(alloc: A) -> Self
     //@ req thread_token(?t) &*& Allocator(t, alloc, ?alloc_id);
     //@ ens thread_token(t) &*& RawVec::<T, A>(t, result, alloc_id, ?ptr, ?capacity) &*& ptr[..capacity] |-> _;
-    //@ safety_proof { assume(false); }
+    /*@
+    safety_proof {
+        std::alloc::open_Allocator_own(alloc);
+        let result = call();
+        close <RawVec<T, A>>.own(_t, result);
+    }
+    @*/
     {
         //@ close exists(std::mem::size_of::<T>());
         //@ std::alloc::Layout_inv(Layout::new_::<T>());
@@ -513,7 +519,13 @@ impl<T, A: Allocator> RawVec<T, A> {
     pub(crate) fn with_capacity_in(capacity: usize, alloc: A) -> Self
     //@ req thread_token(?t) &*& Allocator(t, alloc, ?alloc_id) &*& t == currentThread;
     //@ ens thread_token(t) &*& RawVec(t, result, alloc_id, ?ptr, ?capacity_) &*& ptr[..capacity_] |-> _ &*& capacity <= capacity_;
-    //@ safety_proof { assume(false); }
+    /*@
+    safety_proof {
+        std::alloc::open_Allocator_own(alloc);
+        let result = call();
+        close <RawVec<T, A>>.own(_t, result);
+    }
+    @*/
     {
         //@ size_align::<T>();
         let r = Self {
@@ -814,7 +826,22 @@ impl<T, A: Allocator> RawVec<T, A> {
                 <std::collections::TryReserveError>.own(t, e)
         };
     @*/
-    //@ safety_proof { assume(false); }
+    /*@
+    safety_proof {
+        open <RawVec<T, A>>.own(_t, *self);
+        let result = call();
+        close <RawVec<T, A>>.own(_t, *self);
+        match result {
+            Result::Ok(u) => {
+                tuple_0_eq(u);
+                close_tuple_0_own(_t);
+            }
+            Result::Err(e) => {
+            }
+        }
+        close <std::result::Result<(), std::collections::TryReserveError>>.own(_t, result);
+    }
+    @*/
     {
         //@ size_align::<T>();
         //@ open_points_to(self);
@@ -887,7 +914,22 @@ impl<T, A: Allocator> RawVec<T, A> {
                 <std::collections::TryReserveError>.own(t, e)
         };
     @*/
-    //@ safety_proof { assume(false); }
+    /*@
+    safety_proof {
+        open <RawVec<T, A>>.own(_t, *self);
+        let result = call();
+        close <RawVec<T, A>>.own(_t, *self);
+        match result {
+            Result::Ok(u) => {
+                tuple_0_eq(u);
+                close_tuple_0_own(_t);
+            }
+            Result::Err(e) => {
+            }
+        }
+        close <std::result::Result<(), std::collections::TryReserveError>>.own(_t, result);
+    }
+    @*/
     {
         //@ size_align::<T>();
         //@ open_points_to(self);
