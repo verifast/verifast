@@ -233,7 +233,7 @@ impl<T, A: Allocator> RawVec<T, A> {
             "`len` must be smaller than or equal to `self.capacity()`"
         );
 
-        let me = ManuallyDrop::new(self);
+        let /*@~mut@*/ me = ManuallyDrop::new(self);
         unsafe {
             let slice = ptr::slice_from_raw_parts_mut(me.ptr() as *mut MaybeUninit<T>, len);
             Box::from_raw_in(slice, ptr::read(&me.inner.alloc))
@@ -420,7 +420,7 @@ impl<A: Allocator> RawVecInner<A> {
     #[track_caller]
     fn with_capacity_in(capacity: usize, alloc: A, elem_layout: Layout) -> Self {
         match Self::try_allocate_in(capacity, AllocInit::Uninitialized, alloc, elem_layout) {
-            Ok(this) => {
+            Ok(/*@~mut@*/ this) => {
                 unsafe {
                     // Make it more obvious that a subsequent Vec::reserve(capacity) will not allocate.
                     hint::assert_unchecked(!this.needs_to_grow(0, capacity, elem_layout));
