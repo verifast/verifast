@@ -112,7 +112,8 @@ cd safe_abstraction
   verifast -skip_specless_fns -ignore_unwind_paths atomic.rs
   cd raw_vec
     verifast -ignore_unwind_paths -skip_specless_fns -allow_assume verified/lib.rs
-    refinement-checker original/lib.rs verified/lib.rs
+    refinement-checker with-directives/lib.rs verified/lib.rs
+    refinement-checker --ignore-directives original/lib.rs with-directives/lib.rs
   cd ..
 cd ..
 cd refinement_checker

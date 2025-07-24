@@ -11,8 +11,10 @@ let memoize f =
         Hashtbl.add cache x y;
         y
 
+(** Ignore `/*@~mut@*/` directives *)
+let ignore_directives = ref false
 let push xs_ref x = xs_ref := x :: !xs_ref
-let rustc_args = ref [ "--vf-rust-mir-exporter:no-preprocess" ]
+let rustc_args = ref []
 
 let original_path, verified_path =
   let rec process_args = function
@@ -20,6 +22,9 @@ let original_path, verified_path =
         match flag :: args with
         | "--" :: [ original_path; verified_path ] ->
             (original_path, verified_path)
+        | "--ignore-directives" :: args ->
+          ignore_directives := true;
+          process_args args
         | "--verbose" :: value :: args ->
             verbosity :=
               begin match int_of_string_opt value with
@@ -34,13 +39,21 @@ let original_path, verified_path =
     | [ original_path; verified_path ] -> (original_path, verified_path)
     | _ ->
         print_endline
-          "Usage: refinement_checker [--verbose N] [--rustc-args ARGS] [--] <original_path> \
+          "Usage: refinement_checker [--ignore-directives] [--verbose N] [--rustc-args ARGS] [--] <original_path> \
            <verified_path>\n\n\
            Checks that each behavior of each function in the original path is \
-           also exhibited by the corresponding function in the verified path";
+           also exhibited by the corresponding function in the verified path\n\n
+           Options:\n\
+               --ignore-directives     Ignore /*@~mut@*/ directives";
         exit 1
   in
   process_args (List.tl (Array.to_list Sys.argv))
+
+let () =
+  if !ignore_directives then
+    push rustc_args "--vf-rust-mir-exporter:no-preprocess"
+  else
+    push rustc_args "--vf-rust-mir-exporter:preprocess-readonly"
 
 let () = Perf.init_windows_error_mode ()
 

@@ -56,6 +56,13 @@ use std::collections::HashMap;
 use std::thread_local;
 use tracing::{debug, error, info, trace, Level};
 
+#[derive(PartialEq)]
+enum PreprocessMode {
+    DoNotPreprocess,
+    PreprocessReadOnly,
+    Preprocess
+}
+
 pub fn run_compiler() -> i32 {
     rustc_driver::catch_with_exit_code(move || {
         let mut rustc_args: Vec<_> = std::env::args().collect();
@@ -64,9 +71,13 @@ pub fn run_compiler() -> i32 {
         //rustc_args.push("-Zpolonius".to_owned());
         // To have MIR dump annotated with lifetimes
         //rustc_args.push("-Zverbose_internals".to_owned());
-        let mut preprocess = true;
+        let mut preprocess_mode = PreprocessMode::Preprocess;
+        if let Some(index) = rustc_args.iter().position(|arg| arg == "--vf-rust-mir-exporter:preprocess-readonly") {
+            preprocess_mode = PreprocessMode::PreprocessReadOnly;
+            rustc_args.remove(index);
+        }
         if let Some(index) = rustc_args.iter().position(|arg| arg == "--vf-rust-mir-exporter:no-preprocess") {
-            preprocess = false;
+            preprocess_mode = PreprocessMode::DoNotPreprocess;
             rustc_args.remove(index);
         }
         {
@@ -89,7 +100,7 @@ pub fn run_compiler() -> i32 {
 
         let mut callbacks = CompilerCalls {
             source_files: Box::leak(Box::new(std::sync::Mutex::new(SourceFiles::new()))),
-            preprocess,
+            preprocess_mode,
         };
         // Call the Rust compiler with our callbacks.
         trace!("Calling the Rust Compiler with args: {:?}", rustc_args);
@@ -186,7 +197,7 @@ impl rustc_span::source_map::FileLoader for FileLoader {
 
 struct CompilerCalls {
     source_files: &'static std::sync::Mutex<SourceFiles>,
-    preprocess: bool,
+    preprocess_mode: PreprocessMode,
 }
 
 impl rustc_driver::Callbacks for CompilerCalls {
@@ -196,10 +207,12 @@ impl rustc_driver::Callbacks for CompilerCalls {
             None => {}
             Some(loader) => todo!(),
         }
-        config.file_loader = Some(Box::from(FileLoader {
-            read_only: !self.preprocess,
-            source_files: self.source_files,
-        }));
+        if self.preprocess_mode != PreprocessMode::DoNotPreprocess {
+            config.file_loader = Some(Box::from(FileLoader {
+                read_only: self.preprocess_mode == PreprocessMode::PreprocessReadOnly,
+                source_files: self.source_files,
+            }));
+        }
 
         // assert!(config.override_queries.is_none());
         // config.override_queries = Some(override_queries);
