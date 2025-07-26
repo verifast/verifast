@@ -74,6 +74,7 @@ cd purely_unsafe
 cd ..
 cd safe_abstraction
   verifast -read_options_from_source_file -allow_assume full_borrow_tutorial.rs
+  verifast -read_options_from_source_file -allow_assume frac_borrow_tutorial.rs
   verifast fbc_precise.rs
   verifast -allow_should_fail public_fields.rs
   verifast box.rs
