@@ -108,4 +108,97 @@ The proof starts a lifetime `k`, obtaining `[1]lifetime_token(k)`. It then creat
 
 ## Shared references
 
+Now, consider the following example program:
+```rust
+fn add(r1: &i32, r2: &i32) -> i32 { *r1 + *r2 }
+fn double(r: &i32) { add(r, r) }
+fn main() {
+    let mut x = 42;
+    x = double(&x);
+    x /= 2;
+    println!("The answer is {}", x);
+}
+```
+We can trivially verify this program as follows:
+```rust
+fn add(r1: &i32, r2: &i32) -> i32
+//@ req [?f1](*r1 |-> ?v1) &*& [?f2](*r2 |-> ?v2);
+//@ ens [f1](*r1 |-> v1) &*& [f2](*r2 |-> v2);
+{ *r1 + *r2 }
+
+fn double(r: &i32)
+//@ req [?f](*r |-> ?v);
+//@ ens [f](*r |-> v);
+{ add(r, r) }
+
+fn main()
+//@ req true;
+//@ ens true;
+{
+    let mut x = 42;
+    x = double(&x);
+    x /= 2;
+    println!("The answer is {}", x);
+}
+```
+
+The specification for function `double` requires the caller to pass it *fractional ownership* with *coefficient* `f` of the place at `r`, and requires the function to pass it back when it returns. The specification for `add` is similar.
+
+Again, however, these specifications are not of the form that we are looking for: we are looking for specifications that express that ownership of the arguments is passed into the function, and ownership of the result is passed out when the function returns.
+
+The question, then, is how to define `<&i32>.own`. Clearly, the definition must be different from that of `<&mut i32>.own`, since function `double` must be able to *duplicate* it and full borrows are not duplicable. Intuitively, `<&i32>.own(l)` should express *shared ownership* of place `l` and the value stored at that place. Usually, shared ownership in Rust means *read-only ownership*, but for types that have *interior mutability*, such as [Cell](https://doc.rust-lang.org/std/cell/#cellt) and [Mutex](https://doc.rust-lang.org/std/sync/struct.Mutex.html) it can mean different things. Therefore, we use a separate er-type predicate `<T>.share` to express shared ownership: `<T>.share(k, l)` denotes shared ownership of the place of type T at `l`, and the value at that place, until the end of lifetime `k`. We define `<&'a T>.own(l) = [_]<T>.share('a, l)`. The `[_]` prefix denotes that this is a *dummy fraction* that can be duplicated arbitrarily.
+
+For types that do not involve interior mutability, such as `i32`, shared ownership should denote *fractional* ownership, but only until the end of the associated lifetime. To express this, the lifetime logic offers the `frac_borrow` predicate: ownership of a *fractured borrow* `frac_borrow(k, p)` allows the owner to obtain fractional ownership of the resources described by `p`, but only until the end of lifetime `k`. For types T that do not involve interior mutability, we define `<T>.share(k, l) = [_]frac_borrow(k, <T>.full_borrow_content(l))`. Using this definition, we can verify function `add` as follows:
+
+```rust
+fn add<'a>(r1: &'a i32, r2: &'a i32) -> i32
+//@ req [?qa]lifetime_token('a) &*& [_]frac_borrow('a, i32_full_borrow_content(r1)) &*& [_]frac_borrow('a, i32_full_borrow_content(r2));
+//@ ens [qa]lifetime_token('a);
+{
+    //@ let f1 = open_frac_borrow('a, i32_full_borrow_content(r1), qa/2);
+    //@ let f2 = open_frac_borrow('a, i32_full_borrow_content(r2), qa/2);
+    let result = *r1 + *r2;
+    //@ close_frac_borrow(f1, i32_full_borrow_content(r1));
+    //@ close_frac_borrow(f2, i32_full_borrow_content(r2));
+    result
+}
+```
+The proof obtains fractional ownership of the place at `r1` by calling lemma [`open_frac_borrow`](https://github.com/verifast/verifast/blob/c0c90ac3a094c3efa914aa219f66e727e1104d08/bin/rust/rust_belt/lifetime_logic.rsspec#L275): `open_frac_borrow(k, p, q)` consumes `[_]frac_borrow(k, p)` and `[q]lifetime_token(k)` and produces `[f]p()`, for some coefficient `f` which it returns as its return value, as well as a `close_frac_borrow_token(f, p, q, k)` which can later be passed to lemma [`close_frac_borrow`](https://github.com/verifast/verifast/blob/c0c90ac3a094c3efa914aa219f66e727e1104d08/bin/rust/rust_belt/lifetime_logic.rsspec#L280) to recover `[q]lifetime_token(k)`.
+
+The proof for `double` is trivial, because dummy fractions are duplicable:
+```rust
+fn double<'a>(r: &'a i32) -> i32
+//@ req [?qa]lifetime_token('a) &*& [_]frac_borrow('a, i32_full_borrow_content(r));
+//@ ens [qa]lifetime_token('a);
+//@ safety_proof { assume(false); }
+{
+    add/*@::<'a>@*/(r, r)
+}
+```
+
+The proof for `main` is as follows:
+```rust
+fn main()
+//@ req true;
+//@ ens true;
+{
+    let mut x = 42;
+    //@ let k = begin_lifetime();
+    //@ borrow(k, i32_full_borrow_content(&x));
+    //@ full_borrow_into_frac(k, i32_full_borrow_content(&x));
+    let result;
+    {
+        //@ let_lft 'a = k;
+        result = double/*@::<'a>@*/(&x);
+    }
+    //@ end_lifetime(k);
+    //@ borrow_end(k, i32_full_borrow_content(&x));
+    x = result;
+    x -= 42;
+}
+```
+The proof creates a full borrow of `x` and then uses lemma [`full_borrow_into_frac`](https://github.com/verifast/verifast/blob/c0c90ac3a094c3efa914aa219f66e727e1104d08/bin/rust/rust_belt/lifetime_logic.rsspec#L262) to turn it into a fractured borrow.
+
+## Non-Send types and thread tokens
+
 [TODO]
