@@ -12,3 +12,4 @@
     - [Ghost declarations](ghost-decls.md)
 - [Verifying compliance with Rust's pointer aliasing rules](rusts-aliasing-rules.md)
 - [Verifying non-\`unsafe\` functions](non-unsafe-funcs.md)
+    - [The lifetime logic](lifetime-logic.md)

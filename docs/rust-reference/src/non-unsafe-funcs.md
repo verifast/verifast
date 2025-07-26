@@ -16,6 +16,8 @@ An axiomatisation of the lifetime logic into VeriFast's logic and some further R
 - [`bin/rust/rust_belt/lifetime_logic.rsspec`](https://github.com/verifast/verifast/blob/master/bin/rust/rust_belt/lifetime_logic.rsspec)
 - [`bin/rust/rust_belt/general.rsspec`](https://github.com/verifast/verifast/blob/master/bin/rust/rust_belt/general.rsspec)
 
+A [brief tutorial](lifetime-logic.md) introducing VeriFast's encoding of the lifetime logic is available.
+
 ## Semantic well-typedness of functions in VeriFast
 
 If a crate under verification defines a function not marked as `unsafe`, VeriFast generates a specification for that function that expresses the function's semantic well-typedness. If the function is annotated with an explicit specification as well, VeriFast first verifies that the explicit specification implies[^spec-implies] the generated one, and then verifies the function body against the explicit specification; otherwise, VeriFast verifies the function body against the generated specification.
