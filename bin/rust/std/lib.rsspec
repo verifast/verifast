@@ -939,8 +939,6 @@ mod alloc {
     
     @*/
     
-    // SOUNDNESS ISSUE: We currently don't prevent blocks of memory allocated by an allocator from outliving the allocator itself!! https://github.com/verifast/verifast/issues/829
-    
     trait Allocator {
     
         // Note: for simplicity, this spec for fn `allocate` does not provide access to the extra bytes (at `ptr[layout.size()..]`).
