@@ -4321,6 +4321,20 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       (unbox (WPureFunValueCall (l, w, ws)) tp, tp, None)
     in
+    let check_pure_func_name l (x, (ld, tparams, t, param_names_types, _)) =
+      reportUseSite DeclKind_PureFunction ld l;
+      let (_, pts) = List.split param_names_types in
+      let (typeid_types, pts, t) =
+        if tparams = [] then
+          ([], pts, t)
+        else begin
+          let tpenv = List.map (fun x -> (x, InferredType (object end, ref Unconstrained))) tparams in
+          let typeid_types = tpenv |> flatmap @@ fun (x, tp) -> if tparam_carries_typeid x then [tp] else [] in
+          (typeid_types, List.map (instantiate_type tpenv) pts, instantiate_type tpenv t)
+        end
+      in
+      (WVar (l, x, PureFuncName typeid_types), List.fold_right (fun t1 t2 -> PureFuncType (t1, t2)) pts t, None)
+    in
     match e with
       True l -> (e, boolt, None)
     | False l -> (e, boolt, None)
@@ -4400,20 +4414,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       end else
         cont ()
       end $. fun () ->
-      let check_pure_func_name (x, (ld, tparams, t, param_names_types, _)) =
-        reportUseSite DeclKind_PureFunction ld l;
-        let (_, pts) = List.split param_names_types in
-        let (typeid_types, pts, t) =
-          if tparams = [] then
-            ([], pts, t)
-          else begin
-            let tpenv = List.map (fun x -> (x, InferredType (object end, ref Unconstrained))) tparams in
-            let typeid_types = tpenv |> flatmap @@ fun (x, tp) -> if tparam_carries_typeid x then [tp] else [] in
-            (typeid_types, List.map (instantiate_type tpenv) pts, instantiate_type tpenv t)
-          end
-        in
-        (WVar (l, x, PureFuncName typeid_types), List.fold_right (fun t1 t2 -> PureFuncType (t1, t2)) pts t, None)
-      in
+      let check_pure_func_name entry = check_pure_func_name l entry in
       match resolve Ghost (pn,ilist) l x purefuncmap with
       | Some ((x, (ld, tparams, t, [], _)) as entry) -> check_pure_func_name entry
       | _ ->
@@ -5113,12 +5114,31 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let t = check_pure_type (pn,ilist) tparams Real te in
       (AlignofExpr (l, ManifestTypeExpr (type_expr_loc te, t)), sizeType, None)
     | TypePredExpr (l, te, predName) ->
-      let t = check_pure_type (pn,ilist) tparams Real te in
       begin match try_assoc predName typepreddeclmap with
         None -> static_error l "No such type predicate" None
       | Some (ld, selfTypeName, predType, _) ->
-        let predType' = instantiate_type [selfTypeName, t] predType in
-        (WTypePredExpr (l, t, predName), predType', None)
+        let t = check_pure_type (pn,ilist) tparams Real te in
+        begin fun cont_gen_case ->
+          let tn = match t with PtrType _ -> "raw_ptr" | _ -> rust_string_of_type t in
+          let cn = tn ^ "_" ^ predName in
+          match predType with
+            PredType _ ->
+              begin match resolve Ghost (pn,ilist) l cn predfammap with
+                None -> cont_gen_case ()
+              | Some (ccn, (ld, tparams, arity, ts, _, inputParamCount, inductiveness)) ->
+                reportUseSite DeclKind_Predicate ld l;
+                if arity <> 0 then static_error l "Using a predicate family as a value is not supported." None;
+                if tparams <> [] then static_error l "Using a predicate with type parameters as a value is not supported." None;
+                (WVar (l, cn, PredFamName), PredType (tparams, ts, inputParamCount, inductiveness), None)
+              end
+          | PureFuncType _ ->
+            begin match resolve Ghost (pn,ilist) l cn purefuncmap with
+              None -> cont_gen_case ()
+            | Some pfi -> check_pure_func_name l pfi
+            end
+          | _ -> cont_gen_case ()
+        end
+        @@ fun () -> begin let predType' = instantiate_type [selfTypeName, t] predType in (WTypePredExpr (l, t, predName), predType', None) end
       end
     | GenericExpr (l, e, cs, d) ->
       let (_, t, _) = check e in
@@ -7233,8 +7253,12 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let rec iter (pn,ilist) pm ds =
       match ds with
         PredFamilyInstanceDecl (l, p, tparams, is, xs, body)::ds ->
-        let (pfns, info) as entry = mk_pred_inst l (pn, ilist) p tparams is xs body in 
-        let _ = if List.mem_assoc pfns pm || List.mem_assoc pfns predinstmap0 then static_error l "Duplicate predicate family instance." None in
+        let (pfns, info) as entry = mk_pred_inst l (pn, ilist) p tparams is xs body in
+        let _ = match (try_assoc pfns pm, try_assoc pfns predinstmap0) with
+          Some (_, l1, _, _, _, _, _), _ | None, Some (_, l1, _, _, _, _, _) ->
+            static_error l ("Duplicate predicate family instance. Conflict with " ^ string_of_loc l1) None
+        | None, None -> ()
+        in
         iter (pn,ilist) (entry::pm) ds
       | _::ds -> iter (pn,ilist) pm ds
       | [] -> List.rev pm
