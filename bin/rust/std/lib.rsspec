@@ -511,7 +511,7 @@ mod ptr {
         req [_](NonNull_own::<T>())(t, v);
         ens NonNull_ptr(v) as usize != 0;
         
-    fix NonNull_ptr<_T>(v: NonNull<_T>) -> *_T;
+    fix NonNull_ptr<T>(v: NonNull<T>) -> *T;
     
     // If ptr is 0, the result of NonNull::new_ is unspecified. (It is never the case that NonNull_ptr(nnp) == 0.)
     fix NonNull::new_<T>(ptr: *T) -> NonNull<T>;
@@ -524,7 +524,7 @@ mod ptr {
         req true;
         ens NonNull::new_(NonNull_ptr(v)) == v;
     
-    lem NonNull_ptr_nonnull<T>(v: NonNull<T>);
+    lem_auto(NonNull_ptr(v)) NonNull_ptr_nonnull<T>(v: NonNull<T>);
         req true;
         ens NonNull_ptr(v) != 0;
     
