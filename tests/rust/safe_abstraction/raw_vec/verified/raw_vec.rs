@@ -138,7 +138,6 @@ fix logical_capacity(cap: UsizeNoHighBit, elem_size: usize) -> usize {
 pred RawVecInner0(alloc_id: alloc_id_t, u: Unique<u8>, cap: UsizeNoHighBit, elemLayout: Layout; ptr: *u8, capacity: usize) =
     capacity == logical_capacity(cap, Layout::size_(elemLayout)) &*&
     ptr == NonNull_ptr(Unique::non_null_(u)) &*&
-    ptr != 0 &*&
     ptr as usize % Layout::align_(elemLayout) == 0 &*&
     pointer_within_limits(ptr) == true &*&
     if capacity * Layout::size_(elemLayout) == 0 {
@@ -703,7 +702,6 @@ impl<T, A: Allocator> RawVec<T, A> {
         // SAFETY: Precondition passed to the caller
         unsafe {
             let ptr = ptr.cast();
-            //@ std::ptr::NonNull_ptr_nonnull(ptr);
             //@ std::alloc::Layout_inv(Layout::new_::<T>());
             /*@
             if 1 <= std::mem::size_of::<T>() {
@@ -1226,7 +1224,6 @@ impl<A: Allocator> RawVecInner<A> {
             alloc,
         };
         //@ assert res.ptr == Unique::from_non_null_(NonNull::new_(NonNull_ptr(ptr.ptr)));
-        //@ std::ptr::NonNull_ptr_nonnull(ptr.ptr);
         //@ std::ptr::Unique_non_null__from_non_null_(ptr.ptr);
         //@ std::ptr::NonNull_new_ptr(ptr.ptr);
         //@ assert Unique::non_null_(res.ptr) == ptr.ptr;
@@ -1275,7 +1272,6 @@ impl<A: Allocator> RawVecInner<A> {
     @*/
     //@ ens RawVecInner(t, result, elem_layout, alloc_id, NonNull_ptr(ptr), logical_capacity(cap, Layout::size_(elem_layout)));
     {
-        //@ std::ptr::NonNull_ptr_nonnull(ptr);
         let r = Self { ptr: Unique::from(ptr), cap, alloc };
         //@ close RawVecInner0(alloc_id, r.ptr, r.cap, elem_layout, _, _);
         //@ close RawVecInner(t, r, elem_layout, alloc_id, _, _);
@@ -1694,7 +1690,6 @@ impl<A: Allocator> RawVecInner<A> {
                 unsafe {
                     self.set_ptr_and_cap(ptr, cap);
                     //@ let self1 = *self;
-                    //@ std::ptr::NonNull_ptr_nonnull(ptr.ptr);
                     //@ std::alloc::alloc_block_in_aligned(NonNull_ptr(ptr.ptr));
                     //@ std::num::niche_types::UsizeNoHighBit_as_inner__new_(cap);
                     //@ mul_zero(Layout::size_(elem_layout), cap);
@@ -1798,7 +1793,6 @@ impl<A: Allocator> RawVecInner<A> {
                     //@ mul_mono_l(1, Layout::size_(elem_layout), cap);
                     self.set_ptr_and_cap(ptr, cap);
                     //@ let self1 = *self;
-                    //@ std::ptr::NonNull_ptr_nonnull(ptr.ptr);
                     //@ std::alloc::alloc_block_in_aligned(NonNull_ptr(ptr.ptr));
                     //@ std::num::niche_types::UsizeNoHighBit_as_inner__new_(cap);
                     //@ mul_zero(Layout::size_(elem_layout), cap);
@@ -1979,7 +1973,6 @@ impl<A: Allocator> RawVecInner<A> {
             unsafe {
                 //@ std::num::niche_types::UsizeNoHighBit_inv(self01.cap);
                 self.set_ptr_and_cap(ptr, cap);
-                //@ std::ptr::NonNull_ptr_nonnull(ptr_1.ptr);
                 //@ std::alloc::alloc_block_in_aligned(NonNull_ptr(ptr_1.ptr));
                 //@ mul_zero(cap, Layout::size_(elem_layout));
                 //@ close RawVecInner0(alloc_id, (*self).ptr, (*self).cap, elem_layout, _, _);

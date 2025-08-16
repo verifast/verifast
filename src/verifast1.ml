@@ -3271,6 +3271,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | InductiveType (i0, targs) ->
       let (_, _, _, _, _, cond, _, _, _) = List.assoc i0 inductivemap in
       cond <> Some [] && List.for_all is_universal_type targs
+    | StructType (_, _) -> false (* TODO *)
   
   let functypedeclmap1 =
     let rec iter (pn,ilist) functypedeclmap1 ds =
