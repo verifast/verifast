@@ -1005,7 +1005,24 @@ impl<A: Allocator> RawVecInner<A> {
         capacity * elemSize == 0;
     @*/
     //@ on_unwind_ens false;
-    //@ safety_proof { assume(false); }
+    /*@
+    safety_proof {
+        leak <Alignment>.own(_t, align);
+        close exists::<usize>(0);
+        std::alloc::open_Allocator_own(alloc);
+        std::ptr::Alignment_is_power_of_2(align);
+        if NonZero::get_(Alignment::as_nonzero_(align)) <= isize::MAX {
+            div_rem_nonneg(isize::MAX, NonZero::get_(Alignment::as_nonzero_(align)));
+        } else {
+            div_rem_nonneg_unique(isize::MAX, NonZero::get_(Alignment::as_nonzero_(align)), 0, isize::MAX);
+        }
+        let result = call();
+        open RawVecInner(_t, result, _, _, _, _);
+        std::alloc::Allocator_to_own(result.alloc);
+        close <RawVecInner<A>>.own(_t, result);
+        leak RawVecInner0(_, _, _, _, _, _) &*& array_at_lft_(_, _, _, _);
+    }
+    @*/
     {
         let ptr = Unique::from_non_null(NonNull::without_provenance(align.as_nonzero()));
         // `cap: 0` means "unallocated". zero-sized types are ignored.
@@ -1016,7 +1033,6 @@ impl<A: Allocator> RawVecInner<A> {
         //@ std::num::NonZero_usize_limits(Alignment::as_nonzero_(align));
         //@ close RawVecInner0(alloc_id, ptr, cap, layout, _, logical_capacity(cap, elemSize));
         //@ close RawVecInner(t, r, layout, alloc_id, _, _);
-        //@ std::num::NonZero_usize_limits(Alignment::as_nonzero_(align));
         //@ close array::<u8>(NonNull_ptr(Unique::non_null_(ptr)), 0, nil);
         r
     }

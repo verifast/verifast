@@ -237,7 +237,7 @@ mod num {
     
     lem NonZero_usize_limits(nz: NonZero<usize>);
         req true;
-        ens 0 <= NonZero::get_(nz) &*& NonZero::get_(nz) <= usize::MAX;
+        ens 0 < NonZero::get_(nz) &*& NonZero::get_(nz) <= usize::MAX;
     
     @*/
 
