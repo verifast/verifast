@@ -1547,14 +1547,24 @@ impl<A: Allocator> RawVecInner<A> {
     const fn ptr<T>(&self) -> *mut T
     /*@
     req [_]RawVecInner_share_(?k, ?t, self, ?elem_layout, ?alloc_id, ?ptr, ?capacity) &*&
-        [?q]lifetime_token(k) &*&
-        [_]frac_borrow(k, ref_initialized_(self));
+        [?q]lifetime_token(k);
     @*/
     //@ ens [q]lifetime_token(k) &*& result == ptr as *T;
-    //@ safety_proof { assume(false); }
+    /*@
+    safety_proof {
+        open <RawVecInner<A>>.share(?k, _t, self);
+        call();
+    }
+    @*/
     {
         //@ RawVecInner_share__inv::<A>();
-        let r = self.non_null::<T>();
+        //@ let self_ref = precreate_ref(self);
+        //@ init_ref_RawVecInner_(self_ref);
+        //@ open_frac_borrow(k, ref_initialized_(self_ref), q/2);
+        //@ open [?f]ref_initialized_::<RawVecInner<A>>(self_ref)();
+        let r = unsafe { &*(self as *const RawVecInner<A>) }.non_null::<T>();
+        //@ close [f]ref_initialized_::<RawVecInner<A>>(self_ref)();
+        //@ close_frac_borrow(f, ref_initialized_(self_ref));
         r.as_ptr()
     }
 
@@ -1564,8 +1574,7 @@ impl<A: Allocator> RawVecInner<A> {
     //@ ens [q]lifetime_token(k) &*& result == NonNull::new_(ptr as *T);
     /*@
     safety_proof {
-        assert [?q]lifetime_token(?k);
-        open <RawVecInner<A>>.share(k, _t, self);
+        open <RawVecInner<A>>.share(?k, _t, self);
         let result = call();
         std::ptr::close_NonNull_own::<T>(_t, result);
     }
@@ -1584,11 +1593,15 @@ impl<A: Allocator> RawVecInner<A> {
     const fn capacity(&self, elem_size: usize) -> usize
     /*@
     req [_]RawVecInner_share_(?k, ?t, self, ?elem_layout, ?alloc_id, ?ptr, ?capacity) &*&
-        elem_size == Layout::size_(elem_layout) &*&
         [?q]lifetime_token(k);
     @*/
-    //@ ens [q]lifetime_token(k) &*& result == capacity;
-    //@ safety_proof { assume(false); }
+    //@ ens [q]lifetime_token(k) &*& elem_size != Layout::size_(elem_layout) || result == capacity;
+    /*@
+    safety_proof {
+        open <RawVecInner<A>>.share(?k, _t, self);
+        call();
+    }
+    @*/
     {
         //@ open RawVecInner_share_(k, t, self, elem_layout, alloc_id, ptr, capacity);
         //@ open_frac_borrow(k, RawVecInner_frac_borrow_content(self, elem_layout, ptr, capacity), q);
@@ -1837,14 +1850,26 @@ impl<A: Allocator> RawVecInner<A> {
     #[inline]
     fn needs_to_grow(&self, len: usize, additional: usize, elem_layout: Layout) -> bool
     /*@
-    req [_]RawVecInner_share_(?k, ?t, self, elem_layout, ?alloc_id, ?ptr, ?capacity) &*&
-        [_]frac_borrow(k, ref_initialized_(self)) &*&
+    req [_]RawVecInner_share_(?k, ?t, self, ?elemLayout, ?alloc_id, ?ptr, ?capacity) &*&
         [?qa]lifetime_token(k);
     @*/
-    //@ ens [qa]lifetime_token(k) &*& result == (additional > std::num::wrapping_sub_usize(capacity, len));
-    //@ safety_proof { assume(false); }
+    //@ ens [qa]lifetime_token(k) &*& elem_layout != elemLayout || result == (additional > std::num::wrapping_sub_usize(capacity, len));
+    /*@
+    safety_proof {
+        leak <Layout>.own(_t, elem_layout);
+        open <RawVecInner<A>>.share(?k, _t, self);
+        call();
+    }
+    @*/
     {
-        additional > self.capacity(elem_layout.size()).wrapping_sub(len)
+        //@ let self_ref = precreate_ref(self);
+        //@ init_ref_RawVecInner_(self_ref);
+        //@ open_frac_borrow(k, ref_initialized_(self_ref), qa/2);
+        //@ open [?f]ref_initialized_::<RawVecInner<A>>(self_ref)();
+        let r = additional > unsafe { &*(self as *const RawVecInner<A>) }.capacity(elem_layout.size()).wrapping_sub(len);
+        //@ close [f]ref_initialized_::<RawVecInner<A>>(self_ref)();
+        //@ close_frac_borrow(f, ref_initialized_(self_ref));
+        r
     }
 
     #[inline]
