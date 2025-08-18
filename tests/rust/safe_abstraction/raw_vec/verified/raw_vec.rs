@@ -148,13 +148,27 @@ pred RawVecInner<A>(t: thread_id_t, self: RawVecInner<A>, elemLayout: Layout, al
         alloc_block_in(alloc_id, ptr, allocLayout)
     };
     
-pred<A> <RawVecInner<A>>.own(t, self_) = <A>.own(t, self_.alloc);
+pred RawVecInner0<A>(self: RawVecInner<A>, elemLayout: Layout, ptr: *u8, capacity: usize) =
+    capacity == logical_capacity(self.cap, Layout::size_(elemLayout)) &*&
+    ptr == NonNull_ptr(Unique::non_null_(self.ptr)) &*&
+    ptr as usize % Layout::align_(elemLayout) == 0 &*&
+    pointer_within_limits(ptr) == true &*&
+    if capacity * Layout::size_(elemLayout) == 0 {
+        true
+    } else {
+        Layout::repeat_(elemLayout, capacity) == some(pair(?allocLayout, ?stride))
+    };
+
+pred<A> <RawVecInner<A>>.own(t, self_) =
+    <A>.own(t, self_.alloc) &*&
+    RawVecInner0(self_, ?elemLayout, ?ptr, ?capacity);    
 
 lem RawVecInner_drop<A>()
     req raw_vec::RawVecInner_own::<A>(?_t, ?_v);
     ens std::ptr::Unique_own::<u8>(_t, _v.ptr) &*& std::num::niche_types::UsizeNoHighBit_own(_t, _v.cap) &*& <A>.own(_t, _v.alloc);
 {
     open RawVecInner_own::<A>(_t, _v);
+    open RawVecInner0(_, _, _, _);
     std::ptr::close_Unique_own::<u8>(_t, _v.ptr);
     std::num::niche_types::close_UsizeNoHighBit_own(_t, _v.cap);
 }
@@ -218,6 +232,27 @@ lem RawVecInner_share__inv<A>()
     open RawVecInner_share_(k, t, l, elemLayout, alloc_id, ptr, capacity);
 }
 
+lem RawVecInner_share__mono<A>(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *RawVecInner<A>)
+    req type_interp::<A>() &*& lifetime_inclusion(k1, k) == true &*& [_]RawVecInner_share_::<A>(k, t, l, ?elemLayout, ?alloc_id, ?ptr, ?capacity);
+    ens type_interp::<A>() &*& [_]raw_vec::RawVecInner_share_::<A>(k1, t, l, elemLayout, alloc_id, ptr, capacity);
+{
+    open [_]RawVecInner_share_(k, t, l, elemLayout, alloc_id, ptr, capacity);
+    std::alloc::Allocator_share_mono::<A>(k, k1, t, &(*l).alloc);
+    frac_borrow_mono(k, k1, RawVecInner_frac_borrow_content(l, elemLayout, alloc_id, ptr, capacity));
+    close RawVecInner_share_::<A>(k1, t, l, elemLayout, alloc_id, ptr, capacity);
+    leak RawVecInner_share_::<A>(k1, t, l, elemLayout, alloc_id, ptr, capacity);
+}
+
+lem RawVecInner_sync_<A>(t1: thread_id_t)
+    req type_interp::<A>() &*& is_Sync(typeid(A)) == true &*& [_]RawVecInner_share_::<A>(?k, ?t0, ?l, ?elemLayout, ?alloc_id, ?ptr, ?capacity);
+    ens type_interp::<A>() &*& [_]RawVecInner_share_::<A>(k, t1, l, elemLayout, alloc_id, ptr, capacity);
+{
+    open RawVecInner_share_(k, t0, l, elemLayout, alloc_id, ptr, capacity);
+    std::alloc::Allocator_sync::<A>(t1);
+    close RawVecInner_share_(k, t1, l, elemLayout, alloc_id, ptr, capacity);
+    leak RawVecInner_share_(k, t1, l, elemLayout, alloc_id, ptr, capacity);
+}
+
 pred RawVecInner_share_end_token<A>(k: lifetime_t, t: thread_id_t, l: *RawVecInner<A>, elemLayout: Layout, alloc_id: alloc_id_t, ptr: *u8, capacity: usize) =
     borrow_end_token(k, std::alloc::Allocator_full_borrow_content_(t, &(*l).alloc, alloc_id)) &*&
     borrow_end_token(k, RawVecInner_frac_borrow_content(l, elemLayout, alloc_id, ptr, capacity)) &*&
@@ -260,7 +295,7 @@ lem end_share_RawVecInner<A>(l: *RawVecInner<A>)
     close RawVecInner(t, *l, elemLayout, alloc_id, ptr, capacity);
 }
 
-lem init_ref_RawVecInner<A>(l: *RawVecInner<A>)
+lem init_ref_RawVecInner_<A>(l: *RawVecInner<A>)
     nonghost_callers_only
     req ref_init_perm(l, ?l0) &*& [_]RawVecInner_share_(?k, ?t, l0, ?elemLayout, ?alloc_id, ?ptr, ?capacity) &*& [?q]lifetime_token(k);
     ens [q]lifetime_token(k) &*& [_]RawVecInner_share_(k, t, l, elemLayout, alloc_id, ptr, capacity) &*& [_]frac_borrow(k, ref_initialized_(l));
@@ -320,7 +355,132 @@ lem init_ref_RawVecInner<A>(l: *RawVecInner<A>)
     leak RawVecInner_share_(k, t, l, elemLayout, alloc_id, ptr, capacity);
 }
 
+pred<A> <RawVecInner<A>>.share(k, t, l) = [_]RawVecInner_share_(k, t, l, _, _, _, _);
+
+lem RawVecInner_share_mono<A>(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *RawVecInner<A>)
+    req type_interp::<A>() &*& lifetime_inclusion(k1, k) == true &*& [_]RawVecInner_share::<A>(k, t, l);
+    ens type_interp::<A>() &*& [_]raw_vec::RawVecInner_share::<A>(k1, t, l);
+{
+    open RawVecInner_share::<A>(k, t, l);
+    RawVecInner_share__mono(k, k1, t, l);
+    close RawVecInner_share::<A>(k1, t, l);
+    leak RawVecInner_share::<A>(k1, t, l);
+}
+
+lem RawVecInner_share_full<A>(k: lifetime_t, t: thread_id_t, l: *RawVecInner<A>)
+    req type_interp::<A>() &*& atomic_mask(MaskTop) &*& full_borrow(k, RawVecInner_full_borrow_content::<A>(t, l)) &*& [?q]lifetime_token(k) &*& ref_origin(l) == l;
+    ens type_interp::<A>() &*& atomic_mask(MaskTop) &*& [_]RawVecInner_share::<A>(k, t, l) &*& [q]lifetime_token(k);
+{
+    let klong = open_full_borrow_strong_m(k, RawVecInner_full_borrow_content(t, l), q);
+    open RawVecInner_full_borrow_content::<A>(t, l)();
+    open <RawVecInner<A>>.own(t, *l);
+    std::alloc::open_Allocator_own((*l).alloc);
+    assert Allocator(_, _, ?alloc_id);
+    open RawVecInner0(_, ?elemLayout, ?ptr, ?capacity);
+    {
+        pred Ctx() = true;
+        produce_lem_ptr_chunk full_borrow_convert_strong(Ctx, sep(std::alloc::Allocator_full_borrow_content_(t, &(*l).alloc, alloc_id), RawVecInner_frac_borrow_content(l, elemLayout, alloc_id, ptr, capacity)), klong, RawVecInner_full_borrow_content(t, l))() {
+            open Ctx();
+            open sep(std::alloc::Allocator_full_borrow_content_(t, &(*l).alloc, alloc_id), RawVecInner_frac_borrow_content(l, elemLayout, alloc_id, ptr, capacity))();
+            std::alloc::open_Allocator_full_borrow_content_(t, &(*l).alloc, alloc_id);
+            open RawVecInner_frac_borrow_content::<A>(l, elemLayout, alloc_id, ptr, capacity)();
+            std::alloc::Allocator_to_own((*l).alloc);
+            close RawVecInner0(*l, elemLayout, ptr, capacity);
+            close <RawVecInner<A>>.own(t, *l);
+            close RawVecInner_full_borrow_content::<A>(t, l)();
+        } {
+            close Ctx();
+            std::alloc::close_Allocator_full_borrow_content_(t, &(*l).alloc);
+            close RawVecInner_frac_borrow_content::<A>(l, elemLayout, alloc_id, ptr, capacity)();
+            close sep(std::alloc::Allocator_full_borrow_content_(t, &(*l).alloc, alloc_id), RawVecInner_frac_borrow_content(l, elemLayout, alloc_id, ptr, capacity))();
+            close_full_borrow_strong_m(klong, RawVecInner_full_borrow_content(t, l), sep(std::alloc::Allocator_full_borrow_content_(t, &(*l).alloc, alloc_id), RawVecInner_frac_borrow_content(l, elemLayout, alloc_id, ptr, capacity)));
+            full_borrow_mono(klong, k, sep(std::alloc::Allocator_full_borrow_content_(t, &(*l).alloc, alloc_id), RawVecInner_frac_borrow_content(l, elemLayout, alloc_id, ptr, capacity)));
+            full_borrow_split_m(k, std::alloc::Allocator_full_borrow_content_(t, &(*l).alloc, alloc_id), RawVecInner_frac_borrow_content(l, elemLayout, alloc_id, ptr, capacity));
+        }
+    }
+    std::alloc::share_Allocator_full_borrow_content_m(k, t, &(*l).alloc, alloc_id);
+    full_borrow_into_frac_m(k, RawVecInner_frac_borrow_content(l, elemLayout, alloc_id, ptr, capacity));
+    close RawVecInner_share_::<A>(k, t, l, elemLayout, alloc_id, ptr, capacity);
+    leak RawVecInner_share_::<A>(k, t, l, elemLayout, alloc_id, ptr, capacity);
+    close RawVecInner_share::<A>(k, t, l);
+    leak RawVecInner_share::<A>(k, t, l);
+}
+
+lem init_ref_RawVecInner<A>(l: *RawVecInner<A>)
+    req type_interp::<A>() &*& atomic_mask(Nlft) &*& ref_init_perm(l, ?l0) &*& [_]RawVecInner_share::<A>(?k, ?t, l0) &*& [?q]lifetime_token(k);
+    ens type_interp::<A>() &*& atomic_mask(Nlft) &*& [q]lifetime_token(k) &*& [_]RawVecInner_share::<A>(k, t, l) &*& [_]frac_borrow(k, ref_initialized_(l));
+{
+    open RawVecInner_share::<A>(k, t, l0);
+    open_ref_init_perm_RawVecInner(l);
+    open RawVecInner_share_(k, t, l0, ?elemLayout, ?alloc_id, ?ptr, ?capacity);
+    std::alloc::init_ref_Allocator_share_m(k, t, &(*l).alloc);
+    frac_borrow_sep(k, RawVecInner_frac_borrow_content(l0, elemLayout, alloc_id, ptr, capacity), ref_initialized_(&(*l).alloc));
+    let klong = open_frac_borrow_strong_m(k, sep_(RawVecInner_frac_borrow_content(l0, elemLayout, alloc_id, ptr, capacity), ref_initialized_(&(*l).alloc)), q);
+    open [?f]sep_(RawVecInner_frac_borrow_content(l0, elemLayout, alloc_id, ptr, capacity), ref_initialized_(&(*l).alloc))();
+    open [f]RawVecInner_frac_borrow_content::<A>(l0, elemLayout, alloc_id, ptr, capacity)();
+    let ptr_ = (*l0).ptr;
+    let cap_ = (*l0).cap;
+    open [f]ref_initialized_::<A>(&(*l).alloc)();
+    std::ptr::init_ref_Unique(&(*l).ptr, 1/2);
+    std::num::niche_types::init_ref_UsizeNoHighBit(&(*l).cap, 1/2);
+    init_ref_padding_RawVecInner(l, 1/2);
+    {
+        pred P() = ref_padding_initialized(l);
+        close [1 - f/2]P();
+        close_ref_initialized_RawVecInner(l);
+        open P();
+    }
+    {
+        pred Ctx() =
+            [f/2]ref_initialized(&(*l).alloc) &*&
+            ref_padding_end_token(l, l0, f/2) &*& [f/2]struct_RawVecInner_padding(l0) &*& [1 - f/2]ref_padding_initialized(l) &*&
+            std::ptr::end_ref_Unique_token(&(*l).ptr, &(*l0).ptr, f/2) &*& [f/2](*l0).ptr |-> ptr_ &*& [1 - f/2]ref_initialized(&(*l).ptr) &*&
+            std::num::niche_types::end_ref_UsizeNoHighBit_token(&(*l).cap, &(*l0).cap, f/2) &*& [f/2](*l0).cap |-> cap_ &*& [1 - f/2]ref_initialized(&(*l).cap);
+        produce_lem_ptr_chunk frac_borrow_convert_strong(Ctx, scaledp(f/2, sep_(ref_initialized_(l), RawVecInner_frac_borrow_content(l, elemLayout, alloc_id, ptr, capacity))), klong, f, sep_(RawVecInner_frac_borrow_content(l0, elemLayout, alloc_id, ptr, capacity), ref_initialized_(&(*l).alloc)))() {
+            open scaledp(f/2, sep_(ref_initialized_(l), RawVecInner_frac_borrow_content(l, elemLayout, alloc_id, ptr, capacity)))();
+            open sep_(ref_initialized_(l), RawVecInner_frac_borrow_content(l, elemLayout, alloc_id, ptr, capacity))();
+            open ref_initialized_::<RawVecInner<A>>(l)();
+            open RawVecInner_frac_borrow_content::<A>(l, elemLayout, alloc_id, ptr, capacity)();
+            open_ref_initialized_RawVecInner(l);
+            open Ctx();
+            std::ptr::end_ref_Unique(&(*l).ptr);
+            std::num::niche_types::end_ref_UsizeNoHighBit(&(*l).cap);
+            end_ref_padding_RawVecInner(l);
+            close [f]RawVecInner_frac_borrow_content::<A>(l0, elemLayout, alloc_id, ptr, capacity)();
+            close [f]ref_initialized_::<A>(&(*l).alloc)();
+            close [f]sep_(RawVecInner_frac_borrow_content(l0, elemLayout, alloc_id, ptr, capacity), ref_initialized_(&(*l).alloc))();
+        } {
+            close Ctx();
+            close [f/2]ref_initialized_::<RawVecInner<A>>(l)();
+            close [f/2]RawVecInner_frac_borrow_content::<A>(l, elemLayout, alloc_id, ptr, capacity)();
+            close [f/2]sep_(ref_initialized_(l), RawVecInner_frac_borrow_content(l, elemLayout, alloc_id, ptr, capacity))();
+            close scaledp(f/2, sep_(ref_initialized_(l), RawVecInner_frac_borrow_content(l, elemLayout, alloc_id, ptr, capacity)))();
+            close_frac_borrow_strong_m();
+            full_borrow_mono(klong, k, scaledp(f/2, sep_(ref_initialized_(l), RawVecInner_frac_borrow_content(l, elemLayout, alloc_id, ptr, capacity))));
+        }
+    }
+    full_borrow_into_frac_m(k, scaledp(f/2, sep_(ref_initialized_(l), RawVecInner_frac_borrow_content(l, elemLayout, alloc_id, ptr, capacity))));
+    frac_borrow_implies_scaled(k, f/2, sep_(ref_initialized_(l), RawVecInner_frac_borrow_content(l, elemLayout, alloc_id, ptr, capacity)));
+    frac_borrow_split(k, ref_initialized_(l), RawVecInner_frac_borrow_content(l, elemLayout, alloc_id, ptr, capacity));
+    close RawVecInner_share_(k, t, l, elemLayout, alloc_id, ptr, capacity);
+    leak RawVecInner_share_(k, t, l, elemLayout, alloc_id, ptr, capacity);
+    close RawVecInner_share::<A>(k, t, l);
+    leak RawVecInner_share(k, t, l);
+}
+
+lem RawVecInner_sync<A>(t1: thread_id_t)
+    req type_interp::<A>() &*& is_Sync(typeid(A)) == true &*& [_]RawVecInner_share::<A>(?k, ?t0, ?l);
+    ens type_interp::<A>() &*& [_]RawVecInner_share::<A>(k, t1, l);
+{
+    open RawVecInner_share::<A>(k, t0, l);
+    RawVecInner_sync_::<A>(t1);
+    close RawVecInner_share::<A>(k, t1, l);
+    leak RawVecInner_share(k, t1, l);
+}
+
 @*/
+
+
 
 /*@
 
@@ -380,7 +540,7 @@ lem init_ref_RawVec<T, A>(l: *RawVec<T, A>)
 {
     open RawVec_share_(k, t, l0, alloc_id, ptr, capacity);
     open_ref_init_perm_RawVec(l);
-    init_ref_RawVecInner(&(*l).inner);
+    init_ref_RawVecInner_(&(*l).inner);
     close RawVec_share_(k, t, l, alloc_id, ptr, capacity);
     leak RawVec_share_(k, t, l, alloc_id, ptr, capacity);
     
@@ -747,7 +907,7 @@ impl<T, A: Allocator> RawVec<T, A> {
     {
         //@ open RawVec_share_(k, t, self, alloc_id, ptr, capacity);
         //@ let inner_ref = precreate_ref(&(*self).inner);
-        //@ init_ref_RawVecInner(inner_ref);
+        //@ init_ref_RawVecInner_(inner_ref);
         //@ open_frac_borrow(k, ref_initialized_(inner_ref), q/2);
         //@ open [?f]ref_initialized_::<RawVecInner<A>>(inner_ref)();
         let r = self.inner.ptr();
@@ -772,7 +932,7 @@ impl<T, A: Allocator> RawVec<T, A> {
     {
         //@ open RawVec_share_(k, t, self, alloc_id, ptr, capacity);
         //@ let inner_ref = precreate_ref(&(*self).inner);
-        //@ init_ref_RawVecInner(inner_ref);
+        //@ init_ref_RawVecInner_(inner_ref);
         //@ open_frac_borrow(k, ref_initialized_(inner_ref), q/2);
         //@ open [?f]ref_initialized_::<RawVecInner<A>>(inner_ref)();
         let r = self.inner.capacity(size_of::<T>());
@@ -1037,7 +1197,7 @@ impl<A: Allocator> RawVecInner<A> {
             div_rem_nonneg_unique(isize::MAX, NonZero::get_(Alignment::as_nonzero_(align)), 0, isize::MAX);
         }
         let result = call();
-        open RawVecInner(_t, result, ?elemLayout, _, _, ?capacity);
+        open RawVecInner(_t, result, ?elemLayout, ?alloc_id, ?ptr, ?capacity);
         std::num::niche_types::UsizeNoHighBit_inv(result.cap);
         std::alloc::Layout_inv(elemLayout);
         mul_zero(capacity, Layout::size_(elemLayout));
@@ -1046,6 +1206,7 @@ impl<A: Allocator> RawVecInner<A> {
         assert Layout::size_(elemLayout) == 0;
         assert capacity * Layout::size_(elemLayout) == 0;
         std::alloc::Allocator_to_own(result.alloc);
+        close RawVecInner0(result, elemLayout, ptr, capacity);
         close <RawVecInner<A>>.own(_t, result);
         leak array_at_lft_(_, _, _, _);
     }
@@ -1086,6 +1247,7 @@ impl<A: Allocator> RawVecInner<A> {
         let result = call();
         open RawVecInner(_t, result, elem_layout, ?alloc_id, ?ptr, ?capacity_);
         std::alloc::Allocator_to_own(result.alloc);
+        close RawVecInner0(result, elem_layout, ptr, capacity_);
         close <RawVecInner<A>>.own(_t, result);
         if capacity_ * Layout::size_(elem_layout) != 0 {
             leak alloc_block_in(_, _, _);
@@ -1101,7 +1263,7 @@ impl<A: Allocator> RawVecInner<A> {
                     //@ let k = begin_lifetime();
                     //@ share_RawVecInner(k, &this);
                     //@ let this_ref = precreate_ref(&this);
-                    //@ init_ref_RawVecInner(this_ref);
+                    //@ init_ref_RawVecInner_(this_ref);
                     //@ open_frac_borrow(k, ref_initialized_(this_ref), 1/2);
                     //@ open [?f]ref_initialized_::<RawVecInner<A>>(this_ref)();
                     let needs_to_grow = this.needs_to_grow(0, capacity, elem_layout);
@@ -1193,6 +1355,7 @@ impl<A: Allocator> RawVecInner<A> {
                     leak alloc_block_in(_, _, _);
                 }
                 std::alloc::Allocator_to_own(r.alloc);
+                close RawVecInner0(r, elem_layout, ptr, capacity_);
                 close <RawVecInner<A>>.own(_t, r);
                 match init {
                     raw_vec::AllocInit::Uninitialized => { leak array_at_lft_(_, _, _, _); }
@@ -1399,7 +1562,14 @@ impl<A: Allocator> RawVecInner<A> {
     const fn non_null<T>(&self) -> NonNull<T>
     //@ req [_]RawVecInner_share_(?k, ?t, self, ?elem_layout, ?alloc_id, ?ptr, ?capacity) &*& [?q]lifetime_token(k);
     //@ ens [q]lifetime_token(k) &*& result == NonNull::new_(ptr as *T);
-    //@ safety_proof { assume(false); }
+    /*@
+    safety_proof {
+        assert [?q]lifetime_token(?k);
+        open <RawVecInner<A>>.share(k, _t, self);
+        let result = call();
+        std::ptr::close_NonNull_own::<T>(_t, result);
+    }
+    @*/
     {
         //@ open RawVecInner_share_(k, t, self, elem_layout, alloc_id, ptr, capacity);
         //@ open_frac_borrow(k, RawVecInner_frac_borrow_content(self, elem_layout, alloc_id, ptr, capacity), q);
@@ -1551,7 +1721,7 @@ impl<A: Allocator> RawVecInner<A> {
         //@ let k = begin_lifetime();
         //@ share_RawVecInner(k, self);
         //@ let self_ref = precreate_ref(self);
-        //@ init_ref_RawVecInner(self_ref);
+        //@ init_ref_RawVecInner_(self_ref);
         //@ open_frac_borrow(k, ref_initialized_(self_ref), 1/2);
         //@ open [?f]ref_initialized_::<RawVecInner<A>>(self_ref)();
         let needs_to_grow = self.needs_to_grow(len, additional, elem_layout);
@@ -1567,7 +1737,7 @@ impl<A: Allocator> RawVecInner<A> {
             //@ let k2 = begin_lifetime();
             //@ share_RawVecInner(k2, self);
             //@ let self_ref2 = precreate_ref(self);
-            //@ init_ref_RawVecInner(self_ref2);
+            //@ init_ref_RawVecInner_(self_ref2);
             //@ open_frac_borrow(k2, ref_initialized_(self_ref2), 1/2);
             //@ open [?f2]ref_initialized_::<RawVecInner<A>>(self_ref2)();
             let needs_to_grow2 = self.needs_to_grow(len, additional, elem_layout);
@@ -1623,7 +1793,7 @@ impl<A: Allocator> RawVecInner<A> {
         //@ let k = begin_lifetime();
         //@ share_RawVecInner(k, self);
         //@ let self_ref = precreate_ref(self);
-        //@ init_ref_RawVecInner(self_ref);
+        //@ init_ref_RawVecInner_(self_ref);
         //@ open_frac_borrow(k, ref_initialized_(self_ref), 1/2);
         //@ open [?f]ref_initialized_::<RawVecInner<A>>(self_ref)();
         let needs_to_grow = self.needs_to_grow(len, additional, elem_layout);
@@ -1639,7 +1809,7 @@ impl<A: Allocator> RawVecInner<A> {
             //@ let k2 = begin_lifetime();
             //@ share_RawVecInner(k2, self);
             //@ let self_ref2 = precreate_ref(self);
-            //@ init_ref_RawVecInner(self_ref2);
+            //@ init_ref_RawVecInner_(self_ref2);
             //@ open_frac_borrow(k2, ref_initialized_(self_ref2), 1/2);
             //@ open [?f2]ref_initialized_::<RawVecInner<A>>(self_ref2)();
             let needs_to_grow2 = self.needs_to_grow(len, additional, elem_layout);
@@ -1750,7 +1920,7 @@ impl<A: Allocator> RawVecInner<A> {
         //@ let k = begin_lifetime();
         //@ share_RawVecInner(k, self);
         //@ let self_ref = precreate_ref(self);
-        //@ init_ref_RawVecInner(self_ref);
+        //@ init_ref_RawVecInner_(self_ref);
         //@ open_frac_borrow(k, ref_initialized_(self_ref), 1/2);
         //@ open [?f]ref_initialized_::<RawVecInner<A>>(self_ref)();
         let current_memory = self.current_memory(elem_layout);
@@ -1860,7 +2030,7 @@ impl<A: Allocator> RawVecInner<A> {
         //@ let k = begin_lifetime();
         //@ share_RawVecInner(k, self);
         //@ let self_ref = precreate_ref(self);
-        //@ init_ref_RawVecInner(self_ref);
+        //@ init_ref_RawVecInner_(self_ref);
         //@ open_frac_borrow(k, ref_initialized_(self_ref), 1/2);
         //@ open [?f]ref_initialized_::<RawVecInner<A>>(self_ref)();
         let current_memory = self.current_memory(elem_layout);
@@ -1953,7 +2123,7 @@ impl<A: Allocator> RawVecInner<A> {
         //@ let k = begin_lifetime();
         //@ share_RawVecInner(k, self);
         //@ let self_ref = precreate_ref(self);
-        //@ init_ref_RawVecInner(self_ref);
+        //@ init_ref_RawVecInner_(self_ref);
         //@ open_frac_borrow(k, ref_initialized_(self_ref), 1/2);
         //@ open [?f]ref_initialized_::<RawVecInner<A>>(self_ref)();
         let capacity = self.capacity(elem_layout.size());
@@ -2008,7 +2178,7 @@ impl<A: Allocator> RawVecInner<A> {
         //@ let k = begin_lifetime();
         //@ share_RawVecInner(k, self);
         //@ let self_ref = precreate_ref(self);
-        //@ init_ref_RawVecInner(self_ref);
+        //@ init_ref_RawVecInner_(self_ref);
         //@ open_frac_borrow(k, ref_initialized_(self_ref), 1/2);
         //@ open [?f]ref_initialized_::<RawVecInner<A>>(self_ref)();
         let current_memory = self.current_memory(elem_layout);
@@ -2124,7 +2294,7 @@ impl<A: Allocator> RawVecInner<A> {
         //@ let k = begin_lifetime();
         //@ share_RawVecInner(k, self);
         //@ let self_ref = precreate_ref(self);
-        //@ init_ref_RawVecInner(self_ref);
+        //@ init_ref_RawVecInner_(self_ref);
         //@ open_frac_borrow(k, ref_initialized_(self_ref), 1/2);
         //@ open [?f]ref_initialized_::<RawVecInner<A>>(self_ref)();
         let current_memory = self.current_memory(elem_layout);
@@ -2158,6 +2328,7 @@ impl<A: Allocator> RawVecInner<A> {
         }
         //@ if current_memory == Option::None { leak ptr_[..capacity * Layout::size_(elem_layout)] |-> _; }
         //@ std::alloc::Allocator_to_own((*self).alloc);
+        //@ close RawVecInner0(*self, elem_layout, ptr_, capacity);
         //@ close <RawVecInner<A>>.own(t, *self);
     }
 }

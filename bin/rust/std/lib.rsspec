@@ -869,6 +869,14 @@ mod alloc {
         req type_interp::<A>() &*& atomic_mask(MaskTop) &*& full_borrow(k, Allocator_full_borrow_content_::<A>(t, l, alloc_id)) &*& [?q]lifetime_token(k);
         ens type_interp::<A>() &*& atomic_mask(MaskTop) &*& [_]Allocator_share(k, t, l, alloc_id) &*& [q]lifetime_token(k);
     
+    lem Allocator_share_mono<A>(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *A);
+        req type_interp::<A>() &*& [_]Allocator_share(k, t, l, ?alloc_id) &*& lifetime_inclusion(k1, k) == true;
+        ens type_interp::<A>() &*& [_]Allocator_share(k1, t, l, alloc_id);
+    
+    lem Allocator_sync<A>(t1: thread_id_t);
+        req type_interp::<A>() &*& is_Sync(typeid(A)) == true &*& [_]Allocator_share::<A>(?k, ?t0, ?l, ?alloc_id);
+        ens type_interp::<A>() &*& [_]Allocator_share::<A>(k, t1, l, alloc_id);
+    
     lem close_Allocator_share<A>(k: lifetime_t, t: thread_id_t, l: *A);
         req [_]Allocator_share(k, t, l, _);
         ens [_](<A>.share(k, t, l));
@@ -877,6 +885,10 @@ mod alloc {
         nonghost_callers_only
         req ref_init_perm(p, ?x) &*& [_]Allocator_share(k, t, x, ?allocId) &*& [?q]lifetime_token(k);
         ens [q]lifetime_token(k) &*& [_]Allocator_share(k, t, p, allocId) &*& [_]frac_borrow(k, ref_initialized_(p));
+    
+    lem init_ref_Allocator_share_m<A>(k: lifetime_t, t: thread_id_t, p: *A);
+        req type_interp::<A>() &*& atomic_mask(Nlft) &*& ref_init_perm(p, ?x) &*& [_]Allocator_share(k, t, x, ?allocId) &*& [?q]lifetime_token(k);
+        ens type_interp::<A>() &*& atomic_mask(Nlft) &*& [q]lifetime_token(k) &*& [_]Allocator_share(k, t, p, allocId) &*& [_]frac_borrow(k, ref_initialized_(p));
     
     lem close_Allocator_ref<'a, A>(t: thread_id_t, l: *A);
         req [_]Allocator_share('a, t, l, ?alloc_id);

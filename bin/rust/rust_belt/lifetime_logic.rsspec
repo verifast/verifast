@@ -442,7 +442,7 @@ lem close_frac_borrow_m(q_p: real, P: pred(;));
 
 lem open_frac_borrow_strong_m(k: lifetime_t, P: pred(;), q: real) -> lifetime_t;
     req atomic_mask(?mask) &*& mask_le(Nlft, mask) == true &*& [_]frac_borrow(k, P) &*& [q]lifetime_token(k);
-    ens atomic_mask(mask) &*& lifetime_inclusion(k, result) == true &*& [?f]P() &*& close_frac_borrow_token_strong(result, P, q, k, f);
+    ens atomic_mask(mask) &*& lifetime_inclusion(k, result) == true &*& [?f]P() &*& close_frac_borrow_token_strong(result, P, q, k, f) &*& 0 < f &*& f < 1;
 
 lem close_frac_borrow_strong_m();
     req atomic_mask(?mask) &*& mask_le(Nlft, mask) == true &*& close_frac_borrow_token_strong(?k1, ?P, ?q, ?k, ?f) &*& is_frac_borrow_convert_strong(?c, ?Ctx, ?Q, k1, f, P) &*& Ctx() &*& Q();
