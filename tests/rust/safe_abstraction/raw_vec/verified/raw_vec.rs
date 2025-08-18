@@ -1059,16 +1059,26 @@ impl<A: Allocator> RawVecInner<A> {
     /*@
     req thread_token(?t) &*&
         Allocator(t, alloc, ?alloc_id) &*&
-        t == currentThread &*&
-        Layout::size_(elem_layout) % Layout::align_(elem_layout) == 0;
+        t == currentThread;
     @*/
     /*@
     ens thread_token(t) &*&
         RawVecInner(t, result, elem_layout, alloc_id, ?ptr, ?capacity_) &*&
-        array_at_lft_(alloc_id.lft, ptr, Layout::size_(elem_layout) * capacity_, _) &*&
+        array_at_lft_(alloc_id.lft, ptr, ?n, _) &*&
+        Layout::size_(elem_layout) % Layout::align_(elem_layout) != 0 || n == Layout::size_(elem_layout) * capacity_ &*&
         capacity <= capacity_;
     @*/
-    //@ safety_proof { assume(false); }
+    /*@
+    safety_proof {
+        leak <Layout>.own(_t, elem_layout);
+        std::alloc::open_Allocator_own(alloc);
+        let result = call();
+        open RawVecInner(_t, result, elem_layout, ?alloc_id, ?ptr, ?capacity_);
+        std::alloc::Allocator_to_own(result.alloc);
+        close <RawVecInner<A>>.own(_t, result);
+        leak RawVecInner0(_, _, _, _, _, _) &*& array_at_lft_(_, _, _, _);
+    }
+    @*/
     {
         match Self::try_allocate_in(capacity, AllocInit::Uninitialized, alloc, elem_layout) {
             Ok(mut this) => {
@@ -1157,7 +1167,27 @@ impl<A: Allocator> RawVecInner<A> {
             Result::Err(e) => <std::collections::TryReserveError>.own(t, e)
         };
     @*/
-    //@ safety_proof { assume(false); }
+    /*@
+    safety_proof {
+        leak <AllocInit>.own(_t, init) &*& <Layout>.own(_t, elem_layout);
+        std::alloc::open_Allocator_own(alloc);
+        let result = call();
+        match result {
+            Result::Ok(r) => {
+                open RawVecInner(_t, r, elem_layout, ?alloc_id, ?ptr, ?capacity_);
+                std::alloc::Allocator_to_own(r.alloc);
+                close <RawVecInner<A>>.own(_t, r);
+                leak RawVecInner0(_, _, _, _, _, _);
+                match init {
+                    raw_vec::AllocInit::Uninitialized => { leak array_at_lft_(_, _, _, _); }
+                    raw_vec::AllocInit::Zeroed => { leak array_at_lft(_, _, _, _); }
+                }
+            }
+            Result::Err(e) => { }
+        }
+        close <std::result::Result<RawVecInner<A>, std::collections::TryReserveError>>.own(_t, result);
+    }
+    @*/
     {
         //@ std::alloc::Layout_inv(elem_layout);
         
@@ -1411,7 +1441,7 @@ impl<A: Allocator> RawVecInner<A> {
         };
     @*/
     //@ on_unwind_ens false;
-    //@ safety_proof { assume(false); }
+    //@ safety_proof { assume(false); } // This function should be marked `unsafe`; see https://github.com/rust-lang/rust/pull/145067
     {
         //@ open RawVecInner_share_(k, t, self, elem_layout, alloc_id, ptr, capacity);
         //@ open_frac_borrow(k, RawVecInner_frac_borrow_content(self, elem_layout, alloc_id, ptr, capacity), q);
@@ -1510,7 +1540,7 @@ impl<A: Allocator> RawVecInner<A> {
                 <std::collections::TryReserveError>.own(t, e)
         };
     @*/
-    //@ safety_proof { assume(false); }
+    //@ safety_proof { assume(false); } // This function should be marked `unsafe`; see https://github.com/rust-lang/rust/pull/145067
     {
         //@ let k = begin_lifetime();
         //@ share_RawVecInner(k, self);
@@ -1582,7 +1612,7 @@ impl<A: Allocator> RawVecInner<A> {
                 <std::collections::TryReserveError>.own(t, e)
         };
     @*/
-    //@ safety_proof { assume(false); }
+    //@ safety_proof { assume(false); } // This function should be marked `unsafe`; see https://github.com/rust-lang/rust/pull/145067
     {
         //@ let k = begin_lifetime();
         //@ share_RawVecInner(k, self);
@@ -1682,7 +1712,7 @@ impl<A: Allocator> RawVecInner<A> {
                 <std::collections::TryReserveError>.own(t, e)
         };
     @*/
-    //@ safety_proof { assume(false); }
+    //@ safety_proof { assume(false); } // This function should be marked `unsafe`; see https://github.com/rust-lang/rust/pull/145067
     {
         // This is ensured by the calling contexts.
         if cfg!(debug_assertions) { //~allow_dead_code // FIXME: The source location associated with a dead `else` branch is the entire `if` statement :-(
@@ -1806,7 +1836,7 @@ impl<A: Allocator> RawVecInner<A> {
                 <std::collections::TryReserveError>.own(t, e)
         };
     @*/
-    //@ safety_proof { assume(false); }
+    //@ safety_proof { assume(false); } // This function should be marked `unsafe`; see https://github.com/rust-lang/rust/pull/145067
     {
         if elem_layout.size() == 0 {
             // Since we return a capacity of `usize::MAX` when the type size is
@@ -1914,7 +1944,7 @@ impl<A: Allocator> RawVecInner<A> {
                 <std::collections::TryReserveError>.own(t, e)
         };
     @*/
-    //@ safety_proof { assume(false); }
+    //@ safety_proof { assume(false); } // This function should be marked `unsafe`; see https://github.com/rust-lang/rust/pull/145067
     {
         //@ let k = begin_lifetime();
         //@ share_RawVecInner(k, self);
@@ -2170,7 +2200,7 @@ ens thread_token(t) &*& *alloc |-> ?alloc1 &*& Allocator(t, alloc1, alloc_id) &*
             <std::collections::TryReserveError>.own(currentThread, e)
     };
 @*/
-//@ safety_proof { assume(false); }
+//@ safety_proof { assume(false); } // This function should be marked `unsafe`; see https://github.com/rust-lang/rust/pull/145067
 {
     alloc_guard(new_layout.size())?;
 
@@ -2263,7 +2293,16 @@ ens thread_token(currentThread) &*&
         Result::Err(err) => <std::collections::TryReserveError>.own(currentThread, err)
     };
 @*/
-//@ safety_proof { assume(false); }
+/*@
+safety_proof {
+    let result = call();
+    match result {
+        Result::Ok(r) => { tuple_0_eq(r); close_tuple_0_own(_t); }
+        Result::Err(e) => { }
+    }
+    close <std::result::Result<std_tuple_0_, std::collections::TryReserveError>>.own(_t, result);
+}
+@*/
 {
     if usize::BITS < 64 && alloc_size > isize::MAX as usize { //~allow_dead_code
         Err(CapacityOverflow.into()) //~allow_dead_code
