@@ -207,7 +207,7 @@ lem RawVecInner_inv2<A>()
     close RawVecInner(t, self_, elemLayout, alloc_id, ptr, capacity);
 }
 
-pred_ctor RawVecInner_frac_borrow_content<A>(l: *RawVecInner<A>, elemLayout: Layout, alloc_id: alloc_id_t, ptr: *u8, capacity: usize)(;) =
+pred_ctor RawVecInner_frac_borrow_content<A>(l: *RawVecInner<A>, elemLayout: Layout, ptr: *u8, capacity: usize)(;) =
     struct_RawVecInner_padding(l) &*&
     (*l).ptr |-> ?u &*&
     (*l).cap |-> ?cap &*&
@@ -223,7 +223,7 @@ pred_ctor RawVecInner_frac_borrow_content<A>(l: *RawVecInner<A>, elemLayout: Lay
 
 pred RawVecInner_share_<A>(k: lifetime_t, t: thread_id_t, l: *RawVecInner<A>, elemLayout: Layout, alloc_id: alloc_id_t, ptr: *u8, capacity: usize) =
     [_]std::alloc::Allocator_share(k, t, &(*l).alloc, alloc_id) &*&
-    [_]frac_borrow(k, RawVecInner_frac_borrow_content(l, elemLayout, alloc_id, ptr, capacity)) &*& ptr != 0;
+    [_]frac_borrow(k, RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity)) &*& ptr != 0;
 
 lem RawVecInner_share__inv<A>()
     req [_]RawVecInner_share_::<A>(?k, ?t, ?l, ?elemLayout, ?alloc_id, ?ptr, ?capacity);
@@ -238,7 +238,7 @@ lem RawVecInner_share__mono<A>(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l:
 {
     open [_]RawVecInner_share_(k, t, l, elemLayout, alloc_id, ptr, capacity);
     std::alloc::Allocator_share_mono::<A>(k, k1, t, &(*l).alloc);
-    frac_borrow_mono(k, k1, RawVecInner_frac_borrow_content(l, elemLayout, alloc_id, ptr, capacity));
+    frac_borrow_mono(k, k1, RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity));
     close RawVecInner_share_::<A>(k1, t, l, elemLayout, alloc_id, ptr, capacity);
     leak RawVecInner_share_::<A>(k1, t, l, elemLayout, alloc_id, ptr, capacity);
 }
@@ -255,7 +255,7 @@ lem RawVecInner_sync_<A>(t1: thread_id_t)
 
 pred RawVecInner_share_end_token<A>(k: lifetime_t, t: thread_id_t, l: *RawVecInner<A>, elemLayout: Layout, alloc_id: alloc_id_t, ptr: *u8, capacity: usize) =
     borrow_end_token(k, std::alloc::Allocator_full_borrow_content_(t, &(*l).alloc, alloc_id)) &*&
-    borrow_end_token(k, RawVecInner_frac_borrow_content(l, elemLayout, alloc_id, ptr, capacity)) &*&
+    borrow_end_token(k, RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity)) &*&
     if capacity * Layout::size_(elemLayout) == 0 {
         true
     } else {
@@ -271,9 +271,9 @@ lem share_RawVecInner<A>(k: lifetime_t, l: *RawVecInner<A>)
     RawVecInner_inv::<A>();
     open RawVecInner(t, self_, elemLayout, alloc_id, ptr, capacity);
     open_points_to(l);
-    close RawVecInner_frac_borrow_content::<A>(l, elemLayout, alloc_id, ptr, capacity)();
-    borrow(k, RawVecInner_frac_borrow_content(l, elemLayout, alloc_id, ptr, capacity));
-    full_borrow_into_frac(k, RawVecInner_frac_borrow_content(l, elemLayout, alloc_id, ptr, capacity));
+    close RawVecInner_frac_borrow_content::<A>(l, elemLayout, ptr, capacity)();
+    borrow(k, RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity));
+    full_borrow_into_frac(k, RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity));
     std::alloc::close_Allocator_full_borrow_content_(t, &(*l).alloc);
     borrow(k, std::alloc::Allocator_full_borrow_content_(t, &(*l).alloc, alloc_id));
     std::alloc::share_Allocator_full_borrow_content_(k, t, &(*l).alloc, alloc_id);
@@ -290,8 +290,8 @@ lem end_share_RawVecInner<A>(l: *RawVecInner<A>)
     open RawVecInner_share_end_token(k, t, l, elemLayout, alloc_id, ptr, capacity);
     borrow_end(k, std::alloc::Allocator_full_borrow_content_(t, &(*l).alloc, alloc_id));
     std::alloc::open_Allocator_full_borrow_content_(t, &(*l).alloc, alloc_id);
-    borrow_end(k, RawVecInner_frac_borrow_content(l, elemLayout, alloc_id, ptr, capacity));
-    open RawVecInner_frac_borrow_content::<A>(l, elemLayout, alloc_id, ptr, capacity)();
+    borrow_end(k, RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity));
+    open RawVecInner_frac_borrow_content::<A>(l, elemLayout, ptr, capacity)();
     close RawVecInner(t, *l, elemLayout, alloc_id, ptr, capacity);
 }
 
@@ -303,10 +303,10 @@ lem init_ref_RawVecInner_<A>(l: *RawVecInner<A>)
     open_ref_init_perm_RawVecInner(l);
     open RawVecInner_share_(k, t, l0, elemLayout, alloc_id, ptr, capacity);
     std::alloc::init_ref_Allocator_share(k, t, &(*l).alloc);
-    frac_borrow_sep(k, RawVecInner_frac_borrow_content(l0, elemLayout, alloc_id, ptr, capacity), ref_initialized_(&(*l).alloc));
-    let klong = open_frac_borrow_strong(k, sep_(RawVecInner_frac_borrow_content(l0, elemLayout, alloc_id, ptr, capacity), ref_initialized_(&(*l).alloc)), q);
-    open [?f]sep_(RawVecInner_frac_borrow_content(l0, elemLayout, alloc_id, ptr, capacity), ref_initialized_(&(*l).alloc))();
-    open [f]RawVecInner_frac_borrow_content::<A>(l0, elemLayout, alloc_id, ptr, capacity)();
+    frac_borrow_sep(k, RawVecInner_frac_borrow_content(l0, elemLayout, ptr, capacity), ref_initialized_(&(*l).alloc));
+    let klong = open_frac_borrow_strong(k, sep_(RawVecInner_frac_borrow_content(l0, elemLayout, ptr, capacity), ref_initialized_(&(*l).alloc)), q);
+    open [?f]sep_(RawVecInner_frac_borrow_content(l0, elemLayout, ptr, capacity), ref_initialized_(&(*l).alloc))();
+    open [f]RawVecInner_frac_borrow_content::<A>(l0, elemLayout, ptr, capacity)();
     let ptr_ = (*l0).ptr;
     let cap_ = (*l0).cap;
     open [f]ref_initialized_::<A>(&(*l).alloc)();
@@ -325,32 +325,32 @@ lem init_ref_RawVecInner_<A>(l: *RawVecInner<A>)
             ref_padding_end_token(l, l0, f/2) &*& [f/2]struct_RawVecInner_padding(l0) &*& [1 - f/2]ref_padding_initialized(l) &*&
             std::ptr::end_ref_Unique_token(&(*l).ptr, &(*l0).ptr, f/2) &*& [f/2](*l0).ptr |-> ptr_ &*& [1 - f/2]ref_initialized(&(*l).ptr) &*&
             std::num::niche_types::end_ref_UsizeNoHighBit_token(&(*l).cap, &(*l0).cap, f/2) &*& [f/2](*l0).cap |-> cap_ &*& [1 - f/2]ref_initialized(&(*l).cap);
-        produce_lem_ptr_chunk frac_borrow_convert_strong(Ctx, scaledp(f/2, sep_(ref_initialized_(l), RawVecInner_frac_borrow_content(l, elemLayout, alloc_id, ptr, capacity))), klong, f, sep_(RawVecInner_frac_borrow_content(l0, elemLayout, alloc_id, ptr, capacity), ref_initialized_(&(*l).alloc)))() {
-            open scaledp(f/2, sep_(ref_initialized_(l), RawVecInner_frac_borrow_content(l, elemLayout, alloc_id, ptr, capacity)))();
-            open sep_(ref_initialized_(l), RawVecInner_frac_borrow_content(l, elemLayout, alloc_id, ptr, capacity))();
+        produce_lem_ptr_chunk frac_borrow_convert_strong(Ctx, scaledp(f/2, sep_(ref_initialized_(l), RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity))), klong, f, sep_(RawVecInner_frac_borrow_content(l0, elemLayout, ptr, capacity), ref_initialized_(&(*l).alloc)))() {
+            open scaledp(f/2, sep_(ref_initialized_(l), RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity)))();
+            open sep_(ref_initialized_(l), RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity))();
             open ref_initialized_::<RawVecInner<A>>(l)();
-            open RawVecInner_frac_borrow_content::<A>(l, elemLayout, alloc_id, ptr, capacity)();
+            open RawVecInner_frac_borrow_content::<A>(l, elemLayout, ptr, capacity)();
             open_ref_initialized_RawVecInner(l);
             open Ctx();
             std::ptr::end_ref_Unique(&(*l).ptr);
             std::num::niche_types::end_ref_UsizeNoHighBit(&(*l).cap);
             end_ref_padding_RawVecInner(l);
-            close [f]RawVecInner_frac_borrow_content::<A>(l0, elemLayout, alloc_id, ptr, capacity)();
+            close [f]RawVecInner_frac_borrow_content::<A>(l0, elemLayout, ptr, capacity)();
             close [f]ref_initialized_::<A>(&(*l).alloc)();
-            close [f]sep_(RawVecInner_frac_borrow_content(l0, elemLayout, alloc_id, ptr, capacity), ref_initialized_(&(*l).alloc))();
+            close [f]sep_(RawVecInner_frac_borrow_content(l0, elemLayout, ptr, capacity), ref_initialized_(&(*l).alloc))();
         } {
             close Ctx();
             close [f/2]ref_initialized_::<RawVecInner<A>>(l)();
-            close [f/2]RawVecInner_frac_borrow_content::<A>(l, elemLayout, alloc_id, ptr, capacity)();
-            close [f/2]sep_(ref_initialized_(l), RawVecInner_frac_borrow_content(l, elemLayout, alloc_id, ptr, capacity))();
-            close scaledp(f/2, sep_(ref_initialized_(l), RawVecInner_frac_borrow_content(l, elemLayout, alloc_id, ptr, capacity)))();
-            close_frac_borrow_strong(klong, sep_(RawVecInner_frac_borrow_content(l0, elemLayout, alloc_id, ptr, capacity), ref_initialized_(&(*l).alloc)), scaledp(f/2, sep_(ref_initialized_(l), RawVecInner_frac_borrow_content(l, elemLayout, alloc_id, ptr, capacity))));
-            full_borrow_mono(klong, k, scaledp(f/2, sep_(ref_initialized_(l), RawVecInner_frac_borrow_content(l, elemLayout, alloc_id, ptr, capacity))));
+            close [f/2]RawVecInner_frac_borrow_content::<A>(l, elemLayout, ptr, capacity)();
+            close [f/2]sep_(ref_initialized_(l), RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity))();
+            close scaledp(f/2, sep_(ref_initialized_(l), RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity)))();
+            close_frac_borrow_strong(klong, sep_(RawVecInner_frac_borrow_content(l0, elemLayout, ptr, capacity), ref_initialized_(&(*l).alloc)), scaledp(f/2, sep_(ref_initialized_(l), RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity))));
+            full_borrow_mono(klong, k, scaledp(f/2, sep_(ref_initialized_(l), RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity))));
         }
     }
-    full_borrow_into_frac(k, scaledp(f/2, sep_(ref_initialized_(l), RawVecInner_frac_borrow_content(l, elemLayout, alloc_id, ptr, capacity))));
-    frac_borrow_implies_scaled(k, f/2, sep_(ref_initialized_(l), RawVecInner_frac_borrow_content(l, elemLayout, alloc_id, ptr, capacity)));
-    frac_borrow_split(k, ref_initialized_(l), RawVecInner_frac_borrow_content(l, elemLayout, alloc_id, ptr, capacity));
+    full_borrow_into_frac(k, scaledp(f/2, sep_(ref_initialized_(l), RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity))));
+    frac_borrow_implies_scaled(k, f/2, sep_(ref_initialized_(l), RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity)));
+    frac_borrow_split(k, ref_initialized_(l), RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity));
     close RawVecInner_share_(k, t, l, elemLayout, alloc_id, ptr, capacity);
     leak RawVecInner_share_(k, t, l, elemLayout, alloc_id, ptr, capacity);
 }
@@ -379,11 +379,11 @@ lem RawVecInner_share_full<A>(k: lifetime_t, t: thread_id_t, l: *RawVecInner<A>)
     open RawVecInner0(_, ?elemLayout, ?ptr, ?capacity);
     {
         pred Ctx() = true;
-        produce_lem_ptr_chunk full_borrow_convert_strong(Ctx, sep(std::alloc::Allocator_full_borrow_content_(t, &(*l).alloc, alloc_id), RawVecInner_frac_borrow_content(l, elemLayout, alloc_id, ptr, capacity)), klong, RawVecInner_full_borrow_content(t, l))() {
+        produce_lem_ptr_chunk full_borrow_convert_strong(Ctx, sep(std::alloc::Allocator_full_borrow_content_(t, &(*l).alloc, alloc_id), RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity)), klong, RawVecInner_full_borrow_content(t, l))() {
             open Ctx();
-            open sep(std::alloc::Allocator_full_borrow_content_(t, &(*l).alloc, alloc_id), RawVecInner_frac_borrow_content(l, elemLayout, alloc_id, ptr, capacity))();
+            open sep(std::alloc::Allocator_full_borrow_content_(t, &(*l).alloc, alloc_id), RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity))();
             std::alloc::open_Allocator_full_borrow_content_(t, &(*l).alloc, alloc_id);
-            open RawVecInner_frac_borrow_content::<A>(l, elemLayout, alloc_id, ptr, capacity)();
+            open RawVecInner_frac_borrow_content::<A>(l, elemLayout, ptr, capacity)();
             std::alloc::Allocator_to_own((*l).alloc);
             close RawVecInner0(*l, elemLayout, ptr, capacity);
             close <RawVecInner<A>>.own(t, *l);
@@ -391,15 +391,15 @@ lem RawVecInner_share_full<A>(k: lifetime_t, t: thread_id_t, l: *RawVecInner<A>)
         } {
             close Ctx();
             std::alloc::close_Allocator_full_borrow_content_(t, &(*l).alloc);
-            close RawVecInner_frac_borrow_content::<A>(l, elemLayout, alloc_id, ptr, capacity)();
-            close sep(std::alloc::Allocator_full_borrow_content_(t, &(*l).alloc, alloc_id), RawVecInner_frac_borrow_content(l, elemLayout, alloc_id, ptr, capacity))();
-            close_full_borrow_strong_m(klong, RawVecInner_full_borrow_content(t, l), sep(std::alloc::Allocator_full_borrow_content_(t, &(*l).alloc, alloc_id), RawVecInner_frac_borrow_content(l, elemLayout, alloc_id, ptr, capacity)));
-            full_borrow_mono(klong, k, sep(std::alloc::Allocator_full_borrow_content_(t, &(*l).alloc, alloc_id), RawVecInner_frac_borrow_content(l, elemLayout, alloc_id, ptr, capacity)));
-            full_borrow_split_m(k, std::alloc::Allocator_full_borrow_content_(t, &(*l).alloc, alloc_id), RawVecInner_frac_borrow_content(l, elemLayout, alloc_id, ptr, capacity));
+            close RawVecInner_frac_borrow_content::<A>(l, elemLayout, ptr, capacity)();
+            close sep(std::alloc::Allocator_full_borrow_content_(t, &(*l).alloc, alloc_id), RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity))();
+            close_full_borrow_strong_m(klong, RawVecInner_full_borrow_content(t, l), sep(std::alloc::Allocator_full_borrow_content_(t, &(*l).alloc, alloc_id), RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity)));
+            full_borrow_mono(klong, k, sep(std::alloc::Allocator_full_borrow_content_(t, &(*l).alloc, alloc_id), RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity)));
+            full_borrow_split_m(k, std::alloc::Allocator_full_borrow_content_(t, &(*l).alloc, alloc_id), RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity));
         }
     }
     std::alloc::share_Allocator_full_borrow_content_m(k, t, &(*l).alloc, alloc_id);
-    full_borrow_into_frac_m(k, RawVecInner_frac_borrow_content(l, elemLayout, alloc_id, ptr, capacity));
+    full_borrow_into_frac_m(k, RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity));
     close RawVecInner_share_::<A>(k, t, l, elemLayout, alloc_id, ptr, capacity);
     leak RawVecInner_share_::<A>(k, t, l, elemLayout, alloc_id, ptr, capacity);
     close RawVecInner_share::<A>(k, t, l);
@@ -414,10 +414,10 @@ lem init_ref_RawVecInner<A>(l: *RawVecInner<A>)
     open_ref_init_perm_RawVecInner(l);
     open RawVecInner_share_(k, t, l0, ?elemLayout, ?alloc_id, ?ptr, ?capacity);
     std::alloc::init_ref_Allocator_share_m(k, t, &(*l).alloc);
-    frac_borrow_sep(k, RawVecInner_frac_borrow_content(l0, elemLayout, alloc_id, ptr, capacity), ref_initialized_(&(*l).alloc));
-    let klong = open_frac_borrow_strong_m(k, sep_(RawVecInner_frac_borrow_content(l0, elemLayout, alloc_id, ptr, capacity), ref_initialized_(&(*l).alloc)), q);
-    open [?f]sep_(RawVecInner_frac_borrow_content(l0, elemLayout, alloc_id, ptr, capacity), ref_initialized_(&(*l).alloc))();
-    open [f]RawVecInner_frac_borrow_content::<A>(l0, elemLayout, alloc_id, ptr, capacity)();
+    frac_borrow_sep(k, RawVecInner_frac_borrow_content(l0, elemLayout, ptr, capacity), ref_initialized_(&(*l).alloc));
+    let klong = open_frac_borrow_strong_m(k, sep_(RawVecInner_frac_borrow_content(l0, elemLayout, ptr, capacity), ref_initialized_(&(*l).alloc)), q);
+    open [?f]sep_(RawVecInner_frac_borrow_content(l0, elemLayout, ptr, capacity), ref_initialized_(&(*l).alloc))();
+    open [f]RawVecInner_frac_borrow_content::<A>(l0, elemLayout, ptr, capacity)();
     let ptr_ = (*l0).ptr;
     let cap_ = (*l0).cap;
     open [f]ref_initialized_::<A>(&(*l).alloc)();
@@ -436,32 +436,32 @@ lem init_ref_RawVecInner<A>(l: *RawVecInner<A>)
             ref_padding_end_token(l, l0, f/2) &*& [f/2]struct_RawVecInner_padding(l0) &*& [1 - f/2]ref_padding_initialized(l) &*&
             std::ptr::end_ref_Unique_token(&(*l).ptr, &(*l0).ptr, f/2) &*& [f/2](*l0).ptr |-> ptr_ &*& [1 - f/2]ref_initialized(&(*l).ptr) &*&
             std::num::niche_types::end_ref_UsizeNoHighBit_token(&(*l).cap, &(*l0).cap, f/2) &*& [f/2](*l0).cap |-> cap_ &*& [1 - f/2]ref_initialized(&(*l).cap);
-        produce_lem_ptr_chunk frac_borrow_convert_strong(Ctx, scaledp(f/2, sep_(ref_initialized_(l), RawVecInner_frac_borrow_content(l, elemLayout, alloc_id, ptr, capacity))), klong, f, sep_(RawVecInner_frac_borrow_content(l0, elemLayout, alloc_id, ptr, capacity), ref_initialized_(&(*l).alloc)))() {
-            open scaledp(f/2, sep_(ref_initialized_(l), RawVecInner_frac_borrow_content(l, elemLayout, alloc_id, ptr, capacity)))();
-            open sep_(ref_initialized_(l), RawVecInner_frac_borrow_content(l, elemLayout, alloc_id, ptr, capacity))();
+        produce_lem_ptr_chunk frac_borrow_convert_strong(Ctx, scaledp(f/2, sep_(ref_initialized_(l), RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity))), klong, f, sep_(RawVecInner_frac_borrow_content(l0, elemLayout, ptr, capacity), ref_initialized_(&(*l).alloc)))() {
+            open scaledp(f/2, sep_(ref_initialized_(l), RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity)))();
+            open sep_(ref_initialized_(l), RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity))();
             open ref_initialized_::<RawVecInner<A>>(l)();
-            open RawVecInner_frac_borrow_content::<A>(l, elemLayout, alloc_id, ptr, capacity)();
+            open RawVecInner_frac_borrow_content::<A>(l, elemLayout, ptr, capacity)();
             open_ref_initialized_RawVecInner(l);
             open Ctx();
             std::ptr::end_ref_Unique(&(*l).ptr);
             std::num::niche_types::end_ref_UsizeNoHighBit(&(*l).cap);
             end_ref_padding_RawVecInner(l);
-            close [f]RawVecInner_frac_borrow_content::<A>(l0, elemLayout, alloc_id, ptr, capacity)();
+            close [f]RawVecInner_frac_borrow_content::<A>(l0, elemLayout, ptr, capacity)();
             close [f]ref_initialized_::<A>(&(*l).alloc)();
-            close [f]sep_(RawVecInner_frac_borrow_content(l0, elemLayout, alloc_id, ptr, capacity), ref_initialized_(&(*l).alloc))();
+            close [f]sep_(RawVecInner_frac_borrow_content(l0, elemLayout, ptr, capacity), ref_initialized_(&(*l).alloc))();
         } {
             close Ctx();
             close [f/2]ref_initialized_::<RawVecInner<A>>(l)();
-            close [f/2]RawVecInner_frac_borrow_content::<A>(l, elemLayout, alloc_id, ptr, capacity)();
-            close [f/2]sep_(ref_initialized_(l), RawVecInner_frac_borrow_content(l, elemLayout, alloc_id, ptr, capacity))();
-            close scaledp(f/2, sep_(ref_initialized_(l), RawVecInner_frac_borrow_content(l, elemLayout, alloc_id, ptr, capacity)))();
+            close [f/2]RawVecInner_frac_borrow_content::<A>(l, elemLayout, ptr, capacity)();
+            close [f/2]sep_(ref_initialized_(l), RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity))();
+            close scaledp(f/2, sep_(ref_initialized_(l), RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity)))();
             close_frac_borrow_strong_m();
-            full_borrow_mono(klong, k, scaledp(f/2, sep_(ref_initialized_(l), RawVecInner_frac_borrow_content(l, elemLayout, alloc_id, ptr, capacity))));
+            full_borrow_mono(klong, k, scaledp(f/2, sep_(ref_initialized_(l), RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity))));
         }
     }
-    full_borrow_into_frac_m(k, scaledp(f/2, sep_(ref_initialized_(l), RawVecInner_frac_borrow_content(l, elemLayout, alloc_id, ptr, capacity))));
-    frac_borrow_implies_scaled(k, f/2, sep_(ref_initialized_(l), RawVecInner_frac_borrow_content(l, elemLayout, alloc_id, ptr, capacity)));
-    frac_borrow_split(k, ref_initialized_(l), RawVecInner_frac_borrow_content(l, elemLayout, alloc_id, ptr, capacity));
+    full_borrow_into_frac_m(k, scaledp(f/2, sep_(ref_initialized_(l), RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity))));
+    frac_borrow_implies_scaled(k, f/2, sep_(ref_initialized_(l), RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity)));
+    frac_borrow_split(k, ref_initialized_(l), RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity));
     close RawVecInner_share_(k, t, l, elemLayout, alloc_id, ptr, capacity);
     leak RawVecInner_share_(k, t, l, elemLayout, alloc_id, ptr, capacity);
     close RawVecInner_share::<A>(k, t, l);
@@ -1572,11 +1572,11 @@ impl<A: Allocator> RawVecInner<A> {
     @*/
     {
         //@ open RawVecInner_share_(k, t, self, elem_layout, alloc_id, ptr, capacity);
-        //@ open_frac_borrow(k, RawVecInner_frac_borrow_content(self, elem_layout, alloc_id, ptr, capacity), q);
-        //@ open [?f]RawVecInner_frac_borrow_content::<A>(self, elem_layout, alloc_id, ptr, capacity)();
+        //@ open_frac_borrow(k, RawVecInner_frac_borrow_content(self, elem_layout, ptr, capacity), q);
+        //@ open [?f]RawVecInner_frac_borrow_content::<A>(self, elem_layout, ptr, capacity)();
         let r = self.ptr.cast().as_non_null_ptr();
-        //@ close [f]RawVecInner_frac_borrow_content::<A>(self, elem_layout, alloc_id, ptr, capacity)();
-        //@ close_frac_borrow(f, RawVecInner_frac_borrow_content(self, elem_layout, alloc_id, ptr, capacity));
+        //@ close [f]RawVecInner_frac_borrow_content::<A>(self, elem_layout, ptr, capacity)();
+        //@ close_frac_borrow(f, RawVecInner_frac_borrow_content(self, elem_layout, ptr, capacity));
         r
     }
 
@@ -1591,12 +1591,12 @@ impl<A: Allocator> RawVecInner<A> {
     //@ safety_proof { assume(false); }
     {
         //@ open RawVecInner_share_(k, t, self, elem_layout, alloc_id, ptr, capacity);
-        //@ open_frac_borrow(k, RawVecInner_frac_borrow_content(self, elem_layout, alloc_id, ptr, capacity), q);
-        //@ open [?f]RawVecInner_frac_borrow_content::<A>(self, elem_layout, alloc_id, ptr, capacity)();
+        //@ open_frac_borrow(k, RawVecInner_frac_borrow_content(self, elem_layout, ptr, capacity), q);
+        //@ open [?f]RawVecInner_frac_borrow_content::<A>(self, elem_layout, ptr, capacity)();
         let r =
             if elem_size == 0 { usize::MAX } else { self.cap.as_inner() };
-        //@ close [f]RawVecInner_frac_borrow_content::<A>(self, elem_layout, alloc_id, ptr, capacity)();
-        //@ close_frac_borrow(f, RawVecInner_frac_borrow_content(self, elem_layout, alloc_id, ptr, capacity));
+        //@ close [f]RawVecInner_frac_borrow_content::<A>(self, elem_layout, ptr, capacity)();
+        //@ close_frac_borrow(f, RawVecInner_frac_borrow_content(self, elem_layout, ptr, capacity));
         r
     }
 
@@ -1623,14 +1623,14 @@ impl<A: Allocator> RawVecInner<A> {
     //@ safety_proof { assume(false); } // This function should be marked `unsafe`; see https://github.com/rust-lang/rust/pull/145067
     {
         //@ open RawVecInner_share_(k, t, self, elem_layout, alloc_id, ptr, capacity);
-        //@ open_frac_borrow(k, RawVecInner_frac_borrow_content(self, elem_layout, alloc_id, ptr, capacity), q);
-        //@ open [?f]RawVecInner_frac_borrow_content::<A>(self, elem_layout, alloc_id, ptr, capacity)();
+        //@ open_frac_borrow(k, RawVecInner_frac_borrow_content(self, elem_layout, ptr, capacity), q);
+        //@ open [?f]RawVecInner_frac_borrow_content::<A>(self, elem_layout, ptr, capacity)();
         //@ std::num::niche_types::UsizeNoHighBit_inv((*self).cap);
         //@ std::alloc::Layout_inv(elem_layout);
         //@ mul_zero(capacity, Layout::size_(elem_layout));
         if elem_layout.size() == 0 || self.cap.as_inner() == 0 {
-            //@ close [f]RawVecInner_frac_borrow_content::<A>(self, elem_layout, alloc_id, ptr, capacity)();
-            //@ close_frac_borrow(f, RawVecInner_frac_borrow_content::<A>(self, elem_layout, alloc_id, ptr, capacity));
+            //@ close [f]RawVecInner_frac_borrow_content::<A>(self, elem_layout, ptr, capacity)();
+            //@ close_frac_borrow(f, RawVecInner_frac_borrow_content::<A>(self, elem_layout, ptr, capacity));
             None
         } else {
             // We could use Layout::array here which ensures the absence of isize and usize overflows
@@ -1648,8 +1648,8 @@ impl<A: Allocator> RawVecInner<A> {
                 let layout = Layout::from_size_align_unchecked(alloc_size, elem_layout.align());
                 let ptr_ = self.ptr.into();
                 //@ std::ptr::NonNull_new_ptr(std::ptr::Unique::non_null_((*self).ptr));
-                //@ close [f]RawVecInner_frac_borrow_content::<A>(self, elem_layout, alloc_id, ptr, capacity)();
-                //@ close_frac_borrow(f, RawVecInner_frac_borrow_content::<A>(self, elem_layout, alloc_id, ptr, capacity));
+                //@ close [f]RawVecInner_frac_borrow_content::<A>(self, elem_layout, ptr, capacity)();
+                //@ close_frac_borrow(f, RawVecInner_frac_borrow_content::<A>(self, elem_layout, ptr, capacity));
                 Some((ptr_, layout))
             }
         }
