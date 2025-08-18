@@ -701,6 +701,7 @@ mod alloc {
     //@ fix Layout::align_(layout: Layout) -> usize;
     //@ fix Layout::from_size_align_(size: usize, align: usize) -> Layout;
     //@ fix Layout::new_<T>() -> Layout { Layout::from_size_align_(std::mem::size_of_::<T>(), std::mem::align_of_::<T>()) }
+    //@ fix Layout::repeat_(layout: Layout, n: usize) -> option<pair<Layout, usize>>;
     
     //@ fix is_valid_layout(size: usize, align: usize) -> bool { is_power_of_2(align) && 0 <= size && size <= isize::MAX - isize::MAX % align }
     //@ fix Layout::is_valid(layout: Layout) -> bool { is_valid_layout(Layout::size_(layout), Layout::align_(layout)) }
@@ -730,6 +731,26 @@ mod alloc {
     lem_auto(Layout::from_size_align_(Layout::size_(l), Layout::align_(l))) Layout_from_size_align__Layout_size__Layout_align_(l: Layout);
         req true;
         ens Layout::from_size_align_(Layout::size_(l), Layout::align_(l)) == l;
+    
+    lem Layout_repeat_some(layout: Layout, n: usize);
+        req Layout::repeat_(layout, n) == some(pair(?result, ?stride));
+        ens Layout::size_(layout) <= stride &*&
+            stride % Layout::align_(layout) == 0 &*&
+            stride - Layout::size_(layout) < Layout::align_(layout) &*&
+            Layout::size_(result) == n * stride &*&
+            Layout::align_(result) == Layout::align_(layout);
+    
+    lem Layout_repeat_some_size_aligned(layout: Layout, n: usize);
+        req Layout::repeat_(layout, n) == some(pair(?result, ?stride)) &*& Layout::size_(layout) % Layout::align_(layout) == 0;
+        ens Layout::size_(result) == n * Layout::size_(layout) &*&
+            Layout::align_(result) == Layout::align_(layout) &*&
+            stride == Layout::size_(layout);
+    
+    lem Layout_repeat_size_aligned_intro(layout: Layout, n: usize);
+        req Layout::size_(layout) % Layout::align_(layout) == 0 &*& 0 <= n &*& n * Layout::size_(layout) <= isize::MAX;
+        ens Layout::repeat_(layout, n) == some(pair(?result, Layout::size_(layout))) &*&
+            Layout::size_(result) == n * Layout::size_(layout) &*&
+            Layout::align_(result) == Layout::align_(layout);
     
     pred end_ref_Layout_token(p: *Layout, x: *Layout, f: real);
     
@@ -772,14 +793,17 @@ mod alloc {
         //@ ens [f](*self |-> l) &*& result == std::ptr::Alignment::new_(Layout::align_(l)) &*& std::num::NonZero::get_(std::ptr::Alignment::as_nonzero_(result)) == Layout::align_(l);
 
         fn repeat<'a>(self: &'a Layout, n: usize) -> std::result::Result<(Layout, usize), LayoutError>;
-        //@ req [?f](*self |-> ?l) &*& Layout::size_(l) % Layout::align_(l) == 0;
+        //@ req [?f](*self |-> ?l);
         /*@
         ens [f](*self |-> l) &*&
             match result {
                 Result::Ok(r) =>
-                    Layout::size_(r.0) == n * Layout::size_(l) &*&
-                    Layout::align_(r.0) == Layout::align_(l) &*&
-                    r.1 == Layout::size_(l),
+                    Layout::repeat_(l, n) == some(pair(r.0, r.1)) &*&
+                    Layout::size_(r.0) == n * r.1 &*&
+                    Layout::size_(l) <= r.1 &*&
+                    r.1 % Layout::align_(l) == 0 &*&
+                    r.1 - Layout::size_(l) < Layout::align_(l) &*&
+                    Layout::align_(r.0) == Layout::align_(l),
                 Result::Err(e) => true
             };
         @*/
