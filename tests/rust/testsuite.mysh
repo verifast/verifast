@@ -54,8 +54,8 @@ cd purely_unsafe
   verifast -ignore_unwind_paths -allow_assume tree3.rs
   verifast generic_structs.rs
   verifast -ignore_ref_creation str.rs
-  verifast -ignore_unwind_paths -prover z3v4.5 -target LP64 -ignore_ref_creation -extern ../unverified/platform httpd.rs
-  verifast -ignore_unwind_paths -prover z3v4.5 -target LP64 -ignore_ref_creation -extern ../unverified/platform httpd_vec.rs
+  verifast -ignore_unwind_paths -target LP64 -ignore_ref_creation -extern ../unverified/platform httpd.rs
+  verifast -ignore_unwind_paths -target LP64 -ignore_ref_creation -extern ../unverified/platform httpd_vec.rs
   cd simple_mutex
     cargo verifast -ignore_unwind_paths -allow_assume
   cd ..

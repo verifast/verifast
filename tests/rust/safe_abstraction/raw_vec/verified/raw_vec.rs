@@ -67,8 +67,8 @@ enum AllocInit {
 
 type Cap = core::num::niche_types::UsizeNoHighBit;
 
-//@ fix Cap_new_(n: usize) -> UsizeNoHighBit { UsizeNoHighBit::new_(n) }
-//@ fix Cap_as_inner_(cap: UsizeNoHighBit) -> usize { UsizeNoHighBit::as_inner_(cap) }
+//@ fix Cap_new_(n: usize) -> UsizeNoHighBit { UsizeNoHighBit::new(n) }
+//@ fix Cap_as_inner_(cap: UsizeNoHighBit) -> usize { cap.as_inner() }
 
 const ZERO_CAP: Cap = unsafe { Cap::new_unchecked(0) };
 
@@ -137,11 +137,11 @@ fix logical_capacity(cap: UsizeNoHighBit, elem_size: usize) -> usize {
 
 pred RawVecInner<A>(t: thread_id_t, self: RawVecInner<A>, elemLayout: Layout, alloc_id: alloc_id_t, ptr: *u8, capacity: usize) =
     Allocator(t, self.alloc, alloc_id) &*&
-    capacity == logical_capacity(self.cap, Layout::size_(elemLayout)) &*&
+    capacity == logical_capacity(self.cap, elemLayout.size()) &*&
     ptr == NonNull_ptr(Unique::non_null_(self.ptr)) &*&
-    ptr as usize % Layout::align_(elemLayout) == 0 &*&
+    ptr as usize % elemLayout.align() == 0 &*&
     pointer_within_limits(ptr) == true &*&
-    if capacity * Layout::size_(elemLayout) == 0 {
+    if capacity * elemLayout.size() == 0 {
         true
     } else {
         Layout::repeat_(elemLayout, capacity) == some(pair(?allocLayout, ?stride)) &*&
@@ -149,11 +149,11 @@ pred RawVecInner<A>(t: thread_id_t, self: RawVecInner<A>, elemLayout: Layout, al
     };
     
 pred RawVecInner0<A>(self: RawVecInner<A>, elemLayout: Layout, ptr: *u8, capacity: usize) =
-    capacity == logical_capacity(self.cap, Layout::size_(elemLayout)) &*&
+    capacity == logical_capacity(self.cap, elemLayout.size()) &*&
     ptr == NonNull_ptr(Unique::non_null_(self.ptr)) &*&
-    ptr as usize % Layout::align_(elemLayout) == 0 &*&
+    ptr as usize % elemLayout.align() == 0 &*&
     pointer_within_limits(ptr) == true &*&
-    if capacity * Layout::size_(elemLayout) == 0 {
+    if capacity * elemLayout.size() == 0 {
         true
     } else {
         Layout::repeat_(elemLayout, capacity) == some(pair(?allocLayout, ?stride))
@@ -191,7 +191,7 @@ lem RawVecInner_send<A>(t1: thread_id_t)
 
 lem RawVecInner_inv<A>()
     req RawVecInner::<A>(?t, ?self_, ?elemLayout, ?alloc_id, ?ptr, ?capacity);
-    ens RawVecInner::<A>(t, self_, elemLayout, alloc_id, ptr, capacity) &*& ptr != 0 &*& ptr as usize % Layout::align_(elemLayout) == 0 &*& 0 <= capacity &*& capacity <= usize::MAX;
+    ens RawVecInner::<A>(t, self_, elemLayout, alloc_id, ptr, capacity) &*& ptr != 0 &*& ptr as usize % elemLayout.align() == 0 &*& 0 <= capacity &*& capacity <= usize::MAX;
 {
     open RawVecInner(t, self_, elemLayout, alloc_id, ptr, capacity);
     std::num::niche_types::UsizeNoHighBit_inv(self_.cap);
@@ -200,7 +200,7 @@ lem RawVecInner_inv<A>()
 
 lem RawVecInner_inv2<A>()
     req RawVecInner::<A>(?t, ?self_, ?elemLayout, ?alloc_id, ?ptr, ?capacity);
-    ens RawVecInner::<A>(t, self_, elemLayout, alloc_id, ptr, capacity) &*& pointer_within_limits(ptr) == true &*& ptr as usize % Layout::align_(elemLayout) == 0 &*& 0 <= capacity &*& capacity <= usize::MAX &*& if Layout::size_(elemLayout) == 0 { capacity == usize::MAX } else { capacity <= isize::MAX };
+    ens RawVecInner::<A>(t, self_, elemLayout, alloc_id, ptr, capacity) &*& pointer_within_limits(ptr) == true &*& ptr as usize % elemLayout.align() == 0 &*& 0 <= capacity &*& capacity <= usize::MAX &*& if elemLayout.size() == 0 { capacity == usize::MAX } else { capacity <= isize::MAX };
 {
     open RawVecInner(t, self_, elemLayout, alloc_id, ptr, capacity);
     std::num::niche_types::UsizeNoHighBit_inv(self_.cap);
@@ -211,11 +211,11 @@ pred_ctor RawVecInner_frac_borrow_content<A>(l: *RawVecInner<A>, elemLayout: Lay
     struct_RawVecInner_padding(l) &*&
     (*l).ptr |-> ?u &*&
     (*l).cap |-> ?cap &*&
-    capacity == logical_capacity(cap, Layout::size_(elemLayout)) &*&
+    capacity == logical_capacity(cap, elemLayout.size()) &*&
     ptr == NonNull_ptr(Unique::non_null_(u)) &*&
-    ptr as usize % Layout::align_(elemLayout) == 0 &*&
+    ptr as usize % elemLayout.align() == 0 &*&
     pointer_within_limits(ptr) == true &*&
-    if capacity * Layout::size_(elemLayout) == 0 {
+    if capacity * elemLayout.size() == 0 {
         true
     } else {
         Layout::repeat_(elemLayout, capacity) == some(pair(?allocLayout, ?stride))
@@ -256,7 +256,7 @@ lem RawVecInner_sync_<A>(t1: thread_id_t)
 pred RawVecInner_share_end_token<A>(k: lifetime_t, t: thread_id_t, l: *RawVecInner<A>, elemLayout: Layout, alloc_id: alloc_id_t, ptr: *u8, capacity: usize) =
     borrow_end_token(k, std::alloc::Allocator_full_borrow_content_(t, &(*l).alloc, alloc_id)) &*&
     borrow_end_token(k, RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity)) &*&
-    if capacity * Layout::size_(elemLayout) == 0 {
+    if capacity * elemLayout.size() == 0 {
         true
     } else {
         Layout::repeat_(elemLayout, capacity) == some(pair(?allocLayout, ?stride)) &*&
@@ -1373,7 +1373,7 @@ impl<A: Allocator> RawVecInner<A> {
     @*/
     /*@
     ens thread_token(t) &*&
-        RawVecInner(t, result, Layout::from_size_align_(elemSize, align.as_nonzero().get()), alloc_id, ?ptr, ?capacity) &*&
+        RawVecInner(t, result, Layout::from_size_align(elemSize, align.as_nonzero().get()), alloc_id, ?ptr, ?capacity) &*&
         array_at_lft_(alloc_id.lft, ptr, capacity * elemSize, _) &*&
         capacity * elemSize == 0;
     @*/
@@ -1394,8 +1394,8 @@ impl<A: Allocator> RawVecInner<A> {
         std::num::niche_types::UsizeNoHighBit_inv(result.cap);
         std::alloc::Layout_inv(elemLayout);
         mul_zero(capacity, elemLayout.size());
-        assert elemLayout == Layout::from_size_align_(0, align.as_nonzero().get());
-        std::alloc::Layout_size__Layout_from_size_align_(0, align.as_nonzero().get());
+        assert elemLayout == Layout::from_size_align(0, align.as_nonzero().get());
+        std::alloc::Layout_size_Layout_from_size_align(0, align.as_nonzero().get());
         assert elemLayout.size() == 0;
         assert capacity * elemLayout.size() == 0;
         std::alloc::Allocator_to_own(result.alloc);
@@ -1410,7 +1410,7 @@ impl<A: Allocator> RawVecInner<A> {
         let cap = ZERO_CAP;
         let r = Self { ptr, cap, alloc };
         //@ div_rem_nonneg_unique(align.as_nonzero().get(), align.as_nonzero().get(), 1, 0);
-        //@ let layout = Layout::from_size_align_(elemSize, align.as_nonzero().get());
+        //@ let layout = Layout::from_size_align(elemSize, align.as_nonzero().get());
         //@ close RawVecInner(t, r, layout, alloc_id, _, _);
         r
     }
@@ -1428,7 +1428,7 @@ impl<A: Allocator> RawVecInner<A> {
     ens thread_token(t) &*&
         RawVecInner(t, result, elem_layout, alloc_id, ?ptr, ?capacity_) &*&
         array_at_lft_(alloc_id.lft, ptr, ?n, _) &*&
-        Layout::size_(elem_layout) % Layout::align_(elem_layout) != 0 || n == Layout::size_(elem_layout) * capacity_ &*&
+        elem_layout.size() % elem_layout.align() != 0 || n == elem_layout.size() * capacity_ &*&
         capacity <= capacity_;
     @*/
     /*@
@@ -1440,7 +1440,7 @@ impl<A: Allocator> RawVecInner<A> {
         std::alloc::Allocator_to_own(result.alloc);
         close RawVecInner0(result, elem_layout, ptr, capacity_);
         close <RawVecInner<A>>.own(_t, result);
-        if capacity_ * Layout::size_(elem_layout) != 0 {
+        if capacity_ * elem_layout.size() != 0 {
             leak alloc_block_in(_, _, _);
         }
         leak array_at_lft_(_, _, _, _);
@@ -1467,15 +1467,15 @@ impl<A: Allocator> RawVecInner<A> {
                     //@ assert RawVecInner(t, ?this_, elem_layout, alloc_id, ?ptr, ?capacity_);
                     //@ assert needs_to_grow == (capacity > std::num::wrapping_sub_usize(capacity_, 0));
                     //@ std::num::niche_types::UsizeNoHighBit_inv(this_.cap);
-                    //@ assert 0 <= logical_capacity(this_.cap, Layout::size_(elem_layout));
+                    //@ assert 0 <= logical_capacity(this_.cap, elem_layout.size());
                     //@ assert 0 <= capacity;
                     //@ std::alloc::Layout_inv(elem_layout);
-                    //@ assert 0 <= Layout::size_(elem_layout);
+                    //@ assert 0 <= elem_layout.size();
                     /*@
-                    if Layout::size_(elem_layout) == 0 {
+                    if elem_layout.size() == 0 {
                     } else {
                         RawVecInner_inv2::<A>();
-                        std::num::niche_types::UsizeNoHighBit_as_inner__new_(capacity);
+                        std::num::niche_types::UsizeNoHighBit_as_inner_new(capacity);
                     }
                     @*/
                     hint::assert_unchecked(!needs_to_grow);
@@ -1525,10 +1525,10 @@ impl<A: Allocator> RawVecInner<A> {
                 match init {
                     raw_vec::AllocInit::Uninitialized =>
                         array_at_lft_(alloc_id.lft, ptr, ?n, _) &*&
-                        Layout::size_(elem_layout) % Layout::align_(elem_layout) != 0 || n == capacity_ * Layout::size_(elem_layout),
+                        elem_layout.size() % elem_layout.align() != 0 || n == capacity_ * elem_layout.size(),
                     raw_vec::AllocInit::Zeroed =>
                         array_at_lft(alloc_id.lft, ptr, ?n, ?bs) &*&
-                        Layout::size_(elem_layout) % Layout::align_(elem_layout) != 0 || n == capacity_ * Layout::size_(elem_layout) &*&
+                        elem_layout.size() % elem_layout.align() != 0 || n == capacity_ * elem_layout.size() &*&
                         forall(bs, (eq)(0)) == true
                 },
             Result::Err(e) => <std::collections::TryReserveError>.own(t, e)
@@ -1542,7 +1542,7 @@ impl<A: Allocator> RawVecInner<A> {
         match result {
             Result::Ok(r) => {
                 open RawVecInner(_t, r, elem_layout, ?alloc_id, ?ptr, ?capacity_);
-                if capacity_ * Layout::size_(elem_layout) != 0 {
+                if capacity_ * elem_layout.size() != 0 {
                     leak alloc_block_in(_, _, _);
                 }
                 std::alloc::Allocator_to_own(r.alloc);
@@ -1577,19 +1577,19 @@ impl<A: Allocator> RawVecInner<A> {
         //@ let layout_ = layout;
         //@ assert Layout::repeat_(elemLayout, capacity) == some(pair(layout_, ?stride));
         //@ std::alloc::Layout_repeat_some(elemLayout, capacity);
-        //@ mul_mono_l(Layout::size_(elemLayout), stride, capacity);
+        //@ mul_mono_l(elemLayout.size(), stride, capacity);
         // Don't allocate here because `Drop` will not deallocate when `capacity` is 0.
         if layout.size() == 0 {
             let elem_layout_alignment = elem_layout.alignment();
-            //@ close exists(Layout::size_(elem_layout));
+            //@ close exists(elem_layout.size());
             let r = Self::new_in(alloc, elem_layout_alignment);
             //@ RawVecInner_inv2::<A>();
             //@ assert RawVecInner(_, _, _, _, ?ptr_, ?capacity_);
-            //@ assert capacity * Layout::size_(elem_layout) <= 0;
-            //@ mul_mono_l(0, capacity, Layout::size_(elem_layout));
-            //@ assert capacity * Layout::size_(elem_layout) == 0;
-            //@ mul_zero(capacity, Layout::size_(elem_layout));
-            //@ if Layout::size_(elem_layout) != 0 { assert capacity == 0; }
+            //@ assert capacity * elem_layout.size() <= 0;
+            //@ mul_mono_l(0, capacity, elem_layout.size());
+            //@ assert capacity * elem_layout.size() == 0;
+            //@ mul_zero(capacity, elem_layout.size());
+            //@ if elem_layout.size() != 0 { assert capacity == 0; }
             /*@
             match init {
                 raw_vec::AllocInit::Uninitialized => { close array_at_lft_(alloc_id.lft, ptr_, 0, []); }
@@ -1652,30 +1652,30 @@ impl<A: Allocator> RawVecInner<A> {
         // matches the size requested. If that ever changes, the capacity
         // here should change to `ptr.len() / size_of::<T>()`.
         //@ std::alloc::Layout_inv(elem_layout);
-        //@ assert 0 <= Layout::size_(elem_layout);
+        //@ assert 0 <= elem_layout.size();
         /*@
-        if Layout::size_(elem_layout) % Layout::align_(elem_layout) == 0 {
-            div_rem_nonneg(Layout::size_(elem_layout), Layout::align_(elem_layout));
-            div_rem_nonneg(stride, Layout::align_(elem_layout));
-            if Layout::size_(elem_layout) / Layout::align_(elem_layout) < stride / Layout::align_(elem_layout) {
-                mul_mono_l(Layout::size_(elem_layout) / Layout::align_(elem_layout) + 1, stride / Layout::align_(elem_layout), Layout::align_(elem_layout));
+        if elem_layout.size() % elem_layout.align() == 0 {
+            div_rem_nonneg(elem_layout.size(), elem_layout.align());
+            div_rem_nonneg(stride, elem_layout.align());
+            if elem_layout.size() / elem_layout.align() < stride / elem_layout.align() {
+                mul_mono_l(elem_layout.size() / elem_layout.align() + 1, stride / elem_layout.align(), elem_layout.align());
             } else {
-                assert Layout::size_(elem_layout) / Layout::align_(elem_layout) >= stride / Layout::align_(elem_layout);
-                if Layout::size_(elem_layout) / Layout::align_(elem_layout) > stride / Layout::align_(elem_layout) {
-                    mul_mono_l(stride / Layout::align_(elem_layout) + 1, Layout::size_(elem_layout) / Layout::align_(elem_layout), Layout::align_(elem_layout));
+                assert elem_layout.size() / elem_layout.align() >= stride / elem_layout.align();
+                if elem_layout.size() / elem_layout.align() > stride / elem_layout.align() {
+                    mul_mono_l(stride / elem_layout.align() + 1, elem_layout.size() / elem_layout.align(), elem_layout.align());
                     assert false;
                 }
             }
-            assert stride == Layout::size_(elem_layout);
+            assert stride == elem_layout.size();
         }
         @*/
         /*@
-        if Layout::size_(elem_layout) == 0 {
-            div_rem_nonneg_unique(Layout::size_(elem_layout), Layout::align_(elem_layout), 0, 0);
+        if elem_layout.size() == 0 {
+            div_rem_nonneg_unique(elem_layout.size(), elem_layout.align(), 0, 0);
         }
         @*/
-        //@ assert Layout::size_(elem_layout) != 0;
-        //@ mul_mono_l(1, Layout::size_(elem_layout), capacity);
+        //@ assert elem_layout.size() != 0;
+        //@ mul_mono_l(1, elem_layout.size(), capacity);
         //@ std::alloc::Layout_inv(layout);
         let res = Self {
             ptr: Unique::from(ptr.cast()),
@@ -1686,7 +1686,7 @@ impl<A: Allocator> RawVecInner<A> {
         //@ std::ptr::Unique_non_null__from_non_null_(ptr.ptr);
         //@ std::ptr::NonNull_new_ptr(ptr.ptr);
         //@ assert Unique::non_null_(res.ptr) == ptr.ptr;
-        //@ assert Layout::align_(layout) == Layout::align_(elem_layout);
+        //@ assert layout.align() == elem_layout.align();
         //@ std::alloc::alloc_block_in_aligned(NonNull_ptr(ptr.ptr));
         //@ close RawVecInner(t, res, elem_layout, alloc_id, NonNull_ptr(ptr.ptr), _);
         Ok(res)
@@ -1695,39 +1695,39 @@ impl<A: Allocator> RawVecInner<A> {
     #[inline]
     unsafe fn from_raw_parts_in(ptr: *mut u8, cap: Cap, alloc: A) -> Self
     /*@
-    req exists(?elem_layout) &*&
+    req exists::<Layout>(?elem_layout) &*&
         Allocator(?t, alloc, ?alloc_id) &*&
         ptr != 0 &*&
-        ptr as usize % Layout::align_(elem_layout) == 0 &*&
-        if Cap_as_inner_(cap) * Layout::size_(elem_layout) == 0 {
+        ptr as usize % elem_layout.align() == 0 &*&
+        if Cap_as_inner_(cap) * elem_layout.size() == 0 {
             true
         } else {
             Layout::repeat_(elem_layout, Cap_as_inner_(cap)) == some(pair(?allocLayout, ?stride)) &*&
             alloc_block_in(alloc_id, ptr, allocLayout)
         };
     @*/
-    //@ ens RawVecInner(t, result, elem_layout, alloc_id, ptr, logical_capacity(cap, Layout::size_(elem_layout)));
+    //@ ens RawVecInner(t, result, elem_layout, alloc_id, ptr, logical_capacity(cap, elem_layout.size()));
     {
         let r = Self { ptr: unsafe { Unique::new_unchecked(ptr) }, cap, alloc };
-        //@ close RawVecInner(t, r, elem_layout, alloc_id, ptr, logical_capacity(cap, Layout::size_(elem_layout)));
+        //@ close RawVecInner(t, r, elem_layout, alloc_id, ptr, logical_capacity(cap, elem_layout.size()));
         r
     }
 
     #[inline]
     unsafe fn from_nonnull_in(ptr: NonNull<u8>, cap: Cap, alloc: A) -> Self
     /*@
-    req exists(?elem_layout) &*&
+    req exists::<Layout>(?elem_layout) &*&
         Allocator(?t, alloc, ?alloc_id) &*&
-        NonNull_ptr(ptr) as usize % Layout::align_(elem_layout) == 0 &*&
+        NonNull_ptr(ptr) as usize % elem_layout.align() == 0 &*&
         pointer_within_limits(NonNull_ptr(ptr)) == true &*&
-        if Cap_as_inner_(cap) * Layout::size_(elem_layout) == 0 {
+        if Cap_as_inner_(cap) * elem_layout.size() == 0 {
             true
         } else {
             Layout::repeat_(elem_layout, Cap_as_inner_(cap)) == some(pair(?allocLayout, ?stride)) &*&
             alloc_block_in(alloc_id, NonNull_ptr(ptr), allocLayout)
         };
     @*/
-    //@ ens RawVecInner(t, result, elem_layout, alloc_id, NonNull_ptr(ptr), logical_capacity(cap, Layout::size_(elem_layout)));
+    //@ ens RawVecInner(t, result, elem_layout, alloc_id, NonNull_ptr(ptr), logical_capacity(cap, elem_layout.size()));
     {
         let r = Self { ptr: Unique::from(ptr), cap, alloc };
         //@ close RawVecInner(t, r, elem_layout, alloc_id, _, _);
@@ -1786,7 +1786,7 @@ impl<A: Allocator> RawVecInner<A> {
     req [_]RawVecInner_share_(?k, ?t, self, ?elem_layout, ?alloc_id, ?ptr, ?capacity) &*&
         [?q]lifetime_token(k);
     @*/
-    //@ ens [q]lifetime_token(k) &*& elem_size != Layout::size_(elem_layout) || result == capacity;
+    //@ ens [q]lifetime_token(k) &*& elem_size != elem_layout.size() || result == capacity;
     /*@
     safety_proof {
         open <RawVecInner<A>>.share(?k, _t, self);
@@ -1811,15 +1811,15 @@ impl<A: Allocator> RawVecInner<A> {
 
     #[inline]
     fn current_memory(&self, elem_layout: Layout) -> Option<(NonNull<u8>, Layout)>
-    //@ req [_]RawVecInner_share_(?k, ?t, self, elem_layout, ?alloc_id, ?ptr, ?capacity) &*& [?q]lifetime_token(k) &*& Layout::size_(elem_layout) % Layout::align_(elem_layout) == 0;
+    //@ req [_]RawVecInner_share_(?k, ?t, self, elem_layout, ?alloc_id, ?ptr, ?capacity) &*& [?q]lifetime_token(k) &*& elem_layout.size() % elem_layout.align() == 0;
     /*@
     ens [q]lifetime_token(k) &*&
-        if capacity * Layout::size_(elem_layout) == 0 {
+        if capacity * elem_layout.size() == 0 {
             result == Option::None
         } else {
             result == Option::Some(std_tuple_2_::<NonNull<u8>, Layout> {
                 0: NonNull::new_(ptr),
-                1: Layout::from_size_align_(capacity * Layout::size_(elem_layout), Layout::align_(elem_layout))
+                1: Layout::from_size_align(capacity * elem_layout.size(), elem_layout.align())
             })
         };
     @*/
@@ -1831,7 +1831,7 @@ impl<A: Allocator> RawVecInner<A> {
         //@ open [?f]RawVecInner_frac_borrow_content::<A>(self, elem_layout, ptr, capacity)();
         //@ std::num::niche_types::UsizeNoHighBit_inv((*self).cap);
         //@ std::alloc::Layout_inv(elem_layout);
-        //@ mul_zero(capacity, Layout::size_(elem_layout));
+        //@ mul_zero(capacity, elem_layout.size());
         if elem_layout.size() == 0 || self.cap.as_inner() == 0 {
             //@ close [f]RawVecInner_frac_borrow_content::<A>(self, elem_layout, ptr, capacity)();
             //@ close_frac_borrow(f, RawVecInner_frac_borrow_content::<A>(self, elem_layout, ptr, capacity));
@@ -1846,8 +1846,8 @@ impl<A: Allocator> RawVecInner<A> {
                 //@ assert Layout::repeat_(elemLayout, capacity) == some(pair(?allocLayout, ?stride));
                 //@ std::alloc::Layout_repeat_some_size_aligned(elem_layout, capacity);
                 //@ std::alloc::Layout_inv(allocLayout);
-                //@ is_power_of_2_pos(Layout::align_(elem_layout));
-                //@ div_rem_nonneg(isize::MAX, Layout::align_(elem_layout));
+                //@ is_power_of_2_pos(elem_layout.align());
+                //@ div_rem_nonneg(isize::MAX, elem_layout.align());
                 let alloc_size = elem_layout.size().unchecked_mul(self.cap.as_inner());
                 let layout = Layout::from_size_align_unchecked(alloc_size, elem_layout.align());
                 let ptr_ = self.ptr.into();
@@ -1901,10 +1901,10 @@ impl<A: Allocator> RawVecInner<A> {
     ) -> Result<(), TryReserveError>
     /*@
     req thread_token(?t) &*& t == currentThread &*&
-        Layout::size_(elem_layout) % Layout::align_(elem_layout) == 0 &*&
+        elem_layout.size() % elem_layout.align() == 0 &*&
         *self |-> ?self0 &*&
         RawVecInner(t, self0, elem_layout, ?alloc_id, ?ptr0, ?capacity0) &*&
-        array_at_lft_(alloc_id.lft, ptr0, capacity0 * Layout::size_(elem_layout), _);
+        array_at_lft_(alloc_id.lft, ptr0, capacity0 * elem_layout.size(), _);
     @*/
     /*@
     ens thread_token(t) &*&
@@ -1912,11 +1912,11 @@ impl<A: Allocator> RawVecInner<A> {
         match result {
             Result::Ok(u) =>
                 RawVecInner(t, self1, elem_layout, alloc_id, ?ptr1, ?capacity1) &*&
-                array_at_lft_(alloc_id.lft, ptr1, capacity1 * Layout::size_(elem_layout), _) &*&
+                array_at_lft_(alloc_id.lft, ptr1, capacity1 * elem_layout.size(), _) &*&
                 len > capacity0 || len + additional <= capacity1,
             Result::Err(e) =>
                 RawVecInner(t, self1, elem_layout, alloc_id, ptr0, capacity0) &*&
-                array_at_lft_(alloc_id.lft, ptr0, capacity0 * Layout::size_(elem_layout), _) &*&
+                array_at_lft_(alloc_id.lft, ptr0, capacity0 * elem_layout.size(), _) &*&
                 <std::collections::TryReserveError>.own(t, e)
         };
     @*/
@@ -1973,10 +1973,10 @@ impl<A: Allocator> RawVecInner<A> {
     ) -> Result<(), TryReserveError>
     /*@
     req thread_token(?t) &*& t == currentThread &*&
-        Layout::size_(elem_layout) % Layout::align_(elem_layout) == 0 &*&
+        elem_layout.size() % elem_layout.align() == 0 &*&
         *self |-> ?self0 &*&
         RawVecInner(t, self0, elem_layout, ?alloc_id, ?ptr0, ?capacity0) &*&
-        array_at_lft_(alloc_id.lft, ptr0, capacity0 * Layout::size_(elem_layout), _);
+        array_at_lft_(alloc_id.lft, ptr0, capacity0 * elem_layout.size(), _);
     @*/
     /*@
     ens thread_token(t) &*&
@@ -1984,11 +1984,11 @@ impl<A: Allocator> RawVecInner<A> {
         match result {
             Result::Ok(u) =>
                 RawVecInner(t, self1, elem_layout, alloc_id, ?ptr1, ?capacity1) &*&
-                array_at_lft_(alloc_id.lft, ptr1, capacity1 * Layout::size_(elem_layout), _) &*&
+                array_at_lft_(alloc_id.lft, ptr1, capacity1 * elem_layout.size(), _) &*&
                 len > capacity0 || len + additional <= capacity1,
             Result::Err(e) =>
                 RawVecInner(t, self1, elem_layout, alloc_id, ptr0, capacity0) &*&
-                array_at_lft_(alloc_id.lft, ptr0, capacity0 * Layout::size_(elem_layout), _) &*&
+                array_at_lft_(alloc_id.lft, ptr0, capacity0 * elem_layout.size(), _) &*&
                 <std::collections::TryReserveError>.own(t, e)
         };
     @*/
@@ -2066,7 +2066,7 @@ impl<A: Allocator> RawVecInner<A> {
     #[inline]
     unsafe fn set_ptr_and_cap(&mut self, ptr: NonNull<[u8]>, cap: usize)
     //@ req (*self).ptr |-> _ &*& (*self).cap |-> _ &*& cap <= isize::MAX;
-    //@ ens (*self).ptr |-> Unique::from_non_null_::<u8>(ptr.ptr) &*& (*self).cap |-> UsizeNoHighBit::new_(cap);
+    //@ ens (*self).ptr |-> Unique::from_non_null_::<u8>(ptr.ptr) &*& (*self).cap |-> UsizeNoHighBit::new(cap);
     {
         //@ std::ptr::NonNull_new_ptr(ptr.ptr);
         // Allocators currently return a `NonNull<[u8]>` whose length matches
@@ -2084,10 +2084,10 @@ impl<A: Allocator> RawVecInner<A> {
     ) -> Result<(), TryReserveError>
     /*@
     req thread_token(?t) &*& t == currentThread &*&
-        Layout::size_(elem_layout) % Layout::align_(elem_layout) == 0 &*&
+        elem_layout.size() % elem_layout.align() == 0 &*&
         *self |-> ?self0 &*&
         RawVecInner(t, self0, elem_layout, ?alloc_id, ?ptr0, ?capacity0) &*&
-        array_at_lft_(alloc_id.lft, ptr0, capacity0 * Layout::size_(elem_layout), _) &*&
+        array_at_lft_(alloc_id.lft, ptr0, capacity0 * elem_layout.size(), _) &*&
         capacity0 < len + additional;
     @*/
     /*@
@@ -2096,11 +2096,11 @@ impl<A: Allocator> RawVecInner<A> {
         match result {
             Result::Ok(u) =>
                 RawVecInner(t, self1, elem_layout, alloc_id, ?ptr1, ?capacity1) &*&
-                array_at_lft_(alloc_id.lft, ptr1, capacity1 * Layout::size_(elem_layout), _) &*&
+                array_at_lft_(alloc_id.lft, ptr1, capacity1 * elem_layout.size(), _) &*&
                 len + additional <= capacity1,
             Result::Err(e) =>
                 RawVecInner(t, self1, elem_layout, alloc_id, ptr0, capacity0) &*&
-                array_at_lft_(alloc_id.lft, ptr0, capacity0 * Layout::size_(elem_layout), _) &*&
+                array_at_lft_(alloc_id.lft, ptr0, capacity0 * elem_layout.size(), _) &*&
                 <std::collections::TryReserveError>.own(t, e)
         };
     @*/
@@ -2151,7 +2151,7 @@ impl<A: Allocator> RawVecInner<A> {
         //@ assert NonNull_ptr(Unique::non_null_(ptr0_)) == ptr0;
         //@ std::alloc::Layout_inv(elem_layout);
         /*@
-        if capacity0 * Layout::size_(elem_layout) != 0 {
+        if capacity0 * elem_layout.size() != 0 {
             let elemLayout = elem_layout;
             assert Layout::repeat_(elemLayout, capacity0) == some(pair(?allocLayout, ?stride));
             std::alloc::Layout_repeat_some_size_aligned(elemLayout, capacity0);
@@ -2159,18 +2159,18 @@ impl<A: Allocator> RawVecInner<A> {
         }
         @*/
 
-        //@ std::alloc::Layout_size__Layout_from_size_align_(capacity0 * Layout::size_(elem_layout), Layout::align_(elem_layout));
-        //@ std::alloc::Layout_align__Layout_from_size_align_(capacity0 * Layout::size_(elem_layout), Layout::align_(elem_layout));
+        //@ std::alloc::Layout_size_Layout_from_size_align(capacity0 * elem_layout.size(), elem_layout.align());
+        //@ std::alloc::Layout_align_Layout_from_size_align(capacity0 * elem_layout.size(), elem_layout.align());
         
-        //@ if capacity0 * Layout::size_(elem_layout) == 0 { leak ptr0[..0] |-> _; }
+        //@ if capacity0 * elem_layout.size() == 0 { leak ptr0[..0] |-> _; }
         
         //@ std::num::niche_types::UsizeNoHighBit_inv(self01.cap);
         //@ assert cap >= len + additional;
-        //@ mul_mono_l(1, Layout::size_(elem_layout), Cap_as_inner_(self01.cap));
-        //@ mul_mono_l(1, Layout::size_(elem_layout), cap);
-        //@ assert Layout::size_(new_layout) == cap * Layout::size_(elem_layout);
-        //@ assert cap <= Layout::size_(new_layout);
-        //@ mul_mono_l(Cap_as_inner_(self01.cap), cap, Layout::size_(elem_layout));
+        //@ mul_mono_l(1, elem_layout.size(), Cap_as_inner_(self01.cap));
+        //@ mul_mono_l(1, elem_layout.size(), cap);
+        //@ assert new_layout.size() == cap * elem_layout.size();
+        //@ assert cap <= new_layout.size();
+        //@ mul_mono_l(Cap_as_inner_(self01.cap), cap, elem_layout.size());
         
         //@ open_points_to(self);
         
@@ -2186,10 +2186,10 @@ impl<A: Allocator> RawVecInner<A> {
                     self.set_ptr_and_cap(ptr, cap);
                     //@ let self1 = *self;
                     //@ std::alloc::alloc_block_in_aligned(NonNull_ptr(ptr.ptr));
-                    //@ std::num::niche_types::UsizeNoHighBit_as_inner__new_(cap);
-                    //@ mul_zero(Layout::size_(elem_layout), cap);
+                    //@ std::num::niche_types::UsizeNoHighBit_as_inner_new(cap);
+                    //@ mul_zero(elem_layout.size(), cap);
                     //@ assert 0 <= Cap_as_inner_(self0.cap);
-                    //@ assert 0 <= logical_capacity(self0.cap, Layout::size_(elem_layout));
+                    //@ assert 0 <= logical_capacity(self0.cap, elem_layout.size());
                     //@ assert cap != 0;
                     //@ std::alloc::Layout_inv(new_layout);
                     //@ close RawVecInner::<A>(t, self1, elem_layout, alloc_id, _, _);
@@ -2207,10 +2207,10 @@ impl<A: Allocator> RawVecInner<A> {
     ) -> Result<(), TryReserveError>
     /*@
     req thread_token(?t) &*& t == currentThread &*&
-        Layout::size_(elem_layout) % Layout::align_(elem_layout) == 0 &*&
+        elem_layout.size() % elem_layout.align() == 0 &*&
         *self |-> ?self0 &*&
         RawVecInner(t, self0, elem_layout, ?alloc_id, ?ptr0, ?capacity0) &*&
-        array_at_lft_(alloc_id.lft, ptr0, capacity0 * Layout::size_(elem_layout), _) &*&
+        array_at_lft_(alloc_id.lft, ptr0, capacity0 * elem_layout.size(), _) &*&
         capacity0 < len + additional;
     @*/
     /*@
@@ -2219,11 +2219,11 @@ impl<A: Allocator> RawVecInner<A> {
         match result {
             Result::Ok(u) =>
                 RawVecInner(t, self1, elem_layout, alloc_id, ?ptr1, ?capacity1) &*&
-                array_at_lft_(alloc_id.lft, ptr1, capacity1 * Layout::size_(elem_layout), _) &*&
+                array_at_lft_(alloc_id.lft, ptr1, capacity1 * elem_layout.size(), _) &*&
                 len + additional <= capacity1,
             Result::Err(e) =>
                 RawVecInner(t, self1, elem_layout, alloc_id, ptr0, capacity0) &*&
-                array_at_lft_(alloc_id.lft, ptr0, capacity0 * Layout::size_(elem_layout), _) &*&
+                array_at_lft_(alloc_id.lft, ptr0, capacity0 * elem_layout.size(), _) &*&
                 <std::collections::TryReserveError>.own(t, e)
         };
     @*/
@@ -2265,23 +2265,23 @@ impl<A: Allocator> RawVecInner<A> {
         //@ assert NonNull_ptr(Unique::non_null_(ptr0_)) == ptr0;
         //@ std::alloc::Layout_inv(elem_layout);
         /*@
-        if capacity0 * Layout::size_(elem_layout) != 0 {
+        if capacity0 * elem_layout.size() != 0 {
             let elemLayout = elem_layout;
             assert Layout::repeat_(elemLayout, capacity0) == some(pair(?allocLayout, ?stride));
             std::alloc::Layout_repeat_some_size_aligned(elemLayout, capacity0);
             std::alloc::Layout_inv(allocLayout);
         }
         @*/
-        //@ std::alloc::Layout_size__Layout_from_size_align_(capacity0 * Layout::size_(elem_layout), Layout::align_(elem_layout));
-        //@ std::alloc::Layout_align__Layout_from_size_align_(capacity0 * Layout::size_(elem_layout), Layout::align_(elem_layout));
+        //@ std::alloc::Layout_size_Layout_from_size_align(capacity0 * elem_layout.size(), elem_layout.align());
+        //@ std::alloc::Layout_align_Layout_from_size_align(capacity0 * elem_layout.size(), elem_layout.align());
         
-        //@ if capacity0 * Layout::size_(elem_layout) == 0 { leak ptr0[..0] |-> _; }
+        //@ if capacity0 * elem_layout.size() == 0 { leak ptr0[..0] |-> _; }
         
         //@ std::num::niche_types::UsizeNoHighBit_inv(self0.cap);
         //@ assert cap == len + additional;
-        //@ mul_mono_l(1, Layout::size_(elem_layout), Cap_as_inner_(self0.cap));
-        //@ mul_mono_l(1, Layout::size_(elem_layout), cap);
-        //@ mul_mono_l(capacity0, cap, Layout::size_(elem_layout));
+        //@ mul_mono_l(1, elem_layout.size(), Cap_as_inner_(self0.cap));
+        //@ mul_mono_l(1, elem_layout.size(), cap);
+        //@ mul_mono_l(capacity0, cap, elem_layout.size());
         
         match core::ops::Try::branch(finish_grow(new_layout, current_memory, &mut self.alloc)) {
             core::ops::ControlFlow::Break(residual) => {
@@ -2292,15 +2292,15 @@ impl<A: Allocator> RawVecInner<A> {
             core::ops::ControlFlow::Continue(ptr) => {
                 // SAFETY: finish_grow would have resulted in a capacity overflow if we tried to allocate more than `isize::MAX` items
                 unsafe {
-                    //@ assert Layout::size_(new_layout) == Layout::size_(elem_layout) * cap;
-                    //@ mul_mono_l(1, Layout::size_(elem_layout), cap);
+                    //@ assert new_layout.size() == elem_layout.size() * cap;
+                    //@ mul_mono_l(1, elem_layout.size(), cap);
                     self.set_ptr_and_cap(ptr, cap);
                     //@ let self1 = *self;
                     //@ std::alloc::alloc_block_in_aligned(NonNull_ptr(ptr.ptr));
-                    //@ std::num::niche_types::UsizeNoHighBit_as_inner__new_(cap);
-                    //@ mul_zero(Layout::size_(elem_layout), cap);
+                    //@ std::num::niche_types::UsizeNoHighBit_as_inner_new(cap);
+                    //@ mul_zero(elem_layout.size(), cap);
                     //@ assert 0 <= Cap_as_inner_(self0.cap);
-                    //@ assert 0 <= logical_capacity(self0.cap, Layout::size_(elem_layout));
+                    //@ assert 0 <= logical_capacity(self0.cap, elem_layout.size());
                     //@ assert cap != 0;
                     //@ std::alloc::Layout_inv(new_layout);
                     //@ close RawVecInner::<A>(t, self1, elem_layout, alloc_id, _, _);
@@ -2315,10 +2315,10 @@ impl<A: Allocator> RawVecInner<A> {
     fn shrink(&mut self, cap: usize, elem_layout: Layout) -> Result<(), TryReserveError>
     /*@
     req thread_token(?t) &*& t == currentThread &*&
-        Layout::size_(elem_layout) % Layout::align_(elem_layout) == 0 &*&
+        elem_layout.size() % elem_layout.align() == 0 &*&
         *self |-> ?self0 &*&
         RawVecInner(t, self0, elem_layout, ?alloc_id, ?ptr0, ?capacity0) &*&
-        array_at_lft_(alloc_id.lft, ptr0, capacity0 * Layout::size_(elem_layout), _);
+        array_at_lft_(alloc_id.lft, ptr0, capacity0 * elem_layout.size(), _);
     @*/
     /*@
     ens thread_token(t) &*&
@@ -2326,11 +2326,11 @@ impl<A: Allocator> RawVecInner<A> {
         match result {
             Result::Ok(u) =>
                 RawVecInner(t, self1, elem_layout, alloc_id, ?ptr1, ?capacity1) &*&
-                array_at_lft_(alloc_id.lft, ptr1, capacity1 * Layout::size_(elem_layout), _) &*&
+                array_at_lft_(alloc_id.lft, ptr1, capacity1 * elem_layout.size(), _) &*&
                 cap <= capacity1,
             Result::Err(e) =>
                 RawVecInner(t, self1, elem_layout, alloc_id, ptr0, capacity0) &*&
-                array_at_lft_(alloc_id.lft, ptr0, capacity0 * Layout::size_(elem_layout), _) &*&
+                array_at_lft_(alloc_id.lft, ptr0, capacity0 * elem_layout.size(), _) &*&
                 <std::collections::TryReserveError>.own(t, e)
         };
     @*/
@@ -2370,10 +2370,10 @@ impl<A: Allocator> RawVecInner<A> {
     ) -> Result<(), TryReserveError>
     /*@
     req thread_token(?t) &*& t == currentThread &*&
-        Layout::size_(elem_layout) % Layout::align_(elem_layout) == 0 &*&
+        elem_layout.size() % elem_layout.align() == 0 &*&
         *self |-> ?self0 &*&
         RawVecInner(t, self0, elem_layout, ?alloc_id, ?ptr0, ?capacity0) &*&
-        array_at_lft_(alloc_id.lft, ptr0, capacity0 * Layout::size_(elem_layout), _) &*&
+        array_at_lft_(alloc_id.lft, ptr0, capacity0 * elem_layout.size(), _) &*&
         cap <= capacity0;
     @*/
     /*@
@@ -2382,11 +2382,11 @@ impl<A: Allocator> RawVecInner<A> {
         match result {
             Result::Ok(u) =>
                 RawVecInner(t, self1, elem_layout, alloc_id, ?ptr1, ?capacity1) &*&
-                array_at_lft_(alloc_id.lft, ptr1, capacity1 * Layout::size_(elem_layout), _) &*&
+                array_at_lft_(alloc_id.lft, ptr1, capacity1 * elem_layout.size(), _) &*&
                 cap <= capacity1,
             Result::Err(e) =>
                 RawVecInner(t, self1, elem_layout, alloc_id, ptr0, capacity0) &*&
-                array_at_lft_(alloc_id.lft, ptr0, capacity0 * Layout::size_(elem_layout), _) &*&
+                array_at_lft_(alloc_id.lft, ptr0, capacity0 * elem_layout.size(), _) &*&
                 <std::collections::TryReserveError>.own(t, e)
         };
     @*/
@@ -2414,15 +2414,15 @@ impl<A: Allocator> RawVecInner<A> {
         //@ assert NonNull_ptr(Unique::non_null_(self01.ptr)) == ptr0;
         //@ std::alloc::Layout_inv(elem_layout);
         /*@
-        if capacity0 * Layout::size_(elem_layout) != 0 {
+        if capacity0 * elem_layout.size() != 0 {
             let elemLayout = elem_layout;
             assert Layout::repeat_(elemLayout, capacity0) == some(pair(?allocLayout, ?stride));
             std::alloc::Layout_repeat_some_size_aligned(elemLayout, capacity0);
             std::alloc::Layout_inv(allocLayout);
         }
         @*/
-        //@ std::alloc::Layout_size__Layout_from_size_align_(capacity0 * Layout::size_(elem_layout), Layout::align_(elem_layout));
-        //@ std::alloc::Layout_align__Layout_from_size_align_(capacity0 * Layout::size_(elem_layout), Layout::align_(elem_layout));
+        //@ std::alloc::Layout_size_Layout_from_size_align(capacity0 * elem_layout.size(), elem_layout.align());
+        //@ std::alloc::Layout_align_Layout_from_size_align(capacity0 * elem_layout.size(), elem_layout.align());
         
         // If shrinking to 0, deallocate the buffer. We don't reach this point
         // for the T::IS_ZST case since current_memory() will have returned
@@ -2442,14 +2442,14 @@ impl<A: Allocator> RawVecInner<A> {
                 unsafe { Unique::new_unchecked(ptr::without_provenance_mut(elem_layout.align())) };
             self.cap = ZERO_CAP;
             //@ let ptr1_ = (*self).ptr;
-            //@ assert NonNull_ptr(Unique::non_null_(ptr1_)) as usize == Layout::align_(elem_layout);
-            //@ div_rem_nonneg_unique(Layout::align_(elem_layout), Layout::align_(elem_layout), 1, 0);
+            //@ assert NonNull_ptr(Unique::non_null_(ptr1_)) as usize == elem_layout.align();
+            //@ div_rem_nonneg_unique(elem_layout.align(), elem_layout.align(), 1, 0);
             //@ close RawVecInner(t, *self, elem_layout, alloc_id, _, _);
         } else {
             let ptr = unsafe {
                 // Layout cannot overflow here because it would have
                 // overflowed earlier when capacity was larger.
-                //@ mul_mono_l(cap, capacity0, Layout::size_(elem_layout));
+                //@ mul_mono_l(cap, capacity0, elem_layout.size());
                 let new_size = elem_layout.size().unchecked_mul(cap);
                 let new_layout = Layout::from_size_align_unchecked(new_size, layout.align());
                 //@ let alloc_ref = precreate_ref(&(*self).alloc);
@@ -2481,7 +2481,7 @@ impl<A: Allocator> RawVecInner<A> {
                 //@ std::num::niche_types::UsizeNoHighBit_inv(self01.cap);
                 self.set_ptr_and_cap(ptr, cap);
                 //@ std::alloc::alloc_block_in_aligned(NonNull_ptr(ptr_1.ptr));
-                //@ mul_zero(cap, Layout::size_(elem_layout));
+                //@ mul_zero(cap, elem_layout.size());
                 //@ std::alloc::Layout_repeat_size_aligned_intro(elem_layout, cap);
                 //@ close RawVecInner(t, *self, elem_layout, alloc_id, _, _);
             }
@@ -2501,8 +2501,8 @@ impl<A: Allocator> RawVecInner<A> {
     req thread_token(?t) &*&
         *self |-> ?self0 &*&
         RawVecInner(t, self0, elem_layout, ?alloc_id, ?ptr_, ?capacity) &*&
-        Layout::size_(elem_layout) % Layout::align_(elem_layout) == 0 &*&
-        array_at_lft_(alloc_id.lft, ptr_, capacity * Layout::size_(elem_layout), _);
+        elem_layout.size() % elem_layout.align() == 0 &*&
+        array_at_lft_(alloc_id.lft, ptr_, capacity * elem_layout.size(), _);
     @*/
     //@ ens thread_token(t) &*& *self |-> ?self1 &*& <RawVecInner<A>>.own(t, self1);
     //@ on_unwind_ens thread_token(t) &*& *self |-> ?self1 &*& <RawVecInner<A>>.own(t, self1);
@@ -2534,15 +2534,15 @@ impl<A: Allocator> RawVecInner<A> {
                 //@ std::alloc::Layout_repeat_some_size_aligned(elem_layout, capacity);
                 //@ assert Layout::repeat_(elem_layout, capacity) == some(pair(?allocLayout, ?stride));
                 //@ std::alloc::Layout_inv(allocLayout);
-                //@ std::alloc::Layout_size__Layout_from_size_align_(capacity * Layout::size_(elem_layout), Layout::align_(elem_layout));
-                //@ assert capacity * Layout::size_(elem_layout) == Layout::size_(layout);
+                //@ std::alloc::Layout_size_Layout_from_size_align(capacity * elem_layout.size(), elem_layout.align());
+                //@ assert capacity * elem_layout.size() == layout.size();
                 self.alloc.deallocate(ptr, layout);
                 //@ leak Allocator(_, _, _);
             }
             //@ end_lifetime(k1);
             //@ std::alloc::end_ref_Allocator_at_lifetime::<A>();
         }
-        //@ if current_memory == Option::None { leak ptr_[..capacity * Layout::size_(elem_layout)] |-> _; }
+        //@ if current_memory == Option::None { leak ptr_[..capacity * elem_layout.size()] |-> _; }
         //@ std::alloc::Allocator_to_own((*self).alloc);
         //@ close RawVecInner0(*self, elem_layout, ptr_, capacity);
         //@ close <RawVecInner<A>>.own(t, *self);
@@ -2566,9 +2566,9 @@ req thread_token(?t) &*& t == currentThread &*&
         Option::None => true,
         Option::Some(memory) =>
             alloc_block_in(alloc_id, NonNull_ptr(memory.0), memory.1) &*&
-            array_at_lft_(alloc_id.lft, NonNull_ptr(memory.0), Layout::size_(memory.1), _) &*&
-            Layout::size_(memory.1) <= Layout::size_(new_layout) &*&
-            Layout::align_(memory.1) == Layout::align_(new_layout)
+            array_at_lft_(alloc_id.lft, NonNull_ptr(memory.0), memory.1.size(), _) &*&
+            memory.1.size() <= new_layout.size() &*&
+            memory.1.align() == new_layout.align()
     };
 @*/
 /*@
@@ -2576,14 +2576,14 @@ ens thread_token(t) &*& *alloc |-> ?alloc1 &*& Allocator(t, alloc1, alloc_id) &*
     match result {
         Result::Ok(ptr) =>
             alloc_block_in(alloc_id, NonNull_ptr(ptr.ptr), new_layout) &*&
-            array_at_lft_(alloc_id.lft, NonNull_ptr(ptr.ptr), Layout::size_(new_layout), _) &*&
-            Layout::size_(new_layout) <= isize::MAX,
+            array_at_lft_(alloc_id.lft, NonNull_ptr(ptr.ptr), new_layout.size(), _) &*&
+            new_layout.size() <= isize::MAX,
         Result::Err(e) =>
             match current_memory {
                 Option::None => true,
                 Option::Some(memory) =>
                     alloc_block_in(alloc_id, NonNull_ptr(memory.0), memory.1) &*&
-                    array_at_lft_(alloc_id.lft, NonNull_ptr(memory.0), Layout::size_(memory.1), _)
+                    array_at_lft_(alloc_id.lft, NonNull_ptr(memory.0), memory.1.size(), _)
             } &*&
             <std::collections::TryReserveError>.own(currentThread, e)
     };

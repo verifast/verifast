@@ -13,7 +13,7 @@ struct Buffer {
 pred Buffer_(buffer: Buffer; size: usize, length: usize) =
     size == buffer.size &*& size <= isize::MAX &*&
     length == buffer.length &*&
-    std::alloc::alloc_block(buffer.buffer, std::alloc::Layout::from_size_align_(size, 1)) &*&
+    std::alloc::alloc_block(buffer.buffer, std::alloc::Layout::from_size_align(size, 1)) &*&
     buffer.buffer[..length] |-> ?_ &*&
     buffer.buffer[length..size] |-> _;
 
