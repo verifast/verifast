@@ -517,7 +517,7 @@ mod ptr {
     fix NonNull::new_<T>(ptr: *T) -> NonNull<T>;
     
     lem_auto(NonNull_ptr(NonNull::new_(ptr))) NonNull_ptr_new<T>(ptr: *T);
-        req ptr != 0;
+        req ptr != 0 && pointer_within_limits(ptr);
         ens NonNull_ptr(NonNull::new_(ptr)) == ptr;
     
     lem NonNull_new_ptr<T>(v: NonNull<T>);
@@ -526,7 +526,7 @@ mod ptr {
     
     lem_auto(NonNull_ptr(v)) NonNull_ptr_nonnull<T>(v: NonNull<T>);
         req true;
-        ens NonNull_ptr(v) != 0;
+        ens NonNull_ptr(v) != 0 && pointer_within_limits(NonNull_ptr(v));
     
     lem NonNull_upcast<T0, T1>(v: NonNull<T0>);
         req true;
