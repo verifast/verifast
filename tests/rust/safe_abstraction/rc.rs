@@ -31,7 +31,7 @@ pred_ctor rc_na_inv<T>(dk: lifetime_t, gid: usize, ptr: *RcBox<T>, t: thread_id_
     };
 
 pred<T> <Rc<T>>.own(t, rc) =
-    wrap::<*RcBox<T>>(std::ptr::NonNull_ptr(rc.ptr)) == wrap(?ptr) &*& ref_origin(ptr) == ptr &*&
+    wrap::<*RcBox<T>>(rc.ptr.as_ptr()) == wrap(?ptr) &*& ref_origin(ptr) == ptr &*&
     ptr as usize != 0 &*&
     [_]exists(?dk) &*& [_]exists(?gid) &*& [_]na_inv(t, MaskNshrSingle(ptr), rc_na_inv(dk, gid, ptr, t)) &*&
     ticket(dlft_pred(dk), gid, ?frac) &*& [frac]dlft_pred(dk)(gid, false) &*&
@@ -52,7 +52,7 @@ pred_ctor ticket_(dk: lifetime_t, gid: usize, frac: real)(;) = ticket(dlft_pred(
 
 pred<T> <Rc<T>>.share(k, t, l) =
     [_]exists(?nnp) &*& [_]frac_borrow(k, Rc_frac_bc(l, nnp)) &*&
-    wrap::<*RcBox<T>>(std::ptr::NonNull_ptr(nnp)) == wrap(?ptr) &*& ptr as usize != 0 &*& ref_origin(ptr) == ptr &*&
+    wrap::<*RcBox<T>>(nnp.as_ptr()) == wrap(?ptr) &*& ptr as usize != 0 &*& ref_origin(ptr) == ptr &*&
     [_]exists(?dk) &*& [_]exists(?gid) &*& [_]na_inv(t, MaskNshrSingle(ptr), rc_na_inv(dk, gid, ptr, t)) &*&
     [_]exists(?frac) &*& [_]frac_borrow(k, ticket_(dk, gid, frac)) &*& [_]frac_borrow(k, lifetime_token_(frac, dk)) &*&
     [_](<T>.share(dk, t, &(*ptr).value)) &*&
@@ -75,14 +75,14 @@ lem Rc_fbor_split<T>(t: thread_id_t, l: *Rc<T>) -> std::ptr::NonNull<RcBox<T>> /
     req atomic_mask(?m) &*& mask_le(Nlft, m) == true &*&
         full_borrow(?k, Rc_full_borrow_content::<T>(t, l)) &*& [?q]lifetime_token(k);
     ens atomic_mask(m) &*&
-        full_borrow(k, Rc_frac_bc(l, result)) &*& std::ptr::NonNull_ptr(result) as usize != 0 &*&
-        ref_origin(std::ptr::NonNull_ptr(result)) == std::ptr::NonNull_ptr(result) &*&
+        full_borrow(k, Rc_frac_bc(l, result)) &*& result.as_ptr() as usize != 0 &*&
+        ref_origin(result.as_ptr()) == result.as_ptr() &*&
         [_]exists(?dk) &*& [_]exists(?gid) &*&
-        [_]na_inv(t, MaskNshrSingle(std::ptr::NonNull_ptr(result)), rc_na_inv(dk, gid, std::ptr::NonNull_ptr(result), t)) &*&
+        [_]na_inv(t, MaskNshrSingle(result.as_ptr()), rc_na_inv(dk, gid, result.as_ptr(), t)) &*&
         [_]exists(?frac) &*& full_borrow(k, ticket_(dk, gid, frac)) &*& full_borrow(k, lifetime_token_(frac, dk)) &*&
-        [_](<T>.share(dk, t, &(*std::ptr::NonNull_ptr::<RcBox<T>>(result)).value)) &*&
-        pointer_within_limits(&(*std::ptr::NonNull_ptr::<RcBox<T>>(result)).strong) == true &*&
-        pointer_within_limits(&(*std::ptr::NonNull_ptr::<RcBox<T>>(result)).value) == true &*&
+        [_](<T>.share(dk, t, &(*result.as_ptr()).value)) &*&
+        pointer_within_limits(&(*result.as_ptr()).strong) == true &*&
+        pointer_within_limits(&(*result.as_ptr()).value) == true &*&
         [q]lifetime_token(k);
 {
     let klong = open_full_borrow_strong_m(k, Rc_full_borrow_content::<T>(t, l), q);
@@ -96,8 +96,8 @@ lem Rc_fbor_split<T>(t: thread_id_t, l: *Rc<T>) -> std::ptr::NonNull<RcBox<T>> /
     {
         pred Ctx() =
             struct_Rc_padding::<T>(l) &*&
-            [_]exists(dk) &*& [_]exists(gid) &*& [_]na_inv(t, MaskNshrSingle(std::ptr::NonNull_ptr(nnp)), rc_na_inv(dk, gid, std::ptr::NonNull_ptr(nnp), t)) &*&
-            [_](<T>.share(dk, t, &(*std::ptr::NonNull_ptr::<RcBox<T>>(nnp)).value));
+            [_]exists(dk) &*& [_]exists(gid) &*& [_]na_inv(t, MaskNshrSingle(nnp.as_ptr()), rc_na_inv(dk, gid, nnp.as_ptr(), t)) &*&
+            [_](<T>.share(dk, t, &(*nnp.as_ptr()).value));
         close Ctx();
         produce_lem_ptr_chunk full_borrow_convert_strong(Ctx,
             sep(Rc_frac_bc(l, nnp), sep(ticket_(dk, gid, frac), lifetime_token_(frac, dk))), klong, Rc_full_borrow_content::<T>(t, l))()
@@ -231,7 +231,7 @@ impl<T> Clone for Rc<T> {
             //@ open [?qp_dk]lifetime_token_(frac, dk)();
             //@ close_dlft_pred_(dk, gid);
             //@ open thread_token(_t);
-            //@ let ptr = std::ptr::NonNull_ptr(nnp);
+            //@ let ptr = nnp.as_ptr();
             //@ open_na_inv(_t, MaskNshrSingle(ptr), rc_na_inv(dk, gid, ptr, _t));
             //@ open rc_na_inv::<T>(dk, gid, ptr, _t)();
             //@ counting_match_fraction(dlft_pred(dk), gid);
@@ -265,7 +265,7 @@ impl<T> Drop for Rc<T> {
             let strong = (*self.ptr.as_ptr()).strong.get();
             //@ let nnp = rc.ptr;
             //@ assert [_]exists::<lifetime_t>(?dk) &*& [_]exists::<usize>(?gid);
-            //@ let ptr = std::ptr::NonNull_ptr::<RcBox<T>>(nnp);
+            //@ let ptr = std::ptr::NonNull::as_ptr::<RcBox<T>>(nnp);
             //@ open thread_token(_t);
             //@ open_na_inv(_t, MaskNshrSingle(ptr), rc_na_inv(dk, gid, ptr, _t));
             //@ open rc_na_inv::<T>(dk, gid, ptr, _t)();

@@ -347,11 +347,11 @@ pred edges<K, V>(
             if idx < start_idx {
                 true
             } else if idx <= end_idx {
-                MaybeUninit::inner(edge) == some(?edge_nnp) &*& wrap(NonNull_ptr(edge_nnp)) == wrap(?edge_ptr) &*&
+                MaybeUninit::inner(edge) == some(?edge_nnp) &*& wrap(edge_nnp.as_ptr()) == wrap(?edge_ptr) &*&
                 subtree(alloc_id, edge_ptr, height - 1, child,
                     if idx == start_idx { range_start0 } else { [] },
                     if idx == end_idx { range_end0 } else { [] },
-                    Option::Some(NonNull::new_(root)), MaybeUninit::new_(idx))
+                    Option::Some(NonNull::new(root)), MaybeUninit::new(idx))
             } else {
                 true
             }
@@ -470,7 +470,7 @@ pred context<K, V>(
         Option::Some(parent_nnp) =>
             ctx == child_ctx(?parent_ptr, ?parent_ctx, ?leftSiblings, ?rightSiblings) &*&
             MaybeUninit::inner(parent_idx) == some(?idx) &*&
-            NonNull_ptr(parent_nnp) == parent_ptr &*&
+            parent_nnp.as_ptr() == parent_ptr &*&
             (*parent_ptr).data.parent |-> ?grandparent &*&
             (*parent_ptr).data.parent_idx |-> ?grandparent_idx &*&
             (*parent_ptr).data.len |-> ?len &*& len <= CAPACITY &*&
@@ -481,7 +481,7 @@ pred context<K, V>(
             (*parent_ptr).edges[..idx] |-> ?leftEdges &*&
             (*parent_ptr).edges[idx] |-> ?node_edge &*&
             MaybeUninit::inner(node_edge) == some(?node_nnp) &*&
-            node == NonNull_ptr(node_nnp) &*&
+            node == node_nnp.as_ptr() &*&
             (*parent_ptr).edges[idx + 1..len + 1] |-> ?rightEdges &*&
             (*parent_ptr).edges[len + 1..2*B] |-> _ &*&
             struct_InternalNode_padding(parent_ptr) &*&
@@ -698,27 +698,27 @@ pred NodeRef<BorrowType, K, V, Type>(
         immut(k) =>
             range_start_up == context_height(ctx) &*& range_start_down == [] &*&
             range_end_up == context_height(ctx) &*& range_end_down == [] &*&
-            [_]frac_borrow(k, tree_(alloc_id, NonNull_ptr(r.node), r.height, subtree, ctx, range_start_up, range_start_down, range_end_up, range_end_down)) &*&
+            [_]frac_borrow(k, tree_(alloc_id, r.node.as_ptr(), r.height, subtree, ctx, range_start_up, range_start_down, range_end_up, range_end_down)) &*&
             foreach(map(fst, kv_ptrs_of_tree(subtree, ctx, range_start_up, range_start_down, range_end_up, range_end_down)), share_(k, t)) &*&
             foreach(map(snd, kv_ptrs_of_tree(subtree, ctx, range_start_up, range_start_down, range_end_up, range_end_down)), share_(k, t)),
         val_mut(k) =>
-            full_borrow(k, tree_(alloc_id, NonNull_ptr(r.node), r.height, subtree, ctx, range_start_up, range_start_down, range_end_up, range_end_down)) &*&
+            full_borrow(k, tree_(alloc_id, r.node.as_ptr(), r.height, subtree, ctx, range_start_up, range_start_down, range_end_up, range_end_down)) &*&
             foreach(map(fst, kv_ptrs_of_tree(subtree, ctx, range_start_up, range_start_down, range_end_up, range_end_down)), full_borrow__(k, t)) &*&
             foreach(map(snd, kv_ptrs_of_tree(subtree, ctx, range_start_up, range_start_down, range_end_up, range_end_down)), full_borrow__(k, t)),
         mut_(k) =>
             range_start_up == context_height(ctx) &*& range_start_down == [] &*&
             range_end_up == context_height(ctx) &*& range_end_down == [] &*&
-            full_borrow(k, tree_(alloc_id, NonNull_ptr(r.node), r.height, subtree, ctx, range_start_up, range_start_down, range_end_up, range_end_down)) &*&
+            full_borrow(k, tree_(alloc_id, r.node.as_ptr(), r.height, subtree, ctx, range_start_up, range_start_down, range_end_up, range_end_down)) &*&
             foreach(map(fst, kv_ptrs_of_tree(subtree, ctx, range_start_up, range_start_down, range_end_up, range_end_down)), full_borrow__(k, t)) &*&
             foreach(map(snd, kv_ptrs_of_tree(subtree, ctx, range_start_up, range_start_down, range_end_up, range_end_down)), full_borrow__(k, t)),
         owned =>
             range_start_up == context_height(ctx) &*& range_start_down == [] &*&
             range_end_up == context_height(ctx) &*& range_end_down == [] &*&
-            tree(alloc_id, NonNull_ptr(r.node), r.height, subtree, ctx, range_start_up, range_start_down, range_end_up, range_end_down) &*&
+            tree(alloc_id, r.node.as_ptr(), r.height, subtree, ctx, range_start_up, range_start_down, range_end_up, range_end_down) &*&
             foreach(map(fst, kv_ptrs_of_tree(subtree, ctx, range_start_up, range_start_down, range_end_up, range_end_down)), full_borrow_content_(t)) &*&
             foreach(map(snd, kv_ptrs_of_tree(subtree, ctx, range_start_up, range_start_down, range_end_up, range_end_down)), full_borrow_content_(t)),
         dying =>
-            tree(alloc_id, NonNull_ptr(r.node), r.height, subtree, ctx, range_start_up, range_start_down, range_end_up, range_end_down) &*&
+            tree(alloc_id, r.node.as_ptr(), r.height, subtree, ctx, range_start_up, range_start_down, range_end_up, range_end_down) &*&
             foreach(map(fst, kv_ptrs_of_tree(subtree, ctx, range_start_up, range_start_down, range_end_up, range_end_down)), full_borrow_content_(t)) &*&
             foreach(map(snd, kv_ptrs_of_tree(subtree, ctx, range_start_up, range_start_down, range_end_up, range_end_down)), full_borrow_content_(t)),
         dormant_mut => false, // It seems that a DormantMut NodeRef should not be a NodeRef at all; none of the polymorphic methods are called on it?
@@ -870,7 +870,7 @@ impl<BorrowType, K, V, Type> NodeRef<BorrowType, K, V, Type> {
     /// Returns a raw ptr to avoid invalidating other references to this node.
     fn as_leaf_ptr(this: &Self) -> *mut LeafNode<K, V>
     //@ req [?f](*this).node |-> ?node;
-    //@ ens [f](*this).node |-> node &*& result == NonNull_ptr(node);
+    //@ ens [f](*this).node |-> node &*& result == node.as_ptr();
     //@ safety_proof { assume(false); }
     {
         // The node must be valid for at least the LeafNode portion.
@@ -1138,8 +1138,8 @@ impl<'a, K: 'a, V: 'a> NodeRef<marker::Mut<'a>, K, V, marker::LeafOrInternal> {
     /// Sets the node's link to its parent edge,
     /// without invalidating other references to the node.
     fn set_parent_link(&mut self, parent: NonNull<InternalNode<K, V>>, parent_idx: usize)
-    //@ req *self |-> ?self0 &*& (*NonNull_ptr(self0.node)).parent |-> _ &*& (*NonNull_ptr(self0.node)).parent_idx |-> _ &*& parent_idx <= u16::MAX;
-    //@ ens *self |-> self0 &*& (*NonNull_ptr(self0.node)).parent |-> Option::Some(parent) &*& (*NonNull_ptr(self0.node)).parent_idx |-> MaybeUninit::new_(parent_idx as u16);
+    //@ req *self |-> ?self0 &*& (*self0.node.as_ptr()).parent |-> _ &*& (*self0.node.as_ptr()).parent_idx |-> _ &*& parent_idx <= u16::MAX;
+    //@ ens *self |-> self0 &*& (*self0.node.as_ptr()).parent |-> Option::Some(parent) &*& (*self0.node.as_ptr()).parent_idx |-> MaybeUninit::new(parent_idx as u16);
     //@ safety_proof { assume(false); }
     {
         //@ open_points_to(self);

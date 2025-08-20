@@ -391,21 +391,21 @@ mod mem {
     /*@
     
     fix MaybeUninit::inner<T>(v: MaybeUninit<T>) -> option<T>;
-    fix MaybeUninit::new_<T>(v: T) -> MaybeUninit<T>;
-    fix MaybeUninit::uninit_<T>() -> MaybeUninit<T>;
+    fix MaybeUninit::new<T>(v: T) -> MaybeUninit<T>;
+    fix MaybeUninit::uninit<T>() -> MaybeUninit<T>;
     fix MaybeUninit::new_maybe_uninit<T>(v: option<T>) -> MaybeUninit<T>;
     
-    lem_auto MaybeUninit_inner_new_<T>(v: T);
+    lem_auto MaybeUninit_inner_new<T>(v: T);
         req true;
-        ens MaybeUninit::inner(MaybeUninit::new_(v)) == some(v);
+        ens MaybeUninit::new(v).inner() == some(v);
     
     lem_auto MaybeUninit_inner_new_maybe_uninit<T>(v: option<T>);
         req true;
-        ens MaybeUninit::inner(MaybeUninit::new_maybe_uninit(v)) == v;
+        ens MaybeUninit::new_maybe_uninit(v).inner() == v;
     
     lem open_MaybeUninit<T>(self: *MaybeUninit<T>);
         req *self |-> ?value;
-        ens *(self as *T) |-?-> MaybeUninit::inner(value);
+        ens *(self as *T) |-?-> value.inner();
     
     lem close_MaybeUninit_<T>(self: *MaybeUninit<T>);
         req *(self as *T) |-?-> ?value;
@@ -413,23 +413,23 @@ mod mem {
         
     lem close_MaybeUninit<T>(self: *MaybeUninit<T>);
         req *(self as *T) |-> ?value;
-        ens *self |-> MaybeUninit::new_(value);
+        ens *self |-> MaybeUninit::new(value);
     
     lem open_MaybeUninit_<T>(self: *MaybeUninit<T>);
         req *self |-?-> ?value;
-        ens *(self as *T) |-?-> match value { none => none, some(value_) => MaybeUninit::inner(value_) };
+        ens *(self as *T) |-?-> match value { none => none, some(value_) => value_.inner() };
     
     lem MaybeUninit__to_MaybeUninit<T>(self: *MaybeUninit<T>);
         req *self |-?-> ?value;
-        ens *self |-> match value { none => MaybeUninit::uninit_(), some(value_) => value_ };
+        ens *self |-> match value { none => MaybeUninit::uninit(), some(value_) => value_ };
     
     lem Array__MaybeUninit_to_Array_MaybeUninit<T, N>(self: *[MaybeUninit<T>; N]);
         req *self |-?-> ?value_;
-        ens *self |-> match value_ { none => Array_of_elems(repeat(nat_of_int(usize_of_const(typeid(N))), MaybeUninit::uninit_())), some(value) => value };
+        ens *self |-> match value_ { none => Array_of_elems(repeat(nat_of_int(usize_of_const(typeid(N))), MaybeUninit::uninit())), some(value) => value };
     
     lem array__MaybeUninit_to_array_MaybeUninit<T>(self: *MaybeUninit<T>);
         req self[..?n] |-?-> ?elems_;
-        ens self[..n] |-> map((unwrap_or_else)(MaybeUninit::uninit_), elems_);
+        ens self[..n] |-> map((unwrap_or_else)(MaybeUninit::uninit), elems_);
     
     lem array__to_array_MaybeUninit<T>(self: *T);
         req self[..?n] |-?-> ?elems_;
@@ -453,7 +453,7 @@ mod mem {
     
         fn write<'a>(self: &'a mut MaybeUninit<T>, value: T) -> &'a mut T;
         //@ req *self |-> _;
-        //@ ens *self |-> MaybeUninit::new_(value);
+        //@ ens *self |-> MaybeUninit::new(value);
         //@ on_unwind_ens false;
         
     }
@@ -494,11 +494,11 @@ mod ptr {
     
     /*@
     
-    fix NonNull::without_provenance_<T>(addr: std::num::NonZero<usize>) -> NonNull<T>;
+    fix NonNull::without_provenance<T>(addr: std::num::NonZero<usize>) -> NonNull<T>;
     
-    lem_auto(NonNull_ptr(NonNull::without_provenance_::<T>(addr))) NonNull_ptr_NonNull_without_provenance_<T>(addr: std::num::NonZero<usize>);
+    lem_auto(NonNull::without_provenance::<T>(addr).as_ptr()) NonNull_as_ptr_NonNull_without_provenance<T>(addr: std::num::NonZero<usize>);
         req true;
-        ens NonNull_ptr(NonNull::without_provenance_::<T>(addr)) == addr.get() as *T;
+        ens NonNull::without_provenance::<T>(addr).as_ptr() == addr.get() as *T;
     
     lem close_NonNull_own<T>(t: thread_id_t, v: NonNull<T>);
         req true;
@@ -506,28 +506,28 @@ mod ptr {
         
     lem open_NonNull_own<T>(t: thread_id_t, v: NonNull<T>);
         req [_](NonNull_own::<T>())(t, v);
-        ens NonNull_ptr(v) as usize != 0;
+        ens v.as_ptr() as usize != 0;
         
-    fix NonNull_ptr<T>(v: NonNull<T>) -> *T;
+    fix NonNull::as_ptr<T>(v: NonNull<T>) -> *T;
     
     // If ptr is 0, the result of NonNull::new_ is unspecified. (It is never the case that NonNull_ptr(nnp) == 0.)
-    fix NonNull::new_<T>(ptr: *T) -> NonNull<T>;
+    fix NonNull::new<T>(ptr: *T) -> NonNull<T>;
     
-    lem_auto(NonNull_ptr(NonNull::new_(ptr))) NonNull_ptr_new<T>(ptr: *T);
+    lem_auto(NonNull::new(ptr).as_ptr()) NonNull_as_ptr_new<T>(ptr: *T);
         req ptr != 0 && pointer_within_limits(ptr);
-        ens NonNull_ptr(NonNull::new_(ptr)) == ptr;
+        ens NonNull::new(ptr).as_ptr() == ptr;
     
-    lem NonNull_new_ptr<T>(v: NonNull<T>);
+    lem NonNull_new_as_ptr<T>(v: NonNull<T>);
         req true;
-        ens NonNull::new_(NonNull_ptr(v)) == v;
+        ens NonNull::new(v.as_ptr()) == v;
     
-    lem_auto(NonNull_ptr(v)) NonNull_ptr_nonnull<T>(v: NonNull<T>);
+    lem_auto(v.as_ptr()) NonNull_as_ptr_nonnull<T>(v: NonNull<T>);
         req true;
-        ens NonNull_ptr(v) != 0 && pointer_within_limits(NonNull_ptr(v));
+        ens v.as_ptr() != 0 && pointer_within_limits(v.as_ptr());
     
     lem NonNull_upcast<T0, T1>(v: NonNull<T0>);
         req true;
-        ens NonNull_ptr::<T1>(upcast(v)) == NonNull_ptr::<T0>(v) as *_;
+        ens NonNull::as_ptr::<T1>(upcast(v)) == NonNull::as_ptr::<T0>(v) as *_;
     
     lem init_ref_NonNull<T>(p: *NonNull<T>, coef: real);
         req ref_init_perm(p, ?x) &*& [?f](*x |-> ?v) &*& 0 < coef &*& coef < 1;
@@ -542,36 +542,36 @@ mod ptr {
     impl<T> NonNull<T> {
         fn without_provenance(addr: std::num::NonZero<usize>) -> NonNull<T>;
         //@ req true;
-        //@ ens result == NonNull::without_provenance_(addr);
+        //@ ens result == NonNull::without_provenance(addr);
         //@ on_unwind_ens false;
         
         unsafe fn new_unchecked(ptr: *mut T) -> NonNull<T>;
         //@ req ptr as usize != 0;
-        //@ ens NonNull_ptr(result) == ptr;
+        //@ ens result.as_ptr() == ptr;
         //@ on_unwind_ens false;
         
         unsafe fn as_mut<'a, 'b>(self: &'b mut NonNull<T>) -> &'a mut T;
         //@ req *self |-> ?v;
-        //@ ens *self |-> v &*& result == NonNull_ptr(v);
+        //@ ens *self |-> v &*& result == v.as_ptr();
         //@ on_unwind_ens false;
 
         unsafe fn as_ref<'a, 'b>(self: &'b NonNull<T>) -> &'a T;
         //@ req [?q](*self) |-> ?v;
-        //@ ens [q](*self) |-> v &*& result == NonNull_ptr(v);
+        //@ ens [q](*self) |-> v &*& result == v.as_ptr();
         //@ on_unwind_ens false;
 
         fn as_ptr(self: NonNull<T>) -> *mut T;
         //@ req true;
-        //@ ens result == NonNull_ptr(self);
+        //@ ens result == self.as_ptr();
         //@ on_unwind_ens false;
         
         fn cast<U>(self: NonNull<T>) -> NonNull<U>;
         //@ req true;
-        //@ ens result == NonNull::new_(NonNull_ptr(self) as *U);
+        //@ ens result == NonNull::new(self.as_ptr() as *U);
         
         fn cast_slice<U>(self: NonNull_slice<T>) -> NonNull<U>;
         //@ req true;
-        //@ ens result == NonNull::new_(NonNull_ptr(self.ptr) as *U);
+        //@ ens result == NonNull::new(self.ptr.as_ptr() as *U);
         
     }
     
@@ -621,12 +621,12 @@ mod ptr {
         
         fn new_unchecked(ptr: *mut T) -> Unique<T>;
         //@ req ptr != 0;
-        //@ ens result == Unique::from_non_null_(NonNull::new_(ptr));
+        //@ ens result == Unique::from_non_null_(NonNull::new(ptr));
         //@ on_unwind_ens false;
         
         fn cast<U>(self: Unique<T>) -> Unique<U>;
         //@ req true;
-        //@ ens result == Unique::from_non_null_(NonNull::new_(NonNull_ptr(Unique::non_null_(self)) as *U));
+        //@ ens result == Unique::from_non_null_(NonNull::new(Unique::non_null_(self).as_ptr() as *U));
         //@ on_unwind_ens false;
         
     }
@@ -985,8 +985,8 @@ mod alloc {
         ens thread_token(t) &*& Allocator::<&'a Self>(t, self, alloc_id) &*& 
             match result {
                 Result::Ok(ptr) =>
-                    alloc_block_in(alloc_id, std::ptr::NonNull_ptr(ptr.ptr), layout) &*&
-                    array_at_lft_(alloc_id.lft, std::ptr::NonNull_ptr(ptr.ptr), layout.size(), _) &*&
+                    alloc_block_in(alloc_id, ptr.ptr.as_ptr(), layout) &*&
+                    array_at_lft_(alloc_id.lft, ptr.ptr.as_ptr(), layout.size(), _) &*&
                     layout.size() <= ptr.len &*&
                     is_valid_layout(ptr.len, layout.align()) == true,
                 Result::Err(e) => true
@@ -1000,8 +1000,8 @@ mod alloc {
         ens thread_token(t) &*& Allocator::<&'a Self>(t, self, alloc_id) &*& 
             match result {
                 Result::Ok(ptr) =>
-                    alloc_block_in(alloc_id, std::ptr::NonNull_ptr(ptr.ptr), layout) &*&
-                    array_at_lft(alloc_id.lft, std::ptr::NonNull_ptr(ptr.ptr), layout.size(), ?bs) &*& forall(bs, (eq)(0)) == true &*&
+                    alloc_block_in(alloc_id, ptr.ptr.as_ptr(), layout) &*&
+                    array_at_lft(alloc_id.lft, ptr.ptr.as_ptr(), layout.size(), ?bs) &*& forall(bs, (eq)(0)) == true &*&
                     layout.size() <= ptr.len &*&
                     is_valid_layout(ptr.len, layout.align()) == true,
                 Result::Err(e) => true
@@ -1010,7 +1010,7 @@ mod alloc {
         //@ on_unwind_ens thread_token(t) &*& Allocator::<&'a Self>(t, self, alloc_id);
     
         unsafe fn deallocate<'a>(self: &'a Self, ptr: std::ptr::NonNull<u8>, layout: Layout);
-        //@ req thread_token(?t) &*& Allocator::<&'a Self>(t, self, ?alloc_id) &*& alloc_block_in(alloc_id, std::ptr::NonNull_ptr(ptr), layout) &*& array_at_lft_(alloc_id.lft, std::ptr::NonNull_ptr(ptr), layout.size(), _);
+        //@ req thread_token(?t) &*& Allocator::<&'a Self>(t, self, ?alloc_id) &*& alloc_block_in(alloc_id, ptr.as_ptr(), layout) &*& array_at_lft_(alloc_id.lft, ptr.as_ptr(), layout.size(), _);
         //@ ens thread_token(t) &*& Allocator::<&'a Self>(t, self, alloc_id);
         //@ on_unwind_ens thread_token(t) &*& Allocator::<&'a Self>(t, self, alloc_id);
         
@@ -1018,21 +1018,21 @@ mod alloc {
         /*@
         req thread_token(?t) &*&
             Allocator::<&'a Self>(t, self, ?alloc_id) &*&
-            alloc_block_in(alloc_id, std::ptr::NonNull_ptr(ptr), old_layout) &*&
-            array_at_lft_(alloc_id.lft, std::ptr::NonNull_ptr(ptr), old_layout.size(), ?bs) &*&
+            alloc_block_in(alloc_id, ptr.as_ptr(), old_layout) &*&
+            array_at_lft_(alloc_id.lft, ptr.as_ptr(), old_layout.size(), ?bs) &*&
             old_layout.size() <= new_layout.size();
         @*/
         /*@
         ens thread_token(t) &*& Allocator::<&'a Self>(t, self, alloc_id) &*& 
             match result {
                 Result::Ok(new_ptr) =>
-                    alloc_block_in(alloc_id, std::ptr::NonNull_ptr(new_ptr.ptr), new_layout) &*&
-                    array_at_lft_(alloc_id.lft, std::ptr::NonNull_ptr(new_ptr.ptr), new_layout.size(), _) &*&
+                    alloc_block_in(alloc_id, new_ptr.ptr.as_ptr(), new_layout) &*&
+                    array_at_lft_(alloc_id.lft, new_ptr.ptr.as_ptr(), new_layout.size(), _) &*&
                     new_layout.size() <= new_ptr.len &*&
                     is_valid_layout(new_ptr.len, new_layout.align()) == true,
                 Result::Err(e) =>
-                    alloc_block_in(alloc_id, std::ptr::NonNull_ptr(ptr), old_layout) &*&
-                    array_at_lft_(alloc_id.lft, std::ptr::NonNull_ptr(ptr), old_layout.size(), bs)
+                    alloc_block_in(alloc_id, ptr.as_ptr(), old_layout) &*&
+                    array_at_lft_(alloc_id.lft, ptr.as_ptr(), old_layout.size(), bs)
             };
         @*/
         //@ on_unwind_ens thread_token(t) &*& Allocator::<&'a Self>(t, self, alloc_id);
@@ -1041,21 +1041,21 @@ mod alloc {
         /*@
         req thread_token(?t) &*&
             Allocator::<&'a Self>(t, self, ?alloc_id) &*&
-            alloc_block_in(alloc_id, std::ptr::NonNull_ptr(ptr), old_layout) &*&
-            array_at_lft_(alloc_id.lft, std::ptr::NonNull_ptr(ptr), old_layout.size(), ?bs) &*&
+            alloc_block_in(alloc_id, ptr.as_ptr(), old_layout) &*&
+            array_at_lft_(alloc_id.lft, ptr.as_ptr(), old_layout.size(), ?bs) &*&
             new_layout.size() <= old_layout.size();
         @*/
         /*@
         ens thread_token(t) &*& Allocator::<&'a Self>(t, self, alloc_id) &*& 
             match result {
                 Result::Ok(new_ptr) =>
-                    alloc_block_in(alloc_id, std::ptr::NonNull_ptr(new_ptr.ptr), new_layout) &*&
-                    array_at_lft_(alloc_id.lft, std::ptr::NonNull_ptr(new_ptr.ptr), new_layout.size(), _) &*&
+                    alloc_block_in(alloc_id, new_ptr.ptr.as_ptr(), new_layout) &*&
+                    array_at_lft_(alloc_id.lft, new_ptr.ptr.as_ptr(), new_layout.size(), _) &*&
                     new_layout.size() <= new_ptr.len &*&
                     is_valid_layout(new_ptr.len, new_layout.align()) == true,
                 Result::Err(e) =>
-                    alloc_block_in(alloc_id, std::ptr::NonNull_ptr(ptr), old_layout) &*&
-                    array_at_lft_(alloc_id.lft, std::ptr::NonNull_ptr(ptr), old_layout.size(), bs)
+                    alloc_block_in(alloc_id, ptr.as_ptr(), old_layout) &*&
+                    array_at_lft_(alloc_id.lft, ptr.as_ptr(), old_layout.size(), bs)
             };
         @*/
         //@ on_unwind_ens thread_token(t) &*& Allocator::<&'a Self>(t, self, alloc_id);
