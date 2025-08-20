@@ -279,7 +279,14 @@ let rec parse_expr_funcs allowStructExprs =
   and parse_suffix e = function%parser
     [ (l, Kwd ".");
       [%let e = function%parser
-         [ (_, Ident f); [%let e = parse_suffix (Select (l, e, f)) ] ] -> e
+         [ (_, Ident f);
+           [%let e = function%parser
+              [ (_, Kwd "("); [%let args = rep_comma parse_pat ]; (_, Kwd ")");
+                [%let e = parse_suffix (CallExpr (l, f, [], [], LitPat e::args, Instance))]
+              ] -> e
+            | [ [%let e = parse_suffix (Select (l, e, f))] ] -> e
+           ]
+         ] -> e
        | [ (_, Int (i, dec, usuffix, lsuffix, _)); [%let e = parse_suffix (Select (l, e, string_of_big_int i)) ] ] -> e
       ]
     ] -> e
