@@ -47,7 +47,7 @@ pred count_pulses_pre(data: *mut CountPulsesData) =
     (*data).counter |-> ?counter &*&
     (*data).source |-> ?source &*&
     struct_CountPulsesData_padding(data) &*&
-    alloc_block(data as *u8, Layout::new_::<CountPulsesData>()) &*&
+    alloc_block(data as *u8, Layout::new::<CountPulsesData>()) &*&
     [_](*counter).mutex |-> ?mutex &*& [_]Mutex(mutex, Counter(counter));
 
 @*/

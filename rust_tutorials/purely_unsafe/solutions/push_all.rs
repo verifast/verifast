@@ -22,14 +22,14 @@ pred Nodes(node: *mut Node, count: i32) =
         (*node).next |-> ?next &*&
         (*node).value |-> ?value &*&
         struct_Node_padding(node) &*&
-        alloc_block(node as *u8, Layout::new_::<Node>()) &*&
+        alloc_block(node as *u8, Layout::new::<Node>()) &*&
         Nodes(next, count - 1)
     };
 
 pred Stack(stack: *mut Stack, count: i32) =
     (*stack).head |-> ?head &*&
     struct_Stack_padding(stack) &*&
-    alloc_block(stack as *u8, Layout::new_::<Stack>()) &*&
+    alloc_block(stack as *u8, Layout::new::<Stack>()) &*&
     0 <= count &*&
     Nodes(head, count);
 
@@ -40,7 +40,7 @@ pred lseg(first: *mut Node, last: *mut Node, count: i32) =
         0 < count &*& first != 0 &*&
         (*first).value |-> ?value &*& (*first).next |-> ?next &*&
         struct_Node_padding(first) &*&
-        alloc_block(first as *mut u8, Layout::new_::<Node>()) &*&
+        alloc_block(first as *mut u8, Layout::new::<Node>()) &*&
         lseg(next, last, count - 1)
     };
 
@@ -68,7 +68,7 @@ lem lseg_to_Nodes_lemma(first: *mut Node)
 
 lem lseg_add_lemma(first: *mut Node)
     req lseg(first, ?last, ?count) &*& last != 0 &*& (*last).value |-> ?last_value &*& (*last).next |-> ?next &*&
-        struct_Node_padding(last) &*& alloc_block(last as *u8, Layout::new_::<Node>()) &*&
+        struct_Node_padding(last) &*& alloc_block(last as *u8, Layout::new::<Node>()) &*&
         lseg(next, 0, ?count0);
     ens lseg(first, next, count + 1) &*& lseg(next, 0, count0);
 {
@@ -160,7 +160,7 @@ impl Stack {
                 /*@
                 inv lseg(head0, n, ?count1) &*& n != 0 &*& (*n).value |-> ?n_value &*& 
                     (*n).next |-> ?next &*& struct_Node_padding(n) &*&
-                    alloc_block(n as *u8, Layout::new_::<Node>()) &*&
+                    alloc_block(n as *u8, Layout::new::<Node>()) &*&
                     lseg(next, 0, count0 - count1 - 1);
                 @*/
                 if (*n).next.is_null() {

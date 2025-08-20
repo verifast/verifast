@@ -43,7 +43,7 @@ pred Tree(t: *mut Tree; depth: i32) =
         (*t).right |-> ?right &*& Tree(right, childDepth) &*&
         (*t).value |-> ?value &*&
         struct_Tree_padding(t) &*&
-        alloc_block(t as *u8, Layout::new_::<Tree>()) &*&
+        alloc_block(t as *u8, Layout::new::<Tree>()) &*&
         depth == childDepth + 1
     };
 
@@ -140,7 +140,7 @@ unsafe fn folder(data: *mut FoldData)
 
 unsafe fn start_fold_thread(tree: *mut Tree, f: FoldFunction, acc: i32) -> *mut FoldData
 //@ req [1/2]Tree(tree, _) &*& [_]is_FoldFunction(f);
-//@ ens [1/2](*result).tree |-> tree &*& (*result).thread |-> ?t &*& Thread(t, folder_post(result)) &*& struct_FoldData_padding(result) &*& alloc_block(result as *u8, Layout::new_::<FoldData>());
+//@ ens [1/2](*result).tree |-> tree &*& (*result).thread |-> ?t &*& Thread(t, folder_post(result)) &*& struct_FoldData_padding(result) &*& alloc_block(result as *u8, Layout::new::<FoldData>());
 {
     let data = alloc(Layout::new::<FoldData>()) as *mut FoldData;
     if data.is_null() {
@@ -162,7 +162,7 @@ unsafe fn start_fold_thread(tree: *mut Tree, f: FoldFunction, acc: i32) -> *mut 
 }
 
 unsafe fn join_fold_thread(data: *mut FoldData) -> i32
-//@ req [1/2](*data).tree |-> ?tree &*& (*data).thread |-> ?t &*& Thread(t, folder_post(data)) &*& struct_FoldData_padding(data) &*& alloc_block(data as *u8, Layout::new_::<FoldData>());
+//@ req [1/2](*data).tree |-> ?tree &*& (*data).thread |-> ?t &*& Thread(t, folder_post(data)) &*& struct_FoldData_padding(data) &*& alloc_block(data as *u8, Layout::new::<FoldData>());
 //@ ens [1/2]Tree(tree, _);
 {
     platform::threading::join((*data).thread);

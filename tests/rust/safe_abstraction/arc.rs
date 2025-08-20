@@ -23,7 +23,7 @@ pred_ctor dlft_pred(dk: lifetime_t)(gid: isize; destroyed: bool) = ghost_cell(gi
 
 pred_ctor Arc_inv<T>(dk: lifetime_t, gid: isize, ptr: *ArcInner<T>)() = counting(dlft_pred(dk), gid, ?n, ?destroyed) &*&
     if destroyed { true } else { std::sync::atomic::AtomicUsize(&(*ptr).strong, n) &*& n >= 1 && n <= usize::MAX &*&
-    std::alloc::alloc_block(ptr as *u8, std::alloc::Layout::new_::<ArcInner<T>>()) &*& struct_ArcInner_padding::<T>(ptr) &*&
+    std::alloc::alloc_block(ptr as *u8, std::alloc::Layout::new::<ArcInner<T>>()) &*& struct_ArcInner_padding::<T>(ptr) &*&
     borrow_end_token(dk, <T>.full_borrow_content(default_tid, &(*ptr).data)) };
 
 pred<T> <Arc<T>>.own(t, arc) = [_]std::ptr::NonNull_own(default_tid, arc.ptr) &*& [_]exists(?ptr) &*& std::ptr::NonNull_ptr::<ArcInner<T>>(arc.ptr) == ptr &*&
@@ -363,7 +363,7 @@ impl<T: Sync + Send> Drop for Arc<T> {
             /*@
             pred Pre() = [_]atomic_space(Marc, Arc_inv(dk, gid, ptr)) &*& ticket(dlft_pred(dk), gid, ?frac) &*& [frac]dlft_pred(dk)(gid, false);
             pred Post(result: usize) = if result == 1 {
-                    *sp |-> ?_x0 &*& (*ptr).data |-> ?_x1 &*& <T>.own(default_tid, _x1) &*& struct_ArcInner_padding::<T>(ptr) &*& std::alloc::alloc_block(ptr as *u8, std::alloc::Layout::new_::<ArcInner<T>>())
+                    *sp |-> ?_x0 &*& (*ptr).data |-> ?_x1 &*& <T>.own(default_tid, _x1) &*& struct_ArcInner_padding::<T>(ptr) &*& std::alloc::alloc_block(ptr as *u8, std::alloc::Layout::new::<ArcInner<T>>())
                 } else { true };
             @*/
             /*@

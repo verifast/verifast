@@ -171,7 +171,7 @@ pred Nodes<T>(alloc_id: alloc_id_t, n: Option<NonNull<Node<T>>>, prev: Option<No
         nodes == [] &*& last == prev
     } else {
         n == Option::Some(?n_) &*&
-        alloc_block_in(alloc_id, NonNull_ptr(n_) as *u8, Layout::new_::<Node<T>>()) &*& struct_Node_padding(NonNull_ptr(n_)) &*&
+        alloc_block_in(alloc_id, NonNull_ptr(n_) as *u8, Layout::new::<Node<T>>()) &*& struct_Node_padding(NonNull_ptr(n_)) &*&
         (*NonNull_ptr(n_)).prev |-> prev &*&
         (*NonNull_ptr(n_)).next |-> ?next0 &*&
         pointer_within_limits(&(*NonNull_ptr(n_)).element) == true &*&
@@ -204,7 +204,7 @@ lem Nodes_split_off_last<T>(n: Option<NonNull<Node<T>>>)
     req Nodes::<T>(?alloc_id, n, ?prev, ?last, ?next, ?nodes) &*& n != next;
     ens last == Option::Some(?last_) &*&
         Nodes::<T>(alloc_id, n, prev, ?last1, last, ?nodes0) &*&
-        alloc_block_in(alloc_id, NonNull_ptr(last_) as *u8, Layout::new_::<Node<T>>()) &*&
+        alloc_block_in(alloc_id, NonNull_ptr(last_) as *u8, Layout::new::<Node<T>>()) &*&
         (*NonNull_ptr(last_)).prev |-> last1 &*&
         (*NonNull_ptr(last_)).next |-> next &*&
         pointer_within_limits(&(*NonNull_ptr(last_)).element) == true &*&
@@ -226,7 +226,7 @@ lem Nodes_split_off_last<T>(n: Option<NonNull<Node<T>>>)
 
 lem Nodes_append_one_<T>(head: Option<NonNull<Node<T>>>)
     req Nodes::<T>(?alloc_id, head, ?prev, ?last, Option::Some(?n), ?nodes1) &*&
-        alloc_block_in(alloc_id, NonNull_ptr(n) as *u8, Layout::new_::<Node<T>>()) &*&
+        alloc_block_in(alloc_id, NonNull_ptr(n) as *u8, Layout::new::<Node<T>>()) &*&
         (*NonNull_ptr(n)).prev |-> last &*&
         (*NonNull_ptr(n)).next |-> ?next &*&
         pointer_within_limits(&(*NonNull_ptr(n)).element) == true &*&
@@ -354,7 +354,7 @@ pred Nodes1<T>(alloc_id: alloc_id_t, n: Option<NonNull<Node<T>>>, prev: Option<N
             n == next &*& last == prev &*& prevs == nil &*& nexts == nil,
         cons(n_, nodes0) =>
             n == Option::Some(n_) &*&
-            alloc_block_in(alloc_id, NonNull_ptr(n_) as *u8, Layout::new_::<Node<T>>()) &*& struct_Node_padding(NonNull_ptr(n_)) &*&
+            alloc_block_in(alloc_id, NonNull_ptr(n_) as *u8, Layout::new::<Node<T>>()) &*& struct_Node_padding(NonNull_ptr(n_)) &*&
             (*NonNull_ptr(n_)).prev |-> prev &*&
             (*NonNull_ptr(n_)).next |-> ?next0 &*&
             pointer_within_limits(&(*NonNull_ptr(n_)).element) == true &*&
@@ -966,7 +966,7 @@ impl<T, A: Allocator> LinkedList<T, A> {
     /*@
     req thread_token(?t) &*& *self |-> ?self0 &*& Allocator(t, self0.alloc, ?alloc_id) &*& Nodes(alloc_id, self0.head, None, self0.tail, None, ?nodes) &*&
         length(nodes) == self0.len &*&
-        *NonNull_ptr(node) |-> ?n &*& alloc_block_in(alloc_id, NonNull_ptr(node) as *u8, Layout::new_::<Node<T>>());
+        *NonNull_ptr(node) |-> ?n &*& alloc_block_in(alloc_id, NonNull_ptr(node) as *u8, Layout::new::<Node<T>>());
     @*/
     /*@
     ens thread_token(t) &*& *self |-> ?self1 &*& Allocator(t, self1.alloc, alloc_id) &*&
@@ -1179,7 +1179,7 @@ impl<T, A: Allocator> LinkedList<T, A> {
     /*@
     req (*self).head |-> ?head &*& (*self).tail |-> ?tail &*&
         Nodes::<T>(?alloc_id, head, None, ?prev_, Some(node), ?nodes1) &*&
-        alloc_block_in(alloc_id, NonNull_ptr(node) as *u8, Layout::new_::<Node<T>>()) &*&
+        alloc_block_in(alloc_id, NonNull_ptr(node) as *u8, Layout::new::<Node<T>>()) &*&
         (*NonNull_ptr(node)).next |-> ?next_ &*&
         (*NonNull_ptr(node)).prev |-> prev_ &*&
         struct_Node_padding(NonNull_ptr(node)) &*&
@@ -1189,7 +1189,7 @@ impl<T, A: Allocator> LinkedList<T, A> {
     /*@
     ens (*self).head |-> ?head1 &*& (*self).tail |-> ?tail1 &*&
         Nodes::<T>(alloc_id, head1, None, prev_, next_, nodes1) &*&
-        alloc_block_in(alloc_id, NonNull_ptr(node) as *u8, Layout::new_::<Node<T>>()) &*&
+        alloc_block_in(alloc_id, NonNull_ptr(node) as *u8, Layout::new::<Node<T>>()) &*&
         (*NonNull_ptr(node)).next |-> next_ &*&
         (*NonNull_ptr(node)).prev |-> prev_ &*&
         struct_Node_padding(NonNull_ptr(node)) &*&
@@ -2733,7 +2733,7 @@ impl<'a, T> Iterator for Iter<'a, T> {
                         pred Ctx() = true;
                         pred Q() =
                             [f]Nodes1(alloc_id, head0, None, prev, self0.head, nodes_before, prevs_before, nexts_before) &*&
-                            [f]alloc_block_in(alloc_id, NonNull_ptr(node0) as *u8, Layout::new_::<Node<T>>()) &*&
+                            [f]alloc_block_in(alloc_id, NonNull_ptr(node0) as *u8, Layout::new::<Node<T>>()) &*&
                             [f/2]struct_Node_padding(node_ref) &*&
                             [f/2]struct_Node_padding(NonNull_ptr(node0)) &*&
                             [f/2](*node_ref).prev |-> prev &*& ref_end_token_Option_NonNull(&(*node_ref).prev, &(*NonNull_ptr(node0)).prev, f, prev) &*&
@@ -2866,7 +2866,7 @@ impl<'a, T> Iterator for IterMut<'a, T> {
             *self |-> self0 &*& result == Option::None
         } else {
             self0.head == Option::Some(?head) &*&
-            alloc_block_in(alloc_id, NonNull_ptr(head) as *u8, Layout::new_::<Node<T>>()) &*& struct_Node_padding(NonNull_ptr(head)) &*&
+            alloc_block_in(alloc_id, NonNull_ptr(head) as *u8, Layout::new::<Node<T>>()) &*& struct_Node_padding(NonNull_ptr(head)) &*&
             (*NonNull_ptr(head)).prev |-> prev &*&
             (*NonNull_ptr(head)).next |-> ?next0 &*&
             pointer_within_limits(&(*NonNull_ptr(head)).element) == true &*&
@@ -2924,7 +2924,7 @@ impl<'a, T> DoubleEndedIterator for IterMut<'a, T> {
             *self |-> self0 &*& result == Option::None
         } else {
             self0.tail == Option::Some(?tail) &*&
-            alloc_block_in(alloc_id, NonNull_ptr(tail) as *u8, Layout::new_::<Node<T>>()) &*& struct_Node_padding(NonNull_ptr(tail)) &*&
+            alloc_block_in(alloc_id, NonNull_ptr(tail) as *u8, Layout::new::<Node<T>>()) &*& struct_Node_padding(NonNull_ptr(tail)) &*&
             (*NonNull_ptr(tail)).prev |-> ?prev0 &*&
             (*NonNull_ptr(tail)).next |-> next &*&
             pointer_within_limits(&(*NonNull_ptr(tail)).element) == true &*&

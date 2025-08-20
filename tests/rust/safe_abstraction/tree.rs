@@ -72,7 +72,7 @@ lem_auto node_count_positive(tree: tree)
 
 pred Tree(node: *mut Node; parent: *mut Node, shape: tree) =
     node != 0 &*&
-    std::alloc::alloc_block(node as *u8, std::alloc::Layout::new_::<Node>()) &*&
+    std::alloc::alloc_block(node as *u8, std::alloc::Layout::new::<Node>()) &*&
     struct_Node_padding(node) &*&
     node as usize & 1 == 0 &*&
     pointer_within_limits(node as *mut u8 + 1) == true &*&
@@ -110,7 +110,7 @@ pred stack(parent: *mut Node, current: *mut Node, cShape: tree, root: *mut Node,
         stepsLeft == 0 &*&
         elems_todo == []
     } else {
-        std::alloc::alloc_block(parent as *u8, std::alloc::Layout::new_::<Node>()) &*&
+        std::alloc::alloc_block(parent as *u8, std::alloc::Layout::new::<Node>()) &*&
         struct_Node_padding(parent) &*&
         parent as usize & 1 == 0 &*&
         pointer_within_limits(parent as *mut u8 + 1) == true &*&

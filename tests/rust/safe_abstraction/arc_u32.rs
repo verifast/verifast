@@ -25,7 +25,7 @@ pred_ctor dlft_pred(dk: lifetime_t)(gid: isize; destroyed: bool) = ghost_cell(gi
 */
 pred_ctor Arc_inv(dk: lifetime_t, gid: isize, ptr: *ArcInnerU32)() = counting(dlft_pred(dk), gid, ?n, ?destroyed) &*&
     if destroyed { true } else { std::sync::atomic::AtomicUsize(&(*ptr).strong, n) &*& n >= 1 && n <= usize::MAX &*&
-    std::alloc::alloc_block(ptr as *u8, std::alloc::Layout::new_::<ArcInnerU32>()) &*& struct_ArcInnerU32_padding(ptr) &*&
+    std::alloc::alloc_block(ptr as *u8, std::alloc::Layout::new::<ArcInnerU32>()) &*& struct_ArcInnerU32_padding(ptr) &*&
     borrow_end_token(dk, u32_full_borrow_content(default_tid, &(*ptr).data)) };
 
 pred <ArcU32>.own(t, arcU32) = [_]std::ptr::NonNull_own(default_tid, arcU32.ptr) &*& [_]exists(?ptr) &*& std::ptr::NonNull_ptr::<ArcInnerU32>(arcU32.ptr) == ptr &*&
@@ -349,7 +349,7 @@ impl Drop for ArcU32 {
             /*@
             pred Pre() = [_]atomic_space(Marc, Arc_inv(dk, gid, ptr)) &*& ticket(dlft_pred(dk), gid, ?frac) &*& [frac]dlft_pred(dk)(gid, false);
             pred Post(result: usize) = if result == 1 {
-                    *sp |-> ?_x0 &*& (*ptr).data |-> ?_x1 &*& struct_ArcInnerU32_padding(ptr) &*& std::alloc::alloc_block(ptr as *u8, std::alloc::Layout::new_::<ArcInnerU32>())
+                    *sp |-> ?_x0 &*& (*ptr).data |-> ?_x1 &*& struct_ArcInnerU32_padding(ptr) &*& std::alloc::alloc_block(ptr as *u8, std::alloc::Layout::new::<ArcInnerU32>())
                 } else { true };
             @*/
             /*@

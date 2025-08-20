@@ -75,7 +75,7 @@ pred Nodes(node: *mut Node, values: i32s) =
         (*node).next |-> ?next &*&
         (*node).value |-> ?value &*&
         struct_Node_padding(node) &*&
-        alloc_block(node as *u8, Layout::new_::<Node>()) &*&
+        alloc_block(node as *u8, Layout::new::<Node>()) &*&
         Nodes(next, ?values0) &*&
         values == i32s_cons(value, values0)
     };
@@ -83,7 +83,7 @@ pred Nodes(node: *mut Node, values: i32s) =
 pred Stack(stack: *mut Stack, values: i32s) =
     (*stack).head |-> ?head &*&
     struct_Stack_padding(stack) &*&
-    alloc_block(stack as *u8, Layout::new_::<Stack>()) &*&
+    alloc_block(stack as *u8, Layout::new::<Stack>()) &*&
     Nodes(head, values);
 
 @*/

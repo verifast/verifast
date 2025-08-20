@@ -697,8 +697,8 @@ mod alloc {
     //@ fix Layout::size(layout: Layout) -> usize;
     //@ fix Layout::align(layout: Layout) -> usize;
     //@ fix Layout::from_size_align(size: usize, align: usize) -> Layout;
-    //@ fix Layout::new_<T>() -> Layout { Layout::from_size_align(std::mem::size_of::<T>(), std::mem::align_of::<T>()) }
-    //@ fix Layout::repeat_(layout: Layout, n: usize) -> option<pair<Layout, usize>>;
+    //@ fix Layout::new<T>() -> Layout { Layout::from_size_align(std::mem::size_of::<T>(), std::mem::align_of::<T>()) }
+    //@ fix Layout::repeat(layout: Layout, n: usize) -> option<pair<Layout, usize>>;
     
     //@ fix is_valid_layout(size: usize, align: usize) -> bool { is_power_of_2(align) && 0 <= size && size <= isize::MAX - isize::MAX % align }
     //@ fix Layout::is_valid(layout: Layout) -> bool { is_valid_layout(layout.size(), layout.align()) }
@@ -723,14 +723,14 @@ mod alloc {
     
     lem_auto Layout_is_valid_new<T>();
         req true;
-        ens Layout::is_valid(Layout::new_::<T>()) == true;
+        ens Layout::is_valid(Layout::new::<T>()) == true;
     
-    lem_auto(Layout::from_size_align(l.size(), l.align())) Layout_from_size_align__Layout_size__Layout_align_(l: Layout);
+    lem_auto(Layout::from_size_align(l.size(), l.align())) Layout_from_size_align_Layout_size_Layout_align(l: Layout);
         req true;
         ens Layout::from_size_align(l.size(), l.align()) == l;
     
     lem Layout_repeat_some(layout: Layout, n: usize);
-        req Layout::repeat_(layout, n) == some(pair(?result, ?stride));
+        req layout.repeat(n) == some(pair(?result, ?stride));
         ens layout.size() <= stride &*&
             stride % layout.align() == 0 &*&
             stride - layout.size() < layout.align() &*&
@@ -738,14 +738,14 @@ mod alloc {
             result.align() == layout.align();
     
     lem Layout_repeat_some_size_aligned(layout: Layout, n: usize);
-        req Layout::repeat_(layout, n) == some(pair(?result, ?stride)) &*& layout.size() % layout.align() == 0;
+        req layout.repeat(n) == some(pair(?result, ?stride)) &*& layout.size() % layout.align() == 0;
         ens result.size() == n * layout.size() &*&
             result.align() == layout.align() &*&
             stride == layout.size();
     
     lem Layout_repeat_size_aligned_intro(layout: Layout, n: usize);
         req layout.size() % layout.align() == 0 &*& 0 <= n &*& n * layout.size() <= isize::MAX;
-        ens Layout::repeat_(layout, n) == some(pair(?result, layout.size())) &*&
+        ens layout.repeat(n) == some(pair(?result, layout.size())) &*&
             result.size() == n * layout.size() &*&
             result.align() == layout.align();
     
@@ -767,7 +767,7 @@ mod alloc {
     
         fn new<T>() -> Layout;
         //@ req true;
-        //@ ens result == Layout::new_::<T>();
+        //@ ens result == Layout::new::<T>();
         //@ on_unwind_ens false;
 
         fn from_size_align_unchecked(size: usize, align: usize) -> Layout;
@@ -795,7 +795,7 @@ mod alloc {
         ens [f](*self |-> l) &*&
             match result {
                 Result::Ok(r) =>
-                    Layout::repeat_(l, n) == some(pair(r.0, r.1)) &*&
+                    l.repeat(n) == some(pair(r.0, r.1)) &*&
                     r.0.size() == n * r.1 &*&
                     l.size() <= r.1 &*&
                     r.1 % l.align() == 0 &*&
@@ -1131,7 +1131,7 @@ mod boxed {
         //@ on_unwind_ens thread_token(t);
         
         fn from_raw(x: *T) -> Box<T, std::alloc::Global>;
-        //@ req *x |-> ?value &*& std::alloc::alloc_block(x as *u8, std::alloc::Layout::new_::<T>());
+        //@ req *x |-> ?value &*& std::alloc::alloc_block(x as *u8, std::alloc::Layout::new::<T>());
         //@ ens Box(result, value);
         //@ on_unwind_ens false;
         
@@ -1145,7 +1145,7 @@ mod boxed {
         //@ on_unwind_ens thread_token(t);
         
         fn from_raw_in(x: *T, alloc: A) -> Box<T, A>;
-        //@ req std::alloc::Allocator(?t, alloc, ?alloc_id) &*& std::alloc::alloc_block_in(alloc_id, x as *u8, std::alloc::Layout::new_::<T>()) &*& points_to_at_lft(alloc_id.lft, x, ?value);
+        //@ req std::alloc::Allocator(?t, alloc, ?alloc_id) &*& std::alloc::alloc_block_in(alloc_id, x as *u8, std::alloc::Layout::new::<T>()) &*& points_to_at_lft(alloc_id.lft, x, ?value);
         //@ ens Box_in(t, result, alloc_id, value);
         //@ on_unwind_ens false;
     
@@ -1156,7 +1156,7 @@ mod boxed {
     
         fn into_raw(b: Box<T, std::alloc::Global>) -> *T;
         //@ req Box(b, ?value);
-        //@ ens *result |-> value &*& std::alloc::alloc_block(result as *u8, std::alloc::Layout::new_::<T>()) &*& result as usize != 0;
+        //@ ens *result |-> value &*& std::alloc::alloc_block(result as *u8, std::alloc::Layout::new::<T>()) &*& result as usize != 0;
         //@ on_unwind_ens false;
         
         fn into_inner(b: Box<T, A>) -> T;
@@ -1166,7 +1166,7 @@ mod boxed {
     
         fn leak<'a>(b: Box<T, A>) -> &'a mut T;
         //@ req Box_in::<T, A>(?t, b, ?alloc_id, ?value);
-        //@ ens points_to_at_lft(alloc_id.lft, result, value) &*& std::alloc::alloc_block_in(alloc_id, result as *u8, std::alloc::Layout::new_::<T>()) &*& result as *_ as usize != 0;
+        //@ ens points_to_at_lft(alloc_id.lft, result, value) &*& std::alloc::alloc_block_in(alloc_id, result as *u8, std::alloc::Layout::new::<T>()) &*& result as *_ as usize != 0;
         //@ on_unwind_ens false;
     
         fn new_uninit_in(alloc: A) -> Box<std::mem::MaybeUninit<T>, A>;

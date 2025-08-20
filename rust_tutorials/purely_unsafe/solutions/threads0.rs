@@ -41,7 +41,7 @@ pred Tree(t: *mut Tree, depth: i32) =
         (*t).right |-> ?right &*& Tree(right, depth - 1) &*&
         (*t).value |-> ?value &*&
         struct_Tree_padding(t) &*&
-        alloc_block(t as *u8, Layout::new_::<Tree>())
+        alloc_block(t as *u8, Layout::new::<Tree>())
     };
 
 @*/

@@ -22,14 +22,14 @@ pred Nodes(node: *mut Node, count: i32) =
         (*node).next |-> ?next &*&
         (*node).value |-> ?value &*&
         struct_Node_padding(node) &*&
-        alloc_block(node as *u8, Layout::new_::<Node>()) &*&
+        alloc_block(node as *u8, Layout::new::<Node>()) &*&
         Nodes(next, count - 1)
     };
 
 pred Stack(stack: *mut Stack, count: i32) =
     (*stack).head |-> ?head &*&
     struct_Stack_padding(stack) &*&
-    alloc_block(stack as *u8, Layout::new_::<Stack>()) &*&
+    alloc_block(stack as *u8, Layout::new::<Stack>()) &*&
     0 <= count &*&
     Nodes(head, count);
 

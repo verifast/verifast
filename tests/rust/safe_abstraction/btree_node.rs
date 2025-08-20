@@ -304,7 +304,7 @@ pred subtree<K, V>(
     struct_LeafNode_padding(root) &*&
     if height == 0 {
         tree == tree(root, repeat(nat_of_int(len + 1), empty)) &*&
-        alloc_block_in(alloc_id, root as *u8, Layout::new_::<LeafNode<K, V>>())
+        alloc_block_in(alloc_id, root as *u8, Layout::new::<LeafNode<K, V>>())
     } else {
         1 <= height &*&
         (*(root as *InternalNode<K, V>)).edges[..len + 1] |-> ?edges &*&
@@ -324,7 +324,7 @@ pred subtree<K, V>(
                 edges(alloc_id, root as *InternalNode<K, V>, height, 0, edges, children, start_idx, range_start0, end_idx, range_end0)
         } &*&
         struct_InternalNode_padding(root as *InternalNode<K, V>) &*&
-        alloc_block_in(alloc_id, root as *u8, Layout::new_::<InternalNode<K, V>>())
+        alloc_block_in(alloc_id, root as *u8, Layout::new::<InternalNode<K, V>>())
     };
 
 pred edges<K, V>(
@@ -485,7 +485,7 @@ pred context<K, V>(
             (*parent_ptr).edges[idx + 1..len + 1] |-> ?rightEdges &*&
             (*parent_ptr).edges[len + 1..2*B] |-> _ &*&
             struct_InternalNode_padding(parent_ptr) &*&
-            alloc_block_in(alloc_id, parent_ptr as *u8, Layout::new_::<InternalNode<K, V>>()) &*&
+            alloc_block_in(alloc_id, parent_ptr as *u8, Layout::new::<InternalNode<K, V>>()) &*&
             if range_start_up == 0 { pair(0, cons(idx, range_start_down)) } else { pair(range_start_up - 1, range_start_down) } == pair(?range_start_up1, ?range_start_down1) &*&
             if range_end_up == 0 { pair(0, cons(idx, range_end_down)) } else { pair(range_end_up - 1, range_end_down) } == pair(?range_end_up1, ?range_end_down1) &*&
             if range_start_up1 == 0 {

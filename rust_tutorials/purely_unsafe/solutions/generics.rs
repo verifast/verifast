@@ -21,7 +21,7 @@ pred Nodes<T>(node: *mut Node<T>, values: list<T>) =
         (*node).next |-> ?next &*&
         (*node).value |-> ?value &*&
         struct_Node_padding(node) &*&
-        alloc_block(node as *u8, Layout::new_::<Node<T>>()) &*&
+        alloc_block(node as *u8, Layout::new::<Node<T>>()) &*&
         Nodes(next, ?values0) &*&
         values == cons(value, values0)
     };
@@ -29,7 +29,7 @@ pred Nodes<T>(node: *mut Node<T>, values: list<T>) =
 pred Stack<T>(stack: *mut Stack<T>, values: list<T>) =
     (*stack).head |-> ?head &*&
     struct_Stack_padding(stack) &*&
-    alloc_block(stack as *u8, Layout::new_::<Stack<T>>()) &*&
+    alloc_block(stack as *u8, Layout::new::<Stack<T>>()) &*&
     Nodes(head, values);
 
 @*/
@@ -145,7 +145,7 @@ impl Point {
 
     unsafe fn create(x: i32, y: i32) -> *mut Point
     //@ req true;
-    //@ ens (*result).x |-> x &*& (*result).y |-> y &*& struct_Point_padding(result) &*& alloc_block(result as *u8, Layout::new_::<Point>());
+    //@ ens (*result).x |-> x &*& (*result).y |-> y &*& struct_Point_padding(result) &*& alloc_block(result as *u8, Layout::new::<Point>());
     {
         let result = alloc(Layout::new::<Point>()) as *mut Point;
         if result.is_null() {
