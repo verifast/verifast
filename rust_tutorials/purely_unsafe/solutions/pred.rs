@@ -12,7 +12,7 @@ struct Account {
 
 pred Account_pred(my_account: *mut Account, theLimit: i32, theBalance: i32) =
     (*my_account).limit |-> theLimit &*& (*my_account).balance |-> theBalance &*&
-    struct_Account_padding(my_account) &*& alloc_block(my_account as *u8, Layout::new_::<Account>());
+    struct_Account_padding(my_account) &*& alloc_block(my_account as *u8, Layout::new::<Account>());
 
 @*/
 

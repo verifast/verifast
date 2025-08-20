@@ -192,7 +192,7 @@ struct Connection {
 pred_ctor mutex_inv(buffer: *mut Buffer)() = Buffer(buffer, _, _);
 
 pred Connection(connection: *mut Connection;) =
-    std::alloc::alloc_block(connection as *mut u8, std::alloc::Layout::new_::<Connection>()) &*&
+    std::alloc::alloc_block(connection as *mut u8, std::alloc::Layout::new::<Connection>()) &*&
     struct_Connection_padding(connection) &*&
     (*connection).socket |-> ?socket &*& platform::sockets::Socket(socket) &*&
     (*connection).buffer |-> ?buffer &*&

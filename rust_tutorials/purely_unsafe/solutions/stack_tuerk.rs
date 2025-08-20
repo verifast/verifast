@@ -15,7 +15,7 @@ pred Nodes(node: *mut Node, count: i32) =
     } else {
         0 < count &*&
         (*node).next |-> ?next &*& (*node).value |-> ?value &*&
-        struct_Node_padding(node) &*& alloc_block(node as *mut u8, Layout::new_::<Node>()) &*&
+        struct_Node_padding(node) &*& alloc_block(node as *mut u8, Layout::new::<Node>()) &*&
         Nodes(next, count - 1)
     };
 
@@ -28,7 +28,7 @@ struct Stack {
 /*@
 
 pred Stack(stack: *mut Stack, count: i32) =
-    (*stack).head |-> ?head &*& alloc_block(stack as *mut u8, Layout::new_::<Stack>()) &*&
+    (*stack).head |-> ?head &*& alloc_block(stack as *mut u8, Layout::new::<Stack>()) &*&
     Nodes(head, count);
 
 @*/

@@ -21,7 +21,7 @@ pred Nodes<T>(node: *mut Node<T>, values: list<T>) =
         (*node).next |-> ?next &*&
         (*node).value |-> ?value &*&
         struct_Node_padding(node) &*&
-        alloc_block(node as *u8, Layout::new_::<Node<T>>()) &*&
+        alloc_block(node as *u8, Layout::new::<Node<T>>()) &*&
         Nodes(next, ?values0) &*&
         values == cons(value, values0)
     };
@@ -29,7 +29,7 @@ pred Nodes<T>(node: *mut Node<T>, values: list<T>) =
 pred Stack<T>(stack: *mut Stack<T>, values: list<T>) =
     (*stack).head |-> ?head &*&
     struct_Stack_padding(stack) &*&
-    alloc_block(stack as *u8, Layout::new_::<Stack<T>>()) &*&
+    alloc_block(stack as *u8, Layout::new::<Stack<T>>()) &*&
     Nodes(head, values);
 
 @*/
@@ -131,7 +131,7 @@ struct Vector {
 pred_ctor Vector(limit: i32)(v: *mut Vector) =
     (*v).x |-> ?x &*& (*v).y |-> ?y &*&
     struct_Vector_padding(v) &*&
-    alloc_block(v as *u8, Layout::new_::<Vector>()) &*&
+    alloc_block(v as *u8, Layout::new::<Vector>()) &*&
     x * x + y * y <= limit * limit;
 
 @*/

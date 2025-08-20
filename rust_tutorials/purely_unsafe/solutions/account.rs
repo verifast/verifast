@@ -11,7 +11,7 @@ impl Account {
 
     unsafe fn create() -> *mut Account
     //@ req true;
-    //@ ens Account_balance(result, 0) &*& alloc_block(result as *u8, Layout::new_::<Account>());
+    //@ ens Account_balance(result, 0) &*& alloc_block(result as *u8, Layout::new::<Account>());
     {
         let my_account = alloc(Layout::new::<Account>()) as *mut Account;
         if my_account.is_null() {
@@ -30,7 +30,7 @@ impl Account {
     }
 
     unsafe fn dispose(my_account: *mut Account)
-    //@ req Account_balance(my_account, _) &*& alloc_block(my_account as *u8, Layout::new_::<Account>());
+    //@ req Account_balance(my_account, _) &*& alloc_block(my_account as *u8, Layout::new::<Account>());
     //@ ens true;
     {
         //@ open_struct(my_account);

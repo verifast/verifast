@@ -15,7 +15,7 @@ pred Nodes(node: *mut Node, count: i32) =
         (*node).next |-> ?next &*&
         (*node).value |-> ?value &*&
         struct_Node_padding(node) &*&
-        alloc_block(node as *mut u8, Layout::new_::<Node>()) &*&
+        alloc_block(node as *mut u8, Layout::new::<Node>()) &*&
         Nodes(next, count - 1)
     };
 
@@ -26,7 +26,7 @@ pred lseg(first: *mut Node, last: *mut Node, count: i32) =
         0 < count &*& first != 0 &*&
         (*first).value |-> ?value &*& (*first).next |-> ?next &*&
         struct_Node_padding(first) &*&
-        alloc_block(first as *mut u8, Layout::new_::<Node>()) &*&
+        alloc_block(first as *mut u8, Layout::new::<Node>()) &*&
         lseg(next, last, count - 1)
     };
 

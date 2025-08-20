@@ -11,7 +11,7 @@ pred list(n: **u8; nodes: list< **u8 >) =
     if n == 0 {
         nodes == nil
     } else {
-        std::alloc::alloc_block(n as *u8, std::alloc::Layout::new_::< * u8>()) &*&
+        std::alloc::alloc_block(n as *u8, std::alloc::Layout::new::< * u8>()) &*&
         *n |-> ?next &*& list(next as **u8, ?nodes1) &*& nodes == cons(n, nodes1)
     };
 

@@ -79,7 +79,7 @@ pred Nodes<T>(n: *Node<T>, prev: *Node<T>, last: *Node<T>, next: *Node<T>; nodes
     if n == next {
         nodes == [] &*& last == prev
     } else {
-        std::alloc::alloc_block(n as *u8, std::alloc::Layout::new_::<Node<T>>()) &*& struct_Node_padding(n) &*&
+        std::alloc::alloc_block(n as *u8, std::alloc::Layout::new::<Node<T>>()) &*& struct_Node_padding(n) &*&
         (*n).prev |-> prev &*&
         (*n).next |-> ?next0 &*&
         Nodes(next0, n, last, next, ?nodes0) &*&
@@ -90,7 +90,7 @@ lem Nodes_split_last<T>(n: *Node<T>)
     req Nodes(n, ?prev, ?last, ?next, ?nodes) &*& 1 <= length(nodes);
     ens
         Nodes(n, prev, ?last1, last, take(length(nodes) - 1, nodes)) &*&
-        std::alloc::alloc_block(last as *u8, std::alloc::Layout::new_::<Node<T>>()) &*& struct_Node_padding(last) &*&
+        std::alloc::alloc_block(last as *u8, std::alloc::Layout::new::<Node<T>>()) &*& struct_Node_padding(last) &*&
         (*last).prev |-> last1 &*&
         (*last).next |-> next &*&
         append(take(length(nodes) - 1, nodes), [last]) == nodes;
@@ -110,7 +110,7 @@ lem Nodes_split_last<T>(n: *Node<T>)
 lem Nodes_join_last<T>(n: *Node<T>)
     req
         Nodes(n, ?prev, ?last1, ?last, ?nodes1) &*&
-        std::alloc::alloc_block(last as *u8, std::alloc::Layout::new_::<Node<T>>()) &*& struct_Node_padding(last) &*&
+        std::alloc::alloc_block(last as *u8, std::alloc::Layout::new::<Node<T>>()) &*& struct_Node_padding(last) &*&
         (*last).prev |-> last1 &*&
         (*last).next |-> ?next &*& (*next).next |-> ?nextNext;
     ens
@@ -142,7 +142,7 @@ pred_ctor Deque_full_borrow_content<T>(t: thread_id_t, deque: *Deque<T>)() =
 /*@
 
 pred Deque__<T>(sentinel: *Node<T>; nodes: list<*Node<T>>) =
-    std::alloc::alloc_block(sentinel as *u8, std::alloc::Layout::new_::<Node<T>>()) &*& struct_Node_padding(sentinel) &*&
+    std::alloc::alloc_block(sentinel as *u8, std::alloc::Layout::new::<Node<T>>()) &*& struct_Node_padding(sentinel) &*&
     (*sentinel).prev |-> ?last &*&
     (*sentinel).value |-> _ &*&
     (*sentinel).next |-> ?first &*&
