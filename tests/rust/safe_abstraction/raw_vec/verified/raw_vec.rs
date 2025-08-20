@@ -1408,12 +1408,10 @@ impl<A: Allocator> RawVecInner<A> {
         let ptr = Unique::from_non_null(NonNull::without_provenance(align.as_nonzero()));
         // `cap: 0` means "unallocated". zero-sized types are ignored.
         let cap = ZERO_CAP;
-        //@ let layout = Layout::from_size_align_(elemSize, NonZero::get_(Alignment::as_nonzero_(align)));
         let r = Self { ptr, cap, alloc };
         //@ div_rem_nonneg_unique(NonZero::get_(Alignment::as_nonzero_(align)), NonZero::get_(Alignment::as_nonzero_(align)), 1, 0);
-        //@ std::num::NonZero_usize_limits(Alignment::as_nonzero_(align));
+        //@ let layout = Layout::from_size_align_(elemSize, NonZero::get_(Alignment::as_nonzero_(align)));
         //@ close RawVecInner(t, r, layout, alloc_id, _, _);
-        //@ close array::<u8>(NonNull_ptr(Unique::non_null_(ptr)), 0, nil);
         r
     }
 
@@ -1764,7 +1762,7 @@ impl<A: Allocator> RawVecInner<A> {
     #[inline]
     const fn non_null<T>(&self) -> NonNull<T>
     //@ req [_]RawVecInner_share_(?k, ?t, self, ?elem_layout, ?alloc_id, ?ptr, ?capacity) &*& [?q]lifetime_token(k);
-    //@ ens [q]lifetime_token(k) &*& result == NonNull::new_(ptr as *T);
+    //@ ens [q]lifetime_token(k) &*& NonNull_ptr(result) == ptr as *T;
     /*@
     safety_proof {
         open <RawVecInner<A>>.share(?k, _t, self);
