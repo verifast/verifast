@@ -138,7 +138,7 @@ fix logical_capacity(cap: UsizeNoHighBit, elem_size: usize) -> usize {
 pred RawVecInner<A>(t: thread_id_t, self: RawVecInner<A>, elemLayout: Layout, alloc_id: alloc_id_t, ptr: *u8, capacity: usize) =
     Allocator(t, self.alloc, alloc_id) &*&
     capacity == logical_capacity(self.cap, elemLayout.size()) &*&
-    ptr == Unique::non_null_(self.ptr).as_ptr() &*&
+    ptr == self.ptr.as_non_null_ptr().as_ptr() &*&
     ptr as usize % elemLayout.align() == 0 &*&
     pointer_within_limits(ptr) == true &*&
     if capacity * elemLayout.size() == 0 {
@@ -150,7 +150,7 @@ pred RawVecInner<A>(t: thread_id_t, self: RawVecInner<A>, elemLayout: Layout, al
     
 pred RawVecInner0<A>(self: RawVecInner<A>, elemLayout: Layout, ptr: *u8, capacity: usize) =
     capacity == logical_capacity(self.cap, elemLayout.size()) &*&
-    ptr == Unique::non_null_(self.ptr).as_ptr() &*&
+    ptr == self.ptr.as_non_null_ptr().as_ptr() &*&
     ptr as usize % elemLayout.align() == 0 &*&
     pointer_within_limits(ptr) == true &*&
     if capacity * elemLayout.size() == 0 {
@@ -212,7 +212,7 @@ pred_ctor RawVecInner_frac_borrow_content<A>(l: *RawVecInner<A>, elemLayout: Lay
     (*l).ptr |-> ?u &*&
     (*l).cap |-> ?cap &*&
     capacity == logical_capacity(cap, elemLayout.size()) &*&
-    ptr == Unique::non_null_(u).as_ptr() &*&
+    ptr == u.as_non_null_ptr().as_ptr() &*&
     ptr as usize % elemLayout.align() == 0 &*&
     pointer_within_limits(ptr) == true &*&
     if capacity * elemLayout.size() == 0 {
@@ -1682,10 +1682,10 @@ impl<A: Allocator> RawVecInner<A> {
             cap: unsafe { Cap::new_unchecked(capacity) },
             alloc,
         };
-        //@ assert res.ptr == Unique::from_non_null_(NonNull::new(ptr.ptr.as_ptr()));
-        //@ std::ptr::Unique_non_null__from_non_null_(ptr.ptr);
+        //@ assert res.ptr == Unique::from_non_null(NonNull::new(ptr.ptr.as_ptr()));
+        //@ std::ptr::Unique_as_non_null_ptr_from_non_null(ptr.ptr);
         //@ std::ptr::NonNull_new_as_ptr(ptr.ptr);
-        //@ assert Unique::non_null_(res.ptr) == ptr.ptr;
+        //@ assert res.ptr.as_non_null_ptr() == ptr.ptr;
         //@ assert layout.align() == elem_layout.align();
         //@ std::alloc::alloc_block_in_aligned(ptr.ptr.as_ptr());
         //@ close RawVecInner(t, res, elem_layout, alloc_id, ptr.ptr.as_ptr(), _);
@@ -1851,7 +1851,7 @@ impl<A: Allocator> RawVecInner<A> {
                 let alloc_size = elem_layout.size().unchecked_mul(self.cap.as_inner());
                 let layout = Layout::from_size_align_unchecked(alloc_size, elem_layout.align());
                 let ptr_ = self.ptr.into();
-                //@ std::ptr::NonNull_new_as_ptr(std::ptr::Unique::non_null_((*self).ptr));
+                //@ std::ptr::NonNull_new_as_ptr((*self).ptr.as_non_null_ptr());
                 //@ close [f]RawVecInner_frac_borrow_content::<A>(self, elem_layout, ptr, capacity)();
                 //@ close_frac_borrow(f, RawVecInner_frac_borrow_content::<A>(self, elem_layout, ptr, capacity));
                 Some((ptr_, layout))
@@ -2066,7 +2066,7 @@ impl<A: Allocator> RawVecInner<A> {
     #[inline]
     unsafe fn set_ptr_and_cap(&mut self, ptr: NonNull<[u8]>, cap: usize)
     //@ req (*self).ptr |-> _ &*& (*self).cap |-> _ &*& cap <= isize::MAX;
-    //@ ens (*self).ptr |-> Unique::from_non_null_::<u8>(ptr.ptr) &*& (*self).cap |-> UsizeNoHighBit::new(cap);
+    //@ ens (*self).ptr |-> Unique::from_non_null::<u8>(ptr.ptr) &*& (*self).cap |-> UsizeNoHighBit::new(cap);
     {
         //@ std::ptr::NonNull_new_as_ptr(ptr.ptr);
         // Allocators currently return a `NonNull<[u8]>` whose length matches
@@ -2148,7 +2148,7 @@ impl<A: Allocator> RawVecInner<A> {
         //@ open RawVecInner(t, ?self01, elem_layout, alloc_id, ptr0, capacity0);
         //@ let ptr0_ = self01.ptr;
         //@ let cap0_ = self01.cap;
-        //@ assert Unique::non_null_(ptr0_).as_ptr() == ptr0;
+        //@ assert ptr0_.as_non_null_ptr().as_ptr() == ptr0;
         //@ std::alloc::Layout_inv(elem_layout);
         /*@
         if capacity0 * elem_layout.size() != 0 {
@@ -2262,7 +2262,7 @@ impl<A: Allocator> RawVecInner<A> {
         //@ open RawVecInner(t, *self, elem_layout, alloc_id, ptr0, capacity0);
         //@ let ptr0_ = (*self).ptr;
         //@ let cap0_ = (*self).cap;
-        //@ assert Unique::non_null_(ptr0_).as_ptr() == ptr0;
+        //@ assert ptr0_.as_non_null_ptr().as_ptr() == ptr0;
         //@ std::alloc::Layout_inv(elem_layout);
         /*@
         if capacity0 * elem_layout.size() != 0 {
@@ -2411,7 +2411,7 @@ impl<A: Allocator> RawVecInner<A> {
         //@ open_points_to(self);
 
         //@ open RawVecInner(t, ?self01, elem_layout, alloc_id, ptr0, capacity0);
-        //@ assert Unique::non_null_(self01.ptr).as_ptr() == ptr0;
+        //@ assert self01.ptr.as_non_null_ptr().as_ptr() == ptr0;
         //@ std::alloc::Layout_inv(elem_layout);
         /*@
         if capacity0 * elem_layout.size() != 0 {
@@ -2442,7 +2442,7 @@ impl<A: Allocator> RawVecInner<A> {
                 unsafe { Unique::new_unchecked(ptr::without_provenance_mut(elem_layout.align())) };
             self.cap = ZERO_CAP;
             //@ let ptr1_ = (*self).ptr;
-            //@ assert Unique::non_null_(ptr1_).as_ptr() as usize == elem_layout.align();
+            //@ assert ptr1_.as_non_null_ptr().as_ptr() as usize == elem_layout.align();
             //@ div_rem_nonneg_unique(elem_layout.align(), elem_layout.align(), 1, 0);
             //@ close RawVecInner(t, *self, elem_layout, alloc_id, _, _);
         } else {

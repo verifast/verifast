@@ -582,8 +582,8 @@ mod ptr {
     
     struct Unique<T>;
     
-    //@ fix Unique::non_null_<T>(u: Unique<T>) -> NonNull<T>;
-    //@ fix Unique::from_non_null_<T>(nn: NonNull<T>) -> Unique<T>;
+    //@ fix Unique::from_non_null<T>(nn: NonNull<T>) -> Unique<T>;
+    //@ fix Unique::as_non_null_ptr<T>(u: Unique<T>) -> NonNull<T>;
     
     /*@
     
@@ -591,9 +591,9 @@ mod ptr {
         req true;
         ens <Unique<T>>.own(t, self_);
     
-    lem_auto(Unique::non_null_(Unique::from_non_null_(nn))) Unique_non_null__from_non_null_<T>(nn: NonNull<T>);
+    lem_auto(Unique::from_non_null(nn).as_non_null_ptr()) Unique_as_non_null_ptr_from_non_null<T>(nn: NonNull<T>);
         req true;
-        ens Unique::non_null_(Unique::from_non_null_(nn)) == nn;
+        ens Unique::from_non_null(nn).as_non_null_ptr() == nn;
     
     pred end_ref_Unique_token<T>(p: *Unique<T>, x: *Unique<T>, f: real);
     
@@ -611,22 +611,22 @@ mod ptr {
     
         fn from_non_null(ptr: NonNull<T>) -> Unique<T>;
         //@ req true;
-        //@ ens result == Unique::from_non_null_(ptr);
+        //@ ens result == Unique::from_non_null(ptr);
         //@ on_unwind_ens false;
         
         fn as_non_null_ptr(self: Unique<T>) -> NonNull<T>;
         //@ req true;
-        //@ ens result == Unique::non_null_(self);
+        //@ ens result == self.as_non_null_ptr();
         //@ on_unwind_ens false;
         
         fn new_unchecked(ptr: *mut T) -> Unique<T>;
         //@ req ptr != 0;
-        //@ ens result == Unique::from_non_null_(NonNull::new(ptr));
+        //@ ens result == Unique::from_non_null(NonNull::new(ptr));
         //@ on_unwind_ens false;
         
         fn cast<U>(self: Unique<T>) -> Unique<U>;
         //@ req true;
-        //@ ens result == Unique::from_non_null_(NonNull::new(Unique::non_null_(self).as_ptr() as *U));
+        //@ ens result == Unique::from_non_null(NonNull::new(self.as_non_null_ptr().as_ptr() as *U));
         //@ on_unwind_ens false;
         
     }
@@ -635,7 +635,7 @@ mod ptr {
     
         fn into(self: Unique<T>) -> NonNull<T>;
         //@ req true;
-        //@ ens result == Unique::non_null_(self);
+        //@ ens result == self.as_non_null_ptr();
         //@ on_unwind_ens false;
         
     }
@@ -644,7 +644,7 @@ mod ptr {
     
         fn from(value: NonNull<T>) -> Unique<T>;
         //@ req true;
-        //@ ens result == Unique::from_non_null_(value) &*& Unique::non_null_(result) == value;
+        //@ ens result == Unique::from_non_null(value) &*& result.as_non_null_ptr() == value;
         //@ on_unwind_ens false;
     
     }
