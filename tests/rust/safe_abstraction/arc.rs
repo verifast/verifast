@@ -130,7 +130,6 @@ impl<T: Sync + Send> Arc<T> {
     pub fn new(data: T) -> Arc<T> {
         unsafe {
             let l = std::alloc::Layout::new::<ArcInner<T>>();
-            //@ std::alloc::Layout_size__Layout_from_size_align_(std::mem::size_of_::<ArcInner<T>>(), std::mem::align_of_::<ArcInner<T>>());
             let p = std::alloc::alloc(l) as *mut ArcInner<T>;
             if p.is_null() {
                 std::alloc::handle_alloc_error(l);
@@ -409,7 +408,6 @@ impl<T: Sync + Send> Drop for Arc<T> {
             //@ open ArcInner_data(ptr, v);
             std::ptr::drop_in_place(&mut (*self.ptr.as_ptr()).data);
             //@ open_struct(ptr);
-            //@ std::alloc::Layout_size__Layout_from_size_align_(std::mem::size_of::<ArcInner<T>>(), std::mem::align_of_::<ArcInner<T>>());
             std::alloc::dealloc(self.ptr.as_ptr() as *mut u8, std::alloc::Layout::new::<ArcInner<T>>());
         }
     }

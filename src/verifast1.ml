@@ -4809,7 +4809,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let w, t, _ = check e in
       begin match t with
         StructType (sn, targs) ->
-        check (CallExpr (l, Printf.sprintf "%s::%s_" sn g, targes, [], LitPat (TypedExpr (w, t))::pats, Static))
+        check (CallExpr (l, Printf.sprintf "%s::%s" sn g, targes, [], LitPat (TypedExpr (w, t))::pats, Static))
       | _ ->
         static_error l "Target of method call must be of struct type" None
       end
@@ -4851,7 +4851,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           (WFunCall (l, g, [], es, Static), PtrType t, None)
         | _ ->
         match resolve2 (pn,ilist) l g funcmap with
-          Some (g, FuncInfo (funenv, fterm, lg, k, callee_tparams, tr, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body, virt, overrides)) ->
+          Some (g, FuncInfo (funenv, fterm, lg, k, callee_tparams, tr, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body, virt, overrides)) when match k, inAnnotation with Regular, Some true -> false | _ -> true ->
           let declKind =
             match k with
               Regular -> DeclKind_RegularFunction
@@ -4866,7 +4866,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           | Some (RefType t) -> WDeref (l, wcall, t), instantiate_type tpenv t, None
           | Some rt -> wcall, instantiate_type tpenv rt, None
           end
-        | None ->
+        | _ ->
         match resolve Ghost (pn,ilist) l g purefuncmap with
           Some (g, (lg, callee_tparams, t0, param_names_types, _)) ->
           reportUseSite DeclKind_PureFunction lg l;
