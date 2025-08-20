@@ -26,7 +26,7 @@ pred_ctor Arc_inv<T>(dk: lifetime_t, gid: isize, ptr: *ArcInner<T>)() = counting
     std::alloc::alloc_block(ptr as *u8, std::alloc::Layout::new::<ArcInner<T>>()) &*& struct_ArcInner_padding::<T>(ptr) &*&
     borrow_end_token(dk, <T>.full_borrow_content(default_tid, &(*ptr).data)) };
 
-pred<T> <Arc<T>>.own(t, arc) = [_]std::ptr::NonNull_own(default_tid, arc.ptr) &*& [_]exists(?ptr) &*& std::ptr::NonNull_ptr::<ArcInner<T>>(arc.ptr) == ptr &*&
+pred<T> <Arc<T>>.own(t, arc) = [_]std::ptr::NonNull_own(default_tid, arc.ptr) &*& [_]exists(?ptr) &*& arc.ptr.as_ptr() == ptr &*&
     [_]exists(?dk) &*& [_]exists(?gid) &*& [_]atomic_space(Marc, Arc_inv(dk, gid, ptr)) &*& ticket(dlft_pred(dk), gid, ?frac) &*& [frac]dlft_pred(dk)(gid, false) &*&
     [_](<T>.share)(dk, default_tid, &(*ptr).data) &*&
     pointer_within_limits(&(*ptr).strong) == true &*& pointer_within_limits(&(*ptr).data) == true &*& is_Send(typeid(T)) == true;
@@ -42,7 +42,7 @@ pred_ctor Arc_frac_bc<T>(l: *Arc<T>, nnp: std::ptr::NonNull<ArcInner<T>>)(;) = (
 pred_ctor ticket_(dk: lifetime_t, gid: isize, frac: real)(;) = ticket(dlft_pred(dk), gid, frac) &*& [frac]ghost_cell(gid, false);
 
 pred<T> <Arc<T>>.share(k, t, l) = [_]exists(?nnp) &*& [_]frac_borrow(k, Arc_frac_bc(l, nnp)) &*& [_]std::ptr::NonNull_own(default_tid, nnp) &*&
-    [_]exists(?ptr) &*& std::ptr::NonNull_ptr::<ArcInner<T>>(nnp) == ptr &*& [_]exists(?dk) &*& [_]exists(?gid) &*& [_]atomic_space(Marc, Arc_inv(dk, gid, ptr)) &*&
+    [_]exists(?ptr) &*& nnp.as_ptr() == ptr &*& [_]exists(?dk) &*& [_]exists(?gid) &*& [_]atomic_space(Marc, Arc_inv(dk, gid, ptr)) &*&
     [_]exists(?frac) &*& [_]frac_borrow(k, ticket_(dk, gid, frac)) &*& [_]frac_borrow(k, lifetime_token_(frac, dk)) &*& [_](<T>.share)(dk, default_tid, &(*ptr).data) &*&
     pointer_within_limits(&(*ptr).strong) == true &*&
     pointer_within_limits(&(*ptr).data) == true;
@@ -61,14 +61,14 @@ lem Arc_share_mono<T>(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *Arc<T>)
 }
 
 pred_ctor Ctx<T>(nnp: std::ptr::NonNull<ArcInner<T>>, dk: lifetime_t, gid: isize, l: *Arc<T>)() = [_]std::ptr::NonNull_own(default_tid, nnp) &*&
-    [_]exists(?ptr) &*& std::ptr::NonNull_ptr::<ArcInner<T>>(nnp) == ptr &*& [_]exists(dk) &*& [_]exists(gid) &*& [_]atomic_space(Marc, Arc_inv(dk, gid, ptr)) &*&
+    [_]exists(?ptr) &*& nnp.as_ptr() == ptr &*& [_]exists(dk) &*& [_]exists(gid) &*& [_]atomic_space(Marc, Arc_inv(dk, gid, ptr)) &*&
     [_](<T>.share)(dk, default_tid, &(*ptr).data) &*& struct_Arc_padding(l);
 
 lem Arc_fbor_split<T>(k: lifetime_t, t: thread_id_t, l: *Arc<T>)
     req atomic_mask(MaskTop) &*& [?qk]lifetime_token(k) &*& full_borrow(k, Arc_full_borrow_content(t, l));
     ens atomic_mask(MaskTop) &*& [qk]lifetime_token(k) &*&
         [_]exists(?nnp) &*& full_borrow(k, Arc_frac_bc(l, nnp)) &*& [_]std::ptr::NonNull_own(default_tid, nnp) &*&
-        [_]exists(?ptr) &*& std::ptr::NonNull_ptr::<ArcInner<T>>(nnp) == ptr &*& [_]exists(?dk) &*& [_]exists(?gid) &*& [_]atomic_space(Marc, Arc_inv(dk, gid, ptr)) &*&
+        [_]exists(?ptr) &*& nnp.as_ptr() == ptr &*& [_]exists(?dk) &*& [_]exists(?gid) &*& [_]atomic_space(Marc, Arc_inv(dk, gid, ptr)) &*&
         [_]exists(?frac) &*& full_borrow(k, ticket_(dk, gid, frac)) &*& full_borrow(k, lifetime_token_(frac, dk)) &*& [_](<T>.share)(dk, default_tid, &(*ptr).data) &*&
         pointer_within_limits(&(*ptr).strong) == true &*&
         pointer_within_limits(&(*ptr).data) == true;
