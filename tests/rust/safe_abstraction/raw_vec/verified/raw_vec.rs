@@ -1369,11 +1369,11 @@ impl<A: Allocator> RawVecInner<A> {
     req exists::<usize>(?elemSize) &*&
         thread_token(?t) &*&
         Allocator(t, alloc, ?alloc_id) &*&
-        std::alloc::is_valid_layout(elemSize, NonZero::get_(Alignment::as_nonzero_(align))) == true;
+        std::alloc::is_valid_layout(elemSize, align.as_nonzero().get()) == true;
     @*/
     /*@
     ens thread_token(t) &*&
-        RawVecInner(t, result, Layout::from_size_align_(elemSize, NonZero::get_(Alignment::as_nonzero_(align))), alloc_id, ?ptr, ?capacity) &*&
+        RawVecInner(t, result, Layout::from_size_align_(elemSize, align.as_nonzero().get()), alloc_id, ?ptr, ?capacity) &*&
         array_at_lft_(alloc_id.lft, ptr, capacity * elemSize, _) &*&
         capacity * elemSize == 0;
     @*/
@@ -1384,20 +1384,20 @@ impl<A: Allocator> RawVecInner<A> {
         close exists::<usize>(0);
         std::alloc::open_Allocator_own(alloc);
         std::ptr::Alignment_is_power_of_2(align);
-        if NonZero::get_(Alignment::as_nonzero_(align)) <= isize::MAX {
-            div_rem_nonneg(isize::MAX, NonZero::get_(Alignment::as_nonzero_(align)));
+        if align.as_nonzero().get() <= isize::MAX {
+            div_rem_nonneg(isize::MAX, align.as_nonzero().get());
         } else {
-            div_rem_nonneg_unique(isize::MAX, NonZero::get_(Alignment::as_nonzero_(align)), 0, isize::MAX);
+            div_rem_nonneg_unique(isize::MAX, align.as_nonzero().get(), 0, isize::MAX);
         }
         let result = call();
         open RawVecInner(_t, result, ?elemLayout, ?alloc_id, ?ptr, ?capacity);
         std::num::niche_types::UsizeNoHighBit_inv(result.cap);
         std::alloc::Layout_inv(elemLayout);
-        mul_zero(capacity, Layout::size_(elemLayout));
-        assert elemLayout == Layout::from_size_align_(0, NonZero::get_(Alignment::as_nonzero_(align)));
-        std::alloc::Layout_size__Layout_from_size_align_(0, NonZero::get_(Alignment::as_nonzero_(align)));
-        assert Layout::size_(elemLayout) == 0;
-        assert capacity * Layout::size_(elemLayout) == 0;
+        mul_zero(capacity, elemLayout.size());
+        assert elemLayout == Layout::from_size_align_(0, align.as_nonzero().get());
+        std::alloc::Layout_size__Layout_from_size_align_(0, align.as_nonzero().get());
+        assert elemLayout.size() == 0;
+        assert capacity * elemLayout.size() == 0;
         std::alloc::Allocator_to_own(result.alloc);
         close RawVecInner0(result, elemLayout, ptr, capacity);
         close <RawVecInner<A>>.own(_t, result);
@@ -1409,8 +1409,8 @@ impl<A: Allocator> RawVecInner<A> {
         // `cap: 0` means "unallocated". zero-sized types are ignored.
         let cap = ZERO_CAP;
         let r = Self { ptr, cap, alloc };
-        //@ div_rem_nonneg_unique(NonZero::get_(Alignment::as_nonzero_(align)), NonZero::get_(Alignment::as_nonzero_(align)), 1, 0);
-        //@ let layout = Layout::from_size_align_(elemSize, NonZero::get_(Alignment::as_nonzero_(align)));
+        //@ div_rem_nonneg_unique(align.as_nonzero().get(), align.as_nonzero().get(), 1, 0);
+        //@ let layout = Layout::from_size_align_(elemSize, align.as_nonzero().get());
         //@ close RawVecInner(t, r, layout, alloc_id, _, _);
         r
     }

@@ -4804,7 +4804,15 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let rt = match rt with None -> Void | Some rt -> rt in (* This depends on the fact that the return type does not mention type parameters. *)
         (WFunPtrCall (l, w, Some ftn, es), rt, None)
       | _ -> static_error l "The callee of a call of this form must be a pure function value." None
-      end 
+      end
+    | CallExpr (l, g, targes, [], LitPat e::pats, Instance) when is_rust ->
+      let w, t, _ = check e in
+      begin match t with
+        StructType (sn, targs) ->
+        check (CallExpr (l, Printf.sprintf "%s::%s_" sn g, targes, [], LitPat (TypedExpr (w, t))::pats, Static))
+      | _ ->
+        static_error l "Target of method call must be of struct type" None
+      end
     | CallExpr (l, g, targes, [], pats, fb) ->
       let es = List.map (function LitPat e -> e | _ -> static_error l "Patterns are not allowed in this position" None) pats in
       let process_targes callee_tparams =
