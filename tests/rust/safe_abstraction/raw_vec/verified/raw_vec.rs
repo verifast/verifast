@@ -852,7 +852,7 @@ impl<T, A: Allocator> RawVec<T, A> {
         //@ close exists(std::mem::size_of::<T>());
         //@ std::alloc::Layout_inv(Layout::new::<T>());
         //@ std::alloc::is_valid_layout_size_of_align_of::<T>();
-        //@ std::ptr::Alignment_as_nonzero__new_(std::mem::align_of::<T>());
+        //@ std::ptr::Alignment_as_nonzero_new(std::mem::align_of::<T>());
         let r = Self { inner: RawVecInner::new_in(alloc, Alignment::of::<T>()), _marker: PhantomData };
         //@ RawVecInner_inv::<A>();
         //@ close RawVec::<T, A>(t, r, alloc_id, ?ptr, ?capacity);

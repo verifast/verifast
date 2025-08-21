@@ -652,13 +652,13 @@ mod ptr {
     struct Alignment;
     
     //@ fix Alignment::as_nonzero(align: Alignment) -> std::num::NonZero<usize>;
-    //@ fix Alignment::new_(align: usize) -> Alignment;
+    //@ fix Alignment::new(align: usize) -> Alignment;
     
     /*@
     
-    lem Alignment_as_nonzero__new_(align: usize);
+    lem Alignment_as_nonzero_new(align: usize);
         req is_power_of_2(align) == true;
-        ens Alignment::new_(align).as_nonzero().get() == align;
+        ens Alignment::new(align).as_nonzero().get() == align;
     
     lem Alignment_is_power_of_2(align: Alignment);
         req true;
@@ -675,7 +675,7 @@ mod ptr {
         
         fn of<T>() -> Alignment;
         //@ req true;
-        //@ ens result == Alignment::new_(std::mem::align_of::<T>());
+        //@ ens result == Alignment::new(std::mem::align_of::<T>());
         //@ on_unwind_ens false;
         
     }
@@ -787,7 +787,7 @@ mod alloc {
         
         fn alignment<'a>(self: &'a Layout) -> std::ptr::Alignment;
         //@ req [?f](*self |-> ?l);
-        //@ ens [f](*self |-> l) &*& result == std::ptr::Alignment::new_(l.align()) &*& result.as_nonzero().get() == l.align();
+        //@ ens [f](*self |-> l) &*& result == std::ptr::Alignment::new(l.align()) &*& result.as_nonzero().get() == l.align();
 
         fn repeat<'a>(self: &'a Layout, n: usize) -> std::result::Result<(Layout, usize), LayoutError>;
         //@ req [?f](*self |-> ?l);
@@ -1516,12 +1516,12 @@ mod sync {
             req true;
             ens std::mem::align_of::<AtomicUsize>() == std::mem::size_of::<usize>();
         
-        fix AtomicUsize_inner(v: AtomicUsize) -> usize;
-        pred AtomicUsize(p: *AtomicUsize; v: usize) = *p |-> ?v_ &*& v == AtomicUsize_inner(v_);
+        fix AtomicUsize::inner(v: AtomicUsize) -> usize;
+        pred AtomicUsize(p: *AtomicUsize; v: usize) = *p |-> ?v_ &*& v == v_.inner();
         
         lem AtomicUsize_to_usize(p: *AtomicUsize);
             req *p |-> ?v;
-            ens *(p as *usize) |-> AtomicUsize_inner(v) &*& (p as usize) % std::mem::size_of::<usize>() == 0;
+            ens *(p as *usize) |-> v.inner() &*& (p as usize) % std::mem::size_of::<usize>() == 0;
 
         lem usize_to_AtomicUsize(p: *usize);
             nonghost_callers_only
@@ -1566,7 +1566,7 @@ mod sync {
         impl AtomicUsize {
             fn new(v: usize) -> AtomicUsize;
             //@ req true;
-            //@ ens AtomicUsize_inner(result) == v;
+            //@ ens result.inner() == v;
             //@ on_unwind_ens false;
 
             fn from_ptr<'a>(ptr: *mut usize) -> &'a AtomicUsize;
