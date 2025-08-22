@@ -67,8 +67,7 @@ enum AllocInit {
 
 type Cap = core::num::niche_types::UsizeNoHighBit;
 
-//@ fix Cap_new_(n: usize) -> UsizeNoHighBit { UsizeNoHighBit::new(n) }
-//@ fix Cap_as_inner_(cap: UsizeNoHighBit) -> usize { cap.as_inner() }
+//@ fix Cap::new(n: usize) -> UsizeNoHighBit { UsizeNoHighBit::new(n) }
 
 const ZERO_CAP: Cap = unsafe { Cap::new_unchecked(0) };
 
@@ -77,7 +76,7 @@ const ZERO_CAP: Cap = unsafe { Cap::new_unchecked(0) };
 /// # Safety: cap must be <= `isize::MAX`.
 unsafe fn new_cap<T>(cap: usize) -> Cap
 //@ req std::mem::size_of::<T>() == 0 || cap <= isize::MAX;
-//@ ens result == if std::mem::size_of::<T>() == 0 { Cap_new_(0) } else { Cap_new_(cap) };
+//@ ens result == if std::mem::size_of::<T>() == 0 { Cap::new(0) } else { Cap::new(cap) };
 //@ on_unwind_ens false;
 {
     if T::IS_ZST { ZERO_CAP } else { unsafe { Cap::new_unchecked(cap) } }
@@ -132,7 +131,7 @@ struct RawVecInner<A: Allocator = Global> {
 /*@
 
 fix logical_capacity(cap: UsizeNoHighBit, elem_size: usize) -> usize {
-    if elem_size == 0 { usize::MAX } else { Cap_as_inner_(cap) }
+    if elem_size == 0 { usize::MAX } else { cap.as_inner() }
 }
 
 pred RawVecInner<A>(t: thread_id_t, self: RawVecInner<A>, elemLayout: Layout, alloc_id: alloc_id_t, ptr: *u8, capacity: usize) =
@@ -1699,10 +1698,10 @@ impl<A: Allocator> RawVecInner<A> {
         Allocator(?t, alloc, ?alloc_id) &*&
         ptr != 0 &*&
         ptr as usize % elem_layout.align() == 0 &*&
-        if Cap_as_inner_(cap) * elem_layout.size() == 0 {
+        if cap.as_inner() * elem_layout.size() == 0 {
             true
         } else {
-            elem_layout.repeat(Cap_as_inner_(cap)) == some(pair(?allocLayout, ?stride)) &*&
+            elem_layout.repeat(cap.as_inner()) == some(pair(?allocLayout, ?stride)) &*&
             alloc_block_in(alloc_id, ptr, allocLayout)
         };
     @*/
@@ -1720,10 +1719,10 @@ impl<A: Allocator> RawVecInner<A> {
         Allocator(?t, alloc, ?alloc_id) &*&
         ptr.as_ptr() as usize % elem_layout.align() == 0 &*&
         pointer_within_limits(ptr.as_ptr()) == true &*&
-        if Cap_as_inner_(cap) * elem_layout.size() == 0 {
+        if cap.as_inner() * elem_layout.size() == 0 {
             true
         } else {
-            elem_layout.repeat(Cap_as_inner_(cap)) == some(pair(?allocLayout, ?stride)) &*&
+            elem_layout.repeat(cap.as_inner()) == some(pair(?allocLayout, ?stride)) &*&
             alloc_block_in(alloc_id, ptr.as_ptr(), allocLayout)
         };
     @*/
@@ -2166,11 +2165,11 @@ impl<A: Allocator> RawVecInner<A> {
         
         //@ std::num::niche_types::UsizeNoHighBit_inv(self01.cap);
         //@ assert cap >= len + additional;
-        //@ mul_mono_l(1, elem_layout.size(), Cap_as_inner_(self01.cap));
+        //@ mul_mono_l(1, elem_layout.size(), self01.cap.as_inner());
         //@ mul_mono_l(1, elem_layout.size(), cap);
         //@ assert new_layout.size() == cap * elem_layout.size();
         //@ assert cap <= new_layout.size();
-        //@ mul_mono_l(Cap_as_inner_(self01.cap), cap, elem_layout.size());
+        //@ mul_mono_l(self01.cap.as_inner(), cap, elem_layout.size());
         
         //@ open_points_to(self);
         
@@ -2188,7 +2187,7 @@ impl<A: Allocator> RawVecInner<A> {
                     //@ std::alloc::alloc_block_in_aligned(ptr.ptr.as_ptr());
                     //@ std::num::niche_types::UsizeNoHighBit_as_inner_new(cap);
                     //@ mul_zero(elem_layout.size(), cap);
-                    //@ assert 0 <= Cap_as_inner_(self0.cap);
+                    //@ assert 0 <= self0.cap.as_inner();
                     //@ assert 0 <= logical_capacity(self0.cap, elem_layout.size());
                     //@ assert cap != 0;
                     //@ std::alloc::Layout_inv(new_layout);
@@ -2279,7 +2278,7 @@ impl<A: Allocator> RawVecInner<A> {
         
         //@ std::num::niche_types::UsizeNoHighBit_inv(self0.cap);
         //@ assert cap == len + additional;
-        //@ mul_mono_l(1, elem_layout.size(), Cap_as_inner_(self0.cap));
+        //@ mul_mono_l(1, elem_layout.size(), self0.cap.as_inner());
         //@ mul_mono_l(1, elem_layout.size(), cap);
         //@ mul_mono_l(capacity0, cap, elem_layout.size());
         
@@ -2299,7 +2298,7 @@ impl<A: Allocator> RawVecInner<A> {
                     //@ std::alloc::alloc_block_in_aligned(ptr.ptr.as_ptr());
                     //@ std::num::niche_types::UsizeNoHighBit_as_inner_new(cap);
                     //@ mul_zero(elem_layout.size(), cap);
-                    //@ assert 0 <= Cap_as_inner_(self0.cap);
+                    //@ assert 0 <= self0.cap.as_inner();
                     //@ assert 0 <= logical_capacity(self0.cap, elem_layout.size());
                     //@ assert cap != 0;
                     //@ std::alloc::Layout_inv(new_layout);
