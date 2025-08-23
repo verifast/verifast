@@ -380,6 +380,96 @@ The final part of the `try_allocate_in` proof involves no new concepts:
 }
 ```
 
+### Predicate `RawVecInner_share_`
+
+Rust knows two types of ownership: *exclusive ownership*, as in the case of a non-borrowed value or a mutable reference; and *shared ownership*, as in the case of a shared reference.
+Correspondingly, predicate `RawVecInner(t, self, elemLayout, alloc_id, ptr, capacity)` denotes *exclusive ownership* of a RawVecInner value `self`, and predicate `RawVecInner_share_(k, t, l, elemLayout, alloc_id, ptr, capacity)` denotes *shared ownership* with lifetime `k` of the place of type RawVecInner at `l` and the value it stores.
+Shared references are Copy and therefore duplicable; correspondingly, `RawVecInner_share_` is duplicable as well.
+
+```
+pred_ctor RawVecInner_frac_borrow_content<A>(l: *RawVecInner<A>, elemLayout: Layout, ptr: *u8, capacity: usize)(;) =
+    struct_RawVecInner_padding(l) &*&
+    (*l).ptr |-> ?u &*&
+    (*l).cap |-> ?cap &*&
+    capacity == logical_capacity(cap, elemLayout.size()) &*&
+    ptr == u.as_non_null_ptr().as_ptr() &*&
+    ptr as usize % elemLayout.align() == 0 &*&
+    pointer_within_limits(ptr) == true &*&
+    if capacity * elemLayout.size() == 0 {
+        true
+    } else {
+        elemLayout.repeat(capacity) == some(pair(?allocLayout, ?stride))
+    };
+
+pred RawVecInner_share_<A>(k: lifetime_t, t: thread_id_t, l: *RawVecInner<A>, elemLayout: Layout, alloc_id: alloc_id_t, ptr: *u8, capacity: usize) =
+    [_]std::alloc::Allocator_share(k, t, &(*l).alloc, alloc_id) &*&
+    [_]frac_borrow(k, RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity)) &*& ptr != 0;
+```
+
+Predicate `RawVecInner_share_` uses two predicates in its definition:
+- `[_]Allocator_share::<A>(k, t, l, alloc_id)` denotes shared ownership of the place of type A at `l` and the Allocator value stored at that place, at lifetime `k`, accessible to thread `t`, denoting allocator `alloc_id`. The `[_]` prefix indicates that this is a *dummy fraction*, which means it is duplicable. VeriFast automatically duplicates a dummy fraction when it is consumed, so that it is never actually removed from the symbolic heap.
+- `[_]frac_borrow(k, p)` denotes a *fractured borrow* of the resources asserted by *predicate value* `p` at lifetime `k`. Owning a fractured borrow allows the owner to obtain *fractional ownership* of payload `p` until the end of lifetime `k`. Fractional ownership of a memory region is sufficient for reading, but writing requires exclusive ownership.
+
+Predicate `RawVecInner_share_` specifies the payload of the fractured borrow by means of *predicate constructor* `RawVecInner_frac_borrow_content`. A predicate constructor has two parameter lists. Applying a predicate constructor to arguments for the first parameter list yields a *predicate value* which can be passed as an argument to a higher-order predicate such as `frac_borrow`.
+
+`RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity)()` asserts ownership of the struct padding at `l` and the `ptr` and `cap` fields at `l`, the latter expressed using *points-to assertions*: assertion `place |-> value` asserts ownership of place `place` and furthermore asserts that it currently stores value `value`.
+
+### Lemma `share_RawVecInner`
+
+```
+pred RawVecInner_share_end_token<A>(k: lifetime_t, t: thread_id_t, l: *RawVecInner<A>, elemLayout: Layout, alloc_id: alloc_id_t, ptr: *u8, capacity: usize) =
+    borrow_end_token(k, std::alloc::Allocator_full_borrow_content_(t, &(*l).alloc, alloc_id)) &*&
+    borrow_end_token(k, RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity)) &*&
+    if capacity * elemLayout.size() == 0 {
+        true
+    } else {
+        elemLayout.repeat(capacity) == some(pair(?allocLayout, ?stride)) &*&
+        alloc_block_in(alloc_id, ptr, allocLayout)
+    };
+
+lem share_RawVecInner<A>(k: lifetime_t, l: *RawVecInner<A>)
+    nonghost_callers_only
+    req [?q]lifetime_token(k) &*&
+        *l |-> ?self_ &*&
+        RawVecInner(?t, self_, ?elemLayout, ?alloc_id, ?ptr, ?capacity);
+    ens [q]lifetime_token(k) &*&
+        [_]RawVecInner_share_(k, t, l, elemLayout, alloc_id, ptr, capacity) &*&
+        RawVecInner_share_end_token(k, t, l, elemLayout, alloc_id, ptr, capacity);
+{
+    open RawVecInner(t, self_, elemLayout, alloc_id, ptr, capacity);
+    close RawVecInner_frac_borrow_content::<A>(l, elemLayout, ptr, capacity)();
+    borrow(k, RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity));
+    full_borrow_into_frac(k, RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity));
+    std::alloc::close_Allocator_full_borrow_content_(t, &(*l).alloc);
+    borrow(k, std::alloc::Allocator_full_borrow_content_(t, &(*l).alloc, alloc_id));
+    std::alloc::share_Allocator_full_borrow_content_(k, t, &(*l).alloc, alloc_id);
+    close RawVecInner_share_(k, t, l, elemLayout, alloc_id, ptr, capacity);
+    close RawVecInner_share_end_token(k, t, l, elemLayout, alloc_id, ptr, capacity);
+    leak RawVecInner_share_(k, t, l, elemLayout, alloc_id, ptr, capacity);
+}
+
+lem end_share_RawVecInner<A>(l: *RawVecInner<A>)
+    nonghost_callers_only
+    req RawVecInner_share_end_token(?k, ?t, l, ?elemLayout, ?alloc_id, ?ptr, ?capacity) &*& [_]lifetime_dead_token(k);
+    ens *l |-> ?self_ &*& RawVecInner(t, self_, elemLayout, alloc_id, ptr, capacity);
+{
+    open RawVecInner_share_end_token(k, t, l, elemLayout, alloc_id, ptr, capacity);
+    borrow_end(k, std::alloc::Allocator_full_borrow_content_(t, &(*l).alloc, alloc_id));
+    std::alloc::open_Allocator_full_borrow_content_(t, &(*l).alloc, alloc_id);
+    borrow_end(k, RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity));
+    open RawVecInner_frac_borrow_content::<A>(l, elemLayout, ptr, capacity)();
+    close RawVecInner(t, *l, elemLayout, alloc_id, ptr, capacity);
+}
+```
+
+Lemma `share_RawVecInner` converts exclusive ownership of a place of type RawVecInner, and the value it stores, to shared ownership at a lifetime `k`. This is possible only if the lifetime is alive, as evidenced by the existence of the `lifetime_token` for `k`. Specifically, the caller must show a *fraction* `q` (a real number greater than zero and not greater than one) of the lifetime token for `k`. (The lifetime token for a lifetime is produced by [`begin_lifetime`](https://github.com/verifast/verifast/blob/2e7dd7a6d1aef2c9ffe7a1cedcbe28463f02440b/bin/rust/rust_belt/lifetime_logic.rsspec#L71) and consumed by [`end_lifetime`](https://github.com/verifast/verifast/blob/2e7dd7a6d1aef2c9ffe7a1cedcbe28463f02440b/bin/rust/rust_belt/lifetime_logic.rsspec#L76).) The lemma also produces a `RawVecInner_share_end_token` that the caller can pass to lemma `end_share_RawVecInner` after `k` has ended to recover exclusive ownership.
+
+The proof first uses the `open` command to replace the `RawVecInner` chunk in the symbolic heap by its contents. It then uses the `close` command to create a chunk whose predicate is the predicate value `RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity)`. It then calls [`borrow`](https://github.com/verifast/verifast/blob/2e7dd7a6d1aef2c9ffe7a1cedcbe28463f02440b/bin/rust/rust_belt/lifetime_logic.rsspec#L117) to create a *full borrow* at lifetime `k` with payload `RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity)`. A full borrow denotes exclusive ownership of the payload, but only until the end of the lifetime. This lemma also produces a `borrow_end_token` that allows the caller to recover the payload free and clear after the lifetime has ended. The proof then uses [`full_borrow_into_frac`](https://github.com/verifast/verifast/blob/2e7dd7a6d1aef2c9ffe7a1cedcbe28463f02440b/bin/rust/rust_belt/lifetime_logic.rsspec#L262) to turn the full borrow into a fractured borrow. 
+
+It then uses lemma [`close_Allocator_full_borrow_content`](https://github.com/verifast/verifast/blob/2e7dd7a6d1aef2c9ffe7a1cedcbe28463f02440b/bin/rust/std/lib.rsspec#L852) to wrap ownership of the `alloc` field, and the Allocator value it stores, into a chunk whose predicate is `Allocator_full_borrow_content_(t, &(*l).alloc, alloc_id)`. It then creates a full borrow with this predicate value as its payload. Then it uses [`share_Allocator_full_borrow_content`](https://github.com/verifast/verifast/blob/2e7dd7a6d1aef2c9ffe7a1cedcbe28463f02440b/bin/rust/std/lib.rsspec#L860) to produce the `Allocator_share` chunk that the proof needs in order to create the `RawVecInner_share_` chunk. After creating this chunk as well as the `RawVecInner_share_end_token` chunk, the proof finishes by using the `leak` command to turn full ownership of the `RawVecInner_share_` chunk into a *dummy fraction chunk* `[_]RawVecInner_share_(...)`. (This command is called `leak` because it silences the leak error that VeriFast normally generates if chunks are left in the symbolic heap at the end of a function, after consuming the postcondition. Specifically: VeriFast generates a leak error only if *non-dummy-fraction* chunks are left in the symbolic heap.)
+
+Lemma `end_share_RawVecInner` uses lemmas [`borrow_end`](https://github.com/verifast/verifast/blob/2e7dd7a6d1aef2c9ffe7a1cedcbe28463f02440b/bin/rust/rust_belt/lifetime_logic.rsspec#L122) and [`open_Allocator_full_borrow_content_`](https://github.com/verifast/verifast/blob/2e7dd7a6d1aef2c9ffe7a1cedcbe28463f02440b/bin/rust/std/lib.rsspec#L856) to recover exclusive ownership of the RawVecInner object.
+
 ## Caveats
 
 First of all, this proof was performed with the following VeriFast command-line flags:
