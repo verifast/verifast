@@ -269,12 +269,14 @@ pred RawVecInner_share_end_token<A>(k: lifetime_t, t: thread_id_t, l: *RawVecInn
 
 lem share_RawVecInner<A>(k: lifetime_t, l: *RawVecInner<A>)
     nonghost_callers_only
-    req [?q]lifetime_token(k) &*& *l |-> ?self_ &*& RawVecInner(?t, self_, ?elemLayout, ?alloc_id, ?ptr, ?capacity);
-    ens [q]lifetime_token(k) &*& [_]RawVecInner_share_(k, t, l, elemLayout, alloc_id, ptr, capacity) &*& RawVecInner_share_end_token(k, t, l, elemLayout, alloc_id, ptr, capacity);
+    req [?q]lifetime_token(k) &*&
+        *l |-> ?self_ &*&
+        RawVecInner(?t, self_, ?elemLayout, ?alloc_id, ?ptr, ?capacity);
+    ens [q]lifetime_token(k) &*&
+        [_]RawVecInner_share_(k, t, l, elemLayout, alloc_id, ptr, capacity) &*&
+        RawVecInner_share_end_token(k, t, l, elemLayout, alloc_id, ptr, capacity);
 {
-    RawVecInner_inv::<A>();
     open RawVecInner(t, self_, elemLayout, alloc_id, ptr, capacity);
-    open_points_to(l);
     close RawVecInner_frac_borrow_content::<A>(l, elemLayout, ptr, capacity)();
     borrow(k, RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity));
     full_borrow_into_frac(k, RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity));
@@ -1802,16 +1804,18 @@ impl<A: Allocator> RawVecInner<A> {
 
     #[inline]
     fn current_memory(&self, elem_layout: Layout) -> Option<(NonNull<u8>, Layout)>
-    //@ req [_]RawVecInner_share_(?k, ?t, self, elem_layout, ?alloc_id, ?ptr, ?capacity) &*& [?q]lifetime_token(k) &*& elem_layout.size() % elem_layout.align() == 0;
+    /*@
+    req [_]RawVecInner_share_(?k, ?t, self, elem_layout, ?alloc_id, ?ptr, ?capacity) &*&
+        [?q]lifetime_token(k) &*& elem_layout.size() % elem_layout.align() == 0;
+    @*/
     /*@
     ens [q]lifetime_token(k) &*&
         if capacity * elem_layout.size() == 0 {
             result == Option::None
         } else {
-            result == Option::Some(std_tuple_2_::<NonNull<u8>, Layout> {
-                0: NonNull::new(ptr),
-                1: Layout::from_size_align(capacity * elem_layout.size(), elem_layout.align())
-            })
+            result == Option::Some(?r) &*&
+            r.0.as_ptr() == ptr &*&
+            r.1 == Layout::from_size_align(capacity * elem_layout.size(), elem_layout.align())
         };
     @*/
     //@ on_unwind_ens false;
