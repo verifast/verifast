@@ -163,7 +163,7 @@ pred<A> <RawVecInner<A>>.own(t, self_) =
     RawVecInner0(self_, ?elemLayout, ?ptr, ?capacity);    
 
 lem RawVecInner_drop<A>()
-    req raw_vec::RawVecInner_own::<A>(?_t, ?_v);
+    req RawVecInner_own::<A>(?_t, ?_v);
     ens std::ptr::Unique_own::<u8>(_t, _v.ptr) &*& std::num::niche_types::UsizeNoHighBit_own(_t, _v.cap) &*& <A>.own(_t, _v.alloc);
 {
     open RawVecInner_own::<A>(_t, _v);
@@ -173,15 +173,15 @@ lem RawVecInner_drop<A>()
 }
 
 lem RawVecInner_own_mono<A0, A1>()
-    req type_interp::<A0>() &*& type_interp::<A1>() &*& raw_vec::RawVecInner_own::<A0>(?t, ?v) &*& is_subtype_of::<A0, A1>() == true;
-    ens type_interp::<A0>() &*& type_interp::<A1>() &*& raw_vec::RawVecInner_own::<A1>(t, raw_vec::RawVecInner::<A1> { ptr: upcast(v.ptr), cap: upcast(v.cap), alloc: upcast(v.alloc) });
+    req type_interp::<A0>() &*& type_interp::<A1>() &*& RawVecInner_own::<A0>(?t, ?v) &*& is_subtype_of::<A0, A1>() == true;
+    ens type_interp::<A0>() &*& type_interp::<A1>() &*& RawVecInner_own::<A1>(t, RawVecInner::<A1> { ptr: upcast(v.ptr), cap: upcast(v.cap), alloc: upcast(v.alloc) });
 {
     assume(false);
 }
 
 lem RawVecInner_send<A>(t1: thread_id_t)
-    req type_interp::<A>() &*& is_Send(typeid(A)) == true &*& raw_vec::RawVecInner_own::<A>(?t0, ?v);
-    ens type_interp::<A>() &*& raw_vec::RawVecInner_own::<A>(t1, v);
+    req type_interp::<A>() &*& is_Send(typeid(A)) == true &*& RawVecInner_own::<A>(?t0, ?v);
+    ens type_interp::<A>() &*& RawVecInner_own::<A>(t1, v);
 {
     open RawVecInner_own::<A>(t0, v);
     Send::send::<A>(t0, t1, v.alloc);
@@ -190,7 +190,9 @@ lem RawVecInner_send<A>(t1: thread_id_t)
 
 lem RawVecInner_inv<A>()
     req RawVecInner::<A>(?t, ?self_, ?elemLayout, ?alloc_id, ?ptr, ?capacity);
-    ens RawVecInner::<A>(t, self_, elemLayout, alloc_id, ptr, capacity) &*& ptr != 0 &*& ptr as usize % elemLayout.align() == 0 &*& 0 <= capacity &*& capacity <= usize::MAX;
+    ens RawVecInner::<A>(t, self_, elemLayout, alloc_id, ptr, capacity) &*&
+        ptr != 0 &*& ptr as usize % elemLayout.align() == 0 &*&
+        0 <= capacity &*& capacity <= usize::MAX;
 {
     open RawVecInner(t, self_, elemLayout, alloc_id, ptr, capacity);
     std::num::niche_types::UsizeNoHighBit_inv(self_.cap);
@@ -199,7 +201,10 @@ lem RawVecInner_inv<A>()
 
 lem RawVecInner_inv2<A>()
     req RawVecInner::<A>(?t, ?self_, ?elemLayout, ?alloc_id, ?ptr, ?capacity);
-    ens RawVecInner::<A>(t, self_, elemLayout, alloc_id, ptr, capacity) &*& pointer_within_limits(ptr) == true &*& ptr as usize % elemLayout.align() == 0 &*& 0 <= capacity &*& capacity <= usize::MAX &*& if elemLayout.size() == 0 { capacity == usize::MAX } else { capacity <= isize::MAX };
+    ens RawVecInner::<A>(t, self_, elemLayout, alloc_id, ptr, capacity) &*&
+        pointer_within_limits(ptr) == true &*& ptr as usize % elemLayout.align() == 0 &*&
+        0 <= capacity &*& capacity <= usize::MAX &*&
+        if elemLayout.size() == 0 { capacity == usize::MAX } else { capacity <= isize::MAX };
 {
     open RawVecInner(t, self_, elemLayout, alloc_id, ptr, capacity);
     std::num::niche_types::UsizeNoHighBit_inv(self_.cap);
@@ -233,7 +238,7 @@ lem RawVecInner_share__inv<A>()
 
 lem RawVecInner_share__mono<A>(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *RawVecInner<A>)
     req type_interp::<A>() &*& lifetime_inclusion(k1, k) == true &*& [_]RawVecInner_share_::<A>(k, t, l, ?elemLayout, ?alloc_id, ?ptr, ?capacity);
-    ens type_interp::<A>() &*& [_]raw_vec::RawVecInner_share_::<A>(k1, t, l, elemLayout, alloc_id, ptr, capacity);
+    ens type_interp::<A>() &*& [_]RawVecInner_share_::<A>(k1, t, l, elemLayout, alloc_id, ptr, capacity);
 {
     open [_]RawVecInner_share_(k, t, l, elemLayout, alloc_id, ptr, capacity);
     std::alloc::Allocator_share_mono::<A>(k, k1, t, &(*l).alloc);
@@ -417,7 +422,7 @@ pred<A> <RawVecInner<A>>.share(k, t, l) = [_]RawVecInner_share_(k, t, l, _, _, _
 
 lem RawVecInner_share_mono<A>(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *RawVecInner<A>)
     req type_interp::<A>() &*& lifetime_inclusion(k1, k) == true &*& [_]RawVecInner_share::<A>(k, t, l);
-    ens type_interp::<A>() &*& [_]raw_vec::RawVecInner_share::<A>(k1, t, l);
+    ens type_interp::<A>() &*& [_]RawVecInner_share::<A>(k1, t, l);
 {
     open RawVecInner_share::<A>(k, t, l);
     RawVecInner_share__mono(k, k1, t, l);
@@ -546,15 +551,15 @@ pred RawVec<T, A>(t: thread_id_t, self: RawVec<T, A>, alloc_id: alloc_id_t, ptr:
 pred<T, A> <RawVec<T, A>>.own(t, self_) = RawVec(t, self_, ?alloc_id, ?ptr, ?capacity) &*& array_at_lft_(alloc_id.lft, ptr, capacity, _);
 
 lem RawVec_own_mono<T0, T1, A0, A1>()
-    req type_interp::<T0>() &*& type_interp::<T1>() &*& type_interp::<A0>() &*& type_interp::<A1>() &*& raw_vec::RawVec_own::<T0, A0>(?t, ?v) &*& is_subtype_of::<T0, T1>() == true &*& is_subtype_of::<A0, A1>() == true;
-    ens type_interp::<T0>() &*& type_interp::<T1>() &*& type_interp::<A0>() &*& type_interp::<A1>() &*& raw_vec::RawVec_own::<T1, A1>(t, raw_vec::RawVec::<T1, A1> { inner: upcast(v.inner) });
+    req type_interp::<T0>() &*& type_interp::<T1>() &*& type_interp::<A0>() &*& type_interp::<A1>() &*& RawVec_own::<T0, A0>(?t, ?v) &*& is_subtype_of::<T0, T1>() == true &*& is_subtype_of::<A0, A1>() == true;
+    ens type_interp::<T0>() &*& type_interp::<T1>() &*& type_interp::<A0>() &*& type_interp::<A1>() &*& RawVec_own::<T1, A1>(t, RawVec::<T1, A1> { inner: upcast(v.inner) });
 {
     assume(false);
 }
 
 lem RawVec_send<T, A>(t1: thread_id_t)
-    req type_interp::<T>() &*& type_interp::<A>() &*& is_Send(typeid(T)) == true &*& raw_vec::RawVec_own::<T, A>(?t0, ?v);
-    ens type_interp::<T>() &*& type_interp::<A>() &*& raw_vec::RawVec_own::<T, A>(t1, v);
+    req type_interp::<T>() &*& type_interp::<A>() &*& is_Send(typeid(T)) == true &*& RawVec_own::<T, A>(?t0, ?v);
+    ens type_interp::<T>() &*& type_interp::<A>() &*& RawVec_own::<T, A>(t1, v);
 {
     assume(false); // TODO!
 }
@@ -1584,18 +1589,14 @@ impl<A: Allocator> RawVecInner<A> {
             let r = Self::new_in(alloc, elem_layout_alignment);
             //@ RawVecInner_inv2::<A>();
             //@ assert RawVecInner(_, _, _, _, ?ptr_, ?capacity_);
-            //@ assert capacity * elem_layout.size() <= 0;
             //@ mul_mono_l(0, capacity, elem_layout.size());
-            //@ assert capacity * elem_layout.size() == 0;
             //@ mul_zero(capacity, elem_layout.size());
-            //@ if elem_layout.size() != 0 { assert capacity == 0; }
             /*@
             match init {
                 raw_vec::AllocInit::Uninitialized => { close array_at_lft_(alloc_id.lft, ptr_, 0, []); }
                 raw_vec::AllocInit::Zeroed => { close array_at_lft(alloc_id.lft, ptr_, 0, []); }
             }
             @*/
-            //@ std::num::niche_types::UsizeNoHighBit_inv(r.cap);
             return Ok(r);
         }
         
@@ -1650,8 +1651,6 @@ impl<A: Allocator> RawVecInner<A> {
         // Allocators currently return a `NonNull<[u8]>` whose length
         // matches the size requested. If that ever changes, the capacity
         // here should change to `ptr.len() / size_of::<T>()`.
-        //@ std::alloc::Layout_inv(elem_layout);
-        //@ assert 0 <= elem_layout.size();
         /*@
         if elem_layout.size() % elem_layout.align() == 0 {
             div_rem_nonneg(elem_layout.size(), elem_layout.align());
@@ -1659,7 +1658,6 @@ impl<A: Allocator> RawVecInner<A> {
             if elem_layout.size() / elem_layout.align() < stride / elem_layout.align() {
                 mul_mono_l(elem_layout.size() / elem_layout.align() + 1, stride / elem_layout.align(), elem_layout.align());
             } else {
-                assert elem_layout.size() / elem_layout.align() >= stride / elem_layout.align();
                 if elem_layout.size() / elem_layout.align() > stride / elem_layout.align() {
                     mul_mono_l(stride / elem_layout.align() + 1, elem_layout.size() / elem_layout.align(), elem_layout.align());
                     assert false;
@@ -1671,21 +1669,15 @@ impl<A: Allocator> RawVecInner<A> {
         /*@
         if elem_layout.size() == 0 {
             div_rem_nonneg_unique(elem_layout.size(), elem_layout.align(), 0, 0);
+            assert false;
         }
         @*/
-        //@ assert elem_layout.size() != 0;
         //@ mul_mono_l(1, elem_layout.size(), capacity);
-        //@ std::alloc::Layout_inv(layout);
         let res = Self {
             ptr: Unique::from(ptr.cast()),
             cap: unsafe { Cap::new_unchecked(capacity) },
             alloc,
         };
-        //@ assert res.ptr == Unique::from_non_null(NonNull::new(ptr.ptr.as_ptr()));
-        //@ std::ptr::Unique_as_non_null_ptr_from_non_null(ptr.ptr);
-        //@ std::ptr::NonNull_new_as_ptr(ptr.ptr);
-        //@ assert res.ptr.as_non_null_ptr() == ptr.ptr;
-        //@ assert layout.align() == elem_layout.align();
         //@ std::alloc::alloc_block_in_aligned(ptr.ptr.as_ptr());
         //@ close RawVecInner(t, res, elem_layout, alloc_id, ptr.ptr.as_ptr(), _);
         Ok(res)
