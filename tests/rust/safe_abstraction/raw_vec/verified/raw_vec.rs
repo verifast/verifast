@@ -328,33 +328,34 @@ lem init_ref_RawVecInner_<A>(l: *RawVecInner<A>)
     init_ref_padding_RawVecInner(l, 1/2);
     {
         pred P() = ref_padding_initialized(l);
-        close [1 - f/2]P();
+        close [1 - f]P();
         close_ref_initialized_RawVecInner(l);
         open P();
     }
-    close [f/2]ref_initialized_::<RawVecInner<A>>(l)();
     close [f/2]RawVecInner_frac_borrow_content::<A>(l, elemLayout, ptr, capacity)();
-    close [f/2]sep_(ref_initialized_(l), RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity))();
-    close scaledp(f/2, sep_(ref_initialized_(l), RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity)))();
+    close scaledp(f/2, RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity))();
+    close [f]ref_initialized_::<RawVecInner<A>>(l)();
+    close scaledp(f, ref_initialized_(l))();
+    close sep_(scaledp(f/2, RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity)), scaledp(f, ref_initialized_(l)))();
     
     {
         pred Ctx() =
-            [f/2]ref_initialized(&(*l).alloc) &*&
-            ref_padding_end_token(l, l0, f/2) &*& [f/2]struct_RawVecInner_padding(l0) &*& [1 - f/2]ref_padding_initialized(l) &*&
-            ref_readonly_end_token(&(*l).ptr, &(*l0).ptr, f/2) &*& [f/2](*l0).ptr |-> ptr_ &*& [1 - f/2]ref_initialized(&(*l).ptr) &*&
-            ref_readonly_end_token(&(*l).cap, &(*l0).cap, f/2) &*& [f/2](*l0).cap |-> cap_ &*& [1 - f/2]ref_initialized(&(*l).cap);
+            ref_padding_end_token(l, l0, f/2) &*& [f/2]struct_RawVecInner_padding(l0) &*& [1 - f]ref_padding_initialized(l) &*&
+            ref_readonly_end_token(&(*l).ptr, &(*l0).ptr, f/2) &*& [f/2](*l0).ptr |-> ptr_ &*& [1 - f]ref_initialized(&(*l).ptr) &*&
+            ref_readonly_end_token(&(*l).cap, &(*l0).cap, f/2) &*& [f/2](*l0).cap |-> cap_ &*& [1 - f]ref_initialized(&(*l).cap);
         close Ctx();
         produce_lem_ptr_chunk restore_frac_borrow(
                 Ctx,
-                scaledp(f/2, sep_(ref_initialized_(l), RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity))),
+                sep_(scaledp(f/2, RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity)), scaledp(f, ref_initialized_(l))),
                 f,
                 sep_(RawVecInner_frac_borrow_content(l0, elemLayout, ptr, capacity), ref_initialized_(&(*l).alloc)))() {
-            open scaledp(f/2, sep_(ref_initialized_(l), RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity)))();
-            open sep_(ref_initialized_(l), RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity))();
-            open ref_initialized_::<RawVecInner<A>>(l)();
+            open sep_(scaledp(f/2, RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity)), scaledp(f, ref_initialized_(l)))();
+            open scaledp(f/2, RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity))();
             open RawVecInner_frac_borrow_content::<A>(l, elemLayout, ptr, capacity)();
-            open_ref_initialized_RawVecInner(l);
+            open scaledp(f, ref_initialized_(l))();
+            open ref_initialized_::<RawVecInner<A>>(l)();
             open Ctx();
+            open_ref_initialized_RawVecInner(l);
             end_ref_readonly(&(*l).ptr);
             end_ref_readonly(&(*l).cap);
             end_ref_padding_RawVecInner(l);
@@ -365,9 +366,10 @@ lem init_ref_RawVecInner_<A>(l: *RawVecInner<A>)
             close_frac_borrow_strong_();
         }
     }
-    full_borrow_into_frac(k, scaledp(f/2, sep_(ref_initialized_(l), RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity))));
-    frac_borrow_implies_scaled(k, f/2, sep_(ref_initialized_(l), RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity)));
-    frac_borrow_split(k, ref_initialized_(l), RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity));
+    full_borrow_into_frac(k, sep_(scaledp(f/2, RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity)), scaledp(f, ref_initialized_(l))));
+    frac_borrow_split(k, scaledp(f/2, RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity)), scaledp(f, ref_initialized_(l)));
+    frac_borrow_implies_scaled(k, f/2, RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity));
+    frac_borrow_implies_scaled(k, f, ref_initialized_(l));
     close RawVecInner_share_(k, t, l, elemLayout, alloc_id, ptr, capacity);
     leak RawVecInner_share_(k, t, l, elemLayout, alloc_id, ptr, capacity);
 }
