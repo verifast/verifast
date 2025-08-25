@@ -341,6 +341,22 @@ lem close_frac_borrow_strong(k1: lifetime_t, P: pred(;), Q: pred());
     req close_frac_borrow_token_strong(k1, P, ?q, ?k, ?f) &*& is_frac_borrow_convert_strong(?c, ?Ctx, Q, k1, f, P) &*& Ctx() &*& Q();
     ens full_borrow(k1, Q) &*& [q]lifetime_token(k) &*& is_frac_borrow_convert_strong(c, Ctx, Q, k1, f, P);
 
+pred close_frac_borrow_strong_token_(k: lifetime_t, P: pred(;), q: real, f: real);
+
+lem open_frac_borrow_strong_(k: lifetime_t, P: pred(;), q: real);
+    nonghost_callers_only
+    req [_]frac_borrow(k, P) &*& [q]lifetime_token(k);
+    ens [?f]P() &*& close_frac_borrow_strong_token_(k, P, q, f) &*& 0 < f &*& f < 1;
+
+lem_type restore_frac_borrow(Ctx: pred(), Q: pred(), f: real, P: pred()) = lem();
+    req Ctx() &*& Q(); // Empty mask
+    ens [f]P();
+
+lem close_frac_borrow_strong_();
+    nonghost_callers_only
+    req close_frac_borrow_strong_token_(?k, ?P, ?q, ?f) &*& is_restore_frac_borrow(?lemPtr, ?Ctx, ?Q, f, P) &*& Ctx() &*& Q();
+    ens full_borrow(k, Q) &*& [q]lifetime_token(k) &*& is_restore_frac_borrow(lemPtr, Ctx, Q, f, P);
+
 // Mask preserving view shifts - mask aware versions. See the documentation about Iris view shifts in general.h
 // LftL-incl
 lem lifetime_token_trade_m(k: lifetime_t, q: real, k1: lifetime_t);
