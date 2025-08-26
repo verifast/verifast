@@ -1082,10 +1082,10 @@ impl<T, A: Allocator> LinkedList<T, A> {
                     //@ open elem_fbc::<T>(t)(node);
                     //@ borrow_points_to_at_lft(alloc_id.lft, node.as_ptr());
                     //@ leak points_to_at_lft_end_token(alloc_id.lft, node.as_ptr());
-                    let node = Box::from_raw_in(node.as_ptr(), &*alloc_ref);
+                    let node = Box::from_raw_in/*@::<Node<T>, &'a A>@*/(node.as_ptr(), &*alloc_ref);
                     //@ close [f]ref_initialized_::<A>(alloc_ref)();
                     //@ close_frac_borrow(f, ref_initialized_(alloc_ref));
-                    //@ std::boxed::Box_separate_contents(&node_1);
+                    //@ std::boxed::Box_separate_contents::<Node<T>, &'a A>(&node_1);
                     //@ assert std::boxed::Box_minus_contents_in(_, _, _, _, _, ?contents_ptr);
                     //@ assume(alloc_id.lft == 'static);
                     //@ produce_lifetime_token_static();
@@ -1395,7 +1395,7 @@ impl<T, A: Allocator> LinkedList<T, A> {
                     head: second_part_head,
                     tail: second_part_tail,
                     len: self.len - at,
-                    alloc: Allocator_clone__VeriFast_wrapper(&self.alloc),
+                    alloc: Allocator_clone__VeriFast_wrapper/*@::<A, 'a>@*/(&self.alloc),
                     marker: PhantomData,
                 };
             }
@@ -1422,7 +1422,7 @@ impl<T, A: Allocator> LinkedList<T, A> {
             {
                 //@ let_lft 'a = k;
                 //@ std::alloc::init_ref_Allocator_at_lifetime::<'a, A>(alloc_ref);
-                alloc = Allocator_clone__VeriFast_wrapper(&self.alloc);
+                alloc = Allocator_clone__VeriFast_wrapper/*@::<A, 'a>@*/(&self.alloc);
             }
             //@ end_lifetime(k);
             //@ std::alloc::end_ref_Allocator_at_lifetime::<A>();
@@ -2136,9 +2136,9 @@ impl<T, A: Allocator> LinkedList<T, A> {
                 //@ let_lft 'b = k;
                 //@ std::alloc::init_ref_Allocator_at_lifetime::<'b, A>(alloc_ref);
                 //@ close drop_perm::<Node<T>>(false, True, t, node0);
-                let node = Box::new_in(node0, &self.alloc);
+                let node = Box::new_in/*@::<Node<T>, &'b A>@*/(node0, &self.alloc);
                 //@ open drop_perm::<Node<T>>(false, True, t, node0);
-                node_ptr = NonNull_from_ref_mut__VeriFast_wrapper(Box::leak(node));
+                node_ptr = NonNull_from_ref_mut__VeriFast_wrapper(Box::leak/*@::<Node<T>, &'b A, 'static>@*/(node));
             }
             //@ end_lifetime(k);
             //@ std::alloc::end_ref_Allocator_at_lifetime::<A>();
@@ -2341,7 +2341,7 @@ impl<T, A: Allocator> LinkedList<T, A> {
             unsafe {
                 //@ let_lft 'a = k;
                 //@ std::alloc::init_ref_Allocator_at_lifetime::<'a, A>(alloc_ref);
-                alloc1 = Allocator_clone__VeriFast_wrapper(&self.alloc);
+                alloc1 = Allocator_clone__VeriFast_wrapper/*@::<A, 'a>@*/(&self.alloc);
             }
             //@ end_lifetime(k);
             //@ std::alloc::end_ref_Allocator_at_lifetime::<A>();
@@ -2358,7 +2358,7 @@ impl<T, A: Allocator> LinkedList<T, A> {
             unsafe {
                 //@ let_lft 'a = k;
                 //@ std::alloc::init_ref_Allocator_at_lifetime::<'a, A>(alloc_ref);
-                alloc2 = Allocator_clone__VeriFast_wrapper(&self.alloc);
+                alloc2 = Allocator_clone__VeriFast_wrapper/*@::<A, 'a>@*/(&self.alloc);
             }
             //@ end_lifetime(k);
             //@ std::alloc::end_ref_Allocator_at_lifetime::<A>();
@@ -3733,7 +3733,7 @@ impl<'a, T, A: Allocator> CursorMut<'a, T, A> {
                     //@ borrow_points_to_at_lft(alloc_id.lft, unlinked_node.as_ptr());
                     //@ leak points_to_at_lft_end_token(_, _);
                     let unlinked_node = Box::from_raw_in/*@::<Node<T>, &'b A>@*/(unlinked_node.as_ptr(), &self.list.alloc);
-                    r = Some(Box_into_inner_with_ref_Allocator__VeriFast_wrapper(unlinked_node).element); // Some(unlinked_node_.element)
+                    r = Some(Box_into_inner_with_ref_Allocator__VeriFast_wrapper/*@::<Node<T>, A, 'b>@*/(unlinked_node).element); // Some(unlinked_node_.element)
                 }
                 //@ close [f]ref_initialized_::<A>(alloc_ref)();
                 //@ close_frac_borrow(f, ref_initialized_(alloc_ref));
@@ -4078,7 +4078,7 @@ where
                             //@ std::alloc::close_Allocator_ref::<'b, A>(t, alloc_ref);
                             //@ borrow_points_to_at_lft(alloc_id.lft, node.as_ptr());
                             //@ leak points_to_at_lft_end_token(_, _);
-                            r = Some(Box_into_inner_with_ref_Allocator__VeriFast_wrapper(Box::from_raw_in/*@::<Node<T>, &'b A>@*/(node.as_ptr(), &self.list.alloc)).element);
+                            r = Some(Box_into_inner_with_ref_Allocator__VeriFast_wrapper/*@::<Node<T>, A, 'b>@*/(Box::from_raw_in/*@::<Node<T>, &'b A>@*/(node.as_ptr(), &self.list.alloc)).element);
                         }
                         //@ close [f]ref_initialized_::<A>(alloc_ref)();
                         //@ close_frac_borrow(f, ref_initialized_(alloc_ref));

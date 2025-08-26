@@ -1628,7 +1628,7 @@ impl<A: Allocator> RawVecInner<A> {
                 unsafe {
                     //@ let_lft 'a = k;
                     //@ std::alloc::init_ref_Allocator_at_lifetime::<'a, A>(alloc_ref);
-                    r = alloc.allocate(layout);
+                    r = alloc.allocate/*@::<A, 'a>@*/(layout);
                     //@ leak Allocator(_, _, _);
                 }
                 //@ end_lifetime(k);
@@ -1643,7 +1643,7 @@ impl<A: Allocator> RawVecInner<A> {
                 {
                     //@ let_lft 'a = k;
                     //@ std::alloc::init_ref_Allocator_at_lifetime::<'a, A>(alloc_ref);
-                    r = alloc.allocate_zeroed(layout);
+                    r = alloc.allocate_zeroed/*@::<A, 'a>@*/(layout);
                     //@ leak Allocator(_, _, _);
                 }
                 //@ end_lifetime(k);
@@ -2441,7 +2441,7 @@ impl<A: Allocator> RawVecInner<A> {
             unsafe {
                 //@ let_lft 'a = k1;
                 //@ std::alloc::init_ref_Allocator_at_lifetime::<'a, A>(alloc_ref);
-                self.alloc.deallocate(ptr, layout);
+                self.alloc.deallocate/*@::<A, 'a>@*/(ptr, layout);
                 //@ leak Allocator(_, _, _);
             };
             //@ end_lifetime(k1);
@@ -2466,7 +2466,7 @@ impl<A: Allocator> RawVecInner<A> {
                 {
                     //@ let_lft 'a = k1;
                     //@ std::alloc::init_ref_Allocator_at_lifetime::<'a, A>(alloc_ref);
-                    r = self.alloc.shrink(ptr, layout, new_layout);
+                    r = self.alloc.shrink/*@::<A, 'a>@*/(ptr, layout, new_layout);
                     //@ leak Allocator(_, _, _);
                 };
                 //@ end_lifetime(k1);
@@ -2544,7 +2544,7 @@ impl<A: Allocator> RawVecInner<A> {
                 //@ std::alloc::Layout_inv(allocLayout);
                 //@ std::alloc::Layout_size_Layout_from_size_align(capacity * elem_layout.size(), elem_layout.align());
                 //@ assert capacity * elem_layout.size() == layout.size();
-                self.alloc.deallocate(ptr, layout);
+                self.alloc.deallocate/*@::<A, 'a>@*/(ptr, layout);
                 //@ leak Allocator(_, _, _);
             }
             //@ end_lifetime(k1);
@@ -2621,7 +2621,7 @@ ens thread_token(t) &*& *alloc |-> ?alloc1 &*& Allocator(t, alloc1, alloc_id) &*
             {
                 //@ let_lft 'a = k1;
                 //@ std::alloc::init_ref_Allocator_at_lifetime::<'a, A>(alloc_ref);
-                r = alloc.grow(ptr, old_layout, new_layout);
+                r = alloc.grow/*@::<A, 'a>@*/(ptr, old_layout, new_layout);
                 //@ leak Allocator(_, _, _);
             }
             //@ end_lifetime(k1);
@@ -2635,7 +2635,7 @@ ens thread_token(t) &*& *alloc |-> ?alloc1 &*& Allocator(t, alloc1, alloc_id) &*
         {
             //@ let_lft 'a = k1;
             //@ std::alloc::init_ref_Allocator_at_lifetime::<'a, A>(alloc_ref);
-            r = alloc.allocate(new_layout);
+            r = alloc.allocate/*@::<A, 'a>@*/(new_layout);
             //@ leak Allocator(_, _, _);
         }
         //@ end_lifetime(k1);

@@ -1999,7 +1999,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     flatmap (fun (y, eq) -> if y = x then [eq] else []) !tparam_eqs_table
   
   (* Region: check_pure_type: checks validity of type expressions *)
-  let check_pure_type_core typedefmap1 (pn,ilist) tpenv te envType =
+  let check_pure_type_core typedefmap1 (pn,ilist) tpenv te envType reportInferredType =
     let rec create_objects n = if n > 0 then javaLangObject::(create_objects (n-1)) else [] in
     let rec check te =
     match te with
@@ -2191,15 +2191,24 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let t = check te in
       let traitArgs = List.map check traitArgs in
       ProjectionType (t, traitName, traitArgs, assocTypeName)
+    | InferredTypeExpr l ->
+      let t = InferredType (object end, ref Unconstrained) in
+      reportInferredType l t;
+      t
     in
     check te
+  
+  let report_inferred_types_as_error l t =
+    static_error l "Placeholders are not allowed here" None
+  
+  let allow_inferred_types l t = ()
   
   let typedefmap1 =
     let rec iter tdm1 tdds =
       match tdds with
         [] -> tdm1
       | (d, (pn, ilist, l, tparams, te))::tdds ->
-        let t = check_pure_type_core tdm1 (pn,ilist) tparams te Real in
+        let t = check_pure_type_core tdm1 (pn,ilist) tparams te Real report_inferred_types_as_error in
         iter ((d,(l, tparams, t))::tdm1) tdds
     in
     iter [] typedefdeclmap
@@ -2207,7 +2216,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let typedefmap = typedefmap1 @ typedefmap0
   
   (* envType indicates if we are type checking in a ghost or real environment *)
-  let check_pure_type (pn,ilist) tpenv envType te = check_pure_type_core typedefmap (pn,ilist) tpenv te envType
+  let check_pure_type (pn,ilist) tpenv envType te = check_pure_type_core typedefmap (pn,ilist) tpenv te envType report_inferred_types_as_error
   
   let typepreddeclmap1 =
     let rec iter (tpdm1: type_pred_decl_info map) ds =
@@ -3095,6 +3104,14 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       StaticArrayType (t, _) when not is_rust -> normalize_pointee_type t
     | _ -> t
 
+  let inferred_type_typeids = Hashtbl.create 100
+  let resolve_inferred_type obj state tp =
+    state := EqConstraint tp;
+    match Hashtbl.find_opt inferred_type_typeids obj with
+      None -> ()
+    | Some (typeid_term, resolve_func) ->
+      resolve_func tp
+
   let rec compatible_pointees t t0 =
     match (normalize_pointee_type t, normalize_pointee_type t0) with
       (_, Void) -> true
@@ -3105,15 +3122,15 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   and unify_relaxed t1 t2 =
     t1 == t2 ||
     match (unfold_inferred_type t1, unfold_inferred_type t2) with
-      (InferredType (_, t'), InferredType (_, t0')) ->
-      if t' == t0' then true else begin
-        if inferred_type_constraint_le !t' !t0' then
-          t0' := EqConstraint t1
+      (InferredType (obj1, state1), InferredType (obj2, state2)) ->
+      if state1 == state2 then true else begin
+        if inferred_type_constraint_le !state1 !state2 then
+          resolve_inferred_type obj2 state2 t1
         else
-          t' := EqConstraint t2;
+          resolve_inferred_type obj1 state1 t2;
         true
       end
-    | (t, InferredType (_, t0)) | (InferredType (_, t0), t) -> type_satisfies_inferred_type_constraint !t0 t && (t0 := EqConstraint t; true)
+    | (t, InferredType (obj0, t0)) | (InferredType (obj0, t0), t) -> type_satisfies_inferred_type_constraint !t0 t && (resolve_inferred_type obj0 t0 t; true)
     | (InductiveType (i1, args1), InductiveType (i2, args2)) ->
       i1=i2 && List.for_all2 unify_relaxed args1 args2
     | (StructType (s1, args1), StructType (s2, args2)) ->
@@ -3137,15 +3154,15 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let rec unify_strict t1 t2 =
     t1 == t2 ||
     match (unfold_inferred_type t1, unfold_inferred_type t2) with
-      (InferredType (_, t'), InferredType (_, t0')) ->
-      if t' == t0' then true else begin
-        if inferred_type_constraint_le !t' !t0' then
-          t0' := EqConstraint t1
+      (InferredType (obj1, state1), InferredType (obj2, state2)) ->
+      if state1 == state2 then true else begin
+        if inferred_type_constraint_le !state1 !state2 then
+          resolve_inferred_type obj2 state2 t1
         else
-          t' := EqConstraint t2;
+          resolve_inferred_type obj1 state1 t2;
         true
       end
-    | (t, InferredType (_, t0)) | (InferredType (_, t0), t) -> type_satisfies_inferred_type_constraint !t0 t && (t0 := EqConstraint t; true)
+    | (t, InferredType (obj0, t0)) | (InferredType (obj0, t0), t) -> type_satisfies_inferred_type_constraint !t0 t && (resolve_inferred_type obj0 t0 t; true)
     | (InductiveType (i1, args1), InductiveType (i2, args2)) ->
       i1=i2 && List.for_all2 unify_strict args1 args2
     | (StructType (s1, args1), StructType (s2, args2)) ->
@@ -3159,7 +3176,6 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | (RustRefType (lft1, mut1, t1), RustRefType (lft2, mut2, t2)) -> unify_strict lft1 lft2 && mut1 = mut2 && unify_strict t1 t2
     | (InlineFuncType _, PtrType _) -> true
     | (PtrType _, InlineFuncType _) -> true
-    | (StaticLifetime, _) | (_, StaticLifetime) -> true
     | (GhostTypeParam x1, GhostTypeParam x2) -> x1 = x2
     | (t1, t2) -> t1 = t2
 
@@ -4821,7 +4837,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let Some tpenv = zip callee_tparams targs in
           (targs, tpenv)
         else
-          let targs = List.map (check_pure_type (pn,ilist) tparams Ghost) targes in
+          let targs = List.map (fun te -> check_pure_type_core typedefmap (pn,ilist) tparams te Ghost allow_inferred_types) targes in
           let tpenv =
             match zip callee_tparams targs with
               None -> static_error l "Incorrect number of type arguments." None
@@ -6135,7 +6151,16 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     end
   | ProjectionType (t0, traitName, traitArgs, assocTypeName) ->
     typeid_of_type_projection traitName (List.map (typeid_of_core_core l msg env) traitArgs) assocTypeName (typeid_of_core_core l msg env t0)
-  | InferredType _ -> static_error l (Printf.sprintf "%sA type argument for a type parameter that carries a typeid could not be inferred; specify the type argument explicitly" (msg ())) None
+  | InferredType (obj, _) ->
+    begin match Hashtbl.find_opt inferred_type_typeids obj with
+      None ->
+      let typeid_term = mk_typeid_term (Printf.sprintf "placeholder_%d" (Oo.id obj)) in
+      let resolve tp = ctxt#assert_term (ctxt#mk_eq typeid_term (typeid_of_core_core l msg env tp)) in
+      Hashtbl.replace inferred_type_typeids obj (typeid_term, resolve);
+      typeid_term
+    | Some (typeid_term, _) ->
+      typeid_term
+    end
   | tp -> static_error l (Printf.sprintf "%sTaking the typeid of type '%s' is not yet supported" (msg ()) (string_of_type tp)) None
   and eval_const_type_core l msg env t =
     match t with

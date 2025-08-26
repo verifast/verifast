@@ -348,6 +348,7 @@ type type_expr = (* ?type_expr *)
   | LValueRefTypeExpr of loc * type_expr
   | ConstTypeExpr of loc * type_expr
   | ProjectionTypeExpr of loc * type_expr * string (* trait name *) * type_expr list (* trait generic args *) * string (* associated type name *) (* In Rust: <T as X<GArgs>>::Y *)
+  | InferredTypeExpr of loc (* A placeholder `_` to be filled by the typechecker. *)
 and
   operator =  (* ?operator *)
   | Add | Sub | PtrDiff | Le | Ge | Lt | Gt | Eq | Neq | And | Or | Xor | Not | Mul | Div | Mod | BitNot | BitAnd | BitXor | BitOr | ShiftLeft | ShiftRight
