@@ -989,7 +989,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           [] -> tcont sizemap tenv ghostenv h env
         | (l, te, x, e, (address_taken, blockPtr))::xs ->
           let is_const_var = match te with Some (ConstTypeExpr (_, _)) -> true | _ -> false in
-          let t = option_map (check_pure_type (pn,ilist) tparams (if pure then Ghost else Real)) te in
+          let t = option_map (fun te -> check_pure_type_core typedefmap (pn,ilist) tparams te (if pure then Ghost else Real) allow_inferred_types) te in
           if List.mem_assoc x tenv then static_error l ("Declaration hides existing local variable '" ^ x ^ "'.") None;
           let ghostenv = if pure then x::ghostenv else List.filter (fun y -> y <> x) ghostenv in
           match t with

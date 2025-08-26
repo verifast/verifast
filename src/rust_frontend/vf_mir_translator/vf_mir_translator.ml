@@ -759,7 +759,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
 
   let vf_ty_arg_of_region loc (reg : string) =
     match reg with
-    | "'static" | "'<erased>" -> Ast.ManifestTypeExpr (loc, StaticLifetime)
+    | "'static" -> Ast.ManifestTypeExpr (loc, StaticLifetime)
+    | "'<erased>" -> Ast.InferredTypeExpr loc
     | x -> Ast.IdentTypeExpr (loc, None, x)
 
   let translate_region_expr loc (reg_cpn : D.region) =
@@ -2247,7 +2248,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           |> Util.flatmap @@ function
              | Mir.GenArgType ty -> [ ty.vf_ty ]
              | Mir.GenArgLifetime region ->
-                 [ Ast.ManifestTypeExpr (call_loc, StaticLifetime) ]
+                 [ Ast.InferredTypeExpr call_loc ]
              | Mir.GenArgConst ty -> [ ty ]
         in
         let* targs =
