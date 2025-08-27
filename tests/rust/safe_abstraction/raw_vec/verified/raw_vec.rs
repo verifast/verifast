@@ -146,7 +146,16 @@ pred RawVecInner<A>(t: thread_id_t, self: RawVecInner<A>, elemLayout: Layout, al
         elemLayout.repeat(capacity) == some(pair(?allocLayout, ?stride)) &*&
         alloc_block_in(alloc_id, ptr, allocLayout)
     };
-    
+
+lem RawVecInner_send_<A>(t1: thread_id_t)
+    req type_interp::<A>() &*& is_Send(typeid(A)) == true &*& RawVecInner::<A>(?t0, ?self_, ?elemLayout, ?alloc_id, ?ptr, ?capacity);
+    ens type_interp::<A>() &*& RawVecInner::<A>(t1, self_, elemLayout, alloc_id, ptr, capacity);
+{
+    open RawVecInner(t0, self_, elemLayout, alloc_id, ptr, capacity);
+    std::alloc::Allocator_send(t1, self_.alloc);
+    close RawVecInner(t1, self_, elemLayout, alloc_id, ptr, capacity);
+}
+
 pred RawVecInner0<A>(self: RawVecInner<A>, elemLayout: Layout, ptr: *u8, capacity: usize) =
     capacity == logical_capacity(self.cap, elemLayout.size()) &*&
     ptr == self.ptr.as_non_null_ptr().as_ptr() &*&
@@ -573,10 +582,14 @@ lem RawVec_own_mono<T0, T1, A0, A1>()
 }
 
 lem RawVec_send<T, A>(t1: thread_id_t)
-    req type_interp::<T>() &*& type_interp::<A>() &*& is_Send(typeid(T)) == true &*& RawVec_own::<T, A>(?t0, ?v);
+    req type_interp::<T>() &*& type_interp::<A>() &*& is_Send(typeid(RawVec<T, A>)) == true &*& RawVec_own::<T, A>(?t0, ?v);
     ens type_interp::<T>() &*& type_interp::<A>() &*& RawVec_own::<T, A>(t1, v);
 {
-    assume(false); // TODO!
+    open <RawVec<T, A>>.own(t0, v);
+    open RawVec(t0, v, ?alloc_id, ?ptr, ?capacity);
+    RawVecInner_send_::<A>(t1);
+    close RawVec(t1, v, alloc_id, ptr, capacity);
+    close <RawVec<T, A>>.own(t1, v);
 }
 
 pred RawVec_share_<T, A>(k: lifetime_t, t: thread_id_t, l: *RawVec<T, A>, alloc_id: alloc_id_t, ptr: *T, capacity: usize) =

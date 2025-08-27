@@ -3747,21 +3747,46 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | [] -> Ast.LitPat (Var (l, "nil"))
     | h :: t -> Ast.CtorPat (l, "cons", [ h; mk_list_pat l t ])
 
-  let mk_send_asn loc tparam =
+  let mk_send_expr loc te =
+    let open Ast in
+    CallExpr
+      ( loc,
+        "is_Send",
+        [],
+        [],
+        [
+          LitPat
+            (Typeid (loc, TypeExpr te));
+        ],
+        Static )
+
+  let mk_send_tparam_expr loc tparam =
+    let open Ast in
+    mk_send_expr loc (IdentTypeExpr (loc, None, tparam))
+
+  let mk_send_asn loc te =
     let open Ast in
     ExprAsn
       ( loc,
-        CallExpr
-          ( loc,
-            "is_Send",
-            [],
-            [],
-            [
-              LitPat
-                (Typeid (loc, TypeExpr (IdentTypeExpr (loc, None, tparam))));
-            ],
-            Static ) )
+        mk_send_expr loc te )
 
+  let mk_send_tparam_asn loc tparam =
+    let open Ast in
+    mk_send_asn loc (IdentTypeExpr (loc, None, tparam))
+
+  let mk_sync_tparam_expr loc tparam =
+    let open Ast in
+    CallExpr
+      ( loc,
+        "is_Sync",
+        [],
+        [],
+        [
+          LitPat
+            (Typeid (loc, TypeExpr (IdentTypeExpr (loc, None, tparam))));
+        ],
+        Static )
+  
   let mk_sync_asn loc tparam =
     let open Ast in
     ExprAsn
@@ -3960,7 +3985,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                True contract_loc;
              ] )
     in
-    let send_asns = send_tparams |> List.map (mk_send_asn contract_loc) in
+    let send_asns = send_tparams |> List.map (mk_send_tparam_asn contract_loc) in
     let sync_asns = sync_tparams |> List.map (mk_sync_asn contract_loc) in
     let pre_lft_tks = pre_lft_tks @ outlives_asns @ send_asns @ sync_asns in
     let post_lft_tks =
@@ -4949,7 +4974,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
 
   let add_send_asns loc send_tparams asn =
     List.fold_right
-      (fun x asn -> Ast.Sep (loc, mk_send_asn loc x, asn))
+      (fun x asn -> Ast.Sep (loc, mk_send_tparam_asn loc x, asn))
       send_tparams asn
 
   let add_sync_asns loc sync_tparams asn =
@@ -4957,27 +4982,25 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       (fun x asn -> Ast.Sep (loc, mk_sync_asn loc x, asn))
       sync_tparams asn
 
-  let gen_send_proof_oblig adt_def_loc name tparams vf_tparams send_tparams
-      sync_tparams =
+  let gen_send_proof_oblig adt_def_loc name tparams vf_tparams =
     let open Ast in
     let params = [ (IdentTypeExpr (adt_def_loc, None, "thread_id_t"), "t1") ] in
     let tparams_targs =
       List.map (fun x -> IdentTypeExpr (adt_def_loc, None, x)) vf_tparams
     in
     let pre =
-      CallExpr
+      Sep
         ( adt_def_loc,
-          name ^ "_own",
-          tparams_targs,
-          [],
-          [ VarPat (adt_def_loc, "t0"); VarPat (adt_def_loc, "v") ],
-          if vf_tparams = [] then PredFamCall else PredCtorCall )
+          mk_send_asn adt_def_loc (StructTypeExpr (adt_def_loc, Some name, None, [], tparams_targs)),
+          CallExpr
+            ( adt_def_loc,
+              name ^ "_own",
+              tparams_targs,
+              [],
+              [ VarPat (adt_def_loc, "t0"); VarPat (adt_def_loc, "v") ],
+              if vf_tparams = [] then PredFamCall else PredCtorCall ))
     in
-    let pre =
-      add_type_interp_asns adt_def_loc tparams
-        (add_send_asns adt_def_loc send_tparams
-           (add_sync_asns adt_def_loc sync_tparams pre))
-    in
+    let pre = add_type_interp_asns adt_def_loc tparams pre in
     let post =
       CallExpr
         ( adt_def_loc,
@@ -5909,6 +5932,13 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                fields |> List.map @@ fun ({ty}: D.variant_def_field_def) ->
                   decode_ty ty
           in
+          let send_impls =
+            trait_impls
+            |> List.filter (fun { of_trait; self_ty } ->
+                    (of_trait = "std::marker::Send"
+                    || of_trait = "core::marker::Send")
+                    && self_ty = name)
+          in
           (* If send_preds = None, it means this ADT is never Send.
              If send_preds = Some xs, then xs is a list of type parameters such that if any of them are not Send, then this ADT is not Send.
              Note that Some [] is always a valid value for send_preds, and that if Some xs is a valid value, then Some (xs @ ys) is also a valid value.
@@ -6106,13 +6136,6 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                    (fun preds ty -> preds_union preds (send_preds_of ty))
                    (Some [])
             in
-            let send_impls =
-              trait_impls
-              |> List.filter (fun { of_trait; self_ty } ->
-                     (of_trait = "std::marker::Send"
-                     || of_trait = "core::marker::Send")
-                     && self_ty = name)
-            in
             let negative_send_impls, positive_send_impls =
               send_impls |> List.partition (fun { is_negative } -> is_negative)
             in
@@ -6137,24 +6160,6 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                    (fun preds trait_impl ->
                      preds_intersection preds (Some (get_impl_preds trait_impl)))
                    send_preds
-            in
-            let variable_occurs_in_expr x e =
-              let rec iter acc e =
-                match e with
-                | Ast.Var (_, y) when x = y -> true
-                | _ -> Ast.expr_fold_open iter acc e
-              in
-              iter false e
-            in
-            let send_preds =
-              match send_preds with
-              | None -> None
-              | Some _ -> (
-                  match user_provided_own_defs with
-                  | [ Right ([ t; v ], _, body) ]
-                    when not (variable_occurs_in_expr t body) ->
-                      None
-                  | _ -> send_preds)
             in
             let sync_preds =
               field_types
@@ -6193,40 +6198,29 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                      preds_intersection preds (Some (get_impl_preds trait_impl)))
                    sync_preds
             in
-            let sync_preds =
-              match sync_preds with
-              | None -> None
-              | Some _ -> (
-                  match user_provided_share_defs with
-                  | [ Right ([ k; t; l ], _, body) ]
-                    when not (variable_occurs_in_expr t body) ->
-                      None
-                  | _ -> sync_preds)
-            in
             (send_preds, sync_preds)
           in
           let* full_bor_content =
             gen_adt_full_borrow_content kind name tparams lft_params variants_no_zst
               def_loc (match user_provided_own_defs with [ Right(_, Some _, _) ] -> true | _ -> false)
           in
+          let variable_occurs_in_expr x e =
+            let rec iter acc e =
+              match e with
+              | Ast.Var (_, y) when x = y -> true
+              | _ -> Ast.expr_fold_open iter acc e
+            in
+            iter false e
+          in
           let own_proof_obligs =
             match send_preds with
-            | Some xs when user_provided_own_defs <> [] ->
-                let send_tparams =
-                  List.filter
-                    (fun x ->
-                      List.mem (x, "std::marker::Send") xs
-                      || List.mem x send_tparams)
-                    tparams
-                in
-                let sync_tparams =
-                  List.filter
-                    (fun x -> List.mem (x, "std::marker::Sync") xs)
-                    tparams
-                in
+            | Some xs when
+                match user_provided_own_defs with
+                  [ Right ([ t; v ], _, body) ] -> variable_occurs_in_expr t body
+                | _ -> false
+              ->
                 [
                   gen_send_proof_oblig def_loc name tparams vf_tparams
-                    send_tparams sync_tparams;
                 ]
             | _ -> []
           in
@@ -6244,10 +6238,21 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           let own_proof_obligs = own_variance_proof_obligs @ own_proof_obligs in
           let* share_proof_obligs =
             if user_provided_share_defs <> [] then
+              let sync_preds =
+                match sync_preds with
+                | None -> None
+                | Some _ -> (
+                    match user_provided_share_defs with
+                    | [ Right ([ k; t; l ], _, body) ]
+                      when not (variable_occurs_in_expr t body) ->
+                        None
+                    | _ -> sync_preds)
+              in
               gen_share_proof_obligs def lft_params tparams send_tparams
                 sync_preds
             else Ok []
           in
+          let structTypeExpr = Ast.StructTypeExpr (def_loc, Some name, None, [], tparams_targs) in
           let type_pred_defs =
             (if user_provided_own_defs <> [] then []
              else
@@ -6260,8 +6265,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   Ast.TypePredDef
                     ( def_loc,
                       vf_tparams,
-                      StructTypeExpr
-                        (def_loc, Some name, None, [], tparams_targs),
+                      structTypeExpr,
                       "own",
                       Right ([ "t"; "v" ], inputParamCount, body) ));
                ])
@@ -6269,7 +6273,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                 Ast.TypePredDef
                   ( def_loc,
                     vf_tparams,
-                    StructTypeExpr (def_loc, Some name, None, [], tparams_targs),
+                    structTypeExpr,
                     "full_borrow_content",
                     Left (def_loc, name ^ "_full_borrow_content") );
               ]
@@ -6285,7 +6289,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                  Ast.TypePredDef
                    ( def_loc,
                      vf_tparams,
-                     StructTypeExpr (def_loc, Some name, None, [], tparams_targs),
+                     structTypeExpr,
                      "share",
                      Right ([ "k"; "t"; "l" ], inputParamCount, body) ));
               ]
@@ -6309,6 +6313,113 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                          fds_no_zst));
                 ]
             else []
+          in
+          let send_lemma =
+            let rhs =
+              match send_preds with
+                None -> Ast.False def_loc
+              | Some xs ->
+                let send_tparams =
+                  List.filter
+                    (fun x ->
+                      List.mem (x, "std::marker::Send") xs
+                      || List.mem x send_tparams)
+                    tparams
+                in
+                let sync_tparams =
+                  List.filter
+                    (fun x -> List.mem (x, "std::marker::Sync") xs)
+                    tparams
+                in
+                let rhs_conjuncts =
+                  List.map (mk_send_tparam_expr def_loc) send_tparams @
+                  List.map (mk_sync_tparam_expr def_loc) sync_tparams
+                in
+                List.fold_left (fun e e1 -> Ast.Operation (def_loc, And, [e; e1])) (mk_send_expr def_loc structTypeExpr) rhs_conjuncts
+            in
+            let post =
+              Ast.Operation (def_loc, Eq, [
+                mk_send_expr def_loc structTypeExpr;
+                rhs
+              ])
+            in
+            Ast.Func
+              ( def_loc,
+                Lemma
+                  ( true
+                    (*indicates whether an axiom should be generated for this lemma*),
+                    Some (mk_send_expr def_loc structTypeExpr)),
+                lft_params @ tparams (*type parameters*),
+                None (*return type*),
+                qualified_derived_name "is_Send_%s_lemma" name,
+                [],
+                false (*nonghost_callers_only*),
+                (None, None)
+                (*implemented function type, with function type type arguments and function type arguments*),
+                Some (True def_loc, ("result", post)) (*contract*),
+                false (*terminates*),
+                Some
+                  ( [
+                      ExprStmt
+                        (CallExpr
+                           ( def_loc,
+                             "#assume",
+                             [],
+                             [],
+                             [ LitPat (False def_loc) ],
+                             Static ));
+                    ],
+                    def_loc )
+                (*body*),
+                false (*virtual*),
+                [] (*overrides*) )
+          in
+          let send_def_lemmas =
+            if send_impls <> [] then [] else
+            [
+              let rhs =
+                let rhs_conjuncts =
+                  fds |> List.map (fun fd -> mk_send_expr def_loc fd.Mir.ty.Mir.vf_ty)
+                in
+                List.fold_left (fun e e1 -> Ast.Operation (def_loc, And, [e; e1])) (Ast.True def_loc) rhs_conjuncts
+              in
+              let post =
+                Ast.Operation (def_loc, Eq, [
+                  mk_send_expr def_loc structTypeExpr;
+                  rhs
+                ])
+              in
+              Ast.Func
+                ( def_loc,
+                  Lemma
+                    ( true
+                      (*indicates whether an axiom should be generated for this lemma*),
+                      Some (mk_send_expr def_loc structTypeExpr)),
+                  lft_params @ tparams (*type parameters*),
+                  None (*return type*),
+                  qualified_derived_name "is_Send_%s_def" name,
+                  [],
+                  false (*nonghost_callers_only*),
+                  (None, None)
+                  (*implemented function type, with function type type arguments and function type arguments*),
+                  Some (True def_loc, ("result", post)) (*contract*),
+                  false (*terminates*),
+                  Some
+                    ( [
+                        ExprStmt
+                          (CallExpr
+                            ( def_loc,
+                              "#assume",
+                              [],
+                              [],
+                              [ LitPat (False def_loc) ],
+                              Static ));
+                      ],
+                      def_loc )
+                  (*body*),
+                  false (*virtual*),
+                  [] (*overrides*) )
+            ]
           in
           let open_ref_init_perm_lemma =
             let pre =
@@ -6843,7 +6954,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               own_proof_obligs @ share_proof_obligs,
               delayed_proof_obligs,
               upcast_lemmas
-              @ open_ref_init_perm_lemma :: init_ref_padding_lemma
+              @ send_lemma :: send_def_lemmas @ open_ref_init_perm_lemma :: init_ref_padding_lemma
                 :: close_ref_initialized_lemma :: open_ref_initialized_lemma
                 :: end_ref_padding_lemma :: type_pred_defs ))
         else Ok (None, [], [], [])
