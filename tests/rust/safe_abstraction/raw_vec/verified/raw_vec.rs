@@ -2528,29 +2528,20 @@ impl<A: Allocator> RawVecInner<A> {
         //@ end_share_RawVecInner(self);
         
         //@ open_points_to(self);
-        //@ open RawVecInner(t, ?self01, elem_layout, alloc_id, ptr_, capacity);
-        //@ let u = self01.ptr;
-        //@ let cap = self01.cap;
+        //@ open RawVecInner(t, _, elem_layout, alloc_id, ptr_, capacity);
         if let Some((ptr, layout)) = current_memory {
             //@ let alloc_ref = precreate_ref(&(*self).alloc);
             //@ let k1 = begin_lifetime();
             unsafe {
                 //@ let_lft 'a = k1;
                 //@ std::alloc::init_ref_Allocator_at_lifetime::<'a, A>(alloc_ref);
-                //@ assert ptr_ == ptr.as_ptr();
-                //@ std::alloc::Layout_inv(elem_layout);
                 //@ std::alloc::Layout_repeat_some_size_aligned(elem_layout, capacity);
-                //@ assert elem_layout.repeat(capacity) == some(pair(?allocLayout, ?stride));
-                //@ std::alloc::Layout_inv(allocLayout);
-                //@ std::alloc::Layout_size_Layout_from_size_align(capacity * elem_layout.size(), elem_layout.align());
                 //@ assert capacity * elem_layout.size() == layout.size();
                 self.alloc.deallocate/*@::<A, 'a>@*/(ptr, layout);
-                //@ leak Allocator(_, _, _);
             }
             //@ end_lifetime(k1);
             //@ std::alloc::end_ref_Allocator_at_lifetime::<A>();
         }
-        //@ if current_memory == Option::None { leak ptr_[..capacity * elem_layout.size()] |-> _; }
         //@ std::alloc::Allocator_to_own((*self).alloc);
         //@ close RawVecInner0(*self, elem_layout, ptr_, capacity);
         //@ close <RawVecInner<A>>.own(t, *self);
