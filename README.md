@@ -13,6 +13,25 @@ VeriFast is a research prototype of a tool for modular formal verification of co
 
 The VeriFast source code and binaries are released under the [MIT license](LICENSE.md).
 
+Proofs done
+-----------
+
+Some of the more notable proofs done with VeriFast (with caveats) include:
+- A proof of memory safety and thread safety of [the Linux boot protocol keyboard driver](https://github.com/verifast/verifast/tree/master/examples/usbkbd)
+- A proof of absence of array index out of bounds exceptions, null pointer exceptions, and invalid API calls in [(a mock-up of) the Java Card code running on the Belgian electronic identity card](https://github.com/verifast/verifast/tree/master/examples/java/Java%20Card/NewEidCard)
+- A modular proof of memory safety, thread safety, and termination of a [cohort lock](https://github.com/verifast/verifast/tree/master/examples/busywaiting/flexiblespecs/ticketlock-java) implemented on top of ticketlocks, themselves implemented using busy waiting, and using lock handoff
+- Proofs of integrity and confidentiality of a number of simple [cryptographic protocols](https://github.com/verifast/verifast/tree/master/examples/crypto_ccs) implemented in C using the byte buffer-based APIs of mbed TLS (as opposed to a high-level "symbolic" API).
+- A proof of a [floating-point algorithm](https://github.com/verifast/verifast/tree/master/examples/floating_point/sqrt_with_rounding) for computing the square root, taking into account rounding (but not overflow or underflow).
+- [Termination of some small Java programs involving dynamic binding](https://github.com/verifast/verifast/tree/master/examples/java/termination) (a.k.a. virtual method calls) and/or concurrency.
+- Jayanti's optimal [snapshot algorithm](https://github.com/verifast/verifast/blob/master/examples/jayanti/jayanti.c), using prophecies
+- A [concurrent set](https://github.com/verifast/verifast/tree/master/examples/lcset) implemented using lock coupling (a.k.a. hand-over-hand locking).
+- A modular proof of a fine-grained concurrent Multiple Compare And Swap ([MCAS](https://github.com/verifast/verifast/tree/master/examples/mcas)) algorithm built on top of a Restricted Double Compare Single Swap algorithm, using helping.
+- Termination of various concurrent programs using [monitors](https://github.com/verifast/verifast/tree/master/examples/monitors) and condition variables
+- Some small [purely unsafe](https://github.com/verifast/verifast/tree/master/tests/rust/purely_unsafe) (i.e. C-style) Rust programs, including a constant-space tree marking algorithm
+- A partial proof of the Rust standard library's [LinkedList](https://github.com/verifast/verifast/tree/master/tests/rust/safe_abstraction/linked_list) and [RawVec](https://github.com/verifast/verifast/tree/master/tests/rust/safe_abstraction/raw_vec) abstractions
+- Proofs of simplified versions of Rust's [Cell](https://github.com/verifast/verifast/blob/master/tests/rust/safe_abstraction/cell.rs), [Mutex](https://github.com/verifast/verifast/blob/master/tests/rust/safe_abstraction/mutex.rs), [Rc](https://github.com/verifast/verifast/blob/master/tests/rust/safe_abstraction/rc.rs), [Arc](https://github.com/verifast/verifast/blob/master/tests/rust/safe_abstraction/arc.rs), and [RefCell](https://github.com/verifast/verifast/blob/master/tests/rust/safe_abstraction/ref_cell.rs) abstractions
+
+
 Binaries
 --------
 
