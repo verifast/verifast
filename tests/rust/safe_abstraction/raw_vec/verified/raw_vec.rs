@@ -185,7 +185,7 @@ lem RawVecInner_own_mono<A0, A1>()
     req type_interp::<A0>() &*& type_interp::<A1>() &*& RawVecInner_own::<A0>(?t, ?v) &*& is_subtype_of::<A0, A1>() == true;
     ens type_interp::<A0>() &*& type_interp::<A1>() &*& RawVecInner_own::<A1>(t, RawVecInner::<A1> { ptr: upcast(v.ptr), cap: upcast(v.cap), alloc: upcast(v.alloc) });
 {
-    assume(false);
+    assume(false); // https://github.com/verifast/verifast/issues/610
 }
 
 lem RawVecInner_send<A>(t1: thread_id_t)
@@ -578,7 +578,7 @@ lem RawVec_own_mono<T0, T1, A0, A1>()
     req type_interp::<T0>() &*& type_interp::<T1>() &*& type_interp::<A0>() &*& type_interp::<A1>() &*& RawVec_own::<T0, A0>(?t, ?v) &*& is_subtype_of::<T0, T1>() == true &*& is_subtype_of::<A0, A1>() == true;
     ens type_interp::<T0>() &*& type_interp::<T1>() &*& type_interp::<A0>() &*& type_interp::<A1>() &*& RawVec_own::<T1, A1>(t, RawVec::<T1, A1> { inner: upcast(v.inner) });
 {
-    assume(false);
+    assume(false); // https://github.com/verifast/verifast/issues/610
 }
 
 lem RawVec_send<T, A>(t1: thread_id_t)
@@ -606,13 +606,13 @@ lem RawVec_share__mono<T, A>(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *
 }
 
 lem RawVec_sync_<T, A>(t1: thread_id_t)
-    req type_interp::<T>() &*& type_interp::<A>() &*& is_Sync(typeid(T)) == true &*& [_]RawVec_share_::<T, A>(?k, ?t0, ?l, ?alloc_id, ?ptr, ?capacity);
+    req type_interp::<T>() &*& type_interp::<A>() &*& is_Sync(typeid(RawVec<T, A>)) == true &*& [_]RawVec_share_::<T, A>(?k, ?t0, ?l, ?alloc_id, ?ptr, ?capacity);
     ens type_interp::<T>() &*& type_interp::<A>() &*& [_]RawVec_share_::<T, A>(k, t1, l, alloc_id, ptr, capacity);
 {
-    assume(false); // TODO!
-    //open RawVec_share_::<T, A>(k, t0, l, alloc_id, ptr, capacity);
-    //RawVecInner_sync_::<A>(t1);
-    //close RawVec_share_::<T, A>(k, t1, l, alloc_id, ptr, capacity);
+    open RawVec_share_::<T, A>(k, t0, l, alloc_id, ptr, capacity);
+    RawVecInner_sync_::<A>(t1);
+    close RawVec_share_::<T, A>(k, t1, l, alloc_id, ptr, capacity);
+    leak RawVec_share_::<T, A>(k, t1, l, alloc_id, ptr, capacity);
 }
 
 pred RawVec_share_end_token<T, A>(k: lifetime_t, t: thread_id_t, l: *RawVec<T, A>, alloc_id: alloc_id_t, ptr: *T, capacity: usize) =
@@ -737,7 +737,7 @@ lem RawVec_share_full<T, A>(k: lifetime_t, t: thread_id_t, l: *RawVec<T, A>)
 }
 
 lem RawVec_sync<T, A>(t1: thread_id_t)
-    req type_interp::<T>() &*& type_interp::<A>() &*& is_Sync(typeid(T)) == true &*& [_]RawVec_share::<T, A>(?k, ?t0, ?l);
+    req type_interp::<T>() &*& type_interp::<A>() &*& is_Sync(typeid(RawVec<T, A>)) == true &*& [_]RawVec_share::<T, A>(?k, ?t0, ?l);
     ens type_interp::<T>() &*& type_interp::<A>() &*& [_]RawVec_share::<T, A>(k, t1, l);
 {
     open RawVec_share::<T, A>(k, t0, l);
