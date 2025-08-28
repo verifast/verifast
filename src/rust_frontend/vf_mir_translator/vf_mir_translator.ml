@@ -3774,7 +3774,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let open Ast in
     mk_send_asn loc (IdentTypeExpr (loc, None, tparam))
 
-  let mk_sync_tparam_expr loc tparam =
+  let mk_sync_expr loc te =
     let open Ast in
     CallExpr
       ( loc,
@@ -3783,11 +3783,15 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         [],
         [
           LitPat
-            (Typeid (loc, TypeExpr (IdentTypeExpr (loc, None, tparam))));
+            (Typeid (loc, TypeExpr te));
         ],
         Static )
   
-  let mk_sync_asn loc tparam =
+  let mk_sync_tparam_expr loc tparam =
+    let open Ast in
+    mk_sync_expr loc (IdentTypeExpr (loc, None, tparam))
+  
+  let mk_sync_asn loc te =
     let open Ast in
     ExprAsn
       ( loc,
@@ -3798,9 +3802,12 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             [],
             [
               LitPat
-                (Typeid (loc, TypeExpr (IdentTypeExpr (loc, None, tparam))));
+                (Typeid (loc, TypeExpr te));
             ],
             Static ) )
+  
+  let mk_sync_tparam_asn loc tparam =
+    mk_sync_asn loc (IdentTypeExpr (loc, None, tparam))
 
   let gen_own_asn (adt_defs : Mir.adt_def_tr list) (thread_id : Ast.expr)
       (loc : Ast.loc) (v : Ast.expr) (ty_info : Mir.ty_info) =
@@ -3986,7 +3993,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
              ] )
     in
     let send_asns = send_tparams |> List.map (mk_send_tparam_asn contract_loc) in
-    let sync_asns = sync_tparams |> List.map (mk_sync_asn contract_loc) in
+    let sync_asns = sync_tparams |> List.map (mk_sync_tparam_asn contract_loc) in
     let pre_lft_tks = pre_lft_tks @ outlives_asns @ send_asns @ sync_asns in
     let post_lft_tks =
       List.map (fun lft_var -> lft_token_b lit_pat_b lft_var) lft_vars
@@ -5274,7 +5281,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             [] (*overrides*) );
       ] )
 
-  let gen_sync_proof_oblig adt_def_loc name lft_params tparams sync_tparams =
+  let gen_sync_proof_oblig adt_def_loc name lft_params tparams =
     let open Ast in
     let vf_tparams = lft_params @ tparams in
     let tparams_targs =
@@ -5282,24 +5289,26 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     in
     let params = [ (IdentTypeExpr (adt_def_loc, None, "thread_id_t"), "t1") ] in
     let pre =
-      CoefAsn
+      Sep
         ( adt_def_loc,
-          DummyPat,
-          CallExpr
+          mk_sync_asn adt_def_loc (Ast.StructTypeExpr (adt_def_loc, Some name, None, [], tparams_targs)),
+          CoefAsn
             ( adt_def_loc,
-              name ^ "_share",
-              tparams_targs,
-              [],
-              [
-                VarPat (adt_def_loc, "k");
-                VarPat (adt_def_loc, "t0");
-                VarPat (adt_def_loc, "l");
-              ],
-              if vf_tparams = [] then PredFamCall else PredCtorCall ) )
+              DummyPat,
+              CallExpr
+                ( adt_def_loc,
+                  name ^ "_share",
+                  tparams_targs,
+                  [],
+                  [
+                    VarPat (adt_def_loc, "k");
+                    VarPat (adt_def_loc, "t0");
+                    VarPat (adt_def_loc, "l");
+                  ],
+                  if vf_tparams = [] then PredFamCall else PredCtorCall ) ) )
     in
     let pre =
-      add_type_interp_asns adt_def_loc tparams
-        (add_sync_asns adt_def_loc sync_tparams pre)
+      add_type_interp_asns adt_def_loc tparams pre
     in
     let post =
       CoefAsn
@@ -5671,14 +5680,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           match sync_preds with
           | None -> []
           | Some sync_preds ->
-              let sync_tparams =
-                List.filter
-                  (fun x -> List.mem (x, "std::marker::Sync") sync_preds)
-                  tparams
-              in
               [
                 gen_sync_proof_oblig adt_def_loc name lft_params tparams
-                  sync_tparams;
               ]
         in
         Ok ([ share_mono_po; share_po; init_ref_po ] @ sync_pos)
@@ -5939,6 +5942,13 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                     || of_trait = "core::marker::Send")
                     && self_ty = name)
           in
+          let sync_impls =
+            trait_impls
+            |> List.filter (fun { of_trait; self_ty } ->
+                    (of_trait = "std::marker::Sync"
+                    || of_trait = "core::marker::Sync")
+                    && self_ty = name)
+          in
           (* If send_preds = None, it means this ADT is never Send.
              If send_preds = Some xs, then xs is a list of type parameters such that if any of them are not Send, then this ADT is not Send.
              Note that Some [] is always a valid value for send_preds, and that if Some xs is a valid value, then Some (xs @ ys) is also a valid value.
@@ -6167,13 +6177,6 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                    (fun preds ty -> preds_union preds (sync_preds_of ty))
                    (Some [])
             in
-            let sync_impls =
-              trait_impls
-              |> List.filter (fun { of_trait; self_ty } ->
-                     (of_trait = "std::marker::Sync"
-                     || of_trait = "core::marker::Sync")
-                     && self_ty = name)
-            in
             let negative_sync_impls, positive_sync_impls =
               sync_impls |> List.partition (fun { is_negative } -> is_negative)
             in
@@ -6314,65 +6317,119 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                 ]
             else []
           in
-          let send_lemma =
-            let rhs =
-              match send_preds with
-                None -> Ast.False def_loc
-              | Some xs ->
-                let send_tparams =
-                  List.filter
-                    (fun x ->
-                      List.mem (x, "std::marker::Send") xs
-                      || List.mem x send_tparams)
-                    tparams
-                in
-                let sync_tparams =
-                  List.filter
-                    (fun x -> List.mem (x, "std::marker::Sync") xs)
-                    tparams
-                in
-                let rhs_conjuncts =
-                  List.map (mk_send_tparam_expr def_loc) send_tparams @
-                  List.map (mk_sync_tparam_expr def_loc) sync_tparams
-                in
-                List.fold_left (fun e e1 -> Ast.Operation (def_loc, And, [e; e1])) (mk_send_expr def_loc structTypeExpr) rhs_conjuncts
+          let send_lemmas =
+            let mk_send_lemma rhs =
+              let post =
+                Ast.Operation (def_loc, Eq, [
+                  mk_send_expr def_loc structTypeExpr;
+                  rhs
+                ])
+              in
+              Ast.Func
+                ( def_loc,
+                  Lemma
+                    ( true
+                      (*indicates whether an axiom should be generated for this lemma*),
+                      Some (mk_send_expr def_loc structTypeExpr)),
+                  lft_params @ tparams (*type parameters*),
+                  None (*return type*),
+                  qualified_derived_name "is_Send_%s_lemma" name,
+                  [],
+                  false (*nonghost_callers_only*),
+                  (None, None)
+                  (*implemented function type, with function type type arguments and function type arguments*),
+                  Some (True def_loc, ("result", post)) (*contract*),
+                  false (*terminates*),
+                  Some
+                    ( [
+                        ExprStmt
+                          (CallExpr
+                            ( def_loc,
+                              "#assume",
+                              [],
+                              [],
+                              [ LitPat (False def_loc) ],
+                              Static ));
+                      ],
+                      def_loc )
+                  (*body*),
+                  false (*virtual*),
+                  [] (*overrides*) )
             in
-            let post =
-              Ast.Operation (def_loc, Eq, [
-                mk_send_expr def_loc structTypeExpr;
-                rhs
-              ])
+            match send_preds with
+              None -> [mk_send_lemma (Ast.False def_loc)]
+            | Some xs ->
+              let send_tparams =
+                List.filter
+                  (fun x ->
+                    List.mem (x, "std::marker::Send") xs
+                    || List.mem x send_tparams)
+                  tparams
+              in
+              let sync_tparams =
+                List.filter
+                  (fun x -> List.mem (x, "std::marker::Sync") xs)
+                  tparams
+              in
+              let rhs_conjuncts =
+                List.map (mk_send_tparam_expr def_loc) send_tparams @
+                List.map (mk_sync_tparam_expr def_loc) sync_tparams
+              in
+              if rhs_conjuncts = [] then [] else
+              [mk_send_lemma (List.fold_left (fun e e1 -> Ast.Operation (def_loc, And, [e; e1])) (mk_send_expr def_loc structTypeExpr) rhs_conjuncts)]
+          in
+          let sync_lemmas =
+            let mk_sync_lemma rhs =
+              let post =
+                Ast.Operation (def_loc, Eq, [
+                  mk_sync_expr def_loc structTypeExpr;
+                  rhs
+                ])
+              in
+              Ast.Func
+                ( def_loc,
+                  Lemma
+                    ( true
+                      (*indicates whether an axiom should be generated for this lemma*),
+                      Some (mk_sync_expr def_loc structTypeExpr)),
+                  lft_params @ tparams (*type parameters*),
+                  None (*return type*),
+                  qualified_derived_name "is_Sync_%s_lemma" name,
+                  [],
+                  false (*nonghost_callers_only*),
+                  (None, None)
+                  (*implemented function type, with function type type arguments and function type arguments*),
+                  Some (True def_loc, ("result", post)) (*contract*),
+                  false (*terminates*),
+                  Some
+                    ( [
+                        ExprStmt
+                          (CallExpr
+                            ( def_loc,
+                              "#assume",
+                              [],
+                              [],
+                              [ LitPat (False def_loc) ],
+                              Static ));
+                      ],
+                      def_loc )
+                  (*body*),
+                  false (*virtual*),
+                  [] (*overrides*) )
             in
-            Ast.Func
-              ( def_loc,
-                Lemma
-                  ( true
-                    (*indicates whether an axiom should be generated for this lemma*),
-                    Some (mk_send_expr def_loc structTypeExpr)),
-                lft_params @ tparams (*type parameters*),
-                None (*return type*),
-                qualified_derived_name "is_Send_%s_lemma" name,
-                [],
-                false (*nonghost_callers_only*),
-                (None, None)
-                (*implemented function type, with function type type arguments and function type arguments*),
-                Some (True def_loc, ("result", post)) (*contract*),
-                false (*terminates*),
-                Some
-                  ( [
-                      ExprStmt
-                        (CallExpr
-                           ( def_loc,
-                             "#assume",
-                             [],
-                             [],
-                             [ LitPat (False def_loc) ],
-                             Static ));
-                    ],
-                    def_loc )
-                (*body*),
-                false (*virtual*),
-                [] (*overrides*) )
+            match sync_preds with
+              None -> [mk_sync_lemma (Ast.False def_loc)]
+            | Some sync_preds ->
+              let sync_tparams =
+                List.filter
+                  (fun x -> List.mem (x, "std::marker::Sync") sync_preds)
+                  tparams
+              in
+              let rhs_conjuncts =
+                List.map (mk_sync_tparam_expr def_loc) sync_tparams
+              in
+              if rhs_conjuncts = [] then [] else
+              [mk_sync_lemma (List.fold_left (fun e e1 -> Ast.Operation (def_loc, And, [e; e1])) (mk_sync_expr def_loc structTypeExpr) rhs_conjuncts)]
           in
           let send_def_lemmas =
             if send_impls <> [] then [] else
@@ -6398,6 +6455,53 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   lft_params @ tparams (*type parameters*),
                   None (*return type*),
                   qualified_derived_name "is_Send_%s_def" name,
+                  [],
+                  false (*nonghost_callers_only*),
+                  (None, None)
+                  (*implemented function type, with function type type arguments and function type arguments*),
+                  Some (True def_loc, ("result", post)) (*contract*),
+                  false (*terminates*),
+                  Some
+                    ( [
+                        ExprStmt
+                          (CallExpr
+                            ( def_loc,
+                              "#assume",
+                              [],
+                              [],
+                              [ LitPat (False def_loc) ],
+                              Static ));
+                      ],
+                      def_loc )
+                  (*body*),
+                  false (*virtual*),
+                  [] (*overrides*) )
+            ]
+          in
+          let sync_def_lemmas =
+            if sync_impls <> [] then [] else
+            [
+              let rhs =
+                let rhs_conjuncts =
+                  fds |> List.map (fun fd -> mk_sync_expr def_loc fd.Mir.ty.Mir.vf_ty)
+                in
+                List.fold_left (fun e e1 -> Ast.Operation (def_loc, And, [e; e1])) (Ast.True def_loc) rhs_conjuncts
+              in
+              let post =
+                Ast.Operation (def_loc, Eq, [
+                  mk_sync_expr def_loc structTypeExpr;
+                  rhs
+                ])
+              in
+              Ast.Func
+                ( def_loc,
+                  Lemma
+                    ( true
+                      (*indicates whether an axiom should be generated for this lemma*),
+                      Some (mk_sync_expr def_loc structTypeExpr)),
+                  lft_params @ tparams (*type parameters*),
+                  None (*return type*),
+                  qualified_derived_name "is_Sync_%s_def" name,
                   [],
                   false (*nonghost_callers_only*),
                   (None, None)
@@ -6954,7 +7058,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               own_proof_obligs @ share_proof_obligs,
               delayed_proof_obligs,
               upcast_lemmas
-              @ send_lemma :: send_def_lemmas @ open_ref_init_perm_lemma :: init_ref_padding_lemma
+              @ send_lemmas @ send_def_lemmas @ sync_lemmas @ sync_def_lemmas @ open_ref_init_perm_lemma :: init_ref_padding_lemma
                 :: close_ref_initialized_lemma :: open_ref_initialized_lemma
                 :: end_ref_padding_lemma :: type_pred_defs ))
         else Ok (None, [], [], [])

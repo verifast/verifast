@@ -224,11 +224,91 @@ lem init_ref_share_m<T>(k: lifetime_t, t: thread_id_t, p: *T);
 
 fix is_Send(type_id: *_) -> bool;
 
+lem_auto is_Send_u8_def();
+    req true;
+    ens is_Send(typeid(u8)) == true;
+
+lem_auto is_Send_u16_def();
+    req true;
+    ens is_Send(typeid(u16)) == true;
+
+lem_auto is_Send_u32_def();
+    req true;
+    ens is_Send(typeid(u32)) == true;
+
+lem_auto is_Send_u64_def();
+    req true;
+    ens is_Send(typeid(u64)) == true;
+
+lem_auto is_Send_u128_def();
+    req true;
+    ens is_Send(typeid(u128)) == true;
+
+lem_auto is_Send_i8_def();
+    req true;
+    ens is_Send(typeid(i8)) == true;
+
+lem_auto is_Send_i16_def();
+    req true;
+    ens is_Send(typeid(i16)) == true;
+
+lem_auto is_Send_i32_def();
+    req true;
+    ens is_Send(typeid(i32)) == true;
+
+lem_auto is_Send_i64_def();
+    req true;
+    ens is_Send(typeid(i64)) == true;
+
+lem_auto is_Send_i128_def();
+    req true;
+    ens is_Send(typeid(i128)) == true;
+
 lem Send::send<T>(t0: thread_id_t, t1: thread_id_t, v: T);
     req type_interp::<T>() &*& is_Send(typeid(T)) == true &*& (<T>.own)(t0, v);
     ens type_interp::<T>() &*& (<T>.own)(t1, v);
 
 fix is_Sync(type_id: *_) -> bool;
+
+lem_auto is_Sync_u8_def();
+    req true;
+    ens is_Sync(typeid(u8)) == true;
+
+lem_auto is_Sync_u16_def();
+    req true;
+    ens is_Sync(typeid(u16)) == true;
+
+lem_auto is_Sync_u32_def();
+    req true;
+    ens is_Sync(typeid(u32)) == true;
+
+lem_auto is_Sync_u64_def();
+    req true;
+    ens is_Sync(typeid(u64)) == true;
+
+lem_auto is_Sync_u128_def();
+    req true;
+    ens is_Sync(typeid(u128)) == true;
+
+lem_auto is_Sync_i8_def();
+    req true;
+    ens is_Sync(typeid(i8)) == true;
+
+lem_auto is_Sync_i16_def();
+    req true;
+    ens is_Sync(typeid(i16)) == true;
+
+lem_auto is_Sync_i32_def();
+    req true;
+    ens is_Sync(typeid(i32)) == true;
+
+lem_auto is_Sync_i64_def();
+    req true;
+    ens is_Sync(typeid(i64)) == true;
+
+lem_auto is_Sync_i128_def();
+    req true;
+    ens is_Sync(typeid(i128)) == true;
 
 lem Sync::sync<T>(k: lifetime_t, t0: thread_id_t, t1: thread_id_t, l: *T);
     req type_interp::<T>() &*& is_Sync(typeid(T)) == true &*& [_](<T>.share)(k, t0, l);
