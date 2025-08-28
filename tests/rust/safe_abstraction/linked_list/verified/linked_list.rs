@@ -3715,7 +3715,9 @@ impl<'a, T, A: Allocator> CursorMut<'a, T, A> {
                 self.list.unlink_node(unlinked_node);
                 /*@
                 if t1 != t {
+                    produce_type_interp::<A>();
                     std::alloc::Allocator_send(t, (*self0.list).alloc);
+                    leak type_interp::<A>();
                 }
                 @*/
                 //@ std::alloc::close_Allocator_full_borrow_content_(t, &(*self0.list).alloc);
@@ -3744,7 +3746,9 @@ impl<'a, T, A: Allocator> CursorMut<'a, T, A> {
                 //@ ghost_cell_mutate(ghost_cell_id, pair(self0.index, current1));
                 /*@
                 if t1 != t {
+                    produce_type_interp::<A>();
                     std::alloc::Allocator_send(t1, (*self0.list).alloc);
+                    leak type_interp::<A>();
                     assert r == Option::Some(?e);
                     produce_type_interp::<T>();
                     Send::send(t1, t, e);
