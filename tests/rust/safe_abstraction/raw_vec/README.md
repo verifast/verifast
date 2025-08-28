@@ -470,19 +470,23 @@ It then uses lemma [`close_Allocator_full_borrow_content`](https://github.com/ve
 
 Lemma `end_share_RawVecInner` uses lemmas [`borrow_end`](https://github.com/verifast/verifast/blob/2e7dd7a6d1aef2c9ffe7a1cedcbe28463f02440b/bin/rust/rust_belt/lifetime_logic.rsspec#L122) and [`open_Allocator_full_borrow_content_`](https://github.com/verifast/verifast/blob/2e7dd7a6d1aef2c9ffe7a1cedcbe28463f02440b/bin/rust/std/lib.rsspec#L856) to recover exclusive ownership of the RawVecInner object.
 
-### RawVecInner associated function `non_null`
+### RawVecInner associated function `capacity`
 
 ```rust
 impl<A: Allocator> RawVecInner<A> {
-    const fn non_null<T>(&self) -> NonNull<T>
-    //@ req [_]RawVecInner_share_(?k, ?t, self, ?elem_layout, ?alloc_id, ?ptr, ?capacity) &*& [?q]lifetime_token(k);
-    //@ ens [q]lifetime_token(k) &*& result.as_ptr() == ptr as *T;
+    const fn capacity(&self, elem_size: usize) -> usize
+    /*@
+    req [_]RawVecInner_share_(?k, ?t, self, ?elem_layout, ?alloc_id, ?ptr, ?capacity) &*&
+        [?q]lifetime_token(k);
+    @*/
+    //@ ens [q]lifetime_token(k) &*& elem_size != elem_layout.size() || result == capacity;
     //@ safety_proof { ... }
     {
         //@ open RawVecInner_share_(k, t, self, elem_layout, alloc_id, ptr, capacity);
         //@ open_frac_borrow(k, RawVecInner_frac_borrow_content(self, elem_layout, ptr, capacity), q);
         //@ open [?f]RawVecInner_frac_borrow_content::<A>(self, elem_layout, ptr, capacity)();
-        let r = self.ptr.cast().as_non_null_ptr();
+        let r =
+            if elem_size == 0 { usize::MAX } else { self.cap.as_inner() };
         //@ close [f]RawVecInner_frac_borrow_content::<A>(self, elem_layout, ptr, capacity)();
         //@ close_frac_borrow(f, RawVecInner_frac_borrow_content(self, elem_layout, ptr, capacity));
         r
@@ -490,9 +494,9 @@ impl<A: Allocator> RawVecInner<A> {
 }
 ```
 
-This function's precondition asserts shared ownership of `self` at some lifetime `k`, and a fraction of the lifetime token for `k`. The postcondition asserts the latter as well. (The function does not bother to return the shared ownership; the caller can duplicate it anyway.)
+This function's precondition asserts shared ownership of `self` at some lifetime `k`, and a fraction `q` of the lifetime token for `k`. The postcondition asserts the latter as well. (The function does not bother to return the shared ownership; the caller can duplicate it anyway.)
 
-The proof uses lemma [`open_frac_borrow`](https://github.com/verifast/verifast/blob/2e7dd7a6d1aef2c9ffe7a1cedcbe28463f02440b/bin/rust/rust_belt/lifetime_logic.rsspec#L275) to obtain fractional ownership at some fraction `f` of the fractured borrow's payload. This is sufficient to read (but not write) the `ptr` field. Notice that `open_frac_borrow` consumes a fraction, with coefficient given by its third argument, of the lifetime token for `k`. Indeed, accessing a fractured borrow is possible only while its lifetime is alive. Since the proof must return to the caller the fraction `q` of the lifetime token that it received from the caller, it is forced to call lemma [`close_frac_borrow`](https://github.com/verifast/verifast/blob/2e7dd7a6d1aef2c9ffe7a1cedcbe28463f02440b/bin/rust/rust_belt/lifetime_logic.rsspec#L280) to recover the lifetime token fraction. This lemma consumes the payload fraction `f` that was produced by `open_frac_borrow`.
+The proof uses lemma [`open_frac_borrow`](https://github.com/verifast/verifast/blob/2e7dd7a6d1aef2c9ffe7a1cedcbe28463f02440b/bin/rust/rust_belt/lifetime_logic.rsspec#L275) to obtain fractional ownership at some fraction `f` of the fractured borrow's payload. This is sufficient to read (but not write) the `cap` field. Notice that `open_frac_borrow` consumes a fraction, with coefficient given by its third argument, of the lifetime token for `k`. Indeed, accessing a fractured borrow is possible only while its lifetime is alive. Since the proof must return to the caller the fraction `q` of the lifetime token that it received from the caller, it is forced to call lemma [`close_frac_borrow`](https://github.com/verifast/verifast/blob/2e7dd7a6d1aef2c9ffe7a1cedcbe28463f02440b/bin/rust/rust_belt/lifetime_logic.rsspec#L280) to recover the lifetime token fraction. This lemma consumes the payload fraction `f` that was produced by `open_frac_borrow`.
 
 ### Lemma `init_ref_RawVecInner_`
 
@@ -605,6 +609,419 @@ Lemma `close_frac_borrow_strong_` requires the restoring lemma to be proven. Mor
 The proof of the restoring lemma opens the payload predicates and the context predicate. It then calls `open_ref_initialized_RawVecInner` to turn the `[f]ref_initialized(l)` chunk back into chunks for the fields and for the padding. It then uses `end_ref_readonly` and `end_ref_padding_RawVecInner` to transfer the fractional ownership at `l` back to `l0`. At that point the original payload predicates can be closed up.
 
 The `Client` block of the `produce_lem_ptr_chunk` ghost command simply calls `close_frac_borrow_strong_`. This lemma produces a full borrow, which is turned into a fractured borrow using [`full_borrow_into_frac`](https://github.com/verifast/verifast/blob/e829d5aaa295ed63b278e86ce694914f983f2d65/bin/rust/rust_belt/lifetime_logic.rsspec#L262). The resulting fractured borrow is split into two using [`frac_borrow_split`](https://github.com/verifast/verifast/blob/e829d5aaa295ed63b278e86ce694914f983f2d65/bin/rust/rust_belt/lifetime_logic.rsspec#L314). At this point, the proof has two fractured borrows, each of whose payloads is scaled by some coefficient. The coefficients are dropped using lemma [`frac_borrow_implies_scaled`](https://github.com/verifast/verifast/blob/e829d5aaa295ed63b278e86ce694914f983f2d65/bin/rust/rust_belt/lifetime_logic.rsspec#L324).
+
+### RawVecInner associated function `needs_to_grow`
+
+The original code for this function is as follows:
+```rust
+impl<A: Allocator> RawVecInner<A> {
+    fn needs_to_grow(&self, len: usize, additional: usize, elem_layout: Layout) -> bool {
+        additional > self.capacity(elem_layout.size()).wrapping_sub(len)
+    }
+}
+```
+
+The verified version is as follows:
+```rust
+    fn needs_to_grow(&self, len: usize, additional: usize, elem_layout: Layout) -> bool
+    /*@
+    req [_]RawVecInner_share_(?k, ?t, self, ?elemLayout, ?alloc_id, ?ptr, ?capacity) &*&
+        [?qa]lifetime_token(k);
+    @*/
+    //@ ens [qa]lifetime_token(k) &*& elem_layout != elemLayout || result == (additional > std::num::wrapping_sub_usize(capacity, len));
+    //@ safety_proof { ... }
+    {
+        //@ let self_ref = precreate_ref(self);
+        //@ init_ref_RawVecInner_(self_ref);
+        //@ open_frac_borrow(k, ref_initialized_(self_ref), qa/2);
+        //@ open [?f]ref_initialized_::<RawVecInner<A>>(self_ref)();
+        let r = additional > unsafe { &*(self as *const RawVecInner<A>) }.capacity(elem_layout.size()).wrapping_sub(len);
+        //@ close [f]ref_initialized_::<RawVecInner<A>>(self_ref)();
+        //@ close_frac_borrow(f, ref_initialized_(self_ref));
+        r
+    }
+}
+```
+
+This function takes a shared reference to a RawVecInner object and calls method `capacity` on it. The original code simply writes `self` as the target expression for the method call; the verified code instead writes `unsafe { &*(self as *const RawVecInner<A>) }`. These two expressions are equivalent (as verified by `refinement-checker`); it's just that the former triggers special treatment by VeriFast for implicit reborrows which is sometimes convenient but not in this case. (Specifically, it causes VeriFast to treat the reborrow as a call of lemma [`reborrow_ref_implicit`](https://github.com/verifast/verifast/blob/b6b92b53bb70832774c327ba09d1914a0063a659/bin/rust/rust_belt/aliasing.rsspec#L6), which requires a `[_]frac_borrow(?k, ref_initialized_(x))` resource, where `x` denotes the place being reborrowed, i.e. `self` in this case. However, we do not have this resource available; we only have such a resource for the new shared reference `self_ref` created by the reborrow.)
+
+The proof precreates a reborrow and initializes it using lemma `init_ref_RawVecInner_` (discussed above). It then opens the fractured borrow containing the `ref_initialized(self_ref)` chunk to satisfy the [`create_ref`](https://github.com/verifast/verifast/blob/b6b92b53bb70832774c327ba09d1914a0063a659/bin/rust/aliasing.rsspec#L87) call substituted by VeriFast for the reborrow operation.
+
+### RawVecInner associated function `with_capacity_in`
+
+```rust
+impl<A: Allocator> RawVecInner<A> {
+    fn with_capacity_in(capacity: usize, alloc: A, elem_layout: Layout) -> Self
+    /*@
+    req thread_token(?t) &*&
+        Allocator(t, alloc, ?alloc_id) &*&
+        t == currentThread;
+    @*/
+    /*@
+    ens thread_token(t) &*&
+        RawVecInner(t, result, elem_layout, alloc_id, ?ptr, ?capacity_) &*&
+        array_at_lft_(alloc_id.lft, ptr, ?n, _) &*&
+        elem_layout.size() % elem_layout.align() != 0 || n == elem_layout.size() * capacity_ &*&
+        capacity <= capacity_;
+    @*/
+    //@ safety_proof { ... }
+    {
+        match Self::try_allocate_in(capacity, AllocInit::Uninitialized, alloc, elem_layout) {
+            Ok(mut this) => {
+                unsafe {
+                    // Make it more obvious that a subsequent Vec::reserve(capacity) will not allocate.
+                    //@ let k = begin_lifetime();
+                    //@ share_RawVecInner(k, &this);
+                    //@ let this_ref = precreate_ref(&this);
+                    //@ init_ref_RawVecInner_(this_ref);
+                    //@ open_frac_borrow(k, ref_initialized_(this_ref), 1/2);
+                    //@ open [?f]ref_initialized_::<RawVecInner<A>>(this_ref)();
+                    let needs_to_grow = this.needs_to_grow(0, capacity, elem_layout);
+                    //@ close [f]ref_initialized_::<RawVecInner<A>>(this_ref)();
+                    //@ close_frac_borrow(f, ref_initialized_(this_ref));
+                    //@ end_lifetime(k);
+                    //@ end_share_RawVecInner(&this);
+                    //@ open_points_to(&this);
+                    
+                    hint::assert_unchecked(!needs_to_grow);
+                }
+                this
+            }
+            Err(err) => handle_error(err),
+        }
+    }
+}
+```
+
+This function calls `try_allocate_in` and then creates a shared reference to the resulting RawVecInner object calls method `needs_to_grow` on it. The proof creates a lifetime, uses lemma `share_RawVecInner` (discussed above) to temporarily (for the duration of lifetime `k`) convert exclusive ownership of `this` into shared ownership of `this`, then precreates shared reference `this_ref` to `this` and initializes it with lemma `init_ref_RawVecInner_` (discussed above), then opens the fractured borrow containing the proof that `this_ref` has been initialized, then calls `needs_to_grow`, then closes the fractured borrow back up, ends the lifetime, and calls `end_share_RawVecInner` (discussed above) to recover exclusive ownership of `this`.
+
+The proof then calls ghost command `open_points_to` to turn the single `points_to` chunk expressing ownership of the `this` variable into a separate one for each field of `this` (plus one expressing ownership of the struct padding). This is needed because the subsequent `this` expression loads from this variable, and when loading from a variable of a struct type whose definition is known, VeriFast expects the individual field chunks, not the single chunk for the entire struct. While VeriFast attempts to perform this conversion automatically in some cases, unfortunately this automation logic does not yet cover all cases.
+
+### RawVec associated function `with_capacity_in`
+
+```rust
+impl<T, A: Allocator> RawVec<T, A> {
+    pub(crate) fn with_capacity_in(capacity: usize, alloc: A) -> Self
+    //@ req thread_token(?t) &*& Allocator(t, alloc, ?alloc_id) &*& t == currentThread;
+    /*@
+    ens thread_token(t) &*&
+        RawVec(t, result, alloc_id, ?ptr, ?capacity_) &*&
+        array_at_lft_(alloc_id.lft, ptr, capacity_, _) &*&
+        capacity <= capacity_;
+    @*/
+    /*@
+    safety_proof {
+        std::alloc::open_Allocator_own(alloc);
+        let result = call();
+        close <RawVec<T, A>>.own(_t, result);
+    }
+    @*/
+    {
+        //@ size_align::<T>();
+        let r = Self {
+            inner: RawVecInner::with_capacity_in(capacity, alloc, T::LAYOUT),
+            _marker: PhantomData,
+        };
+        //@ close RawVec(t, r, alloc_id, ?ptr, ?capacity_);
+        //@ u8s_at_lft__to_array_at_lft_(ptr, capacity_);
+        r
+    }
+}
+```
+
+Recall the definition of predicate `RawVec`:
+```
+pred RawVec<T, A>(t: thread_id_t, self: RawVec<T, A>, alloc_id: alloc_id_t, ptr: *T, capacity: usize) =
+    RawVecInner(t, self.inner, Layout::new::<T>, alloc_id, ?ptr_, capacity) &*& ptr == ptr_ as *T;
+```
+
+This function's proof first calls lemma [`size_align`](https://github.com/verifast/verifast/blob/b6b92b53bb70832774c327ba09d1914a0063a659/bin/rust/prelude_core.rsspec#L51) to produce the fact that the size of a Rust type is always a multiple of its alignment. This satisfies a precondition of `RawVecInner::with_capacity_in`. After calling that function, its wraps the `RawVecInner` chunk into a `RawVec` chunk and finally calls lemma [`u8s_at_lft__to_array_at_lft_`](https://github.com/verifast/verifast/blob/b6b92b53bb70832774c327ba09d1914a0063a659/bin/rust/rust_belt/points_to_at_lifetime.rsspec#L80) to convert the `arrat_at_lft_::<u8>(alloc_id.lft, ptr as *u8, capacity * T::LAYOUT.size(), _)` chunk into an `array_at_lft_::<T>(alloc_id.lft, ptr, capacity, _)` chunk. (Since `ptr` is of type `*T`, VeriFast infers the type argument of the `array_of_lft_` assertion in `RawVec::with_capacity_in`'s postcondition.)
+
+This proof also proves semantic well-typedness of this function. Its generated specification is as follows:
+```rust
+fn with_capacity_in(capacity: usize, alloc: A) -> Self
+//@ req thread_token(?t) &*& <A>.own(t, alloc) &*& t == currentThread;
+//@ ens thread_token(t) &*& <RawVec<T, A>>.own(t, result);
+```
+
+The proof defines `RawVec<T, A>.own` as follows:
+```
+pred<T, A> <RawVec<T, A>>.own(t, self_) =
+    RawVec(t, self_, ?alloc_id, ?ptr, ?capacity) &*& array_at_lft_(alloc_id.lft, ptr, capacity, _);
+```
+
+That is, we define ownership of a RawVec value, as far as Rust's type system is concerned, to include not just ownership of the allocator and permission to reallocate and deallocate the allocation (if any), but also ownership of the allocated memory region itself. This is necessary because dropping a RawVec deallocates the allocation, and VeriFast treats dropping a value like a call of [`std::ptr::drop_in_place`](https://github.com/verifast/verifast/blob/b6b92b53bb70832774c327ba09d1914a0063a659/bin/rust/std/lib.rsspec#L488), which requires only `<T>.own`.
+
+The safety proof, as given in the `safety_proof` clause, is straightforward: first, the `<A>.own` chunk is turned into an `Allocator` chunk using lemma [`open_Allocator_own`](https://github.com/verifast/verifast/blob/b6b92b53bb70832774c327ba09d1914a0063a659/bin/rust/std/lib.rsspec#L846), then the implementation proof is called, and then the RawVec and `array_at_lft_` chunks produced by that proof are bundled up into a `<RawVec<T, A>>.own` chunk using the `close` ghost command.
+
+#### `<RawVec<T, A>>.own` proof obligations
+
+Defining the `<S>.own` predicate for a struct S defined by the program being verified generally entails a number of proof obligations. Specifically, if S is Send, VeriFast looks for a lemma `S_send` that proves that
+`<S>own(t, v)` is insensitive to the thread identifier `t`:
+
+```
+lem RawVec_send<T, A>(t1: thread_id_t)
+    req type_interp::<T>() &*& type_interp::<A>() &*& is_Send(typeid(RawVec<T, A>)) == true &*& RawVec_own::<T, A>(?t0, ?v);
+    ens type_interp::<T>() &*& type_interp::<A>() &*& RawVec_own::<T, A>(t1, v);
+{
+    open <RawVec<T, A>>.own(t0, v);
+    open RawVec(t0, v, ?alloc_id, ?ptr, ?capacity);
+    RawVecInner_send_::<A>(t1);
+    close RawVec(t1, v, alloc_id, ptr, capacity);
+    close <RawVec<T, A>>.own(t1, v);
+}
+```
+
+This proof uses auxiliary lemma `RawVecInner_send_`, which in turn uses `Allocator_send`:
+```
+lem RawVecInner_send_<A>(t1: thread_id_t)
+    req type_interp::<A>() &*& is_Send(typeid(A)) == true &*& RawVecInner::<A>(?t0, ?self_, ?elemLayout, ?alloc_id, ?ptr, ?capacity);
+    ens type_interp::<A>() &*& RawVecInner::<A>(t1, self_, elemLayout, alloc_id, ptr, capacity);
+{
+    open RawVecInner(t0, self_, elemLayout, alloc_id, ptr, capacity);
+    std::alloc::Allocator_send(t1, self_.alloc);
+    close RawVecInner(t1, self_, elemLayout, alloc_id, ptr, capacity);
+}
+```
+
+Furthermore, since Rust considers type `RawVec<T, A>` to be *covariant* in T and A, VeriFast looks for a lemma `RawVec_own_mono` that proves that `<RawVec<T, A>>.own(t, v)` is preserved by weakening of T and A. However, the treatment of this proof obligation is [work in progress](https://github.com/verifast/verifast/issues/610).
+
+(Also, if a struct S does not implement Drop and its field types are not understood by VeriFast to be trivially droppable, VeriFast looks for a lemma `S_drop` that proves that `<S>.own(t, v)` implies ownership of the non-trivially-droppable fields of `v`. This is necessary for the safety of dropping an S value. However, `RawVec` does implement Drop; the safety of dropping a RawVec value follows from the safety of its `drop` method.)
+
+### RawVec associated function `capacity`
+
+```rust
+impl<T, A: Allocator> RawVec<T, A> {
+    pub(crate) const fn capacity(&self) -> usize
+    //@ req [_]RawVec_share_(?k, ?t, self, ?alloc_id, ?ptr, ?capacity) &*& [?q]lifetime_token(k);
+    //@ ens [q]lifetime_token(k) &*& result == capacity;
+    /*@
+    safety_proof {
+        open <RawVec<T, A>>.share(?k, _t, self);
+        call();
+    }
+    @*/
+    {
+        //@ open RawVec_share_(k, t, self, alloc_id, ptr, capacity);
+        //@ let inner_ref = precreate_ref(&(*self).inner);
+        //@ init_ref_RawVecInner_(inner_ref);
+        //@ open_frac_borrow(k, ref_initialized_(inner_ref), q/2);
+        //@ open [?f]ref_initialized_::<RawVecInner<A>>(inner_ref)();
+        let r = self.inner.capacity(size_of::<T>());
+        //@ close [f]ref_initialized_::<RawVecInner<A>>(inner_ref)();
+        //@ close_frac_borrow(f, ref_initialized_(inner_ref));
+        r
+    }
+}
+```
+
+This function requires shared ownership of a RawVec value, expressed using predicate `RawVec_share_`, which is a trivial wrapper around `RawVecInner_share_` (discussed above):
+```
+pred RawVec_share_<T, A>(k: lifetime_t, t: thread_id_t, l: *RawVec<T, A>, alloc_id: alloc_id_t, ptr: *T, capacity: usize) =
+    [_]RawVecInner_share_(k, t, &(*l).inner, Layout::new::<T>(), alloc_id, ptr as *u8, capacity);
+```
+
+This proof includes a `safety_proof` clause that proves semantic well-typedness, i.e. compliance with the following generated specification:
+```rust
+pub(crate) const fn capacity(&self) -> usize
+//@ req thread_token(?_t) &*& [?q]lifetime_token(?k) &*& [_]<RawVec<T, A>>.share(k, _t, self) &*& _t == currentThread;
+//@ ens thread_token(_t) &*& [q]lifetime_token(k);
+```
+which can be obtained from the following more uniform specification by unfolding `<&'a RawVec<T, A>>.own(_t, self)`:
+```rust
+pub(crate) const fn capacity<'a>(&'a self) -> usize
+//@ req thread_token(?_t) &*& [?q]lifetime_token('a) &*& <&'a RawVec<T, A>>.own(_t, self);
+//@ ens thread_token(_t) &*& [q]lifetime_token('a);
+```
+Indeed, exclusive ownership of a shared reference is defined as shared ownership of the referent: `<&'a T>.own(t, l) = [_]<T>.share('a, t, l)`.
+
+The proof defines the meaning of shared ownership of a RawVec object as follows:
+```
+pred<T, A> <RawVec<T, A>>.share(k, t, l) = [_]RawVec_share_(k, t, l, ?alloc_id, ?ptr, ?capacity);
+```
+
+#### `<RawVec<T, A>>.share` proof obligations
+
+If a proof defines the `<S>.share` predicate for a struct S, a number of proof obligations are imposed upon it. First of all, VeriFast looks for a lemma `S_share_full` that proves that ownership of a
+full borrow of the ownership of a RawVec object can be converted into shared ownership of the object:
+```
+lem RawVec_share_full<T, A>(k: lifetime_t, t: thread_id_t, l: *RawVec<T, A>)
+    req type_interp::<T>() &*& type_interp::<A>() &*& atomic_mask(MaskTop) &*& full_borrow(k, RawVec_full_borrow_content::<T, A>(t, l)) &*& [?q]lifetime_token(k) &*& ref_origin(l) == l;
+    ens type_interp::<T>() &*& type_interp::<A>() &*& atomic_mask(MaskTop) &*& [_]RawVec_share::<T, A>(k, t, l) &*& [q]lifetime_token(k);
+{
+    let klong = open_full_borrow_strong_m(k, RawVec_full_borrow_content::<T, A>(t, l), q);
+    open RawVec_full_borrow_content::<T, A>(t, l)();
+    let self_ = *l;
+    open <RawVec<T, A>>.own(t, self_);
+    open RawVec(t, self_, ?alloc_id, ?ptr, ?capacity);
+    open RawVecInner(t, self_.inner, Layout::new::<T>(), alloc_id, ptr as *u8, capacity);
+    {
+        pred Ctx() =
+            if capacity * std::mem::size_of::<T>() == 0 {
+                true
+            } else {
+                Layout::new::<T>().repeat(capacity) == some(pair(?allocLayout, ?stride)) &*&
+                alloc_block_in(alloc_id, ptr as *u8, allocLayout)
+            } &*&
+            array_at_lft_(alloc_id.lft, ptr, capacity, _);
+        produce_lem_ptr_chunk full_borrow_convert_strong(Ctx, sep(std::alloc::Allocator_full_borrow_content_(t, &(*l).inner.alloc, alloc_id), RawVecInner_frac_borrow_content(&(*l).inner, Layout::new::<T>(), ptr as *u8, capacity)), klong, RawVec_full_borrow_content(t, l))() {
+            open Ctx();
+            open sep(std::alloc::Allocator_full_borrow_content_(t, &(*l).inner.alloc, alloc_id), RawVecInner_frac_borrow_content(&(*l).inner, Layout::new::<T>(), ptr as *u8, capacity))();
+            std::alloc::open_Allocator_full_borrow_content_(t, &(*l).inner.alloc, alloc_id);
+            open RawVecInner_frac_borrow_content::<A>(&(*l).inner, Layout::new::<T>(), ptr as *u8, capacity)();
+            close RawVecInner(t, (*l).inner, Layout::new::<T>(), alloc_id, ptr as *u8, capacity);
+            close RawVec(t, *l, alloc_id, ptr, capacity);
+            close <RawVec<T, A>>.own(t, *l);
+            close RawVec_full_borrow_content::<T, A>(t, l)();
+        } {
+            close Ctx();
+            std::alloc::close_Allocator_full_borrow_content_(t, &(*l).inner.alloc);
+            close RawVecInner_frac_borrow_content::<A>(&(*l).inner, Layout::new::<T>(), ptr as *u8, capacity)();
+            close sep(std::alloc::Allocator_full_borrow_content_(t, &(*l).inner.alloc, alloc_id), RawVecInner_frac_borrow_content(&(*l).inner, Layout::new::<T>(), ptr as *u8, capacity))();
+            close_full_borrow_strong_m(klong, RawVec_full_borrow_content(t, l), sep(std::alloc::Allocator_full_borrow_content_(t, &(*l).inner.alloc, alloc_id), RawVecInner_frac_borrow_content(&(*l).inner, Layout::new::<T>(), ptr as *u8, capacity)));
+            full_borrow_mono(klong, k, sep(std::alloc::Allocator_full_borrow_content_(t, &(*l).inner.alloc, alloc_id), RawVecInner_frac_borrow_content(&(*l).inner, Layout::new::<T>(), ptr as *u8, capacity)));
+            full_borrow_split_m(k, std::alloc::Allocator_full_borrow_content_(t, &(*l).inner.alloc, alloc_id), RawVecInner_frac_borrow_content(&(*l).inner, Layout::new::<T>(), ptr as *u8, capacity));
+        }
+    }
+    std::alloc::share_Allocator_full_borrow_content_m(k, t, &(*l).inner.alloc, alloc_id);
+    full_borrow_into_frac_m(k, RawVecInner_frac_borrow_content(&(*l).inner, Layout::new::<T>(), ptr as *u8, capacity));
+    close RawVecInner_share_::<A>(k, t, &(*l).inner, Layout::new::<T>(), alloc_id, ptr as *u8, capacity);
+    leak RawVecInner_share_::<A>(k, t, &(*l).inner, Layout::new::<T>(), alloc_id, ptr as *u8, capacity);
+    close RawVec_share_::<T, A>(k, t, l, alloc_id, ptr, capacity);
+    leak RawVec_share_::<T, A>(k, t, l, alloc_id, ptr, capacity);
+    close RawVec_share::<T, A>(k, t, l);
+    leak RawVec_share::<T, A>(k, t, l);
+}
+```
+
+Secondly, VeriFast looks for a lemma `S_share_mono` that proves that shared ownership is preserved by weakening (i.e. shortening) of the lifetime. (Indeed, `<S>.share(k, t, l)` asserts shared ownership of the object at `l` until the end of lifetime `k`, but does *not* assert that shared ownership necessarily ends when `k` ends.)
+
+```
+lem RawVec_share_mono<T, A>(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *RawVec<T, A>)
+    req type_interp::<T>() &*& type_interp::<A>() &*& lifetime_inclusion(k1, k) == true &*& [_]RawVec_share::<T, A>(k, t, l);
+    ens type_interp::<T>() &*& type_interp::<A>() &*& [_]RawVec_share::<T, A>(k1, t, l);
+{
+    open RawVec_share::<T, A>(k, t, l);
+    RawVec_share__mono(k, k1, t, l);
+    close RawVec_share::<T, A>(k1, t, l);
+    leak RawVec_share::<T, A>(k1, t, l);
+}
+
+lem RawVec_share__mono<T, A>(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *RawVec<T, A>)
+    req type_interp::<T>() &*& type_interp::<A>() &*& lifetime_inclusion(k1, k) == true &*& [_]RawVec_share_::<T, A>(k, t, l, ?alloc_id, ?ptr, ?capacity);
+    ens type_interp::<T>() &*& type_interp::<A>() &*& [_]RawVec_share_::<T, A>(k1, t, l, alloc_id, ptr, capacity);
+{
+    open RawVec_share_(k, t, l, alloc_id, ptr, capacity);
+    RawVecInner_share__mono(k, k1, t, &(*l).inner);
+    close RawVec_share_(k1, t, l, alloc_id, ptr, capacity);
+    leak RawVec_share_(k1, t, l, alloc_id, ptr, capacity);
+}
+
+lem RawVecInner_share__mono<A>(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *RawVecInner<A>)
+    req type_interp::<A>() &*& lifetime_inclusion(k1, k) == true &*& [_]RawVecInner_share_::<A>(k, t, l, ?elemLayout, ?alloc_id, ?ptr, ?capacity);
+    ens type_interp::<A>() &*& [_]RawVecInner_share_::<A>(k1, t, l, elemLayout, alloc_id, ptr, capacity);
+{
+    open [_]RawVecInner_share_(k, t, l, elemLayout, alloc_id, ptr, capacity);
+    std::alloc::Allocator_share_mono::<A>(k, k1, t, &(*l).alloc);
+    frac_borrow_mono(k, k1, RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity));
+    close RawVecInner_share_::<A>(k1, t, l, elemLayout, alloc_id, ptr, capacity);
+    leak RawVecInner_share_::<A>(k1, t, l, elemLayout, alloc_id, ptr, capacity);
+}
+```
+
+Finally, if S is Sync, VeriFast looks for a lemma `S_sync` proving that `<S>.share(k, t, l)` is insensitive to the thread identifier `t`:
+```
+lem RawVec_sync<T, A>(t1: thread_id_t)
+    req type_interp::<T>() &*& type_interp::<A>() &*& is_Sync(typeid(RawVec<T, A>)) == true &*& [_]RawVec_share::<T, A>(?k, ?t0, ?l);
+    ens type_interp::<T>() &*& type_interp::<A>() &*& [_]RawVec_share::<T, A>(k, t1, l);
+{
+    open RawVec_share::<T, A>(k, t0, l);
+    RawVec_sync_::<T, A>(t1);
+    close RawVec_share::<T, A>(k, t1, l);
+    leak RawVec_share::<T, A>(k, t1, l);
+}
+
+lem RawVec_sync_<T, A>(t1: thread_id_t)
+    req type_interp::<T>() &*& type_interp::<A>() &*& is_Sync(typeid(RawVec<T, A>)) == true &*& [_]RawVec_share_::<T, A>(?k, ?t0, ?l, ?alloc_id, ?ptr, ?capacity);
+    ens type_interp::<T>() &*& type_interp::<A>() &*& [_]RawVec_share_::<T, A>(k, t1, l, alloc_id, ptr, capacity);
+{
+    open RawVec_share_::<T, A>(k, t0, l, alloc_id, ptr, capacity);
+    RawVecInner_sync_::<A>(t1);
+    close RawVec_share_::<T, A>(k, t1, l, alloc_id, ptr, capacity);
+    leak RawVec_share_::<T, A>(k, t1, l, alloc_id, ptr, capacity);
+}
+
+lem RawVecInner_sync_<A>(t1: thread_id_t)
+    req type_interp::<A>() &*& is_Sync(typeid(A)) == true &*& [_]RawVecInner_share_::<A>(?k, ?t0, ?l, ?elemLayout, ?alloc_id, ?ptr, ?capacity);
+    ens type_interp::<A>() &*& [_]RawVecInner_share_::<A>(k, t1, l, elemLayout, alloc_id, ptr, capacity);
+{
+    open RawVecInner_share_(k, t0, l, elemLayout, alloc_id, ptr, capacity);
+    std::alloc::Allocator_sync::<A>(t1);
+    close RawVecInner_share_(k, t1, l, elemLayout, alloc_id, ptr, capacity);
+    leak RawVecInner_share_(k, t1, l, elemLayout, alloc_id, ptr, capacity);
+}
+```
+
+(Actually, VeriFast should also check that `<S>.share` is consistent with the *variance* of type S; that is, it should look for a lemma that proves that `<S>.share` is preserved by weakening of S. Checking for such a proof obligation is [future work](https://github.com/verifast/verifast/issues/610).)
+
+### RawVec method `drop`
+
+```rust
+unsafe impl<#[may_dangle] T, A: Allocator> Drop for RawVec<T, A> {
+    /// Frees the memory owned by the `RawVec` *without* trying to drop its contents.
+    fn drop(&mut self)
+    //@ req thread_token(?t) &*& t == currentThread &*& <RawVec<T, A>>.full_borrow_content(t, self)();
+    //@ ens thread_token(t) &*& (*self).inner |-> ?inner &*& <RawVecInner<A>>.own(t, inner);
+    {
+        //@ open <RawVec<T, A>>.full_borrow_content(t, self)();
+        //@ open <RawVec<T, A>>.own(t, *self);
+        //@ open RawVec(t, *self, ?alloc_id, ?ptr, ?capacity);
+        //@ array_at_lft__to_u8s_at_lft_(ptr, capacity);
+        //@ size_align::<T>();
+        // SAFETY: We are in a Drop impl, self.inner will not be used again.
+        unsafe { self.inner.deallocate(T::LAYOUT) }
+    }
+}
+```
+
+(Remember that `<T>.full_borrow_content(t, l)()` is defined as `*l |-> ?v &*& <T>.own(t, v)`, i.e. ownership of the place `l` and the value it stores.)
+
+This function calls `RawVecInner::deallocate`, which the proof verifies against the following specification:
+```rust
+impl<A: Allocator> RawVecInner<A> {
+    unsafe fn deallocate(&mut self, elem_layout: Layout)
+    /*@
+    req thread_token(?t) &*&
+        *self |-> ?self0 &*&
+        RawVecInner(t, self0, elem_layout, ?alloc_id, ?ptr_, ?capacity) &*&
+        elem_layout.size() % elem_layout.align() == 0 &*&
+        array_at_lft_(alloc_id.lft, ptr_, capacity * elem_layout.size(), _);
+    @*/
+    //@ ens thread_token(t) &*& *self |-> ?self1 &*& <RawVecInner<A>>.own(t, self1);
+}
+```
+
+The written specification for `drop` matches its generated specification. More generally, the generated specification for a `Drop::drop` method requires ownership of the object being dropped, and ensures ownership
+of each field subobject. (The latter reflects the fact that after calling `drop` on a struct value, Rust drops each of its fields.)
+
+For this specification to hold, we are forced to define `<RawVecInner<A>>.own` such that it does *not* assert permission to deallocate or reallocate the allocation, nor ownership of the allocated memory region itself:
+```
+pred<A> <RawVecInner<A>>.own(t, self_) =
+    <A>.own(t, self_.alloc) &*&
+    RawVecInner0(self_, ?elemLayout, ?ptr, ?capacity);    
+
+pred RawVecInner0<A>(self: RawVecInner<A>, elemLayout: Layout, ptr: *u8, capacity: usize) =
+    capacity == logical_capacity(self.cap, elemLayout.size()) &*&
+    ptr == self.ptr.as_non_null_ptr().as_ptr() &*&
+    ptr as usize % elemLayout.align() == 0 &*&
+    pointer_within_limits(ptr) == true &*&
+    if capacity * elemLayout.size() == 0 {
+        true
+    } else {
+        elemLayout.repeat(capacity) == some(pair(?allocLayout, ?stride))
+    };
+```
+This predicate asserts only ownership of the allocator, as well as the facts expressing validity of the RawVecInner object.
 
 ## Caveats
 
