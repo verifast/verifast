@@ -31,7 +31,6 @@ Some of the more notable proofs done with VeriFast (with caveats) include:
 - A partial proof of the Rust standard library's [LinkedList](https://github.com/verifast/verifast/tree/master/tests/rust/safe_abstraction/linked_list) and [RawVec](https://github.com/verifast/verifast/tree/master/tests/rust/safe_abstraction/raw_vec) abstractions
 - Proofs of simplified versions of Rust's [Cell](https://github.com/verifast/verifast/blob/master/tests/rust/safe_abstraction/cell.rs), [Mutex](https://github.com/verifast/verifast/blob/master/tests/rust/safe_abstraction/mutex.rs), [Rc](https://github.com/verifast/verifast/blob/master/tests/rust/safe_abstraction/rc.rs), [Arc](https://github.com/verifast/verifast/blob/master/tests/rust/safe_abstraction/arc.rs), and [RefCell](https://github.com/verifast/verifast/blob/master/tests/rust/safe_abstraction/ref_cell.rs) abstractions
 
-
 Binaries
 --------
 
@@ -88,6 +87,11 @@ Documentation
 - [VeriFast Docs](https://verifast.github.io/verifast-docs/) (under construction) with a nascent FAQ and a grammar for annotated C/Java source files
 - [The VeriFast for Rust Reference](https://verifast.github.io/verifast/rust-reference) (under construction)
 
+Getting help
+------------
+
+The maintainer (and, perhaps, other VeriFast users and enthusiasts as well) can be reached for informal chat in the [VeriFast Zulip chatroom](https://verifast.zulipchat.com).
+
 Acknowledgements
 ----------------
 
@@ -115,8 +119,7 @@ We gratefully acknowledge the authors and contributors of the following software
 We gratefully acknowledge the following infrastructure providers.
 
 - GitHub
-- Travis CI
-- AppVeyor CI
+- The [Zulip](https://zulip.com) team chat app
 
 ### Funding
 
