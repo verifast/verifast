@@ -516,7 +516,7 @@ let _ =
             ; "-expect_json_result", String (fun file -> json := true; expected_json_result_file := Some file), "Expect JSON result from file"
             ; "-apply_quick_fix", String (fun file -> apply_quick_fix := Some file), "Apply the quick fix proposed by VeriFast and write the resulting source file to the specified file"
             ; "-verbose", Set_int verbose, "-1 = file processing; 1 = statement executions; 2 = produce/consume steps; 4 = prover queries."
-            ; "-verbose_flag", String (fun flag -> verbose_flags := flag::!verbose_flags), "Enable particular verbose output. Flags: rust_exporter"
+            ; "-verbose_flag", String (fun flag -> verbose_flags := flag::!verbose_flags), "Enable particular verbose output. Flags: rust_exporter type_pred_defs"
             ; "-prover", String (fun str -> prover := str), "Set SMT prover (" ^ list_provers() ^ ")."
             ; "-c", Set compileOnly, "Compile only, do not perform link checking."
             ; "-shared", Set isLibrary, "The file is a library (i.e. no main function required)."

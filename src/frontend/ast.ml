@@ -187,6 +187,65 @@ and inferred_type_state =
   | ContainsAnyConstraint of bool (* allow the type to contain 'any' in positive positions *)
   | EqConstraint of type_
 
+let rec unfold_inferred_type t =
+  match t with
+    InferredType (_, t') ->
+    begin
+      match !t' with
+        EqConstraint t -> unfold_inferred_type t
+      | _ -> t
+    end
+  | _ -> t
+
+(** Checks whether `t2` is an instance of `t1`, treating the type parameters of `t2` as opaque.
+    Returns `Some subs` where `subs` associates each type parameter of `t1` with the type that, when substituted for that parameter, yields `t2`.
+    Returns `None` if no such substitution is found. *)
+let is_instance (l: loc) (t1: type_) (t2: type_) =
+  let open Ocaml_aux.ListAux in
+  let rec iter substs t1 t2 =
+    match t1, t2 with
+      Bool, Bool -> Some substs
+    | Void, Void -> Some substs
+    | Int _, Int _ -> if t1 = t2 then Some substs else None
+    | RustChar, RustChar -> Some substs
+    | RealType, RealType -> Some substs
+    | Float, Float -> Some substs
+    | Double, Double -> Some substs
+    | LongDouble, LongDouble -> Some substs
+    | StructType (sn1, targs1), StructType (sn2, targs2) -> if sn1 = sn2 then fold_left2_opt iter substs targs1 targs2 else None
+    | UnionType un1, UnionType un2 -> if un1 = un2 then Some substs else None
+    | PtrType t1, PtrType t2 -> iter substs t1 t2
+    | RustRefType (lft1, ref_kind1, t1), RustRefType (lft2, ref_kind2, t2) -> if ref_kind1 = ref_kind2 then fold_left2_opt iter substs [lft1; t1] [lft2; t2] else None
+    | FuncType ftn1, FuncType ftn2 -> if ftn1 = ftn2 then Some substs else None
+    | InlineFuncType t1, InlineFuncType t2 -> iter substs t1 t2
+    | InductiveType (n1, targs1), InductiveType (n2, targs2) -> if n1 = n2 then fold_left2_opt iter substs targs1 targs2 else None
+    | PredType (tparams1, param_ts1, preciseness1, inductiveness1), PredType (tparams2, param_ts2, preciseness2, inductiveness2) ->
+      if preciseness1 = preciseness2 && inductiveness1 = inductiveness2 then fold_left2_opt iter substs param_ts1 param_ts2 else None
+    | PureFuncType (t1, t1_0), PureFuncType (t2, t2_0) -> fold_left2_opt iter substs [t1; t1_0] [t2; t2_0]
+    | ObjType (n1, targs1), ObjType (n2, targs2) -> if n1 = n2 then fold_left2_opt iter substs targs1 targs2 else None
+    | ArrayType t1, ArrayType t2 -> iter substs t1 t2
+    | StaticArrayType (t1, size1), StaticArrayType (t2, size2) -> fold_left2_opt iter substs [size1; t1] [size2; t2]
+    | LiteralConstType i1, LiteralConstType i2 -> if i1 = i2 then Some substs else None
+    | BoxIdType , BoxIdType -> Some substs
+    | HandleIdType , HandleIdType -> Some substs
+    | AnyType, AnyType -> Some substs
+    | InferredRealType tpn, _ -> None
+    | RealTypeParam tpn1, _
+    | GhostTypeParam tpn1, _ ->
+      begin match List.assoc_opt tpn1 substs with None -> Some ((tpn1, t2)::substs) | Some t -> if t = t2 then Some substs else None end
+    | GhostTypeParamWithEqs (tpn1, _), _ -> failwith "Not supported yet" (* TODO: type projection equalities should be satisfiable in case we need to add a new substitution entry *)
+    | InferredType (_, state1), _ -> begin match !state1 with EqConstraint t1 -> iter substs t1 t2 | _ -> None end
+    | _, InferredType (_, state2) -> begin match !state2 with EqConstraint t2 -> iter substs t1 t2 | _ -> None end
+    | ClassOrInterfaceName n1, ClassOrInterfaceName n2 -> failwith "Not supported yet"
+    | PackageName n1, PackageName n2 -> static_error l "Instantiation check for package names" None
+    | RefType t1, RefType t2 -> iter substs t1 t2
+    | AbstractType n1, AbstractType n2 -> if n1 = n2 then Some substs else None
+    | StaticLifetime, StaticLifetime -> Some substs
+    | ProjectionType (t1, trait1, targs1, assoc_tn1), ProjectionType (t2, trait2, targs2, assoc_tn2) ->
+      if trait1 = trait2 && assoc_tn1 = assoc_tn2 then fold_left2_opt iter substs (t1::targs1) (t2::targs2) else None
+    | _ -> None
+  in iter [] t1 t2
+
 let type_fold_open state f = function
   Bool | Void | Int (_, _) | RustChar | RealType | Float | Double | LongDouble -> state
 | StructType (sn, targs) -> List.fold_left f state targs

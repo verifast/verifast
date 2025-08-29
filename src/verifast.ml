@@ -4044,12 +4044,18 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         field_pred_map1, predfammap1, predinstmap1, typedefmap1, functypemap1, 
         funcmap1, boxmap, classmap1, interfmap1, classterms1, interfaceterms1, 
         abstract_types_map1, cxx_ctor_map1, cxx_dtor_map1, bases_constructed_map1, cxx_vtype_map1, cxx_inst_pred_map1,
-        typepreddeclmap1
+        typepreddeclmap1, typepreddefmap1
       )
     )
-  
+
+  (* Verbose output per file *)
+  let _ = if List.mem "type_pred_defs" verbose_flags then begin
+      print_endline @@ "Type predicate definitions in " ^ filepath ^ ":";
+      List.iter (fun entry -> print_endline @@ string_of_typepreddefmap_entry @@ entry) typepreddefmap1
+    end
+
   end (* CheckFile *)
-  
+
   let rec check_file filepath is_import_spec include_prelude dir headers ps dbg_info =
     let module CF = CheckFile(struct
       let filepath = filepath
