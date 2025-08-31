@@ -1,6 +1,6 @@
-[![CI](https://github.com/verifast/verifast/workflows/CI/badge.svg)](https://github.com/verifast/verifast/actions)
-[![Build status](https://ci.appveyor.com/api/projects/status/1w7vchky3k6erltw?svg=true)](https://ci.appveyor.com/project/verifast/verifast) [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.13620299.svg)](https://doi.org/10.5281/zenodo.13620299)
+[![CI](https://github.com/verifast/verifast/workflows/CI/badge.svg)](https://github.com/verifast/verifast/actions) [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.13620299.svg)](https://doi.org/10.5281/zenodo.13620299)
 
+[[Quick intros](#quick-intros)] [[Proofs done](#proofs-done)] [[Binaries](#binaries)] [[User interfaces](#user-interfaces)] [[Compiling](#compiling)] [[Documentation](#documentation)] [[Getting help](#getting-help)] [[Acknowledgements](#acknowledgements)] [[Mailing lists](#mailing-lists)] [[Third-party resources](#third-party-resources)]
 
 VeriFast
 ========
@@ -12,6 +12,12 @@ By Bart Jacobs\*, Jan Smans\*, and Frank Piessens\*, with contributions by Piete
 VeriFast is a research prototype of a tool for modular formal verification of correctness properties of single-threaded and multithreaded C, Rust and Java programs annotated with preconditions and postconditions written in separation logic. To express rich specifications, the programmer can define inductive datatypes, primitive recursive pure functions over these datatypes, and abstract separation logic predicates. To verify these rich specifications, the programmer can write lemma functions, i.e., functions that serve only as proofs that their precondition implies their postcondition. The verifier checks that lemma functions terminate and do not have side-effects. Since neither VeriFast itself nor the underlying SMT solver need to do any significant search, verification time is predictable and low.
 
 The VeriFast source code and binaries are released under the [MIT license](LICENSE.md).
+
+Quick intros
+------------
+
+- [A quick introduction to VeriFast for C](intro-c.md)
+- [A quick introduction to VeriFast for Rust](intro-rust.md)
 
 Proofs done
 -----------
@@ -81,7 +87,9 @@ Compiling
 Documentation
 -------------
 
-- [The VeriFast Tutorial](https://doi.org/10.5281/zenodo.887906)
+- [The VeriFast Tutorial](https://doi.org/10.5281/zenodo.887906) (for C, but the concepts apply to Rust as well)
+- [A tour of the RawVec proof](tests/rust/safe_abstraction/raw_vec/) (Rust)
+- [A tour of the LinkedList proof](tests/rust/safe_abstraction/linked_list/) (Rust)
 - [Featherweight VeriFast](http://arxiv.org/pdf/1507.07697) [(Slides, handouts, Coq proof)](https://people.cs.kuleuven.be/~bart.jacobs/fvf)
 - [Scientific papers](https://people.cs.kuleuven.be/~bart.jacobs/verifast/) on the various underlying ideas
 - [VeriFast Docs](https://verifast.github.io/verifast-docs/) (under construction) with a nascent FAQ and a grammar for annotated C/Java source files
