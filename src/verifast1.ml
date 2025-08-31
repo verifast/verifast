@@ -6151,6 +6151,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let lazy_predfamsymb name = lazy_value (fun () -> get_pred_symb name)
   let lazy_purefuncsymb name = lazy_value (fun () -> get_pure_func_symb name)
+
+  let ref_origin_symb = lazy_purefuncsymb "ref_origin"
   
   let bitand_uintN_symb = lazy_purefuncsymb "bitand_uintN"
   let bitand_intN_symb = lazy_purefuncsymb "bitand_intN"
