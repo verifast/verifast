@@ -7329,7 +7329,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           let string_of_generic_arg t = string_of_generic_arg (decode_generic_arg t) in
           match match_gen_arg_lists empty_match_env targs substs with
           | None ->
-            Printf.printf "INFO: Function specialization resolver: did not specialize call of %s::<%s> to %s::<%s>: generic arguments do not match <%s>\n" g_generic (String.concat ", " (List.map string_of_generic_arg substs)) g_specialized (String.concat ", " tparams) (String.concat ", " (List.map string_of_generic_arg targs));
+            if List.mem "specializer" Args.verbose_flags then
+              Printf.printf "INFO: Function specialization resolver: did not specialize call of %s::<%s> to %s::<%s>: generic arguments do not match <%s>\n" g_generic (String.concat ", " (List.map string_of_generic_arg substs)) g_specialized (String.concat ", " tparams) (String.concat ", " (List.map string_of_generic_arg targs));
             None
           | Some env ->
               let substs' : Vf_mir_decoder.generic_arg list =
