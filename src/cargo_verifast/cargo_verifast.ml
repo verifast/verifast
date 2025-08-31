@@ -13,9 +13,11 @@ open Unix
 
 let () =
   let self_path::cmd::args = Array.to_list Sys.argv in
+  let produce_json = List.mem "-json" args in
   let cargo_path = getenv "CARGO" in
   let cargo_env = Array.of_list ("CARGO_BUILD_RUSTC_WRAPPER=rustc-verifast"::(Array.to_list (Unix.environment ()))) in
-  let child = create_process_env cargo_path [| cargo_path; "rustc"; "--"; "--record-rustc-args" |] cargo_env stdin stdout stderr in
+  let cargo_rustc_cmdline = [cargo_path; "rustc"] @ (if produce_json then ["--message-format=json"; "--quiet"] else []) @ ["--"; "--record-rustc-args"] in
+  let child = create_process_env cargo_path (Array.of_list cargo_rustc_cmdline) cargo_env stdin stdout stderr in
   let _, status = waitpid [] child in
   begin match status with
     | WEXITED 0 -> ()
