@@ -478,10 +478,6 @@ lemma_auto void chars_to_pointer(void *p);
     requires [?f]chars(p, sizeof(void *), ?cs) &*& has_type(p, &typeid(void *)) == true;
     ensures [f]pointer(p, pointer_of_chars(cs));
 
-lemma_auto void chars_to_boolean(void *p);
-    requires [?f]chars(p, sizeof(bool), ?cs) &*& has_type(p, &typeid(bool)) == true;
-    ensures [f]boolean(p, _);
-
 lemma_auto void chars_to_integer_(void *p, int size, bool signed_);
     requires [?f]chars(p, size, ?cs);
     ensures [f]integer_(p, size, signed_, _);
