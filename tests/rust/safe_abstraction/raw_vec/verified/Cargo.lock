@@ -3,5 +3,5 @@
 version = 4
 
 [[package]]
-name = "linked_list"
+name = "raw_vec"
 version = "0.1.0"

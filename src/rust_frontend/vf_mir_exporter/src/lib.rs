@@ -2082,7 +2082,7 @@ mod vf_mir_builder {
                         let is_identifier = source_text.chars().all(|c| c.is_alphanumeric() || c == '_');
                         ref_data_cpn.set_is_implicit(is_identifier);
                     }
-                    let typing_env = ty::TypingEnv { typing_mode: ty::TypingMode::PostAnalysis, param_env: ty::ParamEnv::empty() };
+                    let typing_env = enc_ctx.body().typing_env(tcx);
                     ref_data_cpn.set_place_does_not_need_drop(!place_ty.ty.needs_drop(tcx, typing_env));
                 }
                 mir::Rvalue::ThreadLocalRef(def_id) => rvalue_cpn.set_thread_local_ref(()),
@@ -2133,7 +2133,7 @@ mod vf_mir_builder {
                                     None => {}
                                     Some(discr) => {
                                         if discr.val != i.try_into().unwrap() {
-                                            todo!()
+                                            todo!("For ADT {:?}, the discriminant value for variant index {} is not {}, but {:?}", ty.ty, i, i, discr);
                                         }
                                     }
                                 }
