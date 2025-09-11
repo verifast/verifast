@@ -4865,10 +4865,12 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | _ -> static_error l "List expression must not contain patterns" None
       in
       check (to_list_expr pats)
-    | CallExpr (l, "#inductive_ctor_index", [], [], [LitPat e], Static) ->
+    | CallExpr (l, "#inductive_discriminant", [discrTp], [], LitPat e::discrExprs, Static) ->
+      let discrTp = check_pure_type (pn,ilist) tparams Ghost discrTp in
       let w, t, _ = check e in
       let InductiveType (i, targs) = t in
-      (WFunCall (l, "#inductive_ctor_index", [t], [w], Static), Int (Signed, PtrRank), None)
+      let discrExprs = List.map (function LitPat e -> checkt e discrTp) discrExprs in
+      (WFunCall (l, "#inductive_discriminant", [t], w::discrExprs, Static), discrTp, None)
     | CallExpr (l, "#inductive_projection", [], [], [LitPat e; LitPat (WIntLit (_, ctor_index) as i1); LitPat (WIntLit (_, arg_index) as i2)], Static) ->
       let w, t, _ = check e in
       let InductiveType (i, targs) = t in
