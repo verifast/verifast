@@ -30,6 +30,7 @@ pushd ../../rust_tutorials/purely_unsafe/solutions
 popd
 verifast -ignore_ref_creation -allow_assume nonnull.rs
 cd purely_unsafe
+  verifast enum_discr.rs
   verifast -ignore_unwind_paths leftpad.rs
   verifast arrays.rs
   verifast -allow_assume std_thread.rs

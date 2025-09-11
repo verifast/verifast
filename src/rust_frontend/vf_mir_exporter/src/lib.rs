@@ -1740,11 +1740,11 @@ mod vf_mir_builder {
                 ty::TyKind::Bool => ty_kind_cpn.set_bool(()),
                 ty::TyKind::Int(int_ty) => {
                     let int_ty_cpn = ty_kind_cpn.init_int();
-                    Self::encode_ty_int(int_ty, int_ty_cpn);
+                    Self::encode_ty_int(*int_ty, int_ty_cpn);
                 }
                 ty::TyKind::Uint(u_int_ty) => {
                     let u_int_ty_cpn = ty_kind_cpn.init_u_int();
-                    Self::encode_ty_uint(u_int_ty, u_int_ty_cpn)
+                    Self::encode_ty_uint(*u_int_ty, u_int_ty_cpn)
                 }
                 ty::TyKind::Float(_) => ty_kind_cpn.set_float(()),
                 ty::TyKind::Char => ty_kind_cpn.set_char(()),
@@ -1824,7 +1824,7 @@ mod vf_mir_builder {
             }
         }
 
-        fn encode_ty_int(int_ty: &ty::IntTy, mut int_ty_cpn: int_ty_cpn::Builder<'_>) {
+        fn encode_ty_int(int_ty: ty::IntTy, mut int_ty_cpn: int_ty_cpn::Builder<'_>) {
             match int_ty {
                 ty::IntTy::Isize => int_ty_cpn.set_i_size(()),
                 ty::IntTy::I8 => int_ty_cpn.set_i8(()),
@@ -1835,7 +1835,7 @@ mod vf_mir_builder {
             }
         }
 
-        fn encode_ty_uint(u_int_ty: &ty::UintTy, mut u_int_ty_cpn: u_int_ty_cpn::Builder<'_>) {
+        fn encode_ty_uint(u_int_ty: ty::UintTy, mut u_int_ty_cpn: u_int_ty_cpn::Builder<'_>) {
             match u_int_ty {
                 ty::UintTy::Usize => u_int_ty_cpn.set_u_size(()),
                 ty::UintTy::U8 => u_int_ty_cpn.set_u8(()),
@@ -2051,6 +2051,44 @@ mod vf_mir_builder {
             }
         }
 
+        fn encode_integer_type(
+            ty: rustc_abi::IntegerType,
+            int_ty_cpn: crate::vf_mir_capnp::integer_type::Builder<'_>,
+        ) {
+            match ty {
+                rustc_abi::IntegerType::Pointer(signed) => {
+                    if signed {
+                        Self::encode_ty_int(ty::IntTy::Isize, int_ty_cpn.init_signed());
+                    } else {
+                        Self::encode_ty_uint(ty::UintTy::Usize, int_ty_cpn.init_unsigned());
+                    }
+                }
+                rustc_abi::IntegerType::Fixed(int, signed) => {
+                    if signed {
+                        let int_ty =
+                            match int {
+                                rustc_abi::Integer::I8 => ty::IntTy::I8,
+                                rustc_abi::Integer::I16 => ty::IntTy::I16,
+                                rustc_abi::Integer::I32 => ty::IntTy::I32,
+                                rustc_abi::Integer::I64 => ty::IntTy::I64,
+                                rustc_abi::Integer::I128 => ty::IntTy::I128,
+                            };
+                        Self::encode_ty_int(int_ty, int_ty_cpn.init_signed());
+                    } else {
+                        let u_int_ty =
+                            match int {
+                                rustc_abi::Integer::I8 => ty::UintTy::U8,
+                                rustc_abi::Integer::I16 => ty::UintTy::U16,
+                                rustc_abi::Integer::I32 => ty::UintTy::U32,
+                                rustc_abi::Integer::I64 => ty::UintTy::U64,
+                                rustc_abi::Integer::I128 => ty::UintTy::U128,
+                            };
+                        Self::encode_ty_uint(u_int_ty, int_ty_cpn.init_unsigned());
+                    }
+                }
+            }
+        }
+
         fn encode_rvalue(
             tcx: TyCtxt<'tcx>,
             enc_ctx: &mut EncCtx<'tcx, 'a>,
@@ -2124,23 +2162,19 @@ mod vf_mir_builder {
                 }
                 // Read the discriminant of an ADT.
                 mir::Rvalue::Discriminant(place) => {
-                    if let EncKind::Body(body) = enc_ctx.mode {
-                        let ty = place.ty(body, tcx);
-                        if let Some(adt_def) = ty.ty.ty_adt_def() {
-                            let variants_count = adt_def.variants().len();
-                            for i in 0..variants_count {
-                                match ty.ty.discriminant_for_variant(tcx, i.into()) {
-                                    None => {}
-                                    Some(discr) => {
-                                        if discr.val != i.try_into().unwrap() {
-                                            todo!("For ADT {:?}, the discriminant value for variant index {} is not {}, but {:?}", ty.ty, i, i, discr);
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                    let mut discriminant_data_cpn = rvalue_cpn.init_discriminant();
+
+                    let body = enc_ctx.body();
+                    let ty = place.ty(body, tcx);
+                    let adt_def = ty.ty.ty_adt_def().unwrap();
+                    let variants_count = adt_def.variants().len();
+
+                    Self::encode_integer_type(adt_def.repr().discr_type(), discriminant_data_cpn.reborrow().init_discriminant_ty());
+                    let mut discr_values_cpn = discriminant_data_cpn.reborrow().init_discriminant_values(variants_count);
+                    for (i, discr) in adt_def.discriminants(tcx) {
+                        capnp_utils::encode_u_int128(discr.val, discr_values_cpn.reborrow().get(i.into()));
                     }
-                    Self::encode_place(enc_ctx, place, rvalue_cpn.init_discriminant());
+                    Self::encode_place(enc_ctx, place, discriminant_data_cpn.init_place());
                 }
                 // Creates an aggregate value, like a tuple or struct.
                 mir::Rvalue::Aggregate(box aggregate_kind, operands) => {

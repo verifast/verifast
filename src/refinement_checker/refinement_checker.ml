@@ -711,7 +711,7 @@ let fns_to_be_inlined: (string * body) list =
       {
         id={index=Stdint.Uint32.of_int 0};
         statements=[
-          {kind=Assign {lhs_place=local "discr"; rhs_rvalue=Discriminant (local "self")}; source_info={span}}
+          {kind=Assign {lhs_place=local "discr"; rhs_rvalue=Discriminant {place=local "self"; discriminant_ty=Signed ISize; discriminant_values=[]}}; source_info={span}}
         ];
         terminator={
           kind=SwitchInt {
@@ -954,7 +954,7 @@ let fns_to_be_inlined: (string * body) list =
       {
         id={index=Stdint.Uint32.of_int 0};
         statements=[
-          {kind=Assign {lhs_place=local "discr"; rhs_rvalue=Discriminant (local "self")}; source_info={span}}
+          {kind=Assign {lhs_place=local "discr"; rhs_rvalue=Discriminant {place=local "self"; discriminant_ty=Signed ISize; discriminant_values=[]}}; source_info={span}}
         ];
         terminator={
           kind=SwitchInt {
@@ -1196,7 +1196,7 @@ let fns_to_be_inlined: (string * body) list =
       {
         id={index=Stdint.Uint32.of_int 0};
         statements=[
-          {kind=Assign {lhs_place=local "discr"; rhs_rvalue=Discriminant (local "self")}; source_info={span}}
+          {kind=Assign {lhs_place=local "discr"; rhs_rvalue=Discriminant {place=local "self"; discriminant_ty=Signed ISize; discriminant_values=[]}}; source_info={span}}
         ];
         terminator={
           kind=SwitchInt {
@@ -1414,7 +1414,7 @@ let fns_to_be_inlined: (string * body) list =
       {
         id={index=Stdint.Uint32.of_int 0};
         statements=[
-          {kind=Assign {lhs_place=local "discr"; rhs_rvalue=Discriminant (local "self")}; source_info={span}}
+          {kind=Assign {lhs_place=local "discr"; rhs_rvalue=Discriminant {place=local "self"; discriminant_ty=Signed ISize; discriminant_values=[]}}; source_info={span}}
         ];
         terminator={
           kind=SwitchInt {
@@ -1639,7 +1639,7 @@ let commands_of_rvalue = function
 | BinaryOp {operator; operandl; operandr} -> commands_of_operand operandl @ commands_of_operand operandr @ [BinaryOp operator]
 | UnaryOp {operator; operand} -> commands_of_operand operand @ [UnaryOp operator]
 | Aggregate {aggregate_kind; operands} -> List.concat_map commands_of_operand operands @ [Aggregate (aggregate_kind, List.length operands)]
-| Discriminant place -> commands_for_loading_place place @ [Discriminant]
+| Discriminant {place} -> commands_for_loading_place place @ [Discriminant]
 
 let commands_of_statement_kind = function
   Assign {lhs_place; rhs_rvalue} ->
@@ -2074,7 +2074,7 @@ let check_rvalue_refines_rvalue genv0 env0 span0 caller0 rhsRvalue0 genv1 env1 s
 | UnaryOp unary_op_data_cpn0, UnaryOp unary_op_data_cpn1 -> failwith "Rvalue::UnaryOp not supported"
 | Aggregate aggregate_data_cpn0, Aggregate aggregate_data_cpn1 ->
   check_aggregate_refines_aggregate genv0 env0 span0 caller0 aggregate_data_cpn0 genv1 env1 span1 caller1 aggregate_data_cpn1
-| Discriminant place_cpn0, Discriminant place_cpn1 ->
+| Discriminant {place=place_cpn0}, Discriminant {place=place_cpn1} ->
   begin match check_place_refines_place env0 caller0 place_cpn0 env1 caller1 place_cpn1 with
     (Local x0, Local x1) | (LocalProjection x0, LocalProjection x1) -> if List.assoc x0 env0 <> List.assoc x1 env1 then failwith "The discriminees of the two rvalues are not equal"
   | Nonlocal, Nonlocal -> ()

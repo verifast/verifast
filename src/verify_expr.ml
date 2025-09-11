@@ -2777,7 +2777,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             | _ ->
               cont (Chunk ((get_pred_symb "malloc_block", true), [], real_unit, [result; sizeof_core l env t], None)::h)
         end
-    | WFunCall (l, "#inductive_ctor_index", [InductiveType (i, targs)], [w], Static) ->
+    | WFunCall (l, "#inductive_discriminant", [InductiveType (i, targs)], w::discrExprs, Static) ->
       eval_h h env w $. fun h env v ->
       let (_, inductive_tparams, ctormap, _, _, _, _, _, _) = List.assoc i inductivemap in
       let rec iter ctor_index ctormap =
@@ -2787,7 +2787,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             get_unique_var_symb (x ^ "__") pt
           in
           assume (ctxt#mk_eq v (mk_app ctorsymb args)) $. fun () ->
-          cont h env (ctxt#mk_intlit ctor_index)
+          cont h env (eval None [] (List.nth discrExprs ctor_index))
         in
         if ctormap = [] then verify_case () else branch verify_case (fun () -> iter (ctor_index + 1) ctormap)
       in

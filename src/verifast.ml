@@ -1230,7 +1230,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               (iter (List.remove_assoc cn ctors) cs)
         in
         iter ctormap cs ()
-      | Int (_, _) -> 
+      | Int (_, _) as tp -> 
         let n = List.length (List.filter (function SwitchStmtDefaultClause (l, _) -> true | _ -> false) cs) in
         if n > 1 then static_error l "switch statement can have at most one default clause" None;
         let cs0 = cs in
@@ -1241,7 +1241,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               begin fun state clause -> 
                 match clause with
                   SwitchStmtClause (l, i, ss) -> 
-                    let w2 = check_expr_t (pn,ilist) tparams tenv i intType in
+                    let w2 = check_expr_t (pn,ilist) tparams tenv i tp in
                     ctxt#mk_and state (ctxt#mk_not (ctxt#mk_eq v (ev w2))) 
                 | _ -> state
               end
@@ -1269,7 +1269,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           | c::cs' ->
             begin match c with
               SwitchStmtClause (l, i, ss) ->
-              let w2 = check_expr_t (pn,ilist) tparams tenv i intType in
+              let w2 = check_expr_t (pn,ilist) tparams tenv i tp in
               execute_branch $. fun () ->
               eval_h h env w2 $. fun h env t ->
               assume_eq t v $. fun () ->

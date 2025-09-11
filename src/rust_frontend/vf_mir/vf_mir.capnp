@@ -537,6 +537,13 @@ struct AggregateKind {
     }
 }
 
+struct IntegerType {
+    union {
+        signed @0: IntTy;
+        unsigned @1: UIntTy;
+    }
+}
+
 struct Rvalue {
     struct AddressOfData {
         mutability @0: Mutability;
@@ -606,6 +613,12 @@ struct Rvalue {
         operands @1: List(Operand);
     }
 
+    struct DiscriminantData {
+        place @0: Place;
+        discriminantTy @1: IntegerType;
+        discriminantValues @2: List(UInt128); # The bit representations of the values of the discriminants for each variant of the ADT
+    }
+
     union {
         # Either move or copy depending on operand type
         use @0: Operand;
@@ -619,7 +632,7 @@ struct Rvalue {
         nullaryOp @11: Void;
         unaryOp @6: UnaryOpData;
         aggregate @5: AggregateData;
-        discriminant @7: Place;
+        discriminant @7: DiscriminantData;
         shallowInitBox @12: Void;
     }
 }

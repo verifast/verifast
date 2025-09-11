@@ -104,7 +104,7 @@ let string_of_rvalue = function
   | UnaryOp _ -> "<UnaryOp>"
   | Aggregate {aggregate_kind; operands} ->
     Printf.sprintf "%s(%s)" (string_of_aggregate_kind aggregate_kind) (String.concat ", " (List.map string_of_operand operands))
-  | Discriminant place ->
+  | Discriminant {place} ->
     Printf.sprintf "discriminant(%s)" (string_of_place place)
   | ShallowInitBox -> "<ShallowInitBox>"
 

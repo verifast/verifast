@@ -2524,7 +2524,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let translate_sw_targets_branch (br_cpn : SwitchTargetsBranchRd.t) =
       let open SwitchTargetsBranchRd in
       let v_cpn = val_get br_cpn in
-      let v = CapnpAux.uint128_get v_cpn in
+      let v = D.decode_uint128 v_cpn in
       let target_cpn = target_get br_cpn in
       let target = translate_basic_block_id target_cpn in
       (v, target)
@@ -2554,7 +2554,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         match discr_ty.vf_ty with
         | Ast.ManifestTypeExpr ((*loc*) _, Ast.Bool) -> (
             match (branches, otherwise_op) with
-            | [ (v, false_tgt) ], Some true_tgt when Stdint.Uint128.(zero = v)
+            | [ (v, false_tgt) ], Some true_tgt when Stdint.Uint128.(zero = DecoderAux.uint128_get v)
               ->
                 Ok
                   ( Ast.IfStmt
@@ -2566,20 +2566,22 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             | _ ->
                 Error
                   (`TrSwInt "Invalid SwitchTargets for a boolean discriminant"))
-        | Ast.ManifestTypeExpr (_, Int (_, _)) ->
-            let clauses =
+        | Ast.ManifestTypeExpr (_, Int (signed, rank)) ->
+            let width =
+              match rank with
+              | PtrRank -> let Some {ptr_width} = TranslatorArgs.data_model_opt in ptr_width
+              | FixedWidthRank w -> w
+            in
+            let size = 1 lsl width in
+            let* clauses =
               branches
-              |> List.map @@ fun (value, target) ->
-                 Ast.SwitchStmtClause
+              |> ListAux.try_map @@ fun (data, target) ->
+                 let* v = translate_scalar_int {data; size} discr_ty.vf_ty loc in
+                 Ok (
+                  Ast.SwitchStmtClause
                    ( loc,
-                     IntLit
-                       ( loc,
-                         Big_int.big_int_of_string
-                           (Stdint.Uint128.to_string value),
-                         true,
-                         false,
-                         NoLSuffix ),
-                     [ Ast.GotoStmt (loc, target) ] )
+                     v,
+                     [ Ast.GotoStmt (loc, target) ] ))
             in
             let default_clause =
               match otherwise_op with
@@ -3053,16 +3055,46 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           let* operand = tr_operand operand in
           Ok (`TrRvalueUnaryOp (operator, operand))
       | Aggregate agg_data_cpn -> translate_aggregate agg_data_cpn loc
-      | Discriminant place_cpn ->
+      | Discriminant discriminant_data_cpn ->
+          let place_cpn = DiscriminantData.place_get discriminant_data_cpn in
           let* place_expr, place_is_mutable = translate_place place_cpn loc in
+          let (discriminant_ty: D.ty), size =
+            match DiscriminantData.discriminant_ty_get discriminant_data_cpn |> D.decode_integer_type with
+              Signed intTy ->
+              {kind=Int intTy},
+              begin match intTy with
+                I8 -> 1
+              | I16 -> 2
+              | I32 -> 4
+              | I64 -> 8
+              | I128 -> 16
+              | ISize -> let Some {ptr_width} = TranslatorArgs.data_model_opt in 1 lsl ptr_width
+              end
+            | Unsigned uintTy ->
+              {kind=UInt uintTy},
+              begin match uintTy with
+                U8 -> 1
+              | U16 -> 2
+              | U32 -> 4
+              | U64 -> 8
+              | U128 -> 16
+              | USize -> let Some {ptr_width} = TranslatorArgs.data_model_opt in 1 lsl ptr_width
+              end
+          in
+          let* discriminant_ty = translate_decoded_ty discriminant_ty loc in
+          let* discriminant_values =
+            DiscriminantData.discriminant_values_get_list discriminant_data_cpn
+            |> List.map D.decode_uint128
+            |> ListAux.try_map (fun data -> translate_scalar_int {data; size} discriminant_ty.vf_ty loc)
+          in
           Ok
             (`TrRvalueExpr
               (Ast.CallExpr
                  ( loc,
-                   "#inductive_ctor_index",
+                   "#inductive_discriminant",
+                   [discriminant_ty.vf_ty],
                    [],
-                   [],
-                   [ LitPat place_expr ],
+                   List.map (fun v -> Ast.LitPat v) (place_expr :: discriminant_values),
                    Static )))
       | Undefined _ -> Error (`TrRvalue "Unknown Rvalue kind")
 
