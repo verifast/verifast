@@ -1524,14 +1524,14 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | Int int_ty_cpn -> `Int int_ty_cpn
     | UInt u_int_ty_cpn -> `Uint u_int_ty_cpn
     | Char -> `Char
-    | Float -> `Float
+    | Float float_ty -> `Float float_ty
     | Adt adt_ty_cpn -> `Adt (decode_adt_ty adt_ty_cpn)
     | Foreign -> `Foreign
     | RawPtr raw_ptr_ty_cpn -> `RawPtr
     | Ref ref_ty_cpn -> `Ref (decode_ref_ty ref_ty_cpn)
     | FnDef fn_def_ty_cpn -> `FnDef fn_def_ty_cpn
     | FnPtr fn_ptr_ty_cpn -> `FnPtr
-    | Dynamic -> `Dynamic
+    | Dynamic trait -> `Dynamic trait
     | Closure _ -> `Closure
     | CoroutineClosure -> `CoroutineClosure
     | Coroutine -> `Coroutine
@@ -1699,7 +1699,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | Int int_ty_cpn -> translate_int_ty int_ty_cpn loc
     | UInt u_int_ty_cpn -> translate_u_int_ty u_int_ty_cpn loc
     | Char -> Ok (char_ty_info loc)
-    | Float ->
+    | Float float_ty ->
         Ast.static_error loc "Floating point types are not yet supported" None
     | Adt adt_ty_cpn -> translate_adt_ty adt_ty_cpn loc
     | Foreign -> Ast.static_error loc "Foreign types are not yet supported" None
@@ -1707,7 +1707,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | Ref ref_ty_cpn -> translate_ref_ty ref_ty_cpn loc
     | FnDef fn_def_ty_cpn -> translate_fn_def_ty fn_def_ty_cpn loc
     | FnPtr fn_ptr_ty_cpn -> translate_fn_ptr_ty fn_ptr_ty_cpn loc
-    | Dynamic -> Ast.static_error loc "Dynamic types are not yet supported" None
+    | Dynamic _ -> Ast.static_error loc "Dynamic types are not yet supported" None
     | Closure _ ->
         Ast.static_error loc "Closure types are not yet supported" None
         (* CAVEAT: Once we allow closure types to appear as function call generic arguments, we must also verify closure bodies. *)

@@ -1351,6 +1351,29 @@ mod vf_mir_builder {
                     "Local declarations of {} are not more than its args",
                     def_path
                 );
+            } else {
+                let closure_ty = tcx.type_of(def_id).skip_binder();
+                if let ty::Closure(_, substs) = closure_ty.kind() {
+                    let sig = substs.as_closure().sig();
+                    let sig = sig.skip_binder();
+                    Self::encode_ty(
+                        tcx,
+                        enc_ctx,
+                        sig.output(),
+                        body_cpn.reborrow().init_output(),
+                    );
+                    let mut inputs = Vec::new();
+                    inputs.push(closure_ty);
+                    inputs.extend_from_slice(sig.inputs());
+                    body_cpn.fill_inputs(&inputs, |input_cpn, input| {
+                        Self::encode_ty(tcx, enc_ctx, *input, input_cpn);
+                    });
+                    assert!(
+                        local_decls_count >= sig.inputs().len() as usize,
+                        "Local declarations of {} are not at least its args",
+                        def_path
+                    );
+                }
             }
 
             body_cpn.fill_local_decls(
@@ -1381,6 +1404,7 @@ mod vf_mir_builder {
 
             let span_cpn = body_cpn.reborrow().init_span();
             Self::encode_span_data(tcx, &body.span.data(), span_cpn);
+            body_cpn.set_is_from_expansion(body.span.from_expansion());
 
             let imp_span_cpn = body_cpn.reborrow().init_imp_span();
             let imp_span_data = crate::span_utils::body_imp_span(tcx, body);
@@ -1746,7 +1770,15 @@ mod vf_mir_builder {
                     let u_int_ty_cpn = ty_kind_cpn.init_u_int();
                     Self::encode_ty_uint(*u_int_ty, u_int_ty_cpn)
                 }
-                ty::TyKind::Float(_) => ty_kind_cpn.set_float(()),
+                ty::TyKind::Float(float_ty) => {
+                    let mut float_ty_cpn = ty_kind_cpn.init_float();
+                    match float_ty {
+                        ty::FloatTy::F16 => float_ty_cpn.set_f16(()),
+                        ty::FloatTy::F32 => float_ty_cpn.set_f32(()),
+                        ty::FloatTy::F64 => float_ty_cpn.set_f64(()),
+                        ty::FloatTy::F128 => float_ty_cpn.set_f128(()),
+                    }
+                }
                 ty::TyKind::Char => ty_kind_cpn.set_char(()),
                 ty::TyKind::Adt(adt_def, substs) => {
                     let adt_ty_cpn = ty_kind_cpn.init_adt();
@@ -1772,7 +1804,24 @@ mod vf_mir_builder {
                     let output_cpn = fn_ptr_ty_cpn.init_output();
                     Self::encode_ty(tcx, enc_ctx, fn_sig.output(), output_cpn);
                 }
-                ty::TyKind::Dynamic(_, _, _) => ty_kind_cpn.set_dynamic(()),
+                ty::TyKind::Dynamic(preds, region, dyn_kind) => {
+                    let mut dynamic_ty_cpn = ty_kind_cpn.init_dynamic();
+                    dynamic_ty_cpn.set_is_just_trait(false);
+                    if preds.len() == 1 {
+                        let pred = preds[0];
+                        if let Some(pred) = pred.no_bound_vars() {
+                            match pred {
+                                ty::ExistentialPredicate::Trait(trait_ref) => {
+                                    if trait_ref.args.is_empty() {
+                                        dynamic_ty_cpn.set_is_just_trait(true);
+                                        dynamic_ty_cpn.set_trait_def_id(&tcx.def_path_str(trait_ref.def_id));
+                                    }
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                }
                 ty::TyKind::Closure(def_id, gen_args) => {
                     let mut closure_ty_cpn = ty_kind_cpn.init_closure();
                     closure_ty_cpn.set_def_id(&tcx.def_path_str(*def_id));
@@ -1931,7 +1980,10 @@ mod vf_mir_builder {
                     }
                 }
                 ty::RegionKind::ReBound(de_bruijn_index, bound_region) => match bound_region.kind {
-                    ty::BoundRegionKind::Anon => todo!(),
+                    ty::BoundRegionKind::Anon => {
+                        let id = Self::anonymous_late_bound_lifetime_name(de_bruijn_index.as_usize());
+                        region_cpn.set_id(&id);
+                    }
                     ty::BoundRegionKind::Named(def_id, symbol) => {
                         if symbol.as_str() == "'_" {
                             let id = Self::anonymous_late_bound_lifetime_name(def_id.index.as_usize());

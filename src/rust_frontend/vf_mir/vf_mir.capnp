@@ -226,6 +226,15 @@ struct UIntTy {
     }
 }
 
+struct FloatTy {
+    union {
+        f16 @0: Void;
+        f32 @1: Void;
+        f64 @2: Void;
+        f128 @3: Void;
+    }
+}
+
 
 struct GenericArg {
     kind @0: GenericArgKind;
@@ -311,6 +320,11 @@ struct TyKind {
         mutability @2: Mutability;
     }
 
+    struct DynamicTy {
+        isJustTrait @0: Bool; # True if this type is simply `dyn Trait`, false if it is `dyn Trait<Args> + Foo + 'a`
+        traitDefId @1: Text;
+    }
+
     struct ClosureTy {
         defId @0: Text;
         substs @1: List(GenericArg);
@@ -332,14 +346,14 @@ struct TyKind {
         int @1: IntTy;
         uInt @2: UIntTy;
         char @9: Void;
-        float @16: Void; # TODO: Elaborate
+        float @16: FloatTy;
         adt @3: AdtTy;
         foreign @17: Void; # TODO: Elaborate
         rawPtr @4: RawPtrTy;
         ref @5: RefTy;
         fnDef @6: FnDefTy;
         fnPtr @10: FnPtrTy;
-        dynamic @19: Void; # TODO: Elaborate
+        dynamic @19: DynamicTy;
         closure @20: ClosureTy; # TODO: Elaborate
         coroutineClosure @21: Void; # TODO: Elaborate
         coroutine @22: Void; # TODO: Elaborate
@@ -779,6 +793,7 @@ struct Body {
     localDecls @4: List(LocalDecl);
     basicBlocks @5: List(BasicBlock);
     span @6: SpanData;
+    isFromExpansion @24: Bool; # True if the function body is from a macro expansion
     impSpan @7: SpanData;
     varDebugInfo @8: List(VarDebugInfo);
     ghostStmts @9: List(Annotation);
