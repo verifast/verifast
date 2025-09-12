@@ -760,9 +760,24 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let open AdtTyRd in
     let open Ast in
     let def_path = translate_adt_def_id @@ adt_ty_cpn.id in
-    let name = TrName.translate_def_path def_path in
     let kind = adt_ty_cpn.kind in
     let substs_cpn = adt_ty_cpn.substs in
+    let slice_targ_indices, substs_cpn =
+      let rec iter is ss i: D.generic_arg list -> (int list * D.generic_arg list) = function
+        | [] -> (List.rev is, List.rev ss)
+        | {kind=Type {kind= Slice tp}} :: substs_cpn' ->
+          iter (i::is) ({kind=Type tp}::ss) (i+1) substs_cpn'
+        | arg :: substs_cpn' -> iter is (arg::ss) (i+1) substs_cpn'
+      in
+      iter [] [] 0 substs_cpn
+    in
+    let def_path =
+      match slice_targ_indices with
+        [] -> def_path
+      | [i] -> Printf.sprintf "%s_slice%d" def_path i
+      | _ -> failwith "translate_adt_ty: Multiple slice type arguments"
+    in
+    let name = def_path in
     match kind with
     | StructKind | UnionKind -> (
         match def_path, substs_cpn with
@@ -772,10 +787,6 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         | "std::ptr::NonNull", [ {kind=Type {kind=Slice ty}} ] ->
             let* elem_ty_info = translate_ty ty loc in
             Ok (slice_non_null_ty_info loc elem_ty_info)
-        | "std::boxed::Box", [ {kind=Type {kind=Slice elem_ty}}; {kind=Type alloc_ty} ] ->
-            let* elem_ty_info = translate_ty elem_ty loc in
-            let* alloc_ty_info = translate_ty alloc_ty loc in
-            Ok (slice_box_ty_info loc elem_ty_info alloc_ty_info)
         | _ ->
             let* gen_args =
               ListAux.try_map
@@ -1054,6 +1065,51 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           { size; own; shr; full_bor_content; points_to; pointee_fbc = None };
     }
 
+  and translate_alias_ty ({kind; def_id; args={kind=Type self_ty}::args}: D.ty_kind_alias_ty) loc =
+    let open Ast in
+    let* self_ty = translate_ty self_ty loc in
+    let* gen_args = ListAux.try_map (fun arg -> translate_generic_arg arg loc) args in
+    let targs =
+      gen_args
+      |> Util.flatmap @@ function
+          | Mir.GenArgType arg_ty -> [ arg_ty.vf_ty ]
+          | _ -> []
+    in
+    let lft_args =
+      gen_args
+      |> Util.flatmap @@ function
+          | Mir.GenArgLifetime name -> [ vf_ty_arg_of_region loc name ]
+          | _ -> []
+    in
+    let vf_targs = lft_args @ targs in
+    let def_id_separator = String.rindex def_id ':' in
+    let trait_name = String.sub def_id 0 (def_id_separator - 1) in
+    let trait_name = canonicalize_item_name trait_name in
+    let alias_name = String.sub def_id (def_id_separator + 1) (String.length def_id - def_id_separator - 1) in
+    let vf_ty = ProjectionTypeExpr (loc, self_ty.vf_ty, trait_name, vf_targs, alias_name) in
+    let size = SizeofExpr (loc, TypeExpr vf_ty) in
+    let own tid vs =
+      Error "Expressing ownership of alias types is not yet supported"
+    in
+    let shr lft tid l =
+      Error "Expressing shared ownership of alias types is not yet supported"
+    in
+    let full_bor_content tid l =
+      Error
+        "Expressing the full borrow content of alias types is not yet supported"
+    in
+    let points_to tid l vid_op =
+      Error
+        "Expressing a points-to assertion for an alias type is not yet \
+         supported"
+    in
+    Ok {
+      Mir.vf_ty;
+      interp =
+        RustBelt.
+          { size; own; shr; full_bor_content; points_to; pointee_fbc = None };
+    }
+
   and str_ref_ty_info loc lft mut =
     let open Ast in
     if mut <> Mir.Not then
@@ -1142,11 +1198,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
 
   and slice_ref_ty_info loc lft mut elem_ty_info =
     let open Ast in
-    if mut <> Mir.Not then
-      static_error loc "Mutable slice references are not yet supported" None;
+    let sn = match mut with Mir.Mut -> "slice_ref_mut" | Mir.Not -> "slice_ref" in
     let vf_ty =
       StructTypeExpr
-        (loc, Some "slice_ref", None, [], [ lft; elem_ty_info.Mir.vf_ty ])
+        (loc, Some sn, None, [], [ lft; elem_ty_info.Mir.vf_ty ])
     in
     let size = SizeofExpr (loc, TypeExpr vf_ty) in
     let own tid vs =
@@ -1160,9 +1215,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         "Expressing the full borrow content of &[_] values is not yet supported"
     in
     let points_to tid l vid_op =
-      Error
-        "Expressing a points-to assertion for a &[_] object is not yet \
-         supported"
+      let* pat = RustBelt.Aux.vid_op_to_var_pat vid_op loc in
+      Ok (PointsTo (loc, l, RegularPointsTo, pat))
     in
     {
       Mir.vf_ty;
@@ -1171,35 +1225,6 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           { size; own; shr; full_bor_content; points_to; pointee_fbc = None };
     }
 
-  and slice_box_ty_info loc elem_ty_info alloc_ty_info =
-    let open Ast in
-    let vf_ty =
-      StructTypeExpr
-        (loc, Some "std::boxed::Box_slice", None, [], [ elem_ty_info.Mir.vf_ty; alloc_ty_info.Mir.vf_ty ])
-    in
-    let size = SizeofExpr (loc, TypeExpr vf_ty) in
-    let own tid vs =
-      Error "Expressing ownership of Box<[_]> values is not yet supported"
-    in
-    let shr lft tid l =
-      Error "Expressing shared ownership of Box<[_]> values is not yet supported"
-    in
-    let full_bor_content tid l =
-      Error
-        "Expressing the full borrow content of Box<[_]> values is not yet supported"
-    in
-    let points_to tid l vid_op =
-      Error
-        "Expressing a points-to assertion for a Box<[_]> object is not yet \
-         supported"
-    in
-    {
-      Mir.vf_ty;
-      interp =
-        RustBelt.
-          { size; own; shr; full_bor_content; points_to; pointee_fbc = None };
-    }
-  
   and translate_generic_arg (gen_arg_cpn : D.generic_arg) (loc : Ast.loc) =
     let kind_cpn = gen_arg_cpn.kind in
     let open GenArgKindRd in
@@ -1499,14 +1524,14 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | Int int_ty_cpn -> `Int int_ty_cpn
     | UInt u_int_ty_cpn -> `Uint u_int_ty_cpn
     | Char -> `Char
-    | Float -> `Float
+    | Float float_ty -> `Float float_ty
     | Adt adt_ty_cpn -> `Adt (decode_adt_ty adt_ty_cpn)
     | Foreign -> `Foreign
     | RawPtr raw_ptr_ty_cpn -> `RawPtr
     | Ref ref_ty_cpn -> `Ref (decode_ref_ty ref_ty_cpn)
     | FnDef fn_def_ty_cpn -> `FnDef fn_def_ty_cpn
     | FnPtr fn_ptr_ty_cpn -> `FnPtr
-    | Dynamic -> `Dynamic
+    | Dynamic trait -> `Dynamic trait
     | Closure _ -> `Closure
     | CoroutineClosure -> `CoroutineClosure
     | Coroutine -> `Coroutine
@@ -1674,7 +1699,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | Int int_ty_cpn -> translate_int_ty int_ty_cpn loc
     | UInt u_int_ty_cpn -> translate_u_int_ty u_int_ty_cpn loc
     | Char -> Ok (char_ty_info loc)
-    | Float ->
+    | Float float_ty ->
         Ast.static_error loc "Floating point types are not yet supported" None
     | Adt adt_ty_cpn -> translate_adt_ty adt_ty_cpn loc
     | Foreign -> Ast.static_error loc "Foreign types are not yet supported" None
@@ -1682,7 +1707,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | Ref ref_ty_cpn -> translate_ref_ty ref_ty_cpn loc
     | FnDef fn_def_ty_cpn -> translate_fn_def_ty fn_def_ty_cpn loc
     | FnPtr fn_ptr_ty_cpn -> translate_fn_ptr_ty fn_ptr_ty_cpn loc
-    | Dynamic -> Ast.static_error loc "Dynamic types are not yet supported" None
+    | Dynamic _ -> Ast.static_error loc "Dynamic types are not yet supported" None
     | Closure _ ->
         Ast.static_error loc "Closure types are not yet supported" None
         (* CAVEAT: Once we allow closure types to appear as function call generic arguments, we must also verify closure bodies. *)
@@ -1696,7 +1721,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           None
     | Never -> Ok (never_ty_info loc)
     | Tuple tys_cpn -> translate_tuple_ty tys_cpn loc
-    | Alias _ -> Ast.static_error loc "Alias types are not yet supported" None
+    | Alias alias_ty_cpn -> translate_alias_ty alias_ty_cpn loc
     | Param name -> translate_param_ty name loc
     | Bound -> Ast.static_error loc "Bound types are not yet supported" None
     | Placeholder ->
@@ -4283,6 +4308,15 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | `Ignored -> "(ignored)"
     | _ -> "(unknown)"
 
+  let compute_sized_tparams preds =
+    preds
+    |> Util.flatmap (function
+         | `Trait
+             ( ("std::marker::Sized" | "core::marker::Sized"),
+               [ `Type (`Param tparam) ] ) ->
+             [ tparam ]
+         | _ -> [])
+
   let compute_send_tparams preds =
     preds
     |> Util.flatmap (function
@@ -5656,6 +5690,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         |> List.map D.decode_predicate
         |> List.map decode_predicate
       in
+      let sized_tparams = compute_sized_tparams preds in
+      let unsized_tparams = List.filter (fun x -> not (List.mem x sized_tparams)) tparams in
       let send_tparams = compute_send_tparams preds in
       let tparams_targs =
         List.map (fun x -> Ast.IdentTypeExpr (def_loc, None, x)) vf_tparams
@@ -5685,6 +5721,32 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   (*struct_attr list*)
                   if is_repr_c_get adt_def_cpn then [ ReprC ] else [] )
             in
+            let unsized_aux_decls =
+              match unsized_tparams with
+              | [] -> []
+              | [x] ->
+                let Some idx = Util.index_of x tparams 0 in
+                let unsized_struct_typedef_aux =
+                  let fds = [] in (* TODO: implement field definitions *)
+                  Ast.Struct
+                    ( def_loc,
+                      Printf.sprintf "%s_slice%d" name idx,
+                      vf_tparams,
+                      Some
+                        ( (*base_spec list*) [],
+                          (*field list*) fds,
+                          (*instance_pred_decl list*) [],
+                          (*is polymorphic*) false ),
+                      (*struct_attr list*)
+                      if is_repr_c_get adt_def_cpn then [ ReprC ] else [] )
+                in
+                [ unsized_struct_typedef_aux ]
+              | _ ->
+                Ast.static_error def_loc
+                  "VeriFast does not yet support structs with multiple \
+                    unsized type parameters"
+                  None
+            in
             let struct_typedef_aux =
               Ast.TypedefDecl
                 ( def_loc,
@@ -5692,7 +5754,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   name,
                   lft_params @ tparams )
             in
-            Ok (Mir.Struct, fds, fds_no_zst, struct_decl, [ struct_typedef_aux ])
+            Ok (Mir.Struct, fds, fds_no_zst, struct_decl, struct_typedef_aux::unsized_aux_decls)
         | EnumKind ->
             let ctors =
               (* VeriFast does not support zero-ctor inductives, so add a dummy ctor. *)
@@ -5706,7 +5768,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                    in
                    Ast.Ctor (loc, name ^ "::" ^ variant_name, ps)
             in
-            let decl = Ast.Inductive (def_loc, name, tparams, ctors) in
+            let decl = Ast.Inductive (def_loc, name, vf_tparams, ctors) in
             Ok (Mir.Enum, [], [], decl, [])
         | UnionKind -> failwith "Todo: AdtDef::Union"
         | Undefined _ -> Error (`TrAdtDef "Unknown ADT kind")

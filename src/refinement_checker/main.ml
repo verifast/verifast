@@ -63,14 +63,23 @@ let original_vf_mir =
 let verified_vf_mir =
   decode_vf_mir @@ VfMirRd.VfMir.of_message @@ Frontend.get_vf_mir !rustc_args verified_path
 
+let ensure_unique_keys kvs =
+  let keys_seen = Hashtbl.create (List.length kvs) in
+  kvs |> List.map @@ fun (k, v) ->
+    let seen = Hashtbl.find_all keys_seen k in
+    Hashtbl.add keys_seen k ();
+    if seen = [] then (k, v) else (Printf.sprintf "%s__%d" k (List.length seen), v)
+
 (* Check, for each function body in original_vf_mir, that there is a matching function body in verified_vf_mir *)
 let original_bodies =
   original_vf_mir.bodies
   |> List.map (fun body -> (canonicalize_def_path body.def_path, body))
+  |> ensure_unique_keys
 
 let verified_bodies =
   verified_vf_mir.bodies
   |> List.map (fun body -> (canonicalize_def_path body.def_path, body))
+  |> ensure_unique_keys
 
 let get_line_offsets text =
   let rec get_line_offsets' text offset acc =
@@ -97,10 +106,25 @@ let load_span_snippet span =
   let end_offset = line_offsets.(end_line - 1) + end_col in
   String.sub contents start_offset (end_offset - start_offset)
 
-let bodies_are_identical body0 body1 =
-  let snippet0 = load_span_snippet (decode_body_span body0) in
-  let snippet1 = load_span_snippet (decode_body_span body1) in
-  snippet0 = snippet1
+let closure_parent_def_path def_path =
+  (* Find the final : in the def_path *)
+  let last_colon = String.rindex def_path ':' in
+  assert (String.sub def_path (last_colon - 1) 11 = "::{closure#");
+  String.sub def_path 0 (last_colon - 1)
+
+let rec bodies_are_identical def_path body0 body1 =
+  body0.def_kind = body1.def_kind &&
+  if body0.def_kind = Closure then
+    let parent_def_path = closure_parent_def_path def_path in
+    match List.assoc_opt parent_def_path original_bodies, List.assoc_opt parent_def_path verified_bodies with
+    | Some parent_body0, Some parent_body1 ->
+      bodies_are_identical parent_def_path parent_body0 parent_body1
+    | _ -> false
+  else
+    not body0.is_from_expansion && not body1.is_from_expansion &&
+    let snippet0 = load_span_snippet (decode_body_span body0) in
+    let snippet1 = load_span_snippet (decode_body_span body1) in
+    snippet0 = snippet1
 
 let wrapper_fn_spans =
   verified_bodies |> List.map (fun (fn, body) ->
@@ -112,7 +136,7 @@ let original_checked_spans = ref []
 let verified_checked_spans = ref wrapper_fn_spans
 
 let check_body_refines_body def_path body verified_body =
-  if bodies_are_identical body verified_body then
+  if bodies_are_identical def_path body verified_body then
     Printf.printf "Function bodies for %s are identical\n" def_path
   else (
     Printf.printf
@@ -173,8 +197,8 @@ let skip_whitespace contents offset =
 let rec skip_whitespace_and_checked_ranges contents offset checked_ranges =
   let offset = skip_whitespace contents offset in
   match checked_ranges with
-  | (start, end_) :: checked_ranges when start = offset ->
-    skip_whitespace_and_checked_ranges contents end_ checked_ranges
+  | (start, end_) :: checked_ranges when start <= offset ->
+    skip_whitespace_and_checked_ranges contents (max offset end_) checked_ranges
   | _ -> offset, checked_ranges
 
 (* Checks that the two files are identical, after collapsing whitespace and spans checked by the refinement checker *)
@@ -221,7 +245,11 @@ let check_files_match (path0, path1) =
     let offset0, offset1 = (offset0', offset1') in
     if offset0 = String.length contents0 then
       if offset1 = String.length contents1 then (
-        assert (checked_ranges0 = [] && checked_ranges1 = []);
+        if checked_ranges0 <> [] || checked_ranges1 <> [] then
+          failwith
+            (Printf.sprintf "Comparing %s to %s: Unused checked ranges remain: %s vs %s"
+               path0 path1 (String.concat ", " (List.map (fun (start, end_) -> Printf.sprintf "(%d, %d)" start end_) checked_ranges0))
+               (String.concat ", " (List.map (fun (start, end_) -> Printf.sprintf "(%d, %d)" start end_) checked_ranges1)));
         ())
       else
         failwith

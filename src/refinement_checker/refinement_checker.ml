@@ -130,6 +130,7 @@ type ty =
 | Int of int_width
 | UInt of int_width
 | Char
+| Float of float_ty
 | Adt of string * adt_kind * gen_arg list
 | RawPtr of ty
 | Ref of region * ty * mutability
@@ -142,6 +143,7 @@ type ty =
 | Str
 | Array of ty * const_expr
 | Slice of ty
+| Dyn of string (* trait def id *) (* `dyn T` *)
 and gen_arg =
   Lifetime of region
 | Type of ty
@@ -166,6 +168,7 @@ let rec string_of_ty = function
 | Str -> "Str"
 | Array (ty, size) -> Printf.sprintf "Array %s %s" (string_of_ty ty) (string_of_const_expr size)
 | Slice ty -> Printf.sprintf "Slice %s" (string_of_ty ty)
+| Dyn trait_def_id -> Printf.sprintf "Dyn %s" trait_def_id
 and string_of_gen_arg = function
   Lifetime region -> Printf.sprintf "Lifetime %s" (string_of_region region)
 | Type ty -> Printf.sprintf "Type %s" (string_of_ty ty)
@@ -230,7 +233,7 @@ let rec decode_ty (genv: generic_env) (ty_cpn: Vf_mir_decoder.ty) =
     | USize -> UInt PtrWidth
     end
   | Char -> Char
-  | Float -> failwith "TODO: Float"
+  | Float float_ty -> Float float_ty
   | Adt adt_ty_cpn ->
     let name = adt_ty_cpn.id.name in
     let kind =
@@ -253,7 +256,11 @@ let rec decode_ty (genv: generic_env) (ty_cpn: Vf_mir_decoder.ty) =
     let args = List.map (decode_gen_arg genv) fn_def_ty_cpn.substs in
     FnDef (id, args)
   | FnPtr info -> FnPtr info (* FIXME: The MIR exporter throws away some FnPtr info unsoundly *)
-  | Dynamic -> failwith "TODO: Dynamic"
+  | Dynamic {is_just_trait; trait_def_id} ->
+    if is_just_trait then
+      Dyn trait_def_id
+    else
+      failwith "TODO: Dynamic"
   | Closure closure_ty_cpn ->
     let id = closure_ty_cpn.def_id in
     let args = List.map (decode_gen_arg genv) closure_ty_cpn.substs in
@@ -567,6 +574,7 @@ let fns_to_be_inlined: (string * body) list =
       local_decls;
       basic_blocks;
       span;
+      is_from_expansion=false;
       imp_span=span;
       var_debug_info=[];
       ghost_stmts=[];
@@ -661,6 +669,7 @@ let fns_to_be_inlined: (string * body) list =
     local_decls;
     basic_blocks;
     span;
+    is_from_expansion=false;
     imp_span=span;
     var_debug_info=[];
     ghost_stmts=[];
@@ -901,6 +910,7 @@ let fns_to_be_inlined: (string * body) list =
     local_decls;
     basic_blocks;
     span;
+    is_from_expansion=false;
     imp_span=span;
     var_debug_info=[];
     ghost_stmts=[];
@@ -1144,6 +1154,7 @@ let fns_to_be_inlined: (string * body) list =
     local_decls;
     basic_blocks;
     span;
+    is_from_expansion=false;
     imp_span=span;
     var_debug_info=[];
     ghost_stmts=[];
@@ -1367,6 +1378,7 @@ let fns_to_be_inlined: (string * body) list =
     local_decls;
     basic_blocks;
     span;
+    is_from_expansion=false;
     imp_span=span;
     var_debug_info=[];
     ghost_stmts=[];
@@ -1554,6 +1566,7 @@ let fns_to_be_inlined: (string * body) list =
     local_decls;
     basic_blocks;
     span;
+    is_from_expansion=false;
     imp_span=span;
     var_debug_info=[];
     ghost_stmts=[];
@@ -2000,7 +2013,10 @@ let check_operand_refines_operand i genv0 env0 span0 caller0 operand0 genv1 env1
 
 let check_aggregate_kind_refines_aggregate_kind genv0 (aggregate_kind0: aggregate_kind) genv1 (aggregate_kind1: aggregate_kind) =
   match aggregate_kind0, aggregate_kind1 with
-    Array _, Array _ -> failwith "Aggregate::Array not supported"
+    Array elemTy0, Array elemTy1 ->
+    let elemTy0 = decode_ty genv0 elemTy0 in
+    let elemTy1 = decode_ty genv1 elemTy1 in
+    if elemTy0 <> elemTy1 then failwith "Aggregate::Array: element types do not match"
   | Tuple, Tuple -> ()
   | Adt adt_data0, Adt adt_data1 ->
     let adt_id0 = adt_data0.adt_id in
