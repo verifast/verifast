@@ -1,0 +1,19 @@
+cargo-features = ["public-dependency"]
+
+[package]
+name = "alloc"
+version = "0.0.0"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/rust-lang/rust.git"
+description = "The Rust core allocation and collections library"
+autotests = false
+autobenches = false
+edition = "2024"
+
+[lib]
+test = false
+bench = false
+path = "lib.rs"
+
+[dependencies]
+

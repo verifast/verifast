@@ -2922,6 +2922,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             | PureFuncType (t1, t2) ->
               check_type true t1; check_type negative t2
             | StructType (_, _) when dialect = Some Rust -> () (* We don't support ghost fields in Rust structs, so these cannot be recursive or contain 'any' or predicate values *)
+            | ProjectionType (_, _, _, _) -> ()  (* We don't support ghost fields in Rust structs, so Rust types cannot be recursive or contain 'any' or predicate values *)
             | t -> static_error l (Printf.sprintf "Type '%s' is not supported as an inductive constructor parameter type." (string_of_type t)) None
           in
           let (_, parameter_types) = List.split parameter_names_and_types in

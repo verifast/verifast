@@ -2130,7 +2130,7 @@ mod vf_mir_builder {
                     Self::encode_mutability(match raw_ptr_kind {
                         mir::RawPtrKind::Mut => mir::Mutability::Mut,
                         mir::RawPtrKind::Const => mir::Mutability::Not,
-                        mir::RawPtrKind::FakeForPtrMetadata => todo!(),
+                        mir::RawPtrKind::FakeForPtrMetadata => mir::Mutability::Mut,
                     }, mutability_cpn);
                     let place_cpn = ao_data_cpn.init_place();
                     Self::encode_place(enc_ctx, place, place_cpn);
@@ -2300,7 +2300,7 @@ mod vf_mir_builder {
             match un_op {
                 mir::UnOp::Not => un_op_cpn.set_not(()),
                 mir::UnOp::Neg => un_op_cpn.set_neg(()),
-                mir::UnOp::PtrMetadata => todo!(),
+                mir::UnOp::PtrMetadata => un_op_cpn.set_ptr_metadata(()),
             }
         }
 
@@ -2689,7 +2689,7 @@ mod vf_mir_builder {
                     });
                     const_value_cpn.set_slice(bytes);
                 }
-                CV::Indirect { alloc_id, offset } => todo!(),
+                CV::Indirect { alloc_id, offset } => const_value_cpn.set_indirect(()),
             }
         }
 

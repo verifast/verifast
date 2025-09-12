@@ -63,14 +63,23 @@ let original_vf_mir =
 let verified_vf_mir =
   decode_vf_mir @@ VfMirRd.VfMir.of_message @@ Frontend.get_vf_mir !rustc_args verified_path
 
+let ensure_unique_keys kvs =
+  let keys_seen = Hashtbl.create (List.length kvs) in
+  kvs |> List.map @@ fun (k, v) ->
+    let seen = Hashtbl.find_all keys_seen k in
+    Hashtbl.add keys_seen k ();
+    if seen = [] then (k, v) else (Printf.sprintf "%s__%d" k (List.length seen), v)
+
 (* Check, for each function body in original_vf_mir, that there is a matching function body in verified_vf_mir *)
 let original_bodies =
   original_vf_mir.bodies
   |> List.map (fun body -> (canonicalize_def_path body.def_path, body))
+  |> ensure_unique_keys
 
 let verified_bodies =
   verified_vf_mir.bodies
   |> List.map (fun body -> (canonicalize_def_path body.def_path, body))
+  |> ensure_unique_keys
 
 let get_line_offsets text =
   let rec get_line_offsets' text offset acc =

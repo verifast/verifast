@@ -469,6 +469,7 @@ struct ConstValue {
         scalar @0: Scalar;
         zeroSized @2: Void;
         slice @1: Data;
+        indirect @3: Void; # TODO: Elaborate
     }
 }
 
@@ -582,6 +583,7 @@ struct Rvalue {
             union {
                 not @0: Void;
                 neg @1: Void;
+                ptrMetadata @2: Void; # Get the metadata (length or vtable) from a fat pointer
             }
         }
         operator @0: UnOp;

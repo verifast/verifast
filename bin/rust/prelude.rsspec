@@ -37,6 +37,8 @@ struct slice_ptr<T> { ptr: *T, len: usize }
 
 struct slice_ref<'a, T> { ptr: *T, len: usize }
 
+struct slice_ref_mut<'a, T> { ptr: *T, len: usize }
+
 struct str_ref<'a> { ptr: *u8, len: usize }
 
 /*@
