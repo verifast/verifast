@@ -786,7 +786,7 @@ mod vf_mir_builder {
                                     let mut required_fns_cons_cpn = required_fns_cpn.init_cons();
                                     let mut required_fn_cpn =
                                         required_fns_cons_cpn.reborrow().init_h();
-                                    required_fn_cpn.set_name(&item.name.to_string());
+                                    required_fn_cpn.set_name(&item.name().to_string());
                                     Self::encode_span_data(
                                         self.tcx,
                                         &hir_item.ident.span.data(),
@@ -1844,7 +1844,7 @@ mod vf_mir_builder {
                         ty::AliasTyKind::Projection => crate::vf_mir_capnp::AliasTyKind::Projection,
                         ty::AliasTyKind::Inherent => crate::vf_mir_capnp::AliasTyKind::Inherent,
                         ty::AliasTyKind::Opaque => crate::vf_mir_capnp::AliasTyKind::Opaque,
-                        ty::AliasTyKind::Weak => crate::vf_mir_capnp::AliasTyKind::Weak,
+                        ty::AliasTyKind::Free => crate::vf_mir_capnp::AliasTyKind::Free,
                     });
                     alias_ty_cpn.set_def_id(&tcx.def_path_str(alias_ty.def_id));
                     alias_ty_cpn.fill_args(alias_ty.args, |arg_cpn, arg| {
@@ -2429,7 +2429,11 @@ mod vf_mir_builder {
                     target,
                     unwind,
                     replace,
+                    drop,
+                    async_fut,
                 } => {
+                    assert!(drop.is_none());
+                    assert!(async_fut.is_none());
                     let mut drop_data_cpn = terminator_kind_cpn.init_drop();
                     Self::encode_place(enc_ctx, place, drop_data_cpn.reborrow().init_place());
                     Self::encode_basic_block_id(*target, drop_data_cpn.reborrow().init_target());

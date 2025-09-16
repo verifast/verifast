@@ -236,6 +236,8 @@ let rec of_type_expr = function
     of_list of_type_expr traitArgs;
     S assocTypeName
   ])
+| InferredTypeExpr l ->
+  C ("InferredTypeExpr", [of_loc l])
 and of_operator = function
   MinValue t -> C ("MinValue", [of_type t])
 | MaxValue t -> C ("MaxValue", [of_type t])
