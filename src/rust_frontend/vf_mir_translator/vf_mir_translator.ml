@@ -748,10 +748,27 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let value = Ast.IntLit (loc, value, (*decimal*) true, (*U suffix*) false, LLSuffix) in
       Ok (Ast.CallExpr (loc, "transmute_uint", [ty], [], [ LitPat value ], Static))
 
-  let canonicalize_item_name (name : string) =
-    if String.starts_with ~prefix:"core::" name then
-      "std::" ^ String.sub name 6 (String.length name - 6)
-    else name
+  let substring_eq (s1 : string) (start: int) (s2 : string) =
+    let len1 = String.length s1 in
+    let len2 = String.length s2 in
+    if start < 0 || start + len2 > len1 then false
+    else
+      let rec iter i =
+        i < 0 || (s1.[start + i] = s2.[i] && iter (i - 1))
+      in
+      iter (len2 - 1)
+  
+  let rec canonicalize_item_name (name : string) =
+    match String.index_opt name '<' with
+    | Some i when substring_eq name (i - 2) "::<impl core::" ->
+      canonicalize_item_name
+        (String.sub name 0 (i - 2)
+        ^ "::<impl std::"
+        ^ String.sub name (i + 12) (String.length name - i - 12))
+    | _ ->
+      if String.starts_with ~prefix:"core::" name then
+        "std::" ^ String.sub name 6 (String.length name - 6)
+      else name
 
   let translate_adt_def_id (adt_def_id_cpn : D.adt_def_id) =
     canonicalize_item_name @@ adt_def_id_cpn.name

@@ -285,7 +285,7 @@ enum AliasTyKind {
     projection @0;
     inherent @1;
     opaque @2;
-    weak @3;
+    free @3;
 }
 
 struct FnDefId {

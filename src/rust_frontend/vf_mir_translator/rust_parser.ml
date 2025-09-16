@@ -988,11 +988,15 @@ let rec parse_impl_rest l tparams = function%parser
     match tp with
     | IdentTypeExpr (lx, None, x) -> (lx, x, [])
     | ManifestTypeExpr (lx, tp) -> (lx, Printf.sprintf "<impl %s>" (Verifast0.rust_string_of_type tp), [])
-    | ConstructedTypeExpr (lx, x, targs) ->
-      (lx, x, targs)
+    | ConstructedTypeExpr (lx, x, targs) -> (lx, x, targs)
     | _ -> static_error (type_expr_loc tp) "This form of type is not supported here" None
   in
-  let tpText = x ^ (if targs = [] then "" else "::<" ^ String.concat ", " (List.map string_of_type_expr targs) ^ ">") in
+  let tpText =
+    if String.index_opt x ':' = None then
+      x ^ (if targs = [] then "" else "::<" ^ String.concat ", " (List.map string_of_type_expr targs) ^ ">")
+    else
+      Printf.sprintf "<impl %s<%s>>" x (String.concat ", " (List.map string_of_type_expr targs))
+  in
   let prefix = match forClause with None -> tpText | Some tp -> Printf.sprintf "<%s as %s>" tpText (string_of_type_expr tp) in
   let prefix = prefix ^ "::" in
   let ds = ds |> List.flatten in
