@@ -1660,7 +1660,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         match val_tree with
         | Leaf scalar_int_cpn ->
             translate_scalar_int scalar_int_cpn ty.vf_ty loc
-        | Branch -> failwith "Todo: ConstKind::ValTree::Branch")
+        | Branch _ -> failwith "Todo: ConstKind::ValTree::Branch")
     | Error -> Ast.static_error loc "Todo: ConstKind::Error" None
     | Expr -> Ast.static_error loc "Todo: ConstKind::Expr" None
 
@@ -3691,7 +3691,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     match own thread_id v with
     | Ok asn -> Ok asn
     | Error estr ->
-        Error (`GenLocalTyAsn ("Owner assertion function error: " ^ estr))
+        Ast.static_error loc ("Owner assertion function error: " ^ estr) None
 
   let gen_own_asns (adt_defs : Mir.adt_def_tr list) (loc : Ast.loc)
       (thread_id : Ast.expr) (vs : (Ast.loc * Ast.expr * Mir.ty_info) list) =

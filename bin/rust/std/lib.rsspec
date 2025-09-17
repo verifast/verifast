@@ -263,38 +263,6 @@ mod marker {
 
 mod intrinsics {
 
-    unsafe fn copy<T>(src: *mut T, dst: *mut T, count: usize);
-    /*@
-    req src[..count] |-> ?vs &*&
-        if src <= dst {
-            ((src + count) as *u8)[..dst as *u8 - src as *u8] |-> _
-        } else {
-            (dst as *u8)[..src as *u8 - dst as *u8] |-> _
-        };
-    @*/
-    /*@
-    ens dst[..count] |-> vs &*&
-        if src <= dst {
-            (src as *u8)[..dst as *u8 - src as *u8] |-> _
-        } else {
-            ((dst + count) as *u8)[..src as *u8 - dst as *u8] |-> _
-        };
-    @*/
-    //@ on_unwind_ens false;
-    //@ terminates;
-
-    unsafe fn copy_nonoverlapping<T>(src: *mut T, dst: *mut T, count: usize);
-    //@ req [?f]src[..count] |-> ?vs &*& dst[..count] |-> _;
-    //@ ens [f]src[..count] |-> vs &*& dst[..count] |-> vs;
-    //@ on_unwind_ens false;
-    //@ terminates;
-    
-    unsafe fn write_bytes<T>(dst: *mut T, val: u8, count: usize);
-    //@ req dst[..count] |-> _ &*& (dst as usize % std::mem::align_of::<T>()) == 0;
-    //@ ens (dst as *u8)[..count * std::mem::size_of::<T>()] |-> repeat(nat_of_int(count * std::mem::size_of::<T>()), val);
-    //@ on_unwind_ens false;
-    //@ terminates;
-
     unsafe fn ptr_offset_from<T>(ptr: *const T, base: *const T) -> isize;
     /*@
     req
@@ -475,6 +443,38 @@ mod mem {
 }
 
 mod ptr {
+
+    unsafe fn copy<T>(src: *mut T, dst: *mut T, count: usize);
+    /*@
+    req src[..count] |-> ?vs &*&
+        if src <= dst {
+            ((src + count) as *u8)[..dst as *u8 - src as *u8] |-> _
+        } else {
+            (dst as *u8)[..src as *u8 - dst as *u8] |-> _
+        };
+    @*/
+    /*@
+    ens dst[..count] |-> vs &*&
+        if src <= dst {
+            (src as *u8)[..dst as *u8 - src as *u8] |-> _
+        } else {
+            ((dst + count) as *u8)[..src as *u8 - dst as *u8] |-> _
+        };
+    @*/
+    //@ on_unwind_ens false;
+    //@ terminates;
+
+    unsafe fn copy_nonoverlapping<T>(src: *mut T, dst: *mut T, count: usize);
+    //@ req [?f]src[..count] |-> ?vs &*& dst[..count] |-> _;
+    //@ ens [f]src[..count] |-> vs &*& dst[..count] |-> vs;
+    //@ on_unwind_ens false;
+    //@ terminates;
+    
+    unsafe fn write_bytes<T>(dst: *mut T, val: u8, count: usize);
+    //@ req dst[..count] |-> _ &*& (dst as usize % std::mem::align_of::<T>()) == 0;
+    //@ ens (dst as *u8)[..count * std::mem::size_of::<T>()] |-> repeat(nat_of_int(count * std::mem::size_of::<T>()), val);
+    //@ on_unwind_ens false;
+    //@ terminates;
 
     fn without_provenance_mut<T>(addr: usize) -> *mut T;
     //@ req true;

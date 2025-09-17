@@ -1180,7 +1180,7 @@ mod vf_mir_builder {
                         Self::encode_gen_arg(enc_ctx.tcx, enc_ctx, arg, arg_cpn);
                     });
                     let term_cpn = proj_cpn.reborrow().init_term();
-                    match projection_pred.term.unpack() {
+                    match projection_pred.term.kind() {
                         ty::TermKind::Ty(ty) =>
                             Self::encode_ty(enc_ctx.tcx, enc_ctx, ty, term_cpn.init_ty()),
                         ty::TermKind::Const(const_) =>
@@ -2013,7 +2013,7 @@ mod vf_mir_builder {
         ) {
             debug!("Encoding generic arg {:?}", gen_arg);
             let kind_cpn = gen_arg_cpn.init_kind();
-            let kind = gen_arg.unpack();
+            let kind = gen_arg.kind();
             match kind {
                 ty::GenericArgKind::Lifetime(region) => {
                     let region_cpn = kind_cpn.init_lifetime();
@@ -2698,7 +2698,7 @@ mod vf_mir_builder {
         fn encode_val_tree(
             tcx: TyCtxt<'tcx>,
             val_tree: &ty::ValTree<'tcx>,
-            val_tree_cpn: val_tree_cpn::Builder<'_>,
+            mut val_tree_cpn: val_tree_cpn::Builder<'_>,
         ) {
             use ty::ValTreeKind as VT;
             match **val_tree {
@@ -2708,7 +2708,11 @@ mod vf_mir_builder {
                     Self::encode_scalar_int(tcx, scalar_int, scalar_int_cpn);
                 }
                 // Used only for `&[u8]` and `&str`
-                VT::Branch(_) => todo!(),
+                VT::Branch(children) => {
+                    val_tree_cpn.fill_branch(children, |child_cpn, child| {
+                        Self::encode_val_tree(tcx, child, child_cpn);
+                    });
+                }
             }
         }
 

@@ -166,7 +166,7 @@ struct ParamConst {
 struct ValTree {
     union {
         leaf @0: ScalarInt;
-        branch @1: Void;
+        branch @1: List(ValTree);
     }
 }
 
