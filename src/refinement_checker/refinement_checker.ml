@@ -296,7 +296,7 @@ and decode_const_expr genv const_cpn =
     let valtree = value_cpn.val_tree in
     match valtree with
       Leaf scalar_int_cpn -> LiteralConstExpr (decode_scalar_int ty scalar_int_cpn)
-    | Branch -> failwith "Branch not supported"
+    | Branch _ -> failwith "Branch not supported"
 
 type call_path = basic_block_path option
 and basic_block_path = {bb_caller: basic_block_path option; bb_index: int}
