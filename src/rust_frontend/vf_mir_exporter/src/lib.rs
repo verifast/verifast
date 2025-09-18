@@ -1239,10 +1239,10 @@ mod vf_mir_builder {
                     def_kind_cpn.set_fn(());
                     if kind == hir::def::DefKind::AssocFn {
                         let assoc_item = tcx.associated_item(def_id);
-                        if assoc_item.container == ty::AssocItemContainer::Trait {
+                        if assoc_item.container == ty::AssocContainer::Trait {
                             body_cpn.set_is_trait_fn(true);
                         } else {
-                            if let Some(trait_fn) = assoc_item.trait_item_def_id {
+                            if let Some(trait_fn) = assoc_item.trait_item_def_id() {
                                 if let Some(trait_did) = tcx.trait_of_assoc(trait_fn) {
                                     if let Some(drop_did) = tcx.lang_items().drop_trait() {
                                         if trait_did == drop_did {
@@ -2198,7 +2198,6 @@ mod vf_mir_builder {
                     let place_cpn = ao_data_cpn.init_place();
                     Self::encode_place(enc_ctx, place, place_cpn);
                 }
-                mir::Rvalue::Len(place) => rvalue_cpn.set_len(()),
                 mir::Rvalue::Cast(cast_kind, operand, ty) => {
                     let mut cast_data_cpn = rvalue_cpn.init_cast();
                     let operand_cpn = cast_data_cpn.reborrow().init_operand();
@@ -2892,9 +2891,10 @@ mod mir_utils {
     use rustc_middle::ty::TyCtxt;
 
     pub fn mir_body_pretty_string<'tcx>(tcx: TyCtxt<'tcx>, body: &mir::Body<'tcx>) -> String {
-        use rustc_middle::mir::pretty::write_mir_fn;
+        use rustc_middle::mir::pretty::MirWriter;
+        let mir_writer = MirWriter::new(tcx);
         let mut buf: Vec<u8> = Vec::new();
-        write_mir_fn(tcx, body, &mut |_, _| Ok(()), &mut buf, PrettyPrintMirOptions { include_extra_comments: false }).expect(&format!(
+        mir_writer.write_mir_fn(body, &mut buf).expect(&format!(
             "Failed to generate pretty MIR for {:?}",
             body.source.instance
         ));

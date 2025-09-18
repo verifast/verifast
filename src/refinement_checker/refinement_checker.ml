@@ -1652,7 +1652,6 @@ let commands_of_rvalue = function
 | Ref rvalue_ref_data -> [Ref rvalue_ref_data]
 | ThreadLocalRef -> failwith "TODO: ThreadLocalRef"
 | AddressOf rvalue_address_of_data -> [AddressOf rvalue_address_of_data]
-| Len -> failwith "TODO: Len"
 | Cast {operand=Copy {local; projection=[BoxAsNonNull _]}} -> [LoadLocal local; BoxAsPtr]
 | Cast {operand; ty} -> commands_of_operand operand @ [Cast ty]
 | BinaryOp {operator; operandl; operandr} -> commands_of_operand operandl @ commands_of_operand operandr @ [BinaryOp operator]
@@ -2084,7 +2083,6 @@ let check_rvalue_refines_rvalue genv0 env0 span0 caller0 rhsRvalue0 genv1 env1 s
   end
 | ThreadLocalRef, ThreadLocalRef -> failwith "Rvalue::ThreadLocalRef not supported"
 | AddressOf address_of_data_cpn0, AddressOf address_of_data_cpn1 -> failwith "Rvalue::AddressOf not supported"
-| Len, Len -> failwith "Rvalue::Len not supported"
 | Cast cast_data_cpn0, Cast cast_data_cpn1 ->
   check_operand_refines_operand 0 genv0 env0 span0 caller0 cast_data_cpn0.operand genv1 env1 span1 caller1 cast_data_cpn1.operand;
   if decode_ty genv0 cast_data_cpn0.ty <> decode_ty genv1 cast_data_cpn1.ty then failwith "Rvalue::Cast: types do not match"
