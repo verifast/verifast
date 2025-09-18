@@ -1157,6 +1157,11 @@ mod boxed {
         //@ ens Box(result, value);
         //@ on_unwind_ens false;
         
+        fn into_raw(b: Box<T, std::alloc::Global>) -> *T;
+        //@ req Box(b, ?value);
+        //@ ens *result |-> value &*& std::alloc::alloc_block(result as *u8, std::alloc::Layout::new::<T>()) &*& result as usize != 0;
+        //@ on_unwind_ens false;
+        
     }
     
     impl<T, A> Box<T, A> {
@@ -1176,11 +1181,6 @@ mod boxed {
         //@ ens Box_slice_in(t, result, alloc_id, vs);
         //@ on_unwind_ens false;
     
-        fn into_raw(b: Box<T, std::alloc::Global>) -> *T;
-        //@ req Box(b, ?value);
-        //@ ens *result |-> value &*& std::alloc::alloc_block(result as *u8, std::alloc::Layout::new::<T>()) &*& result as usize != 0;
-        //@ on_unwind_ens false;
-        
         fn into_inner(b: Box<T, A>) -> T;
         //@ req thread_token(?t) &*& Box_in::<T, A>(t, b, ?alloc_id, ?value);
         //@ ens thread_token(t) &*& result == value;
@@ -1622,6 +1622,13 @@ mod sync {
             //@ ens post(result);
             //@ on_unwind_ens false;
         }
+
+        trait AtomicPrimitive {
+
+            type AtomicInner;
+
+        }
+
     }
 }
 
