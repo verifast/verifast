@@ -5,6 +5,24 @@ Note: binary downloads are available, both ["nightly" builds](https://github.com
 
 Note: The instructions below may get out of date. When that happens, please submit an issue. In the meantime, guaranteed up-to-date instructions can be found by looking at the script, [.github/workflows/build.yml](https://github.com/verifast/verifast/blob/master/.github/workflows/build.yml), used by the Github Actions CI service that automatically builds and tests VeriFast after each commit. This script uses the `build_ubuntu` job, which runs on a Ubuntu 18.04 virtual machine. It first runs the command listed below `Build setup:`, and then the command listed below `Build:`.
 
+Devcontainer
+------------
+
+The easiest way to get started is to use VSCode's support for Dev Containers. Simply choose the Dev Containers: Clone Repository in Container Volume command from the VSCode Command Palette, and enter the `https://github.com/verifast/verifast` repository URL.
+
+On Linux, you can run the VeriFast IDE from inside the dev container by creating a file `.devcontainer/devcontainer.local.json` with the following contents:
+```json
+{
+  "runArgs": [
+    "-e", "DISPLAY=${localEnv:DISPLAY}",
+    "-v", "/tmp/.X11-unix:/tmp/.X11-unix"
+  ]
+}
+```
+In a host terminal, run `xhost +local:docker` to ensure the container has access to your X11 server.
+
+An alternative is to use the VeriFast VSCode extension. This works even in GitHub Codespaces.
+
 Dependencies
 ------------
 
