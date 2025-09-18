@@ -322,7 +322,8 @@ type term =
 | SliceConstant of ty * string
 | AddressOfNonMutLocal of < > * local_variable_path (* The object serves to ensure two AddressOfNonMutLocal values do not compare equal even if their variable names happen to match. *)
 | FieldTerm of term * int
-| ConstTerm of mir_const
+| ConstTerm of mir_const (* TODO: Substitute generic parameters *)
+| RepeatTerm of term * ty_const (* TODO: Substitute generic parameters *)
 
 let rec string_of_term = function
   Symbol id -> Printf.sprintf "Symbol %d" id
@@ -1603,6 +1604,7 @@ type command =
 | BoxAsPtr (* Pop a value from the top of the operand stack, which is a Box, and push a pointer to the contents of the Box *)
 | Downcast of int (* Pop a value from the top of the operand stack, which is an enum value, and push the specified variant of the enum value *)
 | Constant of const_operand (* Push a constant operand onto the operand stack *)
+| Repeat of ty_const
 | Ref of rvalue_ref_data
 | AddressOf of rvalue_address_of_data
 | Cast of Vf_mir_decoder.ty (* Pop a value from the top of the operand stack, cast it to the specified type, and push the result *)
@@ -1622,6 +1624,7 @@ let string_of_command c =
   | BoxAsPtr -> "BoxAsPtr"
   | Downcast i -> Printf.sprintf "Downcast %d" i
   | Constant {const} -> Printf.sprintf "Constant %s" (string_of_mir_const const)
+  | Repeat count -> Printf.sprintf "Repeat <TyConst>"
   | Ref data -> string_of_rvalue_ref_data data
   | AddressOf {place} -> Printf.sprintf "AddressOf %s" (string_of_place place)
   | Cast ty -> Printf.sprintf "Cast %s" (string_of_ty ty)
@@ -1645,14 +1648,18 @@ let commands_of_operand = function
 
 let commands_of_rvalue = function
   Use operand -> commands_of_operand operand
+| Repeat {operand; count} -> commands_of_operand operand @ [Repeat count]
 | Ref rvalue_ref_data -> [Ref rvalue_ref_data]
+| ThreadLocalRef -> failwith "TODO: ThreadLocalRef"
 | AddressOf rvalue_address_of_data -> [AddressOf rvalue_address_of_data]
+| Len -> failwith "TODO: Len"
 | Cast {operand=Copy {local; projection=[BoxAsNonNull _]}} -> [LoadLocal local; BoxAsPtr]
 | Cast {operand; ty} -> commands_of_operand operand @ [Cast ty]
 | BinaryOp {operator; operandl; operandr} -> commands_of_operand operandl @ commands_of_operand operandr @ [BinaryOp operator]
 | UnaryOp {operator; operand} -> commands_of_operand operand @ [UnaryOp operator]
 | Aggregate {aggregate_kind; operands} -> List.concat_map commands_of_operand operands @ [Aggregate (aggregate_kind, List.length operands)]
 | Discriminant {place} -> commands_for_loading_place place @ [Discriminant]
+| ShallowInitBox -> failwith "TODO: ShallowInitBox"
 
 let commands_of_statement_kind = function
   Assign {lhs_place; rhs_rvalue} ->
@@ -1865,6 +1872,9 @@ let rec process_commands bodies (env: env) opnds (i_bb: basic_block_info) i_s (s
     | LoadLocal localId ->
       load_from_local localId (fun msg -> done_ ()) (fun v -> cont env (v::opnds))
     | Constant {const} -> cont env (ConstTerm const::opnds)
+    | Repeat count ->
+      let v::opnds = opnds in
+      cont env (RepeatTerm (v, count)::opnds)
     | Deref ->
       let v::opnds = opnds in
       begin match v with
@@ -1996,7 +2006,7 @@ let check_place_refines_place (env0: env) caller0 place0 (env1: env) caller1 pla
 
 let check_operand_refines_operand i genv0 env0 span0 caller0 operand0 genv1 env1 span1 caller1 operand1 =
   match operand0, operand1 with
-    (Move placeExpr0, Move placeExpr1) | (Copy placeExpr0, Copy placeExpr1) ->
+    (Move placeExpr0|Copy placeExpr0), (Move placeExpr1|Copy placeExpr1) ->
       begin match check_place_refines_place env0 caller0 placeExpr0 env1 caller1 placeExpr1 with
         (Local x0, Local x1) | (LocalProjection x0, LocalProjection x1) ->
           begin match List.assoc x0 env0, List.assoc x1 env1 with
@@ -2010,6 +2020,7 @@ let check_operand_refines_operand i genv0 env0 span0 caller0 operand0 genv1 env1
     let term0 = eval_const_operand genv0 const_operand_cpn0 in
     let term1 = eval_const_operand genv1 const_operand_cpn1 in
     if term0 <> term1 then failwith (Printf.sprintf "The constants %s at %s and %s at %s are not equal" (string_of_term term0) (string_of_span span0) (string_of_term term1) (string_of_span span1))
+  | _ -> failwith "Operand kinds do not match"
 
 let check_aggregate_kind_refines_aggregate_kind genv0 (aggregate_kind0: aggregate_kind) genv1 (aggregate_kind1: aggregate_kind) =
   match aggregate_kind0, aggregate_kind1 with
@@ -2054,7 +2065,8 @@ let check_rvalue_refines_rvalue genv0 env0 span0 caller0 rhsRvalue0 genv1 env1 s
   match rhsRvalue0, rhsRvalue1 with
   Use operand0, Use operand1 ->
     check_operand_refines_operand 0 genv0 env0 span0 caller0 operand0 genv1 env1 span1 caller1 operand1
-| Repeat, Repeat -> failwith "Rvalue::Repeat not supported"
+| Repeat {operand=operand0; count=count0}, Repeat {operand=operand1; count=count1} ->
+  failwith "Rvalue::Repeat not supported"
 | Ref ref_data_cpn0, Ref ref_data_cpn1 ->
   (* We ignore the region because it does not affect the run-time behavior *)
   let borKind0 = ref_data_cpn0.bor_kind in

@@ -560,6 +560,12 @@ struct IntegerType {
 }
 
 struct Rvalue {
+
+    struct RepeatData {
+        operand @0: Operand;
+        count @1: TyConst;
+    }
+
     struct AddressOfData {
         mutability @0: Mutability;
         place @1: Place;
@@ -638,7 +644,7 @@ struct Rvalue {
     union {
         # Either move or copy depending on operand type
         use @0: Operand;
-        repeat @8: Void;
+        repeat @8: RepeatData;
         ref @1: RefData;
         threadLocalRef @9: Void;
         addressOf @2: AddressOfData;

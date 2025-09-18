@@ -109,7 +109,7 @@
 //! parameters (corresponding to `format_spec` in [the syntax](#syntax)). These
 //! parameters affect the string representation of what's being formatted.
 //!
-//! The colon `:` in format syntax divides indentifier of the input data and
+//! The colon `:` in format syntax divides identifier of the input data and
 //! the formatting options, the colon itself does not change anything, only
 //! introduces the options.
 //!
@@ -348,13 +348,13 @@
 //! format := '{' [ argument ] [ ':' format_spec ] [ ws ] * '}'
 //! argument := integer | identifier
 //!
-//! format_spec := [[fill]align][sign]['#']['0'][width]['.' precision]type
+//! format_spec := [[fill]align][sign]['#']['0'][width]['.' precision][type]
 //! fill := character
 //! align := '<' | '^' | '>'
 //! sign := '+' | '-'
 //! width := count
 //! precision := count | '*'
-//! type := '' | '?' | 'x?' | 'X?' | identifier
+//! type := '?' | 'x?' | 'X?' | identifier
 //! count := parameter | integer
 //! parameter := argument '$'
 //! ```

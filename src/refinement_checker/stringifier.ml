@@ -91,7 +91,7 @@ let string_of_aggregate_kind = function
 
 let string_of_rvalue = function
   | Use operand -> string_of_operand operand
-  | Repeat -> "<repeat>"
+  | Repeat {operand; count} -> Printf.sprintf "repeat(%s; <TyConst>)" (string_of_operand operand)
   | Ref data -> string_of_rvalue_ref_data data
   | ThreadLocalRef -> "<ThreadLocalRef>"
   | AddressOf {place} -> Printf.sprintf "&raw %s" (string_of_place place)

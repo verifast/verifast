@@ -617,7 +617,7 @@ impl ::std::error::Error for Error {
     fn description(&self) -> &str {
         &self.extra
     }
-    fn cause(&self) -> Option<&dyn (::std::error::Error)> {
+    fn cause(&self) -> Option<&dyn ::std::error::Error> {
         None
     }
 }

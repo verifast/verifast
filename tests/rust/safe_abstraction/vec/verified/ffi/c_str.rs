@@ -351,9 +351,14 @@ impl CString {
     /// # Safety
     ///
     /// This should only ever be called with a pointer that was earlier
-    /// obtained by calling [`CString::into_raw`]. Other usage (e.g., trying to take
-    /// ownership of a string that was allocated by foreign code) is likely to lead
-    /// to undefined behavior or allocator corruption.
+    /// obtained by calling [`CString::into_raw`], and the memory it points to must not be accessed
+    /// through any other pointer during the lifetime of reconstructed `CString`.
+    /// Other usage (e.g., trying to take ownership of a string that was allocated by foreign code)
+    /// is likely to lead to undefined behavior or allocator corruption.
+    ///
+    /// This function does not validate ownership of the raw pointer's memory.
+    /// A double-free may occur if the function is called twice on the same raw pointer.
+    /// Additionally, the caller must ensure the pointer is not dangling.
     ///
     /// It should be noted that the length isn't just "recomputed," but that
     /// the recomputed length must match the original length from the
@@ -574,7 +579,7 @@ impl CString {
     #[stable(feature = "as_c_str", since = "1.20.0")]
     #[rustc_diagnostic_item = "cstring_as_c_str"]
     pub fn as_c_str(&self) -> &CStr {
-        &*self
+        unsafe { CStr::from_bytes_with_nul_unchecked(self.as_bytes_with_nul()) }
     }
 
     /// Converts this `CString` into a boxed [`CStr`].
@@ -705,14 +710,16 @@ impl ops::Deref for CString {
 
     #[inline]
     fn deref(&self) -> &CStr {
-        unsafe { CStr::from_bytes_with_nul_unchecked(self.as_bytes_with_nul()) }
+        self.as_c_str()
     }
 }
 
+/// Delegates to the [`CStr`] implementation of [`fmt::Debug`],
+/// showing invalid UTF-8 as hex escapes.
 #[stable(feature = "rust1", since = "1.0.0")]
 impl fmt::Debug for CString {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Debug::fmt(&**self, f)
+        fmt::Debug::fmt(self.as_c_str(), f)
     }
 }
 
@@ -818,6 +825,7 @@ impl From<Vec<NonZero<u8>>> for CString {
     }
 }
 
+#[stable(feature = "c_string_from_str", since = "1.85.0")]
 impl FromStr for CString {
     type Err = NulError;
 
@@ -830,6 +838,7 @@ impl FromStr for CString {
     }
 }
 
+#[stable(feature = "c_string_from_str", since = "1.85.0")]
 impl TryFrom<CString> for String {
     type Error = IntoStringError;
 
@@ -1090,6 +1099,46 @@ impl From<&CStr> for CString {
     }
 }
 
+#[stable(feature = "c_string_eq_c_str", since = "1.90.0")]
+impl PartialEq<CStr> for CString {
+    #[inline]
+    fn eq(&self, other: &CStr) -> bool {
+        **self == *other
+    }
+
+    #[inline]
+    fn ne(&self, other: &CStr) -> bool {
+        **self != *other
+    }
+}
+
+#[stable(feature = "c_string_eq_c_str", since = "1.90.0")]
+impl PartialEq<&CStr> for CString {
+    #[inline]
+    fn eq(&self, other: &&CStr) -> bool {
+        **self == **other
+    }
+
+    #[inline]
+    fn ne(&self, other: &&CStr) -> bool {
+        **self != **other
+    }
+}
+
+#[cfg(not(no_global_oom_handling))]
+#[stable(feature = "c_string_eq_c_str", since = "1.90.0")]
+impl PartialEq<Cow<'_, CStr>> for CString {
+    #[inline]
+    fn eq(&self, other: &Cow<'_, CStr>) -> bool {
+        **self == **other
+    }
+
+    #[inline]
+    fn ne(&self, other: &Cow<'_, CStr>) -> bool {
+        **self != **other
+    }
+}
+
 #[stable(feature = "cstring_asref", since = "1.7.0")]
 impl ops::Index<ops::RangeFull> for CString {
     type Output = CStr;
@@ -1116,7 +1165,7 @@ impl CStr {
     /// with the corresponding <code>&[str]</code> slice. Otherwise, it will
     /// replace any invalid UTF-8 sequences with
     /// [`U+FFFD REPLACEMENT CHARACTER`][U+FFFD] and return a
-    /// <code>[Cow]::[Owned]\(&[str])</code> with the result.
+    /// <code>[Cow]::[Owned]\([String])</code> with the result.
     ///
     /// [str]: prim@str "str"
     /// [Borrowed]: Cow::Borrowed
@@ -1169,6 +1218,75 @@ impl CStr {
     #[stable(feature = "into_boxed_c_str", since = "1.20.0")]
     pub fn into_c_string(self: Box<Self>) -> CString {
         CString::from(self)
+    }
+}
+
+#[stable(feature = "c_string_eq_c_str", since = "1.90.0")]
+impl PartialEq<CString> for CStr {
+    #[inline]
+    fn eq(&self, other: &CString) -> bool {
+        *self == **other
+    }
+
+    #[inline]
+    fn ne(&self, other: &CString) -> bool {
+        *self != **other
+    }
+}
+
+#[cfg(not(no_global_oom_handling))]
+#[stable(feature = "c_string_eq_c_str", since = "1.90.0")]
+impl PartialEq<Cow<'_, Self>> for CStr {
+    #[inline]
+    fn eq(&self, other: &Cow<'_, Self>) -> bool {
+        *self == **other
+    }
+
+    #[inline]
+    fn ne(&self, other: &Cow<'_, Self>) -> bool {
+        *self != **other
+    }
+}
+
+#[cfg(not(no_global_oom_handling))]
+#[stable(feature = "c_string_eq_c_str", since = "1.90.0")]
+impl PartialEq<CStr> for Cow<'_, CStr> {
+    #[inline]
+    fn eq(&self, other: &CStr) -> bool {
+        **self == *other
+    }
+
+    #[inline]
+    fn ne(&self, other: &CStr) -> bool {
+        **self != *other
+    }
+}
+
+#[cfg(not(no_global_oom_handling))]
+#[stable(feature = "c_string_eq_c_str", since = "1.90.0")]
+impl PartialEq<&CStr> for Cow<'_, CStr> {
+    #[inline]
+    fn eq(&self, other: &&CStr) -> bool {
+        **self == **other
+    }
+
+    #[inline]
+    fn ne(&self, other: &&CStr) -> bool {
+        **self != **other
+    }
+}
+
+#[cfg(not(no_global_oom_handling))]
+#[stable(feature = "c_string_eq_c_str", since = "1.90.0")]
+impl PartialEq<CString> for Cow<'_, CStr> {
+    #[inline]
+    fn eq(&self, other: &CString) -> bool {
+        **self == **other
+    }
+
+    #[inline]
+    fn ne(&self, other: &CString) -> bool {
+        **self != **other
     }
 }
 

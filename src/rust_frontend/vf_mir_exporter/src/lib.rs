@@ -366,8 +366,8 @@ impl<'tcx> rustc_hir::intravisit::Visitor<'tcx> for HirVisitor<'tcx> {
             // We cannot send DefId of a struct to optimize_mir query
             rustc_hir::ItemKind::Struct(..) => self.structs.push(item.owner_id.def_id),
             rustc_hir::ItemKind::Impl(impl_) => {
-                if let Some(trait_ref) = &impl_.of_trait {
-                    if let Some(of_trait) = trait_ref.trait_def_id() {
+                if let Some(trait_impl_header) = &impl_.of_trait {
+                    if let Some(of_trait) = trait_impl_header.trait_ref.trait_def_id() {
                         if let rustc_hir::TyKind::Path(rustc_hir::QPath::Resolved(
                             None,
                             self_ty_path,
@@ -379,19 +379,20 @@ impl<'tcx> rustc_hir::intravisit::Visitor<'tcx> for HirVisitor<'tcx> {
                             ) = self_ty_path.res
                             {
                                 let mut items = Vec::<TraitImplItemInfo>::new();
-                                for item in impl_.items {
+                                for item_id in impl_.items {
+                                    let item = self.tcx.hir_impl_item(*item_id);
                                     items.push(
                                         TraitImplItemInfo {
                                             name: item.ident.to_string(),
-                                            def_id: self.tcx.def_path_str(item.id.owner_id.to_def_id())
+                                            def_id: self.tcx.def_path_str(item_id.owner_id.to_def_id())
                                         }
                                     );
                                 }
                                 self.trait_impls.push(TraitImplInfo {
                                     def_id: item.owner_id.def_id,
                                     span: item.span,
-                                    is_unsafe: impl_.safety == rustc_hir::Safety::Unsafe,
-                                    is_negative: match impl_.polarity {
+                                    is_unsafe: trait_impl_header.safety == rustc_hir::Safety::Unsafe,
+                                    is_negative: match trait_impl_header.polarity {
                                         rustc_hir::ImplPolarity::Negative(_) => true,
                                         _ => false,
                                     },
@@ -761,7 +762,7 @@ mod vf_mir_builder {
         ) {
             let mut enc_ctx = EncCtx::new(self.tcx, EncKind::Adt, LinkedList::new(), Vec::new());
             let mut traits_cpn = vf_mir_cpn.reborrow().init_traits();
-            for trait_def_id in self.tcx.all_traits() {
+            for trait_def_id in self.tcx.all_traits_including_private() {
                 if trait_def_id.krate != rustc_hir::def_id::LOCAL_CRATE {
                     break; // We assume that the local crate's traits come first.
                 }
@@ -807,8 +808,8 @@ mod vf_mir_builder {
                                                     ty::BoundRegionKind::Anon => todo!(),
                                                     ty::BoundRegionKind::Named(
                                                         def_id,
-                                                        symbol,
-                                                    ) => symbol.to_string(),
+                                                    ) => self.tcx.item_name(def_id).to_string(),
+                                                    ty::BoundRegionKind::NamedAnon(name) => name.to_string(),
                                                     ty::BoundRegionKind::ClosureEnv => todo!(),
                                                 }
                                             }
@@ -1136,15 +1137,16 @@ mod vf_mir_builder {
             match pred.0.kind().skip_binder() {
                 ty::ClauseKind::RegionOutlives(outlives_pred) => {
                     let mut outlives_cpn = pred_cpn.init_outlives();
-                    Self::encode_region(outlives_pred.0, outlives_cpn.reborrow().init_region1());
-                    Self::encode_region(outlives_pred.1, outlives_cpn.reborrow().init_region2());
+                    Self::encode_region(enc_ctx.tcx, outlives_pred.0, outlives_cpn.reborrow().init_region1());
+                    Self::encode_region(enc_ctx.tcx, outlives_pred.1, outlives_cpn.reborrow().init_region2());
                 }
                 ty::ClauseKind::Trait(trait_pred) => {
                     let bound_vars = pred.0.kind().bound_vars();
                     let mut trait_cpn = pred_cpn.init_trait();
                     trait_cpn.fill_bound_regions(bound_vars.iter().map(|v| {
                         match v {
-                            ty::BoundVariableKind::Region(ty::BoundRegionKind::Named(def_id, symbol)) => {
+                            ty::BoundVariableKind::Region(ty::BoundRegionKind::Named(def_id)) => {
+                                let symbol = enc_ctx.tcx.item_name(def_id);
                                 if symbol.as_str() == "'_" {
                                     Self::anonymous_late_bound_lifetime_name(def_id.index.as_usize())
                                 } else {
@@ -1164,7 +1166,8 @@ mod vf_mir_builder {
                     let mut proj_cpn = pred_cpn.init_projection();
                     proj_cpn.fill_bound_regions(bound_vars.iter().map(|v| {
                         match v {
-                            ty::BoundVariableKind::Region(ty::BoundRegionKind::Named(def_id, symbol)) => {
+                            ty::BoundVariableKind::Region(ty::BoundRegionKind::Named(def_id)) => {
+                                let symbol = enc_ctx.tcx.item_name(def_id);
                                 if symbol.as_str() == "'_" {
                                     Self::anonymous_late_bound_lifetime_name(def_id.index.as_usize())
                                 } else {
@@ -1240,7 +1243,7 @@ mod vf_mir_builder {
                             body_cpn.set_is_trait_fn(true);
                         } else {
                             if let Some(trait_fn) = assoc_item.trait_item_def_id {
-                                if let Some(trait_did) = tcx.trait_of_item(trait_fn) {
+                                if let Some(trait_did) = tcx.trait_of_assoc(trait_fn) {
                                     if let Some(drop_did) = tcx.lang_items().drop_trait() {
                                         if trait_did == drop_did {
                                             body_cpn.set_is_drop_fn(true);
@@ -1275,7 +1278,7 @@ mod vf_mir_builder {
                 );
             }
 
-            if let Some(impl_did) = tcx.impl_of_method(def_id) {
+            if let Some(impl_did) = tcx.impl_of_assoc(def_id) {
                 let impl_hir_gens = tcx.hir_get_generics(impl_did.expect_local()).unwrap();
                 let impl_hir_generics_cpn = body_cpn.reborrow().init_impl_block_hir_generics();
                 let impl_hir_generics_some_cpn = impl_hir_generics_cpn.init_something();
@@ -1937,7 +1940,7 @@ mod vf_mir_builder {
             mut ref_ty_cpn: ref_ty_cpn::Builder<'_>,
         ) {
             let region_cpn = ref_ty_cpn.reborrow().init_region();
-            Self::encode_region(region, region_cpn);
+            Self::encode_region(tcx, region, region_cpn);
             let ty_cpn = ref_ty_cpn.reborrow().init_ty();
             Self::encode_ty(tcx, enc_ctx, ty, ty_cpn);
             let mutability_cpn = ref_ty_cpn.init_mutability();
@@ -1968,7 +1971,7 @@ mod vf_mir_builder {
             Self::encode_ty_args(enc_ctx, substs, substs_cpn);
         }
 
-        fn encode_region(region: ty::Region<'tcx>, mut region_cpn: region_cpn::Builder<'_>) {
+        fn encode_region(tcx: TyCtxt<'tcx>, region: ty::Region<'tcx>, mut region_cpn: region_cpn::Builder<'_>) {
             debug!("Encoding region {:?}", region);
             match region.kind() {
                 ty::RegionKind::ReEarlyParam(early_bound_region) => {
@@ -1984,7 +1987,8 @@ mod vf_mir_builder {
                         let id = Self::anonymous_late_bound_lifetime_name(de_bruijn_index.as_usize());
                         region_cpn.set_id(&id);
                     }
-                    ty::BoundRegionKind::Named(def_id, symbol) => {
+                    ty::BoundRegionKind::Named(def_id) => {
+                        let symbol = tcx.item_name(def_id);
                         if symbol.as_str() == "'_" {
                             let id = Self::anonymous_late_bound_lifetime_name(def_id.index.as_usize());
                             region_cpn.set_id(&id);
@@ -1992,6 +1996,7 @@ mod vf_mir_builder {
                             region_cpn.set_id(symbol.as_str());
                         }
                     }
+                    ty::BoundRegionKind::NamedAnon(name) => region_cpn.set_id(name.as_str()),
                     ty::BoundRegionKind::ClosureEnv => todo!(),
                 },
                 ty::RegionKind::ReLateParam(_debruijn_index) => bug!(),
@@ -2017,7 +2022,7 @@ mod vf_mir_builder {
             match kind {
                 ty::GenericArgKind::Lifetime(region) => {
                     let region_cpn = kind_cpn.init_lifetime();
-                    Self::encode_region(region, region_cpn);
+                    Self::encode_region(tcx, region, region_cpn);
                 }
                 ty::GenericArgKind::Type(ty) => {
                     let ty_cpn = kind_cpn.init_type();
@@ -2155,7 +2160,13 @@ mod vf_mir_builder {
                     Self::encode_operand(tcx, enc_ctx, operand, operand_cpn);
                 }
                 // [x; 32]
-                mir::Rvalue::Repeat(operand, ty_const) => rvalue_cpn.set_repeat(()),
+                mir::Rvalue::Repeat(operand, count) => {
+                    let mut repeat_cpn = rvalue_cpn.init_repeat();
+                    let operand_cpn = repeat_cpn.reborrow().init_operand();
+                    Self::encode_operand(tcx, enc_ctx, operand, operand_cpn);
+                    let count_cpn = repeat_cpn.init_count();
+                    Self::encode_typesystem_constant(tcx, enc_ctx, count, count_cpn);
+                }
                 // &x or &mut x
                 mir::Rvalue::Ref(region, bor_kind, place) => {
                     let mut ref_data_cpn = rvalue_cpn.init_ref();
@@ -2163,7 +2174,7 @@ mod vf_mir_builder {
                     let place_ty_cpn = ref_data_cpn.reborrow().init_place_ty();
                     Self::encode_ty(tcx, enc_ctx, place_ty.ty, place_ty_cpn);
                     let region_cpn = ref_data_cpn.reborrow().init_region();
-                    Self::encode_region(*region, region_cpn);
+                    Self::encode_region(enc_ctx.tcx, *region, region_cpn);
                     let bor_kind_cpn = ref_data_cpn.reborrow().init_bor_kind();
                     Self::encode_borrow_kind(bor_kind, bor_kind_cpn);
                     let place_cpn = ref_data_cpn.reborrow().init_place();
@@ -2719,7 +2730,7 @@ mod vf_mir_builder {
         fn encode_const_value(
             tcx: TyCtxt<'tcx>,
             ty: ty::Ty<'tcx>,
-            const_value: &mir::ConstValue<'tcx>,
+            const_value: &mir::ConstValue,
             mut const_value_cpn: const_value_cpn::Builder<'_>,
         ) {
             use mir::ConstValue as CV;
@@ -2741,8 +2752,8 @@ mod vf_mir_builder {
                     const_value_cpn.set_zero_sized(());
                 }
                 // Used only for `&[u8]` and `&str`
-                CV::Slice { data, meta } => {
-                    let allocation = data.inner();
+                CV::Slice { alloc_id, meta} => {
+                    let allocation = tcx.global_alloc(*alloc_id).unwrap_memory().inner();
                     let bytes = allocation.get_bytes_unchecked(AllocRange {
                         start: rustc_abi::Size::ZERO,
                         size: allocation.size(),

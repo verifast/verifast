@@ -3069,6 +3069,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | StructType (_, _) -> allowContainsAnyPositive
       (* We don't need to check the struct type type arguments because they are real and real types
          do not contain any in negative positions. *)
+    | ProjectionType (_, _, _, _) -> allowContainsAnyPositive
+      (* We don't need to check the projection type type arguments because they are real and real types
+         do not contain any in negative positions. *)
     | UnionType _ -> allowContainsAnyPositive
     | StaticArrayType (t, n) -> type_satisfies_contains_any_constraint assumeTypeParamsContainAnyPositiveOnly allowContainsAnyPositive t
     | PureFuncType (t1, t2) -> type_satisfies_contains_any_constraint assumeTypeParamsContainAnyPositiveOnly false t1 && type_satisfies_contains_any_constraint assumeTypeParamsContainAnyPositiveOnly allowContainsAnyPositive t2

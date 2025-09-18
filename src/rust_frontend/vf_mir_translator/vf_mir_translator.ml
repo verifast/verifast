@@ -1116,9 +1116,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         "Expressing the full borrow content of alias types is not yet supported"
     in
     let points_to tid l vid_op =
-      Error
-        "Expressing a points-to assertion for an alias type is not yet \
-         supported"
+      let* pat = RustBelt.Aux.vid_op_to_var_pat vid_op loc in
+      Ok (PointsTo (loc, l, RegularPointsTo, pat))
     in
     Ok {
       Mir.vf_ty;

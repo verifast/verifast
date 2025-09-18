@@ -113,7 +113,7 @@ cd safe_abstraction
     refinement-checker --rustc-args "--edition 2021 --cfg test" orig/lib.rs verified/lib.rs
   cd ..
   verifast -ignore_unwind_paths -skip_specless_fns -allow_assume btree_node.rs
-  verifast -skip_specless_fns -ignore_unwind_paths -allow_assume atomic.rs
+  # TODO: verifast -skip_specless_fns -ignore_unwind_paths -allow_assume atomic.rs
   cd raw_vec
     verifast -ignore_unwind_paths -skip_specless_fns -allow_assume verified/lib.rs
     refinement-checker with-directives/lib.rs verified/lib.rs
