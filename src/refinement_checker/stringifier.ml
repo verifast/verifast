@@ -95,7 +95,6 @@ let string_of_rvalue = function
   | Ref data -> string_of_rvalue_ref_data data
   | ThreadLocalRef -> "<ThreadLocalRef>"
   | AddressOf {place} -> Printf.sprintf "&raw %s" (string_of_place place)
-  | Len -> "len"
   | Cast {operand; ty} ->
     Printf.sprintf "(%s as %s)" (string_of_operand operand) (string_of_ty ty)
   | BinaryOp {operator; operandl; operandr} ->

@@ -648,14 +648,13 @@ struct Rvalue {
         ref @1: RefData;
         threadLocalRef @9: Void;
         addressOf @2: AddressOfData;
-        len @10: Void;
         cast @3: CastData;
         binaryOp @4: BinaryOpData;
         nullaryOp @11: Void;
         unaryOp @6: UnaryOpData;
         aggregate @5: AggregateData;
         discriminant @7: DiscriminantData;
-        shallowInitBox @12: Void;
+        shallowInitBox @10: Void;
     }
 }
 
