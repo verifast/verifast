@@ -3,7 +3,8 @@ type 'a option = 'a Option.t
 module VfMir = S
 module VfMirRd = VfMir.Reader
 
-let verbosity = ref 0
+let verbosity = ref (-1)
+let verbosity_body = 0
 let verbosity_call = 1
 let verbosity_basic_block = 2
 let verbosity_stmt = 3
@@ -70,46 +71,6 @@ let string_of_span span =
 
 type int_width = FixedWidth of int (* log2 of width in bytes *) | PtrWidth
 
-type literal_const_expr =
-  BoolValue of bool
-| I8Value of Stdint.int8
-| I16Value of Stdint.int16
-| I32Value of Stdint.int32
-| I64Value of Stdint.int64
-| I128Value of Stdint.int128
-| ISizeValue of int (* size, in bytes; typically 8 *) * Stdint.int64
-| U8Value of Stdint.uint8
-| U16Value of Stdint.uint16
-| U32Value of Stdint.uint32
-| U64Value of Stdint.uint64
-| U128Value of Stdint.uint128
-| USizeValue of int (* size, in bytes; typically 8 *) * Stdint.uint64
-| CharValue of Stdint.uint32
-
-let string_of_literal_const_expr = function
-  BoolValue b -> Printf.sprintf "BoolValue %b" b
-| I8Value i -> Printf.sprintf "I8Value %s" (Stdint.Int8.to_string i)
-| I16Value i -> Printf.sprintf "I16Value %s" (Stdint.Int16.to_string i)
-| I32Value i -> Printf.sprintf "I32Value %s" (Stdint.Int32.to_string i)
-| I64Value i -> Printf.sprintf "I64Value %s" (Stdint.Int64.to_string i)
-| I128Value i -> Printf.sprintf "I128Value %s" (Stdint.Int128.to_string i)
-| ISizeValue (size, i) -> Printf.sprintf "ISizeValue %d %s" size (Stdint.Int64.to_string i)
-| U8Value i -> Printf.sprintf "U8Value %s" (Stdint.Uint8.to_string i)
-| U16Value i -> Printf.sprintf "U16Value %s" (Stdint.Uint16.to_string i)
-| U32Value i -> Printf.sprintf "U32Value %s" (Stdint.Uint32.to_string i)
-| U64Value i -> Printf.sprintf "U64Value %s" (Stdint.Uint64.to_string i)
-| U128Value i -> Printf.sprintf "U128Value %s" (Stdint.Uint128.to_string i)
-| USizeValue (size, i) -> Printf.sprintf "USizeValue %d %s" size (Stdint.Uint64.to_string i)
-| CharValue i -> Printf.sprintf "CharValue %s" (Stdint.Uint32.to_string i)
-
-type const_expr =
-  ParamConstExpr of string
-| LiteralConstExpr of literal_const_expr
-
-let string_of_const_expr = function
-  ParamConstExpr param -> Printf.sprintf "ParamConstExpr %s" param
-| LiteralConstExpr literal -> string_of_literal_const_expr literal
-
 let decode_uint128 uint128_cpn =
   let h = uint128_cpn.h in
   let l = uint128_cpn.l in
@@ -125,7 +86,26 @@ type region = Region of string
 let string_of_region = function
   Region s -> s
 
-type ty =
+type literal_const_expr =
+  BoolValue of bool
+| I8Value of Stdint.int8
+| I16Value of Stdint.int16
+| I32Value of Stdint.int32
+| I64Value of Stdint.int64
+| I128Value of Stdint.int128
+| ISizeValue of int (* size, in bytes; typically 8 *) * Stdint.int64
+| U8Value of Stdint.uint8
+| U16Value of Stdint.uint16
+| U32Value of Stdint.uint32
+| U64Value of Stdint.uint64
+| U128Value of Stdint.uint128
+| USizeValue of int (* size, in bytes; typically 8 *) * Stdint.uint64
+| CharValue of Stdint.uint32
+| AdtValue of string * gen_arg list * Stdint.uint128
+and const_expr =
+  ParamConstExpr of string
+| LiteralConstExpr of literal_const_expr
+and ty =
   Bool
 | Int of int_width
 | UInt of int_width
@@ -148,6 +128,26 @@ and gen_arg =
   Lifetime of region
 | Type of ty
 | Const of const_expr
+
+let string_of_literal_const_expr = function
+  BoolValue b -> Printf.sprintf "BoolValue %b" b
+| I8Value i -> Printf.sprintf "I8Value %s" (Stdint.Int8.to_string i)
+| I16Value i -> Printf.sprintf "I16Value %s" (Stdint.Int16.to_string i)
+| I32Value i -> Printf.sprintf "I32Value %s" (Stdint.Int32.to_string i)
+| I64Value i -> Printf.sprintf "I64Value %s" (Stdint.Int64.to_string i)
+| I128Value i -> Printf.sprintf "I128Value %s" (Stdint.Int128.to_string i)
+| ISizeValue (size, i) -> Printf.sprintf "ISizeValue %d %s" size (Stdint.Int64.to_string i)
+| U8Value i -> Printf.sprintf "U8Value %s" (Stdint.Uint8.to_string i)
+| U16Value i -> Printf.sprintf "U16Value %s" (Stdint.Uint16.to_string i)
+| U32Value i -> Printf.sprintf "U32Value %s" (Stdint.Uint32.to_string i)
+| U64Value i -> Printf.sprintf "U64Value %s" (Stdint.Uint64.to_string i)
+| U128Value i -> Printf.sprintf "U128Value %s" (Stdint.Uint128.to_string i)
+| USizeValue (size, i) -> Printf.sprintf "USizeValue %d %s" size (Stdint.Uint64.to_string i)
+| CharValue i -> Printf.sprintf "CharValue %s" (Stdint.Uint32.to_string i)
+
+let string_of_const_expr = function
+  ParamConstExpr param -> Printf.sprintf "ParamConstExpr %s" param
+| LiteralConstExpr literal -> string_of_literal_const_expr literal
 
 let rec string_of_ty = function
   Bool -> "Bool"
@@ -192,6 +192,7 @@ let decode_scalar_int ty scalar_int_cpn =
   | UInt (FixedWidth 4), 16 -> U128Value data
   | UInt PtrWidth, _ -> USizeValue (size, Stdint.Uint128.to_uint64 data)
   | Char, 4 -> CharValue (Stdint.Uint128.to_uint32 data)
+  | Adt (name, kind, args), _ -> AdtValue (name, args, data)
 
 type generic_env = {
   lifetimes: (string * region) list;
@@ -319,11 +320,13 @@ type term =
 | Closure of term list
 | FnDef of string * gen_arg list
 | ScalarInt of literal_const_expr
+| StaticPtr of string
+| ConstPtr of string (* The bytes the constant pointer points to *)
 | SliceConstant of ty * string
 | AddressOfNonMutLocal of < > * local_variable_path (* The object serves to ensure two AddressOfNonMutLocal values do not compare equal even if their variable names happen to match. *)
 | FieldTerm of term * int
-| ConstTerm of mir_const (* TODO: Substitute generic parameters *)
-| RepeatTerm of term * ty_const (* TODO: Substitute generic parameters *)
+| UnevaluatedConstTerm of string * gen_arg list
+| RepeatTerm of term * const_expr
 
 let rec string_of_term = function
   Symbol id -> Printf.sprintf "Symbol %d" id
@@ -332,10 +335,13 @@ let rec string_of_term = function
 | EnumValue (variant, ts) -> Printf.sprintf "EnumValue %s %s" variant (string_of_terms ts)
 | FnDef (fn, genArgs) -> Printf.sprintf "FnDef %s [%s]" fn (String.concat "; " (List.map string_of_gen_arg genArgs))
 | ScalarInt literal -> Printf.sprintf "ScalarInt %s" (string_of_literal_const_expr literal)
+| ConstPtr bytes -> Printf.sprintf "ConstPtr %s" bytes
+| SliceConstant (ty, bytes) -> Printf.sprintf "SliceConstant %s %s" (string_of_ty ty) bytes
 | Closure ts -> Printf.sprintf "Closure %s" (string_of_terms ts)
 | AddressOfNonMutLocal (_, lv_path) -> Printf.sprintf "AddressOfNonMutLocal %s" (string_of_lv_path lv_path)
 | FieldTerm (term, i) -> Printf.sprintf "FieldTerm %s %d" (string_of_term term) i
-| ConstTerm const -> Printf.sprintf "ConstTerm %s" (Stringifier.string_of_mir_const const)
+| UnevaluatedConstTerm (def, args) -> Printf.sprintf "UnevaluatedConstTerm %s::<%s>" def (String.concat ", " (List.map string_of_gen_arg args))
+| RepeatTerm (term, count) -> Printf.sprintf "RepeatTerm %s %s" (string_of_term term) (string_of_const_expr count)
 and string_of_terms ts =
   Printf.sprintf "[%s]" (String.concat "; " (List.map string_of_term ts))
 
@@ -354,8 +360,7 @@ let string_of_local_var_state = function
   Value v -> Printf.sprintf "Value %s" (string_of_term v)
 | Address v -> Printf.sprintf "Address %s" (string_of_term v)
 
-let eval_const_operand genv const_operand_cpn =
-  let mir_const_cpn = const_operand_cpn.const in
+let eval_mir_const genv mir_const_cpn =
   match mir_const_cpn with
     Ty mir_ty_const_cpn -> failwith "Using typesystem constant expressions as MIR constant operands is not yet supported"
   | Val mir_val_const_cpn ->
@@ -365,7 +370,16 @@ let eval_const_operand genv const_operand_cpn =
       Scalar scalar_cpn ->
       begin match scalar_cpn with
         Int scalar_int_cpn -> ScalarInt (decode_scalar_int ty scalar_int_cpn)
-      | Ptr -> failwith "MIR pointer constants are not yet supported"
+      | Ptr {provenance; offset} ->
+        assert (offset = Stdint.Uint64.zero);
+        assert (provenance.immutable);
+        assert (provenance.shared_ref);
+        match provenance.alloc with
+          Function -> failwith "TODO: GlobalAlloc::Function"
+        | VTable -> failwith "TODO: GlobalAlloc::VTable"
+        | Static def_id -> StaticPtr def_id
+        | Memory alloc -> ConstPtr alloc.bytes
+        | TypeId -> failwith "TODO: GlobalAlloc::TypeId"
       end
     | ZeroSized ->
       begin match ty with
@@ -382,9 +396,13 @@ let eval_const_operand genv const_operand_cpn =
       end
     | Slice bytes -> SliceConstant (ty, bytes)
     end
-  | Unevaluated {def; args} -> ConstTerm mir_const_cpn
+  | Unevaluated {def; args} -> UnevaluatedConstTerm (def, List.map (decode_gen_arg genv) args)
 
-type env = (local_variable_path * local_var_state) list
+let eval_const_operand genv const_operand_cpn =
+  let mir_const_cpn = const_operand_cpn.const in
+  eval_mir_const genv mir_const_cpn
+
+  type env = (local_variable_path * local_var_state) list
 
 let string_of_env env =
   String.concat "; " (List.map (fun (x, v) -> Printf.sprintf "%s: %s" (string_of_lv_path x) (string_of_local_var_state v)) env)
@@ -1870,10 +1888,10 @@ let rec process_commands bodies (env: env) opnds (i_bb: basic_block_info) i_s (s
           end
     | LoadLocal localId ->
       load_from_local localId (fun msg -> done_ ()) (fun v -> cont env (v::opnds))
-    | Constant {const} -> cont env (ConstTerm const::opnds)
+    | Constant {const} -> cont env (eval_mir_const i_bb#genv const::opnds)
     | Repeat count ->
       let v::opnds = opnds in
-      cont env (RepeatTerm (v, count)::opnds)
+      cont env (RepeatTerm (v, decode_const_expr i_bb#genv count)::opnds)
     | Deref ->
       let v::opnds = opnds in
       begin match v with

@@ -39,7 +39,7 @@ let string_of_uint128 {h; l} =
 
 let string_of_const_value ({kind}: ty) = function
   | Scalar (Int {data; size}) -> Printf.sprintf "%su%d" (string_of_uint128 data) size
-  | Scalar Ptr -> "ptr"
+  | Scalar (Ptr {provenance; offset}) -> "ptr"
   | Slice _ -> "slice"
   | ZeroSized ->
     match kind with

@@ -471,10 +471,36 @@ struct Place {
     kind @3: PlaceKind;
 }
 
+struct Allocation {
+    bytes @0: Data;
+}
+
+struct GlobalAlloc {
+    union {
+        function @0: Void; # TODO: Elaborate
+        vTable @1: Void; # TODO: Elaborate
+        static @2: Text;
+        memory @3: Allocation;
+        typeId @4: Void; # TODO: Elaborate
+    }
+}
+
+struct CtfeProvenance {
+    # allocId @0: UInt64;
+    alloc @0: GlobalAlloc; # For now, we assume the allocation graph is a tree
+    immutable @1: Bool;
+    sharedRef @2: Bool;
+}
+
+struct Pointer {
+    provenance @0: CtfeProvenance;
+    offset @1: UInt64;
+}
+
 struct Scalar {
     union {
         int @0: ScalarInt;
-        ptr @1: Void;
+        ptr @1: Pointer;
     }
 }
 

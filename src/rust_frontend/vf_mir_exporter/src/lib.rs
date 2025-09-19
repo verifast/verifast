@@ -2726,6 +2726,38 @@ mod vf_mir_builder {
             }
         }
 
+        fn encode_alloc_id(
+            tcx: TyCtxt<'tcx>,
+            alloc_id: rustc_middle::mir::interpret::AllocId,
+            mut global_alloc_cpn: crate::vf_mir_capnp::global_alloc::Builder<'_>,
+        ) {
+            let alloc = tcx.global_alloc(alloc_id);
+            match alloc {
+                rustc_middle::mir::interpret::GlobalAlloc::Function{..} => global_alloc_cpn.set_function(()),
+                rustc_middle::mir::interpret::GlobalAlloc::VTable(_, _) => global_alloc_cpn.set_v_table(()),
+                rustc_middle::mir::interpret::GlobalAlloc::Static(def_id) => global_alloc_cpn.set_static(&tcx.def_path_str(def_id)),
+                rustc_middle::mir::interpret::GlobalAlloc::Memory(allocation) => {
+                    let mut allocation_cpn = global_alloc_cpn.init_memory();
+                    let alloc_bytes = allocation.inner().get_bytes_unchecked(AllocRange {
+                        start: rustc_abi::Size::ZERO,
+                        size: allocation.inner().size(),
+                    });
+                    allocation_cpn.set_bytes(alloc_bytes);
+                }
+                rustc_middle::mir::interpret::GlobalAlloc::TypeId{..} => global_alloc_cpn.set_type_id(()),
+            }
+        }
+
+        fn encode_provenance(
+            tcx: TyCtxt<'tcx>,
+            provenance: rustc_middle::mir::interpret::CtfeProvenance,
+            mut provenance_cpn: crate::vf_mir_capnp::ctfe_provenance::Builder<'_>,
+        ) {
+            Self::encode_alloc_id(tcx, provenance.alloc_id(), provenance_cpn.reborrow().init_alloc());
+            provenance_cpn.set_immutable(provenance.immutable());
+            provenance_cpn.set_shared_ref(provenance.shared_ref());
+        }
+
         fn encode_const_value(
             tcx: TyCtxt<'tcx>,
             ty: ty::Ty<'tcx>,
@@ -2742,9 +2774,12 @@ mod vf_mir_builder {
                     let scalar_int_cpn = scalar_cpn.init_int();
                     Self::encode_scalar_int(tcx, scalar_int, scalar_int_cpn);
                 }
-                CV::Scalar(rustc_middle::mir::interpret::Scalar::Ptr(_, _)) => {
-                    let mut scalar_con = const_value_cpn.init_scalar();
-                    scalar_con.set_ptr(());
+                CV::Scalar(rustc_middle::mir::interpret::Scalar::Ptr(pointer, pointer_size)) => {
+                    let scalar_cpn = const_value_cpn.init_scalar();
+                    let mut scalar_ptr_cpn = scalar_cpn.init_ptr();
+                    let (prov, offset) = pointer.prov_and_relative_offset();
+                    Self::encode_provenance(tcx, prov, scalar_ptr_cpn.reborrow().init_provenance());
+                    scalar_ptr_cpn.set_offset(offset.bits());
                 }
                 CV::ZeroSized => {
                     trace!("mir::ConstValue::ZeroSized for type {:?}", ty);

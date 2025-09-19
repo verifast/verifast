@@ -139,7 +139,7 @@ let run_vf_mir_exporter (rustc_args : string list) (rs_file_path : string) =
       (* Printf.eprintf "Running %s with arguments %s\n" bin_path (String.concat " " (List.map (Printf.sprintf "'%s'") (Array.to_list args)));
          flush stderr; *)
       let chns = Unix.open_process_args_full bin_path args env in
-      chns
+      (args, chns)
   with
   | Sys_error emsg ->
       failwith (Printf.sprintf "Could not run vf-rust-mir-exporter: %s" emsg)
@@ -148,7 +148,7 @@ let run_vf_mir_exporter (rustc_args : string list) (rs_file_path : string) =
       failwith (Printf.sprintf "Could not run vf-rust-mir-exporter: %s" emsg)
 
 let get_vf_mir (rustc_args : string list) (rs_file_path : string) =
-  let msg_in_chn, out_chn, err_in_chn =
+  let args, (msg_in_chn, out_chn, err_in_chn) =
     run_vf_mir_exporter rustc_args rs_file_path
   in
   let module CpIO = Capnp_unix.IO in
@@ -182,6 +182,11 @@ let get_vf_mir (rustc_args : string list) (rs_file_path : string) =
         (* print_endline emsgs; *)
         let (Some [ msg ]) = !msgs_cell in
         msg
+    | Unix.WEXITED 101 ->
+        (* rustc panicked *)
+        Printf.printf "The VeriFast MIR exporter crashed.\nCommand line: %s\nDiagnostic info:\n%s"
+          (String.concat " " (Array.to_list args)) emsg;
+        exit 1
     | result ->
         let failInfo =
           match result with
