@@ -136,11 +136,13 @@ let original_checked_spans = ref []
 let verified_checked_spans = ref wrapper_fn_spans
 
 let check_body_refines_body def_path body verified_body =
-  if bodies_are_identical def_path body verified_body then
-    Printf.printf "Function bodies for %s are identical\n" def_path
-  else (
-    Printf.printf
-      "Function bodies for %s are different; checking refinement...\n" def_path;
+  if bodies_are_identical def_path body verified_body then begin
+    if !verbosity >= verbosity_body then
+      Printf.printf "Function bodies for %s are identical\n" def_path
+  end else (
+    if !verbosity >= verbosity_body then
+      Printf.printf
+        "Function bodies for %s are different; checking refinement...\n" def_path;
     check_body_refines_body original_bodies verified_bodies def_path body verified_body;
     push original_checked_spans (decode_body_span body);
     push verified_checked_spans (decode_body_span verified_body))
@@ -203,7 +205,8 @@ let rec skip_whitespace_and_checked_ranges contents offset checked_ranges =
 
 (* Checks that the two files are identical, after collapsing whitespace and spans checked by the refinement checker *)
 let check_files_match (path0, path1) =
-  Printf.printf "Checking that, apart from checked functions and comments, %s and %s are identical\n" path0 path1;
+  if !verbosity >= verbosity_body then
+    Printf.printf "Checking that, apart from checked functions and comments, %s and %s are identical\n" path0 path1;
   let contents0, line_offsets0 = load_file path0 in
   let contents1, line_offsets1 = load_file path1 in
   let checked_ranges0 =

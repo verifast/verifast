@@ -1916,7 +1916,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let open ScalarRd in
       match s_cpn with
       | Int scalar_int_cpn -> translate_scalar_int scalar_int_cpn ty loc
-      | Ptr ->
+      | Ptr _ ->
           match ty with
           | Ast.RustRefTypeExpr (_, _, Shared, pointee_ty) ->
             let expr = Ast.CallExpr (loc, "std::verifast::produce_const_ref", [pointee_ty], [], [], Static) in
