@@ -50,15 +50,15 @@ pub unsafe fn get1(p: *const BoxU8) -> u8
 
 impl BoxU8 {
 pub unsafe fn from_raw(raw: *mut u8) -> BoxU8
-//@ req *raw |-> ?v &*& std::alloc::alloc_block(raw, std::alloc::Layout::new_::<u8>());
-//@ ens *result.ptr |-> v &*& std::alloc::alloc_block(result.ptr, std::alloc::Layout::new_::<u8>());
+//@ req *raw |-> ?v &*& alloc_block_(raw);
+//@ ens *result.ptr |-> v &*& alloc_block_(result.ptr);
 {
     Self { ptr: raw }
 }
 
 pub unsafe fn into_raw(this: BoxU8) -> *mut u8
-//@ req *this.ptr |-> ?v &*& std::alloc::alloc_block(this.ptr, std::alloc::Layout::new_::<u8>());
-//@ ens *result |-> v &*& std::alloc::alloc_block(result, std::alloc::Layout::new_::<u8>());
+//@ req *this.ptr |-> ?v &*& alloc_block_(this.ptr);
+//@ ens *result |-> v &*& alloc_block_(result);
 {
     this.ptr
 }

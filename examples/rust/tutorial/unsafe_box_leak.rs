@@ -6,7 +6,7 @@ pub struct Box<T> { ptr: *mut T }
 
 impl<T> Box<T> {
 pub unsafe fn new(v: T) -> Box<T>
-//@ req std::mem::size_of_::<T> >= 1;
+//@ req std::mem::size_of::<T>() >= 1;
 //@ ens Box_own_(result, v);
 {
     let l = Layout::new::<T>();
@@ -51,7 +51,7 @@ pub unsafe fn get(this: *const Box<T>) -> T
 
 impl<T> Box<T> {
     pub unsafe fn from_raw(raw: *mut T) -> Box<T>
-//@ req *raw |-> ?v &*& std::alloc::alloc_block(raw as *u8, std::alloc::Layout::new_::<T>());
+//@ req *raw |-> ?v &*& alloc_block_(raw);
 //@ ens Box_own_(result, v);
     {
         Self { ptr: raw }
@@ -59,7 +59,7 @@ impl<T> Box<T> {
 
     pub unsafe fn into_raw(this: Box<T>) -> *mut T
 //@ req Box_own_(this, ?v);
-//@ ens *result |-> v &*& std::alloc::alloc_block(result as *u8, std::alloc::Layout::new_::<T>());
+//@ ens *result |-> v &*& alloc_block_(result);
     {
         this.ptr
     }
