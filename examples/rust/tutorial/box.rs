@@ -1,11 +1,12 @@
 use std::alloc::{alloc, dealloc, handle_alloc_error, Layout};
+//@ use std::alloc_block_;
 
 pub struct Box<T> {
     ptr: *mut T,
 }
 
 /*@
-pred<T> <Box<T>>.own(t, b) = *b.ptr |-> ?v &*& <T>.own(t, v) &*& std::alloc::alloc_block(b.ptr as *u8, std::alloc::Layout::new_::<T>());
+pred<T> <Box<T>>.own(t, b) = *b.ptr |-> ?v &*& <T>.own(t, v) &*& alloc_block_(b.ptr);
 
 pred_ctor field_ptr_chunk<T>(l: *Box<T>, p: *T)(;) = (*l).ptr |-> p;
 pred<T> <Box<T>>.share(k, t, l) = [_]exists(?p) &*& [_]frac_borrow(k, field_ptr_chunk(l, p)) &*& [_](<T>.share)(k, t, p);
@@ -36,7 +37,7 @@ lem Box_share_full<T>(k: lifetime_t, t: thread_id_t, l: *Box<T>)
     close field_ptr_chunk::<T>(l, p)();
     close sep(field_ptr_chunk(l, p), (<T>.full_borrow_content)(t, p))();
     {
-    pred ctx(;) = std::alloc::alloc_block(p as *u8, std::alloc::Layout::new_::<T>());
+    pred ctx(;) = alloc_block_(p);
     close ctx();
     produce_lem_ptr_chunk full_borrow_convert_strong(ctx, sep(field_ptr_chunk(l, p), (<T>.full_borrow_content)(t, p)), klong, <Box<T>>.full_borrow_content(t, l))() {
         open ctx();
@@ -127,7 +128,7 @@ impl<T> std::ops::DerefMut for Box<T> {
             let r = &mut *self.ptr;
             /*@
             {
-                pred ctx(;) = (*self).ptr |-> r &*& std::alloc::alloc_block(r as *u8, std::alloc::Layout::new_::<T>());
+                pred ctx(;) = (*self).ptr |-> r &*& alloc_block_(r);
                 produce_lem_ptr_chunk restore_full_borrow_(ctx, <T>.full_borrow_content(_t, r), <Box<T>>.full_borrow_content(_t, self))() {
                     open ctx();
                     open_full_borrow_content::<T>(_t, r);
