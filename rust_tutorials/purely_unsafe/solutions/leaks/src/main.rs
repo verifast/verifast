@@ -46,8 +46,7 @@ struct CountPulsesData {
 pred count_pulses_pre(data: *mut CountPulsesData) =
     (*data).counter |-> ?counter &*&
     (*data).source |-> ?source &*&
-    struct_CountPulsesData_padding(data) &*&
-    alloc_block(data as *u8, Layout::new::<CountPulsesData>()) &*&
+    alloc_block_CountPulsesData(data) &*&
     [_](*counter).mutex |-> ?mutex &*& [_]Mutex(mutex, Counter(counter));
 
 @*/
@@ -59,7 +58,6 @@ unsafe fn count_pulses(data: *mut CountPulsesData)
     //@ open count_pulses_pre(data);
     let counter = (*data).counter;
     let source = (*data).source;
-    //@ open_struct(data);
     dealloc(data as *mut u8, Layout::new::<CountPulsesData>());
 
     let mutex = (*counter).mutex;
@@ -84,7 +82,6 @@ unsafe fn count_pulses_async(counter: *mut Counter, source: i32)
     if data.is_null() {
         handle_alloc_error(Layout::new::<CountPulsesData>());
     }
-    //@ close_struct(data);
     (*data).counter = counter;
     (*data).source = source;
     //@ close count_pulses_pre(data);
@@ -122,7 +119,6 @@ fn main() {
         if counter.is_null() {
             handle_alloc_error(Layout::new::<Counter>());
         }
-        //@ close_struct(counter);
         (*counter).count = 0;
         //@ close Counter(counter)();
         //@ close exists(Counter(counter));

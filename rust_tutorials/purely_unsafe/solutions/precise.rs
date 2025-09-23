@@ -42,8 +42,7 @@ pred Tree(t: *mut Tree; depth: i32) =
         (*t).left |-> ?left &*& Tree(left, ?childDepth) &*&
         (*t).right |-> ?right &*& Tree(right, childDepth) &*&
         (*t).value |-> ?value &*&
-        struct_Tree_padding(t) &*&
-        alloc_block(t as *u8, Layout::new::<Tree>()) &*&
+        alloc_block_Tree(t) &*&
         depth == childDepth + 1
     };
 
@@ -71,7 +70,6 @@ impl Tree {
             if t.is_null() {
                 handle_alloc_error(Layout::new::<Tree>());
             }
-            //@ close_struct(t);
             (*t).left = left;
             (*t).right = right;
             (*t).value = value;
@@ -86,8 +84,7 @@ impl Tree {
         if !tree.is_null() {
             Self::dispose((*tree).left);
             Self::dispose((*tree).right);
-            //@ open_struct(tree);
-            std::alloc::dealloc(tree as *mut u8, Layout::new::<Tree>());
+            dealloc(tree as *mut u8, Layout::new::<Tree>());
         }
     }
 
@@ -140,13 +137,12 @@ unsafe fn folder(data: *mut FoldData)
 
 unsafe fn start_fold_thread(tree: *mut Tree, f: FoldFunction, acc: i32) -> *mut FoldData
 //@ req [1/2]Tree(tree, _) &*& [_]is_FoldFunction(f);
-//@ ens [1/2](*result).tree |-> tree &*& (*result).thread |-> ?t &*& Thread(t, folder_post(result)) &*& struct_FoldData_padding(result) &*& alloc_block(result as *u8, Layout::new::<FoldData>());
+//@ ens [1/2](*result).tree |-> tree &*& (*result).thread |-> ?t &*& Thread(t, folder_post(result)) &*& alloc_block_FoldData(result);
 {
     let data = alloc(Layout::new::<FoldData>()) as *mut FoldData;
     if data.is_null() {
         handle_alloc_error(Layout::new::<FoldData>());
     }
-    //@ close_struct(data);
     (*data).tree = tree;
     (*data).f = f;
     (*data).acc = acc;
@@ -162,14 +158,13 @@ unsafe fn start_fold_thread(tree: *mut Tree, f: FoldFunction, acc: i32) -> *mut 
 }
 
 unsafe fn join_fold_thread(data: *mut FoldData) -> i32
-//@ req [1/2](*data).tree |-> ?tree &*& (*data).thread |-> ?t &*& Thread(t, folder_post(data)) &*& struct_FoldData_padding(data) &*& alloc_block(data as *u8, Layout::new::<FoldData>());
+//@ req [1/2](*data).tree |-> ?tree &*& (*data).thread |-> ?t &*& Thread(t, folder_post(data)) &*& alloc_block_FoldData(data);
 //@ ens [1/2]Tree(tree, _);
 {
     platform::threading::join((*data).thread);
     //@ open folder_post(data)();
     let result = (*data).acc;
-    //@ open_struct(data);
-    std::alloc::dealloc(data as *mut u8, Layout::new::<FoldData>());
+    dealloc(data as *mut u8, Layout::new::<FoldData>());
     result
 }
 

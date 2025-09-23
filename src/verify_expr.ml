@@ -2777,6 +2777,21 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             | _ ->
               cont (Chunk ((get_pred_symb "malloc_block", true), [], real_unit, [result; sizeof_core l env t], None)::h)
         end
+    | WFunCall (l, "std::alloc::VeriFast_dealloc", [], args, Static) ->
+      let [(arg, PtrType t)] = List.map (check_expr (pn,ilist) tparams tenv) args in
+      if pure then static_error l "Cannot call a non-pure function from a pure context." None;
+      eval_h h env arg $. fun h env arg ->
+      consume_c_object_core_core l real_unit_pat arg t h env false true $. fun _ h _ ->
+      let result = get_unique_var_symb "dummy" (StructType ("std_tuple_0_", [])) in
+      begin match t with
+        StructType (sn, targs) ->
+        let (_, (_, _, _, _, malloc_block_symb, _, _)) = List.assoc sn malloc_block_pred_map in
+        consume_chunk rules h env [] [] [] l (malloc_block_symb, true) targs real_unit real_unit_pat (Some 1) [TermPat arg] $. fun _ h _ _ _ _ _ _ ->
+        cont h env result
+      | _ ->
+        consume_chunk rules h env [] [] [] l (get_pred_symb "malloc_block", true) [] real_unit real_unit_pat (Some 1) [TermPat arg; TermPat (sizeof_core l env t)] $. fun _ h _ _ _ _ _ _ ->
+        cont h env result
+      end
     | WFunCall (l, "#inductive_discriminant", [InductiveType (i, targs)], w::discrExprs, Static) ->
       eval_h h env w $. fun h env v ->
       let (_, inductive_tparams, ctormap, _, _, _, _, _, _) = List.assoc i inductivemap in

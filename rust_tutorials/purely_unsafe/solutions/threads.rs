@@ -42,8 +42,7 @@ pred Tree(t: *mut Tree, depth: i32) =
         (*t).left |-> ?left &*& Tree(left, depth - 1) &*&
         (*t).right |-> ?right &*& Tree(right, depth - 1) &*&
         (*t).value |-> ?value &*&
-        struct_Tree_padding(t) &*&
-        alloc_block(t as *u8, Layout::new::<Tree>())
+        alloc_block_Tree(t)
     };
 
 @*/
@@ -65,7 +64,6 @@ impl Tree {
             if t.is_null() {
                 handle_alloc_error(Layout::new::<Tree>());
             }
-            //@ close_struct(t);
             (*t).left = left;
             (*t).right = right;
             (*t).value = value;
@@ -126,8 +124,7 @@ unsafe fn start_sum_thread(tree: *mut Tree) -> *mut SumData
     if data.is_null() {
         handle_alloc_error(Layout::new::<SumData>());
     }
-    //@ close_struct(data);
-    //@ leak alloc_block(data as *u8, _) &*& struct_SumData_padding(data);
+    //@ leak alloc_block_SumData(data);
     (*data).tree = tree;
     //@ close summator_pre(data, summator_post(data));
     /*@
@@ -168,7 +165,7 @@ fn main() {
         let sum_left = join_sum_thread(left_data);
         let sum_right = join_sum_thread(right_data);
         let f = fac((*tree).value);
-        //@ leak (*tree).left |-> _ &*& (*tree).right |-> _ &*& (*tree).value |-> _ &*& struct_Tree_padding(tree) &*& alloc_block(tree as *u8, _);
+        //@ leak (*tree).left |-> _ &*& (*tree).right |-> _ &*& (*tree).value |-> _ &*& alloc_block_Tree(tree);
         print_i32(sum_left + sum_right + f);
     }
 }

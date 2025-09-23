@@ -20,16 +20,14 @@ pred Nodes<T>(node: *mut Node<T>, values: list<T>) =
     } else {
         (*node).next |-> ?next &*&
         (*node).value |-> ?value &*&
-        struct_Node_padding(node) &*&
-        alloc_block(node as *u8, Layout::new::<Node<T>>()) &*&
+        alloc_block_Node(node) &*&
         Nodes(next, ?values0) &*&
         values == cons(value, values0)
     };
 
 pred Stack<T>(stack: *mut Stack<T>, values: list<T>) =
     (*stack).head |-> ?head &*&
-    struct_Stack_padding(stack) &*&
-    alloc_block(stack as *u8, Layout::new::<Stack<T>>()) &*&
+    alloc_block_Stack(stack) &*&
     Nodes(head, values);
 
 @*/
@@ -44,7 +42,6 @@ impl<T> Stack<T> {
         if stack.is_null() {
             handle_alloc_error(Layout::new::<Stack<T>>());
         }
-        //@ close_struct(stack);
         (*stack).head = std::ptr::null_mut();
         //@ close Nodes::<T>(0, nil);
         //@ close Stack(stack, nil);
@@ -60,7 +57,6 @@ impl<T> Stack<T> {
         if n.is_null() {
             handle_alloc_error(Layout::new::<Node<T>>());
         }
-        //@ close_struct(n);
         (*n).next = (*stack).head;
         (&raw mut (*n).value).write(value);
         (*stack).head = n;
@@ -91,7 +87,6 @@ impl<T> Stack<T> {
         (*stack).head = (*head).next;
         let result = (&raw mut (*head).value).read();
         //@ close Node_value(head, _);
-        //@ open_struct(head);
         dealloc(head as *mut u8, Layout::new::<Node<T>>());
         //@ close Stack(stack, tail(values));
         result
@@ -103,7 +98,6 @@ impl<T> Stack<T> {
     {
         //@ open Stack(stack, nil);
         //@ open Nodes(_, _);
-        //@ open_struct(stack);
         dealloc(stack as *mut u8, Layout::new::<Stack<T>>());
     }
 
@@ -130,8 +124,7 @@ struct Vector {
 
 pred Vector(v: *mut Vector) =
     (*v).x |-> ?x &*& (*v).y |-> ?y &*&
-    struct_Vector_padding(v) &*&
-    alloc_block(v as *u8, Layout::new::<Vector>());
+    alloc_block_Vector(v);
 
 @*/
 
@@ -145,7 +138,6 @@ impl Vector {
         if result.is_null() {
             handle_alloc_error(Layout::new::<Vector>());
         }
-        //@ close_struct(result);
         (*result).x = x;
         (*result).y = y;
         //@ close Vector(result);
@@ -183,9 +175,7 @@ fn main() {
                     //@ open foreach(tail(values), Vector);
                     //@ open Vector(v2);
                     let sum = Vector::create((*v1).x + (*v2).x, (*v1).y + (*v2).y);
-                    //@ open_struct(v1);
                     dealloc(v1 as *mut u8, Layout::new::<Vector>());
-                    //@ open_struct(v2);
                     dealloc(v2 as *mut u8, Layout::new::<Vector>());
                     Stack::push(s, sum);
                     //@ close foreach(cons(sum, tail(tail(values))), Vector);
@@ -199,7 +189,6 @@ fn main() {
                     //@ open Vector(v_);
                     output_i32((*v_).x);
                     output_i32((*v_).y);
-                    //@ open_struct(v_);
                     dealloc(v_ as *mut u8, Layout::new::<Vector>());
                 }
                 _ => {

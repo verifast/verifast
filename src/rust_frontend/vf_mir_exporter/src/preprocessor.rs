@@ -13,6 +13,7 @@ impl SrcPos {
 
 struct TextIterator<'a> {
     chars: std::iter::Peekable<std::str::Chars<'a>>,
+    src_pos: u32,
     pos: SrcPos,
     last_char_was_cr: bool,
 }
@@ -30,6 +31,7 @@ impl<'a> TextIterator<'a> {
             None => None,
             Some(c) => {
                 let len: u32 = c.len_utf8().try_into().unwrap();
+                self.src_pos += len;
                 self.pos.byte_pos += len;
                 match c {
                     '\r' => {
@@ -148,6 +150,7 @@ pub fn preprocess(
     let input_starts_with_bom = input.starts_with("\u{feff}");
     let mut cs = TextIterator {
         chars: input.chars().peekable(),
+        src_pos: 0,
         pos: SrcPos {
             line: 1,
             column: 1,
@@ -193,7 +196,7 @@ pub fn preprocess(
                     );
                 }
                 if !read_only {
-                    output.push_str("\n\nconst fn VeriFast_ghost_command() {}\n");
+                    output.push_str("\n\nconst fn VeriFast_ghost_command() {}\nfn VeriFast_alloc<T>() -> *mut T { VeriFast_alloc() }\nfn VF_free<T>(_ptr: *mut T) {}\n");
                 }
                 return output;
             }
@@ -703,10 +706,79 @@ pub fn preprocess(
                         }
                     }
                     c @ ('A'..='Z' | 'a'..='z' | '_') => {
-                        cs.next();
-                        output.push(c);
-                        next_block_is_fn_body |= old_last_token_was_fn;
-                        inside_word = true;
+                        loop {
+                            if c == 'a' && !was_inside_word {
+                                // Check for 'alloc(Layout::new::<T>()) as *mut T'
+                                let byte_pos = cs.pos.byte_pos;
+                                let rest = &input[cs.src_pos as usize..];
+                                if rest.starts_with("alloc(Layout::new::<") {
+                                    let rest = &rest["alloc(Layout::new::<".len()..];
+                                    // Find out where the next newline is
+                                    let eol = rest.find(&['\n', '\r'][..]).unwrap_or(rest.len());
+                                    let rest_of_line = &rest[..eol];
+                                    if let Some(pos) = rest_of_line.find(">()) as *mut ") {
+                                        let type_expr = &rest_of_line[..pos];
+                                        let after = &rest_of_line[pos + ">()) as *mut ".len()..];
+                                        if after.starts_with(type_expr) {
+                                            // We have a match!
+                                            let src_len = "alloc(Layout::new::<".len() + type_expr.len() + ">()) as *mut ".len() + type_expr.len();
+                                            for _ in 0..src_len {
+                                                cs.next();
+                                            }
+                                            cs.pos.byte_pos -= src_len as u32;
+                                            output.push_str("VeriFast_alloc ::  <");
+                                            output.push_str(type_expr);
+                                            output.push_str(">(");
+                                            let output_len = "VeriFast_alloc ::  <".len() + type_expr.len() + ">()".len();
+                                            cs.pos.byte_pos += output_len as u32;
+                                            for _ in 0..src_len as i32 - output_len as i32 {
+                                                output.push(' '); // Keep the output length the same for simplicity
+                                                cs.pos.byte_pos += 1;
+                                            }
+                                            output.push(')');
+                                            inside_word = false;
+                                            break;
+                                        }
+                                    }
+                                }
+                            } else if c == 'd' && !was_inside_word {
+                                // Check for 'dealloc(ptr as *mut u8, Layout::new::<T>())'
+                                let rest = &input[cs.src_pos as usize..];
+                                if rest.starts_with("dealloc(") {
+                                    let byte_pos = cs.pos.byte_pos;
+                                    let rest = &rest["dealloc(".len()..];
+                                    // Find out where the next newline is
+                                    let eol = rest.find(&['\n', '\r'][..]).unwrap_or(rest.len());
+                                    let rest_of_line = &rest[..eol];
+                                    if let Some(pos) = rest_of_line.find(" as *mut u8, Layout::new::<") {
+                                        let ptr_expr = &rest_of_line[..pos];
+                                        let after = &rest_of_line[pos + " as *mut u8, Layout::new::<".len()..];
+                                        if let Some(end_pos) = after.find(">())") {
+                                            let type_expr = &after[..end_pos];
+                                            // We have a match!
+                                            let src_len = "dealloc(".len() + ptr_expr.len() + " as *mut u8, Layout::new::<".len() + type_expr.len() + ">())".len();
+                                            for _ in 0..src_len {
+                                                cs.next();
+                                            }
+                                            output.push_str("VF_free(");
+                                            output.push_str(ptr_expr);
+                                            // " as *mut u8, Layout::new::<"
+                                            // " as *mut u8 as *mut        "
+                                            output.push_str(" as *mut u8 as *mut        ");
+                                            output.push_str(type_expr);
+                                            output.push_str("   )");
+                                            inside_word = false;
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                            cs.next();
+                            output.push(c);
+                            next_block_is_fn_body |= old_last_token_was_fn;
+                            inside_word = true;
+                            break;
+                        }
                     }
                     '(' => {
                         cs.next();

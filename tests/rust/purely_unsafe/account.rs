@@ -1,5 +1,7 @@
 // verifast_options{ignore_unwind_paths}
 
+use std::alloc::{Layout, alloc, handle_alloc_error, dealloc};
+
 unsafe fn assert(b: bool)
 //@ req b;
 //@ ens true;
@@ -12,7 +14,7 @@ struct Account {
 /*@
 
 pred Account(account: *Account; balance: i32) =
-    std::alloc::alloc_block(account as *u8, std::alloc::Layout::new::<Account>()) &*& struct_Account_padding(account) &*&
+    alloc_block_Account(account) &*&
     (*account).balance |-> balance;
 
 @*/
@@ -23,11 +25,10 @@ impl Account {
     //@ req true;
     //@ ens Account(result, 0);
     {
-        let account = std::alloc::alloc(std::alloc::Layout::new::<Account>()) as *mut Account;
+        let account = alloc(Layout::new::<Account>()) as *mut Account;
         if account.is_null() {
-            std::alloc::handle_alloc_error(std::alloc::Layout::new::<Account>());
+            handle_alloc_error(Layout::new::<Account>());
         }
-        //@ close_struct(account);
         (*account).balance = 0;
         return account;
     }
@@ -50,8 +51,7 @@ impl Account {
     //@ req Account(account, _);
     //@ ens true;
     {
-        //@ open_struct(account);
-        std::alloc::dealloc(account as *mut u8, std::alloc::Layout::new::<Account>());
+        dealloc(account as *mut u8, Layout::new::<Account>());
     }
 
 }

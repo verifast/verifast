@@ -64,12 +64,10 @@ fn main2() {
         if account_ptr.is_null() {
             handle_alloc_error(Layout::new::<Account>());
         }
-        //@ close_struct(account_ptr);
         Account::init(account_ptr);
         Account::deposit(account_ptr, 1000);
         assert(Account::get_balance(account_ptr) == 1000);
         Account::drop_in_place(account_ptr);
-        //@ open_struct(account_ptr);
         dealloc(account_ptr as *mut u8, Layout::new::<Account>());
     }
 }

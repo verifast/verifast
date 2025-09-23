@@ -3420,10 +3420,12 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 
   let struct_accessor_map = struct_accessor_map1 @ struct_accessor_map0
 
+  let malloc_block_pred_prefix = if is_rust then "alloc_block_" else "malloc_block_"
+
   let malloc_block_pred_map1: malloc_block_pred_info map =
     structmap1 |> flatmap begin function
     | (sn, (l, tparams, Some _, _, _)) ->
-      [(sn, mk_predfam ("malloc_block_" ^ sn) l tparams 0 [PtrType (StructType (sn, tparams_as_targs tparams))] (Some 1) Inductiveness_Inductive)]
+      [(sn, mk_predfam (malloc_block_pred_prefix ^ sn) l tparams 0 [PtrType (StructType (sn, tparams_as_targs tparams))] (Some 1) Inductiveness_Inductive)]
     | _ -> []
     end
 
@@ -4944,6 +4946,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           ("malloc", [SizeofExpr (ls, TypeExpr te)]) ->
           let t = check_pure_type (pn,ilist) tparams Ghost te in
           (WFunCall (l, g, [], es, Static), PtrType t, None)
+        | ("std::alloc::VeriFast_dealloc", [ptr]) ->
+          (WFunCall (l, g, [], es, Static), StructType ("std_tuple_0_", []), None)
         | _ ->
         match resolve2 (pn,ilist) l g funcmap with
           Some (g, FuncInfo (funenv, fterm, lg, k, callee_tparams, tr, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body, virt, overrides)) when match k, inAnnotation with Regular, Some true -> false | _ -> true ->
@@ -6502,6 +6506,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let generic_points_to_symb = lazy_predfamsymb (if dialect = Some Rust then "points_to" else "generic_points_to")
   let array__symb = lazy_predfamsymb "array_"
   let array_symb = lazy_predfamsymb "array"
+  let alloc_block_symb = lazy_predfamsymb "std::alloc::alloc_block"
+  let layout_new_symb = lazy_purefuncsymb "std::alloc::Layout::new"
 
   let pointee_tuple chunk_pred_name array_pred_name uninit_chunk_pred_name uninit_array_pred_name =
     let ambpn = "malloc_block_" ^ array_pred_name in

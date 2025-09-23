@@ -15,7 +15,7 @@ pred Nodes(node: *mut Node, count: i32) =
     } else {
         0 < count &*&
         (*node).next |-> ?next &*& (*node).value |-> ?value &*&
-        struct_Node_padding(node) &*& alloc_block(node as *mut u8, Layout::new::<Node>()) &*&
+        alloc_block_Node(node) &*&
         Nodes(next, count - 1)
     };
 

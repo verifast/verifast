@@ -40,8 +40,7 @@ pred Tree(t: *mut Tree, depth: i32) =
         (*t).left |-> ?left &*& Tree(left, depth - 1) &*&
         (*t).right |-> ?right &*& Tree(right, depth - 1) &*&
         (*t).value |-> ?value &*&
-        struct_Tree_padding(t) &*&
-        alloc_block(t as *u8, Layout::new::<Tree>())
+        alloc_block_Tree(t)
     };
 
 @*/
@@ -63,7 +62,6 @@ impl Tree {
             if t.is_null() {
                 handle_alloc_error(Layout::new::<Tree>());
             }
-            //@ close_struct(t);
             (*t).left = left;
             (*t).right = right;
             (*t).value = value;

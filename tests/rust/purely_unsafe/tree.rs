@@ -1,5 +1,7 @@
 // verifast_options{ignore_unwind_paths}
 
+use std::alloc::{Layout, alloc, handle_alloc_error, dealloc};
+
 unsafe fn assert(b: bool)
 //@ req b;
 //@ ens true;
@@ -45,8 +47,7 @@ lem_auto node_count_positive(tree: tree)
 
 pred Tree(node: *mut Tree, marked: bool; parent: *mut Tree, shape: tree) =
     node != 0 &*&
-    std::alloc::alloc_block(node as *u8, std::alloc::Layout::new::<Tree>()) &*&
-    struct_Tree_padding(node) &*&
+    alloc_block_Tree(node) &*&
     (*node).left |-> ?left &*&
     (*node).right |-> ?right &*&
     (*node).mark |-> ?mark &*& if marked { mark } else { true } &*&
@@ -77,8 +78,7 @@ pred stack(parent: *mut Tree, current: *mut Tree, cShape: tree, root: *mut Tree,
         stepsLeft == 0
     } else {
         parent != 0 &*&
-        std::alloc::alloc_block(parent as *u8, std::alloc::Layout::new::<Tree>()) &*&
-        struct_Tree_padding(parent) &*&
+        alloc_block_Tree(parent) &*&
         (*parent).left |-> ?left &*&
         (*parent).right |-> ?right &*&
         (*parent).mark |-> true &*&
@@ -113,11 +113,10 @@ impl Tree {
     //@ req Tree(left, false, _, ?leftShape) &*& Tree(right, false, _, ?rightShape);
     //@ ens Tree(result, false, 0, nonempty(result, leftShape, rightShape));
     {
-        let result = std::alloc::alloc(std::alloc::Layout::new::<Tree>()) as *mut Tree;
+        let result = alloc(Layout::new::<Tree>()) as *mut Tree;
         if result.is_null() {
-            std::alloc::handle_alloc_error(std::alloc::Layout::new::<Tree>());
+            handle_alloc_error(Layout::new::<Tree>());
         }
-        //@ close_struct(result);
         (*result).left = left;
         (*left).parent = result;
         (*result).right = right;
@@ -131,11 +130,10 @@ impl Tree {
     //@ req true;
     //@ ens Tree(result, false, 0, empty(result));
     {
-        let result = std::alloc::alloc(std::alloc::Layout::new::<Tree>()) as *mut Tree;
+        let result = alloc(Layout::new::<Tree>()) as *mut Tree;
         if result.is_null() {
-            std::alloc::handle_alloc_error(std::alloc::Layout::new::<Tree>());
+            handle_alloc_error(Layout::new::<Tree>());
         }
-        //@ close_struct(result);
         (*result).left = std::ptr::null_mut();
         (*result).right = std::ptr::null_mut();
         (*result).parent = std::ptr::null_mut();
@@ -202,8 +200,7 @@ impl Tree {
             Self::dispose((*tree).left);
             Self::dispose((*tree).right);
         }
-        //@ open_struct(tree);
-        std::alloc::dealloc(tree as *mut u8, std::alloc::Layout::new::<Tree>());
+        dealloc(tree as *mut u8, Layout::new::<Tree>());
     }
 
 }
