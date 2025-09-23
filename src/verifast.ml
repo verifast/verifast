@@ -1056,7 +1056,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           | _ ->
             let rec get_initial_value h env x t e cont =
               match t, e with
-                _, None -> cont h env (get_unique_var_symb_non_ghost x t)
+                _, None -> cont h env (get_unique_var_symb_non_ghost (x ^ "__init") t)
               | StructType (sn, targs), Some (InitializerList (linit, es)) ->
                 let (_, s_tparams, Some (_, fds, _), _, _) = List.assoc sn structmap in
                 let s_tpenv = List.combine s_tparams targs in
