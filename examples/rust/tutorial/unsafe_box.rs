@@ -7,7 +7,7 @@ pub struct Box<T> { ptr: *mut T }
 impl<T> Box<T> {
 
 pub unsafe fn new(v: T) -> Box<T>
-//@ req thread_token(?t) &*& <T>.own(t, v) &*& std::mem::size_of_::<T> >= 1;
+//@ req thread_token(?t) &*& <T>.own(t, v) &*& std::mem::size_of::<T>() >= 1;
 //@ ens thread_token(t) &*& Box_own_(t, result, v);
 {
     let l = Layout::new::<T>();
@@ -68,7 +68,7 @@ pub unsafe fn get(this: *const Box<T>) -> T
 
 impl<T> Box<T> {
     pub unsafe fn from_raw(raw: *mut T) -> Box<T>
-    //@ req thread_token(?t) &*& *raw |-> ?v &*& <T>.own(t, v) &*& std::alloc::alloc_block(raw as *u8, std::alloc::Layout::new_::<T>());
+    //@ req thread_token(?t) &*& *raw |-> ?v &*& <T>.own(t, v) &*& alloc_block_(raw);
     //@ ens thread_token(t) &*& Box_own_(t, result, v);
     {
         let r = Self { ptr: raw };
@@ -78,7 +78,7 @@ impl<T> Box<T> {
 
     pub unsafe fn into_raw(this: Box<T>) -> *mut T
     //@ req thread_token(?t) &*& Box_own_(t, this, ?v);
-    //@ ens thread_token(t) &*& *result |-> v &*& <T>.own(t, v) &*& std::alloc::alloc_block(result as *u8, std::alloc::Layout::new_::<T>());
+    //@ ens thread_token(t) &*& *result |-> v &*& <T>.own(t, v) &*& alloc_block_(result);
     {
         //@ open Box_own_(t, this, v);
         this.ptr

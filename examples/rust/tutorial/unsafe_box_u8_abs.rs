@@ -65,7 +65,7 @@ pub unsafe fn set(this: *mut BoxU8, new: u8)
 
 impl BoxU8 {
     pub unsafe fn from_raw(raw: *mut u8) -> BoxU8
-    //@ req *raw |-> ?v &*& std::alloc::alloc_block(raw, std::alloc::Layout::new_::<u8>());
+    //@ req *raw |-> ?v &*& alloc_block_(raw);
     //@ ens BoxU8_own_(result, v);
     {
         Self { ptr: raw }
@@ -73,7 +73,7 @@ impl BoxU8 {
 
     pub unsafe fn into_raw(this: BoxU8) -> *mut u8
     //@ req BoxU8_own_(this, ?v);
-    //@ ens *result |-> v &*& std::alloc::alloc_block(result, std::alloc::Layout::new_::<u8>());
+    //@ ens *result |-> v &*& alloc_block_(result);
     {
         this.ptr
     }

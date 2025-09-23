@@ -4,5 +4,6 @@ cd tutorial
   verifast -c -ignore_unwind_paths -ignore_ref_creation unsafe_box_leak.rs
   verifast -c -ignore_unwind_paths -ignore_ref_creation unsafe_box.rs
   verifast -c -ignore_unwind_paths -ignore_ref_creation -allow_assume box_u8.rs
+  verifast -c -ignore_unwind_paths -ignore_ref_creation -allow_assume box_u8_wo_drop.rs
   verifast -c -ignore_unwind_paths -ignore_ref_creation -allow_assume box.rs
 cd ..
