@@ -1,5 +1,7 @@
 // verifast_options{ignore_unwind_paths}
 
+use std::alloc::{Layout, alloc, handle_alloc_error, dealloc};
+
 unsafe fn assert(b: bool)
 //@ req b;
 //@ ens true;
@@ -18,7 +20,7 @@ pred Nodes<T>(n: *Node<T>, prev: *Node<T>, last: *Node<T>, next: *Node<T>; elems
     if n == next {
         elems == [] &*& last == prev
     } else {
-        std::alloc::alloc_block(n as *u8, std::alloc::Layout::new::<Node<T>>()) &*& struct_Node_padding(n) &*&
+        alloc_block_Node(n) &*&
         (*n).prev |-> prev &*&
         (*n).value |-> ?value &*&
         (*n).next |-> ?next0 &*&
@@ -30,7 +32,7 @@ lem Nodes_split_last<T>(n: *Node<T>)
     req Nodes(n, ?prev, ?last, ?next, ?elems) &*& 1 <= length(elems);
     ens
         Nodes(n, prev, ?last1, last, take(length(elems) - 1, elems)) &*&
-        std::alloc::alloc_block(last as *u8, std::alloc::Layout::new::<Node<T>>()) &*& struct_Node_padding(last) &*&
+        alloc_block_Node(last) &*&
         (*last).prev |-> last1 &*&
         (*last).value |-> nth(length(elems) - 1, elems) &*&
         (*last).next |-> next;
@@ -50,7 +52,7 @@ lem Nodes_split_last<T>(n: *Node<T>)
 lem Nodes_join_last<T>(n: *Node<T>)
     req
         Nodes(n, ?prev, ?last1, ?last, ?elems1) &*&
-        std::alloc::alloc_block(last as *u8, std::alloc::Layout::new::<Node<T>>()) &*& struct_Node_padding(last) &*&
+        alloc_block_Node(last) &*&
         (*last).prev |-> last1 &*&
         (*last).value |-> ?value &*&
         (*last).next |-> ?next &*& (*next).next |-> ?nextNext;
@@ -74,9 +76,9 @@ struct Deque<T> {
 /*@
 
 pred Deque<T>(deque: *Deque<T>; elems: list<T>) =
-    std::alloc::alloc_block(deque as *u8, std::alloc::Layout::new::<Deque<T>>()) &*& struct_Deque_padding(deque) &*&
+    alloc_block_Deque(deque) &*&
     (*deque).sentinel |-> ?sentinel &*&
-    std::alloc::alloc_block(sentinel as *u8, std::alloc::Layout::new::<Node<T>>()) &*& struct_Node_padding(sentinel) &*&
+    alloc_block_Node(sentinel) &*&
     (*sentinel).prev |-> ?last &*&
     (*sentinel).value |-> _ &*&
     (*sentinel).next |-> ?first &*&
@@ -90,16 +92,14 @@ impl<T> Deque<T> {
     //@ req true;
     //@ ens Deque(result, []);
     {
-        let deque = std::alloc::alloc(std::alloc::Layout::new::<Deque<T>>()) as *mut Deque<T>;
+        let deque = alloc(Layout::new::<Deque<T>>()) as *mut Deque<T>;
         if deque.is_null() {
-            std::alloc::handle_alloc_error(std::alloc::Layout::new::<Deque<T>>());
+            handle_alloc_error(Layout::new::<Deque<T>>());
         }
-        //@ close_struct(deque);
-        let sentinel = std::alloc::alloc(std::alloc::Layout::new::<Node<T>>()) as *mut Node<T>;
+        let sentinel = alloc(Layout::new::<Node<T>>()) as *mut Node<T>;
         if sentinel.is_null() {
-            std::alloc::handle_alloc_error(std::alloc::Layout::new::<Node<T>>());
+            handle_alloc_error(Layout::new::<Node<T>>());
         }
-        //@ close_struct(sentinel);
         (*sentinel).prev = sentinel;
         (*sentinel).next = sentinel;
         (*deque).size = 0;
@@ -118,11 +118,10 @@ impl<T> Deque<T> {
     //@ req Deque(deque, ?elems) &*& length(elems) < 0x7fffffff;
     //@ ens Deque(deque, cons(value, elems));
     {
-        let new_node = std::alloc::alloc(std::alloc::Layout::new::<Node<T>>()) as *mut Node<T>;
+        let new_node = alloc(Layout::new::<Node<T>>()) as *mut Node<T>;
         if new_node.is_null() {
-            std::alloc::handle_alloc_error(std::alloc::Layout::new::<Node<T>>());
+            handle_alloc_error(Layout::new::<Node<T>>());
         }
-        //@ close_struct(new_node);
         (*new_node).prev = (*deque).sentinel;
         std::ptr::write(&raw mut (*new_node).value, value);
         //@ close Node_value(new_node, _);
@@ -139,11 +138,10 @@ impl<T> Deque<T> {
     //@ req Deque(deque, ?elems) &*& length(elems) < 0x7fffffff;
     //@ ens Deque(deque, append(elems, [value]));
     {
-        let new_node = std::alloc::alloc(std::alloc::Layout::new::<Node<T>>()) as *mut Node<T>;
+        let new_node = alloc(Layout::new::<Node<T>>()) as *mut Node<T>;
         if new_node.is_null() {
-            std::alloc::handle_alloc_error(std::alloc::Layout::new::<Node<T>>());
+            handle_alloc_error(Layout::new::<Node<T>>());
         }
-        //@ close_struct(new_node);
         //@ let sentinel = (*deque).sentinel;
         (*new_node).prev = (*(*deque).sentinel).prev;
         std::ptr::write(&raw mut (*new_node).value, value);
@@ -183,8 +181,7 @@ impl<T> Deque<T> {
         (*(*node).prev).next = (*node).next;
         //@ open Nodes(_, _, _, _, _);
         (*(*node).next).prev = (*node).prev;
-        //@ open_struct(node);
-        std::alloc::dealloc(node as *mut u8, std::alloc::Layout::new::<Node<T>>());
+        dealloc(node as *mut u8, Layout::new::<Node<T>>());
         (*deque).size -= 1;
         return result;
     }
@@ -211,8 +208,7 @@ impl<T> Deque<T> {
         @*/
         (*(*node).prev).next = (*node).next;
         (*(*node).next).prev = (*node).prev;
-        //@ open_struct(node);
-        std::alloc::dealloc(node as *mut u8, std::alloc::Layout::new::<Node<T>>());
+        dealloc(node as *mut u8, Layout::new::<Node<T>>());
         (*deque).size -= 1;
         /*@
         if 2 <= length(elems) {
@@ -226,13 +222,8 @@ impl<T> Deque<T> {
     //@ req Deque(deque, []);
     //@ ens true;
     {
-        //@ open_struct((*deque).sentinel);
-        std::alloc::dealloc(
-            (*deque).sentinel as *mut u8,
-            std::alloc::Layout::new::<Node<T>>(),
-        );
-        //@ open_struct(deque);
-        std::alloc::dealloc(deque as *mut u8, std::alloc::Layout::new::<Deque<T>>());
+        dealloc((*deque).sentinel as *mut u8, Layout::new::<Node<T>>());
+        dealloc(deque as *mut u8, Layout::new::<Deque<T>>());
         //@ open Nodes(_, _, _, _, _);
     }
 

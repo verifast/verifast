@@ -42,8 +42,7 @@ pred Tree(t: *mut Tree, depth: i32) =
         (*t).left |-> ?left &*& Tree(left, depth - 1) &*&
         (*t).right |-> ?right &*& Tree(right, depth - 1) &*&
         (*t).value |-> ?value &*&
-        struct_Tree_padding(t) &*&
-        alloc_block(t as *u8, Layout::new::<Tree>())
+        alloc_block_Tree(t)
     };
 
 fn_type FoldFunction() = unsafe fn(acc: i32, x: i32) -> i32;
@@ -71,7 +70,6 @@ impl Tree {
             if t.is_null() {
                 handle_alloc_error(Layout::new::<Tree>());
             }
-            //@ close_struct(t);
             (*t).left = left;
             (*t).right = right;
             (*t).value = value;
@@ -137,8 +135,7 @@ unsafe fn start_fold_thread(tree: *mut Tree, f: FoldFunction, acc: i32) -> *mut 
     if data.is_null() {
         handle_alloc_error(Layout::new::<FoldData>());
     }
-    //@ close_struct(data);
-    //@ leak alloc_block(data as *u8, _) &*& struct_FoldData_padding(data);
+    //@ leak alloc_block_FoldData(data);
     (*data).tree = tree;
     (*data).f = f;
     (*data).acc = acc;

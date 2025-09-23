@@ -60,17 +60,17 @@ fn main1() {
 
 fn main2() {
     unsafe {
-        let point_ptr = alloc(Layout::new::<Point>()) as *mut Point;
+        let point_ptr = alloc((Layout::new::<Point>())) as *mut Point;
         if point_ptr.is_null() {
             handle_alloc_error(Layout::new::<Point>());
         }
-        //@ close_struct(point_ptr);
+        //@ from_u8s_(point_ptr);
         Point::init(point_ptr);
         Point::set_x(point_ptr, 1000);
         assert(Point::get_x(point_ptr) == 1000);
         Point::drop_in_place(point_ptr);
-        //@ open_struct(point_ptr);
-        dealloc(point_ptr as *mut u8, Layout::new::<Point>());
+        //@ to_u8s_(point_ptr);
+        dealloc(point_ptr as *mut u8, (Layout::new::<Point>()));
     }
 }
 

@@ -12,7 +12,7 @@ struct Account {
 
 pred Account_pred(my_account: *mut Account, theLimit: i32, theBalance: i32) =
     (*my_account).limit |-> theLimit &*& (*my_account).balance |-> theBalance &*&
-    struct_Account_padding(my_account) &*& alloc_block(my_account as *u8, Layout::new::<Account>());
+    alloc_block_Account(my_account);
 
 @*/
 
@@ -26,7 +26,6 @@ impl Account {
         if my_account.is_null() {
             handle_alloc_error(Layout::new::<Account>());
         }
-        //@ close_struct(my_account);
         (*my_account).limit = limit;
         (*my_account).balance = 0;
         //@ close Account_pred(my_account, limit, 0);
@@ -68,7 +67,6 @@ impl Account {
     //@ ens true;
     {
         //@ open Account_pred(my_account, _, _);
-        //@ open_struct(my_account);
         dealloc(my_account as *mut u8, Layout::new::<Account>());
     }
 

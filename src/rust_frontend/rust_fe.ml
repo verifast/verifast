@@ -261,14 +261,20 @@ module Make (Args : RUST_FE_ARGS) = struct
                     O ps::_ ->
                     let msg = List.assoc "message" ps |> s_value in
                     begin match List.assoc "spans" ps with
-                      A (O ps::_) ->
-                      let path = List.assoc "file_name" ps |> s_value in
-                      let line_start = List.assoc "line_start" ps |> i_value in
-                      let line_end = List.assoc "line_end" ps |> i_value in
-                      let column_start = List.assoc "column_start" ps |> i_value in
-                      let column_end = List.assoc "column_end" ps |> i_value in
-                      let loc = Ast.Lexed ((path, line_start, column_start), (path, line_end, column_end)) in
-                      raise (Verifast0.RustcErrors (loc, msg, diagnostics)) 
+                      A spans ->
+                        let is_primary_span ps = match List.assoc_opt "is_primary" ps with Some (B true) -> true | _ -> false in
+                        let primary_spans = List.filter (function O ps when is_primary_span ps -> true | _ -> false) spans in
+                        begin match primary_spans, spans with
+                        | O ps::_, _ | [], O ps::_ ->
+                          let path = List.assoc "file_name" ps |> s_value in
+                          let line_start = List.assoc "line_start" ps |> i_value in
+                          let line_end = List.assoc "line_end" ps |> i_value in
+                          let column_start = List.assoc "column_start" ps |> i_value in
+                          let column_end = List.assoc "column_end" ps |> i_value in
+                          let loc = Ast.Lexed ((path, line_start, column_start), (path, line_end, column_end)) in
+                          raise (Verifast0.RustcErrors (loc, msg, diagnostics))
+                        | _ -> fallback ()
+                        end
                     | _ -> fallback ()
                     end
                   | _ -> fallback ()

@@ -12,13 +12,12 @@ impl Account {
 
     unsafe fn create(limit: i32) -> *mut Account
     //@ req limit <= 0;
-    //@ ens (*result).limit |-> limit &*& (*result).balance |-> 0 &*& struct_Account_padding(result) &*& alloc_block(result as *u8, Layout::new::<Account>());
+    //@ ens (*result).limit |-> limit &*& (*result).balance |-> 0 &*& alloc_block_Account(result);
     {
         let my_account = alloc(Layout::new::<Account>()) as *mut Account;
         if my_account.is_null() {
             handle_alloc_error(Layout::new::<Account>());
         }
-        //@ close_struct(my_account);
         (*my_account).limit = limit;
         (*my_account).balance = 0;
         return my_account;
@@ -51,10 +50,9 @@ impl Account {
     }
 
     unsafe fn dispose(my_account: *mut Account)
-    //@ req (*my_account).limit |-> _ &*& (*my_account).balance |-> _ &*& struct_Account_padding(my_account) &*& alloc_block(my_account as *u8, Layout::new::<Account>());
+    //@ req (*my_account).limit |-> _ &*& (*my_account).balance |-> _ &*& alloc_block_Account(my_account);
     //@ ens true;
     {
-        //@ open_struct(my_account);
         dealloc(my_account as *mut u8, Layout::new::<Account>());
     }
 

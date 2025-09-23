@@ -28,7 +28,6 @@ fn test2() {
         if foo.is_null() {
             handle_alloc_error(Layout::new::<Foo>());
         }
-        //@ close_struct(foo);
         let p: *mut i32 = &raw mut (*foo).xs as *mut i32;
         *p = 10;
         *p.add(1) = 20;
@@ -42,7 +41,6 @@ fn test2() {
         //@ close array_(p + 2, 1, _);
         //@ close array_(p + 1, 2, _);
         //@ close array_(p, 3, _);
-        //@ open_struct(foo);
         dealloc(foo as *mut u8, Layout::new::<Foo>());
     }
 }

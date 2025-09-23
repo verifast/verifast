@@ -361,6 +361,10 @@ impl<'tcx> rustc_hir::intravisit::Visitor<'tcx> for HirVisitor<'tcx> {
     fn visit_item(&mut self, item: &'tcx rustc_hir::Item<'tcx>) {
         match &item.kind {
             rustc_hir::ItemKind::Fn{ident, sig, generics, body, has_body} => {
+                if ident.as_str().starts_with("VeriFast_") || ident.as_str().starts_with("VF_") {
+                    // Skip VeriFast helper functions
+                    return;
+                }
                 self.bodies.push((item.owner_id.def_id, sig.span))
             }
             // We cannot send DefId of a struct to optimize_mir query

@@ -2178,6 +2178,34 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             match fn_name with
             (* Todo @Nima: For cases where we inline an expression instead of a function call,
                there is a problem with extending the implementation for clean-up paths *)
+            | "VeriFast_alloc" ->
+                let [ Mir.GenArgType ty_info ] = substs in
+                Ok
+                  ( [],
+                    FnCallResult
+                      (Ast.CallExpr
+                         ( fn_loc,
+                           "malloc",
+                           [],
+                           [],
+                           [ LitPat (SizeofExpr (fn_loc, TypeExpr ty_info.vf_ty)) ],
+                           Static )) )
+            | "VF_free" ->
+                let [ Mir.GenArgType ty_info ] = substs in
+                let [ arg_cpn ] = args_cpn in
+                let* tmp_rvalue_binders, [ arg ] =
+                  translate_operands [ (arg_cpn, fn_loc) ]
+                in
+                Ok
+                  ( tmp_rvalue_binders,
+                    FnCallResult
+                      (Ast.CallExpr
+                         ( fn_loc,
+                           "std::alloc::VeriFast_dealloc",
+                           [],
+                           [],
+                           [ LitPat (CastExpr (fn_loc, PtrTypeExpr (fn_loc, ty_info.vf_ty), arg)) ],
+                           Static )) )
             | "std::ptr::mut_ptr::<impl *mut T>::is_null" -> (
                 match (substs, args_cpn) with
                 | [ Mir.GenArgType gen_arg_ty_info ], [ arg_cpn ] ->

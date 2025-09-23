@@ -20,16 +20,14 @@ pred Nodes<T>(node: *mut Node<T>, values: list<T>) =
     } else {
         (*node).next |-> ?next &*&
         (*node).value |-> ?value &*&
-        struct_Node_padding(node) &*&
-        alloc_block(node as *u8, Layout::new::<Node<T>>()) &*&
+        alloc_block_Node(node) &*&
         Nodes(next, ?values0) &*&
         values == cons(value, values0)
     };
 
 pred Stack<T>(stack: *mut Stack<T>, values: list<T>) =
     (*stack).head |-> ?head &*&
-    struct_Stack_padding(stack) &*&
-    alloc_block(stack as *u8, Layout::new::<Stack<T>>()) &*&
+    alloc_block_Stack(stack) &*&
     Nodes(head, values);
 
 @*/
@@ -44,7 +42,6 @@ impl<T> Stack<T> {
         if stack.is_null() {
             handle_alloc_error(Layout::new::<Stack<T>>());
         }
-        //@ close_struct(stack);
         (*stack).head = std::ptr::null_mut();
         //@ close Nodes::<T>(0, nil);
         //@ close Stack(stack, nil);
@@ -60,7 +57,6 @@ impl<T> Stack<T> {
         if n.is_null() {
             handle_alloc_error(Layout::new::<Node<T>>());
         }
-        //@ close_struct(n);
         (*n).next = (*stack).head;
         (&raw mut (*n).value).write(value);
         (*stack).head = n;
@@ -91,7 +87,6 @@ impl<T> Stack<T> {
         (*stack).head = (*head).next;
         let result = (&raw mut (*head).value).read();
         //@ close Node_value(head, _);
-        //@ open_struct(head);
         dealloc(head as *mut u8, Layout::new::<Node<T>>());
         //@ close Stack(stack, tail(values));
         result
@@ -130,7 +125,6 @@ impl<T> Stack<T> {
     {
         //@ open Stack(stack, nil);
         //@ open Nodes(_, _);
-        //@ open_struct(stack);
         dealloc(stack as *mut u8, Layout::new::<Stack<T>>());
     }
 
@@ -145,13 +139,12 @@ impl Point {
 
     unsafe fn create(x: i32, y: i32) -> *mut Point
     //@ req true;
-    //@ ens (*result).x |-> x &*& (*result).y |-> y &*& struct_Point_padding(result) &*& alloc_block(result as *u8, Layout::new::<Point>());
+    //@ ens (*result).x |-> x &*& (*result).y |-> y &*& alloc_block_Point(result);
     {
         let result = alloc(Layout::new::<Point>()) as *mut Point;
         if result.is_null() {
             handle_alloc_error(Layout::new::<Point>());
         }
-        //@ close_struct(result);
         (*result).x = x;
         (*result).y = y;
         result

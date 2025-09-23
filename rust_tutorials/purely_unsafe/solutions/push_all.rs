@@ -21,15 +21,13 @@ pred Nodes(node: *mut Node, count: i32) =
         0 < count &*&
         (*node).next |-> ?next &*&
         (*node).value |-> ?value &*&
-        struct_Node_padding(node) &*&
-        alloc_block(node as *u8, Layout::new::<Node>()) &*&
+        alloc_block_Node(node) &*&
         Nodes(next, count - 1)
     };
 
 pred Stack(stack: *mut Stack, count: i32) =
     (*stack).head |-> ?head &*&
-    struct_Stack_padding(stack) &*&
-    alloc_block(stack as *u8, Layout::new::<Stack>()) &*&
+    alloc_block_Stack(stack) &*&
     0 <= count &*&
     Nodes(head, count);
 
@@ -39,8 +37,7 @@ pred lseg(first: *mut Node, last: *mut Node, count: i32) =
     } else {
         0 < count &*& first != 0 &*&
         (*first).value |-> ?value &*& (*first).next |-> ?next &*&
-        struct_Node_padding(first) &*&
-        alloc_block(first as *mut u8, Layout::new::<Node>()) &*&
+        alloc_block_Node(first) &*&
         lseg(next, last, count - 1)
     };
 
@@ -68,7 +65,7 @@ lem lseg_to_Nodes_lemma(first: *mut Node)
 
 lem lseg_add_lemma(first: *mut Node)
     req lseg(first, ?last, ?count) &*& last != 0 &*& (*last).value |-> ?last_value &*& (*last).next |-> ?next &*&
-        struct_Node_padding(last) &*& alloc_block(last as *u8, Layout::new::<Node>()) &*&
+        alloc_block_Node(last) &*&
         lseg(next, 0, ?count0);
     ens lseg(first, next, count + 1) &*& lseg(next, 0, count0);
 {
@@ -108,7 +105,6 @@ impl Stack {
         if stack.is_null() {
             handle_alloc_error(Layout::new::<Stack>());
         }
-        //@ close_struct(stack);
         (*stack).head = std::ptr::null_mut();
         //@ close Nodes(0, 0);
         //@ close Stack(stack, 0);
@@ -150,7 +146,6 @@ impl Stack {
         //@ open Stack(other, count0);
         //@ Nodes_to_lseg_lemma((*other).head);
         let head0 = (*other).head;
-        //@ open_struct(other);
         dealloc(other as *mut u8, Layout::new::<Stack>());
         let mut n = head0;
         //@ open lseg(head0, 0, count0);
@@ -159,8 +154,8 @@ impl Stack {
             loop {
                 /*@
                 inv lseg(head0, n, ?count1) &*& n != 0 &*& (*n).value |-> ?n_value &*& 
-                    (*n).next |-> ?next &*& struct_Node_padding(n) &*&
-                    alloc_block(n as *u8, Layout::new::<Node>()) &*&
+                    (*n).next |-> ?next &*&
+                    alloc_block_Node(n) &*&
                     lseg(next, 0, count0 - count1 - 1);
                 @*/
                 if (*n).next.is_null() {
@@ -189,7 +184,6 @@ impl Stack {
         if n.is_null() {
             handle_alloc_error(Layout::new::<Node>());
         }
-        //@ close_struct(n);
         (*n).next = (*stack).head;
         (*n).value = value;
         (*stack).head = n;
@@ -206,7 +200,6 @@ impl Stack {
         //@ open Nodes(head, count);
         let result = (*head).value;
         (*stack).head = (*head).next;
-        //@ open_struct(head);
         dealloc(head as *mut u8, Layout::new::<Node>());
         //@ close Stack(stack, count - 1);
         return result;
@@ -218,7 +211,6 @@ impl Stack {
     {
         //@ open Stack(stack, 0);
         //@ open Nodes(_, _);
-        //@ open_struct(stack);
         dealloc(stack as *mut u8, Layout::new::<Stack>());
     }
 
