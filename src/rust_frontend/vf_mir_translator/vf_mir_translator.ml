@@ -1830,8 +1830,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let local_decl : Mir.local_decl = { mutability; id; ty = ty_info; loc } in
       Ok local_decl
 
-    let translate_to_vf_local_decl
-        ({ mutability = mut; id; ty = (lazy ty_info); loc } : Mir.local_decl) =
+    let translate_to_vf_local_decl loc
+        ({ mutability = mut; id; ty = (lazy ty_info) } : Mir.local_decl) =
       let ty = ty_info.vf_ty in
       Ast.DeclStmt
         ( loc,
@@ -4699,7 +4699,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                       closing_cbrace_loc )))
           else
             let vf_local_decls =
-              List.map translate_to_vf_local_decl (ret_place_decl :: local_decls)
+              List.map (translate_to_vf_local_decl loc) (ret_place_decl :: local_decls)
             in
             let bblocks_cpn = basic_blocks_get_list body_cpn in
             let* bblocks =
