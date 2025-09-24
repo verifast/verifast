@@ -5353,7 +5353,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   and check_expr_t_core_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (inAnnotation: bool option) e t0 isCast =
     match (e, unfold_inferred_type t0) with
       (Operation(l, Div, [IntLit(_, i1, _, _, _); IntLit(_, i2, _, _, _)]), RealType) -> RealLit(l, (num_of_big_int i1) // (num_of_big_int i2), None)
-    | (IntLit (l, n, _, _, _), PtrType _) when isCast || eq_big_int n zero_big_int -> WPureFunCall (l, "pointer_ctor", [], [WPureFunCall (l, "null_pointer_provenance", [], []); wintlit l n])
+    | (IntLit (l, n, _, _, _), PtrType _) when eq_big_int n zero_big_int -> WPureFunCall (l, "null_pointer", [], [])
+    | (IntLit (l, n, _, _, _), PtrType _) when isCast -> WPureFunCall (l, "pointer_ctor", [], [WPureFunCall (l, "null_pointer_provenance", [], []); wintlit l n])
     | (IntLit (l, n, _, _, _), RealType) -> RealLit (l, num_of_big_int n, None)
     | (IntLit (l, n, _, _, _), (Int (Unsigned, rank) as tp)) when isCast || inAnnotation <> Some true ->
       let k, isTight = get_glb_litwidth (width_of_rank rank) in
