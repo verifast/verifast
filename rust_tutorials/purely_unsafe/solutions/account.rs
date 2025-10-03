@@ -1,7 +1,5 @@
 // verifast_options{ignore_unwind_paths}
-
 use std::alloc::{Layout, alloc, handle_alloc_error, dealloc};
-//@ use std::alloc::{alloc_block, Layout};
 
 struct Account {
     balance: i32,
@@ -18,14 +16,14 @@ impl Account {
             handle_alloc_error(Layout::new::<Account>());
         }
         (*my_account).balance = 0;
-        return my_account;
+        my_account
     }
 
-    unsafe fn set_balance(my_account: *mut Account, newBalance: i32)
+    unsafe fn set_balance(my_account: *mut Account, new_balance: i32)
     //@ req Account_balance(my_account, _);
-    //@ ens Account_balance(my_account, newBalance);
+    //@ ens Account_balance(my_account, new_balance);
     {
-        (*my_account).balance = newBalance;
+        (*my_account).balance = new_balance;
     }
 
     unsafe fn dispose(my_account: *mut Account)
@@ -37,7 +35,10 @@ impl Account {
 
 }
 
-fn main() {
+fn main()
+//@ req true;
+//@ ens true;
+{
     unsafe {
         let my_account = Account::create();
         Account::set_balance(my_account, 5);

@@ -1,5 +1,4 @@
-// verifast_options{disable_overflow_check}
-
+// verifast_options{ignore_unwind_paths disable_overflow_check}
 use std::alloc::{Layout, alloc, handle_alloc_error, dealloc};
 //@ use std::alloc::{alloc_block, Layout};
 
@@ -29,7 +28,7 @@ impl Account {
         (*my_account).limit = limit;
         (*my_account).balance = 0;
         //@ close Account_pred(my_account, limit, 0);
-        return my_account;
+        my_account
     }
 
     unsafe fn get_balance(my_account: *mut Account) -> i32
@@ -39,7 +38,7 @@ impl Account {
         //@ open Account_pred(my_account, limit, balance);
         let result = (*my_account).balance;
         //@ close Account_pred(my_account, limit, balance);
-        return result;
+        result
     }
 
     unsafe fn deposit(my_account: *mut Account, amount: i32)
@@ -53,13 +52,21 @@ impl Account {
 
     unsafe fn withdraw(my_account: *mut Account, amount: i32) -> i32
     //@ req Account_pred(my_account, ?limit, ?balance) &*& 0 <= amount;
-    //@ ens Account_pred(my_account, limit, balance - result) &*& result == if balance - amount < limit { balance - limit } else { amount };
+    /*@
+    ens Account_pred(my_account, limit, balance - result) &*&
+        result == if balance - amount < limit { balance - limit } else { amount };
+    @*/
     {
         //@ open Account_pred(my_account, limit, balance);
-        let result = if (*my_account).balance - amount < (*my_account).limit { (*my_account).balance - (*my_account).limit } else { amount };
+        let result =
+            if (*my_account).balance - amount < (*my_account).limit {
+                (*my_account).balance - (*my_account).limit
+            } else {
+                amount
+            };
         (*my_account).balance -= result;
         //@ close Account_pred(my_account, limit, balance - result);
-        return result;
+        result
     }
 
     unsafe fn dispose(my_account: *mut Account)
@@ -72,18 +79,21 @@ impl Account {
 
 }
 
-fn main() {
+fn main()
+//@ req true;
+//@ ens true;
+{
     unsafe {
         let my_account = Account::create(-100);
         Account::deposit(my_account, 200);
         let w1 = Account::withdraw(my_account, 50);
-        //@ assert w1 == 50;
+        std::hint::assert_unchecked(w1 == 50);
         let b1 = Account::get_balance(my_account);
-        //@ assert b1 == 150;
+        std::hint::assert_unchecked(b1 == 150);
         let w2 = Account::withdraw(my_account, 300);
-        //@ assert w2 == 250;
+        std::hint::assert_unchecked(w2 == 250);
         let b2 = Account::get_balance(my_account);
-        //@ assert b2 == -100;
+        std::hint::assert_unchecked(b2 == -100);
         Account::dispose(my_account);
     }
 }
