@@ -1,4 +1,4 @@
-// verifast_options{ignore_unwind_paths disable_overflow_check}
+// verifast_options{disable_overflow_check}
 use std::alloc::{Layout, alloc, handle_alloc_error, dealloc};
 //@ use std::alloc::{alloc_block, Layout};
 
@@ -23,6 +23,7 @@ impl Account {
     unsafe fn get_balance(my_account: *mut Account) -> i32
     //@ req Account_balance(my_account, ?theBalance);
     //@ ens Account_balance(my_account, theBalance) &*& result == theBalance;
+    //@ on_unwind_ens false;
     {
         return (*my_account).balance;
     }
@@ -30,6 +31,7 @@ impl Account {
     unsafe fn set_balance(my_account: *mut Account, new_balance: i32)
     //@ req Account_balance(my_account, _);
     //@ ens Account_balance(my_account, new_balance);
+    //@ on_unwind_ens false;
     {
         (*my_account).balance = new_balance;
     }
@@ -37,6 +39,7 @@ impl Account {
     unsafe fn deposit(my_account: *mut Account, amount: i32)
     //@ req Account_balance(my_account, ?theBalance);
     //@ ens Account_balance(my_account, theBalance + amount);
+    //@ on_unwind_ens false;
     {
         (*my_account).balance += amount;
     }
@@ -50,10 +53,7 @@ impl Account {
 
 }
 
-fn main()
-//@ req true;
-//@ ens true;
-{
+fn main() {
     unsafe {
         let my_account = Account::create();
         Account::set_balance(my_account, 5);

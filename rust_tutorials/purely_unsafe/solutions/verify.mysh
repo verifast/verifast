@@ -1,9 +1,12 @@
 begin_parallel
 verifast -ignore_unwind_paths account.rs
 verifast account_unwind.rs
-verifast -disable_overflow_check deposit.rs
-verifast -disable_overflow_check limit.rs
-verifast -disable_overflow_check pred.rs
+verifast -ignore_unwind_paths -disable_overflow_check deposit.rs
+verifast -disable_overflow_check deposit_unwind.rs
+verifast -ignore_unwind_paths -disable_overflow_check limit.rs
+verifast -disable_overflow_check limit_unwind.rs
+verifast -ignore_unwind_paths -disable_overflow_check pred.rs
+verifast -disable_overflow_check pred_unwind.rs
 verifast -ignore_unwind_paths stack.rs
 verifast -ignore_unwind_paths dispose.rs
 verifast -ignore_unwind_paths -disable_overflow_check sum.rs

@@ -1,5 +1,4 @@
 // verifast_options{ignore_unwind_paths}
-
 use std::alloc::{Layout, alloc, handle_alloc_error, dealloc};
 //@ use std::alloc::{Layout, alloc_block};
 
@@ -46,7 +45,7 @@ impl Stack {
         (*stack).head = std::ptr::null_mut();
         //@ close Nodes(0, 0);
         //@ close Stack(stack, 0);
-        return stack;
+        stack
     }
 
     unsafe fn push(stack: *mut Stack, value: i32)
@@ -76,7 +75,7 @@ impl Stack {
         (*stack).head = (*head).next;
         dealloc(head as *mut u8, Layout::new::<Node>());
         //@ close Stack(stack, count - 1);
-        return result;
+        result
     }
 
     unsafe fn dispose(stack: *mut Stack)
@@ -90,7 +89,10 @@ impl Stack {
 
 }
 
-fn main() {
+fn main()
+//@ req true;
+//@ ens true;
+{
     unsafe {
         let s = Stack::create();
         Stack::push(s, 10);

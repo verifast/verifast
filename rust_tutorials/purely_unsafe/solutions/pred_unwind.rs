@@ -1,4 +1,4 @@
-// verifast_options{ignore_unwind_paths disable_overflow_check}
+// verifast_options{disable_overflow_check}
 use std::alloc::{Layout, alloc, handle_alloc_error, dealloc};
 //@ use std::alloc::{alloc_block, Layout};
 
@@ -7,11 +7,19 @@ struct Account {
     balance: i32,
 }
 
+/*@
+
+pred Account_pred(my_account: *mut Account, theLimit: i32, theBalance: i32) =
+    (*my_account).limit |-> theLimit &*& (*my_account).balance |-> theBalance &*&
+    alloc_block_Account(my_account);
+
+@*/
+
 impl Account {
 
     unsafe fn create(limit: i32) -> *mut Account
     //@ req limit <= 0;
-    //@ ens (*result).limit |-> limit &*& (*result).balance |-> 0 &*& alloc_block_Account(result);
+    //@ ens Account_pred(result, limit, 0);
     {
         let my_account = alloc(Layout::new::<Account>()) as *mut Account;
         if my_account.is_null() {
@@ -19,30 +27,37 @@ impl Account {
         }
         (*my_account).limit = limit;
         (*my_account).balance = 0;
+        //@ close Account_pred(my_account, limit, 0);
         my_account
     }
 
     unsafe fn get_balance(my_account: *mut Account) -> i32
-    //@ req (*my_account).balance |-> ?theBalance;
-    //@ ens (*my_account).balance |-> theBalance &*& result == theBalance;
+    //@ req Account_pred(my_account, ?limit, ?balance);
+    //@ ens Account_pred(my_account, limit, balance) &*& result == balance;
     {
-        (*my_account).balance
+        //@ open Account_pred(my_account, limit, balance);
+        let result = (*my_account).balance;
+        //@ close Account_pred(my_account, limit, balance);
+        result
     }
 
     unsafe fn deposit(my_account: *mut Account, amount: i32)
-    //@ req (*my_account).balance |-> ?theBalance;
-    //@ ens (*my_account).balance |-> theBalance + amount;
+    //@ req Account_pred(my_account, ?limit, ?balance) &*& 0 <= amount;
+    //@ ens Account_pred(my_account, limit, balance + amount);
     {
+        //@ open Account_pred(my_account, limit, balance);
         (*my_account).balance += amount;
+        //@ close Account_pred(my_account, limit, balance + amount);
     }
 
     unsafe fn withdraw(my_account: *mut Account, amount: i32) -> i32
-    //@ req (*my_account).limit |-> ?limit &*& (*my_account).balance |-> ?balance &*& 0 <= amount;
+    //@ req Account_pred(my_account, ?limit, ?balance) &*& 0 <= amount;
     /*@
-    ens (*my_account).limit |-> limit &*& (*my_account).balance |-> balance - result &*&
+    ens Account_pred(my_account, limit, balance - result) &*&
         result == if balance - amount < limit { balance - limit } else { amount };
     @*/
     {
+        //@ open Account_pred(my_account, limit, balance);
         let result =
             if (*my_account).balance - amount < (*my_account).limit {
                 (*my_account).balance - (*my_account).limit
@@ -50,19 +65,24 @@ impl Account {
                 amount
             };
         (*my_account).balance -= result;
+        //@ close Account_pred(my_account, limit, balance - result);
         result
     }
 
     unsafe fn dispose(my_account: *mut Account)
-    //@ req (*my_account).limit |-> _ &*& (*my_account).balance |-> _ &*& alloc_block_Account(my_account);
+    //@ req Account_pred(my_account, _, _);
     //@ ens true;
     {
+        //@ open Account_pred(my_account, _, _);
         dealloc(my_account as *mut u8, Layout::new::<Account>());
     }
 
 }
 
-fn main() {
+fn main()
+//@ req true;
+//@ ens true;
+{
     unsafe {
         let my_account = Account::create(-100);
         Account::deposit(my_account, 200);
