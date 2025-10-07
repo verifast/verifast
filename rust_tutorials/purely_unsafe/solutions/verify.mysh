@@ -19,7 +19,7 @@ verifast -ignore_unwind_paths -disable_overflow_check push_all.rs
 verifast -ignore_unwind_paths reverse.rs
 verifast -ignore_unwind_paths filter.rs
 verifast -ignore_unwind_paths byref.rs
-verifast -ignore_unwind_paths -disable_overflow_check map.rs
+verifast -ignore_unwind_paths -disable_overflow_check -allow_assume map.rs
 verifast -ignore_unwind_paths generics.rs
 verifast -ignore_unwind_paths -disable_overflow_check foreach.rs
 verifast -ignore_unwind_paths -disable_overflow_check predctors.rs

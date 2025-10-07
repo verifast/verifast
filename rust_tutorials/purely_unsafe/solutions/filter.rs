@@ -1,5 +1,4 @@
 // verifast_options{ignore_unwind_paths}
-
 use std::alloc::{Layout, alloc, handle_alloc_error, dealloc};
 //@ use std::alloc::{Layout, alloc_block};
 
@@ -19,17 +18,12 @@ pred Nodes(node: *mut Node, count: i32) =
         count == 0
     } else {
         0 < count &*&
-        (*node).next |-> ?next &*&
-        (*node).value |-> ?value &*&
-        alloc_block_Node(node) &*&
-        Nodes(next, count - 1)
+        (*node).next |-> ?next &*& (*node).value |-> ?value &*&
+        alloc_block_Node(node) &*& Nodes(next, count - 1)
     };
 
 pred Stack(stack: *mut Stack, count: i32) =
-    (*stack).head |-> ?head &*&
-    alloc_block_Stack(stack) &*&
-    0 <= count &*&
-    Nodes(head, count);
+    (*stack).head |-> ?head &*& alloc_block_Stack(stack) &*& 0 <= count &*& Nodes(head, count);
 
 fn_type I32Predicate() = unsafe fn(x: i32) -> bool;
     req true;
@@ -44,7 +38,7 @@ unsafe fn filter_nodes(n: *mut Node, p: I32Predicate) -> *mut Node
 //@ ens Nodes(result, _);
 {
     if n.is_null() {
-        return std::ptr::null_mut();
+        std::ptr::null_mut()
     } else {
         //@ open Nodes(n, _);
         let keep = p((*n).value);
@@ -55,12 +49,12 @@ unsafe fn filter_nodes(n: *mut Node, p: I32Predicate) -> *mut Node
             //@ close Nodes(next, count);
             (*n).next = next;
             //@ close Nodes(n, count + 1);
-            return n;
+            n
         } else {
             next = (*n).next;
             dealloc(n as *mut u8, Layout::new::<Node>());
             let result = filter_nodes(next, p);
-            return result;
+            result
         }
     }
 }
@@ -89,7 +83,7 @@ impl Stack {
         (*stack).head = std::ptr::null_mut();
         //@ close Nodes(0, 0);
         //@ close Stack(stack, 0);
-        return stack;
+        stack
     }
     
     unsafe fn push(stack: *mut Stack, value: i32)
@@ -119,7 +113,7 @@ impl Stack {
         (*stack).head = (*head).next;
         dealloc(head as *mut u8, Layout::new::<Node>());
         //@ close Stack(stack, count - 1);
-        return result;
+        result
     }
     
     unsafe fn filter(stack: *mut Stack, p: I32Predicate)
@@ -153,7 +147,10 @@ unsafe fn neq_20(x: i32) -> bool
     x != 20
 }
 
-fn main() {
+fn main()
+//@ req true;
+//@ ens true;
+{
     unsafe {
         let s = Stack::create();
         Stack::push(s, 10);

@@ -1,5 +1,4 @@
 // verifast_options{ignore_unwind_paths}
-
 use std::alloc::{Layout, alloc, handle_alloc_error, dealloc};
 //@ use std::alloc::{Layout, alloc_block};
 
@@ -20,17 +19,13 @@ pred Nodes(node: *mut Node, values: i32s) =
     if node == 0 {
         values == i32s_nil
     } else {
-        (*node).next |-> ?next &*&
-        (*node).value |-> ?value &*&
-        alloc_block_Node(node) &*&
-        Nodes(next, ?values0) &*&
+        (*node).next |-> ?next &*& (*node).value |-> ?value &*&
+        alloc_block_Node(node) &*& Nodes(next, ?values0) &*&
         values == i32s_cons(value, values0)
     };
 
 pred Stack(stack: *mut Stack, values: i32s) =
-    (*stack).head |-> ?head &*&
-    alloc_block_Stack(stack) &*&
-    Nodes(head, values);
+    (*stack).head |-> ?head &*& alloc_block_Stack(stack) &*& Nodes(head, values);
 
 @*/
 
@@ -47,7 +42,7 @@ impl Stack {
         (*stack).head = std::ptr::null_mut();
         //@ close Nodes(0, i32s_nil);
         //@ close Stack(stack, i32s_nil);
-        return stack;
+        stack
     }
     
     unsafe fn push(stack: *mut Stack, value: i32)
