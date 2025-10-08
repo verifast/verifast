@@ -1,5 +1,4 @@
 // verifast_options{ignore_unwind_paths disable_overflow_check}
-
 use std::alloc::{Layout, alloc, handle_alloc_error, dealloc};
 //@ use std::alloc::{Layout, alloc_block};
 
@@ -19,17 +18,12 @@ pred Nodes(node: *mut Node, count: i32) =
         count == 0
     } else {
         0 < count &*&
-        (*node).next |-> ?next &*&
-        (*node).value |-> ?value &*&
-        alloc_block_Node(node) &*&
-        Nodes(next, count - 1)
+        (*node).next |-> ?next &*& (*node).value |-> ?value &*&
+        alloc_block_Node(node) &*& Nodes(next, count - 1)
     };
 
 pred Stack(stack: *mut Stack, count: i32) =
-    (*stack).head |-> ?head &*&
-    alloc_block_Stack(stack) &*&
-    0 <= count &*&
-    Nodes(head, count);
+    (*stack).head |-> ?head &*& alloc_block_Stack(stack) &*& 0 <= count &*& Nodes(head, count);
 
 fn_type I32Func(data_pred: pred(*mut u8)) = unsafe fn(data: *mut u8, x: i32) -> i32;
     req data_pred(data);
@@ -141,21 +135,34 @@ unsafe fn plus_a(data: *mut u8, x: i32) -> i32
     result
 }
 
-fn main() {
+unsafe fn read_i32() -> i32
+//@ req true;
+//@ ens true;
+//@ assume_correct
+{
+    let mut line = String::new();
+    std::io::stdin().read_line(&mut line).unwrap();
+    line.parse().unwrap()
+}
+
+fn main()
+//@ req true;
+//@ ens true;
+{
     unsafe {
         let s = Stack::create();
         Stack::push(s, 10);
         Stack::push(s, 20);
         Stack::push(s, 30);
-        let mut a = 42;
-        //@ close plus_a_data(&a as *u8);
+        let mut a = read_i32();
         /*@
         produce_fn_ptr_chunk I32Func(plus_a)(plus_a_data)(data, x) {
             call();
         }
         @*/
+        //@ close plus_a_data(&a as *mut u8);
         Stack::map(s, plus_a, &raw mut a as *mut u8);
-        //@ open plus_a_data(_);
+        //@ open plus_a_data(&a as *mut u8);
         Stack::dispose(s);
     }
 }

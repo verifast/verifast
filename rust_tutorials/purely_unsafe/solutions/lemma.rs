@@ -12,10 +12,8 @@ pred Nodes(node: *mut Node, count: i32) =
         count == 0
     } else {
         0 < count &*&
-        (*node).next |-> ?next &*&
-        (*node).value |-> ?value &*&
-        alloc_block_Node(node) &*&
-        Nodes(next, count - 1)
+        (*node).next |-> ?next &*& (*node).value |-> ?value &*&
+        alloc_block_Node(node) &*& Nodes(next, count - 1)
     };
 
 pred lseg(first: *mut Node, last: *mut Node, count: i32) =
@@ -23,8 +21,7 @@ pred lseg(first: *mut Node, last: *mut Node, count: i32) =
         count == 0
     } else {
         0 < count &*& first != 0 &*&
-        (*first).value |-> ?value &*& (*first).next |-> ?next &*&
-        alloc_block_Node(first) &*&
+        (*first).value |-> ?value &*& (*first).next |-> ?next &*& alloc_block_Node(first) &*&
         lseg(next, last, count - 1)
     };
 

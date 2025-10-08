@@ -1,5 +1,4 @@
 // verifast_options{ignore_unwind_paths disable_overflow_check}
-
 use std::alloc::{Layout, alloc, handle_alloc_error, dealloc};
 //@ use std::alloc::{Layout, alloc_block};
 
@@ -19,25 +18,19 @@ pred Nodes(node: *mut Node, count: i32) =
         count == 0
     } else {
         0 < count &*&
-        (*node).next |-> ?next &*&
-        (*node).value |-> ?value &*&
-        alloc_block_Node(node) &*&
-        Nodes(next, count - 1)
+        (*node).next |-> ?next &*& (*node).value |-> ?value &*&
+        alloc_block_Node(node) &*& Nodes(next, count - 1)
     };
 
 pred Stack(stack: *mut Stack, count: i32) =
-    (*stack).head |-> ?head &*&
-    alloc_block_Stack(stack) &*&
-    0 <= count &*&
-    Nodes(head, count);
+    (*stack).head |-> ?head &*& alloc_block_Stack(stack) &*& 0 <= count &*& Nodes(head, count);
 
 pred lseg(first: *mut Node, last: *mut Node, count: i32) =
     if first == last {
         count == 0
     } else {
         0 < count &*& first != 0 &*&
-        (*first).value |-> ?value &*& (*first).next |-> ?next &*&
-        alloc_block_Node(first) &*&
+        (*first).value |-> ?value &*& (*first).next |-> ?next &*& alloc_block_Node(first) &*&
         lseg(next, last, count - 1)
     };
 
@@ -64,9 +57,8 @@ lem lseg_to_Nodes_lemma(first: *mut Node)
 }
 
 lem lseg_add_lemma(first: *mut Node)
-    req lseg(first, ?last, ?count) &*& last != 0 &*& (*last).value |-> ?last_value &*& (*last).next |-> ?next &*&
-        alloc_block_Node(last) &*&
-        lseg(next, 0, ?count0);
+    req lseg(first, ?last, ?count) &*& last != 0 &*& (*last).value |-> ?last_value &*&
+        (*last).next |-> ?next &*& alloc_block_Node(last) &*& lseg(next, 0, ?count0);
     ens lseg(first, next, count + 1) &*& lseg(next, 0, count0);
 {
     open lseg(first, last, count);
@@ -108,7 +100,7 @@ impl Stack {
         (*stack).head = std::ptr::null_mut();
         //@ close Nodes(0, 0);
         //@ close Stack(stack, 0);
-        return stack;
+        stack
     }
 
     unsafe fn get_count(stack: *mut Stack) -> i32
@@ -134,7 +126,7 @@ impl Stack {
         //@ open lseg(0, 0, _);
         //@ lseg_to_Nodes_lemma(head);
         //@ close Stack(stack, count);
-        return i;
+        i
     }
 
     unsafe fn push_all(stack: *mut Stack, other: *mut Stack)
@@ -202,7 +194,7 @@ impl Stack {
         (*stack).head = (*head).next;
         dealloc(head as *mut u8, Layout::new::<Node>());
         //@ close Stack(stack, count - 1);
-        return result;
+        result
     }
 
     unsafe fn dispose(stack: *mut Stack)
@@ -216,7 +208,10 @@ impl Stack {
 
 }
 
-fn main() {
+fn main()
+//@ req true;
+//@ ens true;
+{
     unsafe {
         let s = Stack::create();
         Stack::push(s, 10);
