@@ -1,5 +1,4 @@
 // verifast_options{ignore_unwind_paths disable_overflow_check}
-
 use std::alloc::{Layout, alloc, handle_alloc_error, dealloc};
 //@ use std::alloc::{Layout, alloc_block};
 
@@ -18,17 +17,13 @@ pred Nodes<T>(node: *mut Node<T>, values: list<T>) =
     if node == 0 {
         values == nil
     } else {
-        (*node).next |-> ?next &*&
-        (*node).value |-> ?value &*&
-        alloc_block_Node(node) &*&
-        Nodes(next, ?values0) &*&
+        (*node).next |-> ?next &*& (*node).value |-> ?value &*&
+        alloc_block_Node(node) &*& Nodes(next, ?values0) &*&
         values == cons(value, values0)
     };
 
 pred Stack<T>(stack: *mut Stack<T>, values: list<T>) =
-    (*stack).head |-> ?head &*&
-    alloc_block_Stack(stack) &*&
-    Nodes(head, values);
+    (*stack).head |-> ?head &*& alloc_block_Stack(stack) &*& Nodes(head, values);
 
 @*/
 
@@ -45,7 +40,7 @@ impl<T> Stack<T> {
         (*stack).head = std::ptr::null_mut();
         //@ close Nodes::<T>(0, nil);
         //@ close Stack(stack, nil);
-        return stack;
+        stack
     }
     
     unsafe fn push(stack: *mut Stack<T>, value: T)
@@ -103,17 +98,33 @@ impl<T> Stack<T> {
 
 }
 
+unsafe fn input_char() -> char
+//@ req true;
+//@ ens true;
+//@ assume_correct
+{
+    let mut line = String::new();
+    std::io::stdin().read_line(&mut line).unwrap();
+    line.chars().next().unwrap()
+}
+
 unsafe fn input_i32() -> i32
 //@ req true;
 //@ ens true;
+//@ assume_correct
 {
-    42 // TODO: Actually input a number
+    let mut line = String::new();
+    std::io::stdin().read_line(&mut line).unwrap();
+    line.trim().parse().unwrap()
 }
 
 unsafe fn output_i32(value: i32)
 //@ req true;
 //@ ens true;
-{}
+//@ assume_correct
+{
+    println!("{}", value);
+}
 
 struct Vector {
     x: i32,
@@ -152,25 +163,21 @@ fn main() {
         //@ close foreach(nil, Vector);
         loop {
             //@ inv Stack(s, ?values) &*& foreach(values, Vector);
-            let cmd = input_i32();
+            let cmd = input_char();
             match cmd {
-                1 => {
+                'p' => {
                     let x = input_i32();
                     let y = input_i32();
                     let v = Vector::create(x, y);
                     Stack::push(s, v);
                     //@ close foreach(cons(v, values), Vector);
                 }
-                2 => {
-                    if Stack::is_empty(s) {
-                        std::process::abort();
-                    }
+                '+' => {
+                    assert!(!Stack::is_empty(s), "Stack underflow");
                     let v1 = Stack::pop(s);
                     //@ open foreach(values, Vector);
                     //@ open Vector(v1);
-                    if Stack::is_empty(s) {
-                        std::process::abort();
-                    }
+                    assert!(!Stack::is_empty(s), "Stack underflow");
                     let v2 = Stack::pop(s);
                     //@ open foreach(tail(values), Vector);
                     //@ open Vector(v2);
@@ -180,10 +187,8 @@ fn main() {
                     Stack::push(s, sum);
                     //@ close foreach(cons(sum, tail(tail(values))), Vector);
                 }
-                3 => {
-                    if Stack::is_empty(s) {
-                        std::process::abort();
-                    }
+                '=' => {
+                    assert!(!Stack::is_empty(s), "Stack underflow");
                     let v_ = Stack::pop(s);
                     //@ open foreach(values, Vector);
                     //@ open Vector(v_);

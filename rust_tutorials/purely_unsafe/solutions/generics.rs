@@ -1,5 +1,4 @@
 // verifast_options{ignore_unwind_paths}
-
 use std::alloc::{Layout, alloc, handle_alloc_error, dealloc};
 //@ use std::alloc::{Layout, alloc_block};
 
@@ -18,17 +17,13 @@ pred Nodes<T>(node: *mut Node<T>, values: list<T>) =
     if node == 0 {
         values == nil
     } else {
-        (*node).next |-> ?next &*&
-        (*node).value |-> ?value &*&
-        alloc_block_Node(node) &*&
-        Nodes(next, ?values0) &*&
+        (*node).next |-> ?next &*& (*node).value |-> ?value &*&
+        alloc_block_Node(node) &*& Nodes(next, ?values0) &*&
         values == cons(value, values0)
     };
 
 pred Stack<T>(stack: *mut Stack<T>, values: list<T>) =
-    (*stack).head |-> ?head &*&
-    alloc_block_Stack(stack) &*&
-    Nodes(head, values);
+    (*stack).head |-> ?head &*& alloc_block_Stack(stack) &*& Nodes(head, values);
 
 @*/
 
@@ -45,7 +40,7 @@ impl<T> Stack<T> {
         (*stack).head = std::ptr::null_mut();
         //@ close Nodes::<T>(0, nil);
         //@ close Stack(stack, nil);
-        return stack;
+        stack
     }
     
     unsafe fn push(stack: *mut Stack<T>, value: T)
@@ -152,7 +147,10 @@ impl Point {
     
 }
 
-fn main() {
+fn main()
+//@ req true;
+//@ ens true;
+{
     unsafe {
         let s = Stack::create();
         let p1 = Point::create(10, 0);
@@ -160,6 +158,10 @@ fn main() {
         Stack::push(s, p1);
         Stack::push(s, p2);
         Stack::reverse(s);
-        std::process::abort();
+        std::hint::assert_unchecked(Stack::pop(s) == p1);
+        std::hint::assert_unchecked(Stack::pop(s) == p2);
+        Stack::dispose(s);
+        dealloc(p1 as *mut u8, Layout::new::<Point>());
+        dealloc(p2 as *mut u8, Layout::new::<Point>());
     }
 }

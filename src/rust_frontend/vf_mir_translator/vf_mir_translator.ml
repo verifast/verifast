@@ -2635,17 +2635,23 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             | _ ->
                 Error
                   (`TrSwInt "Invalid SwitchTargets for a boolean discriminant"))
-        | Ast.ManifestTypeExpr (_, Int (signed, rank)) ->
-            let width =
-              match rank with
-              | PtrRank -> let Some {ptr_width} = TranslatorArgs.data_model_opt in ptr_width
-              | FixedWidthRank w -> w
+        | Ast.ManifestTypeExpr (_, tp) ->
+            let intTp, width =
+              match tp with
+              | Ast.Int (signed, rank) ->
+                  tp,
+                  begin match rank with
+                  | PtrRank -> let Some {ptr_width} = TranslatorArgs.data_model_opt in ptr_width
+                  | FixedWidthRank w -> w
+                  end
+              | Ast.RustChar -> Ast.Int (Unsigned, FixedWidthRank 2), 2
+              | _ -> failwith (Printf.sprintf "Todo: SwitchInt TerminatorKind for discriminant type %s" (Verifast0.rust_string_of_type tp))
             in
             let size = 1 lsl width in
             let* clauses =
               branches
               |> ListAux.try_map @@ fun (data, target) ->
-                 let* v = translate_scalar_int {data; size} discr_ty.vf_ty loc in
+                 let* v = translate_scalar_int {data; size} (Ast.ManifestTypeExpr (loc, intTp)) loc in
                  Ok (
                   Ast.SwitchStmtClause
                    ( loc,
@@ -2666,11 +2672,6 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               @ match otherwise_op with None -> [] | Some tgt -> [ tgt ]
             in
             Ok (Ast.SwitchStmt (loc, discr, clauses @ default_clause), targets)
-        | Ast.ManifestTypeExpr (_, tp) ->
-            failwith
-              (Printf.sprintf
-                 "Todo: SwitchInt TerminatorKind for discriminant type %s"
-                 (Verifast0.rust_string_of_type tp))
       in
       if ListAux.is_empty tmp_rvalue_binders then Ok (main_stmt, targets)
       else

@@ -21,7 +21,7 @@ verifast -ignore_unwind_paths filter.rs
 verifast -ignore_unwind_paths byref.rs
 verifast -ignore_unwind_paths -disable_overflow_check -allow_assume map.rs
 verifast -ignore_unwind_paths generics.rs
-verifast -ignore_unwind_paths -disable_overflow_check foreach.rs
+verifast -ignore_unwind_paths -disable_overflow_check -allow_assume foreach.rs
 verifast -ignore_unwind_paths -disable_overflow_check predctors.rs
 verifast -ignore_unwind_paths -disable_overflow_check threads0.rs
 verifast -ignore_unwind_paths -disable_overflow_check -extern ../../../tests/rust/unverified/platform -allow_assume threads.rs

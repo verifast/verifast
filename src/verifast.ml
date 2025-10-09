@@ -1230,7 +1230,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               (iter (List.remove_assoc cn ctors) cs)
         in
         iter ctormap cs ()
-      | Int (_, _) as tp -> 
+      | (Int (_, _) | RustChar) as tp -> 
         let n = List.length (List.filter (function SwitchStmtDefaultClause (l, _) -> true | _ -> false) cs) in
         if n > 1 then static_error l "switch statement can have at most one default clause" None;
         let cs0 = cs in
