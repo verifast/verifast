@@ -254,6 +254,9 @@ module TreeMetrics = struct
   let cw = dotWidth + 2 * padding
 end
 
+let is_real_path path =
+  not (String.starts_with ~prefix:"/RUSTC_VIRTUAL_PATH" path)
+
 let show_ide initialPath prover codeFont traceFont vfbindings layout javaFrontend enforceAnnotations verifyAndQuit =
   let vfbindings = ref vfbindings in
   let set_or_reset_bool_vfbinding p b = vfbindings := Vfbindings.set_or_reset_bool p b !vfbindings in
@@ -959,10 +962,16 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
   in
   let load tab newPath =
     try
-      let chan = open_in_bin newPath in
-      let text = input_fully chan in
-      let mtime = in_channel_last_modification_time chan in
-      close_in chan;
+      let text, mtime =
+        if is_real_path newPath then
+          let chan = open_in_bin newPath in
+          let text = input_fully chan in
+          let mtime = in_channel_last_modification_time chan in
+          close_in chan;
+          (text, mtime)
+        else
+          ("", 0.0)
+      in
       let text = file_to_utf8 text in
       let (eol, text) = normalize_to_lf text in
       ignore_text_changes := true;

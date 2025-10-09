@@ -131,13 +131,7 @@ struct Vector {
     y: i32,
 }
 
-/*@
-
-pred Vector(v: *mut Vector) =
-    (*v).x |-> ?x &*& (*v).y |-> ?y &*&
-    alloc_block_Vector(v);
-
-@*/
+//@ pred Vector(v: *mut Vector) = (*v).x |-> ?x &*& (*v).y |-> ?y &*& alloc_block_Vector(v);
 
 impl Vector {
 
@@ -157,7 +151,10 @@ impl Vector {
     
 }
 
-fn main() {
+fn main()
+//@ req true;
+//@ ens true;
+{
     unsafe {
         let s = Stack::create();
         //@ close foreach(nil, Vector);
@@ -196,9 +193,7 @@ fn main() {
                     output_i32((*v_).y);
                     dealloc(v_ as *mut u8, Layout::new::<Vector>());
                 }
-                _ => {
-                    std::process::abort();
-                }
+                _ => panic!("Bad command")
             }
         }
     }

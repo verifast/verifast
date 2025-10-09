@@ -434,7 +434,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | LocalPath path -> Ok path
     | Remapped {local_path=local_path_opt_cpn; virtual_name} ->
         match local_path_opt_cpn with
-        | Nothing -> Ok virtual_name
+        | Nothing -> Ok ("/RUSTC_VIRTUAL_PATH" ^ virtual_name)
         | Something {text} ->
             Ok text
 
