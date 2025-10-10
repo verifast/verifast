@@ -1,39 +1,41 @@
-// verifast_options{ignore_unwind_paths disable_overflow_check}
+// verifast_options{ignore_unwind_paths}
+#![allow(unsafe_op_in_unsafe_fn)]
+use std::{alloc::{alloc, handle_alloc_error, Layout}};
 
-use std::alloc::{Layout, alloc, handle_alloc_error};
-//@ use std::alloc::{Layout, alloc_block};
-
-unsafe fn random_int(max: i32) -> i32
-//@ req 0 < max;
-//@ ens 0 <= result && result < max;
-{
-    max - 1 // TODO: Replace by an actual random number generator
-}
-
-unsafe fn fac(mut x: i32) -> i32
+unsafe fn wrapping_fib(n: u16) -> u64
 //@ req true;
 //@ ens true;
 {
-    let mut result = 1;
-    loop {
-        //@ inv true;
-        if x == 1 {
-            return result;
+    if n <= 1 {
+        1
+    } else {
+        let mut k: u16 = 2;
+        let mut fib_k_minus_1: u64 = 1;
+        let mut fib_k: u64 = 1;
+        loop {
+            //@ inv k <= n;
+            
+            if k == n { break; }
+            
+            let fib_k_plus_1 = fib_k_minus_1.wrapping_add(fib_k);
+            
+            k += 1;
+            fib_k_minus_1 = fib_k;
+            fib_k = fib_k_plus_1;
         }
-        result *= x;
-        x -= 1;
+        fib_k
     }
 }
 
 struct Tree {
     left: *mut Tree,
     right: *mut Tree,
-    value: i32,
+    value: u16,
 }
 
 /*@
 
-pred Tree(t: *mut Tree, depth: i32) =
+pred Tree(t: *mut Tree, depth: u8) =
     if t == 0 {
         depth == 0
     } else {
@@ -47,7 +49,7 @@ pred Tree(t: *mut Tree, depth: i32) =
 
 impl Tree {
 
-    unsafe fn make(depth: i32) -> *mut Tree
+    unsafe fn make(depth: u8) -> *mut Tree
     //@ req true;
     //@ ens Tree(result, depth);
     {
@@ -57,7 +59,7 @@ impl Tree {
         } else {
             let left = Self::make(depth - 1);
             let right = Self::make(depth - 1);
-            let value = random_int(2000);
+            let value = 5000; // TODO: Use a random number here
             let t = alloc(Layout::new::<Tree>()) as *mut Tree;
             if t.is_null() {
                 handle_alloc_error(Layout::new::<Tree>());
@@ -70,31 +72,40 @@ impl Tree {
         }
     }
 
-    unsafe fn compute_sum_facs(tree: *mut Tree) -> i32
+    unsafe fn compute_sum_fibs(tree: *mut Tree) -> u64
     //@ req Tree(tree, ?depth);
     //@ ens Tree(tree, depth);
     {
         if tree.is_null() {
-            1
+            0
         } else {
             //@ open Tree(tree, depth);
-            let left_sum = Self::compute_sum_facs((*tree).left);
-            let right_sum = Self::compute_sum_facs((*tree).right);
-            let f = fac((*tree).value);
+            let left_sum = Self::compute_sum_fibs((*tree).left);
+            let f = wrapping_fib((*tree).value);
+            let right_sum = Self::compute_sum_fibs((*tree).right);
             //@ close Tree(tree, depth);
-            left_sum + right_sum + f
+            left_sum.wrapping_add(f).wrapping_add(right_sum)
         }
     }
 
 }
 
-fn print_i32(value: i32) {}
+unsafe fn print_u64(value: u64)
+//@ req true;
+//@ ens true;
+//@ assume_correct
+{
+    println!("{}", value);
+}
 
-fn main() {
+fn main()
+//@ req true;
+//@ ens true;
+{
     unsafe {
         let tree = Tree::make(22);
-        let sum = Tree::compute_sum_facs(tree);
-        //@ leak Tree(tree, _);
-        print_i32(sum)
+        let sum = Tree::compute_sum_fibs(tree);
+        //@ leak Tree(tree, 22);
+        print_u64(sum)
     }
 }

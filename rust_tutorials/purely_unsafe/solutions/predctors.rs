@@ -1,5 +1,4 @@
 // verifast_options{ignore_unwind_paths disable_overflow_check}
-
 use std::alloc::{Layout, alloc, handle_alloc_error, dealloc};
 //@ use std::alloc::{Layout, alloc_block};
 
@@ -18,17 +17,13 @@ pred Nodes<T>(node: *mut Node<T>, values: list<T>) =
     if node == 0 {
         values == nil
     } else {
-        (*node).next |-> ?next &*&
-        (*node).value |-> ?value &*&
-        alloc_block_Node(node) &*&
-        Nodes(next, ?values0) &*&
+        (*node).next |-> ?next &*& (*node).value |-> ?value &*&
+        alloc_block_Node(node) &*& Nodes(next, ?values0) &*&
         values == cons(value, values0)
     };
 
 pred Stack<T>(stack: *mut Stack<T>, values: list<T>) =
-    (*stack).head |-> ?head &*&
-    alloc_block_Stack(stack) &*&
-    Nodes(head, values);
+    (*stack).head |-> ?head &*& alloc_block_Stack(stack) &*& Nodes(head, values);
 
 @*/
 
@@ -45,7 +40,7 @@ impl<T> Stack<T> {
         (*stack).head = std::ptr::null_mut();
         //@ close Nodes::<T>(0, nil);
         //@ close Stack(stack, nil);
-        return stack;
+        stack
     }
     
     unsafe fn push(stack: *mut Stack<T>, value: T)
@@ -103,17 +98,33 @@ impl<T> Stack<T> {
 
 }
 
+unsafe fn input_char() -> char
+//@ req true;
+//@ ens true;
+//@ assume_correct
+{
+    let mut line = String::new();
+    std::io::stdin().read_line(&mut line).unwrap();
+    line.chars().next().unwrap()
+}
+
 unsafe fn input_i32() -> i32
 //@ req true;
 //@ ens true;
+//@ assume_correct
 {
-    42 // TODO: Actually input a number
+    let mut line = String::new();
+    std::io::stdin().read_line(&mut line).unwrap();
+    line.trim().parse().unwrap()
 }
 
 unsafe fn output_i32(value: i32)
 //@ req true;
 //@ ens true;
-{}
+//@ assume_correct
+{
+    println!("{}", value);
+}
 
 struct Vector {
     x: i32,
@@ -123,9 +134,7 @@ struct Vector {
 /*@
 
 pred_ctor Vector(limit: i32)(v: *mut Vector) =
-    (*v).x |-> ?x &*& (*v).y |-> ?y &*&
-    alloc_block_Vector(v) &*&
-    x * x + y * y <= limit * limit;
+    (*v).x |-> ?x &*& (*v).y |-> ?y &*& alloc_block_Vector(v) &*& x * x + y * y <= limit * limit;
 
 @*/
 
@@ -135,9 +144,7 @@ impl Vector {
     //@ req true;
     //@ ens Vector(limit)(result);
     {
-        if x * x + y * y > limit * limit {
-            std::process::abort();
-        }
+        assert!(x * x + y * y <= limit * limit, "Vector too big");
         let result = alloc(Layout::new::<Vector>()) as *mut Vector;
         if result.is_null() {
             handle_alloc_error(Layout::new::<Vector>());
@@ -150,32 +157,31 @@ impl Vector {
     
 }
 
-fn main() {
+fn main()
+//@ req true;
+//@ ens true;
+{
     unsafe {
         let limit = input_i32();
         let s = Stack::create();
         //@ close foreach(nil, Vector(limit));
         loop {
             //@ inv Stack(s, ?values) &*& foreach(values, Vector(limit));
-            let cmd = input_i32();
+            let cmd = input_char();
             match cmd {
-                1 => {
+                'p' => {
                     let x = input_i32();
                     let y = input_i32();
                     let v = Vector::create(limit, x, y);
                     Stack::push(s, v);
                     //@ close foreach(cons(v, values), Vector(limit));
                 }
-                2 => {
-                    if Stack::is_empty(s) {
-                        std::process::abort();
-                    }
+                '+' => {
+                    assert!(!Stack::is_empty(s), "Stack underflow");
                     let v1 = Stack::pop(s);
                     //@ open foreach(values, Vector(limit));
                     //@ open Vector(limit)(v1);
-                    if Stack::is_empty(s) {
-                        std::process::abort();
-                    }
+                    assert!(!Stack::is_empty(s), "Stack underflow");
                     let v2 = Stack::pop(s);
                     //@ open foreach(tail(values), Vector(limit));
                     //@ open Vector(limit)(v2);
@@ -185,20 +191,17 @@ fn main() {
                     Stack::push(s, sum);
                     //@ close foreach(cons(sum, tail(tail(values))), Vector(limit));
                 }
-                3 => {
-                    if Stack::is_empty(s) {
-                        std::process::abort();
-                    }
+                '=' => {
+                    assert!(!Stack::is_empty(s), "Stack underflow");
                     let v_ = Stack::pop(s);
                     //@ open foreach(values, Vector(limit));
                     //@ open Vector(limit)(v_);
+                    std::hint::assert_unchecked((*v_).x * (*v_).x + (*v_).y * (*v_).y <= limit * limit);
                     output_i32((*v_).x);
                     output_i32((*v_).y);
                     dealloc(v_ as *mut u8, Layout::new::<Vector>());
                 }
-                _ => {
-                    std::process::abort();
-                }
+                _ => panic!("Bad command")
             }
         }
     }

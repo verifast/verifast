@@ -1,41 +1,80 @@
-// verifast_options{ignore_unwind_paths extern:../../../tests/rust/unverified/platform disable_overflow_check}
+// verifast_options{ignore_unwind_paths}
+#![allow(unsafe_op_in_unsafe_fn)]
 
-use std::alloc::{Layout, alloc, handle_alloc_error};
-//use platform::threading::Thread;
+use std::{alloc::{alloc, handle_alloc_error, Layout}, thread::JoinHandle};
 //@ use std::alloc::{Layout, alloc_block};
-//@ use platform::threading::{Thread, thread_run_joinable};
+//@ use std::thread::JoinHandle;
 
-unsafe fn random_int(max: i32) -> i32
-//@ req 0 < max;
-//@ ens 0 <= result && result < max;
+/*@
+
+fn_type Spawnee<A, R>(pre: pred(A, pred(R))) = unsafe fn(arg: A) -> R;
+    req pre(arg, ?post);
+    ens post(result);
+
+pred JoinHandle<R>(h: JoinHandle<Sendable<R>>, post: pred(R));
+
+@*/
+
+type Spawnee<A, R> = unsafe fn(arg: A) -> R;
+
+struct Sendable<T> { payload: T }
+unsafe impl<T> Send for Sendable<T> {}
+
+unsafe fn spawn<A, R>(f: Spawnee<A, R>, arg: A) -> JoinHandle<Sendable<R>>
+where A: 'static, R: 'static
+//@ req [_]is_Spawnee::<A, R>(f, ?pre) &*& pre(arg, ?post);
+//@ ens JoinHandle(result, post);
+//@ assume_correct
 {
-    max - 1 // TODO: Replace by an actual random number generator
+    let package = Sendable { payload: arg };
+    std::thread::spawn(move || {
+        let package_moved = package;
+        Sendable { payload: f(package_moved.payload) }
+    })
 }
 
-unsafe fn fac(mut x: i32) -> i32
+unsafe fn join<R>(h: JoinHandle<Sendable<R>>) -> R
+//@ req JoinHandle(h, ?post);
+//@ ens post(result);
+//@ assume_correct
+{
+    h.join().unwrap().payload
+}
+
+unsafe fn wrapping_fib(n: u16) -> u64
 //@ req true;
 //@ ens true;
 {
-    let mut result = 1;
-    loop {
-        //@ inv true;
-        if x == 1 {
-            return result;
+    if n <= 1 {
+        1
+    } else {
+        let mut k: u16 = 2;
+        let mut fib_k_minus_1: u64 = 1;
+        let mut fib_k: u64 = 1;
+        loop {
+            //@ inv k <= n;
+            
+            if k == n { break; }
+            
+            let fib_k_plus_1 = fib_k_minus_1.wrapping_add(fib_k);
+            
+            k += 1;
+            fib_k_minus_1 = fib_k;
+            fib_k = fib_k_plus_1;
         }
-        result *= x;
-        x -= 1;
+        fib_k
     }
 }
 
 struct Tree {
     left: *mut Tree,
     right: *mut Tree,
-    value: i32,
+    value: u16,
 }
 
 /*@
 
-pred Tree(t: *mut Tree, depth: i32) =
+pred Tree(t: *mut Tree, depth: u8) =
     if t == 0 {
         depth == 0
     } else {
@@ -49,7 +88,7 @@ pred Tree(t: *mut Tree, depth: i32) =
 
 impl Tree {
 
-    unsafe fn make(depth: i32) -> *mut Tree
+    unsafe fn make(depth: u8) -> *mut Tree
     //@ req true;
     //@ ens Tree(result, depth);
     {
@@ -59,7 +98,7 @@ impl Tree {
         } else {
             let left = Self::make(depth - 1);
             let right = Self::make(depth - 1);
-            let value = random_int(5);
+            let value = 5000; // TODO: Use a random number here
             let t = alloc(Layout::new::<Tree>()) as *mut Tree;
             if t.is_null() {
                 handle_alloc_error(Layout::new::<Tree>());
@@ -72,83 +111,25 @@ impl Tree {
         }
     }
 
-    unsafe fn compute_sum_facs(tree: *mut Tree) -> i32
+    unsafe fn compute_sum_fibs(tree: *mut Tree) -> u64
     //@ req Tree(tree, ?depth);
     //@ ens Tree(tree, depth);
     {
         if tree.is_null() {
-            1
+            0
         } else {
             //@ open Tree(tree, depth);
-            let left_sum = Self::compute_sum_facs((*tree).left);
-            let right_sum = Self::compute_sum_facs((*tree).right);
-            let f = fac((*tree).value);
+            let left_sum = Self::compute_sum_fibs((*tree).left);
+            let f = wrapping_fib((*tree).value);
+            let right_sum = Self::compute_sum_fibs((*tree).right);
             //@ close Tree(tree, depth);
-            left_sum + right_sum + f
+            left_sum.wrapping_add(f).wrapping_add(right_sum)
         }
     }
 
 }
 
-struct SumData {
-    thread: platform::threading::Thread,
-    tree: *mut Tree,
-    sum: i32,
-}
-
-/*@
-
-pred_ctor summator_post(data: *SumData)() =
-    (*data).tree |-> ?tree &*& Tree(tree, _) &*& (*data).sum |-> ?sum;
-pred summator_pre(data: *SumData, post: pred()) =
-    (*data).tree |-> ?tree &*& Tree(tree, _) &*& (*data).sum |-> _ &*&
-    post == summator_post(data);
-
-@*/
-
-unsafe fn summator(data: *mut SumData)
-//@ req summator_pre(data, ?post);
-//@ ens post();
-{
-    //@ open summator_pre(data, _);
-    let sum = Tree::compute_sum_facs((*data).tree);
-    (*data).sum = sum;
-    //@ close summator_post(data)();
-}
-
-unsafe fn start_sum_thread(tree: *mut Tree) -> *mut SumData
-//@ req Tree(tree, _);
-//@ ens (*result).thread |-> ?t &*& Thread(t, summator_post(result));
-{
-    let data = alloc(Layout::new::<SumData>()) as *mut SumData;
-    if data.is_null() {
-        handle_alloc_error(Layout::new::<SumData>());
-    }
-    //@ leak alloc_block_SumData(data);
-    (*data).tree = tree;
-    //@ close summator_pre(data, summator_post(data));
-    /*@
-    produce_fn_ptr_chunk thread_run_joinable<*SumData>(summator)(summator_pre)(data_) {
-        call();
-    }
-    @*/
-    let t = platform::threading::fork_joinable(summator, data);
-    (*data).thread = t;
-    data
-}
-
-unsafe fn join_sum_thread(data: *mut SumData) -> i32
-//@ req (*data).thread |-> ?t &*& Thread(t, summator_post(data));
-//@ ens true;
-{
-    platform::threading::join((*data).thread);
-    //@ open summator_post(data)();
-    let result = (*data).sum;
-    //@ leak (*data).tree |-> ?tree &*& Tree(tree, _) &*& (*data).sum |-> _ &*& (*data).thread |-> _;
-    result
-}
-
-unsafe fn print_i32(value: i32)
+unsafe fn print_u64(value: u64)
 //@ req true;
 //@ ens true;
 //@ assume_correct
@@ -156,16 +137,43 @@ unsafe fn print_i32(value: i32)
     println!("{}", value);
 }
 
-fn main() {
+/*@
+pred_ctor compute_sum_fibs_post(tree: *mut Tree, depth: i32)(result: u64) = Tree(tree, depth);
+pred compute_sum_fibs_pre(tree: *mut Tree, post: pred(u64)) =
+    Tree(tree, ?depth) &*& post == compute_sum_fibs_post(tree, depth);
+@*/
+
+fn main()
+//@ req true;
+//@ ens true;
+{
     unsafe {
         let tree = Tree::make(22);
-        //@ open Tree(tree, _);
-        let left_data = start_sum_thread((*tree).left);
-        let right_data = start_sum_thread((*tree).right);
-        let sum_left = join_sum_thread(left_data);
-        let sum_right = join_sum_thread(right_data);
-        let f = fac((*tree).value);
-        //@ leak (*tree).left |-> _ &*& (*tree).right |-> _ &*& (*tree).value |-> _ &*& alloc_block_Tree(tree);
-        print_i32(sum_left + sum_right + f);
+        //@ open Tree(tree, 22);
+        let left = (*tree).left;
+        let right = (*tree).right;
+        /*@
+        produce_fn_ptr_chunk Spawnee<*mut Tree, u64>(Tree::compute_sum_fibs)(compute_sum_fibs_pre)(arg) {
+            open compute_sum_fibs_pre(arg, _);
+            assert Tree(arg, ?depth);
+            let result = call();
+            close compute_sum_fibs_post(arg, depth)(result);
+        }
+        @*/
+        //@ close compute_sum_fibs_pre(left, _);
+        let left_join_handle = spawn(Tree::compute_sum_fibs, left);
+        //@ close compute_sum_fibs_pre(right, _);
+        let right_join_handle = spawn(Tree::compute_sum_fibs, right);
+        let root_fib = wrapping_fib((*tree).value);
+
+        let left_sum = join(left_join_handle);
+        //@ open compute_sum_fibs_post(left, 21)(_);
+        let right_sum = join(right_join_handle);
+        //@ open compute_sum_fibs_post(right, 21)(_);
+        let sum = left_sum.wrapping_add(root_fib).wrapping_add(right_sum);
+        
+        //@ close Tree(tree, 22);
+        //@ leak Tree(tree, 22);
+        print_u64(sum)
     }
 }

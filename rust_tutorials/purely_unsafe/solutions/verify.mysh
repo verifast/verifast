@@ -22,12 +22,11 @@ verifast -ignore_unwind_paths byref.rs
 verifast -ignore_unwind_paths -disable_overflow_check -allow_assume map.rs
 verifast -ignore_unwind_paths generics.rs
 verifast -ignore_unwind_paths -disable_overflow_check -allow_assume foreach.rs
-verifast -ignore_unwind_paths -disable_overflow_check predctors.rs
-verifast -ignore_unwind_paths -disable_overflow_check threads0.rs
-verifast -ignore_unwind_paths -disable_overflow_check -extern ../../../tests/rust/unverified/platform -allow_assume threads.rs
-verifast -ignore_unwind_paths -disable_overflow_check -extern ../../../tests/rust/unverified/platform -allow_assume fractions0.rs
-verifast -ignore_unwind_paths -disable_overflow_check -extern ../../../tests/rust/unverified/platform -allow_assume fractions.rs
-verifast -ignore_unwind_paths -disable_overflow_check -extern ../../../tests/rust/unverified/platform -allow_assume precise.rs
+verifast -ignore_unwind_paths -disable_overflow_check -allow_assume predctors.rs
+verifast -ignore_unwind_paths -allow_assume threads0.rs
+verifast -ignore_unwind_paths -allow_assume threads.rs
+verifast -ignore_unwind_paths -allow_assume fractions.rs
+verifast -ignore_unwind_paths -allow_assume precise.rs
 verifast -allow_assume precise_bad_merge.rs
 cd mutexes
   cargo verifast -ignore_unwind_paths -allow_assume

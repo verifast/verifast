@@ -120,6 +120,20 @@ mod cmp {
 
 mod num {
 
+    impl u64 {
+    
+        fn wrapping_add(self: u64, other: u64) -> u64;
+        //@ req true;
+        //@ ens true;
+        //@ on_unwind_ens false;
+        
+        fn wrapping_mul(self: u64, other: u64) -> u64;
+        //@ req true;
+        //@ ens true;
+        //@ on_unwind_ens false;
+        
+    }
+
     /*@
     
     lem init_ref_usize(p: *usize, coef: real);
