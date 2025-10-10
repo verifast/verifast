@@ -13,6 +13,7 @@ union std_empty_ {}
 struct std_tuple_0_ {}
 struct std_tuple_1_<T1>(T1)
 struct std_tuple_2_<T1, T2>(T1, T2)
+struct std_tuple_3_<T1, T2, T3>(T1, T2, T3)
 
 
 /*@
