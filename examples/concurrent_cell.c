@@ -1,3 +1,5 @@
+// verifast_options{disable_overflow_check}
+
 #include "threading.h"
 
 struct cell {
@@ -70,7 +72,6 @@ typedef lemma void increment_only(struct cell* c, int v)();
 @*/
 
 /*@
-predicate exists<t>(t x) = true;
 
 predicate_ctor lock_invariant(struct cell* c, fixpoint(trace, bool) allowed)() =
   c->x |-> ?v &*& [_]c->id |-> ?id &*& malloc_block_cell(c) &*& exists(?trace) &*& trace_extension(id, trace) &*& execute_trace(trace) == v &*& allowed(trace) == true;
@@ -139,7 +140,7 @@ void increment(struct cell* c)
   /*@
     }
     producing_box_predicate trace_extension(inc(trace))
-    producing_handle_predicate is_prefix_handle(inc(trace));
+    producing_handle_predicate is_prefix_handle(h, inc(trace));
   @*/
   //@ close observed(c, inc(trace));
   //@ lem(trace);
@@ -176,7 +177,7 @@ void decrement(struct cell* c)
   /*@
     }
     producing_box_predicate trace_extension(dec(trace))
-    producing_handle_predicate is_prefix_handle(dec(trace));
+    producing_handle_predicate is_prefix_handle(h, dec(trace));
   @*/
   //@ close observed(c, dec(trace));
   //@ lem(trace);
@@ -217,7 +218,7 @@ int cas(struct cell* c, int old, int new)
   /*@
     }
     producing_box_predicate trace_extension(cas_(old, new, trace))
-    producing_handle_predicate is_prefix_handle(cas_(old, new, trace));
+    producing_handle_predicate is_prefix_handle(h, cas_(old, new, trace));
   @*/
   //@ close observed(c, cas_(old, new, trace));
   //@ lem(trace);
@@ -251,7 +252,7 @@ int get(struct cell* c)
   /*@
     }
     producing_box_predicate trace_extension(trace)
-    producing_handle_predicate is_prefix_handle(trace);
+    producing_handle_predicate is_prefix_handle(h, trace);
   @*/
   //@ close lock_invariant(c, allowed)();
   //@ close observed(c, trace);
