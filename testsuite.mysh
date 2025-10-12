@@ -9,6 +9,7 @@ cd bin
   cd ..
 cd ..
 cd examples
+  verifast -c -disable_overflow_check concurrent_cell.c
   cd tutorial
     verifast -c lemptrs.c
     cd finegrained
