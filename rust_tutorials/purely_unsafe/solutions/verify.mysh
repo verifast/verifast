@@ -34,7 +34,8 @@ verifast -ignore_unwind_paths -ignore_ref_creation -allow_assume mutexes_native.
 cd mutexes_platform
   cargo verifast -ignore_unwind_paths -allow_assume
 cd ..
-cd leaks
+verifast -ignore_unwind_paths -allow_assume leaks.rs
+cd leaks_platform
   cargo verifast -ignore_unwind_paths -allow_assume
 cd ..
 verifast -ignore_unwind_paths -allow_assume -disable_overflow_check bytes.rs
