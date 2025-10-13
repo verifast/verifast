@@ -120,6 +120,15 @@ mod cmp {
 
 mod num {
 
+    impl u32 {
+    
+        fn checked_add(self: u32, other: u32) -> std::option::Option<u32>;
+        //@ req true;
+        //@ ens if self + other <= u32::MAX { result == std::option::Option::Some(self + other) } else { result == std::option::Option::None };
+        //@ on_unwind_ens false;
+        
+    }
+
     impl u64 {
     
         fn wrapping_add(self: u64, other: u64) -> u64;
@@ -1314,6 +1323,11 @@ mod option {
         //@ ens result == match self { Option::None => std::result::Result::Err(err), Option::Some(v) => std::result::Result::Ok(v) };
         //@ on_unwind_ens false;
         
+        fn unwrap(self: Option<T>) -> T;
+        //@ req true;
+        //@ ens self == Option::Some(result);
+        //@ on_unwind_ens self == Option::None;
+        
     }
     
     impl<T> std::ops::Try for std::option::Option<T> {
@@ -1351,8 +1365,14 @@ mod result {
     impl<T, E> Result<T, E> {
     
         fn unwrap(self: Result<T, E>) -> T;
-        //@ req thread_token(?t) &*& std::result::Result_own::<T, E>(t, self);
-        //@ ens thread_token(t);
+        /*@
+        req thread_token(?t) &*&
+            match self {
+                Result::Ok(r) => ens thread_token(t) &*& result == r,
+                Result::Err(err) => <E>.own(t, err) &*& ens false
+            };
+        @*/
+        //@ ens true;
         //@ on_unwind_ens thread_token(t);
     
     }
@@ -1644,6 +1664,62 @@ mod sync {
         }
 
     }
+    
+    struct Mutex<T>;
+    struct MutexGuard<'a, T>;
+    
+    //@ fix Mutex::data_ptr<T>(self: *mut Mutex<T>) -> *mut T;
+    
+    //@ pred Mutex<T>(mutex: Mutex<T>, value: T);
+    //@ pred Mutex_minus_data<T>(mutex: *mut Mutex<T>);
+    //@ pred Mutex_shared<T>(mutex: *Mutex<T>; inv_: pred());
+    //@ pred MutexGuard<'a, T>(t: thread_id_t, guard: MutexGuard<'a, T>, inv_: pred());
+    //@ pred Mutex_lock_end_token<T>(mutex: *Mutex<T>, inv_: pred(), k: lifetime_t, frac: real);
+    
+    /*@
+    
+    lem Mutex_separate_data<T>(mutex_ptr: *mut Mutex<T>);
+        req *mutex_ptr |-> ?mutex &*& Mutex(mutex, ?value);
+        ens Mutex_minus_data(mutex_ptr) &*& *Mutex::data_ptr(mutex_ptr) |-> value;
+
+    lem share_Mutex<T>(mutex: *mut Mutex<T>);
+        req Mutex_minus_data(mutex) &*& exists::<pred()>(?inv_) &*& inv_();
+        ens Mutex_shared(mutex, inv_);
+        
+    lem MutexGuard_to_own<'a, T>(guard: MutexGuard<'a, T>);
+        req MutexGuard::<'a, T>(?t, guard, ?inv_) &*& inv_();
+        ens <MutexGuard<'a, T>>.own(t, guard);
+    
+    lem end_Mutex_lock<T>(mutex: *mut Mutex<T>);
+        req Mutex_lock_end_token(mutex, ?inv_, ?k, ?frac) &*& [_]lifetime_dead_token(k);
+        ens [frac]Mutex_shared(mutex, inv_);
+    
+    @*/
+    
+    struct PoisonError<T>;
+        
+    impl<T> Mutex<T> {
+    
+        fn new(init: T) -> Mutex<T>;
+        //@ req true;
+        //@ ens Mutex(result, init);
+    
+        fn data_ptr<'a>(self: &'a Mutex<T>) -> *mut T;
+        //@ req true;
+        //@ ens result == Mutex::data_ptr(self);
+        
+        fn lock<'a>(self: &'a Mutex<T>) -> std::result::Result<MutexGuard<'a, T>, PoisonError<MutexGuard<'a, T>>>;
+        //@ req thread_token(currentThread) &*& [?frac]Mutex_shared(self, ?inv_);
+        /*@
+        ens thread_token(currentThread) &*&
+            match result {
+                Result::Ok(guard) => MutexGuard(currentThread, guard, inv_) &*& inv_() &*& Mutex_lock_end_token(self, inv_, 'a, frac),
+                Result::Err(err) => <PoisonError<MutexGuard<'a, T>>>.own(currentThread, err)
+            };
+        @*/
+    
+    }
+    
 }
 
 mod thread {

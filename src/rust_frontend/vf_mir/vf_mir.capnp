@@ -857,6 +857,13 @@ struct Trait {
     requiredFns @1: IndList(RequiredFn);
 }
 
+struct TyAlias {
+    defId @0: Text;
+    span @1: SpanData;
+    generics @2: List(GenericParamDef);
+    ty @3: Ty;
+}
+
 struct TraitImplItem {
     name @0: Text;
     defId @1: Text;
@@ -890,6 +897,7 @@ struct VfMir {
     # shoule be determined before initializing them which is not the case for ADT definitions. The standard way to
     # do this is capnp `orphans` which are not supported for Rust plugin at the time.
     adtDefs @0: IndList(AdtDef);
+    tyAliases @9: List(TyAlias);
     traits @5: IndList(Trait);
     traitImpls @3: List(TraitImpl);
     bodies @1: List(Body);

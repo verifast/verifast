@@ -3506,16 +3506,16 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         PredFamilyDecl (l, p, tparams, arity, tes, inputParamCount, inductiveness)::ds -> let p=full_name pn p in
         let ts = List.map (check_pure_type (pn,ilist) tparams Ghost) tes in
         begin
-          match try_assoc2' Ghost (pn,ilist) p pm predfammap0 with
+          match try_assoc2 p pm predfammap0 with
             Some (l0, tparams0, arity0, ts0, symb0, inputParamCount0, inductiveness0) ->
             let tpenv =
               match zip tparams0 (List.map (fun tparam -> GhostTypeParam (tparam)) tparams) with
-                None -> static_error l "Predicate family redeclarations declares a different number of type parameters." None
+                None -> static_error l (Printf.sprintf "Predicate family redeclaration declares a different number of type parameters. Original declaration at '%s'." (string_of_loc l0)) None
               | Some bs -> bs
             in
             let ts0' = List.map (instantiate_type tpenv) ts0 in
             if arity <> arity0 || ts <> ts0' || inputParamCount <> inputParamCount0 || inductiveness <> inductiveness0 then
-              static_error l ("Predicate family redeclaration does not match original declaration at '" ^ string_of_loc l0 ^ "'.") None;
+              static_error l (Printf.sprintf "Predicate family redeclaration does not match original declaration at '%s'." (string_of_loc l0)) None;
             iter (pn,ilist) pm ds
           | None ->
             iter (pn,ilist) (mk_predfam p l tparams arity ts inputParamCount inductiveness::pm) ds
