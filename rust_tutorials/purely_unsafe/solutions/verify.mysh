@@ -27,8 +27,11 @@ verifast -ignore_unwind_paths -allow_assume threads0.rs
 verifast -ignore_unwind_paths -allow_assume threads.rs
 verifast -ignore_unwind_paths -allow_assume fractions.rs
 verifast -ignore_unwind_paths -allow_assume precise.rs
+verifast -ignore_unwind_paths -disable_overflow_check -extern ../../../tests/rust/unverified/platform -allow_assume precise_platform.rs
 verifast -allow_assume precise_bad_merge.rs
-cd mutexes
+verifast -ignore_unwind_paths -allow_assume mutexes.rs
+verifast -ignore_unwind_paths -ignore_ref_creation -allow_assume mutexes_native.rs
+cd mutexes_platform
   cargo verifast -ignore_unwind_paths -allow_assume
 cd ..
 cd leaks

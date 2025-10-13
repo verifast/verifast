@@ -235,6 +235,7 @@ impl rustc_driver::Callbacks for CompilerCalls {
         let mut visitor = HirVisitor {
             tcx,
             structs: Vec::new(),
+            ty_aliases: Vec::new(),
             trait_impls: Vec::new(),
             bodies: Vec::new(),
         };
@@ -283,6 +284,7 @@ impl rustc_driver::Callbacks for CompilerCalls {
         vf_mir_capnp_builder.add_comments(&mut ghost_ranges);
         vf_mir_capnp_builder.set_directives(std::mem::replace(&mut directives, Vec::new()));
         vf_mir_capnp_builder.set_structs(visitor.structs);
+        vf_mir_capnp_builder.set_ty_aliases(visitor.ty_aliases);
         vf_mir_capnp_builder.set_trait_impls(visitor.trait_impls);
         vf_mir_capnp_builder.add_bodies(bodies);
         let msg_cpn = vf_mir_capnp_builder.build(compiler);
@@ -346,6 +348,7 @@ struct TraitImplInfo {
 struct HirVisitor<'tcx> {
     tcx: TyCtxt<'tcx>,
     structs: Vec<LocalDefId>,
+    ty_aliases: Vec<LocalDefId>,
     trait_impls: Vec<TraitImplInfo>,
     bodies: Vec<(LocalDefId, Span)>,
 }
@@ -409,6 +412,7 @@ impl<'tcx> rustc_hir::intravisit::Visitor<'tcx> for HirVisitor<'tcx> {
                     }
                 }
             }
+            rustc_hir::ItemKind::TyAlias(..) => self.ty_aliases.push(item.owner_id.def_id),
             _ => (),
         }
         rustc_hir::intravisit::walk_item(self, item);
@@ -665,6 +669,7 @@ mod vf_mir_builder {
         tcx: TyCtxt<'tcx>,
         directives: Vec<Box<GhostRange>>,
         structs: Vec<rustc_span::def_id::LocalDefId>,
+        ty_aliases: Vec<rustc_hir::def_id::LocalDefId>,
         trait_impls: Vec<super::TraitImplInfo>,
         bodies: Vec<(mir::Body<'tcx>, Span)>,
         annots: LinkedList<Box<GhostRange>>,
@@ -676,6 +681,7 @@ mod vf_mir_builder {
                 tcx,
                 directives: Vec::new(),
                 structs: Vec::new(),
+                ty_aliases: Vec::new(),
                 trait_impls: Vec::new(),
                 bodies: Vec::new(),
                 annots: LinkedList::new(),
@@ -696,6 +702,10 @@ mod vf_mir_builder {
 
         pub(super) fn set_structs(&mut self, structs: Vec<rustc_span::def_id::LocalDefId>) {
             self.structs = structs;
+        }
+
+        pub(super) fn set_ty_aliases(&mut self, ty_aliases: Vec<rustc_span::def_id::LocalDefId>) {
+            self.ty_aliases = ty_aliases;
         }
 
         pub(super) fn set_trait_impls(&mut self, trait_impls: Vec<super::TraitImplInfo>) {
@@ -896,6 +906,24 @@ mod vf_mir_builder {
             for struct_did in &self.structs {
                 req_adt_defs.push(self.tcx.adt_def(struct_did.to_def_id()));
             }
+
+            vf_mir_cpn.fill_ty_aliases(&self.ty_aliases, |mut ty_alias_cpn, ty_alias| {
+                let alias_def = self.tcx.type_of(ty_alias.to_def_id());
+                ty_alias_cpn.set_def_id(&self.tcx.def_path_str(ty_alias.to_def_id()));
+                Self::encode_span_data(
+                    self.tcx,
+                    &self.tcx.def_span(ty_alias.to_def_id()).data(),
+                    ty_alias_cpn.reborrow().init_span(),
+                );
+                let mut enc_ctx = EncCtx::new(self.tcx, EncKind::Adt, LinkedList::new(), Vec::new());
+                ty_alias_cpn.fill_generics(
+                    &self.tcx.generics_of(ty_alias.to_def_id()).own_params,
+                    |generic_param_cpn, generic_param| {
+                        Self::encode_generic_param_def(generic_param, generic_param_cpn);
+                    },
+                );
+                Self::encode_ty(self.tcx, &mut enc_ctx, alias_def.instantiate_identity(), ty_alias_cpn.reborrow().init_ty());
+            });
 
             // Encode traits (consumes annotations)
             self.encode_traits(&mut req_adt_defs, vf_mir_cpn.reborrow());

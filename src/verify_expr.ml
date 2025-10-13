@@ -2775,7 +2775,10 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               Some (_, _, _, _, _, arrayMallocBlockSymb, _, _, _, _, _, _) ->
               cont (Chunk ((arrayMallocBlockSymb (), true), [], real_unit, [result; ctxt#mk_intlit 1], None)::h)
             | _ ->
-              cont (Chunk ((get_pred_symb "malloc_block", true), [], real_unit, [result; sizeof_core l env t], None)::h)
+              if is_rust then
+                cont (Chunk ((get_pred_symb "std::alloc::alloc_block", true), [], real_unit, [result; mk_app (get_pure_func_symb "std::alloc::Layout::new") [typeid_of_core l env t]], None)::h)
+              else
+                cont (Chunk ((get_pred_symb "malloc_block", true), [], real_unit, [result; sizeof_core l env t], None)::h)
         end
     | WFunCall (l, "std::alloc::VeriFast_dealloc", [], args, Static) ->
       let [(arg, PtrType t)] = List.map (check_expr (pn,ilist) tparams tenv) args in

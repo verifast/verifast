@@ -177,7 +177,9 @@ unsafe fn print<'a>(text: &'a str)
 //@ ens thread_token(t) &*& [f]text.ptr[..text.len] |-> cs;
 {
     let mut stdout = std::io::stdout();
-    stdout.write(text.as_bytes()).unwrap();
+    let result = stdout.write(text.as_bytes());
+    //@ open std::result::Result_own::<usize, std::io::Error>(t, result);
+    result.unwrap();
     std::mem::drop(stdout);
 }
 

@@ -4315,6 +4315,14 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     in
     Ok decl
 
+  let translate_ty_alias_decl (ty_alias_cpn : VfMirStub.Reader.TyAlias.t) =
+    let open VfMirStub.Reader.TyAlias in
+    let def_id = def_id_get ty_alias_cpn in
+    let* loc = translate_span_data (span_get ty_alias_cpn) in
+    let generics = List.map translate_generic_param_def (generics_get_list ty_alias_cpn) in
+    let* ty_info = translate_ty (ty_get ty_alias_cpn) loc in
+    Ok (Ast.TypedefDecl (loc, ty_info.vf_ty, def_id, List.map fst generics))
+
   let translate_trait (adt_defs : Mir.adt_def_tr list)
       (skip_specless_fns : bool) (trait_cpn : TraitRd.t) =
     let name = TraitRd.name_get trait_cpn in
@@ -7584,6 +7592,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         List.filter_map Fun.id adts_full_bor_content_preds
       in
       let* _ = check_proof_obligations ghost_decl_map adts_proof_obligs in
+      let* ty_alias_decls = ListAux.try_map translate_ty_alias_decl (VfMirRd.VfMir.ty_aliases_get_list vf_mir_cpn) in
       let* traits_cpn =
         CapnpAux.ind_list_get_list (VfMirRd.VfMir.traits_get vf_mir_cpn)
       in
@@ -7638,7 +7647,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let decls =
         List.map
           (modularize_decl module_imports_map)
-          (traits_decls @ trait_impl_prototypes @ adt_decls @ aux_decls
+          (ty_alias_decls @ traits_decls @ trait_impl_prototypes @ adt_decls @ aux_decls
          @ adts_full_bor_content_preds @ adts_proof_obligs)
         @ ghost_decls
         @ List.map
