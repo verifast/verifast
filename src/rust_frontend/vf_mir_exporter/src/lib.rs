@@ -2246,7 +2246,19 @@ mod vf_mir_builder {
                     let operandr_cpn = bin_op_data_cpn.init_operandr();
                     Self::encode_operand(tcx, enc_ctx, operandr, operandr_cpn);
                 }
-                mir::Rvalue::NullaryOp(null_op, ty) => rvalue_cpn.set_nullary_op(()),
+                mir::Rvalue::NullaryOp(null_op, ty) => {
+                    let mut nullary_op_data_cpn = rvalue_cpn.init_nullary_op();
+                    let mut operator_cpn = nullary_op_data_cpn.reborrow().init_operator();
+                    match null_op {
+                        mir::NullOp::SizeOf => operator_cpn.set_size_of(()),
+                        mir::NullOp::AlignOf => operator_cpn.set_align_of(()),
+                        mir::NullOp::OffsetOf(fields) => operator_cpn.set_offset_of(()),
+                        mir::NullOp::UbChecks => operator_cpn.set_ub_checks(()),
+                        mir::NullOp::ContractChecks => operator_cpn.set_contract_checks(()),
+                    }
+                    let ty_cpn = nullary_op_data_cpn.init_ty();
+                    Self::encode_ty(tcx, enc_ctx, *ty, ty_cpn);
+                }
                 mir::Rvalue::UnaryOp(un_op, operand) => {
                     let mut un_op_data_cpn = rvalue_cpn.init_unary_op();
                     let un_op_cpn = un_op_data_cpn.reborrow().init_operator();

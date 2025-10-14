@@ -16,6 +16,8 @@ use crate::boxed::Box;
 use crate::collections::TryReserveError;
 use crate::collections::TryReserveErrorKind::*;
 
+//@ use std::alloc::{alloc_id_t, Allocator, Layout, alloc_block_in};
+
 #[cfg(test)]
 mod tests;
 
@@ -75,6 +77,12 @@ pub(crate) struct RawVec<T, A: Allocator = Global> {
     inner: RawVecInner<A>,
     _marker: PhantomData<T>,
 }
+
+/*@
+
+pred RawVec<T, A>(t: thread_id_t, self: RawVec<T, A>, alloc_id: alloc_id_t, ptr: *T, capacity: usize);
+
+@*/
 
 /// Like a `RawVec`, but only generic over the allocator, not the type.
 ///
@@ -251,7 +259,21 @@ impl<T, A: Allocator> RawVec<T, A> {
     /// If the `ptr` and `capacity` come from a `RawVec` created via `alloc`, then this is
     /// guaranteed.
     #[inline]
-    pub(crate) unsafe fn from_raw_parts_in(ptr: *mut T, capacity: usize, alloc: A) -> Self {
+    pub(crate) unsafe fn from_raw_parts_in(ptr: *mut T, capacity: usize, alloc: A) -> Self
+    /*@
+    req Allocator(?t, alloc, ?alloc_id) &*&
+        ptr != 0 &*&
+        ptr as usize % std::mem::align_of::<T>() == 0 &*&
+        if capacity * std::mem::size_of::<T>() == 0 {
+            true
+        } else {
+            Layout::new::<T>().repeat(capacity) == some(pair(?allocLayout, ?stride)) &*&
+            alloc_block_in(alloc_id, ptr as *u8, allocLayout)
+        };
+    @*/
+    //@ ens RawVec(t, result, alloc_id, ptr, ?capacity_) &*& capacity <= capacity_;
+    //@ assume_correct
+    {
         // SAFETY: Precondition passed to the caller
         unsafe {
             let ptr = ptr.cast();

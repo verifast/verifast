@@ -624,6 +624,20 @@ struct Rvalue {
         operandr @2: Operand;
     }
 
+    struct NullaryOpData {
+        struct NullOp {
+            union {
+                sizeOf @0: Void;
+                alignOf @1: Void;
+                offsetOf @2: Void; # TODO: Elaborate
+                ubChecks @3: Void;
+                contractChecks @4: Void;
+            }
+        }
+        operator @0: NullOp;
+        ty @1: Ty;
+    }
+
     struct UnaryOpData {
         struct UnOp {
             union {
@@ -676,7 +690,7 @@ struct Rvalue {
         addressOf @2: AddressOfData;
         cast @3: CastData;
         binaryOp @4: BinaryOpData;
-        nullaryOp @11: Void;
+        nullaryOp @11: NullaryOpData;
         unaryOp @6: UnaryOpData;
         aggregate @5: AggregateData;
         discriminant @7: DiscriminantData;
