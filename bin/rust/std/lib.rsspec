@@ -286,6 +286,11 @@ mod marker {
 
 mod intrinsics {
 
+    fn ub_checks() -> bool;
+    //@ req true;
+    //@ ens result == false; // TODO: Also check the case where `ub_checks()` returns `true`. https://github.com/verifast/verifast/issues/931
+    //@ on_unwind_ens false;
+
     unsafe fn ptr_offset_from<T>(ptr: *const T, base: *const T) -> isize;
     /*@
     req

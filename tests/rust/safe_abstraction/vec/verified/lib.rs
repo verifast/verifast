@@ -1,4 +1,4 @@
-// verifast_options{skip_specless_fns}
+// verifast_options{skip_specless_fns ignore_unwind_paths}
 
 //! # The Rust core allocation and collections library
 //!

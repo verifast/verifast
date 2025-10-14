@@ -2983,6 +2983,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       | Use operand_cpn ->
           let* operand = translate_operand operand_cpn loc in
           tr_operand operand
+      | Repeat repeat_data_cpn ->
+          Ast.static_error loc
+            "Array repeat expressions are not yet supported" None
       | Ref ref_data_cpn ->
           let open RefData in
           let region_cpn = region_get ref_data_cpn in
@@ -3072,6 +3075,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   (loc, "fn_outcome_result", [], [], [ LitPat expr ], Static)
             in
             Ok (`TrRvalueExpr expr)
+      | ThreadLocalRef ->
+          Ast.static_error loc
+            "Thread-local static references are not yet supported" None
       | AddressOf address_of_data_cpn ->
           let open AddressOfData in
           let mut_cpn = mutability_get address_of_data_cpn in
@@ -3118,6 +3124,22 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           let* operandl = tr_operand operandl in
           let* operandr = tr_operand operandr in
           Ok (`TrRvalueBinaryOp (operator, operandl, operandr))
+      | NullaryOp nullary_op_data_cpn ->
+          let open NullaryOpData in
+          begin match operator_get nullary_op_data_cpn |> NullOp.get with
+            UbChecks ->
+              let expr = Ast.CallExpr (loc, "std::intrinsics::ub_checks", [], [], [], Static) in
+              let expr =
+                if TranslatorArgs.ignore_unwind_paths then
+                  expr
+                else
+                  Ast.CallExpr (loc, "fn_outcome_result", [], [], [ LitPat expr ], Static)
+              in
+              Ok (`TrRvalueExpr expr)
+          | _ ->
+              Ast.static_error loc
+                "Nullary operations are not yet supported" None
+          end
       | UnaryOp un_op_data_cpn ->
           let* operator, operand =
             translate_unary_operation un_op_data_cpn loc
@@ -3166,6 +3188,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                    [],
                    List.map (fun v -> Ast.LitPat v) (place_expr :: discriminant_values),
                    Static )))
+      | ShallowInitBox ->
+          Ast.static_error loc
+            "Shallow initialization of a Box is not yet supported" None
       | Undefined _ -> Error (`TrRvalue "Unknown Rvalue kind")
 
     let translate_statement_kind (statement_kind_cpn : StatementKindRd.t)

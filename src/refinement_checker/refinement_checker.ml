@@ -1627,6 +1627,7 @@ type command =
 | AddressOf of rvalue_address_of_data
 | Cast of Vf_mir_decoder.ty (* Pop a value from the top of the operand stack, cast it to the specified type, and push the result *)
 | BinaryOp of rvalue_binary_op_data_bin_op (* Pop two values from the top of the operand stack, apply the specified binary operator to them, and push the result *)
+| NullaryOp of rvalue_nullary_op_data (* Push the result of the specified nullary operator onto the operand stack *)
 | UnaryOp of rvalue_unary_op_data_un_op (* Pop a value from the top of the operand stack, apply the specified unary operator to it, and push the result *)
 | Aggregate of aggregate_kind * int (* Pop the specified number of values from the top of the operand stack and push an aggregate value *)
 | Discriminant (* Pop a value from the top of the operand stack, which is an enum value, and push the discriminant of the enum value *)
@@ -1647,6 +1648,7 @@ let string_of_command c =
   | AddressOf {place} -> Printf.sprintf "AddressOf %s" (string_of_place place)
   | Cast ty -> Printf.sprintf "Cast %s" (string_of_ty ty)
   | BinaryOp operator -> Printf.sprintf "BinaryOp %s" (string_of_bin_op operator)
+  | NullaryOp data -> Printf.sprintf "NullaryOp"
   | Aggregate (aggregate_kind, n) -> Printf.sprintf "Aggregate %s %d" (string_of_aggregate_kind aggregate_kind) n
   | Discriminant -> "Discriminant"
   | SourceInfo {span} -> Printf.sprintf "SourceInfo %s" (string_of_span span)
@@ -1673,6 +1675,7 @@ let commands_of_rvalue = function
 | Cast {operand=Copy {local; projection=[BoxAsNonNull _]}} -> [LoadLocal local; BoxAsPtr]
 | Cast {operand; ty} -> commands_of_operand operand @ [Cast ty]
 | BinaryOp {operator; operandl; operandr} -> commands_of_operand operandl @ commands_of_operand operandr @ [BinaryOp operator]
+| NullaryOp nullary_op_data -> [NullaryOp nullary_op_data]
 | UnaryOp {operator; operand} -> commands_of_operand operand @ [UnaryOp operator]
 | Aggregate {aggregate_kind; operands} -> List.concat_map commands_of_operand operands @ [Aggregate (aggregate_kind, List.length operands)]
 | Discriminant {place} -> commands_for_loading_place place @ [Discriminant]
@@ -2114,7 +2117,18 @@ let check_rvalue_refines_rvalue genv0 env0 span0 caller0 rhsRvalue0 genv1 env1 s
   let rhs0 = binary_op_data_cpn0.operandr in
   let rhs1 = binary_op_data_cpn1.operandr in
   check_operand_refines_operand 1 genv0 env0 span0 caller0 rhs0 genv1 env1 span1 caller1 rhs1
-| NullaryOp, NullaryOp -> failwith "Rvalue::NullaryOp not supported"
+| NullaryOp {operator=op0; ty=ty0}, NullaryOp {operator=op1; ty=ty1} ->
+  let ty0 = decode_ty genv0 ty0 in
+  let ty1 = decode_ty genv1 ty1 in
+  if ty0 <> ty1 then error "NullaryOp: The types do not match";
+  begin match op0, op1 with
+  | SizeOf, SizeOf -> ()
+  | AlignOf, AlignOf -> ()
+  | OffsetOf _, OffsetOf _ -> failwith "Rvalue::NullaryOp: OffsetOf not supported"
+  | UbChecks, UbChecks -> ()
+  | ContractChecks, ContractChecks -> ()
+  | _ -> failwith "Rvalue::NullaryOp: operators do not match"
+  end
 | UnaryOp unary_op_data_cpn0, UnaryOp unary_op_data_cpn1 -> failwith "Rvalue::UnaryOp not supported"
 | Aggregate aggregate_data_cpn0, Aggregate aggregate_data_cpn1 ->
   check_aggregate_refines_aggregate genv0 env0 span0 caller0 aggregate_data_cpn0 genv1 env1 span1 caller1 aggregate_data_cpn1
@@ -2675,6 +2689,19 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
         | BinaryOp op0, BinaryOp op1 ->
             let [vlhs; vrhs], opnds0, opnds1 = consume_operands 2 opnds0 opnds1 in
             if op0 <> op1 then error "BinaryOp: The operators do not match";
+            let v = fresh_symbol () in
+            cont env0 (v::opnds0) env1 (v::opnds1)
+        | NullaryOp op0, NullaryOp op1 ->
+            begin match op0.operator, op1.operator with
+              SizeOf, SizeOf -> ()
+            | AlignOf, AlignOf -> ()
+            | OffsetOf _, OffsetOf _ -> error "OffsetOf not yet supported"
+            | UbChecks, UbChecks -> ()
+            | ContractChecks, ContractChecks -> ()
+            end;
+            let ty0 = decode_ty i_bb0#genv op0.ty in
+            let ty1 = decode_ty i_bb1#genv op1.ty in
+            if ty0 <> ty1 then error "NullaryOp: The types do not match";
             let v = fresh_symbol () in
             cont env0 (v::opnds0) env1 (v::opnds1)
         | UnaryOp op0, UnaryOp op1 ->

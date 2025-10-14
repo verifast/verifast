@@ -94,6 +94,9 @@ use crate::boxed::Box;
 use crate::collections::TryReserveError;
 use crate::raw_vec::RawVec;
 
+//@ use std::alloc::{alloc_id_t, Allocator, Layout, alloc_block_in};
+//@ use raw_vec::RawVec;
+
 mod extract_if;
 
 #[cfg(not(no_global_oom_handling))]
@@ -435,6 +438,13 @@ pub struct Vec<T, #[unstable(feature = "allocator_api", issue = "32838")] A: All
     buf: RawVec<T, A>,
     len: usize,
 }
+
+/*@
+
+pred Vec<T, A>(t: thread_id_t, self: Vec<T, A>, alloc_id: alloc_id_t, ptr: *T, capacity: usize, len: usize) =
+    RawVec(t, self.buf, alloc_id, ptr, capacity) &*& len == self.len &*& len <= capacity;
+
+@*/
 
 ////////////////////////////////////////////////////////////////////////////////
 // Inherent methods
@@ -1086,13 +1096,39 @@ impl<T, A: Allocator> Vec<T, A> {
     /// ```
     #[inline]
     #[unstable(feature = "allocator_api", issue = "32838")]
-    pub unsafe fn from_raw_parts_in(ptr: *mut T, length: usize, capacity: usize, alloc: A) -> Self {
-        ub_checks::assert_unsafe_precondition!(
-            check_library_ub,
-            "Vec::from_raw_parts_in requires that length <= capacity",
-            (length: usize = length, capacity: usize = capacity) => length <= capacity
-        );
-        unsafe { Vec { buf: RawVec::from_raw_parts_in(ptr, capacity, alloc), len: length } }
+    pub unsafe fn from_raw_parts_in(ptr: *mut T, length: usize, capacity: usize, alloc: A) -> Self
+    /*@
+    req Allocator(?t, alloc, ?alloc_id) &*&
+        ptr != 0 &*&
+        ptr as usize % std::mem::align_of::<T>() == 0 &*&
+        length <= capacity &*&
+        if capacity * std::mem::size_of::<T>() == 0 {
+            true
+        } else {
+            Layout::new::<T>().repeat(capacity) == some(pair(?allocLayout, ?stride)) &*&
+            alloc_block_in(alloc_id, ptr as *u8, allocLayout)
+        };
+    @*/
+    //@ ens Vec(t, result, alloc_id, ptr, ?capacity_, length) &*& capacity <= capacity_;
+    {
+        const fn precondition_check(length: usize, capacity: usize) {
+            if !(length <= capacity) {
+                let msg = concat!("unsafe precondition(s) violated: ", "Vec::from_raw_parts_in requires that length <= capacity",
+                    "\n\nThis indicates a bug in the program. This Undefined Behavior check is optional, and cannot be relied on for safety.");
+                ::core::panicking::panic_nounwind_fmt(::core::fmt::Arguments::new_const(&[msg]), false);
+            }
+        }
+        if ::core::ub_checks::check_library_ub() { //~allow_dead_code
+            precondition_check(length, capacity); //~allow_dead_code
+        }
+        //ub_checks::assert_unsafe_precondition!(
+        //    check_library_ub,
+        //    "Vec::from_raw_parts_in requires that length <= capacity",
+        //    (length: usize = length, capacity: usize = capacity) => length <= capacity //~allow_dead_code
+        //);
+        let r = unsafe { Vec { buf: RawVec::from_raw_parts_in(ptr, capacity, alloc), len: length } };
+        //@ close Vec(t, r, alloc_id, ptr, _, length);
+        r
     }
 
     #[doc(alias = "from_non_null_parts_in")]

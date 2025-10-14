@@ -99,7 +99,7 @@ let string_of_rvalue = function
     Printf.sprintf "(%s as %s)" (string_of_operand operand) (string_of_ty ty)
   | BinaryOp {operator; operandl; operandr} ->
     Printf.sprintf "%s %s %s" (string_of_operand operandl) (string_of_bin_op operator) (string_of_operand operandr)
-  | NullaryOp -> "<NullaryOp>"
+  | NullaryOp _ -> "<NullaryOp>"
   | UnaryOp _ -> "<UnaryOp>"
   | Aggregate {aggregate_kind; operands} ->
     Printf.sprintf "%s(%s)" (string_of_aggregate_kind aggregate_kind) (String.concat ", " (List.map string_of_operand operands))
