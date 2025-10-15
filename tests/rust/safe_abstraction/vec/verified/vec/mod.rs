@@ -95,6 +95,7 @@ use crate::collections::TryReserveError;
 use crate::raw_vec::RawVec;
 
 //@ use std::alloc::{alloc_id_t, Allocator, Layout, alloc_block_in};
+//@ use alloc::Global_alloc_id;
 //@ use raw_vec::RawVec;
 
 mod extract_if;
@@ -654,7 +655,21 @@ impl<T> Vec<T> {
     /// ```
     #[inline]
     #[stable(feature = "rust1", since = "1.0.0")]
-    pub unsafe fn from_raw_parts(ptr: *mut T, length: usize, capacity: usize) -> Self {
+    pub unsafe fn from_raw_parts(ptr: *mut T, length: usize, capacity: usize) -> Self
+    /*@
+    req ptr != 0 &*&
+        ptr as usize % std::mem::align_of::<T>() == 0 &*&
+        length <= capacity &*&
+        if capacity * std::mem::size_of::<T>() == 0 {
+            true
+        } else {
+            Layout::new::<T>().repeat(capacity) == some(pair(?allocLayout, ?stride)) &*&
+            alloc_block_in(Global_alloc_id, ptr as *u8, allocLayout)
+        };
+    @*/
+    //@ ens Vec(currentThread, result, Global_alloc_id, ptr, ?capacity_, length) &*& capacity <= capacity_;
+    {
+        //@ alloc::produce_Allocator_Global(currentThread);
         unsafe { Self::from_raw_parts_in(ptr, length, capacity, Global) }
     }
 
