@@ -781,7 +781,20 @@ impl<T> Vec<T> {
     /// ```
     #[inline]
     #[unstable(feature = "box_vec_non_null", reason = "new API", issue = "130364")]
-    pub unsafe fn from_parts(ptr: NonNull<T>, length: usize, capacity: usize) -> Self {
+    pub unsafe fn from_parts(ptr: NonNull<T>, length: usize, capacity: usize) -> Self
+    /*@
+    req ptr.as_ptr() as usize % std::mem::align_of::<T>() == 0 &*&
+        length <= capacity &*&
+        if capacity * std::mem::size_of::<T>() == 0 {
+            true
+        } else {
+            Layout::new::<T>().repeat(capacity) == some(pair(?allocLayout, ?stride)) &*&
+            alloc_block_in(Global_alloc_id, ptr.as_ptr() as *u8, allocLayout)
+        };
+    @*/
+    //@ ens Vec(currentThread, result, Global_alloc_id, ptr.as_ptr(), ?capacity_, length) &*& capacity <= capacity_;
+    {
+        //@ alloc::produce_Allocator_Global(currentThread);
         unsafe { Self::from_parts_in(ptr, length, capacity, Global) }
     }
 
@@ -1258,13 +1271,38 @@ impl<T, A: Allocator> Vec<T, A> {
     #[inline]
     #[unstable(feature = "allocator_api", reason = "new API", issue = "32838")]
     // #[unstable(feature = "box_vec_non_null", issue = "130364")]
-    pub unsafe fn from_parts_in(ptr: NonNull<T>, length: usize, capacity: usize, alloc: A) -> Self {
-        ub_checks::assert_unsafe_precondition!(
-            check_library_ub,
-            "Vec::from_parts_in requires that length <= capacity",
-            (length: usize = length, capacity: usize = capacity) => length <= capacity
-        );
-        unsafe { Vec { buf: RawVec::from_nonnull_in(ptr, capacity, alloc), len: length } }
+    pub unsafe fn from_parts_in(ptr: NonNull<T>, length: usize, capacity: usize, alloc: A) -> Self
+    /*@
+    req Allocator(?t, alloc, ?alloc_id) &*&
+        ptr.as_ptr() as usize % std::mem::align_of::<T>() == 0 &*&
+        length <= capacity &*&
+        if capacity * std::mem::size_of::<T>() == 0 {
+            true
+        } else {
+            Layout::new::<T>().repeat(capacity) == some(pair(?allocLayout, ?stride)) &*&
+            alloc_block_in(alloc_id, ptr.as_ptr() as *u8, allocLayout)
+        };
+    @*/
+    //@ ens Vec(t, result, alloc_id, ptr.as_ptr(), ?capacity_, length) &*& capacity <= capacity_;
+    {
+        const fn precondition_check(length: usize, capacity: usize) {
+            if !(length <= capacity) {
+                let msg = concat!("unsafe precondition(s) violated: ", "Vec::from_parts_in requires that length <= capacity",
+                    "\n\nThis indicates a bug in the program. This Undefined Behavior check is optional, and cannot be relied on for safety.");
+                ::core::panicking::panic_nounwind_fmt(::core::fmt::Arguments::new_const(&[msg]), false);
+            }
+        }
+        if ::core::ub_checks::check_library_ub() { //~allow_dead_code
+            precondition_check(length, capacity); //~allow_dead_code
+        }
+        //ub_checks::assert_unsafe_precondition!(
+        //    check_library_ub,
+        //    "Vec::from_parts_in requires that length <= capacity",
+        //    (length: usize = length, capacity: usize = capacity) => length <= capacity
+        //);
+        let r = unsafe { Vec { buf: RawVec::from_nonnull_in(ptr, capacity, alloc), len: length } };
+        //@ close Vec(t, r, alloc_id, ptr.as_ptr(), _, length);
+        r
     }
 
     /// Decomposes a `Vec<T>` into its raw components: `(pointer, length, capacity, allocator)`.
