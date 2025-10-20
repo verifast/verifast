@@ -1,5 +1,4 @@
 // verifast_options{ignore_unwind_paths disable_overflow_check}
-
 use std::io::{Read, Write, stdin, stdout};
 
 unsafe fn read_byte() -> u8
@@ -23,14 +22,17 @@ unsafe fn write_byte(value: u8)
 
 /*@
 
+pred bytes_(start: *mut u8, count: usize) =
+    if count == 0 { true } else { *start |-> _ &*& bytes_(start + 1, count - 1) };
+
 pred bytes(start: *mut u8, count: usize) =
-    if count <= 0 { true } else { *start |-> ?_ &*& bytes(start + 1, count - 1) };
+    if count == 0 { true } else { *start |-> ?_ &*& bytes(start + 1, count - 1) };
 
 @*/
 
 unsafe fn alloc(count: usize) -> *mut u8
 //@ req 1 <= count;
-//@ ens bytes(result, count);
+//@ ens bytes_(result, count);
 //@ assume_correct
 {
     let layout = std::alloc::Layout::from_size_align(count, 1).unwrap();
@@ -42,16 +44,16 @@ unsafe fn alloc(count: usize) -> *mut u8
 }
 
 unsafe fn read_bytes(start: *mut u8, count: usize)
-//@ req bytes(start, count);
+//@ req bytes_(start, count);
 //@ ens bytes(start, count);
 {
+    //@ open bytes_(start, count);
     if count > 0 {
-        //@ open bytes(start, count);
         let b = read_byte();
         *start = b;
         read_bytes(start.add(1), count - 1);
-        //@ close bytes(start, count);
     }
+    //@ close bytes(start, count);
 }
 
 unsafe fn xor_bytes(text: *mut u8, key: *mut u8, count: usize)
@@ -83,7 +85,10 @@ unsafe fn write_bytes(start: *mut u8, count: usize)
     }
 }
 
-fn main() {
+fn main()
+//@ req true;
+//@ ens true;
+{
     unsafe {
         let text = alloc(10);
         let key = alloc(10);

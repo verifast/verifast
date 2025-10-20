@@ -1,5 +1,4 @@
 // verifast_options{disable_overflow_check}
-
 //@ use std::alloc::{Layout, alloc_block};
 
 struct Node {
@@ -15,8 +14,7 @@ pred Nodes(node: *mut Node, count: i32) =
     } else {
         0 < count &*&
         (*node).next |-> ?next &*& (*node).value |-> ?value &*&
-        alloc_block_Node(node) &*&
-        Nodes(next, count - 1)
+        alloc_block_Node(node) &*& Nodes(next, count - 1)
     };
 
 @*/
@@ -28,8 +26,7 @@ struct Stack {
 /*@
 
 pred Stack(stack: *mut Stack, count: i32) =
-    (*stack).head |-> ?head &*& alloc_block(stack as *mut u8, Layout::new::<Stack>()) &*&
-    Nodes(head, count);
+    (*stack).head |-> ?head &*& alloc_block_Stack(stack) &*& Nodes(head, count);
 
 @*/
 

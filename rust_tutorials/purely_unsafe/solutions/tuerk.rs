@@ -1,5 +1,4 @@
 // verifast_options{ignore_unwind_paths disable_overflow_check}
-
 use std::io::{Read, Write, stdin, stdout};
 
 unsafe fn read_byte() -> u8
@@ -23,14 +22,17 @@ unsafe fn write_byte(value: u8)
 
 /*@
 
+pred bytes_(start: *mut u8, count: usize) =
+    if count == 0 { true } else { *start |-> _ &*& bytes_(start + 1, count - 1) };
+
 pred bytes(start: *mut u8, count: usize) =
-    if count <= 0 { true } else { *start |-> ?_ &*& bytes(start + 1, count - 1) };
+    if count == 0 { true } else { *start |-> ?_ &*& bytes(start + 1, count - 1) };
 
 @*/
 
 unsafe fn alloc(count: usize) -> *mut u8
 //@ req 1 <= count;
-//@ ens bytes(result, count);
+//@ ens bytes_(result, count);
 //@ assume_correct
 {
     let layout = std::alloc::Layout::from_size_align(count, 1).unwrap();
@@ -42,20 +44,19 @@ unsafe fn alloc(count: usize) -> *mut u8
 }
 
 unsafe fn read_bytes(start: *mut u8, count: usize)
-//@ req bytes(start, count);
+//@ req bytes_(start, count);
 //@ ens bytes(start, count);
 {
     let mut i = 0;
     loop {
         /*@
-        req bytes(start + i, count - i);
+        req bytes_(start + i, count - i);
         ens bytes(start + old_i, count - old_i);
         @*/
-        if i >= count {
-            break;
-        }
+        //@ open bytes_(start + i, count - i);
+        //@ if i == count { close bytes(start + i, 0); }
+        if i == count { break; }
         let b = read_byte();
-        //@ open bytes(start + i, count - i);
         *start.add(i) = b;
         i += 1;
         //@ recursive_call();
@@ -73,9 +74,7 @@ unsafe fn write_bytes(start: *mut u8, count: usize)
         req bytes(start + i, count - i);
         ens bytes(start + old_i, count - old_i);
         @*/
-        if i >= count {
-            break;
-        }
+        if i == count { break; }
         //@ open bytes(start + i, count - i);
         write_byte(*start.add(i));
         i += 1;

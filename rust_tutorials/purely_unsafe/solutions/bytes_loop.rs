@@ -1,5 +1,4 @@
 // verifast_options{ignore_unwind_paths disable_overflow_check}
-
 use std::io::{Read, Write, stdin, stdout};
 
 unsafe fn read_byte() -> u8
@@ -23,14 +22,17 @@ unsafe fn write_byte(value: u8)
 
 /*@
 
+pred bytes_(start: *mut u8, count: usize) =
+    if count == 0 { true } else { *start |-> _ &*& bytes_(start + 1, count - 1) };
+
 pred bytes(start: *mut u8, count: usize) =
-    if count <= 0 { true } else { *start |-> ?_ &*& bytes(start + 1, count - 1) };
+    if count == 0 { true } else { *start |-> ?_ &*& bytes(start + 1, count - 1) };
 
 @*/
 
 unsafe fn alloc(count: usize) -> *mut u8
 //@ req 1 <= count;
-//@ ens bytes(result, count);
+//@ ens bytes_(result, count);
 //@ assume_correct
 {
     let layout = std::alloc::Layout::from_size_align(count, 1).unwrap();
@@ -43,73 +45,72 @@ unsafe fn alloc(count: usize) -> *mut u8
 
 /*@
 
-lem split_bytes_chunk(start: *mut u8, i: usize)
-    req bytes(start, ?count) &*& 0 <= i &*& i <= count;
-    ens bytes(start, i) &*& bytes(start + i, count - i);
+lem_auto bytes_count_nonneg()
+    req bytes(?start, ?count);
+    ens bytes(start, count) &*& 0 <= count;
 {
-    if i == 0 {
-        close bytes(start, 0);
-    } else {
-        open bytes(start, count);
-        split_bytes_chunk(start + 1, i - 1);
-        close bytes(start, i);
+    open bytes(start, count);
+    if count != 0 {
+        bytes_count_nonneg();
     }
+    close bytes(start, count);
 }
 
-lem merge_bytes_chunk(start: *mut u8)
-    req bytes(start, ?i) &*& bytes(start + i, ?count) &*& 0 <= i &*& 0 <= count;
-    ens bytes(start, i + count);
+lem bytes_add_byte(start: *mut u8)
+    req bytes(start, ?count) &*& *(start + count) |-> ?_;
+    ens bytes(start, count + 1);
 {
-    open bytes(start, i);
-    if i != 0 {
-        merge_bytes_chunk(start + 1);
-        close bytes(start, i + count);
+    open bytes(start, count);
+    if count == 0 {
+        close bytes(start + 1, 0);
+    } else {
+        bytes_add_byte(start + 1);
     }
+    close bytes(start, count + 1);
 }
 
 @*/
 
 unsafe fn read_bytes(start: *mut u8, count: usize)
-//@ req bytes(start, count);
+//@ req bytes_(start, count);
 //@ ens bytes(start, count);
 {
+    //@ close bytes(start, 0);
     let mut i = 0;
     loop {
-        //@ inv bytes(start, count) &*& 0 <= i;
-        if i >= count {
-            break;
-        }
+        //@ inv bytes(start, i) &*& bytes_(start + i, count - i);
+        if i == count { break; }
         let b = read_byte();
-        //@ split_bytes_chunk(start, i);
-        //@ open bytes(start + i, count - i);
+        //@ open bytes_(start + i, count - i);
         *start.add(i) = b;
-        //@ close bytes(start + i, count - i);
-        //@ merge_bytes_chunk(start);
+        //@ bytes_add_byte(start);
         i += 1;
     }
+    //@ open bytes_(start + count, 0);
 }
 
 unsafe fn write_bytes(start: *mut u8, count: usize)
 //@ req bytes(start, count);
 //@ ens bytes(start, count);
 {
+    //@ close bytes(start, 0);
     let mut i = 0;
     loop {
-        //@ inv bytes(start, count) &*& 0 <= i;
-        if i >= count {
-            break;
-        }
-        //@ split_bytes_chunk(start, i);
+        //@ inv bytes(start, i) &*& bytes(start + i, count - i);
+        if i == count { break; }
         //@ open bytes(start + i, count - i);
         let b = *start.add(i);
-        //@ close bytes(start + i, count - i);
-        //@ merge_bytes_chunk(start);
+        //@ bytes_add_byte(start);
         write_byte(b);
         i += 1;
     }
+    //@ open bytes(start + count, 0);
 }
 
-fn main() {
+fn main()
+//@ req true;
+//@ ens true;
+{
     unsafe {
         let array = alloc(100);
         read_bytes(array, 100);
