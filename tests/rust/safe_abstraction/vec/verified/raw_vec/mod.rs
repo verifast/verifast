@@ -291,7 +291,20 @@ impl<T, A: Allocator> RawVec<T, A> {
     ///
     /// See [`RawVec::from_raw_parts_in`].
     #[inline]
-    pub(crate) unsafe fn from_nonnull_in(ptr: NonNull<T>, capacity: usize, alloc: A) -> Self {
+    pub(crate) unsafe fn from_nonnull_in(ptr: NonNull<T>, capacity: usize, alloc: A) -> Self
+    /*@
+    req Allocator(?t, alloc, ?alloc_id) &*&
+        ptr.as_ptr() as usize % std::mem::align_of::<T>() == 0 &*&
+        if capacity * std::mem::size_of::<T>() == 0 {
+            true
+        } else {
+            Layout::new::<T>().repeat(capacity) == some(pair(?allocLayout, ?stride)) &*&
+            alloc_block_in(alloc_id, ptr.as_ptr() as *u8, allocLayout)
+        };
+    @*/
+    //@ ens RawVec(t, result, alloc_id, ptr.as_ptr(), ?capacity_) &*& capacity <= capacity_;
+    //@ assume_correct
+    {
         // SAFETY: Precondition passed to the caller
         unsafe {
             let ptr = ptr.cast();
