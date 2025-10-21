@@ -43,5 +43,6 @@ verifast -ignore_unwind_paths -allow_assume -disable_overflow_check xor.rs
 verifast -ignore_unwind_paths -allow_assume -disable_overflow_check bytes_loop.rs
 verifast -ignore_unwind_paths -allow_assume -disable_overflow_check tuerk.rs
 verifast -disable_overflow_check stack_tuerk.rs
+verifast -ignore_unwind_paths copy_nonoverlapping.rs
 verifast memcmp.rs
 end_parallel
