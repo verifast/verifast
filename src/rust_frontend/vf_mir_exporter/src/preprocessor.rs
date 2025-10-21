@@ -63,6 +63,7 @@ impl<'a> TextIterator<'a> {
 pub enum GhostRangeKind {
     Regular,
     BlockDecls, // This ghost range contains the ghost decls of a block with ghost decls.
+    LoopSpec,
     GenericArgs,
     Mut,
 }
@@ -122,13 +123,20 @@ impl GhostRange {
     }
 }
 
-fn ghost_range_contents_is_block_decls(contents: &str) -> bool {
+fn ghost_range_kind_of_ghost_range_contents(contents: &str) -> GhostRangeKind {
     let trimmed_contents = contents.trim_ascii_start();
-    trimmed_contents.starts_with("pred ")
+    if trimmed_contents.starts_with("pred ")
         || trimmed_contents.starts_with("lem ")
         || trimmed_contents.starts_with("lem_auto ")
         || trimmed_contents.starts_with("lem_auto(")
         || trimmed_contents.starts_with("let_lft ")
+    {
+        GhostRangeKind::BlockDecls
+    } else if trimmed_contents.starts_with("req ") {
+        GhostRangeKind::LoopSpec
+    } else {
+        GhostRangeKind::Regular
+    }
 }
 
 /// If a ghost range occurs at the toplevel before the first token in a file,
@@ -224,9 +232,10 @@ pub fn preprocess(
                     '}' => {
                         if let Some(last) = open_blocks.last() {
                             if last.brace_depth == brace_depth {
-                                ghost_ranges[last.start_ghost_range_index].block_end = Some(cs.pos);
+                                let ghost_range = &mut ghost_ranges[last.start_ghost_range_index];
+                                ghost_range.block_end = Some(cs.pos);
                                 open_blocks.pop();
-                                if !read_only {
+                                if !read_only && ghost_range.kind == GhostRangeKind::BlockDecls {
                                     output.push_str(VF_GHOST_CMD_TAG);
                                     cs.pos.byte_pos += VF_GHOST_CMD_TAG_LEN;
                                 }
@@ -307,18 +316,23 @@ pub fn preprocess(
                                                 }
                                             }
                                         }
-                                        let is_block_decls = in_fn_body
+                                        let kind = 
+                                            if in_fn_body
                                             && start_of_whitespace.byte_pos
                                                 == start_of_block.byte_pos + 1
                                             && !ghost_range_seen_since_last_token
-                                            && ghost_range_contents_is_block_decls(
+                                        { 
+                                            ghost_range_kind_of_ghost_range_contents(
                                                 contents.strip_prefix("//@").unwrap(),
-                                            );
-                                            if is_block_decls {
-                                                open_blocks.push(OpenBlock {
-                                                    start_ghost_range_index: ghost_ranges.len(),
-                                                    brace_depth: brace_depth,
-                                                });
+                                            )
+                                        } else {
+                                            GhostRangeKind::Regular
+                                        };
+                                        if kind != GhostRangeKind::Regular {
+                                            open_blocks.push(OpenBlock {
+                                                start_ghost_range_index: ghost_ranges.len(),
+                                                brace_depth: brace_depth,
+                                            });
                                         }
                                         ghost_ranges.push(Box::new(GhostRange {
                                             in_fn_body,
@@ -327,11 +341,7 @@ pub fn preprocess(
                                             end,
                                             contents,
                                             span: None,
-                                            kind: if is_block_decls {
-                                                GhostRangeKind::BlockDecls
-                                            } else {
-                                                GhostRangeKind::Regular
-                                            },
+                                            kind,
                                             block_end: None,
                                         }));
                                         ghost_range_seen_since_last_token = true;
@@ -533,21 +543,20 @@ pub fn preprocess(
                                     ghost_range.end = cs.pos;
                                     ghost_range.kind = if is_generic_args {
                                         GhostRangeKind::GenericArgs
+                                    } else if ghost_range.contents == "/*@~mut@*/" {
+                                            GhostRangeKind::Mut
                                     } else if fn_body_brace_depth != -1
                                         && start_of_whitespace.byte_pos
                                             == start_of_block.byte_pos + 1
                                         && !ghost_range_seen_since_last_token
-                                        && ghost_range_contents_is_block_decls(
+                                    {
+                                        ghost_range_kind_of_ghost_range_contents(
                                             ghost_range.contents.strip_prefix("/*@").unwrap(),
                                         )
-                                    {
-                                        GhostRangeKind::BlockDecls
-                                    } else if ghost_range.contents == "/*@~mut@*/" {
-                                        GhostRangeKind::Mut
                                     } else {
                                         GhostRangeKind::Regular
                                     };
-                                    if ghost_range.kind == GhostRangeKind::BlockDecls {
+                                    if ghost_range.kind == GhostRangeKind::BlockDecls || ghost_range.kind == GhostRangeKind::LoopSpec {
                                         open_blocks.push(OpenBlock {
                                             start_ghost_range_index: ghost_ranges.len(),
                                             brace_depth: brace_depth,

@@ -17,11 +17,12 @@ unsafe fn memchr(mut haystack: *const u8, mut size: usize, needle: u8) -> *const
         @*/
         //@ open array(haystack, _, _);
         if size == 0 || *haystack == needle {
-            return haystack;
+            break;
         }
         haystack = haystack.offset(1);
         size -= 1;
     }
+    haystack
 }
 
 unsafe fn read_line<'a>(socket: platform::sockets::Socket, buffer: &'a mut Vec<u8>)

@@ -1464,6 +1464,9 @@ mod vf_mir_builder {
             let ghost_decl_blocks = ghost_stmts
                 .extract_if(|annot| annot.kind == GhostRangeKind::BlockDecls)
                 .collect::<LinkedList<_>>();
+            let loop_spec_blocks = ghost_stmts
+                .extract_if(|annot| annot.kind == GhostRangeKind::LoopSpec)
+                .collect::<LinkedList<_>>();
             for b in &ghost_decl_blocks {
                 if b.kind == GhostRangeKind::GenericArgs {
                     panic!(
@@ -1487,6 +1490,21 @@ mod vf_mir_builder {
                         tcx,
                         &ghost_decl_block.block_end_span().data(),
                         ghost_decl_block_cpn.init_close_brace_span(),
+                    );
+                },
+            );
+            body_cpn.fill_loop_spec_blocks(
+                &loop_spec_blocks,
+                |mut loop_spec_block_cpn, loop_spec_block| {
+                    Self::encode_annotation(
+                        tcx,
+                        &loop_spec_block,
+                        loop_spec_block_cpn.reborrow().init_start(),
+                    );
+                    Self::encode_span_data(
+                        tcx,
+                        &loop_spec_block.block_end_span().data(),
+                        loop_spec_block_cpn.init_close_brace_span(),
                     );
                 },
             );

@@ -828,6 +828,11 @@ struct Body {
         closeBraceSpan @1: SpanData; # After preprocessing, to match against the span of the inserted VeriFast_ghost_command() call.
     }
 
+    struct LoopSpecBlock {
+        start @0: Annotation;
+        closeBraceSpan @1: SpanData;
+    }
+
     fnSigSpan @21: SpanData;
     defKind @0: DefKind;
     defPath @1: Text;
@@ -843,6 +848,7 @@ struct Body {
     varDebugInfo @8: List(VarDebugInfo);
     ghostStmts @9: List(Annotation);
     ghostDeclBlocks @15: List(GhostDeclBlock); # A Rust block starting with a ghost range containing ghost declarations (local predicates and lemmas)
+    loopSpecBlocks @25: List(LoopSpecBlock); # A Rust block starting with a ghost range containing a loop specification (req and ens clause)
     unsafety @10: Unsafety;
     implBlockHirGenerics @14: Option(Hir.Generics);
     implBlockGenerics @23: List(GenericParamDef);

@@ -130,12 +130,12 @@ unsafe fn memchr(mut haystack: *const u8, mut size: usize, needle: u8) -> *const
         @*/
         //@ open array(haystack, _, _);
         if size == 0 || *haystack == needle {
-            // if size != 0 { close [f]integers_(haystack, 1, false, size, _); }
-            return haystack;
+            break;
         }
         haystack = haystack.offset(1);
         size -= 1;
     }
+    haystack
 }
 
 unsafe fn read_line(socket: platform::sockets::Socket, buffer: *mut Buffer)
