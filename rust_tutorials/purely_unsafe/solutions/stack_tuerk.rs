@@ -43,8 +43,8 @@ unsafe fn stack_get_count(stack: *mut Stack) -> i32
         ens Nodes(old_n, count1) &*& i == old_i + count1;
         @*/
         //@ open Nodes(n, count1);
-        //@ if n == 0 { close Nodes(n, count1); }
         if n.is_null() {
+            //@ close Nodes(n, count1);
             break;
         }
         n = (*n).next;

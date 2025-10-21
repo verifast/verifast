@@ -179,7 +179,7 @@ lem points_to_limits<T>(p: *T);
     req [?f]points_to(p, ?v);
     ens [f]points_to(p, v) &*& f <= 1 &*& object_pointer_within_limits(p, std::mem::size_of::<T>()) == true;
 
-pred array_<T>(p: *T, count: i32; values: list<option<T>>) =
+pred array_<T>(p: *T, count: usize; values: list<option<T>>) =
     pointer_within_limits(p) == true &*&
     if count == 0 {
         values == nil
@@ -187,7 +187,7 @@ pred array_<T>(p: *T, count: i32; values: list<option<T>>) =
         points_to_(p, ?value) &*& array_(p + 1, count - 1, ?values0) &*& values == cons(value, values0)
     };
 
-pred array<T>(p: *T, count: i32; values: list<T>) =
+pred array<T>(p: *T, count: usize; values: list<T>) =
     pointer_within_limits(p) == true &*&
     if count == 0 {
         values == nil
