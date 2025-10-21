@@ -54,8 +54,10 @@ unsafe fn read_bytes(start: *mut u8, count: usize)
         ens bytes(start + old_i, count - old_i);
         @*/
         //@ open bytes_(start + i, count - i);
-        //@ if i == count { close bytes(start + i, 0); }
-        if i == count { break; }
+        if i == count {
+            //@ close bytes(start + i, 0);
+            break;
+        }
         let b = read_byte();
         *start.add(i) = b;
         i += 1;

@@ -133,10 +133,10 @@ module Mir = struct
 
   and basic_block = {
     id : string;
-    statements : Ast.stmt list;
-    terminator_stmts : Ast.stmt list;
-    terminator : terminator;
-    successors : string list;
+    mutable statements : Ast.stmt list;
+    mutable terminator_stmts : Ast.stmt list;
+    mutable terminator : terminator;
+    mutable successors : string list;
     mutable external_predecessor_count : int;
         (* Number of non-descendant predecessors (i.e. that jump to the start of the loop) *)
     mutable internal_predecessor_count : int;
@@ -538,6 +538,20 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       Ast.BlockStmt (gh_decl_b.span, ghost_decls, [], closeBraceSpan, ref [])
     in
     Ok ghost_decl_block
+
+  let translate_loop_spec_block (lsb_cpn : BodyRd.LoopSpecBlock.t) =
+    let open BodyRd.LoopSpecBlock in
+    let open AnnotationRd in
+    let* loop_spec_annot = translate_annotation (start_get lsb_cpn) in
+    let loop_spec_parser_input = translate_annot_to_vf_parser_inp loop_spec_annot in
+    let loop_spec =
+      VfMirAnnotParser.parse_ghost_stmt loop_spec_parser_input
+    in
+    let* closeBraceSpan = translate_span_data (close_brace_span_get lsb_cpn) in
+    let loop_spec_block =
+      Ast.BlockStmt (loop_spec_annot.span, [], [loop_spec], closeBraceSpan, ref [])
+    in
+    Ok loop_spec_block
 
   let translate_mutability (mutability_cpn : MutabilityRd.t) =
     match MutabilityRd.get mutability_cpn with
@@ -3397,9 +3411,26 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let explicit_block_heads_table = Hashtbl.create 10 in
       let bblocks_table = Hashtbl.create 100 in
       let explicit_block_ends = ref [] in
+      let loop_spec_blocks = ref [] in
       bblocks
       |> List.iter (fun (bb : Mir.basic_block) ->
              match bb.terminator_stmts with
+             | Ast.BlockStmt
+                 ( Ast.Lexed (startPos, _),
+                   [],
+                   [PureStmt (_, SpecStmt (_, _, _)) as stmt],
+                   Ast.Lexed (_, endPos),
+                   _ )
+               ::stmts
+               ->
+                 loop_spec_blocks := (startPos, endPos, bb.id)::!loop_spec_blocks;
+                 let fixed_bb =
+                   {
+                     bb with
+                     terminator_stmts = stmt::stmts
+                   }
+                 in
+                 Hashtbl.add bblocks_table bb.id fixed_bb
              | [
               Ast.BlockStmt
                 ( l,
@@ -3438,6 +3469,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                  explicit_block_ends :=
                    (closeBraceLoc, bb.terminator, bb) :: !explicit_block_ends
              | _ -> Hashtbl.add bblocks_table bb.id bb);
+      let loop_spec_blocks = !loop_spec_blocks in
       !explicit_block_ends
       |> List.iter (fun (closeBraceLoc, gotoStmt, (bb : Mir.basic_block)) ->
              let head_bb =
@@ -3450,6 +3482,88 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                  terminator = gotoStmt;
                  successors = head_bb.id :: bb.successors;
                });
+      let find_innermost_loop_spec_block l =
+        match l with
+        | Ast.Lexed (pos, _) ->
+          let enclosing_loop_spec_blocks =
+            loop_spec_blocks
+            |> List.filter (fun (startPos, endPos, _) -> LocAux.loc0_contains_srcpos (startPos, endPos) pos)
+          in
+          begin match enclosing_loop_spec_blocks with
+          | [] -> None
+          | block::blocks ->
+            let rec iter block blocks =
+              match blocks with
+              | [] -> block
+              | block'::blocks' ->
+                let ((_, line1, col1), e1, _) = block in
+                let ((_, line2, col2), e2, _) = block' in
+                if line1 < line2 || (line1 = line2 && col1 < col2) then
+                  iter block' blocks'
+                else
+                  iter block blocks'
+            in
+            Some (iter block blocks)
+          end
+        | _ -> None
+      in
+      let process_bb_wrt_loop_spec_blocks (bb : basic_block) =
+        (* 1. Split the basic block such that all statements and the terminator belong to the same innermost loop spec block
+         * 2. Add the head of the innermost loop spec block as a (fictional) successor of the basic block
+         *)
+        let terminator_loop_spec_block =
+          match bb.terminator_stmts with
+          | s::ss -> find_innermost_loop_spec_block (Ast.stmt_loc s)
+          | _ -> None
+        in
+        let stmts = List.map (fun s -> (find_innermost_loop_spec_block (Ast.stmt_loc s), s)) bb.statements in
+        let rec iter bb stmts =
+          match stmts with
+            [] ->
+            begin match terminator_loop_spec_block with
+            | None -> ()
+            | Some (_, _, loop_head_bb_id) ->
+              bb.successors <- loop_head_bb_id :: bb.successors;
+            end
+          | (block, stmt)::stmts ->
+            let stmts_in_block, stmts =
+              let rec iter1 stmts_in_block stmts =
+                match stmts with
+                | (block', stmt')::stmts' when block = block' ->
+                    iter1 (stmt'::stmts_in_block) stmts'
+                | _ -> List.rev stmts_in_block, stmts
+              in
+              iter1 [stmt] stmts
+            in
+            if stmts = [] && block = terminator_loop_spec_block then
+              iter bb stmts
+            else
+              let new_bb = 
+                {
+                  bb with
+                  id = Printf.sprintf "%s_split%d"
+                    bb.id (Hashtbl.length bblocks_table);
+                  statements = List.map snd stmts;
+                  external_predecessor_count = 0;
+                  internal_predecessor_count = 0;
+                  walk_state = NotSeen;
+                  is_block_head = false;
+                  parent = None;
+                  children = [];
+                }
+              in
+              Hashtbl.add bblocks_table new_bb.id new_bb;
+              bb.statements <- stmts_in_block;
+              bb.terminator_stmts <- [];
+              bb.terminator <- GotoTerminator (Ast.stmt_loc stmt, new_bb.id);
+              bb.successors <- [ new_bb.id ] @ begin match block with
+                | None -> []
+                | Some (_, _, loop_head_bb_id) -> [ loop_head_bb_id ]
+              end;
+              iter new_bb stmts
+        in
+        iter bb stmts
+      in
       let entry_id = (List.hd bblocks).id in
       let toplevel_blocks = ref [] in
       let rec set_parent (bb : basic_block) k k' path =
@@ -3474,6 +3588,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         let bb = Hashtbl.find bblocks_table bb_id in
         match bb.walk_state with
         | NotSeen -> (
+            process_bb_wrt_loop_spec_blocks bb;
             bb.external_predecessor_count <- bb.external_predecessor_count + 1;
             let path = bb :: path in
             bb.walk_state <- Walking (k, path);
@@ -3601,13 +3716,44 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                             Mir.EncodedTerminator );
                         ]
                     in
+                    let stmts = stmts @ children_stmts in
+                    let rec move_recursive_call_to_end stmts =
+                      match stmts with
+                      | [] -> []
+                      | Ast.PureStmt
+                          (
+                            lstmt,
+                            Ast.ExprStmt
+                              (Ast.CallExpr
+                                (lcall, "recursive_call", [], [], [], Static))) as stmt
+                        :: stmts ->
+                          let rec collect_epilog epilog_stmts stmts =
+                            match stmts with
+                            | [] -> List.rev epilog_stmts
+                            | Ast.GotoStmt (lgoto, lbl) as stmt :: stmts ->
+                                let rec find_label stmts =
+                                  match stmts with
+                                  | [] -> Ast.static_error lcall "This recursive_call() is not supported in this position" None
+                                  | Ast.LabelStmt (llabel, id) as stmt :: stmts when id = lbl ->
+                                      stmt :: collect_epilog epilog_stmts stmts
+                                  | stmt :: stmts ->
+                                      stmt :: find_label stmts
+                                in
+                                stmt :: find_label stmts
+                            | stmt :: stmts ->
+                                collect_epilog (stmt :: epilog_stmts) stmts
+                          in
+                          collect_epilog [stmt] stmts
+                      | stmt :: stmts ->
+                          stmt :: move_recursive_call_to_end stmts
+                    in
                     ( external_predecessor_count,
                       Ast.WhileStmt
                         ( loc,
                           True loc,
                           Some (LoopSpec (req, ens)),
                           None,
-                          stmts @ children_stmts,
+                          move_recursive_call_to_end stmts,
                           [] ) )
                 | _ ->
                     let children_stmts =
@@ -4494,8 +4640,12 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
          Ast.ExprStmt
            (CallExpr (closeBraceLoc, "#ghost_decl_block_end", [], [], [], Static))
     in
+    let* loop_spec_blocks =
+      ListAux.try_map translate_loop_spec_block
+        (loop_spec_blocks_get_list body_cpn)
+    in
     let ghost_stmts =
-      ghost_decl_block_start_stmts @ ghost_decl_block_end_stmts @ ghost_stmts
+      ghost_decl_block_start_stmts @ ghost_decl_block_end_stmts @ loop_spec_blocks @ ghost_stmts
     in
     let imp_span_cpn = imp_span_get body_cpn in
     let* imp_loc = translate_span_data imp_span_cpn in
