@@ -1,4 +1,4 @@
-# VeriFast for Rust
+# A brief introduction to VeriFast for Rust
 
 [VeriFast](https://github.com/verifast/verifast) is a tool for verifying the
 absence of [undefined
@@ -189,5 +189,5 @@ specified on the command line.
 
 - [A tour of the RawVec proof](tests/rust/safe_abstraction/raw_vec/)
 - [A tour of the LinkedList proof](tests/rust/safe_abstraction/linked_list/)
-- [The VeriFast Tutorial](https://doi.org/10.5281/zenodo.887906) (only for C, for now, but Rust versions of the examples and exercises are [available](rust_tutorials/purely_unsafe/solutions/))
+- [Verifying purely `unsafe` Rust programs with VeriFast: a tutorial](https://zenodo.org/records/17413725)
 - [The VeriFast for Rust Reference](https://verifast.github.io/verifast/rust-reference)

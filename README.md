@@ -17,7 +17,7 @@ Quick intros
 ------------
 
 - [A quick introduction to VeriFast for C](intro-c.md)
-- [A quick introduction to VeriFast for Rust](intro-rust.md)
+- [A quick introduction to VeriFast for Rust](https://verifast.github.io/verifast/rust-reference/intro.html)
 
 Proofs done
 -----------
@@ -83,7 +83,8 @@ Compiling
 Documentation
 -------------
 
-- [The VeriFast Tutorial](https://doi.org/10.5281/zenodo.887906) (for C, but the concepts apply to Rust as well)
+- [The VeriFast Tutorial](https://doi.org/10.5281/zenodo.887906) (for C)
+- [Verifying purely `unsafe` Rust programs with VeriFast: a tutorial](https://doi.org/10.5281/zenodo.17413725)
 - [A tour of the RawVec proof](tests/rust/safe_abstraction/raw_vec/) (Rust)
 - [A tour of the LinkedList proof](tests/rust/safe_abstraction/linked_list/) (Rust)
 - [Featherweight VeriFast](http://arxiv.org/pdf/1507.07697) [(Slides, handouts, Coq proof)](https://people.cs.kuleuven.be/~bart.jacobs/fvf)
