@@ -1,6 +1,7 @@
 # The VeriFast for Rust Reference
 
 [Introduction](introduction.md)
+- [Brief introduction to VeriFast for Rust](intro.md)
 - [Symbolic execution states](states.md)
 - [Annotations](annotations.md)
     - [Keywords](keywords.md)
