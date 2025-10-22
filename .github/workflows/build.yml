@@ -1,6 +1,11 @@
 name: CI
 
-on: [push, pull_request, merge_group]
+on:
+  push:
+  pull_request:
+  merge_group:
+  release:
+    types: [created]
 
 jobs:
   build_ubuntu:
@@ -84,6 +89,51 @@ jobs:
               assetsToDeleteRegex: /-linux\.tar\.gz$/,
               tag: 'nightly'
             });
+
+  upload_ubuntu_release_asset:
+    if: github.event_name == 'release' && github.event.action == 'created'
+    needs:
+      - build_ubuntu
+    concurrency: # Prevent a lost update when updating the release notes
+      group: upload-release-asset
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Download artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: binary-package-ubuntu
+
+      - uses: actions/attest-build-provenance@v3
+        id: attestation
+        with:
+          subject-path: ${{ needs.build_ubuntu.outputs.artifact_name }}
+
+      - name: Upload to release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ARTIFACT_NAME: ${{ needs.build_ubuntu.outputs.artifact_name }}
+        run: |
+          gh release upload --repo ${{ github.event.repository.full_name }} ${{ github.event.release.tag_name }} $ARTIFACT_NAME --clobber
+
+      - name: Add attestation URL to release message
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ARTIFACT_NAME: ${{ needs.build_ubuntu.outputs.artifact_name }}
+          ATTESTATION_URL: ${{ steps.attestation.outputs['attestation-url'] }}
+        run: |
+          BODY=$(gh release view --repo ${{ github.event.repository.full_name }} ${{ github.event.release.tag_name }} --json body --template '{{.body}}')
+          gh release edit --repo ${{ github.event.repository.full_name }} ${{ github.event.release.tag_name }} --notes "$BODY"$'\r\n'"- $ARTIFACT_NAME: [attestation]($ATTESTATION_URL)"
 
   build_macos:
     runs-on: macos-13
@@ -175,6 +225,51 @@ jobs:
               tag: 'nightly'
             });
 
+  upload_macos_release_asset:
+    if: github.event_name == 'release' && github.event.action == 'created'
+    needs:
+      - build_macos
+    concurrency: # Prevent a lost update when updating the release notes
+      group: upload-release-asset
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Download artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: binary-package-macos
+
+      - uses: actions/attest-build-provenance@v3
+        id: attestation
+        with:
+          subject-path: ${{ needs.build_macos.outputs.artifact_name }}
+
+      - name: Upload to release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ARTIFACT_NAME: ${{ needs.build_macos.outputs.artifact_name }}
+        run: |
+          gh release upload --repo ${{ github.event.repository.full_name }} ${{ github.event.release.tag_name }} $ARTIFACT_NAME --clobber
+
+      - name: Add attestation URL to release message
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ARTIFACT_NAME: ${{ needs.build_macos.outputs.artifact_name }}
+          ATTESTATION_URL: ${{ steps.attestation.outputs['attestation-url'] }}
+        run: |
+          BODY=$(gh release view --repo ${{ github.event.repository.full_name }} ${{ github.event.release.tag_name }} --json body --template '{{.body}}')
+          gh release edit --repo ${{ github.event.repository.full_name }} ${{ github.event.release.tag_name }} --notes "$BODY"$'\r\n'"- $ARTIFACT_NAME: [attestation]($ATTESTATION_URL)"
+
   build_macos_aarch:
     runs-on: macos-14
     permissions: {}
@@ -265,6 +360,51 @@ jobs:
               tag: 'nightly'
             });
 
+  upload_macos_aarch_release_asset:
+    if: github.event_name == 'release' && github.event.action == 'created'
+    needs:
+      - build_macos_aarch
+    concurrency: # Prevent a lost update when updating the release notes
+      group: upload-release-asset
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Download artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: binary-package-macos-aarch
+
+      - uses: actions/attest-build-provenance@v3
+        id: attestation
+        with:
+          subject-path: ${{ needs.build_macos_aarch.outputs.artifact_name }}
+
+      - name: Upload to release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ARTIFACT_NAME: ${{ needs.build_macos_aarch.outputs.artifact_name }}
+        run: |
+          gh release upload --repo ${{ github.event.repository.full_name }} ${{ github.event.release.tag_name }} $ARTIFACT_NAME --clobber
+
+      - name: Add attestation URL to release message
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ARTIFACT_NAME: ${{ needs.build_macos_aarch.outputs.artifact_name }}
+          ATTESTATION_URL: ${{ steps.attestation.outputs['attestation-url'] }}
+        run: |
+          BODY=$(gh release view --repo ${{ github.event.repository.full_name }} ${{ github.event.release.tag_name }} --json body --template '{{.body}}')
+          gh release edit --repo ${{ github.event.repository.full_name }} ${{ github.event.release.tag_name }} --notes "$BODY"$'\r\n'"- $ARTIFACT_NAME: [attestation]($ATTESTATION_URL)"
+
   build_windows:
     runs-on: windows-2022
     permissions: {}
@@ -344,3 +484,48 @@ jobs:
               assetsToDeleteRegex: /-windows\.zip$/,
               tag: 'nightly'
             });
+
+  upload_windows_release_asset:
+    if: github.event_name == 'release' && github.event.action == 'created'
+    needs:
+      - build_windows
+    concurrency: # Prevent a lost update when updating the release notes
+      group: upload-release-asset
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Download artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: binary-package-windows
+
+      - uses: actions/attest-build-provenance@v3
+        id: attestation
+        with:
+          subject-path: ${{ needs.build_windows.outputs.artifact_name }}
+
+      - name: Upload to release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ARTIFACT_NAME: ${{ needs.build_windows.outputs.artifact_name }}
+        run: |
+          gh release upload --repo ${{ github.event.repository.full_name }} ${{ github.event.release.tag_name }} $ARTIFACT_NAME --clobber
+
+      - name: Add attestation URL to release message
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ARTIFACT_NAME: ${{ needs.build_windows.outputs.artifact_name }}
+          ATTESTATION_URL: ${{ steps.attestation.outputs['attestation-url'] }}
+        run: |
+          BODY=$(gh release view --repo ${{ github.event.repository.full_name }} ${{ github.event.release.tag_name }} --json body --template '{{.body}}')
+          gh release edit --repo ${{ github.event.repository.full_name }} ${{ github.event.release.tag_name }} --notes "$BODY"$'\r\n'"- $ARTIFACT_NAME: [attestation]($ATTESTATION_URL)"
