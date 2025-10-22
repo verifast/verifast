@@ -719,6 +719,13 @@ ifeq ($(OS), Windows_NT)
 else
 	cp ../test.sh verifast-$(VFVERSION)
 endif
+	cp -R ../rust_tutorials verifast-$(VFVERSION)
+	mkdir verifast-$(VFVERSION)/rust_tutorials/purely_unsafe/problems
+	cd verifast-$(VFVERSION)/rust_tutorials/purely_unsafe/solutions; \
+	    for f in *.rs; do \
+	        ../../../bin/vfstrip < $$f > ../problems/$$f; \
+	    done; \
+	    cd ../../../..
 
 ifeq ($(OS), Darwin)
   RELEASE_SUFFIX=-osx
