@@ -1168,6 +1168,35 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           { size; own; shr; full_bor_content; points_to; pointee_fbc = None };
     }
 
+  and str_ptr_ty_info loc = (* *const/mut str *)
+    let open Ast in
+    let vf_ty =
+      StructTypeExpr
+        (loc, Some "str_ptr", None, [], [])
+    in
+    let size = SizeofExpr (loc, TypeExpr vf_ty) in
+    let own tid vs =
+      Error "Expressing ownership of *const/mut str values is not yet supported"
+    in
+    let shr lft tid l =
+      Error "Expressing shared ownership of *const/mut str values is not yet supported"
+    in
+    let full_bor_content tid l =
+      Error
+        "Expressing the full borrow content of *const/mut str values is not yet supported"
+    in
+    let points_to tid l vid_op =
+      Error
+        "Expressing a points-to assertion for a *const/mut str object is not yet \
+         supported"
+    in
+    {
+      Mir.vf_ty;
+      interp =
+        RustBelt.
+          { size; own; shr; full_bor_content; points_to; pointee_fbc = None };
+    }
+
   and slice_non_null_ty_info loc elem_ty_info = (* NonNull<[T]> *)
     let open Ast in
     let vf_ty =
@@ -1386,6 +1415,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       {kind=Slice elem_ty_cpn} ->
       let* elem_ty_info = translate_ty elem_ty_cpn loc in
       Ok (slice_ptr_ty_info loc elem_ty_info)
+    | {kind=Str} ->
+      Ok (str_ptr_ty_info loc)
     | _ ->
     let* pointee_ty_info = translate_ty ty_cpn loc in
     let pointee_ty = pointee_ty_info.vf_ty in

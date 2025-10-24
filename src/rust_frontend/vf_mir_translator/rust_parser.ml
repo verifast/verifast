@@ -91,10 +91,11 @@ let rec parse_type = function%parser
 | [ (l, Kwd "*");
     [%let mutability = opt (function%parser [ (_, Kwd "const") ] -> () | [ (_, Kwd "mut") ] -> ()) ];
     [%let t = function%parser
-       [ (lv, Kwd "_") ] -> ManifestTypeExpr (lv, Void)
-     | [ parse_type as t ] -> t
+       [ (lv, Kwd "_") ] -> PtrTypeExpr (l, ManifestTypeExpr (lv, Void))
+     | [ (lv, Ident "str") ] -> StructTypeExpr (l, Some "str_ptr", None, [], [])
+     | [ parse_type as t ] -> PtrTypeExpr (l, t)
     ]
-  ] -> ignore mutability; PtrTypeExpr (l, t)
+  ] -> t
 | [ (l, Kwd "&");
     [%let lft = function%parser
        [ (_, PrimePrefixedIdent "static") ] -> ManifestTypeExpr (l, StaticLifetime)

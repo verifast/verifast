@@ -46,3 +46,4 @@ verifast -disable_overflow_check stack_tuerk.rs
 verifast -ignore_unwind_paths copy_nonoverlapping.rs
 verifast memcmp.rs
 end_parallel
+verifast lemptrs.rs
