@@ -720,6 +720,8 @@ mod slice {
 
 mod str {
 
+    //@ pred str(str: *str; bytes: list<u8>);
+
     struct Chars<'a>;
     
     struct Utf8Error;
