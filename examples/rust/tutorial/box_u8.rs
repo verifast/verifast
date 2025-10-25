@@ -7,24 +7,46 @@ pub struct BoxU8 { ptr: *mut u8 }
 /*@
 pred <BoxU8>.own(t, b;) = *b.ptr |-> ?_ &*& alloc_block_(b.ptr);
 pred_ctor BoxU8_ptr_field(l: *BoxU8, p: *u8)(;) = (*l).ptr |-> p;
-pred <BoxU8>.share(k, t, l) = [_]exists(?p) &*& [_]frac_borrow(k, BoxU8_ptr_field(l, p)) &*& [_]frac_borrow(k, <u8>.full_borrow_content(t, p));
+pred <BoxU8>.share(k, t, l) = [_]exists(?p) &*&
+    [_]frac_borrow(k, BoxU8_ptr_field(l, p)) &*& [_]frac_borrow(k, <u8>.full_borrow_content(t, p));
 @*/
 
 /*@
 lem BoxU8_share_mono(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *BoxU8)
-    req lifetime_inclusion(k1, k) == true &*& [_]BoxU8_share(k, t, l);
-    ens [_]BoxU8_share(k1, t, l);
+    req lifetime_inclusion(k1, k) == true &*& [_](<BoxU8>.share(k, t, l));
+    ens [_](<BoxU8>.share(k1, t, l));
 {
-    open BoxU8_share(k, t, l);
+    open <BoxU8>.share(k, t, l);
     assert [_]exists(?p);
+    /*|\begin{vfPathCond}
+    \vfResAdd{lifetime_inclusion(k1, k) == true}
+    \end{vfPathCond}
+    \begin{vfHeap}
+    \vfResAdd{[_]exists(p)}, \vfResAdd{[_]fcbor(k, BoxU8_ptr_field(l, p))}, \vfResAdd{[_]fcbor(k, <u8>.fbc(t, p))}
+    \end{vfHeap}|*/
     frac_borrow_mono(k, k1, BoxU8_ptr_field(l, p));
-    frac_borrow_mono(k, k1, u8_full_borrow_content(t, p));
+    /*|\begin{vfPathCond}
+    lifetime_inclusion(k1, k) == true
+    \end{vfPathCond}
+    \begin{vfHeap}
+    [_]exists(p), [_]fcbor(k, <u8>.fbc(t, p)),
+    \vfResRm{[_]fcbor(k, BoxU8_ptr_field(l, p))}, \vfResAdd{[_]fcbor(k1, BoxU8_ptr_field(l, p))}
+    \end{vfHeap}|*/
+    frac_borrow_mono(k, k1, <u8>.full_borrow_content(t, p));
+    /*|\begin{vfPathCond}
+    lifetime_inclusion(k1, k) == true
+    \end{vfPathCond}
+    \begin{vfHeap}
+    [_]exists(p), [_]fcbor(k1, BoxU8_ptr_field(l, p)),
+    \vfResRm{[_]fcbor(k, <u8>.fbc(t, p))}, \vfResAdd{[_]fcbor(k1, <u8>.fbc(t, p))}
+    \end{vfHeap}|*/
     close BoxU8_share(k1, t, l); leak BoxU8_share(k1, t, l);
 }
 
 lem BoxU8_share_full(k: lifetime_t, t: thread_id_t, l: *BoxU8)
-    req atomic_mask(MaskTop) &*& [?q]lifetime_token(k) &*& full_borrow(k, BoxU8_full_borrow_content(t, l));
-    ens atomic_mask(MaskTop) &*& [q]lifetime_token(k) &*& [_]BoxU8_share(k, t, l);
+    req atomic_mask(MaskTop) &*& [?q]lifetime_token(k) &*&
+        full_borrow(k, <BoxU8>.full_borrow_content(t, l));
+    ens atomic_mask(MaskTop) &*& [q]lifetime_token(k) &*& [_](<BoxU8>.share(k, t, l));
 {
     let klong = open_full_borrow_strong_m(k, BoxU8_full_borrow_content(t, l), q);
     open BoxU8_full_borrow_content(t, l)();
@@ -55,9 +77,7 @@ lem BoxU8_share_full(k: lifetime_t, t: thread_id_t, l: *BoxU8)
 lem init_ref_BoxU8(p: *BoxU8)
     req atomic_mask(Nlft) &*& ref_init_perm(p, ?x) &*& [_]BoxU8_share(?k, ?t, x) &*& [?q]lifetime_token(k);
     ens atomic_mask(Nlft) &*& [q]lifetime_token(k) &*& [_]BoxU8_share(k, t, p) &*& [_]frac_borrow(k, ref_initialized_(p));
-{
-    assume(false); // TODO
-}
+{ assume(false); /* TODO */ }
 @*/
 
 impl BoxU8 {
@@ -175,15 +195,35 @@ impl BoxU8 {
 pub fn deref<'a>(this: &'a BoxU8) -> &'a u8
 //@ req [?qa]lifetime_token('a) &*& [_](<BoxU8>.share('a, ?t, this));
 //@ ens [qa]lifetime_token('a) &*& [_](<u8>.share('a, t, result));
-{
+{//|produce \verb|req| clause.
+    /*|\begin{vfHeap}
+    \vfResAdd{[qa]lft('a)}, \vfResAdd{[_](<BoxU8>.share('a, t, this))}
+    \end{vfHeap}|*/
     //@ open BoxU8_share('a, t, this);
+    /*|\begin{vfHeap}
+    [qa]lft('a), \vfResRm{[_](<BoxU8>.share('a, t, this))}, \vfResAdd{[_]exists(p)},
+    \vfResAdd{[_]fcbor('a, BoxU8_ptr_field(this, p))}, \vfResAdd{[_]fcbor('a, <u8>.fbc(t, p))}
+    \end{vfHeap}|*/
     //@ assert [_]exists(?p);
     //@ open_frac_borrow('a, BoxU8_ptr_field(this, p), qa);
+    /*|\begin{vfHeap}
+    [_]exists(p), [_]fcbor('a, <u8>.fbc(t, p)), \vfResRm{[qa]lft('a)},
+    \vfResRm{[_]fcbor('a, BoxU8_ptr_field(this, p))}, \vfResAdd{[qp]BoxU8_ptr_field(this, p)()},
+    \vfResAdd{close_fcbor_t(qp, BoxU8_ptr_field(this, p), qa, 'a)}
+    \end{vfHeap}|*/
     //@ assert [?qp]BoxU8_ptr_field(this, p)();
     let r = unsafe { & *this.ptr };
     //@ close_frac_borrow(qp, BoxU8_ptr_field(this, p));
+    /*|\begin{vfHeap}
+    ..., [_]fcbor('a, <u8>.fbc(t, p)),
+    \vfResRm{close_fcbor_t(qp, BoxU8_ptr_field(this, p), qa, 'a)},
+    \vfResRm{[qp]BoxU8_ptr_field(this, p)()}, \vfResAdd{[qa]lft('a)}
+    \end{vfHeap}|*/
     //@ close u8_share('a, t, r);
     //@ leak <u8>.share('a, t, r);
+    /*|\begin{vfHeap}
+    ..., [qa]lft('a), \vfResRm{[_]fcbor('a, <u8>.fbc(t, p))}, \vfResAdd{[_](<u8>.share('a, t, p))}
+    \end{vfHeap}|*/
     r
 }
 }
