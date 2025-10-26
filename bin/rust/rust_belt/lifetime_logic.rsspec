@@ -403,6 +403,14 @@ lem close_full_borrow_strong_m(k1: lifetime_t, P: pred(), Q: pred());
     req atomic_mask(?mask) &*& mask_le(Nlft, mask) == true &*& close_full_borrow_token_strong(k1, P, ?q, ?k) &*& is_full_borrow_convert_strong(?f, ?Ctx, Q, k1, P) &*& Ctx() &*& Q();
     ens atomic_mask(mask) &*& full_borrow(k1, Q) &*& [q]lifetime_token(k) &*& is_full_borrow_convert_strong(f, Ctx, Q, k1, P);
 
+lem open_full_borrow_strong_m_(k: lifetime_t, P: pred());
+    req atomic_mask(?mask) &*& mask_le(Nlft, mask) == true &*& full_borrow(k, P) &*& [?q]lifetime_token(k);
+    ens atomic_mask(mask) &*& P() &*& close_full_borrow_token_strong_(k, P, q);
+
+lem close_full_borrow_strong_m_();
+    req atomic_mask(?mask) &*& mask_le(Nlft, mask) == true &*& close_full_borrow_token_strong_(?k, ?P, ?q) &*& is_restore_full_borrow_(?proof, ?Ctx, ?Q, P) &*& Ctx() &*& Q();
+    ens atomic_mask(mask) &*& full_borrow(k, Q) &*& [q]lifetime_token(k) &*& is_restore_full_borrow_(proof, Ctx, Q, P);
+
 // LftL-bor-unnest
 lem full_borrow_unnest_m(k1: lifetime_t, k: lifetime_t, P: pred());
     req atomic_mask(?mask) &*& mask_le(Nlft, mask) == true &*& full_borrow(k1, full_borrow_(k, P));
