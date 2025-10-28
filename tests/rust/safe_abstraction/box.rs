@@ -1,3 +1,4 @@
+use std::{alloc::{dealloc, Layout}, ptr::drop_in_place};
 //@ use std::alloc::{alloc_block, Layout};
 pub struct Box<T> {
     ptr: *mut T
@@ -84,3 +85,14 @@ impl<T> Box<T> {
 
 }
 
+impl<T> Drop for Box<T> {
+    fn drop(&mut self) {
+        unsafe {
+            //@ open <Box<T>>.full_borrow_content(_t, self)();
+            //@ open <Box<T>>.own(_t, ?b);
+            //@ open_full_borrow_content(_t, b.ptr);
+            drop_in_place(self.ptr);
+            dealloc(self.ptr as *mut u8, Layout::new::<T>());
+        }
+    }
+}
