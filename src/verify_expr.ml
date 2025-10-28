@@ -2792,7 +2792,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         consume_chunk rules h env [] [] [] l (malloc_block_symb, true) targs real_unit real_unit_pat (Some 1) [TermPat arg] $. fun _ h _ _ _ _ _ _ ->
         cont h env result
       | _ ->
-        consume_chunk rules h env [] [] [] l (get_pred_symb "malloc_block", true) [] real_unit real_unit_pat (Some 1) [TermPat arg; TermPat (sizeof_core l env t)] $. fun _ h _ _ _ _ _ _ ->
+        consume_chunk rules h env [] [] [] l (get_pred_symb "std::alloc::alloc_block", true) [] real_unit real_unit_pat (Some 1) [TermPat arg; TermPat (mk_app (get_pure_func_symb "std::alloc::Layout::new") [typeid_of_core l env t])] $. fun _ h _ _ _ _ _ _ ->
         cont h env result
       end
     | WFunCall (l, "#inductive_discriminant", [InductiveType (i, targs)], w::discrExprs, Static) ->

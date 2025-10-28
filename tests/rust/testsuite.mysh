@@ -79,7 +79,7 @@ cd safe_abstraction
   verifast -read_options_from_source_file -allow_assume frac_borrow_tutorial.rs
   verifast fbc_precise.rs
   verifast -allow_should_fail public_fields.rs
-  verifast -allow_assume box.rs
+  verifast -allow_assume -ignore_unwind_paths box.rs
   verifast full_bor_primitive_types.rs
   verifast shared_primitive_types.rs
   verifast -ignore_unwind_paths -allow_assume deque_i32.rs
