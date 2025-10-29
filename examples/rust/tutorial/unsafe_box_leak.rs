@@ -21,7 +21,6 @@ pub unsafe fn drop(this: Box<T>)
 //@ req Box_own_(this, _);
 //@ ens true;
 {
-    //@ to_u8s_(this.ptr);
     // `v` never gets destructed!
     dealloc(this.ptr as *mut u8, Layout::new::<T>());
 }
