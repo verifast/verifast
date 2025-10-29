@@ -28,7 +28,6 @@ pub unsafe fn drop(this: Box<T>)
 {
     //@ open Box_own_(t, this, _);
     std::ptr::drop_in_place(this.ptr);
-    //@ to_u8s_(this.ptr);
     dealloc(this.ptr as *mut u8, Layout::new::<T>());
 }
 

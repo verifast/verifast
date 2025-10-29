@@ -96,7 +96,6 @@ impl<T> Drop for Box<T> {
             //@ open <Box<T>>.full_borrow_content(t, self)();
             //@ open <Box<T>>.own(t, *self);
             std::ptr::drop_in_place(self.ptr);
-            //@ to_u8s_((*self).ptr);
             dealloc(self.ptr as *mut u8, Layout::new::<T>());
         }
     }
