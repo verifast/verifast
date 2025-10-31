@@ -136,7 +136,7 @@ jobs:
           gh release edit --repo ${{ github.event.repository.full_name }} ${{ github.event.release.tag_name }} --notes "$BODY"$'\r\n'"- $ARTIFACT_NAME: [attestation]($ATTESTATION_URL)"
 
   build_macos:
-    runs-on: macos-14-large
+    runs-on: macos-15-intel
     permissions: {}
 
     steps:
