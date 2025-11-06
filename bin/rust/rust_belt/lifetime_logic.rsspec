@@ -472,6 +472,14 @@ lem close_frac_borrow_strong_m();
     req atomic_mask(?mask) &*& mask_le(Nlft, mask) == true &*& close_frac_borrow_token_strong(?k1, ?P, ?q, ?k, ?f) &*& is_frac_borrow_convert_strong(?c, ?Ctx, ?Q, k1, f, P) &*& Ctx() &*& Q();
     ens atomic_mask(mask) &*& full_borrow(k1, Q) &*& [q]lifetime_token(k) &*& is_frac_borrow_convert_strong(c, Ctx, Q, k1, f, P);
 
+lem open_frac_borrow_strong__m(k: lifetime_t, P: pred(;), q: real);
+    req atomic_mask(?mask) &*& mask_le(Nlft, mask) == true &*& [_]frac_borrow(k, P) &*& [q]lifetime_token(k);
+    ens atomic_mask(mask) &*& [?f]P() &*& close_frac_borrow_strong_token_(k, P, q, f) &*& 0 < f &*& f < 1;
+
+lem close_frac_borrow_strong__m();
+    req atomic_mask(?mask) &*& mask_le(Nlft, mask) == true &*& close_frac_borrow_strong_token_(?k, ?P, ?q, ?f) &*& is_restore_frac_borrow(?lemPtr, ?Ctx, ?Q, f, P) &*& Ctx() &*& Q();
+    ens atomic_mask(mask) &*& full_borrow(k, Q) &*& [q]lifetime_token(k) &*& is_restore_frac_borrow(lemPtr, Ctx, Q, f, P);
+
 // Lemmas for proving init_ref_S proof obligations. Not in RustBelt; TODO: check soundness!
 pred close_frac_borrow_for_init_ref_lemma_token(fr: real, q: real, k: lifetime_t, P: pred(;));
 

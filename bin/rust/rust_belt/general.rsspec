@@ -203,6 +203,9 @@ fix type_depth(typeId: *_) -> i32;
 
 pred type_interp<T>(;) = ghost_rec_perm(type_depth(typeid(T)));
 
+// The intersection of the lifetimes that appear in type T, or 'static if no lifetimes appear in T
+fix lft_of_type<T>() -> lifetime_t;
+
 lem share_mono<T>(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *T);
     req type_interp::<T>() &*& lifetime_inclusion(k1, k) == true &*& [_](<T>.share)(k, t, l);
     ens type_interp::<T>() &*& [_](<T>.share)(k1, t, l);

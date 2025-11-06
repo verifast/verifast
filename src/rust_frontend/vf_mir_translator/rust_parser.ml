@@ -532,6 +532,8 @@ let parse_pred_asn = function%parser
       (None, sn ^ "_" ^ g, [], [], args)
     | ConstructedTypeExpr (_, sn, targs) ->
       (None, sn ^ "_" ^ g, targs, [], args)
+    | (StructTypeExpr (_, Some sn, _, _, targs)) ->
+      (None, sn ^ "_" ^ g, targs, [], args)
     | _ ->
       raise (ParseException (type_expr_loc te, "Opening or closing a type predicate for this type is not yet supported"))
     end
@@ -540,6 +542,8 @@ let parse_pred_asn = function%parser
     IdentTypeExpr (_, None, sn) ->
       (None, sn ^ "_" ^ g, [], args1, args2)
     | ConstructedTypeExpr (_, sn, targs) ->
+      (None, sn ^ "_" ^ g, targs, args1, args2)
+    | (StructTypeExpr (_, Some sn, _, _, targs)) ->
       (None, sn ^ "_" ^ g, targs, args1, args2)
     | _ ->
       raise (ParseException (type_expr_loc te, "Opening or closing a type predicate for this type is not yet supported"))
@@ -630,10 +634,16 @@ and parse_stmt = function%parser
   ] -> SwitchStmt (l, e, cs)
 | [ (l, Kwd "while");
     parse_expr_no_struct_expr as e;
-    (linv, Kwd "inv"); parse_asn as inv; (_, Kwd ";");
+    [%let spec = function%parser
+      [ (linv, Kwd "inv"); parse_asn as inv; (_, Kwd ";") ] -> LoopInv inv
+    | [ (lpre, Kwd "req"); parse_asn as pre; (_, Kwd ";");
+        (lpost, Kwd "ens"); parse_asn as post; (_, Kwd ";")
+      ] -> LoopSpec (pre, post)
+    ];
     (ldecr, Kwd "decreases"); parse_expr as decr; (_, Kwd ";");
     parse_block_stmt as s
-  ] -> WhileStmt (l, e, Some (LoopInv inv), Some decr, [s], [])
+  ] -> WhileStmt (l, e, Some spec, Some decr, [s], [])
+| [ (l, Kwd "break"); (_, Kwd ";") ] -> Break l
 | [ (l, Kwd "assert"); parse_asn as p; (_, Kwd ";") ] -> Assert (l, p)
 | [ (l, Kwd "leak"); parse_asn as p; (_, Kwd ";") ] -> Leak (l, p)
 | [ (l, Kwd "produce_lem_ptr_chunk");

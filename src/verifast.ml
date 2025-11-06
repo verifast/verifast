@@ -2032,7 +2032,9 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let rec iter ss_before ss =
           match ss with
             [] -> (List.rev ss_before, None, [])
-          | PureStmt (_, ExprStmt (CallExpr (lc, "recursive_call", [], [], [], Static)))::ss_after -> (List.rev ss_before, Some lc, ss_after)
+          | (ExprStmt (CallExpr (lc, "recursive_call", [], [], [], Static)) |
+             PureStmt (_, ExprStmt (CallExpr (lc, "recursive_call", [], [], [], Static))))::ss_after ->
+            (List.rev ss_before, Some lc, ss_after)
           | s::ss_after -> iter (s::ss_before) ss_after
         in
         iter [] ss
@@ -2118,7 +2120,8 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       produce_asn env [] h' ghostenv'' env'' post real_unit None None $. fun h' _ _ ->
       let env' = bs' @ env' in
-      List.iter (function PureStmt _ -> () | s -> static_error (stmt_loc s) "Only pure statements are allowed after the recursive call." None) ss_after;
+      if not pure then
+        List.iter (function PureStmt _ -> () | s -> static_error (stmt_loc s) "Only pure statements are allowed after the recursive call." None) ss_after;
       let ss_after_xs = block_assigned_variables ss_after in
       List.iter (fun x -> if List.mem x xs then static_error l "Statements after the recursive call are not allowed to assign to loop variables" None) ss_after_xs;
       verify_cont (pn,ilist) blocks_done [] tparams boxes pure leminfo funcmap predinstmap sizemap tenv''' ghostenv' h' env' ss_after (fun _ tenv _ h' env' ->  check_post h' env') (fun _ _ -> assert false) (fun _ _ _ -> assert false)

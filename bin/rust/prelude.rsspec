@@ -14,6 +14,7 @@ struct std_tuple_0_ {}
 struct std_tuple_1_<T1>(T1)
 struct std_tuple_2_<T1, T2>(T1, T2)
 struct std_tuple_3_<T1, T2, T3>(T1, T2, T3)
+struct std_tuple_4_<T1, T2, T3, T4>(T1, T2, T3, T4)
 
 
 /*@
@@ -31,6 +32,14 @@ lem close_tuple_0_own(t: thread_id_t);
     ens <()>.own(t, std_tuple_0_ {});
 
 pred<T1, T2> <(T1, T2)>.share(k, t, l) = <T1>.share(k, t, &(*l).0) &*& <T2>.share(k, t, &(*l).1);
+
+lem open_tuple_4_own<T1, T2, T3, T4>(t: thread_id_t, v: (T1, T2, T3, T4));
+    req <(T1, T2, T3, T4)>.own(t, v);
+    ens <T1>.own(t, v.0) &*& <T2>.own(t, v.1) &*& <T3>.own(t, v.2) &*& <T4>.own(t, v.3);
+
+lem close_tuple_4_own<T1, T2, T3, T4>(t: thread_id_t, v: (T1, T2, T3, T4));
+    req <T1>.own(t, v.0) &*& <T2>.own(t, v.1) &*& <T3>.own(t, v.2) &*& <T4>.own(t, v.3);
+    ens <(T1, T2, T3, T4)>.own(t, v);
 
 @*/
 

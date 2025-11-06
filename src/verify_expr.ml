@@ -1745,7 +1745,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | _ -> produce_points_to ()
       end @@ fun (tparams, fields, padding_predsymb_opt) ->
       let tpenv = List.combine tparams targs in
-      let producePaddingChunk = match language, dialect, fields with CLang, Some Rust, [] -> false | _ -> producePaddingChunk in
+      let producePaddingChunk = match language, dialect, fields with CLang, Some Rust, ([]|[_]) -> false | _ -> producePaddingChunk in
       let field_values_of_struct_as_value v =
         let (_, csym, getters, _, _) = List.assoc sn struct_accessor_map in
         if getters = [] then ctxt#assert_term (ctxt#mk_eq v (ctxt#mk_app csym []));
@@ -1886,7 +1886,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | _ -> consume_points_to_chunk ()
       end @@ fun tparams fields padding_predsymb_opt ->
       let tpenv = List.combine tparams targs in
-      let consumePaddingChunk = match language, dialect, fields with CLang, Some Rust, [] -> false | _ -> consumePaddingChunk in
+      let consumePaddingChunk = match language, dialect, fields with CLang, Some Rust, ([]|[_]) -> false | _ -> consumePaddingChunk in
       begin fun cont ->
         match consumePaddingChunk, padding_predsymb_opt with
           true, Some padding_predsymb ->
