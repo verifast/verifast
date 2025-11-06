@@ -362,6 +362,10 @@ mod mem {
     //@ ens result == (std::mem::size_of::<T>() == 0);
     //@ on_unwind_ens false;
     
+    fn MAX_SLICE_LEN<T>() -> usize; // The VeriFast MIR translator translates T::MAX_SLICE_LEN unevaluated constants to MAX_SLICE_LEN::<T>() calls.
+    //@ req true;
+    //@ ens result == if std::mem::size_of::<T>() == 0 { usize::MAX } else { isize::MAX / std::mem::size_of::<T>() };
+    
     fn align_of<T>() -> usize;
     //@ req true;
     //@ ens result == std::mem::align_of::<T>();
@@ -801,6 +805,10 @@ mod alloc {
             result.size() == n * layout.size() &*&
             result.align() == layout.align();
     
+    lem Layout_repeat_0_intro(layout: Layout);
+        req true;
+        ens layout.repeat(0) != none;
+    
     pred end_ref_Layout_token(p: *Layout, x: *Layout, f: real);
     
     lem init_ref_Layout(p: *Layout, coef: real);
@@ -882,6 +890,10 @@ mod alloc {
     
     pred Allocator<A>(t: thread_id_t, alloc: A, alloc_id: alloc_id_t);
     pred Allocator_share<A>(k: lifetime_t, t: thread_id_t, l: *A, alloc_id: alloc_id_t);
+
+    lem Allocator_inv<A>();
+        req Allocator::<A>(?t, ?alloc, ?alloc_id);
+        ens Allocator::<A>(t, alloc, alloc_id) &*& lifetime_inclusion(lft_of_type::<A>(), alloc_id.lft) == true;
     
     lem Allocator_upcast<A0, A1>(alloc: A0);
         req Allocator::<A0>(?t, alloc, ?alloc_id) &*& is_subtype_of::<A0, A1>() == true;

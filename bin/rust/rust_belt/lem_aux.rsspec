@@ -28,4 +28,42 @@ lem u32_share_mono(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *u32)
     leak u32_share(k1, t, l);
 }
 
+pred points_to_shared<T>(k: lifetime_t, l: *T, v: T) =
+    [_]frac_borrow(k, mk_points_to(l, v));
+
+lem init_ref_readonly_points_to_shared<T>(l: *T)
+    nonghost_callers_only
+    req ref_init_perm(l, ?l0) &*& [_]points_to_shared(?k, l0, ?v) &*& [?q]lifetime_token(k);
+    ens [q]lifetime_token(k) &*& [_]points_to_shared(k, l, v) &*& [_]frac_borrow(k, ref_initialized_(l));
+{
+    open points_to_shared(k, l0, v);
+    open_frac_borrow_strong_(k, mk_points_to(l0, v), q);
+    open [?f]mk_points_to::<T>(l0, v)();
+    init_ref_readonly(l, 1/2);
+    close ref_initialized_::<T>(l)();
+    close [f/2]mk_points_to::<T>(l, v)();
+    close scaledp(f/2, mk_points_to(l, v))();
+    close sep_(ref_initialized_(l), scaledp(f/2, mk_points_to(l, v)))();
+    {
+        pred Ctx() = ref_readonly_end_token(l, l0, f/2) &*& [f/2](*l0 |-> v);
+        close Ctx();
+        produce_lem_ptr_chunk restore_frac_borrow(Ctx, sep_(ref_initialized_(l), scaledp(f/2, mk_points_to(l, v))), f, mk_points_to(l0, v))() {
+            open Ctx();
+            open sep_(ref_initialized_(l), scaledp(f/2, mk_points_to(l, v)))();
+            open ref_initialized_::<T>(l)();
+            open scaledp(f/2, mk_points_to(l, v))();
+            open [f/2]mk_points_to::<T>(l, v)();
+            end_ref_readonly(l);
+            close [f]mk_points_to::<T>(l0, v)();
+        } {
+            close_frac_borrow_strong_();
+        }
+    }
+    full_borrow_into_frac(k, sep_(ref_initialized_(l), scaledp(f/2, mk_points_to(l, v))));
+    frac_borrow_split(k, ref_initialized_(l), scaledp(f/2, mk_points_to(l, v)));
+    frac_borrow_implies_scaled(k, f/2, mk_points_to(l, v));
+    close points_to_shared(k, l, v);
+    leak points_to_shared(k, l, v);
+}
+
 @*/

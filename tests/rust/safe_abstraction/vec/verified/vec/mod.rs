@@ -442,8 +442,429 @@ pub struct Vec<T, #[unstable(feature = "allocator_api", issue = "32838")] A: All
 
 /*@
 
-pred Vec<T, A>(t: thread_id_t, self: Vec<T, A>, alloc_id: alloc_id_t, ptr: *T, capacity: usize, len: usize) =
-    RawVec(t, self.buf, alloc_id, ptr, capacity) &*& len == self.len &*& len <= capacity;
+fix Vec::alloc<T, A>(v: Vec<T, A>) -> A { v.buf.alloc() }
+
+pred Vec<T, A>(t: thread_id_t, self: Vec<T, A>, alloc_id: alloc_id_t, ptr: *T, capacity: usize, length: usize) =
+    RawVec(t, self.buf, alloc_id, ptr, capacity) &*& length == self.len &*& length <= capacity;
+
+lem Vec_send_<T, A>(t1: thread_id_t)
+    req type_interp::<A>() &*& is_Send(typeid(A)) == true &*& Vec::<T, A>(?t0, ?v, ?alloc_id, ?ptr, ?capacity, ?length);
+    ens type_interp::<A>() &*& Vec::<T, A>(t1, v, alloc_id, ptr, capacity, length);
+{
+    open Vec(t0, v, alloc_id, ptr, capacity, length);
+    raw_vec::RawVec_send_(t1);
+    close Vec(t1, v, alloc_id, ptr, capacity, length);
+}
+
+pred_ctor elem_own<T>(t: thread_id_t)(elem: T) = <T>.own(t, elem);
+
+pred<T, A> <Vec<T, A>>.own(t, v) =
+    Vec(t, v, ?alloc_id, ?ptr, ?capacity, ?len) &*&
+    array_at_lft(alloc_id.lft, ptr, len, ?elems) &*& foreach(elems, elem_own(t)) &*&
+    array_at_lft_(alloc_id.lft, ptr + len, capacity - len, _);
+
+lem Vec_own_mono<T0, T1, A0, A1>()
+    req type_interp::<T0>() &*& type_interp::<T1>() &*& type_interp::<A0>() &*& type_interp::<A1>() &*& vec::Vec_own::<T0, A0>(?t, ?v) &*& is_subtype_of::<T0, T1>() == true &*& is_subtype_of::<A0, A1>() == true;
+    ens type_interp::<T0>() &*& type_interp::<T1>() &*& type_interp::<A0>() &*& type_interp::<A1>() &*& vec::Vec_own::<T1, A1>(t, vec::Vec::<T1, A1> { buf: upcast(v.buf), len: upcast(v.len) });
+{
+    assume(false); // https://github.com/verifast/verifast/issues/610
+}
+
+lem Vec_send<T, A>(t1: thread_id_t)
+    req type_interp::<T>() &*& type_interp::<A>() &*& is_Send(typeid(Vec<T, A>)) == true &*& Vec_own::<T, A>(?t0, ?v);
+    ens type_interp::<T>() &*& type_interp::<A>() &*& Vec_own::<T, A>(t1, v);
+{
+    open <Vec<T, A>>.own(t0, v);
+    Vec_send_(t1);
+    {
+        lem iter()
+            req foreach::<T>(?elems, elem_own(t0)) &*& type_interp::<T>();
+            ens foreach(elems, elem_own(t1)) &*& type_interp::<T>();
+        {
+            open foreach(elems, elem_own(t0));
+            match elems {
+                nil => {}
+                cons(elem, elems0) => {
+                    open elem_own::<T>(t0)(elem);
+                    Send::send(t0, t1, elem);
+                    close elem_own::<T>(t1)(elem);
+                    iter();
+                }
+            }
+            close foreach(elems, elem_own(t1));
+        }
+        iter();
+    }
+    close <Vec<T, A>>.own(t1, v);
+}
+
+pred_ctor Vec_frac_borrow_content<T, A>(l: *Vec<T, A>, length: usize)(;) = (*l).len |-> length &*& struct_Vec_padding(l);
+
+pred Vec_share_<T, A>(k: lifetime_t, t: thread_id_t, l: *Vec<T, A>, alloc_id: alloc_id_t, ptr: *T, capacity: usize, length: usize) =
+    pointer_within_limits(&(*l).buf) == true &*&
+    [_]raw_vec::RawVec_share_(k, t, &(*l).buf, alloc_id, ptr, capacity) &*& length <= capacity &*&
+    [_]frac_borrow(k, Vec_frac_borrow_content(l, length));
+
+pred Vec_share_end_token<T, A>(k: lifetime_t, t: thread_id_t, l: *Vec<T, A>, alloc_id: alloc_id_t, ptr: *T, capacity: usize, length: usize) =
+    raw_vec::RawVec_share_end_token(k, t, &(*l).buf, alloc_id, ptr, capacity) &*& length <= capacity &*&
+    borrow_end_token(k, Vec_frac_borrow_content(l, length));
+
+lem Vec_share__mono<T, A>(k: lifetime_t, k1: lifetime_t, l: *Vec<T, A>)
+    req type_interp::<T>() &*& type_interp::<A>() &*& [_]Vec_share_::<T, A>(k, ?t, l, ?alloc_id, ?ptr, ?capacity, ?length) &*& lifetime_inclusion(k1, k) == true;
+    ens type_interp::<T>() &*& type_interp::<A>() &*& [_]Vec_share_::<T, A>(k1, t, l, alloc_id, ptr, capacity, length);
+{
+    open Vec_share_(k, t, l, alloc_id, ptr, capacity, length);
+    raw_vec::RawVec_share__mono(k, k1, t, &(*l).buf);
+    frac_borrow_mono(k, k1, Vec_frac_borrow_content(l, length));
+    close Vec_share_(k1, t, l, alloc_id, ptr, capacity, length);
+    leak Vec_share_(k1, t, l, alloc_id, ptr, capacity, length);
+}
+
+lem Vec_sync_<T, A>(t1: thread_id_t)
+    req type_interp::<A>() &*& [_]Vec_share_::<T, A>(?k, ?t, ?l, ?alloc_id, ?ptr, ?capacity, ?length) &*& is_Sync(typeid(Vec<T, A>)) == true;
+    ens type_interp::<A>() &*& [_]Vec_share_(k, t1, l, alloc_id, ptr, capacity, length);
+{
+    open Vec_share_(k, t, l, alloc_id, ptr, capacity, length);
+    raw_vec::RawVec_sync_(t1);
+    close Vec_share_(k, t1, l, alloc_id, ptr, capacity, length);
+    leak Vec_share_(k, t1, l, alloc_id, ptr, capacity, length);
+}
+
+lem share_Vec<T, A>(k: lifetime_t, l: *Vec<T, A>)
+    nonghost_callers_only
+    req [?q]lifetime_token(k) &*& *l |-> ?self_ &*& Vec(?t, self_, ?alloc_id, ?ptr, ?capacity, ?length);
+    ens [q]lifetime_token(k) &*& [_]Vec_share_(k, t, l, alloc_id, ptr, capacity, length) &*& Vec_share_end_token(k, t, l, alloc_id, ptr, capacity, length);
+{
+    open Vec(t, self_, alloc_id, ptr, capacity, length);
+    open_points_to(l);
+    close_points_to(&(*l).buf);
+    raw_vec::share_RawVec(k, &(*l).buf);
+    close Vec_frac_borrow_content::<T, A>(l, length)();
+    borrow(k, Vec_frac_borrow_content(l, length));
+    full_borrow_into_frac(k, Vec_frac_borrow_content(l, length));
+    close Vec_share_(k, t, l, alloc_id, ptr, capacity, length);
+    leak Vec_share_(k, t, l, alloc_id, ptr, capacity, length);
+    close Vec_share_end_token(k, t, l, alloc_id, ptr, capacity, length);
+}
+
+lem end_share_Vec<T, A>(l: *Vec<T, A>)
+    nonghost_callers_only
+    req Vec_share_end_token(?k, ?t, l, ?alloc_id, ?ptr, ?capacity, ?length) &*& [_]lifetime_dead_token(k);
+    ens *l |-> ?self_ &*& Vec(t, self_, alloc_id, ptr, capacity, length);
+{
+    open Vec_share_end_token(k, t, l, alloc_id, ptr, capacity, length);
+    raw_vec::end_share_RawVec(&(*l).buf);
+    borrow_end(k, Vec_frac_borrow_content(l, length));
+    open Vec_frac_borrow_content::<T, A>(l, length)();
+    assert *l |-> ?self_;
+    close Vec(t, self_, alloc_id, ptr, capacity, length);
+}
+
+lem init_ref_Vec_<T, A>(l: *Vec<T, A>)
+    nonghost_callers_only
+    req ref_init_perm(l, ?l0) &*& [_]Vec_share_(?k, ?t, l0, ?alloc_id, ?ptr, ?capacity, ?length) &*& [?q]lifetime_token(k);
+    ens [q]lifetime_token(k) &*& [_]Vec_share_(k, t, l, alloc_id, ptr, capacity, length) &*& [_]frac_borrow(k, ref_initialized_(l));
+{
+    open Vec_share_::<T, A>(k, t, l0, alloc_id, ptr, capacity, length);
+    open_ref_init_perm_Vec(l);
+    raw_vec::init_ref_RawVec_(&(*l).buf);
+    frac_borrow_sep(k, ref_initialized_(&(*l).buf), Vec_frac_borrow_content(l0, length));
+    open_frac_borrow_strong_(k, sep_(ref_initialized_(&(*l).buf), Vec_frac_borrow_content(l0, length)), q);
+    open [?f]sep_(ref_initialized_(&(*l).buf), Vec_frac_borrow_content(l0, length))();
+    open [f]ref_initialized_::<RawVec<T, A>>(&(*l).buf)();
+    open [f]Vec_frac_borrow_content::<T, A>(l0, length)();
+    init_ref_readonly(&(*l).len, 1/2);
+    init_ref_padding_Vec(l, 1/2);
+    {
+        pred P() = ref_padding_initialized(l);
+        close [1 - f]P();
+        close_ref_initialized_Vec(l);
+        open [1 - f]P();
+    }
+    close [f]ref_initialized_::<Vec<T, A>>(l)();
+    close scaledp(f, ref_initialized_(l))();
+    close [f/2]Vec_frac_borrow_content::<T, A>(l, length)();
+    close scaledp(f/2, Vec_frac_borrow_content(l, length))();
+    close sep_(scaledp(f, ref_initialized_(l)), scaledp(f/2, Vec_frac_borrow_content(l, length)))();
+    {
+        pred Ctx() =
+            [f/2](*l0).len |-> length &*& ref_readonly_end_token(&(*l).len, &(*l0).len, f/2) &*& [1 - f]ref_initialized(&(*l).len) &*&
+            [f/2]struct_Vec_padding(l0) &*& ref_padding_end_token(l, l0, f/2) &*& [1 - f]ref_padding_initialized(l);
+        close Ctx();
+        produce_lem_ptr_chunk restore_frac_borrow(
+            Ctx,
+            sep_(scaledp(f, ref_initialized_(l)), scaledp(f/2, Vec_frac_borrow_content(l, length))),
+            f,
+            sep_(ref_initialized_(&(*l).buf), Vec_frac_borrow_content(l0, length))
+        )() {
+            open Ctx();
+            open sep_(scaledp(f, ref_initialized_(l)), scaledp(f/2, Vec_frac_borrow_content(l, length)))();
+            open scaledp(f, ref_initialized_(l))();
+            open [f]ref_initialized_::<Vec<T, A>>(l)();
+            open scaledp(f/2, Vec_frac_borrow_content(l, length))();
+            open [f/2]Vec_frac_borrow_content::<T, A>(l, length)();
+            open_ref_initialized_Vec(l);
+            end_ref_readonly(&(*l).len);
+            end_ref_padding_Vec(l);
+            close [f]ref_initialized_::<RawVec<T, A>>(&(*l).buf)();
+            close [f]Vec_frac_borrow_content::<T, A>(l0, length)();
+            close [f]sep_(ref_initialized_(&(*l).buf), Vec_frac_borrow_content(l0, length))();
+        } {
+            close_frac_borrow_strong_();
+        }
+    }
+    full_borrow_into_frac(k, sep_(scaledp(f, ref_initialized_(l)), scaledp(f/2, Vec_frac_borrow_content(l, length))));
+    frac_borrow_split(k, scaledp(f, ref_initialized_(l)), scaledp(f/2, Vec_frac_borrow_content(l, length)));
+    frac_borrow_implies_scaled(k, f, ref_initialized_(l));
+    frac_borrow_implies_scaled(k, f/2, Vec_frac_borrow_content(l, length));
+    ref_origin_min_addr((l as pointer).provenance);
+    ref_origin_max_addr((l as pointer).provenance);
+    close Vec_share_::<T, A>(k, t, l, alloc_id, ptr, capacity, length);
+    leak Vec_share_(k, t, l, alloc_id, ptr, capacity, length);
+}
+
+lem init_ref_Vec_m<T, A>(l: *Vec<T, A>)
+    req type_interp::<A>() &*& atomic_mask(Nlft) &*& ref_init_perm(l, ?l0) &*& [_]Vec_share_(?k, ?t, l0, ?alloc_id, ?ptr, ?capacity, ?length) &*& [?q]lifetime_token(k);
+    ens type_interp::<A>() &*& atomic_mask(Nlft) &*& [q]lifetime_token(k) &*& [_]Vec_share_(k, t, l, alloc_id, ptr, capacity, length) &*& [_]frac_borrow(k, ref_initialized_(l));
+{
+    open Vec_share_::<T, A>(k, t, l0, alloc_id, ptr, capacity, length);
+    open_ref_init_perm_Vec(l);
+    raw_vec::init_ref_RawVec_m(&(*l).buf);
+    frac_borrow_sep(k, ref_initialized_(&(*l).buf), Vec_frac_borrow_content(l0, length));
+    open_frac_borrow_strong__m(k, sep_(ref_initialized_(&(*l).buf), Vec_frac_borrow_content(l0, length)), q);
+    open [?f]sep_(ref_initialized_(&(*l).buf), Vec_frac_borrow_content(l0, length))();
+    open [f]ref_initialized_::<RawVec<T, A>>(&(*l).buf)();
+    open [f]Vec_frac_borrow_content::<T, A>(l0, length)();
+    init_ref_readonly(&(*l).len, 1/2);
+    init_ref_padding_Vec(l, 1/2);
+    {
+        pred P() = ref_padding_initialized(l);
+        close [1 - f]P();
+        close_ref_initialized_Vec(l);
+        open [1 - f]P();
+    }
+    close [f]ref_initialized_::<Vec<T, A>>(l)();
+    close scaledp(f, ref_initialized_(l))();
+    close [f/2]Vec_frac_borrow_content::<T, A>(l, length)();
+    close scaledp(f/2, Vec_frac_borrow_content(l, length))();
+    close sep_(scaledp(f, ref_initialized_(l)), scaledp(f/2, Vec_frac_borrow_content(l, length)))();
+    {
+        pred Ctx() =
+            [f/2](*l0).len |-> length &*& ref_readonly_end_token(&(*l).len, &(*l0).len, f/2) &*& [1 - f]ref_initialized(&(*l).len) &*&
+            [f/2]struct_Vec_padding(l0) &*& ref_padding_end_token(l, l0, f/2) &*& [1 - f]ref_padding_initialized(l);
+        close Ctx();
+        produce_lem_ptr_chunk restore_frac_borrow(
+            Ctx,
+            sep_(scaledp(f, ref_initialized_(l)), scaledp(f/2, Vec_frac_borrow_content(l, length))),
+            f,
+            sep_(ref_initialized_(&(*l).buf), Vec_frac_borrow_content(l0, length))
+        )() {
+            open Ctx();
+            open sep_(scaledp(f, ref_initialized_(l)), scaledp(f/2, Vec_frac_borrow_content(l, length)))();
+            open scaledp(f, ref_initialized_(l))();
+            open [f]ref_initialized_::<Vec<T, A>>(l)();
+            open scaledp(f/2, Vec_frac_borrow_content(l, length))();
+            open [f/2]Vec_frac_borrow_content::<T, A>(l, length)();
+            open_ref_initialized_Vec(l);
+            end_ref_readonly(&(*l).len);
+            end_ref_padding_Vec(l);
+            close [f]ref_initialized_::<RawVec<T, A>>(&(*l).buf)();
+            close [f]Vec_frac_borrow_content::<T, A>(l0, length)();
+            close [f]sep_(ref_initialized_(&(*l).buf), Vec_frac_borrow_content(l0, length))();
+        } {
+            close_frac_borrow_strong__m();
+        }
+    }
+    full_borrow_into_frac_m(k, sep_(scaledp(f, ref_initialized_(l)), scaledp(f/2, Vec_frac_borrow_content(l, length))));
+    frac_borrow_split(k, scaledp(f, ref_initialized_(l)), scaledp(f/2, Vec_frac_borrow_content(l, length)));
+    frac_borrow_implies_scaled(k, f, ref_initialized_(l));
+    frac_borrow_implies_scaled(k, f/2, Vec_frac_borrow_content(l, length));
+    ref_origin_min_addr((l as pointer).provenance);
+    ref_origin_max_addr((l as pointer).provenance);
+    close Vec_share_::<T, A>(k, t, l, alloc_id, ptr, capacity, length);
+    leak Vec_share_(k, t, l, alloc_id, ptr, capacity, length);
+}
+
+pred array_share<T>(k: lifetime_t, t: thread_id_t, l: *T, length: usize) =
+    if length == 0 {
+        true
+    } else {
+        [_](<T>.share(k, t, l)) &*& [_]array_share(k, t, l + 1, length - 1)
+    };
+
+lem array_share_mono<T>(k: lifetime_t, k1: lifetime_t, l: *T)
+    req [_]array_share(k, ?t, l, ?length) &*& type_interp::<T>() &*& lifetime_inclusion(k1, k) == true;
+    ens type_interp::<T>() &*& [_]array_share(k1, t, l, length);
+{
+    open array_share(k, t, l, length);
+    if length != 0 {
+        share_mono(k, k1, t, l);
+        array_share_mono(k, k1, l + 1);
+    }
+    close array_share(k1, t, l, length);
+    leak array_share(k1, t, l, length);
+}
+
+lem array_sync<T>(t1: thread_id_t, l: *T)
+    req [_]array_share::<T>(?k, ?t, l, ?length) &*& type_interp::<T>() &*& is_Sync(typeid(T)) == true;
+    ens type_interp::<T>() &*& [_]array_share(k, t1, l, length);
+{
+    open array_share(k, t, l, length);
+    if length != 0 {
+        Sync::sync::<T>(k, t, t1, l);
+        array_sync(t1, l + 1);
+    }
+    close array_share(k, t1, l, length);
+    leak array_share(k, t1, l, length);
+}
+
+pred<T, A> <Vec<T, A>>.share(k, t, l) =
+    [_]Vec_share_(k, t, l, ?alloc_id, ?ptr, ?capacity, ?length) &*& [_]array_share::<T>(k, t, ptr, length);
+
+pred_ctor array_at_lft_fbc<T>(k: lifetime_t, t: thread_id_t, p: *T, length: usize)() =
+    array_at_lft(k, p, length, ?elems) &*& foreach(elems, elem_own(t));
+
+lem array_at_lft_share_full<T>(k: lifetime_t, k0: lifetime_t, t: thread_id_t, p: *T, length: usize)
+    req type_interp::<T>() &*& atomic_mask(MaskTop) &*& [?q]lifetime_token(k) &*& full_borrow(k, array_at_lft_fbc(k0, t, p, length)) &*& lifetime_inclusion(k, k0) == true;
+    ens type_interp::<T>() &*& atomic_mask(MaskTop) &*& [q]lifetime_token(k) &*& [_]array_share(k, t, p, length);
+{
+    let n = length;
+    let p1 = p;
+    while true
+        req type_interp::<T>() &*& atomic_mask(MaskTop) &*& [q]lifetime_token(k) &*& full_borrow(k, array_at_lft_fbc(k0, t, p1, n));
+        ens type_interp::<T>() &*& atomic_mask(MaskTop) &*& [q]lifetime_token(k) &*& [_]array_share(k, t, old_p1, old_n);
+        decreases n;
+    {
+        if n == 0 {
+            leak full_borrow(_, _);
+            close array_share(k, t, p1, n);
+            leak array_share(k, t, p1, n);
+            break;
+        }
+        let klong = open_full_borrow_strong_m(k, array_at_lft_fbc(k0, t, p1, n), q);
+        open array_at_lft_fbc::<T>(k0, t, p1, n)();
+        open array_at_lft(k0, p1, n, cons(?v, _));
+        open foreach(_, _);
+        open elem_own::<T>(t)(v);
+        close full_borrow_content_at_lft::<T>(k0, t, p1)();
+        close array_at_lft_fbc::<T>(k0, t, p1 + 1, n - 1)();
+        close sep(full_borrow_content_at_lft::<T>(k0, t, p1), array_at_lft_fbc::<T>(k0, t, p1 + 1, n - 1))();
+        produce_lem_ptr_chunk full_borrow_convert_strong(True, sep(full_borrow_content_at_lft::<T>(k0, t, p1), array_at_lft_fbc::<T>(k0, t, p1 + 1, n - 1)), klong, array_at_lft_fbc(k0, t, p1, n))() {
+            open sep(full_borrow_content_at_lft::<T>(k0, t, p1), array_at_lft_fbc::<T>(k0, t, p1 + 1, n - 1))();
+            open full_borrow_content_at_lft::<T>(k0, t, p1)();
+            open array_at_lft_fbc::<T>(k0, t, p1 + 1, n - 1)();
+            assert points_to_at_lft(k0, p1, ?elem);
+            assert foreach(?elems0, elem_own(t));
+            close elem_own::<T>(t)(elem);
+            close foreach(cons(elem, elems0), elem_own(t));
+            close array_at_lft_fbc::<T>(k0, t, p1, n)();
+        } {
+            close_full_borrow_strong_m(klong, array_at_lft_fbc(k0, t, p1, n), sep(full_borrow_content_at_lft::<T>(k0, t, p1), array_at_lft_fbc::<T>(k0, t, p1 + 1, n - 1)));
+            full_borrow_mono(klong, k, sep(full_borrow_content_at_lft::<T>(k0, t, p1), array_at_lft_fbc::<T>(k0, t, p1 + 1, n - 1)));
+        }
+        full_borrow_split_m(k, full_borrow_content_at_lft::<T>(k0, t, p1), array_at_lft_fbc::<T>(k0, t, p1 + 1, n - 1));
+        p1 = p1 + 1;
+        n = n - 1;
+        recursive_call();
+        full_borrow_at_lft_to_full_borrow(k, k0, t, old_p1);
+        share_full_borrow_m(k, t, old_p1);
+        close array_share(k, t, old_p1, old_n);
+        leak array_share(k, t, old_p1, old_n);
+    }
+}
+
+lem Vec_share_full<T, A>(k: lifetime_t, t: thread_id_t, l: *Vec<T, A>)
+    req type_interp::<T>() &*& type_interp::<A>() &*& atomic_mask(MaskTop) &*&
+        full_borrow(k, Vec_full_borrow_content::<T, A>(t, l)) &*& [?q]lifetime_token(k) &*&
+        ref_origin(l) == l;
+    ens type_interp::<T>() &*& type_interp::<A>() &*& atomic_mask(MaskTop) &*& [_]Vec_share::<T, A>(k, t, l) &*& [q]lifetime_token(k);
+{
+    assume(lifetime_inclusion(k, lft_of_type::<T>()) && lifetime_inclusion(k, lft_of_type::<A>())); // TODO: Make this a precondition
+    let klong = open_full_borrow_strong_m(k, Vec_full_borrow_content::<T, A>(t, l), q);
+    open Vec_full_borrow_content::<T, A>(t, l)();
+    open_points_to(l);
+    open <Vec<T, A>>.own(t, ?self_);
+    open Vec(t, self_, ?alloc_id, ?ptr, ?capacity, ?length);
+    raw_vec::RawVec_inv();
+    close_points_to(&(*l).buf);
+    raw_vec::close_RawVec_full_borrow_content_::<T, A>(t, &(*l).buf, alloc_id, ptr, capacity);
+    close Vec_frac_borrow_content::<T, A>(l, length)();
+    close array_at_lft_fbc::<T>(alloc_id.lft, t, ptr, length)();
+    close sep(Vec_frac_borrow_content(l, length), array_at_lft_fbc::<T>(alloc_id.lft, t, ptr, length))();
+    close sep(raw_vec::RawVec_full_borrow_content_::<T, A>(t, &(*l).buf, alloc_id, ptr, capacity), sep(Vec_frac_borrow_content(l, length), array_at_lft_fbc::<T>(alloc_id.lft, t, ptr, length)))();
+    {
+        pred Ctx() = array_at_lft_(alloc_id.lft, ptr + length, capacity - length, _);
+        close Ctx();
+        
+        produce_lem_ptr_chunk full_borrow_convert_strong(
+            Ctx,
+            sep(raw_vec::RawVec_full_borrow_content_::<T, A>(t, &(*l).buf, alloc_id, ptr, capacity), sep(Vec_frac_borrow_content(l, length), array_at_lft_fbc::<T>(alloc_id.lft, t, ptr, length))),
+            klong,
+            Vec_full_borrow_content::<T, A>(t, l)
+        )() {
+            open Ctx();
+            open sep(raw_vec::RawVec_full_borrow_content_::<T, A>(t, &(*l).buf, alloc_id, ptr, capacity), sep(Vec_frac_borrow_content(l, length), array_at_lft_fbc::<T>(alloc_id.lft, t, ptr, length)))();
+            raw_vec::open_RawVec_full_borrow_content_::<T, A>(t, &(*l).buf, alloc_id, ptr, capacity);
+            open sep(Vec_frac_borrow_content(l, length), array_at_lft_fbc::<T>(alloc_id.lft, t, ptr, length))();
+            open Vec_frac_borrow_content::<T, A>(l, length)();
+            open array_at_lft_fbc::<T>(alloc_id.lft, t, ptr, length)();
+            open_points_to(l);
+            let self1 = *l;
+            close Vec(t, self1, alloc_id, ptr, capacity, length);
+            close <Vec<T, A>>.own(t, self1);
+            close_points_to(&(*l).buf);
+            close Vec_full_borrow_content::<T, A>(t, l)();
+        } {
+            close_full_borrow_strong_m(klong, Vec_full_borrow_content::<T, A>(t, l), sep(raw_vec::RawVec_full_borrow_content_::<T, A>(t, &(*l).buf, alloc_id, ptr, capacity), sep(Vec_frac_borrow_content(l, length), array_at_lft_fbc::<T>(alloc_id.lft, t, ptr, length))));
+            full_borrow_mono(klong, k, sep(raw_vec::RawVec_full_borrow_content_::<T, A>(t, &(*l).buf, alloc_id, ptr, capacity), sep(Vec_frac_borrow_content(l, length), array_at_lft_fbc::<T>(alloc_id.lft, t, ptr, length))));
+        }
+    }
+    full_borrow_split_m(k, raw_vec::RawVec_full_borrow_content_::<T, A>(t, &(*l).buf, alloc_id, ptr, capacity), sep(Vec_frac_borrow_content(l, length), array_at_lft_fbc::<T>(alloc_id.lft, t, ptr, length)));
+    full_borrow_split_m(k, Vec_frac_borrow_content(l, length), array_at_lft_fbc::<T>(alloc_id.lft, t, ptr, length));
+    raw_vec::close_RawVec_full_borrow(k, t, &(*l).buf, alloc_id, ptr, capacity);
+    raw_vec::RawVec_share_full_(k, &(*l).buf);
+    full_borrow_into_frac_m(k, Vec_frac_borrow_content(l, length));
+    close Vec_share_(k, t, l, alloc_id, ptr, capacity, length);
+    leak Vec_share_(k, t, l, alloc_id, ptr, capacity, length);
+    lifetime_inclusion_trans(k, lft_of_type::<A>(), alloc_id.lft);
+    array_at_lft_share_full(k, alloc_id.lft, t, ptr, length);
+    close <Vec<T, A>>.share(k, t, l);
+    leak <Vec<T, A>>.share(k, t, l);
+}
+
+lem Vec_share_mono<T, A>(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *_)
+    req type_interp::<T>() &*& type_interp::<A>() &*& lifetime_inclusion(k1, k) == true &*& [_]Vec_share::<T, A>(k, t, l);
+    ens type_interp::<T>() &*& type_interp::<A>() &*& [_]Vec_share::<T, A>(k1, t, l);
+{
+    open Vec_share::<T, A>(k, t, l);
+    assert [_]Vec_share_(k, t, l, ?alloc_id, ?ptr, ?capacity, ?length);
+    Vec_share__mono::<T, A>(k, k1, l);
+    array_share_mono(k, k1, ptr);
+    close Vec_share::<T, A>(k1, t, l);
+    leak Vec_share::<T, A>(k1, t, l);
+}
+
+lem init_ref_Vec<T, A>(p: *Vec<T, A>)
+    req type_interp::<T>() &*& type_interp::<A>() &*& atomic_mask(Nlft) &*& ref_init_perm(p, ?x) &*& [_]Vec_share::<T, A>(?k, ?t, x) &*& [?q]lifetime_token(k);
+    ens type_interp::<T>() &*& type_interp::<A>() &*& atomic_mask(Nlft) &*& [q]lifetime_token(k) &*& [_]Vec_share::<T, A>(k, t, p) &*& [_]frac_borrow(k, ref_initialized_(p));
+{
+    open <Vec<T, A>>.share(k, t, x);
+    init_ref_Vec_m(p);
+    close <Vec<T, A>>.share(k, t, p);
+    leak <Vec<T, A>>.share(k, t, p);
+}
+
+lem Vec_sync<T, A>(t1: thread_id_t)
+    req type_interp::<T>() &*& type_interp::<A>() &*& is_Sync(typeid(Vec<T, A>)) == true &*& [_]Vec_share::<T, A>(?k, ?t0, ?l);
+    ens type_interp::<T>() &*& type_interp::<A>() &*& [_]Vec_share::<T, A>(k, t1, l);
+{
+    open <Vec<T, A>>.share(k, t0, l);
+    assert [_]Vec_share_(k, t0, l, ?alloc_id, ?ptr, ?capacity, ?length);
+    Vec_sync_(t1);
+    array_sync(t1, ptr);
+    close <Vec<T, A>>.share(k, t1, l);
+    leak <Vec<T, A>>.share(k, t1, l);
+}
 
 @*/
 
@@ -1345,12 +1766,104 @@ impl<T, A: Allocator> Vec<T, A> {
     #[must_use = "losing the pointer will leak memory"]
     #[unstable(feature = "allocator_api", issue = "32838")]
     // #[unstable(feature = "vec_into_raw_parts", reason = "new API", issue = "65816")]
-    pub fn into_raw_parts_with_alloc(self) -> (*mut T, usize, usize, A) {
+    pub fn into_raw_parts_with_alloc(self) -> (*mut T, usize, usize, A)
+    //@ req Vec(currentThread, self, ?alloc_id, ?ptr_, ?capacity_, ?length);
+    /*@
+    ens result.0 == ptr_ &*& result.1 == length &*& result.2 == capacity_ &*&
+        Allocator(currentThread, result.3, alloc_id) &*&
+        if capacity_ * std::mem::size_of::<T>() == 0 {
+            true
+        } else {
+            Layout::new::<T>().repeat(capacity_) == some(pair(?allocLayout, ?stride)) &*&
+            alloc_block_in(alloc_id, ptr_ as *u8, allocLayout)
+        };
+    @*/
+    /*@
+    safety_proof {
+        open <Vec<T, A>>.own(currentThread, self);
+        assert Vec(currentThread, self, ?alloc_id, ?ptr, ?capacity, ?length);
+        let result = call();
+        close raw_ptr_own(currentThread, result.0);
+        close usize_own(currentThread, result.1);
+        close usize_own(currentThread, result.2);
+        std::alloc::Allocator_to_own(result.3);
+        close_tuple_4_own(currentThread, result);
+        leak array_at_lft(alloc_id.lft, ptr, length, ?elems) &*& array_at_lft_(alloc_id.lft, ptr + length, capacity - length, _) &*& foreach(elems, elem_own(currentThread));
+        if capacity * std::mem::size_of::<T>() != 0 {
+            leak alloc_block_in(alloc_id, ptr as *u8, _);
+        }
+    }
+    @*/
+    {
         let mut me = ManuallyDrop::new(self);
-        let len = me.len();
-        let capacity = me.capacity();
+        
+        //@ let k = begin_lifetime();
+        //@ close_points_to(&me.buf);
+        //@ share_Vec(k, &me);
+        let len;
+        let capacity;
+        {
+            //@ let_lft 'a = k;
+            
+            //@ let me_ref1 = precreate_ref(&me);
+            //@ init_ref_Vec_(me_ref1);
+            //@ open_frac_borrow(k, ref_initialized_(me_ref1), 1/4);
+            //@ open [?f1]ref_initialized_::<Vec<T, A>>(me_ref1)();
+            len = me.len/*@::<T, A, 'a>@*/();
+            //@ close [f1]ref_initialized_::<Vec<T, A>>(me_ref1)();
+            //@ close_frac_borrow(f1, ref_initialized_(me_ref1));
+            
+            //@ let me_ref2 = precreate_ref(&me);
+            //@ init_ref_Vec_(me_ref2);
+            //@ open_frac_borrow(k, ref_initialized_(me_ref2), 1/4);
+            //@ open [?f2]ref_initialized_::<Vec<T, A>>(me_ref2)();
+            capacity = me.capacity/*@::<T, A, 'a>@*/();
+            //@ close [f2]ref_initialized_::<Vec<T, A>>(me_ref2)();
+            //@ close_frac_borrow(f2, ref_initialized_(me_ref2));
+        }
+        //@ end_lifetime(k);
+        //@ end_share_Vec(&me);
+        
         let ptr = me.as_mut_ptr();
-        let alloc = unsafe { ptr::read(me.allocator()) };
+        
+        //@ assert me |-> ?me_;
+        //@ close mk_points_to::<Vec<T, A>>(&me, me_)();
+        //@ let k2 = begin_lifetime();
+        //@ borrow(k2, mk_points_to(&me, me_));
+        //@ full_borrow_into_frac(k2, mk_points_to(&me, me_));
+        //@ close points_to_shared(k2, &me, me_);
+        //@ leak points_to_shared(k2, &me, me_);
+        //@ let me_ref3 = precreate_ref(&me);
+        //@ init_ref_readonly_points_to_shared(me_ref3);
+        use core::ops::Deref;
+        //@ open_frac_borrow(k2, ref_initialized_(me_ref3), 1/2);
+        //@ open [?f3]ref_initialized_::<Vec<T, A>>(me_ref3)();
+        let me_deref = me.deref();
+        //@ close [f3]ref_initialized_::<Vec<T, A>>(me_ref3)();
+        //@ close_frac_borrow(f3, ref_initialized_(me_ref3));
+        
+        //@ let me_ref4 = precreate_ref(me_ref3);
+        //@ init_ref_readonly_points_to_shared(me_ref4);
+        //@ open_frac_borrow(k2, ref_initialized_(me_ref4), 1/2);
+        //@ open [?f4]ref_initialized_::<Vec<T, A>>(me_ref4)();
+        //@ close exists(true);
+        let alloc_ref = unsafe { (*(me_deref as *const Vec<T, A>)).allocator() };
+        //@ close [f4]ref_initialized_::<Vec<T, A>>(me_ref4)();
+        //@ close_frac_borrow(f4, ref_initialized_::<Vec<T, A>>(me_ref4));
+        
+        //@ open points_to_shared(k2, alloc_ref, _);
+        //@ open_frac_borrow(k2, mk_points_to(alloc_ref, me_.alloc()), 1/2);
+        //@ open [?f5]mk_points_to::<A>(alloc_ref, me_.alloc())();
+        let alloc = unsafe { ptr::read(alloc_ref) };
+        //@ close [f5]mk_points_to::<A>(alloc_ref, me_.alloc())();
+        //@ close_frac_borrow(f5, mk_points_to(alloc_ref, me_.alloc()));
+        //@ end_lifetime(k2);
+        //@ borrow_end(k2, mk_points_to(&me, me_));
+        //@ open mk_points_to::<Vec<T, A>>(&me, me_)();
+        //@ open_points_to(&me);
+        //@ open Vec(currentThread, me, alloc_id, ptr_, capacity_, length);
+        //@ raw_vec::RawVec_into_raw_parts(me.buf);
+        
         (ptr, len, capacity, alloc)
     }
 
@@ -1428,8 +1941,25 @@ impl<T, A: Allocator> Vec<T, A> {
     #[inline]
     #[stable(feature = "rust1", since = "1.0.0")]
     #[rustc_const_stable(feature = "const_vec_string_slice", since = "1.87.0")]
-    pub const fn capacity(&self) -> usize {
-        self.buf.capacity()
+    pub const fn capacity<'a>(&'a self) -> usize
+    //@ req [?q]lifetime_token('a) &*& [_]Vec_share_('a, currentThread, self, ?alloc_id, ?ptr, ?capacity, ?length);
+    //@ ens [q]lifetime_token('a) &*& result == capacity;
+    /*@
+    safety_proof {
+        open <Vec<T, A>>.share('a, _t, self);
+        call();
+    }
+    @*/
+    {
+        //@ open Vec_share_('a, currentThread, self, alloc_id, ptr, capacity, length);
+        //@ let buf_ref = precreate_ref(&(*self).buf);
+        //@ raw_vec::init_ref_RawVec_(buf_ref);
+        //@ open_frac_borrow('a, ref_initialized_(buf_ref), q/2);
+        //@ open [?f]ref_initialized_::<RawVec<T, A>>(buf_ref)();
+        let r = self.buf.capacity();
+        //@ close [f]ref_initialized_::<RawVec<T, A>>(buf_ref)();
+        //@ close_frac_borrow(f, ref_initialized_(buf_ref));
+        r
     }
 
     /// Reserves capacity for at least `additional` more elements to be inserted
@@ -1934,10 +2464,36 @@ impl<T, A: Allocator> Vec<T, A> {
     #[rustc_never_returns_null_ptr]
     #[rustc_as_ptr]
     #[inline]
-    pub const fn as_mut_ptr(&mut self) -> *mut T {
+    pub const fn as_mut_ptr(&mut self) -> *mut T
+    //@ req *self |-> ?self0 &*& Vec(currentThread, self0, ?alloc_id, ?ptr, ?capacity, ?length);
+    //@ ens *self |-> ?self1 &*& Vec(currentThread, self1, alloc_id, ptr, capacity, length) &*& result == ptr;
+    /*@
+    safety_proof {
+        open <Vec<T, A>>.own(_t, ?self0);
+        call();
+        close <Vec<T, A>>.own(_t, *self);
+    }
+    @*/
+    {
         // We shadow the slice method of the same name to avoid going through
         // `deref_mut`, which creates an intermediate reference.
-        self.buf.ptr()
+        
+        //@ open Vec(currentThread, self0, alloc_id, ptr, capacity, length);
+        //@ let k = begin_lifetime();
+        //@ open_points_to(self);
+        //@ close_points_to(&(*self).buf);
+        //@ raw_vec::share_RawVec(k, &(*self).buf);
+        //@ let buf_ref = precreate_ref(&(*self).buf);
+        //@ raw_vec::init_ref_RawVec_(buf_ref);
+        //@ open_frac_borrow(k, ref_initialized_(buf_ref), 1/2);
+        //@ open [?f]ref_initialized_::<RawVec<T, A>>(buf_ref)();
+        let r = self.buf.ptr();
+        //@ close [f]ref_initialized_::<RawVec<T, A>>(buf_ref)();
+        //@ close_frac_borrow(f, ref_initialized_(buf_ref));
+        //@ end_lifetime(k);
+        //@ raw_vec::end_share_RawVec(&(*self).buf);
+        //@ close Vec(currentThread, *self, alloc_id, ptr, capacity, length);
+        r
     }
 
     /// Returns a `NonNull` pointer to the vector's buffer, or a dangling
@@ -2006,8 +2562,68 @@ impl<T, A: Allocator> Vec<T, A> {
     /// Returns a reference to the underlying allocator.
     #[unstable(feature = "allocator_api", issue = "32838")]
     #[inline]
-    pub fn allocator(&self) -> &A {
-        self.buf.allocator()
+    pub fn allocator(&self) -> &A
+    /*@
+    req [?q]lifetime_token(?k) &*&
+        exists(?readOnly) &*&
+        if readOnly {
+            [_]points_to_shared(k, self, ?self_) &*&
+            ens [q]lifetime_token(k) &*& [_]points_to_shared(k, result, self_.alloc())
+        } else {
+            [_]Vec_share_(k, ?t, self, ?alloc_id, ?ptr, ?capacity, ?length) &*&
+            ens [q]lifetime_token(k) &*&
+                [_]std::alloc::Allocator_share(k, t, result, alloc_id) &*&
+                [_]frac_borrow(k, ref_initialized_(result))
+        };
+    @*/
+    //@ ens true;
+    /*@
+    safety_proof {
+        open <Vec<T, A>>.share(?k, _t, self);
+        close exists(false);
+        let result = call();
+        std::alloc::close_Allocator_share(k, _t, result);
+    }
+    @*/
+    {
+        //@ let buf_ref = precreate_ref(&(*self).buf);
+        /*@
+        if readOnly {
+            open points_to_shared(k, self, ?self_);
+            open_frac_borrow_strong_(k, mk_points_to(self, self_), q/2);
+            open [?f]mk_points_to::<Vec<T, A>>(self, self_)();
+            open_points_to(self);
+            close_points_to(&(*self).buf, f);
+            close [f]mk_points_to::<RawVec<T, A>>(&(*self).buf, self_.buf)();
+            close scaledp(f, mk_points_to::<RawVec<T, A>>(&(*self).buf, self_.buf))();
+            {
+                pred Ctx() = [f](*self).len |-> self_.len &*& [f]struct_Vec_padding(self);
+                close Ctx();
+                produce_lem_ptr_chunk restore_frac_borrow(Ctx, scaledp(f, mk_points_to(&(*self).buf, self_.buf)), f, mk_points_to(self, self_))() {
+                    open Ctx();
+                    open scaledp(f, mk_points_to(&(*self).buf, self_.buf))();
+                    open [f]mk_points_to::<RawVec<T, A>>(&(*self).buf, self_.buf)();
+                    close [f]mk_points_to::<Vec<T, A>>(self, self_)();
+                } {
+                    close_frac_borrow_strong_();
+                }
+            }
+            full_borrow_into_frac(k, scaledp(f, mk_points_to(&(*self).buf, self_.buf)));
+            frac_borrow_implies_scaled(k, f, mk_points_to(&(*self).buf, self_.buf));
+            close points_to_shared(k, &(*self).buf, self_.buf);
+            leak points_to_shared(k, &(*self).buf, self_.buf);
+            init_ref_readonly_points_to_shared(buf_ref);
+        } else {
+            open Vec_share_(k, ?t, self, ?alloc_id, ?ptr, ?capacity, ?length);
+            raw_vec::init_ref_RawVec_(buf_ref);
+        }
+        @*/
+        //@ open_frac_borrow(k, ref_initialized_(buf_ref), q/2);
+        //@ open [?f]ref_initialized_::<RawVec<T, A>>(buf_ref)();
+        let r = self.buf.allocator();
+        //@ close [f]ref_initialized_::<RawVec<T, A>>(buf_ref)();
+        //@ close_frac_borrow(f, ref_initialized_(buf_ref));
+        r
     }
 
     /// Forces the length of the vector to `new_len`.
@@ -2981,8 +3597,46 @@ impl<T, A: Allocator> Vec<T, A> {
     #[stable(feature = "rust1", since = "1.0.0")]
     #[rustc_const_stable(feature = "const_vec_string_slice", since = "1.87.0")]
     #[rustc_confusables("length", "size")]
-    pub const fn len(&self) -> usize {
+    pub const fn len<'a>(&'a self) -> usize
+    //@ req [?q]lifetime_token('a) &*& [_]Vec_share_('a, currentThread, self, ?alloc_id, ?ptr, ?capacity, ?length);
+    //@ ens [q]lifetime_token('a) &*& result == length;
+    /*@
+    safety_proof {
+        open <Vec<T, A>>.share('a, _t, self);
+        call();
+    }
+    @*/
+    {
+        //@ open Vec_share_('a, currentThread, self, alloc_id, ptr, capacity, length);
+        //@ open_frac_borrow('a, Vec_frac_borrow_content(self, length), q);
+        //@ open [?f]Vec_frac_borrow_content::<T, A>(self, length)();
         let len = self.len;
+        //@ close [f]Vec_frac_borrow_content::<T, A>(self, length)();
+        //@ close_frac_borrow(f, Vec_frac_borrow_content(self, length));
+        
+        //@ raw_vec::RawVec_share__inv();
+        /*@
+        if std::mem::size_of::<T>() == 0 {
+        } else {
+            assert Layout::new::<T>().repeat(capacity) == some(pair(?allocLayout, ?stride));
+            std::alloc::Layout_repeat_some(Layout::new::<T>(), capacity);
+            std::alloc::Layout_inv(Layout::new::<T>());
+            std::alloc::Layout_inv(allocLayout);
+            div_rem_nonneg(isize::MAX, std::mem::size_of::<T>());
+            if len > isize::MAX / std::mem::size_of::<T>() {
+                mul_mono_l(isize::MAX / std::mem::size_of::<T>() + 1, len, std::mem::size_of::<T>());
+                assert (isize::MAX / std::mem::size_of::<T>() + 1) * std::mem::size_of::<T>() <= len * std::mem::size_of::<T>();
+                assert isize::MAX < (isize::MAX / std::mem::size_of::<T>() + 1) * std::mem::size_of::<T>();
+                mul_mono_l(std::mem::size_of::<T>(), stride, capacity);
+                assert capacity * std::mem::size_of::<T>() <= allocLayout.size();
+                mul_mono_l(len, capacity, std::mem::size_of::<T>());
+                assert len * std::mem::size_of::<T>() <= allocLayout.size();
+                div_rem_nonneg(isize::MAX, allocLayout.align());
+                //assert allocLayout.size() <= isize::MAX;
+                assert false;
+            }
+        }
+        @*/
 
         // SAFETY: The maximum capacity of `Vec<T>` is `isize::MAX` bytes, so the maximum value can
         // be returned is `usize::checked_div(size_of::<T>()).unwrap_or(usize::MAX)`, which

@@ -1638,6 +1638,7 @@ type command =
 | Aggregate of aggregate_kind * int (* Pop the specified number of values from the top of the operand stack and push an aggregate value *)
 | Discriminant (* Pop a value from the top of the operand stack, which is an enum value, and push the discriminant of the enum value *)
 | SourceInfo of source_info
+| Assume (* Pop a Boolean value from the top of the operand stack. Produce UB if false. *)
 
 let string_of_command c =
   let open Stringifier in
@@ -1658,6 +1659,7 @@ let string_of_command c =
   | Aggregate (aggregate_kind, n) -> Printf.sprintf "Aggregate %s %d" (string_of_aggregate_kind aggregate_kind) n
   | Discriminant -> "Discriminant"
   | SourceInfo {span} -> Printf.sprintf "SourceInfo %s" (string_of_span span)
+  | Assume -> "Assume"
 
 let commands_for_loading_place {local; projection}: command list =
   let proj_cmds =
@@ -1693,6 +1695,13 @@ let commands_of_statement_kind = function
      Evaluating a place expression or an rvalue does not have "physical" side-effects but
      it might have a side-effects on the Tree Borrows state? *)
   commands_of_rvalue rhs_rvalue @ [Store lhs_place]
+| SetDiscriminant -> failwith "TODO: SetDiscriminant"
+| Deinit -> failwith "TODO: Deinit"
+| StorageLive _ -> [] (* FIXME https://github.com/verifast/verifast/issues/948 *)
+| StorageDead _ -> [] (* FIXME https://github.com/verifast/verifast/issues/948 *)
+| PlaceMention _ -> failwith "TODO: PlaceMention"
+| Assume operand -> commands_of_operand operand @ [Assume]
+| CopyNonOverlapping -> failwith "TODO: CopyNonOverlapping"
 | Nop -> []
 
 let commands_of_statement ({source_info; kind}: statement) = SourceInfo source_info::commands_of_statement_kind kind
@@ -2725,6 +2734,9 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
             let v, opnds0, opnds1 = consume_operand opnds0 opnds1 in
             let v = fresh_symbol () in
             cont env0 (v::opnds0) env1 (v::opnds1)
+        | Assume, Assume ->
+            let v, opnds0, opnds1 = consume_operand opnds0 opnds1 in
+            cont env0 opnds0 env1 opnds1
         | _ -> error "Command kinds do not match"
       in
       match ss_i0, ss_i1 with

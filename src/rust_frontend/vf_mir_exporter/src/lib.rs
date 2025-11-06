@@ -2152,9 +2152,44 @@ mod vf_mir_builder {
                     let rhs_rvalue_cpn = assign_data_cpn.init_rhs_rvalue();
                     Self::encode_rvalue(tcx, enc_ctx, span, rhs_rval, rhs_rvalue_cpn);
                 }
+                mir::StatementKind::FakeRead(_) => statement_kind_cpn.set_nop(()),
+                mir::StatementKind::SetDiscriminant { place, variant_index } => {
+                    statement_kind_cpn.set_set_discriminant(()); // TODO encode data
+                }
+                mir::StatementKind::Deinit(place) => {
+                    statement_kind_cpn.set_deinit(()); // TODO encode data
+                }
+                mir::StatementKind::StorageLive(local) => {
+                    let storage_live_cpn = statement_kind_cpn.init_storage_live();
+                    Self::encode_local_decl_id(*local, storage_live_cpn);
+                }
+                mir::StatementKind::StorageDead(local) => {
+                    let storage_dead_cpn = statement_kind_cpn.init_storage_dead();
+                    Self::encode_local_decl_id(*local, storage_dead_cpn);
+                }
+                mir::StatementKind::Retag { .. } => statement_kind_cpn.set_nop(()),
+                mir::StatementKind::PlaceMention(place) => {
+                    let place_cpn = statement_kind_cpn.init_place_mention();
+                    Self::encode_place(enc_ctx, place, place_cpn);
+                }
+                mir::StatementKind::AscribeUserType { .. } => statement_kind_cpn.set_nop(()),
+                mir::StatementKind::Coverage(_) => statement_kind_cpn.set_nop(()),
+                mir::StatementKind::Intrinsic(intrinsic) => {
+                    match &**intrinsic {
+                        mir::NonDivergingIntrinsic::Assume(operand) => {
+                            let operand_cpn = statement_kind_cpn.init_assume();
+                            Self::encode_operand(tcx, enc_ctx, operand, operand_cpn);
+                        }
+                        mir::NonDivergingIntrinsic::CopyNonOverlapping(_) => {
+                            statement_kind_cpn.set_copy_non_overlapping(()); // TODO encode data
+                        }
+                    }
+                }
+                mir::StatementKind::ConstEvalCounter => statement_kind_cpn.set_nop(()),
                 mir::StatementKind::Nop => statement_kind_cpn.set_nop(()),
-                // Todo @Nima: For now we do not support many statements and treat them as Nop
-                _ => statement_kind_cpn.set_nop(()),
+                mir::StatementKind::BackwardIncompatibleDropHint { place, reason } => {
+                    statement_kind_cpn.set_nop(());
+                }
             }
         }
 

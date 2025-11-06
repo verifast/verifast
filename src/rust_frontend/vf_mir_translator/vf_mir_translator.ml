@@ -2062,6 +2062,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           Ok (`TrTypedConstantScalar (Ast.CallExpr (loc, "std::mem::IS_ZST", [ty.Mir.vf_ty], [], [], Static)))
         | "core::mem::SizedTypeProperties::LAYOUT", [ Mir.GenArgType ty ] ->
           Ok (`TrTypedConstantScalar (Ast.CallExpr (loc, "std::alloc::Layout::new", [ty.Mir.vf_ty], [], [], Static)))
+        | "core::mem::SizedTypeProperties::MAX_SLICE_LEN", [ Mir.GenArgType ty ] ->
+          Ok (`TrTypedConstantScalar (Ast.CallExpr (loc, "std::mem::MAX_SLICE_LEN", [ty.Mir.vf_ty], [], [], Static)))
         | _ -> Ast.static_error loc (Printf.sprintf "Unevaluated MIR constant %s is not yet supported" def) None
         end
       | Undefined _ -> Error (`TrConstantKind "Unknown ConstantKind")
@@ -3385,6 +3387,31 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   Ok [ block_stmt ])
           | `TrRvalueAggregate init_stmts_builder ->
               Ok (init_stmts_builder (lhs_place, lhs_place_is_mutable)))
+      | SetDiscriminant -> failwith "TODO: StatementKind::SetDiscriminant"
+      | Deinit -> failwith "TODO: StatementKind::Deinit"
+      | StorageLive _ -> Ok [] (* FIXME https://github.com/verifast/verifast/issues/947 *)
+      | StorageDead _ -> Ok [] (* FIXME https://github.com/verifast/verifast/issues/947 *)
+      | PlaceMention _ -> failwith "TODO: StatementKind::PlaceMention"
+      | Assume operand_cpn ->
+          let* operand = translate_operand operand_cpn loc in
+          let expr =
+            match operand with
+            | `TrOperandCopy e
+            | `TrOperandMove (e, _ (*place_is_mutable*)) -> e
+            | _ ->
+                failwith "TODO: StatementKind::Assume"
+          in
+          let assert_unchecked_call =
+            Ast.ExprStmt
+              (Ast.CallExpr
+                 ( loc,
+                   "std::hint::assert_unchecked",
+                   [],
+                   [],
+                   [ LitPat expr ],
+                   Static ))
+          in
+          Ok [ assert_unchecked_call ]
       | Nop -> Ok []
       | Undefined _ -> Error (`TrStatementKind "Unknown StatementKind")
 

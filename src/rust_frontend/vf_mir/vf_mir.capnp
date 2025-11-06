@@ -706,6 +706,13 @@ struct StatementKind {
 
     union {
         assign @0: AssignData;
+        setDiscriminant @2: Void; # TODO: Elaborate
+        deinit @8: Void; # TODO: Elaborate
+        storageLive @3: LocalDeclId;
+        storageDead @4: LocalDeclId;
+        placeMention @5: Place;
+        assume @6: Operand;
+        copyNonOverlapping @7: Void; # TODO: Elaborate
         nop @1: Void;
     }
 }
