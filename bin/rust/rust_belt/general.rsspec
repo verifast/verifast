@@ -106,7 +106,7 @@ lem close_na_inv_m(t: thread_id_t, m: mask_t);
 
 pred bool_own(t: thread_id_t, v: bool;) = true;
 pred char_own(t: thread_id_t, v: char;) = 0 <= v as u32 && v as u32 <= 0xD7FF || 0xE000 <= v as u32 && v as u32 <= 0x10FFFF;
-pred raw_ptr_own(t: thread_id_t, v: *_;) = true;
+pred_ctor raw_ptr_own<T>()(t: thread_id_t, v: *T;) = true;
 
 pred i8_own(t: thread_id_t, v: i8;) = true;
 pred i16_own(t: thread_id_t, v: i16;) = true;
@@ -150,7 +150,7 @@ pred_ctor own<T>(t: thread_id_t)(v: T) = (<T>.own)(t, v);
 
 type_pred_def <bool>.own = bool_own;
 //TODO: How to deal with Rust type `char`? Distinct Rust types should be mapped to distinct VF types, with distinct typeids.
-type_pred_def <*_>.own = raw_ptr_own;
+type_pred_def for <T> <*T>.own = raw_ptr_own::<T>;
 
 type_pred_def <i8>.own = i8_own;
 type_pred_def <i16>.own = i16_own;

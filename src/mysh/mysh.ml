@@ -379,10 +379,10 @@ let rec exec_cmds macros cwd parallel cmds =
       | _ ->
         acquire_run_permission ();
         let pid = processes_started_counter () in
-        if !verbose then do_print_line (Printf.sprintf "Starting process %d" pid);
         let time0 = Unix.gettimeofday () in
         let cwd = getcwd () in
         let line' = if cwd = "." then line else cwd ^ "$ " ^ line in
+        if !verbose then do_print_line (Printf.sprintf "Starting process %d: %s" pid line');
         Mutex.lock global_mutex;
         Sys.chdir (get_abs_path ".");
         let negate_exit_status, line =
