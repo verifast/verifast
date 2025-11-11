@@ -1,4 +1,5 @@
 begin_parallel
+verifast -allow_should_fail size_of_ptr_unsized.rs
 verifast -skip_specless_fns const_generic_param.rs
 verifast -allow_dead_code -allow_should_fail struct_layout.rs
 verifast ghost_cmd_inj.rs

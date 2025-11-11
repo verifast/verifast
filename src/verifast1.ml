@@ -648,9 +648,14 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     ctxt#begin_formal;
     let t = ctxt#mk_bound 0 type_info_type_node in
     let app = mk_sizeof (mk_pointer_typeid t) in
-    let eq = ctxt#mk_eq app (width_size_term ptr_width) in
+    let rel =
+      if is_rust then
+        ctxt#mk_le (width_size_term ptr_width) app (* Fat pointers *)
+      else
+        ctxt#mk_eq app (width_size_term ptr_width)
+    in
     ctxt#end_formal;
-    ctxt#assume_forall "sizeof_pointer" [app] [type_info_type_node] eq
+    ctxt#assume_forall "sizeof_pointer" [app] [type_info_type_node] rel
 
   let union_size_partial umap l un =
     match try_assoc un umap with
@@ -6219,7 +6224,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   | Int (Unsigned, FixedWidthRank k) -> fst exact_width_integer_typeid_terms.(k)
   | RustChar -> rust_char_typeid_term
   | PtrType Void -> void_pointer_typeid_term
-  | PtrType _ when fno_strict_aliasing -> void_pointer_typeid_term
+  | PtrType _ when fno_strict_aliasing && not is_rust (* fat pointers *) -> void_pointer_typeid_term
   | InlineFuncType _ when fno_strict_aliasing -> void_pointer_typeid_term
   | PtrType t0 -> mk_pointer_typeid (typeid_of_core_core l msg env t0)
   | RustRefType (lft, kind, t0) ->
@@ -6294,7 +6299,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     (* Assume IEEE-754 *)
     | Float -> width_size_term (LitWidth 2)
     | Double -> width_size_term (LitWidth 3)
-    | PtrType _ | RustRefType _ -> width_size_term ptr_width
+    | PtrType _ when not is_rust (* fat pointers *) -> width_size_term ptr_width
+    | PtrType _ | RustRefType _ -> mk_sizeof (typeid_of_core l env t)
     | StructType (sn, targs) -> mk_sizeof (typeid_of_core l env t)
     | UnionType un -> union_size_partial unionmap l un
     | StaticArrayType (elemTp, elemCount) -> ctxt#mk_mul (sizeof_core l env elemTp) (eval_const_type l env elemCount)

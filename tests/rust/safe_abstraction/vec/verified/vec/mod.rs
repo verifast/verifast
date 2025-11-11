@@ -1783,7 +1783,7 @@ impl<T, A: Allocator> Vec<T, A> {
         open <Vec<T, A>>.own(currentThread, self);
         assert Vec(currentThread, self, ?alloc_id, ?ptr, ?capacity, ?length);
         let result = call();
-        close raw_ptr_own(currentThread, result.0);
+        close raw_ptr_own::<T>(currentThread, result.0);
         close usize_own(currentThread, result.1);
         close usize_own(currentThread, result.2);
         std::alloc::Allocator_to_own(result.3);
