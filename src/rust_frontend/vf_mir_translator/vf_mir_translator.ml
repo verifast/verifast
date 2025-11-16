@@ -3980,11 +3980,11 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | _ -> false
 
   let gen_adt_drop_proof_oblig (adt_defs : Mir.adt_def_tr list)
-      (adt_def_loc : Ast.loc) (adt_name : string) (tparams : string list)
+      (adt_def_loc : Ast.loc) (adt_name : string) (tparams : (string * Ast.tparam_bounds_expr) list)
       (adt_fields : (Ast.loc * string * Mir.ty_info) list) =
     let open Ast in
     let targs =
-      List.map (fun x -> IdentTypeExpr (adt_def_loc, None, x)) tparams
+      List.map (fun (x, _) -> IdentTypeExpr (adt_def_loc, None, x)) tparams
     in
     let pre =
       CallExpr
@@ -4530,7 +4530,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       Ast.Func
         ( loc,
           Ast.Regular,
-          (*type params*) [ "Self" ] @ lifetime_params_get_list required_fn_cpn,
+          (*type params*) (Ast.unbounded_tparams ([ "Self" ] @ lifetime_params_get_list required_fn_cpn)),
           Some ret_ty,
           Printf.sprintf "%s::%s" trait_name name,
           vf_param_decls,
@@ -4760,6 +4760,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           |> List.map D.decode_predicate
           |> List.map decode_predicate
         in
+        let sized_tparams = compute_sized_tparams preds in
+        let vf_tparams_with_bounds = vf_tparams |> List.map (fun x -> (x, {Ast.sized = List.mem x sized_tparams})) in
         let projection_preds =
           preds
           |> Util.flatmap (function
@@ -4902,7 +4904,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           Ast.Func
             ( loc,
               Ast.Regular,
-              (*type params*) vf_tparams,
+              (*type params*) vf_tparams_with_bounds,
               Some
                 (if TranslatorArgs.ignore_unwind_paths then ret_ty
                  else
@@ -5146,7 +5148,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let open Ast in
     let params = [ (IdentTypeExpr (adt_def_loc, None, "thread_id_t"), "t1") ] in
     let tparams_targs =
-      List.map (fun x -> IdentTypeExpr (adt_def_loc, None, x)) vf_tparams
+      List.map (fun (x, _) -> IdentTypeExpr (adt_def_loc, None, x)) vf_tparams
     in
     let pre =
       Sep
@@ -5256,13 +5258,13 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let tparams01, all_tparams_and_pres =
       List.split
         (List.map2
-           (fun x variance ->
-             if variance = VarianceRd.Invariant then ((x, x), ([ x ], []))
+           (fun ((x, bounds) as x_with_bounds) variance ->
+             if variance = VarianceRd.Invariant then ((x, x), ([ x_with_bounds ], []))
              else
                let x0 = x ^ "0" in
                let x1 = x ^ "1" in
                ( (x0, x1),
-                 ( [ x0; x1 ],
+                 ( [ (x0, bounds); (x1, bounds) ],
                    match variance with
                    | Covariant ->
                        [
@@ -5301,7 +5303,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let all_tparams = List.flatten all_tparams in
     let tparam_pres = List.flatten tparam_pres in
     let tparams0, tparams1 = List.split tparams01 in
-    let vf_tparams = all_lft_params @ all_tparams in
+    let vf_tparams = unbounded_tparams all_lft_params @ all_tparams in
     let vf_tparams0 = lft_params0 @ tparams0 in
     let tparams_targs0 =
       List.map (fun x -> IdentTypeExpr (adt_def_loc, None, x)) vf_tparams0
@@ -5325,7 +5327,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let pre =
       List.fold_left (fun a1 a2 -> Sep (adt_def_loc, a1, a2)) pre tparam_pres
     in
-    let pre = add_type_interp_asns adt_def_loc all_tparams pre in
+    let pre = add_type_interp_asns adt_def_loc (List.map fst all_tparams) pre in
     let tp0 =
       StructTypeExpr (adt_def_loc, Some name, None, [], tparams_targs0)
     in
@@ -5375,7 +5377,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           [ LitPat (Var (adt_def_loc, "t")); LitPat upcast_expr ],
           if vf_tparams = [] then PredFamCall else PredCtorCall )
     in
-    let post = add_type_interp_asns adt_def_loc all_tparams post in
+    let post = add_type_interp_asns adt_def_loc (List.map fst all_tparams) post in
     ( [
         Func
           ( adt_def_loc,
@@ -5436,9 +5438,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
 
   let gen_sync_proof_oblig adt_def_loc name lft_params tparams =
     let open Ast in
-    let vf_tparams = lft_params @ tparams in
+    let vf_tparams = unbounded_tparams lft_params @ tparams in
     let tparams_targs =
-      List.map (fun x -> IdentTypeExpr (adt_def_loc, None, x)) vf_tparams
+      List.map (fun (x, _) -> IdentTypeExpr (adt_def_loc, None, x)) vf_tparams
     in
     let params = [ (IdentTypeExpr (adt_def_loc, None, "thread_id_t"), "t1") ] in
     let pre =
@@ -5461,7 +5463,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   if vf_tparams = [] then PredFamCall else PredCtorCall ) ) )
     in
     let pre =
-      add_type_interp_asns adt_def_loc tparams pre
+      add_type_interp_asns adt_def_loc (List.map fst tparams) pre
     in
     let post =
       CoefAsn
@@ -5479,7 +5481,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               ],
               if vf_tparams = [] then PredFamCall else PredCtorCall ) )
     in
-    let post = add_type_interp_asns adt_def_loc tparams post in
+    let post = add_type_interp_asns adt_def_loc (List.map fst tparams) post in
     Func
       ( adt_def_loc,
         Lemma
@@ -5499,7 +5501,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         false (*virtual*),
         [] (*overrides*) )
 
-  let gen_share_proof_obligs adt_def lft_params tparams send_tparams sync_preds
+  let gen_share_proof_obligs adt_def lft_params tparams_with_bounds send_tparams sync_preds
       =
     let open Ast in
     let* adt_kind = Mir.decl_mir_adt_kind adt_def in
@@ -5508,10 +5510,12 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         failwith "Todo: Gen proof obligs for Enum or Union"
     | Mir.Struct ->
         let adt_def_loc = AstAux.decl_loc adt_def in
+        let tparams = List.map fst tparams_with_bounds in
+        let vf_tparams = unbounded_tparams lft_params @ tparams_with_bounds in
         let tparams_targs =
           List.map
-            (fun x -> IdentTypeExpr (adt_def_loc, None, x))
-            (lft_params @ tparams)
+            (fun (x, _) -> IdentTypeExpr (adt_def_loc, None, x))
+            vf_tparams
         in
         let* name =
           Option.to_result ~none:(`GenAdtProofObligs "Failed to get ADT name")
@@ -5578,7 +5582,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                 ( false
                   (*indicates whether an axiom should be generated for this lemma*),
                   None (*trigger*) ),
-              lft_params @ tparams (*type parameters*),
+              vf_tparams (*type parameters*),
               None (*return type*),
               name ^ "_share_mono",
               params,
@@ -5699,7 +5703,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                 ( false
                   (*indicates whether an axiom should be generated for this lemma*),
                   None (*trigger*) ),
-              lft_params @ tparams (*type parameters*),
+              vf_tparams (*type parameters*),
               None (*return type*),
               name ^ "_share_full",
               params,
@@ -5810,7 +5814,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                 ( false
                   (*indicates whether an axiom should be generated for this lemma*),
                   None (*trigger*) ),
-              lft_params @ tparams (*type parameters*),
+              vf_tparams (*type parameters*),
               None (*return type*),
               qualified_derived_name "init_ref_%s" name,
               [
@@ -5834,7 +5838,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           | None -> []
           | Some sync_preds ->
               [
-                gen_sync_proof_oblig adt_def_loc name lft_params tparams
+                gen_sync_proof_oblig adt_def_loc name lft_params tparams_with_bounds
               ]
         in
         Ok ([ share_mono_po; share_po; init_ref_po ] @ sync_pos)
@@ -5953,10 +5957,12 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let tparams =
         Util.flatmap (function `Type x -> [ x ] | _ -> []) generics
       in
+      let tparams_with_bounds = Verifast0.tparams_with_default_bounds_exprs tparams in
       let lft_params =
         Util.flatmap (function `Lifetime x -> [ x ] | _ -> []) generics
       in
       let vf_tparams = lft_params @ tparams in
+      let vf_tparams_with_bounds = Ast.unbounded_tparams lft_params @ tparams_with_bounds in
       let variances = variances_get_list adt_def_cpn in
       let variants_cpn = variants_get_list adt_def_cpn in
       let decoded_variants = List.map D.decode_variant_def variants_cpn in
@@ -5999,7 +6005,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                 ( def_loc,
                   name,
                   vf_tparams,
-                  Some
+                  Left
                     ( (*base_spec list*) [],
                       (*field list*) field_defs_no_zst,
                       (*instance_pred_decl list*) [],
@@ -6018,7 +6024,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                     ( def_loc,
                       Printf.sprintf "%s_slice%d" name idx,
                       vf_tparams,
-                      Some
+                      Left
                         ( (*base_spec list*) [],
                           (*field list*) fds,
                           (*instance_pred_decl list*) [],
@@ -6404,7 +6410,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                 | _ -> false
               ->
                 [
-                  gen_send_proof_oblig def_loc name tparams vf_tparams
+                  gen_send_proof_oblig def_loc name tparams vf_tparams_with_bounds
                 ]
             | _ -> []
           in
@@ -6415,7 +6421,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                    (fun variance -> variance <> VarianceRd.Invariant)
                    variances
             then
-              gen_own_variance_proof_oblig def_loc name lft_params tparams
+              gen_own_variance_proof_oblig def_loc name lft_params tparams_with_bounds
                 variances fds_no_zst
             else ([], [])
           in
@@ -6432,7 +6438,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                         None
                     | _ -> sync_preds)
               in
-              gen_share_proof_obligs def lft_params tparams send_tparams
+              gen_share_proof_obligs def lft_params tparams_with_bounds send_tparams
                 sync_preds
             else Ok []
           in
@@ -6490,7 +6496,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               else
                 [
                   (fun adt_defs ->
-                    gen_adt_drop_proof_oblig adt_defs def_loc name vf_tparams
+                    gen_adt_drop_proof_oblig adt_defs def_loc name vf_tparams_with_bounds
                       (List.map
                          (fun (fd : Mir.field_def_tr) ->
                            (fd.loc, fd.name, fd.ty))
@@ -6512,7 +6518,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                     ( true
                       (*indicates whether an axiom should be generated for this lemma*),
                       Some (mk_send_expr def_loc structTypeExpr)),
-                  lft_params @ tparams (*type parameters*),
+                  Ast.unbounded_tparams vf_tparams (*type parameters*),
                   None (*return type*),
                   qualified_derived_name "is_Send_%s_lemma" name,
                   [],
@@ -6573,7 +6579,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                     ( true
                       (*indicates whether an axiom should be generated for this lemma*),
                       Some (mk_sync_expr def_loc structTypeExpr)),
-                  lft_params @ tparams (*type parameters*),
+                  Ast.unbounded_tparams vf_tparams (*type parameters*),
                   None (*return type*),
                   qualified_derived_name "is_Sync_%s_lemma" name,
                   [],
@@ -6633,7 +6639,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                     ( true
                       (*indicates whether an axiom should be generated for this lemma*),
                       Some (mk_send_expr def_loc structTypeExpr)),
-                  lft_params @ tparams (*type parameters*),
+                  Ast.unbounded_tparams vf_tparams (*type parameters*),
                   None (*return type*),
                   qualified_derived_name "is_Send_%s_def" name,
                   [],
@@ -6680,7 +6686,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                     ( true
                       (*indicates whether an axiom should be generated for this lemma*),
                       Some (mk_sync_expr def_loc structTypeExpr)),
-                  lft_params @ tparams (*type parameters*),
+                  Ast.unbounded_tparams vf_tparams (*type parameters*),
                   None (*return type*),
                   qualified_derived_name "is_Sync_%s_def" name,
                   [],
@@ -6768,7 +6774,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   ( false
                     (*indicates whether an axiom should be generated for this lemma*),
                     None (*trigger*) ),
-                lft_params @ tparams (*type parameters*),
+                vf_tparams_with_bounds (*type parameters*),
                 None (*return type*),
                 qualified_derived_name "open_ref_init_perm_%s" name,
                 [
@@ -6921,7 +6927,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   ( false
                     (*indicates whether an axiom should be generated for this lemma*),
                     None (*trigger*) ),
-                lft_params @ tparams (*type parameters*),
+                vf_tparams_with_bounds (*type parameters*),
                 None (*return type*),
                 qualified_derived_name "init_ref_padding_%s" name,
                 [
@@ -7004,7 +7010,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   ( false
                     (*indicates whether an axiom should be generated for this lemma*),
                     None (*trigger*) ),
-                lft_params @ tparams (*type parameters*),
+                vf_tparams_with_bounds (*type parameters*),
                 None (*return type*),
                 qualified_derived_name "end_ref_padding_%s" name,
                 [
@@ -7112,7 +7118,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   ( false
                     (*indicates whether an axiom should be generated for this lemma*),
                     None (*trigger*) ),
-                lft_params @ tparams (*type parameters*),
+                vf_tparams_with_bounds (*type parameters*),
                 None (*return type*),
                 qualified_derived_name "close_ref_initialized_%s" name,
                 params,
@@ -7203,7 +7209,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   ( false
                     (*indicates whether an axiom should be generated for this lemma*),
                     None (*trigger*) ),
-                lft_params @ tparams (*type parameters*),
+                vf_tparams_with_bounds (*type parameters*),
                 None (*return type*),
                 qualified_derived_name "open_ref_initialized_%s" name,
                 [
@@ -7493,7 +7499,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                            | Ast.Func
                                ( lf,
                                  Regular,
-                                 "Self" :: tparams,
+                                 ("Self", _) :: tparams,
                                  rt,
                                  name,
                                  ps,
@@ -7640,7 +7646,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
 
   let rec generic_arg_of_type_expr tparams: Ast.type_expr -> D.generic_arg = function
     | Ast.IdentTypeExpr (_, None, x) ->
-      if List.mem x tparams then
+      if List.mem_assoc x tparams then
         if String.starts_with ~prefix:"'" x then
           { kind = Lifetime { id = x } }
         else
@@ -7710,12 +7716,12 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           match match_gen_arg_lists empty_match_env targs substs with
           | None ->
             if List.mem "specializer" Args.verbose_flags then
-              Printf.printf "INFO: Function specialization resolver: did not specialize call of %s::<%s> to %s::<%s>: generic arguments do not match <%s>\n" g_generic (String.concat ", " (List.map string_of_generic_arg substs)) g_specialized (String.concat ", " tparams) (String.concat ", " (List.map string_of_generic_arg targs));
+              Printf.printf "INFO: Function specialization resolver: did not specialize call of %s::<%s> to %s::<%s>: generic arguments do not match <%s>\n" g_generic (String.concat ", " (List.map string_of_generic_arg substs)) g_specialized (String.concat ", " (List.map fst tparams)) (String.concat ", " (List.map string_of_generic_arg targs));
             None
           | Some env ->
               let substs' : Vf_mir_decoder.generic_arg list =
                 tparams
-                |> List.map @@ fun x: D.generic_arg ->
+                |> List.map @@ fun (x, _): D.generic_arg ->
                     if String.starts_with ~prefix:"'" x then
                       { kind = Lifetime { id = List.assoc x env.lifetime_env } }
                     else

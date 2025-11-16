@@ -285,7 +285,8 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | Some (ftn, fttargs, args, params, openBraceLoc, ss, closeBraceLoc) ->
           begin match resolve Ghost (pn,ilist) l ftn functypemap with
             None -> static_error l "No such function type" None
-          | Some (ftn, (lft, gh, fttparams, rt, ftxmap, xmap, pre, post, terminates, ft_predfammaps, ft_typeid)) ->
+          | Some (ftn, (lft, gh, fttparams_with_bounds, rt, ftxmap, xmap, pre, post, terminates, ft_predfammaps, ft_typeid)) ->
+            let fttparams = List.map fst fttparams_with_bounds in
             reportUseSite DeclKind_FuncType lft l;
             begin match stmt_ghostness with
               Real -> if gh <> Real || (ftxmap = [] && fttparams = [] && dialect <> Some Rust) then static_error l "A produce_function_pointer_chunk statement may be used only for parameterized and type-parameterized function types." None
@@ -2472,11 +2473,11 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 if List.mem_assoc (p, i) predinsts then static_error l "Duplicate predicate family instance." None;
                 (lems, ((p, i), (l, predinst_tparams, xs, body))::predinsts, localpreds, localpredinsts, typedecls)
               end
-            | Func (l, Lemma(auto, trigger), tparams, rt, fn, xs, nonghost_callers_only, (functype_opt, None), contract_opt, terminates, Some body, is_virtual, overrides) ->
+            | Func (l, Lemma(auto, trigger), tparams_with_bounds, rt, fn, xs, nonghost_callers_only, (functype_opt, None), contract_opt, terminates, Some body, is_virtual, overrides) ->
               if List.mem_assoc fn funcmap || List.mem_assoc fn lems then static_error l "Duplicate function name." None;
               if List.mem_assoc fn tenv then static_error l "Local lemma name hides existing local variable name." None;
               let fterm = get_unique_var_symb fn (PtrType Void) in
-              ((fn, (auto, trigger, fterm, l, tparams, rt, xs, nonghost_callers_only, functype_opt, contract_opt, terminates, body))::lems, predinsts, localpreds, localpredinsts, typedecls)
+              ((fn, (auto, trigger, fterm, l, tparams_with_bounds, rt, xs, nonghost_callers_only, functype_opt, contract_opt, terminates, body))::lems, predinsts, localpreds, localpredinsts, typedecls)
             | TypeWithTypeidDecl (l, tn, e) ->
               if List.mem tn tparams || List.mem_assoc tn typedecls then static_error l "Duplicate type parameter name" None;
               let w = check_expr_t_pure tenv e voidPtrType in
@@ -2960,7 +2961,12 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     add_lemma_rule q_symb rule
 
-  and create_auto_lemma l (pn,ilist) g trigger pre (_, post) ps pre_tenv tparams' =
+  and create_auto_lemma l (pn,ilist) g trigger pre (_, post) ps pre_tenv tparams'_with_bounds =
+    tparams'_with_bounds |> List.iter begin fun (tparam, {sized}) ->
+      if is_rust && sized then
+        static_error l "Autolemmas with Sized-bounded type parameters are not yet supported." None
+    end;
+    let tparams' = List.map fst tparams'_with_bounds in
     match (pre, post) with
     (ExprAsn(_, pre), ExprAsn(_, post)) ->
       ctxt#begin_formal;
@@ -3191,10 +3197,15 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     end @@ fun sizemap tenv ghostenv h env ->
     verify_return_stmt (pn, ilist) [] [] tparams boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env false close_brace_loc None [] return_cont (fun _ _ _ -> assert false)
 
-  and verify_func pn ilist gs lems boxes predinstmap funcmap tparams env l k tparams' rt g ps nonghost_callers_only pre pre_tenv post terminates ss closeBraceLoc =
+  and verify_func pn ilist gs lems boxes predinstmap funcmap tparams env l k tparams'_with_bounds rt g ps nonghost_callers_only pre pre_tenv post terminates ss closeBraceLoc =
     if startswith g "vf__" then static_error l "The name of a user-defined function must not start with 'vf__'." None;
+    push_tparam_bounds_table ();
+    let tparams' = tparams'_with_bounds |> List.map @@ fun (x, {sized}) ->
+      if sized then
+        register_tparam_sized x;
+      x
+    in
     let tparams = tparams' @ tparams in
-    push_tparam_eqs_table ();
     let _ = push() in
     let tparam_typeid_env = tparams' |> flatmap @@ fun x ->
       if tparam_carries_typeid x then
@@ -3298,12 +3309,12 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       )
     in
     let _ = pop() in
-    pop_tparam_eqs_table ();
+    pop_tparam_bounds_table ();
     let _ = 
       (match k with
         Lemma(true, trigger) ->
         if rt <> None then static_error l "An autolemma must not return a value" None;
-        create_auto_lemma l (pn,ilist) g trigger pre post ps pre_tenv tparams'
+        create_auto_lemma l (pn,ilist) g trigger pre post ps pre_tenv tparams'_with_bounds
       | _ -> ()
     ) in
     gs', lems'
@@ -3500,7 +3511,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           (* reverse order compared to constructor order *)
           iter bases_rest @@ fun h env tenv ->
           with_context (Executing (h, env, base_spec_loc, "Executing base destructor")) @@ fun () ->
-          let this_addr = mk_field_ptr this_addr type_info base_offset in
+          let this_addr = mk_field_ptr this_addr type_info base_offset false in
           begin fun cont ->
             if is_polymorphic_struct base_name then
               (* the base is polymorphic, produce its vtype *)
@@ -3824,9 +3835,15 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let gs', lems' =
       record_fun_timing l g begin fun () ->
       let FuncInfo ([], fterm, l, k, tparams', rt, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, (_, (prototype_opt, prototypeImplementationProof_opt)), Some (Some (ss, closeBraceLoc)), is_virtual, overrides) = List.assoc g funcmap in
+      push_tparam_bounds_table ();
       begin match prototype_opt, prototypeImplementationProof_opt with
         None, None -> ()
-      | Some (k0, tparams0, rt0, ps0, nonghost_callers_only0, fenv, pre0, pre_tenv0, post0, terminates0), _ ->
+      | Some (k0, tparams0_with_bounds, rt0, ps0, nonghost_callers_only0, fenv, pre0, pre_tenv0, post0, terminates0), _ ->
+        let tparams0 = tparams0_with_bounds |> List.map @@ fun (x, {sized}) ->
+          if sized then
+            register_tparam_sized x;
+            x
+        in
         let prolog =
           match prototypeImplementationProof_opt with
             None ->
@@ -3889,9 +3906,10 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         in
         check_func_header_compat_core l ("Function '" ^ g ^ "'") "Function prototype implementation check" fenv
           (k, tparams', rt, ps, nonghost_callers_only, pre, post, [], terminates)
-          (k0, tparams0, rt0, ps0, nonghost_callers_only0, [], fenv, pre0, post0, [], terminates0)
+          (k0, tparams0_with_bounds, rt0, ps0, nonghost_callers_only0, [], fenv, pre0, post0, [], terminates0)
           prolog
       end;
+      pop_tparam_bounds_table ();
       let tparams = [] in
       let env = [] in
       verify_func pn ilist gs lems boxes predinstmap funcmap tparams env l k tparams' rt g ps nonghost_callers_only pre pre_tenv post terminates ss closeBraceLoc
@@ -4047,7 +4065,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         field_pred_map1, predfammap1, predinstmap1, typedefmap1, functypemap1, 
         funcmap1, boxmap, classmap1, interfmap1, classterms1, interfaceterms1, 
         abstract_types_map1, cxx_ctor_map1, cxx_dtor_map1, bases_constructed_map1, cxx_vtype_map1, cxx_inst_pred_map1,
-        typepreddeclmap1, typepreddefmap1
+        typepreddeclmap1, typepreddefmap1, struct_sizedness_map1
       )
     )
 

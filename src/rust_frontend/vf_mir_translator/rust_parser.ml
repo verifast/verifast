@@ -3,6 +3,7 @@ open Lexer
 open Ast
 open Parser
 open Big_int
+open Verifast0
 
 let expr_of_lft_param_expr loc e = CallExpr (loc, "lft_of", [], [], [LitPat (Typeid (loc, TypeExpr e))], Static)
 let expr_of_lft_param loc x = expr_of_lft_param_expr loc (match x with "'static" -> ManifestTypeExpr (loc, StaticLifetime) | _ -> IdentTypeExpr (loc, None, x))
@@ -739,9 +740,22 @@ and parse_type_params = function%parser
     | [ (_, PrimePrefixedIdent a) ] -> "'" ^ a)];
     (_, Kwd ">") ] -> tparams
 | [ ] -> []
+and parse_type_params_with_bounds = function%parser
+  [ (_, Kwd "<");
+    [%let tparams = rep_comma (function%parser
+      [ (_, Ident x);
+        [%let sized = function%parser
+           [ (_, Kwd ":"); (_, Kwd "?"); (_, Ident "Sized") ] -> false
+         | [ ] -> Verifast0.tparam_is_uppercase x
+        ]
+      ] -> (x, {sized})
+    | [ (_, PrimePrefixedIdent a) ] -> ("'" ^ a, {sized = false}))
+    ];
+    (_, Kwd ">") ] -> tparams
+| [ ] -> []
 
 and parse_func_header k = function%parser
-  [ (l, Ident g); [%let l, g = parse_simple_path_rest l g]; parse_type_params as tparams; (_, Kwd "("); [%let ps = rep_comma parse_param]; (_, Kwd ")");
+  [ (l, Ident g); [%let l, g = parse_simple_path_rest l g]; parse_type_params_with_bounds as tparams; (_, Kwd "("); [%let ps = rep_comma parse_param]; (_, Kwd ")");
     [%let rt = function%parser
       [ (_, Kwd "->"); parse_type as t ] -> Some t
     | [ ] -> if k = Regular then Some (StructTypeExpr (l, Some "std_tuple_0_", None, [], [])) else None
@@ -835,7 +849,7 @@ and parse_ghost_decl = function%parser
         (_, Kwd ";")
       ] ->
       [PredFamilyDecl (l, g, tparams, 0, List.map fst ps, inputParamCount, Inductiveness_Inductive)] @
-      (match body with None -> [] | Some body -> [PredFamilyInstanceDecl (l, g, tparams, [], ps, body)])
+      (match body with None -> [] | Some body -> [PredFamilyInstanceDecl (l, g, tparams_with_default_bounds_exprs tparams, [], ps, body)])
     ]
   ] -> ds
 | [ (l, Kwd "pred_fam"); (li, Ident g);
@@ -903,6 +917,7 @@ and parse_ghost_decl = function%parser
   ] ->
     let rt = Option.map (fun rt -> ConstructedTypeExpr (l, "fn_outcome", [rt])) rt in
     let post = mk_outcome_post l post unwind_post in
+    let tparams = tparams_with_default_bounds_exprs tparams in
     [FuncTypeDecl (l, Real, rt, ftn, tparams, ftps, ps, (pre, post, terminates))]
 | [ (l, Kwd "lem_type"); (lftn, Ident ftn); parse_type_params as tparams; (_, Kwd "("); [%let ftps = rep_comma parse_param]; (_, Kwd ")"); (_, Kwd "=");
   (_, Kwd "lem"); (_, Kwd "("); [%let ps = rep_comma parse_param]; (_, Kwd ")"); 
@@ -913,7 +928,7 @@ and parse_ghost_decl = function%parser
   (_, Kwd ";");
   (_, Kwd "req"); parse_asn as pre; (_, Kwd ";");
   (_, Kwd "ens"); parse_asn as post; (_, Kwd ";")
-] -> [FuncTypeDecl (l, Ghost, rt, ftn, tparams, ftps, ps, (pre, ("result", post), false))]
+] -> [FuncTypeDecl (l, Ghost, rt, ftn, tparams_with_default_bounds_exprs tparams, ftps, ps, (pre, ("result", post), false))]
 | [ (l, Kwd "abstract_type"); (_, Ident tn); (_, Kwd ";") ] -> [AbstractTypeDecl (l, tn)]
 | [ (l, Kwd "type_pred_decl"); (_, Kwd "<"); (_, Kwd "Self"); (_, Kwd ">"); (_, Kwd "."); (_, Ident predName); (_, Kwd ":"); parse_type as te; (_, Kwd ";") ] ->
   [TypePredDecl (l, te, "Self", predName)]
@@ -1017,7 +1032,7 @@ let rec parse_impl_rest l tparams = function%parser
     | Some tp ->
       ds |> List.concat_map begin function
         Func (l, k, tparams', rt, g, ps, nonghost_callers_only, ft, co, terminates, body, isVirtual, overrides) ->
-          [FuncSpecializationDecl (l, x ^ "::" ^ g, false, g, tparams', tp::targs @ List.map (fun x -> IdentTypeExpr (lx, None, x)) tparams')]
+          [FuncSpecializationDecl (l, x ^ "::" ^ g, false, g, tparams', tp::targs @ List.map (fun (x, _) -> IdentTypeExpr (lx, None, x)) tparams')]
       | _ -> []
     end
   in
@@ -1035,13 +1050,13 @@ and parse_decl = function%parser
        if tparams <> [x] then raise (ParseException (l, "`impl<Ts> for T = Type` where Ts is not exactly T is not yet supported"));
        ds |> List.flatten |> List.concat_map begin function
            Func (l, k, tparams', rt, g, ps, nonghost_callers_only, ft, co, terminates, body, isVirtual, overrides) ->
-           if tparams' <> [x] then raise (ParseException (l, "Inside an `impl<T> for T = Type` block, each function must have exactly one type parameter named T"));
+           if tparams' <> [x, {sized=true}] then raise (ParseException (l, "Inside an `impl<T> for T = Type` block, each function must have exactly one type parameter named T"));
            let g_specialized = g ^ "::<" ^ string_of_type_expr tp ^ ">" in
            [Func (l, k, [], rt, g_specialized, ps, nonghost_callers_only, ft, co, terminates, body, isVirtual, overrides);
             FuncSpecializationDecl (l, g, true, g_specialized, [], [tp])]
          | _ -> raise (ParseException (l, "Only function declarations are supported in this form of impl"))
          end
-     | [ [%let ds = parse_impl_rest l tparams ] ] -> ds
+     | [ [%let ds = parse_impl_rest l (tparams_with_default_bounds_exprs tparams) ] ] -> ds
     ]
   ] -> ds
 | [ (l, Kwd "trait"); (lx, Ident x); parse_type_params as tparams; (_, Kwd "{");
@@ -1050,7 +1065,8 @@ and parse_decl = function%parser
   ] ->
   let prefix = x ^ "::" in
   let ds = ds |> List.flatten |> List.map (prefix_decl_name l prefix) in
-  let ds = List.map (decl_add_type_params l ("Self"::tparams)) ds in
+  let tparams = tparams_with_default_bounds_exprs tparams in
+  let ds = List.map (decl_add_type_params l (("Self", {sized=false})::tparams)) ds in
   ds
 | [ (l, Kwd "mod"); (lx, Ident x); (_, Kwd "{");
     [%let ds = rep parse_decl];
@@ -1068,27 +1084,51 @@ and parse_decl = function%parser
 | [ (_, Kwd "unsafe"); (l, Kwd "fn"); [%let d = parse_func_rest Regular] ] -> [d]
 | [ (_, Kwd "struct"); (l, Ident sn); parse_type_params as tparams;
     [%let body = function%parser
-       [ (_, Kwd ";") ] -> None
+       [ (_, Kwd ";") ] -> Either.Right (Either.Left true)
      | [ (_, Kwd "{"); [%let fds = rep_comma_ parse_struct_field]; (_, Kwd "}") ] ->
-       Some ([], fds, [], false)
+       Left ([], fds, [], false)
      | [ (_, Kwd "("); [%let tys = rep_comma_ parse_type]; (_, Kwd ")") ] ->
        let fds = List.mapi (fun i t -> Field (l, Real, t, string_of_int i, Instance, Public, false, None)) tys in
-       Some ([], fds, [], false)
+       Left ([], fds, [], false)
+     | [ (_, Kwd ":");
+         [%let sizedness = function%parser
+            [ (_, Kwd "!"); (_, Ident "Sized"); (_, Kwd ";") ] -> Either.Left false
+          | [ (_, Kwd "?"); (_, Ident "Sized"); (_, Kwd ";");
+              (limpl, Kwd "impl"); parse_type_params as impl_tparams; (_, Ident "Sized"); (_, Kwd "for"); parse_type as self_ty;
+              (_, Kwd "where"); (lx, Ident x); (_, Kwd ":"); (_, Ident "Sized"); (_, Kwd ";") ] ->
+            if List.length impl_tparams <> List.length tparams then raise (ParseException (limpl, "The number of impl type parameters must match the number of struct type parameters"));
+            begin match Util.index_of x impl_tparams 0 with
+              None -> raise (ParseException (lx, "No such type parameter"))
+            | Some i ->
+              match self_ty with
+                ConstructedTypeExpr (_, self_ty_name, self_ty_targs) ->
+                  if self_ty_name <> sn then raise (ParseException (type_expr_loc self_ty, "The self type must be the struct being defined"));
+                  let self_ty_targ_names = self_ty_targs |> List.map @@ function
+                    IdentTypeExpr (_, None, targ_name) -> targ_name
+                  | te -> raise (ParseException (type_expr_loc te, "Type parameter name expected"))
+                  in
+                  if self_ty_targ_names <> impl_tparams then raise (ParseException (type_expr_loc self_ty, "The type arguments in the self type must match the impl type parameters"));
+                  Either.Right i
+              | _ -> raise (ParseException (type_expr_loc self_ty, "The self type must be the struct being defined"))
+            end
+         ]
+       ] -> Either.Right sizedness
     ]
   ] ->
   let targs = List.map (fun x -> IdentTypeExpr (l, None, x)) tparams in
   let structTypeExpr = StructTypeExpr (l, Some sn, None, [], targs) in
   let own_paramTypes = [IdentTypeExpr (l, None, "thread_id_t"); structTypeExpr] in
   let fbc_paramTypes = [IdentTypeExpr (l, None, "thread_id_t"), "t"; PtrTypeExpr (l, structTypeExpr), "l"] in
+  let func_tparams = tparams_with_default_bounds_exprs tparams in
   [
     Struct (l, sn, tparams, body, []);
     TypedefDecl (l, structTypeExpr, sn, tparams);
     if tparams = [] then
       PredFamilyDecl (l, sn ^ "_own", [], 0, own_paramTypes, None, Inductiveness_Inductive)
     else
-      Func (l, Fixpoint, tparams, Some (PredTypeExpr (l, own_paramTypes, None)), sn ^ "_own", [], false, (None, None), None, false, None, false, []);
+      Func (l, Fixpoint, func_tparams, Some (PredTypeExpr (l, own_paramTypes, None)), sn ^ "_own", [], false, (None, None), None, false, None, false, []);
     TypePredDef (l, tparams, structTypeExpr, "own", Left (l, sn ^ "_own"));
-    Func (l, Fixpoint, tparams, Some (PredTypeExpr (l, [], None)), sn ^ "_full_borrow_content", fbc_paramTypes, false, (None, None), None, false, None, false, []);
+    Func (l, Fixpoint, func_tparams, Some (PredTypeExpr (l, [], None)), sn ^ "_full_borrow_content", fbc_paramTypes, false, (None, None), None, false, None, false, []);
     TypePredDef (l, tparams, structTypeExpr, "full_borrow_content", Left (l, sn ^ "_full_borrow_content"))
   ]
 | [ (_, Ident "union"); (l, Ident un); (_, Kwd "{"); (_, Kwd "}") ] -> [ Union (l, un, Some []) ]

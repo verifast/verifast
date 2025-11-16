@@ -70,13 +70,41 @@ lem div_rem_nonneg_unique(D: i32, d: i32, q: i32, r: i32);
 
 inductive pointer_provenance =
     pointer_provenance_ctor(i32); // Do not rely on this definition; it is subject to change.
-inductive pointer = pointer_ctor(provenance: pointer_provenance, address: usize);
+inductive pointer_metadata =
+    pointer_metadata_ctor(i32); // Do not rely on this definition; it is subject to change.
+inductive pointer = pointer_ctor(provenance: pointer_provenance, address: usize, metadata: pointer_metadata);
+
+fix pointer_metadata_none() -> pointer_metadata;
+
+fix strip_pointer_metadata(p: pointer) -> pointer {
+    pointer_ctor(p.provenance, p.address, pointer_metadata_none)
+}
+
+// - If from_typeid and to_typeid have the same kind of metadata (e.g. they are both slice-based types), this preserves it
+// - If to_typeid has no metadata, this strips it
+// - Otherwise, the result is unspecified
+fix cast_pointer_metadata(from_typeid: *_, to_typeid: *_, metadata: pointer_metadata) -> pointer_metadata;
+
+fix pointer_cast(from_typeid: *_, to_typeid: *_, p: pointer) -> pointer {
+    pointer_ctor(p.provenance, p.address, cast_pointer_metadata(from_typeid, to_typeid, p.metadata))
+}
+
+fix ptr_cast<T, U>(p: *T) -> *U { pointer_cast(typeid(T), typeid(U), p as pointer) as *U }
 
 fix null_pointer_provenance() -> pointer_provenance;
-fix null_pointer() -> pointer { pointer_ctor(null_pointer_provenance, 0) }
+fix null_pointer() -> pointer { pointer_ctor(null_pointer_provenance, 0, pointer_metadata_none) }
+
+// Retain only the data that is definitely used for pointer equality tests
+fix strip_pointer_provenance(p: pointer) -> pointer {
+    pointer_ctor(null_pointer_provenance, p.address, p.metadata)
+}
 
 fix ptr_add(p: pointer, offset: i32) -> pointer {
-    pointer_ctor(p.provenance, p.address + offset)
+    pointer_ctor(p.provenance, p.address + offset, p.metadata)
+}
+
+fix ptr_add_strip_metadata(p: pointer, offset: i32) -> pointer {
+    pointer_ctor(p.provenance, p.address + offset, pointer_metadata_none)
 }
 
 fix field_ptr_provenance(p: pointer, structTypeid: *_, fieldOffset: i32) -> pointer_provenance;
@@ -85,10 +113,14 @@ fix field_ptr_provenance_parent(pr: pointer_provenance, fieldOffset: i32) -> poi
 lem_auto(field_ptr_provenance(p, structTypeid, fieldOffset)) field_ptr_provenance_injective(p: pointer, structTypeid: *_, fieldOffset: i32);
     req true;
     ens field_ptr_provenance_parent(field_ptr_provenance(p, structTypeid, fieldOffset), fieldOffset) == p;
-    
+
 fix field_ptr(p: pointer, structTypeid: *_, fieldOffset: i32) -> pointer {
-    pointer_ctor(field_ptr_provenance(p, structTypeid, fieldOffset), p.address + fieldOffset)
-}   
+    pointer_ctor(field_ptr_provenance(p, structTypeid, fieldOffset), p.address + fieldOffset, pointer_metadata_none)
+}
+
+fix last_field_ptr(p: pointer, structTypeid: *_, fieldOffset: i32) -> pointer {
+    pointer_ctor(field_ptr_provenance(p, structTypeid, fieldOffset), p.address + fieldOffset, p.metadata)
+}
 
 fix ptr_provenance_min_addr(pr: pointer_provenance) -> usize;
 fix ptr_provenance_max_addr(pr: pointer_provenance) -> usize;
@@ -137,6 +169,10 @@ lem_auto(pointer_within_limits(field_ptr(p as pointer, structTypeid, fieldOffset
     req true;
     ens field_pointer_within_limits(p, fieldOffset) == pointer_within_limits(field_ptr(p as pointer, structTypeid, fieldOffset) as *_);
 
+lem_auto(pointer_within_limits(last_field_ptr(p as pointer, structTypeid, fieldOffset) as *_)) last_field_pointer_within_limits_def(p: *_, structTypeid: *_, fieldOffset: i32);
+    req true;
+    ens field_pointer_within_limits(p, fieldOffset) == pointer_within_limits(last_field_ptr(p as pointer, structTypeid, fieldOffset) as *_);
+
 lem_auto(field_pointer_within_limits(field_ptr(p as pointer, structTypeid, fieldOffset) as *_, 0)) first_field_pointer_within_limits_elim(p: *_, structTypeid: *_, fieldOffset: i32);
     req true;
     ens field_pointer_within_limits(field_ptr(p as pointer, structTypeid, fieldOffset) as *_, 0) == field_pointer_within_limits(p, fieldOffset);
@@ -156,7 +192,7 @@ fix transmute_uint<T>(n: u128) -> T;
 fix u8s__of<T>(v: T) -> list<option<u8>>;
 fix of_u8s_<T>(cs: list<option<u8>>) -> T;
 
-lem_auto(of_u8s_::<T>(u8s__of::<T>(v as T))) of_u8s__u8s__of<T>(v: T);
+lem_auto(of_u8s_::<T>(u8s__of::<T>(v as T))) of_u8s__u8s__of<T: ?Sized>(v: T);
 req true;
 ens of_u8s_::<T>(u8s__of::<T>(v)) == v;
 
@@ -197,11 +233,11 @@ pred array<T>(p: *T, count: usize; values: list<T>) =
         *p |-> ?value &*& array(p + 1, count - 1, ?values0) &*& values == cons(value, values0)
     };
 
-lem_auto array__inv<T>();
+lem_auto array__inv<T: ?Sized>();
     req [?f]array_::<T>(?p, ?count, ?elems);
     ens [f]array_::<T>(p, count, elems) &*& count == length(elems) &*& count * std::mem::size_of::<T>() <= isize::MAX &*& pointer_within_limits(p) == true &*& pointer_within_limits(p + count) == true;
     
-lem_auto array_inv<T>();
+lem_auto array_inv<T: ?Sized>();
     req [?f]array::<T>(?p, ?count, ?elems);
     ens [f]array::<T>(p, count, elems) &*& count == length(elems) &*& count * std::mem::size_of::<T>() <= isize::MAX &*& pointer_within_limits(p) == true &*& pointer_within_limits(p + count) == true;
 

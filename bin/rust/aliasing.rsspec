@@ -8,7 +8,7 @@ fix is_shared_ref_provenance(prov: pointer_provenance) -> bool;
 fix is_shared_ref(x: *_) -> bool { is_shared_ref_provenance((x as pointer).provenance) }
 
 fix ref_origin_provenance(prov: pointer_provenance) -> pointer_provenance;
-fix ref_origin<t>(p: *t) -> *t { pointer_ctor(ref_origin_provenance((p as pointer).provenance), (p as pointer).address) as *t }
+fix ref_origin<t>(p: *t) -> *t { pointer_ctor(ref_origin_provenance((p as pointer).provenance), (p as pointer).address, (p as pointer).metadata) as *t }
 
 lem_auto(ptr_provenance_min_addr(ref_origin_provenance(prov))) ref_origin_min_addr(prov: pointer_provenance);
     req true;
@@ -27,7 +27,7 @@ pred ref_mut_end_token<T>(p: *T; x: *T);
 pred ref_init_perm<T>(p: *T; x: *T);
 pred ref_padding_init_perm<T>(p: *T; x: *T);
 
-lem_auto ref_init_perm_inv<T>();
+lem_auto ref_init_perm_inv<T: ?Sized>();
     req ref_init_perm::<T>(?p, ?x);
     ens ref_init_perm::<T>(p, x) &*& ref_origin(p) == ref_origin(x);
 

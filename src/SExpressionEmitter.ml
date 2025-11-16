@@ -926,7 +926,7 @@ and sexpr_of_decl (decl : decl) : sexpression =
     | Struct (loc,
               name,
               tparams,
-              None,
+              Right sizedness,
               attrs) ->
         build_list [ Symbol "declare-struct"
                    ; Symbol name; List (List.map (fun x -> Symbol x) tparams) ]
@@ -934,7 +934,7 @@ and sexpr_of_decl (decl : decl) : sexpression =
     | Struct (loc,
               name,
               tparams,
-              Some (bases, fields, inst_preds, polymorphic),
+              Left (bases, fields, inst_preds, polymorphic),
               attrs) ->
         build_list [ Symbol "define-struct"
                    ; Symbol name; List (List.map (fun x -> Symbol x) tparams) ]
@@ -977,7 +977,7 @@ and sexpr_of_decl (decl : decl) : sexpression =
             ; "postcondition", List [ Symbol result_var; sexpr_of_pred post ] ]
       in
       let kw = List.concat [ [ "kind", sexpr_of_func_kind kind
-                             ; "type-parameters", List (List.map symbol tparams )
+                             ; "type-parameters", List (List.map symbol (List.map fst tparams) )
                              ; "return-type", sexpr_of_type_expr_option rtype
                              ; "parameters", List (List.map sexpr_of_arg params)
                              ; "is_virtual", sexpr_of_bool is_virtual ]
@@ -1011,7 +1011,7 @@ and sexpr_of_decl (decl : decl) : sexpression =
       in
       build_list [ Symbol "declare-predicate-family-instance"
                  ; Symbol name ]
-                 [ "type-parameters", List (List.map symbol tparams)
+                 [ "type-parameters", List (List.map symbol (List.map fst tparams))
                  ; "parameters", List (List.map arg_pair params)
                  ; "predicate", sexpr_of_pred predicate ]
     | ImportModuleDecl (loc, name) ->
