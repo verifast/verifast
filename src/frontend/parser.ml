@@ -725,7 +725,7 @@ and
         None -> []
         | Some x -> x
     in
-    (noneToEmptyList functiontypetypeparams, noneToEmptyList functiontypeparams, params)
+    (unbounded_tparams (noneToEmptyList functiontypetypeparams), noneToEmptyList functiontypeparams, params)
 | [ parse_paramlist as params ] -> ([], [], params)
 and
   parse_ignore_inline = function%parser
@@ -775,18 +775,18 @@ and
         end
         ];
         [%l ds = function%parser
-          | [ (_, Kwd ";") ] -> [Struct (l, s, reinterpret_targs_as_tparams targs, Some ([], fs, [], false), attrs)]
+          | [ (_, Kwd ";") ] -> [Struct (l, s, reinterpret_targs_as_tparams targs, Left ([], fs, [], false), attrs)]
           | [
               [%l t = parse_type_suffix (StructTypeExpr (l, Some s, None, [], targs))]; 
               [%l d = parse_func_rest Regular (Some t)]
             ] ->
             [
-              Struct (l, s, reinterpret_targs_as_tparams targs, Some ([], fs, [], false), attrs);
+              Struct (l, s, reinterpret_targs_as_tparams targs, Left ([], fs, [], false), attrs);
               d
             ]
         ]
       ] -> ds
-    | [ (_, Kwd ";") ] -> [Struct (l, s, reinterpret_targs_as_tparams targs, None, [])]
+    | [ (_, Kwd ";") ] -> [Struct (l, s, reinterpret_targs_as_tparams targs, Right (Left true), [])]
     | [ [%l t = parse_type_suffix (StructTypeExpr (l, Some s, None, [], targs))]; 
         [%l d = parse_func_rest Regular (Some t)]
       ] -> [d]
@@ -827,13 +827,13 @@ and
             [EnumDecl (l, en, body); TypedefDecl (l, EnumTypeExpr (le, Some en, None), g, [])]
           | Some (StructTypeExpr (ls, s_opt, Some (tparams, fs), attrs, targs)) ->
             let s = match s_opt with None -> g | Some s -> s in
-            [Struct (l, s, tparams, Some ([], fs, [], false), attrs); TypedefDecl (l, StructTypeExpr (ls, Some s, None, attrs, targs), g, [])]
+            [Struct (l, s, tparams, Left ([], fs, [], false), attrs); TypedefDecl (l, StructTypeExpr (ls, Some s, None, attrs, targs), g, [])]
           | Some (UnionTypeExpr (ls, u_opt, Some fs)) ->
             let u = match u_opt with None -> g | Some u -> u in
             [Union (l, u, Some fs); TypedefDecl (l, UnionTypeExpr (ls, Some u, None), g, [])]
           | Some PtrTypeExpr (lp, (StructTypeExpr (ls, s_opt, Some (tparams, fs), attrs, targs))) ->
             let s = match s_opt with None -> g | Some s -> s in
-            [Struct (l, s, tparams, Some ([], fs, [], false), attrs); TypedefDecl (l, PtrTypeExpr (lp, StructTypeExpr (ls, Some s, None, attrs, targs)), g, [])]
+            [Struct (l, s, tparams, Left ([], fs, [], false), attrs); TypedefDecl (l, PtrTypeExpr (lp, StructTypeExpr (ls, Some s, None, attrs, targs)), g, [])]
           | Some te ->
             [TypedefDecl (l, te, g, [])]
           end
@@ -967,7 +967,7 @@ and
   ] ->
   pop_typedef_scope ();
   [PredFamilyDecl (l, g, tparams, 0, List.map (fun (t, p) -> t) ps, inputParamCount, inductiveness)] @
-  (match body with None -> [] | Some body -> [PredFamilyInstanceDecl (l, g, tparams, [], ps, body)])
+  (match body with None -> [] | Some body -> [PredFamilyInstanceDecl (l, g, unbounded_tparams tparams, [], ps, body)])
 and
   parse_pure_decl = function%parser
 | [ (l, Kwd "inductive"); 
@@ -1047,7 +1047,7 @@ and
     [%l (ftps, ps) = parse_functype_paramlists]; 
     (_, Kwd ";"); 
     [%l (pre, post, terminates) = parse_spec] 
-  ] -> [FuncTypeDecl (l, Ghost, rt, g, tps, ftps, ps, (pre, ("result", post), terminates))]
+  ] -> [FuncTypeDecl (l, Ghost, rt, g, unbounded_tparams tps, ftps, ps, (pre, ("result", post), terminates))]
 | [ (l, Kwd "unloadable_module"); 
     (_, Kwd ";") 
   ] -> [UnloadableModuleDecl l]
@@ -1095,6 +1095,7 @@ and
       | Var (_, g') when g' = g -> true
       | _ -> expr_fold_open refers_to_g state e
     in
+    let func_tparams = unbounded_tparams tparams in
     begin match body with
       Some ([ReturnStmt (_, Some bodyExpr)], _) when refers_to_g false bodyExpr ->
       let rt =
@@ -1116,18 +1117,18 @@ and
       let gmeasure = g ^ "__measure" in
       let call g args = CallExpr (l, g, [], [], List.map (fun e -> LitPat e) args, Static) in
       [
-        Func (l, Fixpoint, tparams, Some rt, gdef, (PureFuncTypeExpr (l, List.map (fun (tp, x) -> (tp, None)) ps @ [(rt, None)], None), g) :: ps, false, (None, None), None, false, body, false, []);
+        Func (l, Fixpoint, func_tparams, Some rt, gdef, (PureFuncTypeExpr (l, List.map (fun (tp, x) -> (tp, None)) ps @ [(rt, None)], None), g) :: ps, false, (None, None), None, false, body, false, []);
         Inductive (l, iargs, tparams, [Ctor (l, iargs, List.map (fun (t, x) -> (x, t)) ps)]);
-        Func (l, Fixpoint, tparams, Some rt, g_uncurry, (PureFuncTypeExpr (l, [iargsType, None; rt, None], None), g) :: ps, false, (None, None), None, false,
+        Func (l, Fixpoint, func_tparams, Some rt, g_uncurry, (PureFuncTypeExpr (l, [iargsType, None; rt, None], None), g) :: ps, false, (None, None), None, false,
           Some ([ReturnStmt (l, Some (call g [call iargs (List.map (fun (t, x) -> Var (l, x)) ps)]))], l), false, []);
-        Func (l, Fixpoint, tparams, Some rt, gdef_curried, [PureFuncTypeExpr (l, [iargsType, None; rt, None], None), g; iargsType, "__args"], false, (None, None), None, false,
+        Func (l, Fixpoint, func_tparams, Some rt, gdef_curried, [PureFuncTypeExpr (l, [iargsType, None; rt, None], None), g; iargsType, "__args"], false, (None, None), None, false,
           Some ([SwitchStmt (l, Var (l, "__args"), [SwitchStmtClause (l, call iargs (List.map (fun (t, x) -> Var (l, x)) ps),
             [ReturnStmt (l, Some (call gdef ([ExprCallExpr (l, Var (l, g_uncurry), [LitPat (Var (l, g))])] @ List.map (fun (t, x) -> Var (l, x)) ps)))])])], l), false, []);
-        Func (l, Fixpoint, tparams, Some (ManifestTypeExpr (l, intType)), gmeasure, [iargsType, "__args"], false, (None, None), None, false,
+        Func (l, Fixpoint, func_tparams, Some (ManifestTypeExpr (l, intType)), gmeasure, [iargsType, "__args"], false, (None, None), None, false,
           Some ([SwitchStmt (l, Var (l, "__args"), [SwitchStmtClause (l, call iargs (List.map (fun (t, x) -> Var (l, x)) ps),
             [ReturnStmt (l, Some measure)])])], l), false, []);
-        Func (l, Fixpoint, tparams, Some rt, g, ps, false, (None, None), None, false, Some ([ReturnStmt (l, Some (call "fix" [Var (l, gdef_curried); Var (l, gmeasure); call iargs (List.map (fun (t, x) -> Var (l, x)) ps)]))], l), false, []);
-        Func (l, Lemma (kwd = "fixpoint_auto", None), tparams, None, g ^ "_def", ps, false, (None, None),
+        Func (l, Fixpoint, func_tparams, Some rt, g, ps, false, (None, None), None, false, Some ([ReturnStmt (l, Some (call "fix" [Var (l, gdef_curried); Var (l, gmeasure); call iargs (List.map (fun (t, x) -> Var (l, x)) ps)]))], l), false, []);
+        Func (l, Lemma (kwd = "fixpoint_auto", None), func_tparams, None, g ^ "_def", ps, false, (None, None),
           Some (Operation (l, Le, [IntLit (l, zero_big_int, true, false, NoLSuffix); measure]), ("result", Operation (l, Eq, [call g (List.map (fun (t, x) -> Var (l, x)) ps); bodyExpr]))),
           false,
           Some ([
@@ -1144,7 +1145,7 @@ and
       ]
     | _ ->
       if kwd = "fixpoint_auto" then raise (ParseException (l, "Keyword 'fixpoint_auto' does not make sense here because this type of fixpoint definition is always unfolded automatically"));
-      [Func (l, Fixpoint, tparams, rt, g, ps, false, (None, None), None, false, body, false, [])]
+      [Func (l, Fixpoint, func_tparams, rt, g, ps, false, (None, None), None, false, body, false, [])]
     end
 | [ (l, Kwd "type_pred_decl"); parse_type as te; (_, Kwd "<"); (_, Ident selfTypeName); (_, Kwd ">"); (_, Kwd "."); (_, Ident predName); (_, Kwd ";") ] ->
   [TypePredDecl (l, te, selfTypeName, predName)]
@@ -1269,12 +1270,12 @@ and
         f = function%parser
         | [ (_, Kwd ";"); 
             [%l (nonghost_callers_only, ft, co, terminates) = parse_spec_clauses] 
-          ] -> Func (l, k, tparams, t, g, ps, nonghost_callers_only, (ft, None), Option.map (fun (pre, post) -> (pre, ("result", post))) co, terminates, None, false, [])
+          ] -> Func (l, k, unbounded_tparams tparams, t, g, ps, nonghost_callers_only, (ft, None), Option.map (fun (pre, post) -> (pre, ("result", post))) co, terminates, None, false, [])
         | [ [%l (nonghost_callers_only, ft, co, terminates) = parse_spec_clauses]; 
             (_, Kwd "{"); 
             parse_stmts as ss; 
             (closeBraceLoc, Kwd "}") 
-          ] -> Func (l, k, tparams, t, g, ps, nonghost_callers_only, (ft, None), Option.map (fun (pre, post) -> (pre, ("result", post))) co, terminates, Some (ss, closeBraceLoc), false, [])
+          ] -> Func (l, k, unbounded_tparams tparams, t, g, ps, nonghost_callers_only, (ft, None), Option.map (fun (pre, post) -> (pre, ("result", post))) co, terminates, Some (ss, closeBraceLoc), false, [])
         ]
       ] -> pop_typedef_scope (); f
     | [ [%l () = (fun s -> if k = Regular && tparams = [] && t <> None then () else raise Stream.Failure)];

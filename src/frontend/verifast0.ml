@@ -56,7 +56,12 @@ let get_callers (ctxts: 'termnode context list): loc option list =
 let get_root_caller ctxts = match List.rev (get_callers ctxts) with Some l::_ -> Some l | _ -> None
 
 let tparam_is_uppercase tparam =
+  String.length tparam > 0 && match tparam.[0] with 'A'..'Z' -> true | _ -> false
+let tparam_is_uppercase_or_lifetime tparam =
   String.length tparam > 0 && match tparam.[0] with 'A'..'Z'|'\'' -> true | _ -> false
+
+let tparams_with_default_bounds_exprs tparams =
+  tparams |> List.map (fun x -> (x, {sized = tparam_is_uppercase x}))
 
 let rec c_string_of_type t =
   match t with
@@ -255,11 +260,7 @@ let rec rust_string_of_type t =
   | AnyType -> "any"
   | RealTypeParam x -> "<" ^ x ^ ">"
   | GhostTypeParam x -> x
-  | GhostTypeParamWithEqs (x, eqs) ->
-    let string_of_eq ((traitName, traitArgs, assocTypeName), t) =
-      Printf.sprintf "%s<%s>" traitName (String.concat ", " (List.map rust_string_of_type traitArgs @ [Printf.sprintf "%s = %s" assocTypeName (rust_string_of_type t)]))
-    in
-    x ^ ": " ^ String.concat ", " (List.map string_of_eq eqs)
+  | BoundedGhostTypeParam (x, _) -> x
   | InferredRealType x -> x ^ "?"
   | InferredType (_, t) -> begin match !t with EqConstraint t -> rust_string_of_type t | _ -> "?" end
   | ArrayType(t) -> (rust_string_of_type t) ^ "[]"

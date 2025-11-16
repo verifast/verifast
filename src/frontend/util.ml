@@ -318,6 +318,25 @@ let remove_assoc_opt x xys =
   let value = List.assoc_opt x xys in
   value, List.remove_assoc x xys
 
+let rec assoc_with_is_last x xys =
+  match xys with
+    [] -> raise Not_found
+  | [(x', y)] when x' = x -> (y, true)
+  | (x', y)::xys when x' = x -> (y, false)
+  | _::xys -> assoc_with_is_last x xys
+
+let rec iter_with_is_last f xs =
+  match xs with
+    [] -> ()
+  | [x] -> f x true
+  | x::xs -> f x false; iter_with_is_last f xs
+
+let rec map_with_is_last f xs =
+  match xs with
+    [] -> []
+  | [x] -> [f x true]
+  | x::xs -> f x false::map_with_is_last f xs
+
 exception IsNone
 
 let get x = 

@@ -64,9 +64,10 @@ let rec of_type = function
 | RealTypeParam x -> C ("RealTypeParam", [S x])
 | InferredRealType x -> C ("InferredRealType", [S x])
 | GhostTypeParam x -> C ("GhostTypeParam", [S x])
-| GhostTypeParamWithEqs (x, eqs) ->
-  C ("GhostTypeParamWithEqs", [
+| BoundedGhostTypeParam (x, {sized; eqs}) ->
+  C ("BoundedGhostTypeParam", [
     S x;
+    B sized;
     of_list (fun ((traitName, traitArgs, assocTypeName), tp) -> T [T [S traitName; of_list of_type traitArgs; S assocTypeName]; of_type tp]) eqs
   ])
 | InferredType (o, r) -> C ("InferredType", [I (Oo.id o); of_ref of_inferred_type_state r])
@@ -238,6 +239,10 @@ let rec of_type_expr = function
   ])
 | InferredTypeExpr l ->
   C ("InferredTypeExpr", [of_loc l])
+and of_tparam_bounds_expr {sized} =
+  T [
+    B sized;
+  ]
 and of_operator = function
   MinValue t -> C ("MinValue", [of_type t])
 | MaxValue t -> C ("MaxValue", [of_type t])
@@ -929,14 +934,21 @@ and of_decl = function
     of_loc l;
     S sn;
     of_list s tparams;
-    of_option begin fun (bases, fds, preds, isPoly) ->
-      T [
+    begin match body with
+    | Left (bases, fds, preds, isPoly) ->
+      C ("Left", [
         of_list of_base_spec bases;
         of_list of_field fds;
         of_list of_instance_pred_decl preds;
         B isPoly
-      ]
-    end body;
+      ])
+    | Right sizedness ->
+      C ("Right", [
+        match sizedness with
+        | Left b -> C ("Left", [B b])
+        | Right i -> C ("Right", [I i])
+      ])
+    end;
     of_list of_struct_attr attrs
   ])
 | Union (l, un, fds) ->
@@ -967,7 +979,7 @@ and of_decl = function
   C ("PredFamilyInstanceDecl", [
     of_loc l;
     S p;
-    of_list s tparams;
+    of_list (fun (x, bounds) -> T [S x; of_tparam_bounds_expr bounds]) tparams;
     of_list (fun (l, x) -> T [of_loc l; S x]) indices;
     of_params params;
     of_expr body
@@ -986,7 +998,7 @@ and of_decl = function
   C ("Func", [
     of_loc l;
     of_func_kind k;
-    of_list s tparams;
+    of_list (fun (x, bounds) -> T [S x; of_tparam_bounds_expr bounds]) tparams;
     of_option of_type_expr rt;
     S g;
     of_params xs;
@@ -1020,7 +1032,7 @@ and of_decl = function
     of_ghostness gh;
     of_option of_type_expr rt;
     S ftn;
-    of_list s tparams;
+    of_list (fun (x, bounds) -> T [S x; of_tparam_bounds_expr bounds]) tparams;
     of_list (fun (t, x) -> T [of_type_expr t; S x]) ftparams;
     of_list (fun (t, x) -> T [of_type_expr t; S x]) params;
     T [

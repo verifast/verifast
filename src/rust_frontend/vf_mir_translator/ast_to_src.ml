@@ -17,9 +17,11 @@ let string_of_val_targs = function
   [] -> ""
 | ts -> Printf.sprintf "::<%s>" (String.concat ", " (List.map string_of_type_expr ts))
 
+let string_of_tparam (x, bounds) = x
+
 let string_of_tparams = function
   [] -> ""
-| tps -> "<" ^ String.concat ", " tps ^ ">"
+| tps -> "<" ^ String.concat ", " (List.map string_of_tparam tps) ^ ">"
 
 let string_of_params ps =
   String.concat ", " (List.map (fun (tp, x) -> Printf.sprintf "%s: %s" x (string_of_type_expr tp)) ps)

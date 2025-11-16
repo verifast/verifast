@@ -199,7 +199,7 @@ lem RawVecInner_send<A>(t1: thread_id_t)
     close RawVecInner_own::<A>(t1, v);
 }
 
-lem_auto RawVecInner_inv<A>()
+lem_auto RawVecInner_inv<A: ?Sized>()
     req RawVecInner::<A>(?t, ?self_, ?elemLayout, ?alloc_id, ?ptr, ?capacity);
     ens RawVecInner::<A>(t, self_, elemLayout, alloc_id, ptr, capacity) &*&
         lifetime_inclusion(lft_of_type::<A>(), alloc_id.lft) == true &*&

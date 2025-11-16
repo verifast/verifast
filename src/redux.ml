@@ -774,7 +774,7 @@ and context () =
     | Mul (t1, t2) -> Mul (simplify t1, simplify t2)
     | App (parent_sym, [target; App (parent_offset_sym, [], _) as parent_offset], cached) when parent_sym#name = "field_ptr_parent" -> 
       begin match simplify target with
-      | App (child_sym, [child_target; _; App (child_offset_sym, [], _)], _) when child_sym#name = "field_ptr" && parent_offset_sym#name = child_offset_sym#name ->
+      | App (child_sym, [child_target; _; App (child_offset_sym, [], _)], _) when (child_sym#name = "field_ptr" || child_sym#name = "last_field_ptr") && parent_offset_sym#name = child_offset_sym#name ->
         child_target
       | simpl -> 
         App (parent_sym, [simpl; parent_offset], cached)

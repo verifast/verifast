@@ -113,7 +113,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     externs_extern_specs @ extern_specs
 
   let tparam_carries_typeid tparam =
-    uppercase_type_params_carry_typeid && tparam_is_uppercase tparam
+    uppercase_type_params_carry_typeid && tparam_is_uppercase_or_lifetime tparam
 
   let () =
     if assume_no_subobject_provenance && not fno_strict_aliasing then
@@ -485,7 +485,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | AnyType -> ProverInductive
     | RealTypeParam _ -> ProverInt
     | GhostTypeParam _ -> ProverInductive
-    | GhostTypeParamWithEqs _ -> ProverInductive
+    | BoundedGhostTypeParam _ -> ProverInductive
     | ProjectionType _ -> ProverInductive
     | Void -> ProverInductive
     | InferredType (_, t) -> begin match !t with EqConstraint t -> provertype_of_type t | _ -> t := EqConstraint (InductiveType ("unit", [])); ProverInductive end
@@ -948,7 +948,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       * termnode (* function pointer *)
       * loc
       * func_kind
-      * string list (* type parameters *)
+      * (string * tparam_bounds_expr) list (* type parameters *)
       * type_ option
       * (string * type_) list (* parameters *)
       * bool (* nonghost_callers_only *)
@@ -957,7 +957,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       * (string (* result variable *) * asn) (* postcondition *)
       * bool  (* terminates *)
       * ((string * pred_fam_info map * type_ list * (loc * string) list) option (* implemented function type, with function type type arguments and function type arguments *)
-         * ((func_kind * string list * type_ option * (string * type_) list * bool * (string * termnode) list * asn * (string * type_) list * (string * asn) * bool) option * (* Function prototype *)
+         * ((func_kind * (string * tparam_bounds_expr) list * type_ option * (string * type_) list * bool * (string * termnode) list * asn * (string * type_) list * (string * asn) * bool) option * (* Function prototype *)
             (loc * stmt list) option)) (* Prototype implementation proof *)
       * (stmt list * loc (* closing brace *) ) option option (* body; None if prototype; Some None if ? *)
       * bool (* virtual *)
@@ -965,7 +965,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     type func_type_info =
         loc
       * ghostness
-      * string list (* type parameters *)
+      * (string * tparam_bounds_expr) list (* type parameters *)
       * type_ option (* return type *)
       * type_ map (* parameters of the function type *)
       * type_ map (* parameters of the function *)
@@ -1129,6 +1129,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       * inst_pred_info map map
       * type_pred_decl_info map
       * ((string list (* tparams *) * type_ * string (* type pred name *)) * type_pred_def_info) list
+      * (bool, int) Either.t map (* struct_sizedness_map *)
 
     let string_of_typepreddefmap_entry ((key_tparams, tp, pred_name), (ldef, rhs, rhs_tp)) =
       string_of_loc ldef ^ ": " ^ (if key_tparams <> [] then "for<" ^ String.concat ", " key_tparams ^ "> " else "") ^
@@ -1304,7 +1305,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       (cxx_vtype_map0: cxx_vtype_pred_info map),
       (cxx_inst_pred_map0: inst_pred_info map map),
       (typepreddeclmap0: type_pred_decl_info map),
-      (typepreddefmap0: ((string list * type_ * string) * type_pred_def_info) list)
+      (typepreddefmap0: ((string list * type_ * string) * type_pred_def_info) list),
+      (struct_sizedness_map0: (bool, int) Either.t map)
       : maps
     ) =
 
@@ -1320,8 +1322,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     let id x = x in
     let merge_maps l
-      (structmap, unionmap, enummap, globalmap, modulemap, importmodulemap, inductivemap, purefuncmap, purefuncparamrequiresmap, predctormap, struct_accessor_map, malloc_block_pred_map, new_block_pred_map, field_pred_map, predfammap, predinstmap, typedefmap, functypemap, funcmap, boxmap, classmap, interfmap, classterms, interfaceterms, abstract_types_map, cxx_ctor_map, cxx_dtor_map, bases_constructed_map, cxx_vtype_map, cxx_inst_pred_map, type_pred_decl_map, type_pred_def_map)
-      (structmap0, unionmap0, enummap0, globalmap0, modulemap0, importmodulemap0, inductivemap0, purefuncmap0, purefuncparamrequiresmap0, predctormap0, struct_accessor_map0, malloc_block_pred_map0, new_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, typedefmap0, functypemap0, funcmap0, boxmap0, classmap0, interfmap0, classterms0, interfaceterms0, abstract_types_map0, cxx_ctor_map0, cxx_dtor_map0, bases_constructed_map0, cxx_vtype_map0, cxx_inst_pred_map0, type_pred_decl_map0, type_pred_def_map0)
+      (structmap, unionmap, enummap, globalmap, modulemap, importmodulemap, inductivemap, purefuncmap, purefuncparamrequiresmap, predctormap, struct_accessor_map, malloc_block_pred_map, new_block_pred_map, field_pred_map, predfammap, predinstmap, typedefmap, functypemap, funcmap, boxmap, classmap, interfmap, classterms, interfaceterms, abstract_types_map, cxx_ctor_map, cxx_dtor_map, bases_constructed_map, cxx_vtype_map, cxx_inst_pred_map, type_pred_decl_map, type_pred_def_map, struct_sizedness_map)
+      (structmap0, unionmap0, enummap0, globalmap0, modulemap0, importmodulemap0, inductivemap0, purefuncmap0, purefuncparamrequiresmap0, predctormap0, struct_accessor_map0, malloc_block_pred_map0, new_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, typedefmap0, functypemap0, funcmap0, boxmap0, classmap0, interfmap0, classterms0, interfaceterms0, abstract_types_map0, cxx_ctor_map0, cxx_dtor_map0, bases_constructed_map0, cxx_vtype_map0, cxx_inst_pred_map0, type_pred_decl_map0, type_pred_def_map0, struct_sizedness_map0)
       =
       (
 (*     append_nodups structmap structmap0 id l "struct", *)
@@ -1359,7 +1361,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
        cxx_vtype_map @ cxx_vtype_map0,
        cxx_inst_pred_map @ cxx_inst_pred_map0,
        append_nodups type_pred_decl_map type_pred_decl_map0 id l "type predicate declaration",
-       type_pred_def_map @ type_pred_def_map0)
+       type_pred_def_map @ type_pred_def_map0,
+       struct_sizedness_map @ struct_sizedness_map0)
     in
 
     (* [merge_header_maps maps0 headers] returns [maps0] plus all elements transitively declared in [headers]. *)
@@ -1438,7 +1441,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         end
     in
 
-    let maps0 = ([], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], []) in
+    let maps0 = ([], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], []) in
     
     let (maps0, headers_included) =
       if include_prelude && dialect <> Some Rust then
@@ -1552,29 +1555,29 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let sn = full_name pn sn in
         let body_opt, pred_map =
           match body_opt with
-          | Some (bases, fields, inst_preds, polymorphic) ->
+          | Left (bases, fields, inst_preds, polymorphic) ->
             if List.exists (fun (CxxBaseSpec (l, _, is_virtual)) -> is_virtual) bases then static_error l "Virtual inheritance is not supported." None;
             let pred_map = 
               match inst_preds with
               | [] -> pred_map
               | _ -> (sn, inst_preds) :: pred_map
             in
-            Some (bases, fields, polymorphic), pred_map
-          | _ -> None, pred_map
+            Either.Left (bases, fields, polymorphic), pred_map
+          | Right sizedness -> Right sizedness, pred_map
         in
         let earlier_decl =
           match try_assoc sn structmap0 with
             Some (ldecl, tparams0, body, _, _) -> Some (ldecl, tparams0, body <> None)
           | None ->
             match try_assoc sn sdm with
-              Some (ldecl, tparams0, body, _) -> Some (ldecl, tparams0, body <> None)
+              Some (ldecl, tparams0, body, _) -> Some (ldecl, tparams0, match body with Either.Left _ -> true | Either.Right _ -> false)
             | None -> None
         in
         begin
           match earlier_decl with
             Some (ldecl, tparams0, has_body) ->
             if has_body then static_error l "Duplicate struct name." None;
-            if body_opt = None then static_error l "Duplicate struct declaration." None;
+            begin match body_opt with Right _ -> static_error l "Duplicate struct declaration." None | _ -> () end;
             if List.length tparams0 <> List.length tparams then
               static_error l ("The number of type parameters does not match the earlier declaration of this struct at " ^ string_of_loc ldecl) None;
             delayed_struct_def sn ldecl l
@@ -1969,7 +1972,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let rec instantiate_type tpenv t =
     if tpenv = [] then t else
     match t with
-      RealTypeParam x | GhostTypeParam x | GhostTypeParamWithEqs (x, _) -> (try List.assoc x tpenv  with _ -> failwith 
+      RealTypeParam x | GhostTypeParam x | BoundedGhostTypeParam (x, _) -> (try List.assoc x tpenv  with _ -> failwith 
         (Printf.sprintf "not found! looking for %s in env %s" x (String.concat ", " (List.map (fun (a,b) -> a ^ "->" ^ (string_of_type b)) tpenv))))
     | PtrType t -> PtrType (instantiate_type tpenv t)
     | RustRefType (lft, kind, t) -> RustRefType (instantiate_type tpenv lft, kind, instantiate_type tpenv t)
@@ -1989,7 +1992,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let t = instantiate_type tpenv t in
       let traitArgs = List.map (instantiate_type tpenv) traitArgs in
       begin match t with
-        GhostTypeParamWithEqs (x, eqs) ->
+        BoundedGhostTypeParam (x, {eqs}) ->
         begin match try_assoc (traitName, traitArgs, assocTypeName) eqs with
           Some t -> t
         | None -> ProjectionType (t, traitName, traitArgs, assocTypeName)
@@ -1998,22 +2001,32 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       end
     | _ -> t
   
-  let tparam_eqs_table = ref []
-  let tparam_eqs_tables_stack = ref []
+  let tparam_bounds_table = ref []
+  let tparam_bounds_tables_stack = ref []
 
-  let push_tparam_eqs_table () =
-    tparam_eqs_tables_stack := !tparam_eqs_table :: !tparam_eqs_tables_stack
+  let push_tparam_bounds_table () =
+    tparam_bounds_tables_stack := !tparam_bounds_table :: !tparam_bounds_tables_stack
 
-  let pop_tparam_eqs_table () =
-    let t::ts = !tparam_eqs_tables_stack in
-    tparam_eqs_table := t;
-    tparam_eqs_tables_stack := ts
+  let pop_tparam_bounds_table () =
+    let t::ts = !tparam_bounds_tables_stack in
+    tparam_bounds_table := t;
+    tparam_bounds_tables_stack := ts
+  
+  let lookup_tparam_bounds_opt x =
+    List.assoc_opt x !tparam_bounds_table
+  
+  let lookup_tparam_bounds x =
+    match lookup_tparam_bounds_opt x with
+      Some bounds -> bounds
+    | None -> {sized = false; eqs = []}
   
   let register_tparam_eq x eq =
-    tparam_eqs_table := (x, eq)::!tparam_eqs_table
-  
-  let lookup_tparam_eqs x =
-    flatmap (fun (y, eq) -> if y = x then [eq] else []) !tparam_eqs_table
+    let bounds = lookup_tparam_bounds x in
+    tparam_bounds_table := (x, {bounds with eqs = eq::bounds.eqs}) :: !tparam_bounds_table
+ 
+  let register_tparam_sized x =
+    let bounds = lookup_tparam_bounds x in
+    tparam_bounds_table := (x, {bounds with sized = true}) :: !tparam_bounds_table
   
   (* Region: check_pure_type: checks validity of type expressions *)
   let check_pure_type_core typedefmap1 (pn,ilist) tpenv te envType reportInferredType =
@@ -2039,7 +2052,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       begin
       if List.mem id tpenv then begin match envType with
       | Real when language = Java -> RealTypeParam id
-      | _ -> let eqs = lookup_tparam_eqs id in if eqs = [] then GhostTypeParam id else GhostTypeParamWithEqs (id, eqs)
+      | _ -> match lookup_tparam_bounds_opt id with None -> GhostTypeParam id | Some bounds -> BoundedGhostTypeParam (id, bounds)
       end
       else
       match resolve2' Ghost (pn,ilist) l id typedefmap0 typedefmap1 with
@@ -2292,7 +2305,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 [TypePredDef (l, tparams, te, tpn, Left (l, g))] @
                 if tparams = [] then
                   [PredFamilyDecl (l, g, tparams, 0, List.map (fun (t, p) -> t) ps, inputParamCount, inductiveness);
-                  PredFamilyInstanceDecl (l, g, tparams, [], ps, body)]
+                  PredFamilyInstanceDecl (l, g, tparams_with_default_bounds_exprs tparams, [], ps, body)]
                 else
                   [PredCtorDecl (l, g, tparams, [], ps, inputParamCount, body)]
               in
@@ -2386,10 +2399,17 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     else
       package ^ item_path_separator ^ "struct_" ^ name ^ "_padding"
   
-  let structmap1: struct_info map =
-    let rec iter (smap: struct_info map) (smapwith0: struct_info map) remaining =
+  module SizednessCheckingState = struct
+    type t =
+      NotStarted of string list * (string * (loc * ghostness * type_ * symbol option * expr option)) list
+    | InProgress
+    | Done of (bool, int) Either.t
+  end
+  
+  let (structmap1: struct_info map), struct_sizedness_map1 =
+    let rec iter (smap: struct_info map) (smapwith0: struct_info map) sizedness_map remaining =
       match remaining with
-      | [] -> smap
+      | [] -> smap, sizedness_map
       | (sn, (l, tparams, body_opt, attrs)) :: remaining ->
         let type_info_func = mk_symbol (sn ^ "_type_info") (List.map (fun x -> type_info_type_node) tparams) type_info_type_node Uninterp in
         let packed = List.mem Packed attrs in
@@ -2402,13 +2422,14 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               else
                 Some (get_unique_var_symb (padding_pred_name sn) (PredType ([], [PtrType (StructType (sn, []))], Some 1, Inductiveness_Inductive)))
             in
+            let reverse_fmap = fmap in
             let fmap = List.rev fmap in
             let base_map = bases |> List.map @@ fun (CxxBaseSpec (l, base, is_virtual)) -> 
               let base_offset = get_unique_var_symb (sn ^ "_" ^ base ^ "_offset") intType in
                 ctxt#assert_term (ctxt#mk_le int_zero_term base_offset);
               base, (l, is_virtual, base_offset) 
             in
-            (sn, (l, tparams, Some (base_map, fmap, is_polymorphic), padding_predsym_opt, type_info_func))
+            (sn, (l, tparams, Some (base_map, fmap, is_polymorphic), padding_predsym_opt, type_info_func)), SizednessCheckingState.NotStarted (tparams, reverse_fmap)
           | Field (lf, gh, t, f, Instance, Public, final, init)::fds ->
             if List.mem_assoc f fmap then static_error lf "Duplicate field name." None;
             let t = check_pure_type ("", []) tparams gh t in
@@ -2420,17 +2441,69 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let entry = (f, (lf, gh, t, offset, init)) in
             iter1 (entry::fmap) fds (has_ghost_fields || gh = Ghost) bases is_polymorphic
         in
-        let new_item = begin
+        let new_item, sizedness_checking_state = begin
           match body_opt with
-            Some (bases, fds, is_polymorphic) -> iter1 [] fds false bases is_polymorphic
-          | None -> (sn, (l, tparams, None, None, type_info_func))
+            Either.Left (bases, fds, is_polymorphic) -> iter1 [] fds false bases is_polymorphic
+          | Either.Right sizedness -> (sn, (l, tparams, None, None, type_info_func)), SizednessCheckingState.Done sizedness
         end
         in
-        iter (new_item::smap) (new_item::smapwith0) remaining
+        let new_sizedness_item = (sn, (l, ref sizedness_checking_state)) in
+        iter (new_item::smap) (new_item::smapwith0) (new_sizedness_item::sizedness_map) remaining
     in
-    iter [] structmap0 (List.rev structdeclmap)
+    iter [] structmap0 [] (List.rev structdeclmap)
 
+  let struct_sizedness_map1 =
+    let rec sizedness_of_type t: (bool, string) Either.t =
+      match unfold_inferred_type t with
+        Bool | Int _ | RustChar | Float | Double | LongDouble
+      | UnionType _ | PtrType _ | RustRefType _ | FuncType _ | InlineFuncType _
+      | InductiveType _
+      | StaticArrayType _
+      | AbstractType _ -> Left true
+      | StructType (sn, targs) ->
+        begin match get_struct_sizedness sn with
+          Either.Left b -> Left b
+        | Either.Right i -> sizedness_of_type (List.nth targs i)
+        end
+      | GhostTypeParam x -> Right x
+      | BoundedGhostTypeParam (x, _) -> Right x
+      | InferredType _ -> failwith "sizedness_of_type: called on unresolved inferred type"
+      | ProjectionType (t, traitName, traitArgs, assocTypeName) ->
+        failwith "sizedness_of_type: TODO: projection types"
+    and get_struct_sizedness sn =
+      match try_assoc sn struct_sizedness_map1 with
+        Some (l, state_ref) -> finish_struct_sizedness_checking l sn state_ref
+      | None -> List.assoc sn struct_sizedness_map0
+    and finish_struct_sizedness_checking l sn state =
+      match !state with
+        SizednessCheckingState.Done sizedness -> sizedness
+      | SizednessCheckingState.InProgress ->
+        static_error l "Cyclic dependency detected while checking struct sizedness" None
+      | SizednessCheckingState.NotStarted (tparams, fmap) ->
+        state := SizednessCheckingState.InProgress;
+        let sizedness =
+          if is_rust then
+            match fmap with
+              [] -> Either.Left true
+            | (_, (lf, Real, t, _, _))::_ ->
+              match sizedness_of_type t with
+                Left b -> Left b
+              | Right x ->
+                let Some i = index_of x tparams 0 in
+                Right i
+          else
+            Either.Left true
+        in
+        state := SizednessCheckingState.Done sizedness;
+        sizedness
+    in
+    struct_sizedness_map1 |> List.map begin fun (sn, (l, state_ref)) ->
+      let sizedness = finish_struct_sizedness_checking l sn state_ref in
+      (sn, sizedness)
+    end
+  
   let structmap = structmap1 @ structmap0
+  let struct_sizedness_map = struct_sizedness_map1 @ struct_sizedness_map0
 
   let union_size = union_size_partial unionmap
 
@@ -2718,7 +2791,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | _ -> []
         in
         iter pni ((i, (l, tparams', List.rev ctormap, getters, setters, subtype))::imap) pfm pfprm fpm ds
-      | Func (l, Fixpoint, tparams, rto, g, ps, nonghost_callers_only, (functype, None), contract, terminates, body_opt, _, _)::ds ->
+      | Func (l, Fixpoint, tparams_with_bounds, rto, g, ps, nonghost_callers_only, (functype, None), contract, terminates, body_opt, _, _)::ds ->
+        let tparams = List.map fst tparams_with_bounds in
         let g = full_name pn g in
         if List.mem_assoc g pfm || List.mem_assoc g purefuncmap0 then static_error l ("Duplicate pure function name: "^g) None;
         check_tparams l [] tparams;
@@ -3155,7 +3229,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | (InlineFuncType _, PtrType _) -> true
     | (PtrType _, InlineFuncType _) -> true
     | (StaticLifetime, _) | (_, StaticLifetime) -> true
-    | (GhostTypeParam x1, GhostTypeParam x2) ->
+    | ((GhostTypeParam x1|BoundedGhostTypeParam (x1, _)), (GhostTypeParam x2|BoundedGhostTypeParam (x2, _))) ->
       (* We ignore lifetimes *)
       if x1 <> "" && x1.[0] = '\'' || x2 <> "" && x2.[0] = '\'' then true else x1 = x2
     | (t1, t2) -> t1 = t2
@@ -3187,7 +3261,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | (RustRefType (lft1, mut1, t1), RustRefType (lft2, mut2, t2)) -> unify_strict lft1 lft2 && mut1 = mut2 && unify_strict t1 t2
     | (InlineFuncType _, PtrType _) -> true
     | (PtrType _, InlineFuncType _) -> true
-    | (GhostTypeParam x1, GhostTypeParam x2) -> x1 = x2
+    | ((GhostTypeParam x1|BoundedGhostTypeParam (x1, _)), (GhostTypeParam x2|BoundedGhostTypeParam (x2, _))) -> x1 = x2
     | (t1, t2) -> t1 = t2
 
   let unify t1 t2 = if uppercase_type_params_carry_typeid then unify_strict t1 t2 else unify_relaxed t1 t2
@@ -3291,7 +3365,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let rec is_universal_type tp =
     match tp with 
       Bool | AbstractType _ -> false
-    | GhostTypeParam x | RealTypeParam x -> true
+    | GhostTypeParam x | BoundedGhostTypeParam (x, _) | RealTypeParam x -> true
     | RustChar | Float | Double | LongDouble -> true (* FIXME: Aren't these finite types? *)
     | Int (_, _) | RealType | PtrType _ | RustRefType _ | PredType (_, _, _, _) | ObjType _ | ArrayType _ | BoxIdType | HandleIdType | AnyType -> true
     | PureFuncType (t1, t2) -> is_universal_type t1 && is_universal_type t2
@@ -3304,7 +3378,14 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let rec iter (pn,ilist) functypedeclmap1 ds =
       match ds with
         [] -> functypedeclmap1
-      | FuncTypeDecl (l, gh, rt, ftn, tparams, ftxs, xs, (pre, post, terminates))::ds ->
+      | FuncTypeDecl (l, gh, rt, ftn, tparams_with_bounds, ftxs, xs, (pre, post, terminates))::ds ->
+        push_tparam_bounds_table ();
+        if is_rust then begin
+          tparams_with_bounds |> List.iter @@ fun (tp, {sized}) ->
+            if sized then
+              register_tparam_sized tp
+        end;
+        let tparams = List.map fst tparams_with_bounds in
         if gh = Ghost && terminates then static_error l "A 'terminates' clause on a lemma function type is superfluous." None;
         let ftn0 = ftn in
         let ftn = full_name pn ftn in
@@ -3341,7 +3422,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           in
           iter [] xs
         in
-        iter (pn,ilist) ((ftn, (l, gh, tparams, rt, ftxmap, xmap, ftn0, pn, ilist, pre, post, terminates))::functypedeclmap1) ds
+        pop_tparam_bounds_table ();
+        iter (pn,ilist) ((ftn, (l, gh, tparams_with_bounds, rt, ftxmap, xmap, ftn0, pn, ilist, pre, post, terminates))::functypedeclmap1) ds
       | _::ds -> iter (pn,ilist) functypedeclmap1 ds
     in
     let rec iter' functypedeclmap1 ps =
@@ -3368,7 +3450,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let functypedeclmap1 =
     List.map
-      begin fun (g, (l, gh, tparams, rt, ftxmap, xmap, g0, pn, ilist, pre, post, terminates)) ->
+      begin fun (g, (l, gh, tparams_with_bounds, rt, ftxmap, xmap, g0, pn, ilist, pre, post, terminates)) ->
+        let tparams = List.map fst tparams_with_bounds in
         let predfammaps =
           if gh = Ghost || ftxmap <> [] || tparams <> [] || dialect = Some Rust then
             let fun_ptr_type =
@@ -3379,7 +3462,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             []
         in
         let typeid = mk_typeid_term g in
-        (g, (l, gh, tparams, rt, ftxmap, xmap, pn, ilist, pre, post, terminates, predfammaps, typeid))
+        (g, (l, gh, tparams_with_bounds, rt, ftxmap, xmap, pn, ilist, pre, post, terminates, predfammaps, typeid))
       end
       functypedeclmap1
   
@@ -4302,7 +4385,25 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       (infvar, inferred)
     end
-
+  
+  let rec is_definitely_sized_type t =
+    match unfold_inferred_type t with
+      Bool | Void | Int _ | RustChar | Float | Double | LongDouble
+    | UnionType _ | PtrType _ | RustRefType _ | FuncType _ | InlineFuncType _
+    | InductiveType _
+    | StaticArrayType _
+    | LiteralConstType _
+    | AbstractType _ -> true
+    | StructType (sn, targs) ->
+      begin match List.assoc sn struct_sizedness_map with
+        Either.Left b -> b
+      | Either.Right i -> is_definitely_sized_type (List.nth targs i)
+      end
+    | GhostTypeParam x -> false
+    | BoundedGhostTypeParam (x, {sized}) -> sized
+    | InferredType _ -> false
+    | ProjectionType (t, traitName, traitArgs, assocTypeName) -> false
+    | _ -> failwith ("is_definitely_sized_type: unexpected type " ^ string_of_type t)
 
   let rec check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (inAnnotation: bool option) e: (expr (* typechecked expression *) * type_ (* expression type *) * big_int option (* constant integer expression => value*)) =
     let (w, t, v) = check_expr_core_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv inAnnotation e in
@@ -4955,7 +5056,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           (WFunCall (l, g, [], es, Static), StructType ("std_tuple_0_", []), None)
         | _ ->
         match resolve2 (pn,ilist) l g funcmap with
-          Some (g, FuncInfo (funenv, fterm, lg, k, callee_tparams, tr, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body, virt, overrides)) when match k, inAnnotation with Regular, Some true -> false | _ -> true ->
+          Some (g, FuncInfo (funenv, fterm, lg, k, callee_tparams_with_bounds, tr, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body, virt, overrides)) when match k, inAnnotation with Regular, Some true -> false | _ -> true ->
+          let callee_tparams = List.map fst callee_tparams_with_bounds in
           let declKind =
             match k with
               Regular -> DeclKind_RegularFunction
@@ -5359,7 +5461,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     match (e, unfold_inferred_type t0) with
       (Operation(l, Div, [IntLit(_, i1, _, _, _); IntLit(_, i2, _, _, _)]), RealType) -> RealLit(l, (num_of_big_int i1) // (num_of_big_int i2), None)
     | (IntLit (l, n, _, _, _), PtrType _) when eq_big_int n zero_big_int -> WPureFunCall (l, "null_pointer", [], [])
-    | (IntLit (l, n, _, _, _), PtrType _) when isCast -> WPureFunCall (l, "pointer_ctor", [], [WPureFunCall (l, "null_pointer_provenance", [], []); wintlit l n])
+    | (IntLit (l, n, _, _, _), PtrType _) when isCast ->
+      if is_rust then
+        WPureFunCall (l, "pointer_ctor", [], [WPureFunCall (l, "null_pointer_provenance", [], []); wintlit l n; WPureFunCall (l, "pointer_metadata_none", [], [])])
+      else
+        WPureFunCall (l, "pointer_ctor", [], [WPureFunCall (l, "null_pointer_provenance", [], []); wintlit l n])
     | (IntLit (l, n, _, _, _), RealType) -> RealLit (l, num_of_big_int n, None)
     | (IntLit (l, n, _, _, _), (Int (Unsigned, rank) as tp)) when isCast || inAnnotation <> Some true ->
       let k, isTight = get_glb_litwidth (width_of_rank rank) in
@@ -5397,11 +5503,25 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         begin match (t, t0) with
         | _ when t = t0 -> w
         | (ObjType _, ObjType _) when isCast -> w
-        | ((PtrType _|RustRefType _), (PtrType _|RustRefType _)) when isCast -> Upcast (w, t, t0)
+        | (PtrType pointeeType|RustRefType (_, _, pointeeType)), (PtrType pointeeType0|RustRefType (_, _, pointeeType0)) when isCast ->
+          if is_rust then
+            (* We might need to strip metadata *)
+            if is_definitely_sized_type pointeeType then
+              Upcast (w, t, t0)
+            else if is_definitely_sized_type pointeeType0 then
+              WPureFunCall (expr_loc w, "strip_pointer_metadata", [], [w])
+            else
+              WPureFunCall (expr_loc w, "ptr_cast", [t; t0], [w])
+          else
+            Upcast (w, t, t0)
         | (Int (_, _)), (Int (_, _)) when isCast -> if definitely_is_upcast (int_rank_and_signedness t) (int_rank_and_signedness t0) then Upcast (w, t, t0) else w
         | (PtrType _), (Int (Unsigned, PtrRank)) when isCast -> WReadInductiveField (expr_loc w, w, "pointer", "pointer_ctor", "address", [], PtrType Void, PtrType Void)
         | (PtrType _), (Int (Unsigned, m)) when isCast && definitely_is_upcast (int_rank_and_signedness t) (int_rank_and_signedness t0) -> WReadInductiveField (expr_loc w, w, "pointer", "pointer_ctor", "address", [], PtrType Void, PtrType Void)
-        | (Int (_, _)), (PtrType _) when isCast && (inAnnotation = Some true || definitely_is_upcast (int_rank_and_signedness t) (int_rank_and_signedness t0)) -> WPureFunCall (expr_loc w, "pointer_ctor", [], [WPureFunCall (expr_loc w, "null_pointer_provenance", [], []); w])
+        | (Int (_, _)), (PtrType _) when isCast && (inAnnotation = Some true || definitely_is_upcast (int_rank_and_signedness t) (int_rank_and_signedness t0)) ->
+          if is_rust then
+            WPureFunCall (expr_loc w, "pointer_ctor", [], [WPureFunCall (expr_loc w, "null_pointer_provenance", [], []); w; WPureFunCall (expr_loc w, "pointer_metadata_none", [], [])])
+          else
+            WPureFunCall (expr_loc w, "pointer_ctor", [], [WPureFunCall (expr_loc w, "null_pointer_provenance", [], []); w])
         | (Int (signedness, _), (Float|Double|LongDouble)) -> floating_point_fun_call_expr funcmap (expr_loc w) t0 ("of_" ^ identifier_string_of_type (Int (signedness, FixedWidthRank max_width))) [TypedExpr (w, t)]
         | ((Float|Double|LongDouble), (Float|Double|LongDouble)) -> floating_point_fun_call_expr funcmap (expr_loc w) t0 ("of_" ^ identifier_string_of_type t) [TypedExpr (w, t)]
         | ((Float|Double|LongDouble), (Int (signedness, _))) when isCast -> floating_point_fun_call_expr funcmap (expr_loc w) (Int (signedness, FixedWidthRank max_width)) ("of_" ^ identifier_string_of_type t) [TypedExpr (w, t)]
@@ -6259,7 +6379,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       ft_typeid
     end
   | StaticLifetime -> static_lifetime_typeid_term
-  | GhostTypeParam tn | GhostTypeParamWithEqs (tn, _) | RealTypeParam tn  ->
+  | GhostTypeParam tn | BoundedGhostTypeParam (tn, _) | RealTypeParam tn  ->
     let x = tparam_typeid_varname tn in
     begin try
       List.assoc x env
@@ -6304,7 +6424,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | StructType (sn, targs) -> mk_sizeof (typeid_of_core l env t)
     | UnionType un -> union_size_partial unionmap l un
     | StaticArrayType (elemTp, elemCount) -> ctxt#mk_mul (sizeof_core l env elemTp) (eval_const_type l env elemCount)
-    | GhostTypeParam x -> mk_sizeof (typeid_of_core l env t)
+    | GhostTypeParam x | BoundedGhostTypeParam (x, _) -> mk_sizeof (typeid_of_core l env t)
     | _ -> static_error l ("Taking the size of type " ^ string_of_type t ^ " is not yet supported.") None
   
   let struct_size l env sn targs = sizeof_core l env (StructType (sn, targs))
@@ -6355,14 +6475,17 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 
   let pointer_ctor_symb = lazy_purefuncsymb "pointer_ctor"
   let ptr_add_symb = lazy_purefuncsymb "ptr_add"
+  let ptr_add_strip_metadata_symb = lazy_purefuncsymb (if is_rust then "ptr_add_strip_metadata" else "ptr_add")
   let ptr_add__symb = lazy_purefuncsymb "ptr_add_"
   let field_ptr_symb = lazy_purefuncsymb "field_ptr"
+  let last_field_ptr_symb = lazy_purefuncsymb (if is_rust then "last_field_ptr" else "field_ptr")
   let union_variant_ptr_symb = lazy_purefuncsymb "union_variant_ptr"
   let null_pointer_provenance_symb = lazy_purefuncsymb "null_pointer_provenance"
   let pointer_within_limits_symb = lazy_purefuncsymb "pointer_within_limits"
   let object_pointer_within_limits_symb = lazy_purefuncsymb "object_pointer_within_limits"
   let field_pointer_within_limits_symb = lazy_purefuncsymb "field_pointer_within_limits"
   let null_pointer_symb = lazy_purefuncsymb "null_pointer"
+  let pointer_metadata_none_symb = lazy_purefuncsymb "pointer_metadata_none"
   let null_pointer_term =
     match language with
       Java -> fun () -> int_zero_term
@@ -6370,6 +6493,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let has_type_symb = lazy_purefuncsymb "has_type"
 
   let mk_ptr_add p off = mk_app (ptr_add_symb ()) [p; off]
+  let mk_ptr_add_strip_metadata p off = mk_app (ptr_add_strip_metadata_symb ()) [p; off]
   let rec mk_ptr_add_ l env p off elemType =
     match elemType with
       Void|Int (_, CharRank) ->
@@ -6378,10 +6502,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       mk_ptr_add_ l env p (ctxt#mk_mul off (eval_const_type l env elemCount)) elemTp
     | _ ->
       mk_app (ptr_add__symb ()) [p; off; typeid_of_core l env elemType]
-  let mk_field_ptr p structTypeid off = mk_app (field_ptr_symb ()) [p; structTypeid; off]
-  let mk_field_ptr_ l env p targs structTypeidFunc offsetFunc =
+  let mk_field_ptr p structTypeid off is_last_field =
+    mk_app (if is_last_field then last_field_ptr_symb () else field_ptr_symb ()) [p; structTypeid; off]
+  let mk_field_ptr_ l env p targs structTypeidFunc offsetFunc is_last_field =
     let targ_typeids = List.map (typeid_of_core l env) targs in
-    mk_field_ptr p (ctxt#mk_app structTypeidFunc targ_typeids) (ctxt#mk_app offsetFunc targ_typeids)
+    mk_field_ptr p (ctxt#mk_app structTypeidFunc targ_typeids) (ctxt#mk_app offsetFunc targ_typeids) is_last_field
   let mk_union_variant_ptr p unionTypeName idx =
     let (_, _, unionTypeid) = List.assoc unionTypeName unionmap in
     mk_app (union_variant_ptr_symb ()) [p; unionTypeid; ctxt#mk_intlit idx]
@@ -6405,17 +6530,19 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let () =
     structmap1 |> List.iter begin function
       (sn, (_, tparams, Some (_, fmap, _), _, structTypeidFunc)) ->
-      fmap |> List.iter begin function (f, (l, Real, t, Some offsetFunc, _)) ->
-        ctxt#begin_formal;
-        let p = ctxt#mk_bound 0 ctxt#type_inductive in
-        let targs_env = List.mapi (fun i x -> (x ^ "_typeid", ctxt#mk_bound (i + 1) ctxt#type_inductive)) tparams in
-        let targs = List.map snd targs_env in
-        let structTypeid = ctxt#mk_app structTypeidFunc targs in
-        let offset = ctxt#mk_app offsetFunc targs in
-        let field_has_type = mk_has_type (mk_field_ptr p structTypeid offset) (typeid_of_core l targs_env t) in
-        ctxt#end_formal;
-        ctxt#assume_forall ("has_type_field_ptr_" ^ sn ^ "_" ^ f) [field_has_type] (ctxt#type_inductive::List.map (fun x -> ctxt#type_inductive) tparams) field_has_type
-      | _ -> ()
+      fmap |> iter_with_is_last begin fun fd is_last_field ->
+        match fd with
+          (f, (l, Real, t, Some offsetFunc, _)) ->
+          ctxt#begin_formal;
+          let p = ctxt#mk_bound 0 ctxt#type_inductive in
+          let targs_env = List.mapi (fun i x -> (x ^ "_typeid", ctxt#mk_bound (i + 1) ctxt#type_inductive)) tparams in
+          let targs = List.map snd targs_env in
+          let structTypeid = ctxt#mk_app structTypeidFunc targs in
+          let offset = ctxt#mk_app offsetFunc targs in
+          let field_has_type = mk_has_type (mk_field_ptr p structTypeid offset is_last_field) (typeid_of_core l targs_env t) in
+          ctxt#end_formal;
+          ctxt#assume_forall ("has_type_field_ptr_" ^ sn ^ "_" ^ f) [field_has_type] (ctxt#type_inductive::List.map (fun x -> ctxt#type_inductive) tparams) field_has_type
+        | _ -> ()
       end
     | _ -> ()
     end
@@ -6435,10 +6562,22 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let pr = ctxt#mk_bound 0 ctxt#type_inductive in
     let structTypeid = ctxt#mk_bound 1 ctxt#type_inductive in
     let addr = ctxt#mk_bound 2 ctxt#type_int in
-    let fp = mk_field_ptr pr structTypeid addr in
-    let eq = ctxt#mk_eq fp (mk_ptr_add pr addr) in
+    let fp = mk_field_ptr pr structTypeid addr false in
+    let eq = ctxt#mk_eq fp (mk_ptr_add_strip_metadata pr addr) in
     ctxt#end_formal;
     ctxt#assume_forall "field_ptr_eq_ptr_add" [fp] [ctxt#type_inductive; ctxt#type_inductive; ctxt#type_int] eq
+    end;
+
+    if is_rust then
+    begin
+    ctxt#begin_formal;
+    let pr = ctxt#mk_bound 0 ctxt#type_inductive in
+    let structTypeid = ctxt#mk_bound 1 ctxt#type_inductive in
+    let addr = ctxt#mk_bound 2 ctxt#type_int in
+    let fp = mk_field_ptr pr structTypeid addr true in
+    let eq = ctxt#mk_eq fp (mk_ptr_add pr addr) in
+    ctxt#end_formal;
+    ctxt#assume_forall "last_field_ptr_eq_ptr_add" [fp] [ctxt#type_inductive; ctxt#type_inductive; ctxt#type_int] eq
     end;
 
     if dialect <> Some Rust then
@@ -6451,22 +6590,34 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let eq = ctxt#mk_eq vp p in
     ctxt#end_formal;
     ctxt#assume_forall "union_variant_ptr_eq_ptr" [vp] [ctxt#type_inductive; ctxt#type_inductive; ctxt#type_int] eq
-    end
+    end;
   end
 
   let pointer_getters = lazy_value (fun () ->
-    let (_, _, _, ["provenance", ptr_provenance; "address", ptr_address], _, _, _, _, _) =
-      List.assoc "pointer" inductivemap
-    in
-    ptr_provenance, ptr_address
+    if is_rust then
+      let (_, _, _, ["provenance", ptr_provenance; "address", ptr_address; "metadata", ptr_metadata], _, _, _, _, _) =
+        List.assoc "pointer" inductivemap
+      in
+      ptr_provenance, ptr_address, ptr_metadata
+    else
+      let (_, _, _, ["provenance", ptr_provenance; "address", ptr_address], _, _, _, _, _) =
+        List.assoc "pointer" inductivemap
+      in
+      ptr_provenance, ptr_address, ptr_address (* dummy value; not used *)
   )
   
-  let ptr_provenance () = fst (pointer_getters ())
-  let ptr_address () = snd (pointer_getters ())
+  let ptr_provenance () = let (f, _, _) = pointer_getters () in f
+  let ptr_address () = let (_, f, _) = pointer_getters () in f
+  let ptr_metadata () = let (_, _, f) = pointer_getters () in f
 
-  let mk_pointer pr addr = mk_app (pointer_ctor_symb ()) [pr; addr]
+  let mk_pointer pr addr metadata =
+    if is_rust then
+      mk_app (pointer_ctor_symb ()) [pr; addr; metadata]
+    else
+      mk_app (pointer_ctor_symb ()) [pr; addr]
   let mk_ptr_provenance p = ctxt#mk_app (ptr_provenance ()) [p]
   let mk_ptr_address p = if language = Java then p else ctxt#mk_app (ptr_address ()) [p]
+  let mk_ptr_metadata p = if is_rust then ctxt#mk_app (ptr_metadata ()) [p] else real_unit
 
   let assume_bounds term (tp: type_) = 
     match tp with
@@ -6477,21 +6628,22 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       ctxt#assert_term (mk_pointer_within_limits term)
     | _ -> ()
   
-  let assert_mk_pointer p =
-    ctxt#assert_term (ctxt#mk_eq p (mk_pointer (mk_ptr_provenance p) (mk_ptr_address p)));
+  let assert_mk_pointer p pointeeType =
+    let metadata = if is_rust && is_definitely_sized_type pointeeType then snd (pointer_metadata_none_symb ()) else mk_ptr_metadata p in
+    ctxt#assert_term (ctxt#mk_eq p (mk_pointer (mk_ptr_provenance p) (mk_ptr_address p) metadata));
     if assume_no_provenance then ctxt#assert_term (ctxt#mk_eq (mk_ptr_provenance p) (snd (null_pointer_provenance_symb ())))
 
   let get_unique_var_symb_ x t ghost = 
     let result = get_unique_var_symb x t in
     if not ghost then assume_bounds result t;
     begin match language, t with
-      CLang, (PtrType _|RustRefType _) -> assert_mk_pointer result
+      CLang, (PtrType pointeeType|RustRefType (_, _, pointeeType)) -> assert_mk_pointer result pointeeType
     | _ -> ()
     end;
     result
 
   let () = 
-    globalmap1 |> List.iter (fun (x, (lg, tp, symb, ref_init)) -> assert_mk_pointer symb)
+    globalmap1 |> List.iter (fun (x, (lg, tp, symb, ref_init)) -> assert_mk_pointer symb tp)
 
   let get_unique_var_symb_non_ghost x t = 
     get_unique_var_symb_ x t false
@@ -7284,7 +7436,13 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       end
       structmap1
   
-  let check_predinst0 predfam_tparams arity ps psymb inputParamCount (pn, ilist) tparams tenv env l p predinst_tparams fns xs body =
+  let check_predinst0 predfam_tparams arity ps psymb inputParamCount (pn, ilist) tparams tenv env l p predinst_tparams_with_bounds fns xs body =
+    push_tparam_bounds_table ();
+    let predinst_tparams = predinst_tparams_with_bounds |> List.map @@ fun (x, {sized}) ->
+      if sized then
+        register_tparam_sized x;
+      x
+    in
     check_tparams l tparams predinst_tparams;
     let tpenv =
       match zip predfam_tparams (List.map (fun x -> GhostTypeParam x) predinst_tparams) with
@@ -7325,6 +7483,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
              static_error l ("Preciseness check failure: body does not fix output parameter '" ^ x ^ "'.") None)
           outps
     end;
+    pop_tparam_bounds_table ();
     ((p, fns), (env, l, predinst_tparams, xs, psymb, inputParamCount, wbody))
   
   let check_predinst (pn, ilist) tparams tenv env l p predinst_tparams fns xs body =
@@ -7527,18 +7686,18 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 
   let field_address l env t fparent targs fname =
     let (_, tparams, Some (_, fmap, _), _, structTypeidFunc) = List.assoc fparent structmap in
-    let (_, gh, y, offsetFunc_opt, _) = List.assoc fname fmap in
+    let (_, gh, y, offsetFunc_opt, _), is_last_field = assoc_with_is_last fname fmap in
     let offsetFunc =
        match offsetFunc_opt with
         Some symbol -> symbol
       | None -> static_error l "Cannot take the address of a ghost field" None
     in
-    mk_field_ptr_ l env t targs structTypeidFunc offsetFunc
+    mk_field_ptr_ l env t targs structTypeidFunc offsetFunc is_last_field
 
   let direct_base_addr (derived_name, derived_addr) base_name =
     let _, _, Some (bases, _, _), _, derivedTypeid = List.assoc derived_name structmap in
     let _, _, base_offset = List.assoc base_name bases in
-    mk_field_ptr derived_addr (ctxt#mk_app derivedTypeid []) base_offset
+    mk_field_ptr derived_addr (ctxt#mk_app derivedTypeid []) base_offset false
 
   let base_addr l (derived_name, derived_addr) base_name =
     if derived_name = base_name then 
@@ -7560,7 +7719,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | _ -> None
       in 
       let Some offsets = iter derived_name [] in 
-      List.rev offsets |> List.fold_left (fun addr (structTypeid, offset) -> mk_field_ptr addr structTypeid offset) derived_addr
+      List.rev offsets |> List.fold_left (fun addr (structTypeid, offset) -> mk_field_ptr addr structTypeid offset false) derived_addr
 
   let convert_provertype term proverType proverType0 =
     if proverType = proverType0 then term else apply_conversion proverType proverType0 term

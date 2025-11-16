@@ -131,9 +131,9 @@ let decl_fields (d : decl) =
   match d with
   | Struct (loc, name, tparams, definition_opt, attrs) -> (
       match definition_opt with
-      | Some (base_specs, fields, instance_pred_decls, is_polymorphic) ->
+      | Left (base_specs, fields, instance_pred_decls, is_polymorphic) ->
           Ok (Some fields)
-      | None -> Ok None)
+      | Right sizedness -> Ok None)
   | _ -> failwith "Todo: get Ast.decl fields"
 
 let decl_loc (d : decl) =

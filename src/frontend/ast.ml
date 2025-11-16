@@ -172,9 +172,9 @@ type type_ = (* ?type_ *)
   | RealTypeParam of string (* a reference to a type parameter declared in the enclosing Real code *)
   | InferredRealType of string
   | GhostTypeParam of string (* a reference to a type parameter declared in the ghost code *)
-  | GhostTypeParamWithEqs of (* a reference to a type parameter declared in the ghost code *)
+  | BoundedGhostTypeParam of (* a reference to a type parameter declared in the ghost code *)
       string *
-      ((string * type_ list * string) * type_) list (* type projection equalities: TraitName<TraitArgs>::AssocTypeName == T *)
+      tparam_bounds
   | InferredType of < > * inferred_type_state ref (* inferred type, is unified during type checking. '< >' is the type of objects with no methods. This hack is used to prevent types from incorrectly comparing equal, as in InferredType (ref Unconstrained) = InferredType (ref Unconstrained). Yes, ref Unconstrained = ref Unconstrained. But object end <> object end. *)
   | ClassOrInterfaceName of string (* not a real type; used only during type checking *)
   | PackageName of string (* not a real type; used only during type checking *)
@@ -186,6 +186,10 @@ and inferred_type_state =
     Unconstrained
   | ContainsAnyConstraint of bool (* allow the type to contain 'any' in positive positions *)
   | EqConstraint of type_
+and tparam_bounds = {
+  sized: bool; (* Is this type parameter constrained to be Sized? *)
+  eqs: ((string * type_ list * string) * type_) list; (* type projection equalities: TraitName<TraitArgs>::AssocTypeName == T *)
+}
 
 let rec unfold_inferred_type t =
   match t with
@@ -233,7 +237,7 @@ let is_instance (l: loc) (t1: type_) (t2: type_) =
     | RealTypeParam tpn1, _
     | GhostTypeParam tpn1, _ ->
       begin match List.assoc_opt tpn1 substs with None -> Some ((tpn1, t2)::substs) | Some t -> if t = t2 then Some substs else None end
-    | GhostTypeParamWithEqs (tpn1, _), _ -> failwith "Not supported yet" (* TODO: type projection equalities should be satisfiable in case we need to add a new substitution entry *)
+    | BoundedGhostTypeParam (tpn1, _), _ -> failwith "Not supported yet" (* TODO: type projection equalities should be satisfiable in case we need to add a new substitution entry *)
     | InferredType (_, state1), _ -> begin match !state1 with EqConstraint t1 -> iter substs t1 t2 | _ -> None end
     | _, InferredType (_, state2) -> begin match !state2 with EqConstraint t2 -> iter substs t1 t2 | _ -> None end
     | ClassOrInterfaceName n1, ClassOrInterfaceName n2 -> failwith "Not supported yet"
@@ -264,7 +268,7 @@ let type_fold_open state f = function
 | BoxIdType | HandleIdType | AnyType | RealTypeParam _ | InferredRealType _ | GhostTypeParam _ | InferredType (_, _) | ClassOrInterfaceName _ | PackageName _ -> state
 | RefType tp -> f state tp
 | AbstractType _ | StaticLifetime -> state
-| GhostTypeParamWithEqs (tp, eqs) -> List.fold_left (fun state (_, tp) -> f state tp) state eqs
+| BoundedGhostTypeParam (tp, {eqs}) -> List.fold_left (fun state (_, tp) -> f state tp) state eqs
 | ProjectionType (tp, _, targs, _) -> List.fold_left f (f state tp) targs
 
 let is_ptr_type tp =
@@ -408,6 +412,10 @@ type type_expr = (* ?type_expr *)
   | ConstTypeExpr of loc * type_expr
   | ProjectionTypeExpr of loc * type_expr * string (* trait name *) * type_expr list (* trait generic args *) * string (* associated type name *) (* In Rust: <T as X<GArgs>>::Y *)
   | InferredTypeExpr of loc (* A placeholder `_` to be filled by the typechecker. *)
+and
+  tparam_bounds_expr = {
+    sized: bool; (* Is this type parameter constrained to be Sized? *)
+  }
 and
   operator =  (* ?operator *)
   | Add | Sub | PtrDiff | Le | Ge | Lt | Gt | Eq | Neq | And | Or | Xor | Not | Mul | Div | Mod | BitNot | BitAnd | BitXor | BitOr | ShiftLeft | ShiftRight
@@ -927,7 +935,7 @@ and
       loc * 
       string *
       string list * (* type parameters *) 
-      (base_spec list * field list * instance_pred_decl list * bool (* is polymorphic *)) option *
+      (base_spec list * field list * instance_pred_decl list * bool (* is polymorphic *), (bool, int (* inherits sizedness of i'th type parameter *)) Either.t (* sizedness *)) Either.t *
       struct_attr list
   | Union of loc * string * field list option
   | Inductive of  (* inductief data type regel-naam-type parameters-lijst van constructors*)
@@ -967,7 +975,7 @@ and
   | PredFamilyInstanceDecl of
       loc *
       string *
-      string list (* type parameters *) *
+      (string * tparam_bounds_expr) list (* type parameters *) *
       (loc * string) list *
       (type_expr * string) list *
       asn
@@ -982,7 +990,7 @@ and
   | Func of
       loc *
       func_kind *
-      string list *  (* type parameters *)
+      (string * tparam_bounds_expr) list *  (* type parameters *)
       type_expr option *  (* return type *)
       string *  (* name *)
       (type_expr * string) list *  (* parameters *)
@@ -1030,7 +1038,7 @@ and
       ghostness * (* e.g. a "typedef lemma" is ghost. *)
       type_expr option * (* return type *)
       string *
-      string list * (* type parameters *)
+      (string * tparam_bounds_expr) list * (* type parameters *)
       (type_expr * string) list *
       (type_expr * string) list *
       (asn * (string (* result variable *) * asn) * bool) (* precondition, postcondition, terminates *)
@@ -1059,7 +1067,7 @@ and
       string * (* name of the generic function, e.g. "std::iter::IntoIterator::into_iter" *)
       bool * (* the name of the generic function is relative to the current package *)
       string (* name of the specialized function, e.g. "std::ops::<Range<usize> as std::iter::IntoIterator>::into_iter" *) *
-      string list (* type parameters of the specialized function *) *
+      (string * tparam_bounds_expr) list (* type parameters of the specialized function *) *
       type_expr list (* type arguments for the generic function, e.g. Range<usize> *)
 and (* shared box is deeltje ghost state, waarde kan enkel via actions gewijzigd worden, handle predicates geven info over de ghost state, zelfs als er geen eigendom over de box is*)
   action_decl = (* ?action_decl *)
@@ -1114,6 +1122,12 @@ and constant_value = (* ?constant_value *)
 | StringConst of string
 | NullConst
 | GhostConst of expr
+
+let tparams_with_bounds_expr bounds tparams =
+  List.map (fun tpname -> (tpname, bounds)) tparams
+
+let no_bounds = { sized = false }
+let unbounded_tparams tparams = tparams_with_bounds_expr no_bounds tparams
 
 let func_kind_of_ghostness gh =
   match gh with

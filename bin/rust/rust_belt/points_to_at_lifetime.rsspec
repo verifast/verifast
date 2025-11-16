@@ -57,11 +57,11 @@ pred array_at_lft<T>(k: lifetime_t, p: *T, n: usize; vs: list<T>) =
         vs == cons(v, vs0)
     };
 
-lem_auto array_at_lft__inv<T>();
+lem_auto array_at_lft__inv<T: ?Sized>();
     req [?f]array_at_lft_::<T>(?k, ?p, ?count, ?elems);
     ens [f]array_at_lft_::<T>(k, p, count, elems) &*& count == length(elems) &*& count * std::mem::size_of::<T>() <= isize::MAX &*& pointer_within_limits(p) == true &*& pointer_within_limits(p + count) == true;
     
-lem_auto array_at_lft_inv<T>();
+lem_auto array_at_lft_inv<T: ?Sized>();
     req [?f]array_at_lft::<T>(?k, ?p, ?count, ?elems);
     ens [f]array_at_lft::<T>(k, p, count, elems) &*& count == length(elems) &*& count * std::mem::size_of::<T>() <= isize::MAX &*& pointer_within_limits(p) == true &*& pointer_within_limits(p + count) == true;
 

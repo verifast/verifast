@@ -121,14 +121,23 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let rec iter functypemap ds =
       match ds with
         [] -> List.rev functypemap
-      | (ftn, (l, gh, tparams, rt, ftxmap, xmap, pn, ilist, pre, (result_var, post), terminates, predfammaps, typeid))::ds ->
+      | (ftn, (l, gh, tparams_with_bounds, rt, ftxmap, xmap, pn, ilist, pre, (result_var, post), terminates, predfammaps, typeid))::ds ->
+        let tparams = List.map fst tparams_with_bounds in
+        push_tparam_bounds_table ();
+        if is_rust then begin
+          tparams_with_bounds |> List.iter begin fun (x, {sized}) ->
+            if sized then
+              register_tparam_sized x
+          end
+        end;
         let (pre, post) =
           let (wpre, tenv) = check_asn (pn,ilist) tparams (ftxmap @ xmap @ [("this", PtrType Void); (current_thread_name, current_thread_type)]) pre in
           let postmap = match rt with None -> tenv | Some rt -> (result_var, rt)::tenv in
           let (wpost, tenv) = check_asn (pn,ilist) tparams postmap post in
           (wpre, (result_var, wpost))
         in
-        iter ((ftn, (l, gh, tparams, rt, ftxmap, xmap, pre, post, terminates, predfammaps, typeid))::functypemap) ds
+        pop_tparam_bounds_table ();
+        iter ((ftn, (l, gh, tparams_with_bounds, rt, ftxmap, xmap, pre, post, terminates, predfammaps, typeid))::functypemap) ds
     in
     iter [] functypedeclmap1
   
@@ -182,7 +191,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     check_breakpoint [] env l;
     major_success ()
   
-  let check_func_header_compat_core l msg0 msg env00 (k, tparams, rt, xmap, nonghost_callers_only, pre, post, epost, terminates) (k0, tparams0, rt0, xmap0, nonghost_callers_only0, tpenv0, cenv0, pre0, post0, epost0, terminates0) prolog =
+  let check_func_header_compat_core l msg0 msg env00 (k, tparams_with_bounds, rt, xmap, nonghost_callers_only, pre, post, epost, terminates) (k0, tparams0_with_bounds, rt0, xmap0, nonghost_callers_only0, tpenv0, cenv0, pre0, post0, epost0, terminates0) prolog =
     let msg1 = msg in
     let msg = msg ^ ": " in
     if k <> k0 then 
@@ -190,9 +199,12 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         static_error l (msg ^ "Not the same kind of function.") None;
     if terminates0 && not terminates then static_error l (msg ^ "Implementation must declare 'terminates' clause.") None;
     let tpenv =
-      match zip tparams tparams0 with
+      match zip tparams_with_bounds tparams0_with_bounds with
         None -> static_error l (msg ^ "Type parameter counts do not match.") None
-      | Some bs -> List.map (fun (x, x0) -> (x, GhostTypeParam x0)) bs
+      | Some bs ->
+        bs |> List.map @@ fun ((x, {sized}), (x0, {sized=sized0})) ->
+          if sized && not sized0 then static_error l (msg ^ Printf.sprintf "Implementation Sized bound on type parameter %s not satisfied." x) None;
+          (x, if sized then BoundedGhostTypeParam (x, {sized; eqs=[]}) else GhostTypeParam x0)
     in
     begin
       match (rt, rt0) with
@@ -211,7 +223,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     if nonghost_callers_only <> nonghost_callers_only0 then static_error l (msg ^ "nonghost_callers_only clauses do not match.") None;
     execute_branch begin fun () ->
     with_context (Executing ([], [], l, msg0 ^ ": " ^ msg1)) $. fun () ->
-    let tparam_typeid_env = tparams0 |> flatmap @@ fun x ->
+    let tparam_typeid_env = tparams0_with_bounds |> flatmap @@ fun (x, _) ->
       if tparam_carries_typeid x then
         let paramName = x ^ "_typeid" in
         [paramName, get_unique_var_symb paramName voidPtrType]
@@ -295,9 +307,10 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
  
   let functypes_implemented = ref []
   
-  let check_func_header pn ilist tparams0 tenv0 env0 l k tparams rt fn fterm xs nonghost_callers_only functype_opt contract_opt terminates body =
-    push_tparam_eqs_table ();
+  let check_func_header pn ilist tparams0 tenv0 env0 l k tparams_with_bounds rt fn fterm xs nonghost_callers_only functype_opt contract_opt terminates body =
+    push_tparam_bounds_table ();
     if terminates && k <> Regular then static_error l "Terminates clause not allowed here." None;
+    let tparams = List.map fst tparams_with_bounds in
     check_tparams l tparams0 tparams;
     let tparam_typeid_tenv = tparams |> flatmap @@ fun x ->
       if tparam_carries_typeid x then
@@ -307,6 +320,10 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         []
     in
     let tparams1 = tparams0 @ tparams in
+    tparams_with_bounds |> List.iter begin fun (x, {sized}) ->
+      if sized then
+        register_tparam_sized x
+    end;
     begin match body with
       Some (ss, closeBraceLoc) ->
       let rec iter = function
@@ -376,13 +393,19 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         begin
           match resolve Real (pn,ilist) l ftn functypemap with
             None -> static_error l "No such function type." None
-          | Some (ftn, (lft, gh, fttparams, rt0, ftxmap0, xmap0, pre0, post0, terminates0, ft_predfammaps, ft_typeid)) ->
+          | Some (ftn, (lft, gh, fttparams_with_bounds, rt0, ftxmap0, xmap0, pre0, post0, terminates0, ft_predfammaps, ft_typeid)) ->
             let fttargs = List.map (check_pure_type (pn,ilist) [] Ghost) fttargs in
-            let fttpenv =
-              match zip fttparams fttargs with
+            let fttpenv_with_bounds =
+              match zip fttparams_with_bounds fttargs with
                 None -> static_error l "Incorrect number of function type type arguments" None
               | Some bs -> bs
             in
+            let fttpenv = fttpenv_with_bounds |> List.map begin fun ((x, {sized}), tp) ->
+              if sized then
+                if not (is_definitely_sized_type tp) then
+                  static_error l ("Type argument for type parameter '" ^ x ^ "' must be a sized type.") None;
+              (x, tp)
+            end in
             let ftargenv =
               match zip ftxmap0 ftargs with
                 None -> static_error l "Incorrect number of function type arguments" None
@@ -412,7 +435,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let k' = match gh with Real -> Regular | Ghost -> Lemma(true, None) in
             let xmap0 = List.map (fun (x, t) -> (x, instantiate_type fttpenv t)) xmap0 in
             check_func_header_compat l ("Function '" ^ fn ^ "'") "Function type implementation check" env0
-              (k, tparams, rt, xmap, nonghost_callers_only, pre, post, [], terminates)
+              (k, tparams_with_bounds, rt, xmap, nonghost_callers_only, pre, post, [], terminates)
               (k', [], rt0, xmap0, false, fttpenv, cenv0, pre0, post0, [], terminates0);
             if gh = Real then
             begin
@@ -424,7 +447,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             Some (ftn, ft_predfammaps, fttargs, ftargs)
         end
     in
-    pop_tparam_eqs_table ();
+    pop_tparam_bounds_table ();
     (rt, xmap, functype_opt, pre, pre_tenv, post)
   
   let is_transparent_stmt s =
@@ -465,7 +488,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let rec iter pn ilist funcmap prototypes_implemented ds =
       match ds with
         [] -> (funcmap, List.rev prototypes_implemented)
-      | Func (l, k, tparams, rt, fn, xs, nonghost_callers_only, (functype_opt, prototypeImplementationProof_opt), contract_opt, terminates, body, is_virtual, overrides)::ds when k <> Fixpoint ->
+      | Func (l, k, tparams_with_bounds, rt, fn, xs, nonghost_callers_only, (functype_opt, prototypeImplementationProof_opt), contract_opt, terminates, body, is_virtual, overrides)::ds when k <> Fixpoint ->
+        let tparams = List.map fst tparams_with_bounds in
         let fn = full_name pn fn in
         let fterm = List.assoc fn funcnameterms in
         if body <> None then
@@ -473,7 +497,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         if report_skipped_stmts || match contract_opt with Some ((False _ | ExprAsn (_, False _)), _) -> false | _ -> true then begin match body with None -> () | Some (ss, _) -> reportStmts ss end;
         incr func_counter;
         let (rt, xmap, functype_opt, pre, pre_tenv, post) =
-          check_func_header pn ilist [] [] [] l k tparams rt fn (Some fterm) xs nonghost_callers_only functype_opt contract_opt terminates body
+          check_func_header pn ilist [] [] [] l k tparams_with_bounds rt fn (Some fterm) xs nonghost_callers_only functype_opt contract_opt terminates body
         in
         let body' = match body with None -> None | Some body -> Some (Some body) in
         let fenv = 
@@ -494,7 +518,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               None -> ()
             | Some (l, ss) -> static_error l "This function does not have a prototype." None
             end;
-            cont (fn, FuncInfo ([], fterm, l, k, tparams, rt, xmap, nonghost_callers_only, pre, pre_tenv, post, terminates, (functype_opt, (None, None)), body', is_virtual, overrides)) prototypes_implemented
+            cont (fn, FuncInfo ([], fterm, l, k, tparams_with_bounds, rt, xmap, nonghost_callers_only, pre, pre_tenv, post, terminates, (functype_opt, (None, None)), body', is_virtual, overrides)) prototypes_implemented
           | Some (FuncInfo ([], fterm0, l0, k0, tparams0, rt0, xmap0, nonghost_callers_only0, pre0, pre_tenv0, post0, terminates0, _, Some _, is_virtual0, overrides0)) ->
             if body = None then
               static_error l "Function prototype must precede function implementation." None
@@ -502,7 +526,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               static_error l "Duplicate function implementation." None
           | Some (FuncInfo ([], fterm0, l0, k0, tparams0, rt0, xmap0, nonghost_callers_only0, pre0, pre_tenv0, post0, terminates0, (functype_opt0, (None, None)), None, is_virtual, overrides0)) ->
             if body = None then static_error l "Duplicate function prototype." None;
-            cont (fn, FuncInfo ([], fterm, l, k, tparams, rt, xmap, nonghost_callers_only, pre, pre_tenv, post, terminates, (functype_opt, (Some (k0, tparams0, rt0, xmap0, nonghost_callers_only0, fenv, pre0, pre_tenv0, post0, terminates0), prototypeImplementationProof_opt)), body', is_virtual, overrides)) ((fn, l0)::prototypes_implemented)
+            cont (fn, FuncInfo ([], fterm, l, k, tparams_with_bounds, rt, xmap, nonghost_callers_only, pre, pre_tenv, post, terminates, (functype_opt, (Some (k0, tparams0, rt0, xmap0, nonghost_callers_only0, fenv, pre0, pre_tenv0, post0, terminates0), prototypeImplementationProof_opt)), body', is_virtual, overrides)) ((fn, l0)::prototypes_implemented)
         end @@ fun func_info protos_implemented ->
         let () = check_cxx_spec_overrides fenv func_info (fun name -> assoc2 name funcmap funcmap0) in
         iter pn ilist (func_info :: funcmap) protos_implemented ds
@@ -2081,7 +2105,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | GhostTypeParam x when String.starts_with ~prefix:"'" x -> true
     | _ -> false
   
-  let verify_call funcmap eval_h l (pn, ilist) xo g targs pats (callee_tparams, tr, ps, funenv, pre, post, epost, terminates, dynamic_dispatch) pure is_upcall target_class leminfo sizemap h tparams tenv ghostenv env cont econt =
+  let verify_call funcmap eval_h l (pn, ilist) xo g targs pats (callee_tparams_with_bounds, tr, ps, funenv, pre, post, epost, terminates, dynamic_dispatch) pure is_upcall target_class leminfo sizemap h tparams tenv ghostenv env cont econt =
     let check_expr_t (pn,ilist) tparams tenv e tp = check_expr_t_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (Some pure) e tp in
     let check_expr (pn,ilist) tparams tenv pure e = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv pure e in
     let eval_h h env pat cont =
@@ -2089,11 +2113,12 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         SrcPat (LitPat e) -> eval_h h env e cont
       | TermPat t -> cont h env t
     in
-    let tpenv =
-      match zip callee_tparams targs with
+    let tpenv_with_bounds =
+      match zip callee_tparams_with_bounds targs with
         None -> static_error l "Incorrect number of type arguments." None
       | Some tpenv -> tpenv
     in
+    let tpenv = tpenv_with_bounds |> List.map @@ fun ((tp, {sized}), ta) -> (tp, ta) in
     if dialect = Some Rust then
       List.iter begin fun (x, tp) ->
         if String.starts_with ~prefix:"'" x then begin
@@ -2234,6 +2259,12 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           cont h
       end $. fun h ->
       consume_asn_with_post rules tpenv h env ghostenv cenv pre true real_unit (fun _ h ghostenv' env' chunk_size post' ->
+        if is_rust then begin
+          tpenv_with_bounds |> List.iter @@ fun ((tp, {sized}), ta) ->
+            if sized then
+              if not (is_definitely_sized_type ta) then
+                static_error l (Printf.sprintf "Type argument %s for type parameter %s must implement trait Sized" (string_of_type ta) tp) None
+        end;
         let (result_var, post) =
           match post' with
             None -> post
@@ -3032,7 +3063,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         if not pure then static_error l "A lemma method call is not allowed in a non-pure context." None;
         if leminfo_is_lemma leminfo then static_error l "Lemma method calls in lemmas are currently not supported (for termination reasons)." None
       end;
-      check_correct h xo None mtargs args (lm, mtparams, rt, xmap, [], pre, ("result", post), Some epost, terminates, true) is_upcall target_class cont
+      let mtparams_with_bounds = tparams_with_bounds_expr {sized=true} mtparams in
+      check_correct h xo None mtargs args (lm, mtparams_with_bounds, rt, xmap, [], pre, ("result", post), Some epost, terminates, true) is_upcall target_class cont
     | WSuperMethodCall(l, supercn, m, args, (lm, gh, rt, xmap, pre, post, epost, terminates, rank, v)) ->
       if gh = Real && pure then static_error l "Method call is not allowed in a pure context" None;
       if gh = Ghost then begin

@@ -162,13 +162,13 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
               bases_get body
               |> Capnp_util.arr_map (Node_translator.map ~f:transl_base)
             in
-            ( Some
+            ( Either.Left
                 ( List.rev bases,
                   List.rev fields,
                   List.rev inst_preds,
                   polymorphic ),
               List.rev decls )
-      else (None, [])
+      else (Right (Either.Left true), [])
     in
     let vf_record =
       match kind_get record with
@@ -176,7 +176,7 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
           Ast.Struct (loc, name, [], body, [])
       | R.RecordKind.Unio ->
           Ast.Union
-            (loc, name, body |> Option.map @@ fun (_, fields, _, _) -> fields)
+            (loc, name, match body with Left (_, fields, _, _) -> Some fields | _ -> None)
     in
     vf_record :: decls
 
@@ -379,7 +379,7 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
             Ast.Real,
             return_type,
             name,
-            ft_type_params,
+            Ast.tparams_with_bounds_expr {Ast.sized=true} ft_type_params,
             ft_params,
             params,
             (pre, ("result", post), terminates) )

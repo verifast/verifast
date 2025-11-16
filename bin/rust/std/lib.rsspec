@@ -395,11 +395,11 @@ mod mem {
     fix MaybeUninit::uninit<T>() -> MaybeUninit<T>;
     fix MaybeUninit::new_maybe_uninit<T>(v: option<T>) -> MaybeUninit<T>;
     
-    lem_auto MaybeUninit_inner_new<T>(v: T);
+    lem_auto MaybeUninit_inner_new<T: ?Sized>(v: T);
         req true;
         ens MaybeUninit::new(v).inner() == some(v);
     
-    lem_auto MaybeUninit_inner_new_maybe_uninit<T>(v: option<T>);
+    lem_auto MaybeUninit_inner_new_maybe_uninit<T: ?Sized>(v: option<T>);
         req true;
         ens MaybeUninit::new_maybe_uninit(v).inner() == v;
     
@@ -439,11 +439,11 @@ mod mem {
         req array_at_lft_(?k, self, ?n, ?elems_);
         ens array_at_lft(k, self as *MaybeUninit<T>, n, map(MaybeUninit::new_maybe_uninit, elems_));
     
-    lem_auto(std::mem::size_of::<MaybeUninit<T>>()) size_of_MaybeUninit<T>();
+    lem_auto(std::mem::size_of::<MaybeUninit<T>>()) size_of_MaybeUninit<T: ?Sized>();
         req true;
         ens std::mem::size_of::<MaybeUninit<T>>() == std::mem::size_of::<T>();
     
-    lem_auto(std::mem::align_of::<MaybeUninit<T>>()) align_of_MaybeUninit<T>();
+    lem_auto(std::mem::align_of::<MaybeUninit<T>>()) align_of_MaybeUninit<T: ?Sized>();
         req true;
         ens std::mem::align_of::<MaybeUninit<T>>() == std::mem::align_of::<T>();
     
@@ -528,7 +528,7 @@ mod ptr {
     
     fix NonNull::without_provenance<T>(addr: std::num::NonZero<usize>) -> NonNull<T>;
     
-    lem_auto(NonNull::without_provenance::<T>(addr).as_ptr()) NonNull_as_ptr_NonNull_without_provenance<T>(addr: std::num::NonZero<usize>);
+    lem_auto(NonNull::without_provenance::<T>(addr).as_ptr()) NonNull_as_ptr_NonNull_without_provenance<T: ?Sized>(addr: std::num::NonZero<usize>);
         req true;
         ens NonNull::without_provenance::<T>(addr).as_ptr() == addr.get() as *T;
     
@@ -545,7 +545,7 @@ mod ptr {
     // If ptr is 0, the result of NonNull::new_ is unspecified. (It is never the case that NonNull_ptr(nnp) == 0.)
     fix NonNull::new<T>(ptr: *T) -> NonNull<T>;
     
-    lem_auto(NonNull::new(ptr).as_ptr()) NonNull_as_ptr_new<T>(ptr: *T);
+    lem_auto(NonNull::new(ptr).as_ptr()) NonNull_as_ptr_new<T: ?Sized>(ptr: *T);
         req ptr != 0 && pointer_within_limits(ptr);
         ens NonNull::new(ptr).as_ptr() == ptr;
     
@@ -553,7 +553,7 @@ mod ptr {
         req true;
         ens NonNull::new(v.as_ptr()) == v;
     
-    lem_auto(v.as_ptr()) NonNull_as_ptr_nonnull<T>(v: NonNull<T>);
+    lem_auto(v.as_ptr()) NonNull_as_ptr_nonnull<T: ?Sized>(v: NonNull<T>);
         req true;
         ens v.as_ptr() != 0 && pointer_within_limits(v.as_ptr());
     
@@ -623,7 +623,7 @@ mod ptr {
         req true;
         ens <Unique<T>>.own(t, self_);
     
-    lem_auto(Unique::from_non_null(nn).as_non_null_ptr()) Unique_as_non_null_ptr_from_non_null<T>(nn: NonNull<T>);
+    lem_auto(Unique::from_non_null(nn).as_non_null_ptr()) Unique_as_non_null_ptr_from_non_null<T: ?Sized>(nn: NonNull<T>);
         req true;
         ens Unique::from_non_null(nn).as_non_null_ptr() == nn;
     
@@ -773,11 +773,11 @@ mod alloc {
         req true;
         ens is_valid_layout(layout.size(), layout.align()) == true;
     
-    lem_auto is_valid_layout_size_of_align_of<T>();
+    lem_auto is_valid_layout_size_of_align_of<T: ?Sized>();
         req true;
         ens is_valid_layout(std::mem::size_of::<T>(), std::mem::align_of::<T>()) == true;
     
-    lem_auto Layout_is_valid_new<T>();
+    lem_auto Layout_is_valid_new<T: ?Sized>();
         req true;
         ens Layout::is_valid(Layout::new::<T>()) == true;
     
@@ -891,7 +891,7 @@ mod alloc {
     pred Allocator<A>(t: thread_id_t, alloc: A, alloc_id: alloc_id_t);
     pred Allocator_share<A>(k: lifetime_t, t: thread_id_t, l: *A, alloc_id: alloc_id_t);
 
-    lem Allocator_inv<A>();
+    lem Allocator_inv<A: ?Sized>();
         req Allocator::<A>(?t, ?alloc, ?alloc_id);
         ens Allocator::<A>(t, alloc, alloc_id) &*& lifetime_inclusion(lft_of_type::<A>(), alloc_id.lft) == true;
     
@@ -1462,7 +1462,7 @@ mod vec {
     
     /*@
     
-    lem_auto Vec_inv<T, A>();
+    lem_auto Vec_inv<T: ?Sized, A: ?Sized>();
         req [?f]Vec::<T, A>(?vec, ?capacity, ?elems);
         ens [f]Vec::<T, A>(vec, capacity, elems) &*& length(elems) <= capacity &*& capacity <= isize::MAX;
     

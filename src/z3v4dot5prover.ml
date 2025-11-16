@@ -41,7 +41,7 @@ let rec simplify e =
     end
   | List [Atom "field_ptr_parent" as a0; ptr_e; Atom parent_offset as a1] ->
     begin match simplify ptr_e with
-    | List [Atom "field_ptr"; child_target; _; Atom child_offset] when parent_offset = child_offset ->
+    | List [Atom ("field_ptr"|"last_field_ptr"); child_target; _; Atom child_offset] when parent_offset = child_offset ->
       child_target
     | simpl ->
       List [a0; simpl; a1] 

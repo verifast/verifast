@@ -833,7 +833,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         match lookup_points_to_chunk_core h0 (generic_points_to_symb ()) [tp] t with
           Some v -> v
         | None ->
-          let vs = fmap |> List.map @@ fun (f, (_, _, tp, offsetFunc_opt, _)) ->
+          let vs = fmap |> map_with_is_last @@ fun (f, (_, _, tp, offsetFunc_opt, _)) is_last_field ->
             let tp' = instantiate_type s_tpenv tp in
             let (_, (_, _, _, _, fsymb, _, _)), _ = List.assoc (sn, f) field_pred_map in
             let v =
@@ -842,7 +842,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               | None ->
                 let Some offsetFunc = offsetFunc_opt in
                 let offset = ctxt#mk_app offsetFunc targs_typeids in
-                deref_pointer h0 env l (mk_field_ptr t structTypeid offset) tp'
+                deref_pointer h0 env l (mk_field_ptr t structTypeid offset is_last_field) tp'
             in
             prover_convert_term v tp' tp
           in
@@ -2395,7 +2395,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     (* rules for obtaining underscore (i.e. possibly uninitialized) field chunks *)
     field_pred_map |> List.iter begin function (_, (_, None)) -> () | ((sn, fn), ((_, (_, _, _, [_; ft], symb, _, _)), Some (_, (_, _, _, _, symb_, _, _)))) ->
       let (_, tparams, Some (_, fmap, _), padding_predsymb_opt, structTypeidFunc) = List.assoc sn structmap in
-      let (_, gh, _, offset_opt, _) = List.assoc fn fmap in
+      let (_, gh, _, offset_opt, _), is_last_field = assoc_with_is_last fn fmap in
       add_rule symb_ (get_auto_open_generic_points_to__chunk_rule sn tparams fmap padding_predsymb_opt);
       let auto_open_generic_points_to_chunk_rule = get_auto_open_generic_points_to_chunk_rule sn tparams fmap padding_predsymb_opt in
       add_rule symb auto_open_generic_points_to_chunk_rule;
@@ -2410,7 +2410,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let targ_typeids = List.map (typeid_of_core l typeid_env) wanted_targs in
           let structTypeid = ctxt#mk_app structTypeidFunc targ_typeids in
           let offset = ctxt#mk_app offsetFunc targ_typeids in
-          let field_address = mk_field_ptr tp structTypeid offset in
+          let field_address = mk_field_ptr tp structTypeid offset is_last_field in
           match extract
             begin function
               (Chunk ((g, is_symb), [], coef, [tp'; tv], _)) when g == pointee_pred_symb && definitely_equal tp' field_address -> Some (coef, tv)
@@ -2431,7 +2431,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let tsigned = match signedness with Signed -> true_term | Unsigned -> false_term in
         let pointee_chunk_to_field_chunk__rule l h typeid_env wanted_targs terms_are_well_typed wanted_coef wanted_coefpat wanted_indices_and_input_ts cont =
           let [tp] = wanted_indices_and_input_ts in
-          let field_address = mk_field_ptr_ l [] tp wanted_targs structTypeidFunc offsetFunc in
+          let field_address = mk_field_ptr_ l [] tp wanted_targs structTypeidFunc offsetFunc is_last_field in
           match extract
             begin function
               (Chunk ((g, is_symb), [], coef, [tp'; tsize'; tsigned'; tv], _)) when

@@ -363,7 +363,7 @@ pred Nodes1<T>(alloc_id: alloc_id_t, n: Option<NonNull<Node<T>>>, prev: Option<N
             nexts == cons(next0, nexts0)
     };
 
-lem_auto Nodes1_inv<T>()
+lem_auto Nodes1_inv<T: ?Sized>()
     req [?f]Nodes1::<T>(?alloc_id, ?head, ?prev, ?last, ?next, ?nodes, ?prevs, ?nexts);
     ens [f]Nodes1::<T>(alloc_id, head, prev, last, next, nodes, prevs, nexts) &*& length(prevs) == length(nodes) &*& length(nexts) == length(nodes);
 {
