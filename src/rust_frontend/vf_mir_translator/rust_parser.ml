@@ -56,6 +56,7 @@ let rec parse_type = function%parser
 | [ (l, Ident "f32" ) ] -> ManifestTypeExpr (l, Float)
 | [ (l, Ident "f64" ) ] -> ManifestTypeExpr (l, Double)
 | [ (l, Ident "real" ) ] -> ManifestTypeExpr (l, RealType)
+| [ (l, Ident "str") ] -> ManifestTypeExpr (l, Str)
 | [ (l, Ident x); [%let l, x = parse_simple_path_rest l x];
     [%let t = function%parser
       [ parse_type_args as targs ] -> ConstructedTypeExpr (l, x, targs)
@@ -93,7 +94,6 @@ let rec parse_type = function%parser
     [%let mutability = opt (function%parser [ (_, Kwd "const") ] -> () | [ (_, Kwd "mut") ] -> ()) ];
     [%let t = function%parser
        [ (lv, Kwd "_") ] -> PtrTypeExpr (l, ManifestTypeExpr (lv, Void))
-     | [ (lv, Ident "str") ] -> StructTypeExpr (l, Some "str_ptr", None, [], [])
      | [ parse_type as t ] -> PtrTypeExpr (l, t)
     ]
   ] -> t
@@ -115,9 +115,6 @@ let rec parse_type = function%parser
             RustRefTypeExpr (l, lft, mutability, StaticArrayTypeExpr (ls, elemTp, size))
          ]
        ] -> tp
-     | [ (l, Ident "str") ] ->
-       if mutability <> Shared then raise (ParseException (l, "Mutable string references are not yet supported"));
-       StructTypeExpr (l, Some "str_ref", None, [], [lft])
      | [ parse_type as tp ] ->
        RustRefTypeExpr (l, lft, mutability, tp)
     ]

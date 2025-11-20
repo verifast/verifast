@@ -182,6 +182,7 @@ type type_ = (* ?type_ *)
   | AbstractType of string
   | StaticLifetime (* 'static in Rust *)
   | ProjectionType of type_ * string (* trait name *) * type_ list (* trait generic args *) * string (* associated type name *) (* In Rust: <T as X<GArgs>>::Y *)
+  | Str (* Rust's `str` type *)
 and inferred_type_state =
     Unconstrained
   | ContainsAnyConstraint of bool (* allow the type to contain 'any' in positive positions *)
@@ -251,7 +252,7 @@ let is_instance (l: loc) (t1: type_) (t2: type_) =
   in iter [] t1 t2
 
 let type_fold_open state f = function
-  Bool | Void | Int (_, _) | RustChar | RealType | Float | Double | LongDouble -> state
+  Bool | Void | Int (_, _) | RustChar | RealType | Float | Double | LongDouble | Str -> state
 | StructType (sn, targs) -> List.fold_left f state targs
 | UnionType _ -> state
 | PtrType tp -> f state tp

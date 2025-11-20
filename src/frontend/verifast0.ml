@@ -272,6 +272,7 @@ let rec rust_string_of_type t =
   | AbstractType x -> x
   | StaticLifetime -> "'static"
   | ProjectionType (t, traitName, traitArgs, assocTypeName) -> Printf.sprintf "<%s as %s<%s>>::%s" (rust_string_of_type t) traitName (String.concat ", " (List.map rust_string_of_type traitArgs)) assocTypeName
+  | Str -> "str"
 
 let string_of_type lang dialect =
   match lang, dialect with

@@ -76,6 +76,7 @@ let rec of_type = function
 | RefType t -> C ("RefType", [of_type t])
 | AbstractType s -> C ("AbstractType", [S s])
 | StaticLifetime -> c "StaticLifetime"
+| Str -> c "Str"
 and of_inferred_type_state = function
   Unconstrained -> c "Unconstrained"
 | ContainsAnyConstraint b -> C ("ContainsAnyConstraint", [B b])

@@ -175,8 +175,8 @@ unsafe fn read_line(socket: platform::sockets::Socket, buffer: *mut Buffer)
 }
 
 unsafe fn send_str<'a>(socket: platform::sockets::Socket, text: &'a str)
-//@ req [?fs]platform::sockets::Socket(socket) &*& [?ft]text.ptr[..text.len] |-> ?cs;
-//@ ens [fs]platform::sockets::Socket(socket) &*& [ft]text.ptr[..text.len] |-> cs;
+//@ req [?fs]platform::sockets::Socket(socket) &*& [?ft](text as *u8)[..text.len()] |-> ?cs;
+//@ ens [fs]platform::sockets::Socket(socket) &*& [ft](text as *u8)[..text.len()] |-> cs;
 {
     socket.send(text.as_ptr(), text.len());
 }
@@ -234,8 +234,8 @@ unsafe fn handle_connection(connection: *mut Connection)
 }
 
 unsafe fn print<'a>(text: &'a str)
-//@ req thread_token(?t) &*& [?f]text.ptr[..text.len] |-> ?cs;
-//@ ens thread_token(t) &*& [f]text.ptr[..text.len] |-> cs;
+//@ req thread_token(?t) &*& [?f](text as *u8)[..text.len()] |-> ?cs;
+//@ ens thread_token(t) &*& [f](text as *u8)[..text.len()] |-> cs;
 {
     let mut stdout = std::io::stdout();
     let result = stdout.write(text.as_bytes());

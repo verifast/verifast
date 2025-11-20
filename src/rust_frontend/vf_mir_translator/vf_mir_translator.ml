@@ -1144,7 +1144,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let open Ast in
     if mut <> Mir.Not then
       static_error loc "Mutable string references are not yet supported" None;
-    let vf_ty = StructTypeExpr (loc, Some "str_ref", None, [], [ lft ]) in
+    let vf_ty = RustRefTypeExpr (loc, lft, (match mut with Mir.Not -> Shared | Mir.Mut -> Mutable), ManifestTypeExpr (loc, Str)) in
     let size = SizeofExpr (loc, TypeExpr vf_ty) in
     let own tid vs =
       Error "Expressing ownership of &str values is not yet supported"
@@ -1171,8 +1171,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
   and str_ptr_ty_info loc = (* *const/mut str *)
     let open Ast in
     let vf_ty =
-      StructTypeExpr
-        (loc, Some "str_ptr", None, [], [])
+      PtrTypeExpr (loc, ManifestTypeExpr (loc, Str))
     in
     let size = SizeofExpr (loc, TypeExpr vf_ty) in
     let own tid vs =
@@ -2026,27 +2025,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               | Slice bytes ->
                   Ok
                     (`TrTypedConstantScalar
-                      (Ast.CastExpr
-                         ( loc,
-                           StructTypeExpr
-                             ( loc,
-                               Some "str_ref",
-                               None,
-                               [],
-                               [ ManifestTypeExpr (loc, StaticLifetime) ] ),
-                           InitializerList
-                             ( loc,
-                               [
-                                 (None, StringLit (loc, bytes));
-                                 ( None,
-                                   IntLit
-                                     ( loc,
-                                       Big_int.big_int_of_int
-                                         (String.length bytes),
-                                       true,
-                                       false,
-                                       NoLSuffix ) );
-                               ] ) )))
+                      (StringLit (loc, bytes)))
               | _ -> failwith "TODO")
           | _ ->
               let* ty_info = translate_ty (ty_get val_cpn) loc in
@@ -2438,7 +2417,14 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                       (CallExpr
                          (fn_loc, "ref_origin", [], [], [ LitPat arg ], Static))
                   )
-            | "std::str::<impl str>::as_ptr"
+            | "std::str::<impl str>::as_ptr" ->
+                let [ arg_cpn ] = args_cpn in
+                let* tmp_rvalue_binders, [ arg ] =
+                  translate_operands [ (arg_cpn, fn_loc) ]
+                in
+                Ok
+                  ( tmp_rvalue_binders,
+                    FnCallResult (CastExpr (fn_loc, PtrTypeExpr (fn_loc, ManifestTypeExpr (fn_loc, Int (Unsigned, FixedWidthRank 0))), arg)) )
             | "std::slice::<impl [T]>::as_ptr" ->
                 let [ arg_cpn ] = args_cpn in
                 let* tmp_rvalue_binders, [ arg ] =
@@ -2447,7 +2433,15 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                 Ok
                   ( tmp_rvalue_binders,
                     FnCallResult (Ast.Select (fn_loc, arg, "ptr")) )
-            | "std::str::<impl str>::len" | "std::slice::<impl [T]>::len" ->
+            | "std::str::<impl str>::len" ->
+                let [ arg_cpn ] = args_cpn in
+                let* tmp_rvalue_binders, [ arg ] =
+                  translate_operands [ (arg_cpn, fn_loc) ]
+                in
+                Ok
+                  ( tmp_rvalue_binders,
+                    FnCallResult (CallExpr (fn_loc, "ptr_len", [], [], [LitPat arg], Static)) )
+            | "std::slice::<impl [T]>::len" ->
                 let [ arg_cpn ] = args_cpn in
                 let* tmp_rvalue_binders, [ arg ] =
                   translate_operands [ (arg_cpn, fn_loc) ]
@@ -2481,8 +2475,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                            InitializerList
                              ( fn_loc,
                                [
-                                 (None, Select (fn_loc, arg, "ptr"));
-                                 (None, Select (fn_loc, arg, "len"));
+                                 (None, CastExpr (fn_loc, PtrTypeExpr (fn_loc, ManifestTypeExpr (fn_loc, Int (Unsigned, FixedWidthRank 0))), arg));
+                                 (None, CallExpr (fn_loc, "ptr_len", [], [], [LitPat arg], Static));
                                ] ) )) )
             | _ -> translate_regular_fn_call substs fn_name)
       | _ ->
