@@ -1,7 +1,7 @@
 //@ use std::str::str;
 
-//@ pred small_str(s: *str) = str(s, _) &*& s.len <= 20;
-//@ pred large_str(s: *str) = str(s, _) &*& s.len <= 1000;
+//@ pred small_str(s: *str) = str(s, _) &*& s.len() <= 20;
+//@ pred large_str(s: *str) = str(s, _) &*& s.len() <= 1000;
 
 unsafe fn read_lines() -> *const *const str
 //@ req true;

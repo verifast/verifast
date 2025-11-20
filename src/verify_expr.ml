@@ -3118,11 +3118,13 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         cont h env value
       | CLang, Some Rust ->
         let cs = get_unique_var_symb "stringLiteralChars" (InductiveType ("list", [u8Type])) in
-        let value = get_unique_var_symb "stringLiteral" (PtrType u8Type) in
+        let value = get_unique_var_symb "stringLiteral" (PtrType Str) in
         let coef = get_dummy_frac_term () in
-        assume (ctxt#mk_not (ctxt#mk_eq value (null_pointer_term ()))) $. fun () ->
+        let thin_ptr = mk_app (strip_pointer_metadata_symb ()) [value] in
+        assume (ctxt#mk_not (ctxt#mk_eq thin_ptr (null_pointer_term ()))) $. fun () ->
         assume (ctxt#mk_eq (mk_u8_list_of_rust_string s) cs) $. fun () ->
-        cont (Chunk ((array_symb (), true), [u8Type], coef, [value; ctxt#mk_intlit (String.length s); cs], None)::h) env value
+        assume (ctxt#mk_eq (mk_app (ptr_len_symb ()) [value]) (ctxt#mk_intlit (String.length s))) $. fun () ->
+        cont (Chunk ((array_symb (), true), [u8Type], coef, [thin_ptr; ctxt#mk_intlit (String.length s); cs], None)::h) env value
       | CLang, _ ->
         if unloadable then static_error l "The use of string literals as expressions in unloadable modules is not supported. Put the string literal in a named global array variable instead." None;
         let (_, _, _, _, string_symb, _, _) = List.assoc "string" predfammap in

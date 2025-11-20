@@ -1810,9 +1810,9 @@ mod panicking {
     }
     
     fn panic<'a>(msg: &'a str);
-    //@ req [?f]msg.ptr[..msg.len] |-> ?cs;
+    //@ req [?f](msg as *u8)[..msg.len()] |-> ?cs;
     //@ ens false;
-    //@ on_unwind_ens [f]msg.ptr[..msg.len] |-> cs;
+    //@ on_unwind_ens [f](msg as *u8)[..msg.len()] |-> cs;
 
     fn panic_fmt<'a>(args: std::fmt::Arguments<'a>);
     //@ req thread_token(?t) &*& <std::fmt::Arguments<'a>>.own(t, args);

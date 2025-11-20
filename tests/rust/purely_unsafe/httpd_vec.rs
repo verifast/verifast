@@ -73,8 +73,8 @@ unsafe fn send_bytes<'a>(socket: platform::sockets::Socket, bytes: &'a [u8])
 }
 
 unsafe fn send_str<'a>(socket: platform::sockets::Socket, text: &'a str)
-//@ req [?fs]platform::sockets::Socket(socket) &*& [?ft]text.ptr[..text.len] |-> ?bs;
-//@ ens [fs]platform::sockets::Socket(socket) &*& [ft]text.ptr[..text.len] |-> bs;
+//@ req [?fs]platform::sockets::Socket(socket) &*& [?ft](text as *u8)[..text.len()] |-> ?bs;
+//@ ens [fs]platform::sockets::Socket(socket) &*& [ft](text as *u8)[..text.len()] |-> bs;
 {
     send_bytes(socket, text.as_bytes());
 }
@@ -94,8 +94,8 @@ unsafe fn handle_connection<'a>(buffer: &'a mut Vec<u8>, socket: platform::socke
 }
 
 unsafe fn print<'a>(text: &'a str)
-//@ req thread_token(?t) &*& [?f]text.ptr[..text.len] |-> ?cs;
-//@ ens thread_token(t) &*& [f]text.ptr[..text.len] |-> cs;
+//@ req thread_token(?t) &*& [?f](text as *u8)[..text.len()] |-> ?cs;
+//@ ens thread_token(t) &*& [f](text as *u8)[..text.len()] |-> cs;
 {
     let mut stdout = std::io::stdout();
     let result = stdout.write(text.as_bytes());

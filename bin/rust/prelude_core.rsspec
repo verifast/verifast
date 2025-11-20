@@ -91,6 +91,9 @@ fix pointer_cast(from_typeid: *_, to_typeid: *_, p: pointer) -> pointer {
 
 fix ptr_cast<T, U>(p: *T) -> *U { pointer_cast(typeid(T), typeid(U), p as pointer) as *U }
 
+fix pointer_metadata_as_usize(metadata: pointer_metadata) -> usize;
+fix ptr_len<t>(p: *t) -> usize { pointer_metadata_as_usize((p as pointer).metadata) }
+
 fix null_pointer_provenance() -> pointer_provenance;
 fix null_pointer() -> pointer { pointer_ctor(null_pointer_provenance, 0, pointer_metadata_none) }
 

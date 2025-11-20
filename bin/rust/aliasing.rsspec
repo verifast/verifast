@@ -109,7 +109,7 @@ fn reborrow_slice_ref<T>(x: slice_ref<'static, T>) -> slice_ref<'static, T>;
 //@ ens result == x;
 //@ on_unwind_ens false;
 
-fn create_str_ref(x: str_ref<'static>) -> str_ref<'static>;
+fn create_str_ref(x: &'static str) -> &'static str;
 //@ req true; // TODO
 //@ ens result == x;
 //@ on_unwind_ens false;
