@@ -1228,8 +1228,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
   and slice_ptr_ty_info loc elem_ty_info = (* *const/mut [T] *)
     let open Ast in
     let vf_ty =
-      StructTypeExpr
-        (loc, Some "slice_ptr", None, [], [ elem_ty_info.Mir.vf_ty ])
+      PtrTypeExpr (loc, SliceTypeExpr (loc, elem_ty_info.Mir.vf_ty))
     in
     let size = SizeofExpr (loc, TypeExpr vf_ty) in
     let own tid vs =
@@ -1256,10 +1255,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
 
   and slice_ref_ty_info loc lft mut elem_ty_info =
     let open Ast in
-    let sn = match mut with Mir.Mut -> "slice_ref_mut" | Mir.Not -> "slice_ref" in
+    let mut = match mut with Mir.Not -> Shared | Mir.Mut -> Mutable in
     let vf_ty =
-      StructTypeExpr
-        (loc, Some sn, None, [], [ lft; elem_ty_info.Mir.vf_ty ])
+      RustRefTypeExpr (loc, lft, mut, SliceTypeExpr (loc, elem_ty_info.Mir.vf_ty))
     in
     let size = SizeofExpr (loc, TypeExpr vf_ty) in
     let own tid vs =
@@ -2426,14 +2424,15 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   ( tmp_rvalue_binders,
                     FnCallResult (CastExpr (fn_loc, PtrTypeExpr (fn_loc, ManifestTypeExpr (fn_loc, Int (Unsigned, FixedWidthRank 0))), arg)) )
             | "std::slice::<impl [T]>::as_ptr" ->
+                let [ Mir.GenArgType gen_arg_ty_info; _ ] = substs in
                 let [ arg_cpn ] = args_cpn in
                 let* tmp_rvalue_binders, [ arg ] =
                   translate_operands [ (arg_cpn, fn_loc) ]
                 in
                 Ok
                   ( tmp_rvalue_binders,
-                    FnCallResult (Ast.Select (fn_loc, arg, "ptr")) )
-            | "std::str::<impl str>::len" ->
+                    FnCallResult (Ast.CastExpr (fn_loc, PtrTypeExpr (fn_loc, gen_arg_ty_info.vf_ty), arg)) )
+            | "std::str::<impl str>::len" | "std::slice::<impl [T]>::len" ->
                 let [ arg_cpn ] = args_cpn in
                 let* tmp_rvalue_binders, [ arg ] =
                   translate_operands [ (arg_cpn, fn_loc) ]
@@ -2441,30 +2440,20 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                 Ok
                   ( tmp_rvalue_binders,
                     FnCallResult (CallExpr (fn_loc, "ptr_len", [], [], [LitPat arg], Static)) )
-            | "std::slice::<impl [T]>::len" ->
-                let [ arg_cpn ] = args_cpn in
-                let* tmp_rvalue_binders, [ arg ] =
-                  translate_operands [ (arg_cpn, fn_loc) ]
-                in
-                Ok
-                  ( tmp_rvalue_binders,
-                    FnCallResult (Ast.Select (fn_loc, arg, "len")) )
             | "std::str::<impl str>::as_bytes" ->
                 let [ arg_cpn ] = args_cpn in
                 let* tmp_rvalue_binders, [ arg ] =
                   translate_operands [ (arg_cpn, fn_loc) ]
                 in
                 let slice_u8_ref_ty =
-                  Ast.StructTypeExpr
+                  Ast.RustRefTypeExpr
                     ( fn_loc,
-                      Some "slice_ref",
-                      None,
-                      [],
-                      [
-                        ManifestTypeExpr (fn_loc, StaticLifetime);
-                        ManifestTypeExpr
-                          (fn_loc, Int (Unsigned, FixedWidthRank 0));
-                      ] )
+                      ManifestTypeExpr (fn_loc, StaticLifetime),
+                      Shared,
+                      SliceTypeExpr
+                        ( fn_loc,
+                           ManifestTypeExpr
+                             (fn_loc, Int (Unsigned, FixedWidthRank 0))))
                 in
                 Ok
                   ( tmp_rvalue_binders,
@@ -2472,12 +2461,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                       (Ast.CastExpr
                          ( fn_loc,
                            slice_u8_ref_ty,
-                           InitializerList
-                             ( fn_loc,
-                               [
-                                 (None, CastExpr (fn_loc, PtrTypeExpr (fn_loc, ManifestTypeExpr (fn_loc, Int (Unsigned, FixedWidthRank 0))), arg));
-                                 (None, CallExpr (fn_loc, "ptr_len", [], [], [LitPat arg], Static));
-                               ] ) )) )
+                           arg )) )
             | _ -> translate_regular_fn_call substs fn_name)
       | _ ->
           Error (`TrFnCallRExpr "Invalid function definition type translation")

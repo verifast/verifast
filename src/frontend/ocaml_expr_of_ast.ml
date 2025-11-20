@@ -77,6 +77,7 @@ let rec of_type = function
 | AbstractType s -> C ("AbstractType", [S s])
 | StaticLifetime -> c "StaticLifetime"
 | Str -> c "Str"
+| Slice t -> C ("Slice", [of_type t])
 and of_inferred_type_state = function
   Unconstrained -> c "Unconstrained"
 | ContainsAnyConstraint b -> C ("ContainsAnyConstraint", [B b])
@@ -240,6 +241,11 @@ let rec of_type_expr = function
   ])
 | InferredTypeExpr l ->
   C ("InferredTypeExpr", [of_loc l])
+| SliceTypeExpr (l, tp) ->
+  C ("SliceTypeExpr", [
+    of_loc l;
+    of_type_expr tp
+  ])
 and of_tparam_bounds_expr {sized} =
   T [
     B sized;

@@ -8,6 +8,7 @@ let rec string_of_type_expr = function
 | ConstructedTypeExpr (l, tn, targs) -> Printf.sprintf "%s%s" tn (string_of_type_targs targs)
 | RustRefTypeExpr (l, lft, mut, tp) -> Printf.sprintf "&%s%s %s" (string_of_type_expr lft) (match mut with Mutable -> " mut" | Shared -> "") (string_of_type_expr tp)
 | PtrTypeExpr (l, tp) -> Printf.sprintf "*%s" (string_of_type_expr tp)
+| SliceTypeExpr (l, tp) -> Printf.sprintf "[%s]" (string_of_type_expr tp)
 | te -> failwith (Printf.sprintf "string_of_type_expr: %s" (Ocaml_expr_formatter.string_of_ocaml_expr true (Ocaml_expr_of_ast.of_type_expr te)))
 and string_of_type_targs = function
   [] -> ""

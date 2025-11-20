@@ -104,21 +104,8 @@ let rec parse_type = function%parser
      | [ ] -> raise (ParseException (l, "Explicit lifetime required"))
     ];
     [%let mutability = function%parser [ (_, Kwd "mut") ] -> Mutable | [ ] -> Shared];
-    [%let tp = function%parser
-       [ (ls, Kwd "[");
-         parse_type as elemTp;
-         [%let tp = function%parser
-            [ (_, Kwd "]") ] ->
-            if mutability <> Shared then raise (ParseException (l, "Mutable slice references are not yet supported"));
-            StructTypeExpr (ls, Some "slice_ref", None, [], [lft; elemTp])
-          | [ (_, Kwd ";"); parse_type as size; (_, Kwd "]") ] ->
-            RustRefTypeExpr (l, lft, mutability, StaticArrayTypeExpr (ls, elemTp, size))
-         ]
-       ] -> tp
-     | [ parse_type as tp ] ->
-       RustRefTypeExpr (l, lft, mutability, tp)
-    ]
-  ] -> tp
+    parse_type as tp
+  ] -> RustRefTypeExpr (l, lft, mutability, tp)
 | [ (l, Kwd "any") ] -> ManifestTypeExpr (l, AnyType)
 | [ (l, Kwd "Self") ] -> IdentTypeExpr (l, None, "Self")
 | [ (l, Kwd "(");
@@ -137,7 +124,14 @@ let rec parse_type = function%parser
        ] -> tp
     ]
     ] -> tp
-| [ (l, Kwd "["); parse_type as elemTp; (_, Kwd ";"); parse_type as size; (_, Kwd "]") ] -> StaticArrayTypeExpr (l, elemTp, size)
+| [ (l, Kwd "[");
+    parse_type as elemTp;
+    [%let tp = function%parser
+       [ (_, Kwd ";"); parse_type as size ] -> StaticArrayTypeExpr (l, elemTp, size)
+     | [ ] -> SliceTypeExpr (l, elemTp)
+    ];
+    (_, Kwd "]")
+  ] -> tp
 | [ (l, Int (n, _, _, _, _)) ] -> LiteralConstTypeExpr (l, int_of_big_int n)
 | [ (l, Kwd "<"); parse_type as t; (_, Kwd "as"); parse_type as trait; (_, Kwd ">"); (l, Kwd "::"); (_, Ident x) ] ->
   begin match trait with

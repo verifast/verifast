@@ -1222,7 +1222,7 @@ impl<T, A: Allocator> RawVec<T, A> {
             //@ close_points_to(me_ref1, 1/2);
             //@ end_ref_readonly(me_ref1);
             //@ open_points_to(&me);
-            //@ std::mem::array_at_lft__to_array_at_lft_MaybeUninit(slice.ptr as *T);
+            //@ std::mem::array_at_lft__to_array_at_lft_MaybeUninit(slice as *T);
             //@ open RawVec(_, _, _, _, _);
             //@ open RawVecInner(_, _, _, _, _, _);
             //@ size_align::<T>();

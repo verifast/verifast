@@ -66,8 +66,8 @@ unsafe fn read_line<'a>(socket: platform::sockets::Socket, buffer: &'a mut Vec<u
 }
 
 unsafe fn send_bytes<'a>(socket: platform::sockets::Socket, bytes: &'a [u8])
-//@ req [?fs]platform::sockets::Socket(socket) &*& [?ft]bytes.ptr[..bytes.len] |-> ?bs;
-//@ ens [fs]platform::sockets::Socket(socket) &*& [ft]bytes.ptr[..bytes.len] |-> bs;
+//@ req [?fs]platform::sockets::Socket(socket) &*& [?ft](bytes as *u8)[..bytes.len()] |-> ?bs;
+//@ ens [fs]platform::sockets::Socket(socket) &*& [ft](bytes as *u8)[..bytes.len()] |-> bs;
 {
     socket.send(bytes.as_ptr(), bytes.len());
 }

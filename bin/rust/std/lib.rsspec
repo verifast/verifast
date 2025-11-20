@@ -512,9 +512,9 @@ mod ptr {
     //@ req true;
     //@ ens result == addr as *T;
     
-    fn slice_from_raw_parts_mut<T>(data: *T, len: usize) -> slice_ptr<T>;
+    fn slice_from_raw_parts_mut<T>(data: *T, len: usize) -> *[T];
     //@ req true;
-    //@ ens result == slice_ptr::<T> { ptr: data, len };
+    //@ ens result as *T == data &*& result.len() == len;
     //@ on_unwind_ens false;
 
     unsafe fn drop_in_place<T>(to_drop: *mut T);
@@ -1218,8 +1218,22 @@ mod boxed {
         //@ ens Box_in(t, result, alloc_id, value);
         //@ on_unwind_ens false;
     
-        fn from_raw_slice_in(x: slice_ptr<T>, alloc: A) -> Box_slice0<T, A>;
-        //@ req std::alloc::Allocator(?t, alloc, ?alloc_id) &*& array_at_lft(alloc_id.lft, x.ptr, x.len, ?vs) &*& if x.len * std::mem::size_of::<T>() == 0 { true } else { std::alloc::alloc_block_in(alloc_id, x.ptr as *u8, std::alloc::Layout::from_size_align(x.len * std::mem::size_of::<T>(), std::mem::align_of::<T>())) };
+        fn from_raw_slice_in(x: *[T], alloc: A) -> Box_slice0<T, A>;
+        /*@
+        req std::alloc::Allocator(?t, alloc, ?alloc_id) &*&
+            array_at_lft(alloc_id.lft, x as *T, x.len(), ?vs) &*&
+            if x.len() * std::mem::size_of::<T>() == 0 {
+                true
+            } else {
+                std::alloc::alloc_block_in(
+                    alloc_id,
+                    x as *u8,
+                    std::alloc::Layout::from_size_align(
+                        x.len() * std::mem::size_of::<T>(),
+                        std::mem::align_of::<T>()
+                    ))
+            };
+        @*/
         //@ ens Box_slice_in(t, result, alloc_id, vs);
         //@ on_unwind_ens false;
     
@@ -1530,7 +1544,7 @@ mod vec {
 
         fn spare_capacity_mut<'a>(self: &'a Vec<T, A>) -> &'a [T];
         //@ req [?f](*self |-> ?self_) &*& [f]Vec_minus_buffer::<T, A>(self_, ?capacity, ?len, ?buffer);
-        //@ ens [f](*self |-> self_) &*& [f]Vec_minus_buffer::<T, A>(self_, capacity, len, buffer) &*& result.ptr == buffer + len &*& result.len == capacity - len;
+        //@ ens [f](*self |-> self_) &*& [f]Vec_minus_buffer::<T, A>(self_, capacity, len, buffer) &*& result as *T == buffer + len &*& result.len() == capacity - len;
         //@ on_unwind_ens false;
 
         fn set_len<'a>(self: &'a Vec<T, A>, new_len: usize);
@@ -1551,9 +1565,9 @@ mod io {
     trait Write {
     
         fn write<'a, 'b>(self: &'a Self, buf: &'b [u8]) -> Result<usize>;
-        //@ req thread_token(?t) &*& *self |-> ?self0 &*& <Self>.own(t, self0) &*& [?f]buf.ptr[..buf.len] |-> ?bs;
-        //@ ens thread_token(t) &*& *self |-> ?self1 &*& <Self>.own(t, self1) &*& [f]buf.ptr[..buf.len] |-> bs &*& std::result::Result_own::<usize, Error>(t, result);
-        //@ on_unwind_ens thread_token(t) &*& *self |-> ?self1 &*& <Self>.own(t, self1) &*& [f]buf.ptr[..buf.len] |-> _;
+        //@ req thread_token(?t) &*& *self |-> ?self0 &*& <Self>.own(t, self0) &*& [?f](buf as *u8)[..buf.len()] |-> ?bs;
+        //@ ens thread_token(t) &*& *self |-> ?self1 &*& <Self>.own(t, self1) &*& [f](buf as *u8)[..buf.len()] |-> bs &*& std::result::Result_own::<usize, Error>(t, result);
+        //@ on_unwind_ens thread_token(t) &*& *self |-> ?self1 &*& <Self>.own(t, self1) &*& [f](buf as *u8)[..buf.len()] |-> _;
         
         fn flush<'a>(self: &'a Self) -> Result<()>;
         //@ req thread_token(?t) &*& *self |-> ?self0 &*& <Self>.own(t, self0);

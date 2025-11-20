@@ -402,7 +402,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             in
             let fttpenv = fttpenv_with_bounds |> List.map begin fun ((x, {sized}), tp) ->
               if sized then
-                if not (is_definitely_sized_type tp) then
+                if not (sizedness_of_type tp = Some true) then
                   static_error l ("Type argument for type parameter '" ^ x ^ "' must be a sized type.") None;
               (x, tp)
             end in
@@ -2262,7 +2262,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         if is_rust then begin
           tpenv_with_bounds |> List.iter @@ fun ((tp, {sized}), ta) ->
             if sized then
-              if not (is_definitely_sized_type ta) then
+              if not (sizedness_of_type ta = Some true) then
                 static_error l (Printf.sprintf "Type argument %s for type parameter %s must implement trait Sized" (string_of_type ta) tp) None
         end;
         let (result_var, post) =
