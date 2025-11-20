@@ -182,6 +182,7 @@ type type_ = (* ?type_ *)
   | AbstractType of string
   | StaticLifetime (* 'static in Rust *)
   | ProjectionType of type_ * string (* trait name *) * type_ list (* trait generic args *) * string (* associated type name *) (* In Rust: <T as X<GArgs>>::Y *)
+  | Slice of type_  (* Rust slice type [T] *)
   | Str (* Rust's `str` type *)
 and inferred_type_state =
     Unconstrained
@@ -271,6 +272,7 @@ let type_fold_open state f = function
 | AbstractType _ | StaticLifetime -> state
 | BoundedGhostTypeParam (tp, {eqs}) -> List.fold_left (fun state (_, tp) -> f state tp) state eqs
 | ProjectionType (tp, _, targs, _) -> List.fold_left f (f state tp) targs
+| Slice tp -> f state tp
 
 let is_ptr_type tp =
   match tp with
@@ -413,6 +415,7 @@ type type_expr = (* ?type_expr *)
   | ConstTypeExpr of loc * type_expr
   | ProjectionTypeExpr of loc * type_expr * string (* trait name *) * type_expr list (* trait generic args *) * string (* associated type name *) (* In Rust: <T as X<GArgs>>::Y *)
   | InferredTypeExpr of loc (* A placeholder `_` to be filled by the typechecker. *)
+  | SliceTypeExpr of loc * type_expr  (* Rust slice type [T] *)
 and
   tparam_bounds_expr = {
     sized: bool; (* Is this type parameter constrained to be Sized? *)
@@ -1310,6 +1313,7 @@ let type_expr_fold_open f state te =
   | LValueRefTypeExpr (l, tp) -> f state tp
   | ConstTypeExpr (l, tp) -> f state tp
   | ProjectionTypeExpr (l, tp, traitName, traitGenericArgs, assocTypeName) -> List.fold_left f (f state tp) traitGenericArgs
+  | SliceTypeExpr (l, tp) -> f state tp
 
 let stmt_fold_open f state s =
   match s with

@@ -496,6 +496,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | PackageName n -> ProverInt
     | StaticLifetime -> ProverInductive
     | Str -> ProverInductive
+    | Slice t -> ProverInductive
     | t -> failwith ("provertype_of_type: " ^ string_of_type t)
   
   let typenode_of_type t = typenode_of_provertype (provertype_of_type t)
@@ -572,6 +573,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 
   let rust_char_typeid_term = mk_typeid_term (match dialect with Some Rust -> "char" | _ -> "rust_char")
   let str_typeid_term = mk_typeid_term "str"
+  let slice_typeid_func_symb = mk_symbol "slice_typeid" [type_info_type_node] type_info_type_node Uninterp
+  let mk_slice_typeid elem_typeid = ctxt#mk_app slice_typeid_func_symb [elem_typeid]
 
   let pointer_typeid_func_symb = mk_symbol "pointer_typeid" [type_info_type_node] type_info_type_node Uninterp
   let mk_pointer_typeid pointee_typeid = ctxt#mk_app pointer_typeid_func_symb [pointee_typeid]
@@ -2001,6 +2004,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         end
       | _ -> ProjectionType (t, traitName, traitArgs, assocTypeName)
       end
+    | Slice t -> Slice (instantiate_type tpenv t)
     | _ -> t
   
   let tparam_bounds_table = ref []
@@ -2227,6 +2231,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let t = InferredType (object end, ref Unconstrained) in
       reportInferredType l t;
       t
+    | SliceTypeExpr (l, t) ->
+      let tp = check t in
+      Slice tp
     in
     check te
   
@@ -2462,7 +2469,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | InductiveType _
       | StaticArrayType _
       | AbstractType _ -> Left true
-      | Str -> Left false
+      | Str | Slice _ -> Left false
       | StructType (sn, targs) ->
         begin match get_struct_sizedness sn with
           Either.Left b -> Left b
@@ -3033,7 +3040,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let (_, pts) = List.split pts in
             let rec type_is_inhabited tp =
               match tp with
-                Bool | Int (_, _) | RustChar | RealType | PtrType _ | RustRefType _ | ObjType _ | ArrayType _ | BoxIdType | HandleIdType | AnyType | AbstractType _ | Str -> true
+                Bool | Int (_, _) | RustChar | RealType | PtrType _ | RustRefType _ | ObjType _ | ArrayType _ | BoxIdType | HandleIdType | AnyType | AbstractType _ | Str | Slice _ -> true
               | GhostTypeParam _ -> true  (* Should be checked at instantiation site. *)
               | PredType (tps, pts, _, _) -> true
               | PureFuncType (t1, t2) -> type_is_inhabited t2
@@ -3077,7 +3084,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             match tp with
               Bool -> Some []
             | GhostTypeParam x -> Some [x]
-            | Int (_, _) | RustChar | RealType | PtrType _ | RustRefType _ | PredType (_, _, _, _) | ObjType _ | ArrayType _ | BoxIdType | HandleIdType | AnyType | AbstractType _ | Str -> None
+            | Int (_, _) | RustChar | RealType | PtrType _ | RustRefType _ | PredType (_, _, _, _) | ObjType _ | ArrayType _ | BoxIdType | HandleIdType | AnyType | AbstractType _ | Str | Slice _ -> None
             | PureFuncType (_, _) -> None (* CAVEAT: This assumes we do *not* have extensionality *)
             | StructType _ -> Some []
             | InductiveType (i0, targs) ->
@@ -3155,7 +3162,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       (* We don't need to check the projection type type arguments because they are real and real types
          do not contain any in negative positions. *)
     | UnionType _ -> allowContainsAnyPositive
-    | StaticArrayType (t, n) -> type_satisfies_contains_any_constraint assumeTypeParamsContainAnyPositiveOnly allowContainsAnyPositive t
+    | StaticArrayType (t, _) | Slice t -> type_satisfies_contains_any_constraint assumeTypeParamsContainAnyPositiveOnly allowContainsAnyPositive t
     | PureFuncType (t1, t2) -> type_satisfies_contains_any_constraint assumeTypeParamsContainAnyPositiveOnly false t1 && type_satisfies_contains_any_constraint assumeTypeParamsContainAnyPositiveOnly allowContainsAnyPositive t2
     | InductiveType (i, targs) ->
       let (_, _, _, _, _, _, containsAny, _, _) = List.assoc i inductivemap in
@@ -4399,25 +4406,25 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       (infvar, inferred)
     end
   
-  let rec is_definitely_sized_type t =
+  let rec sizedness_of_type t =
     match unfold_inferred_type t with
       Bool | Void | Int _ | RustChar | Float | Double | LongDouble
     | UnionType _ | PtrType _ | RustRefType _ | FuncType _ | InlineFuncType _
     | InductiveType _
     | StaticArrayType _
     | LiteralConstType _
-    | AbstractType _ -> true
-    | Str -> false
+    | AbstractType _ -> Some true
+    | Str | Slice _ -> Some false
     | StructType (sn, targs) ->
       begin match List.assoc sn struct_sizedness_map with
-        Either.Left b -> b
-      | Either.Right i -> is_definitely_sized_type (List.nth targs i)
+        Either.Left b -> Some b
+      | Either.Right i -> sizedness_of_type (List.nth targs i)
       end
-    | GhostTypeParam x -> false
-    | BoundedGhostTypeParam (x, {sized}) -> sized
-    | InferredType _ -> false
-    | ProjectionType (t, traitName, traitArgs, assocTypeName) -> false
-    | _ -> failwith ("is_definitely_sized_type: unexpected type " ^ string_of_type t)
+    | GhostTypeParam x -> None
+    | BoundedGhostTypeParam (x, {sized}) -> if sized then Some true else None
+    | InferredType _ -> None
+    | ProjectionType (t, traitName, traitArgs, assocTypeName) -> None
+    | _ -> failwith ("sizedness_of_type: unexpected type " ^ string_of_type t)
 
   let rec check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (inAnnotation: bool option) e: (expr (* typechecked expression *) * type_ (* expression type *) * big_int option (* constant integer expression => value*)) =
     let (w, t, v) = check_expr_core_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv inAnnotation e in
@@ -5027,7 +5034,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       begin match t, g with
         StructType (sn, targs), _ ->
         check (CallExpr (l, Printf.sprintf "%s::%s" sn g, targes, [], LitPat (TypedExpr (w, t))::pats, Static))
-      | (PtrType Str | RustRefType (_, _, Str)), "len" ->
+      | (PtrType (Str|Slice _) | RustRefType (_, _, (Str|Slice _))), "len" ->
         check (CallExpr (l, "ptr_len", targes, [], LitPat (TypedExpr (w, t))::pats, Static))
       | _ ->
         static_error l "Target of method call must be of struct type" None
@@ -5522,10 +5529,15 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | (PtrType pointeeType|RustRefType (_, _, pointeeType)), (PtrType pointeeType0|RustRefType (_, _, pointeeType0)) when isCast ->
           if is_rust then
             (* We might need to strip metadata *)
-            if is_definitely_sized_type pointeeType then
+            let sizedness = sizedness_of_type pointeeType in
+            if sizedness = Some true then
               Upcast (w, t, t0)
-            else if is_definitely_sized_type pointeeType0 then
-              WPureFunCall (expr_loc w, "strip_pointer_metadata", [], [w])
+            else
+              let sizedness0 = sizedness_of_type pointeeType0 in
+              if sizedness <> None && sizedness0 = sizedness then
+                Upcast (w, t, t0)
+              else if sizedness0 = Some true then
+                WPureFunCall (expr_loc w, "strip_pointer_metadata", [], [w])
             else
               WPureFunCall (expr_loc w, "ptr_cast", [t; t0], [w])
           else
@@ -6360,6 +6372,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   | Int (Unsigned, FixedWidthRank k) -> fst exact_width_integer_typeid_terms.(k)
   | RustChar -> rust_char_typeid_term
   | Str -> str_typeid_term
+  | Slice t -> mk_slice_typeid (typeid_of_core_core l msg env t)
   | PtrType Void -> void_pointer_typeid_term
   | PtrType _ when fno_strict_aliasing && not is_rust (* fat pointers *) -> void_pointer_typeid_term
   | InlineFuncType _ when fno_strict_aliasing -> void_pointer_typeid_term
@@ -6648,7 +6661,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | _ -> ()
   
   let assert_mk_pointer p pointeeType =
-    let metadata = if is_rust && is_definitely_sized_type pointeeType then snd (pointer_metadata_none_symb ()) else mk_ptr_metadata p in
+    let metadata = if is_rust && sizedness_of_type pointeeType = Some true then snd (pointer_metadata_none_symb ()) else mk_ptr_metadata p in
     ctxt#assert_term (ctxt#mk_eq p (mk_pointer (mk_ptr_provenance p) (mk_ptr_address p) metadata));
     if assume_no_provenance then ctxt#assert_term (ctxt#mk_eq (mk_ptr_provenance p) (snd (null_pointer_provenance_symb ())))
 

@@ -147,8 +147,8 @@ unsafe fn read_line(socket: platform::sockets::Socket, buffer: *mut Buffer)
 }
 
 unsafe fn send_bytes<'a>(socket: platform::sockets::Socket, bytes: &'a [u8])
-//@ req [?fs]platform::sockets::Socket(socket) &*& [?ft]bytes.ptr[..bytes.len] |-> ?cs;
-//@ ens [fs]platform::sockets::Socket(socket) &*& [ft]bytes.ptr[..bytes.len] |-> cs;
+//@ req [?fs]platform::sockets::Socket(socket) &*& [?ft](bytes as *u8)[..bytes.len()] |-> ?cs;
+//@ ens [fs]platform::sockets::Socket(socket) &*& [ft](bytes as *u8)[..bytes.len()] |-> cs;
 {
     socket.send(bytes.as_ptr(), bytes.len());
 }

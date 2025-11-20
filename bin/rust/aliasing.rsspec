@@ -99,12 +99,12 @@ fn create_ref_UnsafeCell(x: *_) -> *_;
 //@ ens ref_origin(result) == ref_origin(x);
 //@ on_unwind_ens false;
 
-fn create_slice_ref<T>(x: slice_ref<'static, T>) -> slice_ref<'static, T>;
+fn create_slice_ref<T>(x: &'static [T]) -> &'static [T];
 //@ req true; // TODO
 //@ ens result == x;
 //@ on_unwind_ens false;
 
-fn reborrow_slice_ref<T>(x: slice_ref<'static, T>) -> slice_ref<'static, T>;
+fn reborrow_slice_ref<T>(x: &'static [T]) -> &'static [T];
 //@ req true; // TODO
 //@ ens result == x;
 //@ on_unwind_ens false;
