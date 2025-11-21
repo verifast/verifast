@@ -2802,7 +2802,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         in
         iter pni ((i, (l, tparams', List.rev ctormap, getters, setters, subtype))::imap) pfm pfprm fpm ds
       | Func (l, Fixpoint, tparams_with_bounds, rto, g, ps, nonghost_callers_only, (functype, None), contract, terminates, body_opt, _, _)::ds ->
-        let tparams = List.map fst tparams_with_bounds in
+        push_tparam_bounds_table ();
+        let tparams = tparams_with_bounds |> List.map @@ fun (x, {sized}) ->
+           if sized then register_tparam_sized x;
+           x
+        in
         let g = full_name pn g in
         if List.mem_assoc g pfm || List.mem_assoc g purefuncmap0 then static_error l ("Duplicate pure function name: "^g) None;
         check_tparams l [] tparams;
@@ -2832,6 +2836,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           in
           iter [] [] 0 ps
         in
+        pop_tparam_bounds_table ();
         let param_requires_map = param_requires_map |> List.map @@ fun (p, (ps, requires)) ->
           let pmap' =
             let rec iter pmap' i = function
@@ -2889,10 +2894,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             | _ -> static_error l "Fixpoint function must switch on a parameter." None
           in
           let fsym = mk_func_symbol g fsym_paramtypes (provertype_of_type rt) (Proverapi.Fixpoint (subtype, List.length typeid_paramtypes + index)) in
-          iter (pn,ilist) imap ((g, (l, tparams, rt, List.map (fun (p, t) -> p, t) pmap, fsym))::pfm) pfprm ((g, (l, tparams, rt, pmap, Some index, body, pn, ilist, fst fsym))::fpm) ds
+          iter (pn,ilist) imap ((g, (l, tparams, rt, List.map (fun (p, t) -> p, t) pmap, fsym))::pfm) pfprm ((g, (l, tparams_with_bounds, rt, pmap, Some index, body, pn, ilist, fst fsym))::fpm) ds
         | Some ([ReturnStmt (lr, Some e) as body], _) ->
           let fsym = mk_func_symbol g fsym_paramtypes (provertype_of_type rt) Proverapi.Uninterp in
-          iter (pn,ilist) imap ((g, (l, tparams, rt, List.map (fun (p, t) -> p, t) pmap, fsym))::pfm) pfprm ((g, (l, tparams, rt, pmap, None, body, pn, ilist, fst fsym))::fpm) ds
+          iter (pn,ilist) imap ((g, (l, tparams, rt, List.map (fun (p, t) -> p, t) pmap, fsym))::pfm) pfprm ((g, (l, tparams_with_bounds, rt, pmap, None, body, pn, ilist, fst fsym))::fpm) ds
         | None ->
           let fsym = mk_func_symbol g fsym_paramtypes (provertype_of_type rt) Proverapi.Uninterp in
           iter (pn,ilist) imap ((g, (l, tparams, rt, List.map (fun (p, t) -> p, t) pmap, fsym))::pfm) pfprm fpm ds
@@ -3252,6 +3257,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | ((GhostTypeParam x1|BoundedGhostTypeParam (x1, _)), (GhostTypeParam x2|BoundedGhostTypeParam (x2, _))) ->
       (* We ignore lifetimes *)
       if x1 <> "" && x1.[0] = '\'' || x2 <> "" && x2.[0] = '\'' then true else x1 = x2
+    | (Slice t1, Slice t2) -> unify_relaxed t1 t2
     | (t1, t2) -> t1 = t2
   
   (* If [unify_strict t1 t2] returns [true], then t1 and t2 must have the same typeid.
@@ -3282,6 +3288,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | (InlineFuncType _, PtrType _) -> true
     | (PtrType _, InlineFuncType _) -> true
     | ((GhostTypeParam x1|BoundedGhostTypeParam (x1, _)), (GhostTypeParam x2|BoundedGhostTypeParam (x2, _))) -> x1 = x2
+    | (Slice t1, Slice t2) -> unify_strict t1 t2
     | (t1, t2) -> t1 = t2
 
   let unify t1 t2 = if uppercase_type_params_carry_typeid then unify_strict t1 t2 else unify_relaxed t1 t2
@@ -5031,7 +5038,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       end
     | CallExpr (l, g, targes, [], LitPat e::pats, Instance) when is_rust ->
       let w, t, _ = check e in
-      begin match t, g with
+      begin match unfold_inferred_type_deep t, g with
         StructType (sn, targs), _ ->
         check (CallExpr (l, Printf.sprintf "%s::%s" sn g, targes, [], LitPat (TypedExpr (w, t))::pats, Static))
       | (PtrType (Str|Slice _) | RustRefType (_, _, (Str|Slice _))), "len" ->
@@ -5689,7 +5696,12 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let rec iter fpm_done fpm_todo =
       match fpm_todo with
         [] -> List.rev fpm_done
-      | (g, (l, tparams, rt, pmap, index, body, pn, ilist, fsym))::fpm_todo ->
+      | (g, (l, tparams_with_bounds, rt, pmap, index, body, pn, ilist, fsym))::fpm_todo ->
+      push_tparam_bounds_table ();
+      let tparams = tparams_with_bounds |> List.map @@ fun (x, {sized}) ->
+        if sized then register_tparam_sized x;
+        x
+      in
       let param_requires_map =
         match try_assoc g purefuncparamrequiresmap with
           None -> []
@@ -5699,6 +5711,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
              reqs |> List.map @@ fun (l, j, rel, i) ->
                (l, j, rel, fst (List.nth pmap i)))
       in
+      let new_entry =
       match (index, body) with
         (Some index, SwitchStmt (ls, Var (lx, x), cs)) ->
         let (i, targs) =
@@ -5863,7 +5876,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             clauses @ wcs
         in
         let wcs = check_cs ctormap [] cs in
-        iter ((g, (l, tparams, rt, pmap, Some index, SwitchExpr (ls, Var (lx, x), wcs, None), pn, ilist, fsym))::fpm_done) fpm_todo
+        (g, (l, tparams, rt, pmap, Some index, SwitchExpr (ls, Var (lx, x), wcs, None), pn, ilist, fsym))
       | (None, ReturnStmt (lr, Some e)) ->
         let tenv = pmap in
         let w = check_expr_t (pn,ilist) tparams tenv (Some true) e rt in
@@ -5883,7 +5896,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           iter () e
         in
         iter0 w;
-        iter ((g, (l, tparams, rt, pmap, None, w, pn, ilist, fsym))::fpm_done) fpm_todo
+        (g, (l, tparams, rt, pmap, None, w, pn, ilist, fsym))
+      in
+      pop_tparam_bounds_table ();
+      iter (new_entry::fpm_done) fpm_todo
     in
     iter [] fixpointmap1
   

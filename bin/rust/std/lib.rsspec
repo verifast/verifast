@@ -544,6 +544,9 @@ mod ptr {
     
     // If ptr is 0, the result of NonNull::new_ is unspecified. (It is never the case that NonNull_ptr(nnp) == 0.)
     fix NonNull::new<T>(ptr: *T) -> NonNull<T>;
+
+    fix NonNull::as_non_null_ptr<T>(v: NonNull<[T]>) -> NonNull<T> { NonNull::new(v.as_ptr() as *T) }
+    fix NonNull::len<T>(v: NonNull<[T]>) -> usize { v.as_ptr().len() }
     
     lem_auto(NonNull::new(ptr).as_ptr()) NonNull_as_ptr_new<T: ?Sized>(ptr: *T);
         req ptr != 0 && pointer_within_limits(ptr);
@@ -556,6 +559,10 @@ mod ptr {
     lem_auto(v.as_ptr()) NonNull_as_ptr_nonnull<T: ?Sized>(v: NonNull<T>);
         req true;
         ens v.as_ptr() != 0 && pointer_within_limits(v.as_ptr());
+    
+    lem_auto(v.as_ptr()) NonNull_as_ptr_as_usize_nonzero<T: ?Sized>(v: NonNull<T>);
+        req true;
+        ens v.as_ptr() as usize != 0 && pointer_within_limits(v.as_ptr() as *_);
     
     lem NonNull_upcast<T0, T1>(v: NonNull<T0>);
         req true;
@@ -601,15 +608,10 @@ mod ptr {
         //@ req true;
         //@ ens result == NonNull::new(self.as_ptr() as *U);
         
-        fn cast_slice<U>(self: NonNull_slice0<T>) -> NonNull<U>;
+        fn cast_slice<U>(self: NonNull<[T]>) -> NonNull<U>;
         //@ req true;
-        //@ ens result == NonNull::new(self.ptr.as_ptr() as *U);
+        //@ ens result == NonNull::new(self.as_ptr() as *U);
         
-    }
-    
-    struct NonNull_slice0<T> { // Used by the MIR translator to represent NoNull<[T]> types
-        ptr: std::ptr::NonNull<T>,
-        len: usize,
     }
     
     struct Unique<T>;
@@ -1043,31 +1045,31 @@ mod alloc {
         // TODO: Provide access to the extra bytes (probably by introducing a predicate `alloc_block_in_(alloc_id, ptr, requested_layout, actual_length)`
         // and defining `alloc_block_in(alloc_id, ptr, layout) = alloc_block_in_(alloc_id, ptr, layout, ?len) &*& ptr[layout.size()..len] |-> _`).
     
-        fn allocate<'a>(self: &'a Self, layout: Layout) -> std::result::Result<std::ptr::NonNull_slice0<u8>, AllocError>;
+        fn allocate<'a>(self: &'a Self, layout: Layout) -> std::result::Result<std::ptr::NonNull<[u8]>, AllocError>;
         //@ req thread_token(?t) &*& Allocator::<&'a Self>(t, self, ?alloc_id);
         /*@
         ens thread_token(t) &*& Allocator::<&'a Self>(t, self, alloc_id) &*& 
             match result {
                 Result::Ok(ptr) =>
-                    alloc_block_in(alloc_id, ptr.ptr.as_ptr(), layout) &*&
-                    array_at_lft_(alloc_id.lft, ptr.ptr.as_ptr(), layout.size(), _) &*&
-                    layout.size() <= ptr.len &*&
-                    is_valid_layout(ptr.len, layout.align()) == true,
+                    alloc_block_in(alloc_id, ptr.as_ptr() as *u8, layout) &*&
+                    array_at_lft_(alloc_id.lft, ptr.as_ptr() as *u8, layout.size(), _) &*&
+                    layout.size() <= ptr.len() &*&
+                    is_valid_layout(ptr.len(), layout.align()) == true,
                 Result::Err(e) => true
             };
         @*/
         //@ on_unwind_ens thread_token(t) &*& Allocator::<&'a Self>(t, self, alloc_id);
     
-        fn allocate_zeroed<'a>(self: &'a Self, layout: Layout) -> std::result::Result<std::ptr::NonNull_slice0<u8>, AllocError>;
+        fn allocate_zeroed<'a>(self: &'a Self, layout: Layout) -> std::result::Result<std::ptr::NonNull<[u8]>, AllocError>;
         //@ req thread_token(?t) &*& Allocator::<&'a Self>(t, self, ?alloc_id);
         /*@
         ens thread_token(t) &*& Allocator::<&'a Self>(t, self, alloc_id) &*& 
             match result {
                 Result::Ok(ptr) =>
-                    alloc_block_in(alloc_id, ptr.ptr.as_ptr(), layout) &*&
-                    array_at_lft(alloc_id.lft, ptr.ptr.as_ptr(), layout.size(), ?bs) &*& forall(bs, (eq)(0)) == true &*&
-                    layout.size() <= ptr.len &*&
-                    is_valid_layout(ptr.len, layout.align()) == true,
+                    alloc_block_in(alloc_id, ptr.as_ptr() as *u8, layout) &*&
+                    array_at_lft(alloc_id.lft, ptr.as_ptr() as *u8, layout.size(), ?bs) &*& forall(bs, (eq)(0)) == true &*&
+                    layout.size() <= ptr.len() &*&
+                    is_valid_layout(ptr.len(), layout.align()) == true,
                 Result::Err(e) => true
             };
         @*/
@@ -1078,7 +1080,7 @@ mod alloc {
         //@ ens thread_token(t) &*& Allocator::<&'a Self>(t, self, alloc_id);
         //@ on_unwind_ens thread_token(t) &*& Allocator::<&'a Self>(t, self, alloc_id);
         
-        unsafe fn grow<'a>(self: &'a Self, ptr: std::ptr::NonNull<u8>, old_layout: Layout, new_layout: Layout) -> std::result::Result<std::ptr::NonNull_slice0<u8>, AllocError>;
+        unsafe fn grow<'a>(self: &'a Self, ptr: std::ptr::NonNull<u8>, old_layout: Layout, new_layout: Layout) -> std::result::Result<std::ptr::NonNull<[u8]>, AllocError>;
         /*@
         req thread_token(?t) &*&
             Allocator::<&'a Self>(t, self, ?alloc_id) &*&
@@ -1090,10 +1092,10 @@ mod alloc {
         ens thread_token(t) &*& Allocator::<&'a Self>(t, self, alloc_id) &*& 
             match result {
                 Result::Ok(new_ptr) =>
-                    alloc_block_in(alloc_id, new_ptr.ptr.as_ptr(), new_layout) &*&
-                    array_at_lft_(alloc_id.lft, new_ptr.ptr.as_ptr(), new_layout.size(), _) &*&
-                    new_layout.size() <= new_ptr.len &*&
-                    is_valid_layout(new_ptr.len, new_layout.align()) == true,
+                    alloc_block_in(alloc_id, new_ptr.as_ptr() as *u8, new_layout) &*&
+                    array_at_lft_(alloc_id.lft, new_ptr.as_ptr() as *u8, new_layout.size(), _) &*&
+                    new_layout.size() <= new_ptr.len() &*&
+                    is_valid_layout(new_ptr.len(), new_layout.align()) == true,
                 Result::Err(e) =>
                     alloc_block_in(alloc_id, ptr.as_ptr(), old_layout) &*&
                     array_at_lft_(alloc_id.lft, ptr.as_ptr(), old_layout.size(), bs)
@@ -1101,7 +1103,7 @@ mod alloc {
         @*/
         //@ on_unwind_ens thread_token(t) &*& Allocator::<&'a Self>(t, self, alloc_id);
         
-        unsafe fn shrink<'a>(self: &'a Self, ptr: std::ptr::NonNull<u8>, old_layout: Layout, new_layout: Layout) -> std::result::Result<std::ptr::NonNull_slice0<u8>, AllocError>;
+        unsafe fn shrink<'a>(self: &'a Self, ptr: std::ptr::NonNull<u8>, old_layout: Layout, new_layout: Layout) -> std::result::Result<std::ptr::NonNull<[u8]>, AllocError>;
         /*@
         req thread_token(?t) &*&
             Allocator::<&'a Self>(t, self, ?alloc_id) &*&
@@ -1113,10 +1115,10 @@ mod alloc {
         ens thread_token(t) &*& Allocator::<&'a Self>(t, self, alloc_id) &*& 
             match result {
                 Result::Ok(new_ptr) =>
-                    alloc_block_in(alloc_id, new_ptr.ptr.as_ptr(), new_layout) &*&
-                    array_at_lft_(alloc_id.lft, new_ptr.ptr.as_ptr(), new_layout.size(), _) &*&
-                    new_layout.size() <= new_ptr.len &*&
-                    is_valid_layout(new_ptr.len, new_layout.align()) == true,
+                    alloc_block_in(alloc_id, new_ptr.as_ptr() as *u8, new_layout) &*&
+                    array_at_lft_(alloc_id.lft, new_ptr.as_ptr() as *u8, new_layout.size(), _) &*&
+                    new_layout.size() <= new_ptr.len() &*&
+                    is_valid_layout(new_ptr.len(), new_layout.align()) == true,
                 Result::Err(e) =>
                     alloc_block_in(alloc_id, ptr.as_ptr(), old_layout) &*&
                     array_at_lft_(alloc_id.lft, ptr.as_ptr(), old_layout.size(), bs)
@@ -1131,7 +1133,6 @@ mod alloc {
 mod boxed {
 
     struct Box<T, A>;
-    struct Box_slice0<T, A>; // The VeriFast MIR translator translates Box<[T], A> to Box_slice0<T, A>
     
     /*@
     
@@ -1142,7 +1143,7 @@ mod boxed {
         ens thread_token(t) &*& <Box<T, std::alloc::Global>>.own(t, self);
     
     pred Box_in<T, A>(t: thread_id_t, self: Box<T, A>, alloc_id: std::alloc::alloc_id_t, value: T);
-    pred Box_slice_in<T, A>(t: thread_id_t, self: Box_slice0<T, A>, alloc_id: std::alloc::alloc_id_t, values: list<T>);
+    pred Box_slice_in<T, A>(t: thread_id_t, self: Box<[T], A>, alloc_id: std::alloc::alloc_id_t, values: list<T>);
     
     lem own_to_Box_in<T, A>(self: Box<T, A>);
         req <Box<T, A>>.own(?t, self);
@@ -1218,7 +1219,7 @@ mod boxed {
         //@ ens Box_in(t, result, alloc_id, value);
         //@ on_unwind_ens false;
     
-        fn from_raw_slice_in(x: *[T], alloc: A) -> Box_slice0<T, A>;
+        fn from_raw_slice_in(x: *[T], alloc: A) -> Box<[T], A>;
         /*@
         req std::alloc::Allocator(?t, alloc, ?alloc_id) &*&
             array_at_lft(alloc_id.lft, x as *T, x.len(), ?vs) &*&

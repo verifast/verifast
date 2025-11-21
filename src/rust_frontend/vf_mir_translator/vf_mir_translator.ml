@@ -793,21 +793,6 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let def_path = translate_adt_def_id @@ adt_ty_cpn.id in
     let kind = adt_ty_cpn.kind in
     let substs_cpn = adt_ty_cpn.substs in
-    let slice_targ_indices, substs_cpn =
-      let rec iter is ss i: D.generic_arg list -> (int list * D.generic_arg list) = function
-        | [] -> (List.rev is, List.rev ss)
-        | {kind=Type {kind= Slice tp}} :: substs_cpn' ->
-          iter (i::is) ({kind=Type tp}::ss) (i+1) substs_cpn'
-        | arg :: substs_cpn' -> iter is (arg::ss) (i+1) substs_cpn'
-      in
-      iter [] [] 0 substs_cpn
-    in
-    let def_path =
-      match slice_targ_indices with
-        [] -> def_path
-      | [i] -> Printf.sprintf "%s_slice%d" def_path i
-      | _ -> failwith "translate_adt_ty: Multiple slice type arguments"
-    in
     let name = def_path in
     match kind with
     | StructKind | UnionKind -> (
@@ -815,9 +800,6 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         | ("std::cell::UnsafeCell" | "std::mem::ManuallyDrop"), [ arg_cpn ] ->
             let* (Mir.GenArgType arg_ty) = translate_generic_arg arg_cpn loc in
             Ok arg_ty
-        | "std::ptr::NonNull", [ {kind=Type {kind=Slice ty}} ] ->
-            let* elem_ty_info = translate_ty ty loc in
-            Ok (slice_non_null_ty_info loc elem_ty_info)
         | _ ->
             let* gen_args =
               ListAux.try_map
@@ -1187,35 +1169,6 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let points_to tid l vid_op =
       Error
         "Expressing a points-to assertion for a *const/mut str object is not yet \
-         supported"
-    in
-    {
-      Mir.vf_ty;
-      interp =
-        RustBelt.
-          { size; own; shr; full_bor_content; points_to; pointee_fbc = None };
-    }
-
-  and slice_non_null_ty_info loc elem_ty_info = (* NonNull<[T]> *)
-    let open Ast in
-    let vf_ty =
-      StructTypeExpr
-        (loc, Some "std::ptr::NonNull_slice", None, [], [ elem_ty_info.Mir.vf_ty ])
-    in
-    let size = SizeofExpr (loc, TypeExpr vf_ty) in
-    let own tid vs =
-      Error "Expressing ownership of NonNull<[_]> values is not yet supported"
-    in
-    let shr lft tid l =
-      Error "Expressing shared ownership of NonNull<[_]> values is not yet supported"
-    in
-    let full_bor_content tid l =
-      Error
-        "Expressing the full borrow content of NonNull<[_]> values is not yet supported"
-    in
-    let points_to tid l vid_op =
-      Error
-        "Expressing a points-to assertion for a NonNull<[_]> object is not yet \
          supported"
     in
     {
@@ -1749,6 +1702,39 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     in
     Ok { Mir.vf_ty; interp }
 
+  and translate_slice_ty (elem_ty_cpn : D.ty) (loc : Ast.loc) =
+    let* elem_ty_info = translate_ty elem_ty_cpn loc in
+    let elem_ty = elem_ty_info.vf_ty in
+    let vf_ty = Ast.SliceTypeExpr (loc, elem_ty) in
+    let size = Ast.SizeofExpr (loc, TypeExpr vf_ty) in
+    let own tid vs =
+      Error "Expressing ownership of a slice is not yet supported"
+    in
+    let full_bor_content t l =
+      Error
+        "Expressing the full borrow content of a slice is not yet supported"
+    in
+    let points_to tid l vid_op =
+      let* pat = RustBelt.Aux.vid_op_to_var_pat vid_op loc in
+      Ok (Ast.PointsTo (loc, l, RegularPointsTo, pat))
+    in
+    let interp =
+      RustBelt.
+        {
+          size;
+          own;
+          shr =
+            (fun k t l ->
+              Error
+                "Expressing the shared ownership of a slice is not yet \
+                 supported");
+          full_bor_content;
+          points_to;
+          pointee_fbc = None;
+        }
+    in
+    Ok { Mir.vf_ty; interp }
+
   and translate_ty (ty_cpn : D.ty) (loc : Ast.loc) =
     let open Ast in
     let kind_cpn = ty_cpn.kind in
@@ -1789,7 +1775,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | Str -> Ast.static_error loc "Str types are not yet supported" None
     | Array array_ty_cpn -> translate_array_ty array_ty_cpn loc
     | Pattern -> Ast.static_error loc "Pattern types are not yet supported" None
-    | Slice _ -> Ast.static_error loc "Slice types are not yet supported" None
+    | Slice ty_cpn -> translate_slice_ty ty_cpn loc
 
   let translate_decoded_ty = translate_ty
 
@@ -5991,32 +5977,6 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   (*struct_attr list*)
                   if is_repr_c_get adt_def_cpn then [ ReprC ] else [] )
             in
-            let unsized_aux_decls =
-              match unsized_tparams with
-              | [] -> []
-              | [x] ->
-                let Some idx = Util.index_of x tparams 0 in
-                let unsized_struct_typedef_aux =
-                  let fds = [] in (* TODO: implement field definitions *)
-                  Ast.Struct
-                    ( def_loc,
-                      Printf.sprintf "%s_slice%d" name idx,
-                      vf_tparams,
-                      Left
-                        ( (*base_spec list*) [],
-                          (*field list*) fds,
-                          (*instance_pred_decl list*) [],
-                          (*is polymorphic*) false ),
-                      (*struct_attr list*)
-                      if is_repr_c_get adt_def_cpn then [ ReprC ] else [] )
-                in
-                [ unsized_struct_typedef_aux ]
-              | _ ->
-                Ast.static_error def_loc
-                  "VeriFast does not yet support structs with multiple \
-                    unsized type parameters"
-                  None
-            in
             let struct_typedef_aux =
               Ast.TypedefDecl
                 ( def_loc,
@@ -6024,7 +5984,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   name,
                   lft_params @ tparams )
             in
-            Ok (Mir.Struct, fds, fds_no_zst, struct_decl, struct_typedef_aux::unsized_aux_decls)
+            Ok (Mir.Struct, fds, fds_no_zst, struct_decl, [struct_typedef_aux])
         | EnumKind ->
             let ctors =
               (* VeriFast does not support zero-ctor inductives, so add a dummy ctor. *)
