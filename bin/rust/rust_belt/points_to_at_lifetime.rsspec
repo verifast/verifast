@@ -103,4 +103,8 @@ lem array_at_lft__to_u8s_at_lft_<T>(p: *T, size: usize);
     req [?f]array_at_lft_(?k, p, size, _);
     ens [f]array_at_lft_(k, p as *u8, size * std::mem::size_of::<T>(), _) &*& p as usize % std::mem::align_of::<T>() == 0;
 
+lem close_points_to_slice_at_lft<T>(p: *[T]);
+    req [?f]array_at_lft(?k, p as *T, p.len(), ?vs);
+    ens [f]points_to_at_lft(k, p, slice_of_elems(vs));
+
 @*/

@@ -1032,13 +1032,13 @@ let rec parse_impl_rest l tparams = function%parser
   let ds = ds |> List.map (prefix_decl_name l prefix) in
   List.map (decl_add_type_params l tparams) ds
 and parse_decl = function%parser
-  [ (l, Kwd "impl"); parse_type_params as tparams;
+  [ (l, Kwd "impl"); parse_type_params_with_bounds as tparams;
     [%let ds = function%parser
        [
          (_, Kwd "for"); (_, Ident x); (_, Kwd "="); parse_type as tp;
          (_, Kwd "{"); [%let ds = rep parse_decl]; (_, Kwd "}")
        ] ->
-       if tparams <> [x] then raise (ParseException (l, "`impl<Ts> for T = Type` where Ts is not exactly T is not yet supported"));
+       if tparams <> [x, {sized=true}] then raise (ParseException (l, "`impl<Ts> for T = Type` where Ts is not exactly T is not yet supported"));
        ds |> List.flatten |> List.concat_map begin function
            Func (l, k, tparams', rt, g, ps, nonghost_callers_only, ft, co, terminates, body, isVirtual, overrides) ->
            if tparams' <> [x, {sized=true}] then raise (ParseException (l, "Inside an `impl<T> for T = Type` block, each function must have exactly one type parameter named T"));
@@ -1047,7 +1047,7 @@ and parse_decl = function%parser
             FuncSpecializationDecl (l, g, true, g_specialized, [], [tp])]
          | _ -> raise (ParseException (l, "Only function declarations are supported in this form of impl"))
          end
-     | [ [%let ds = parse_impl_rest l (tparams_with_default_bounds_exprs tparams) ] ] -> ds
+     | [ [%let ds = parse_impl_rest l tparams ] ] -> ds
     ]
   ] -> ds
 | [ (l, Kwd "trait"); (lx, Ident x); parse_type_params as tparams; (_, Kwd "{");

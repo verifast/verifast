@@ -285,6 +285,17 @@ fix Array_elems<T, N>(array: [T; N]) -> list<T>;
 // If `length(elems)` is not `usize_of_const(typeid(N))` then the result is unspecified.
 fix Array_of_elems<T, N>(elems: list<T>) -> [T; N];
 
+fix slice_elems<T>(slice: [T]) -> list<T>;
+fix slice_of_elems<T>(elems: list<T>) -> [T];
+
+lem_auto slice_elems_slice_of_elems<T: ?Sized>(elems: list<T>);
+    req true;
+    ens slice_elems(slice_of_elems(elems)) == elems;
+
+lem_auto slice_of_elems_slice_elems<T: ?Sized>(slice: [T]);
+    req true;
+    ens slice_of_elems(slice_elems(slice)) == slice;
+
 lem Array__to_array_<T, N>(p: *[T; N]);
     req [?f](*p |-?-> ?array_);
     ens [f](p as *T)[..usize_of_const(typeid(N))] |-?-> match array_ { none => repeat(nat_of_int(usize_of_const(typeid(N))), none), some(array) => map(some, Array_elems(array)) };
