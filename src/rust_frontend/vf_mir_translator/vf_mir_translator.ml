@@ -2139,45 +2139,6 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           let fn_name, substs_cpn =
             Args.body_tr_defs_ctx.fn_specializer fn_name substs_cpn
           in
-          if substs_cpn |> List.exists @@ function
-            ({kind=Type {kind=Slice ty}}: D.generic_arg) -> true
-          | _ -> false
-          then
-            match fn_name, substs_cpn, args_cpn with
-            | "std::ptr::NonNull::<T>::cast", [ {kind=Type {kind=Slice ty0}}; subst1 ], [ arg_cpn ] ->
-                let* ty0_info = translate_decoded_ty ty0 call_loc in
-                let* Mir.GenArgType gen_arg_ty_info = translate_generic_arg subst1 call_loc in
-                let* tmp_rvalue_binders, [ arg ] =
-                  translate_operands [ (arg_cpn, fn_loc) ]
-                in
-                Ok
-                  ( tmp_rvalue_binders,
-                    FnCallResult
-                      (Ast.CallExpr
-                         ( fn_loc,
-                           "std::ptr::NonNull::<T>::cast_slice",
-                           [ ty0_info.vf_ty; gen_arg_ty_info.vf_ty ],
-                           [],
-                           [ LitPat arg ],
-                           Static )))
-            | "std::boxed::Box::<T, A>::from_raw_in", [ {kind=Type {kind=Slice ty0}}; subst1 ], [ arg1_cpn; arg2_cpn ] ->
-                let* ty0_info = translate_decoded_ty ty0 call_loc in
-                let* Mir.GenArgType gen_arg_ty_info = translate_generic_arg subst1 call_loc in
-                let* tmp_rvalue_binders, [ arg1; arg2 ] =
-                  translate_operands [ (arg1_cpn, fn_loc); (arg2_cpn, fn_loc) ]
-                in
-                Ok
-                  ( tmp_rvalue_binders,
-                    FnCallResult
-                      (Ast.CallExpr
-                         ( fn_loc,
-                           "std::boxed::Box::<T, A>::from_raw_slice_in",
-                           [ ty0_info.vf_ty; gen_arg_ty_info.vf_ty ],
-                           [],
-                           [ LitPat arg1; LitPat arg2 ],
-                           Static )))
-            | _ -> Ast.static_error call_loc (Printf.sprintf "Slice type are not yet supported as generic arguments to calls of function %s" fn_name) None
-          else
           let* substs =
             ListAux.try_map
               (fun arg -> translate_generic_arg arg call_loc)

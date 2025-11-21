@@ -352,6 +352,30 @@ mod intrinsics {
 
 mod mem {
 
+    /*@
+    
+    fix size_of_val<T: ?Sized>(x: *T) -> usize;
+    fix align_of_val<T: ?Sized>(x: *T) -> usize;
+    
+    lem_auto(size_of_val(x)) size_of_val_metadata_none<T: ?Sized>(x: *T);
+        req (x as pointer).metadata == pointer_metadata_none;
+        ens size_of_val(x) == std::mem::size_of::<T>();
+    
+    lem_auto(align_of_val(x)) align_of_val_metadata_none<T: ?Sized>(x: *T);
+        req (x as pointer).metadata == pointer_metadata_none;
+        ens align_of_val(x) == std::mem::align_of::<T>();
+    
+    lem_auto(size_of_val(x)) size_of_val_slice<T: ?Sized>(x: *[T]);
+        req true;
+        ens size_of_val(x) == x.len() * std::mem::size_of::<T>();
+    
+    lem_auto(align_of_val(x)) align_of_val_slice<T: ?Sized>(x: *[T]);
+        req true;
+        ens align_of_val(x) == std::mem::align_of::<T>();
+    
+    @*/
+    
+
     fn size_of<T>() -> usize;
     //@ req true;
     //@ ens result == std::mem::size_of::<T>();
@@ -552,6 +576,10 @@ mod ptr {
         req ptr != 0 && pointer_within_limits(ptr);
         ens NonNull::new(ptr).as_ptr() == ptr;
     
+    lem NonNull_Sized_as_ptr<T>(v: NonNull<T>);
+        req true;
+        ens v.as_ptr() as pointer == pointer_ctor((v.as_ptr() as pointer).provenance, (v.as_ptr() as pointer).address, pointer_metadata_none);
+    
     lem NonNull_new_as_ptr<T>(v: NonNull<T>);
         req true;
         ens NonNull::new(v.as_ptr()) == v;
@@ -604,11 +632,11 @@ mod ptr {
         //@ ens result == self.as_ptr();
         //@ on_unwind_ens false;
         
-        fn cast<U>(self: NonNull<T>) -> NonNull<U>;
-        //@ req true;
-        //@ ens result == NonNull::new(self.as_ptr() as *U);
+    }
+    
+    impl<T: ?Sized> NonNull<T> {
         
-        fn cast_slice<U>(self: NonNull<[T]>) -> NonNull<U>;
+        fn cast<U>(self: NonNull<T>) -> NonNull<U>;
         //@ req true;
         //@ ens result == NonNull::new(self.as_ptr() as *U);
         
@@ -760,6 +788,8 @@ mod alloc {
     
     //@ fix is_valid_layout(size: usize, align: usize) -> bool { is_power_of_2(align) && 0 <= size && size <= isize::MAX - isize::MAX % align }
     //@ fix Layout::is_valid(layout: Layout) -> bool { is_valid_layout(layout.size(), layout.align()) }
+    
+    //@ fix Layout::for_value<T: ?Sized>(v: *T) -> Layout { Layout::from_size_align(std::mem::size_of_val(v), std::mem::align_of_val(v)) }
     
     /*@
     
@@ -1143,7 +1173,6 @@ mod boxed {
         ens thread_token(t) &*& <Box<T, std::alloc::Global>>.own(t, self);
     
     pred Box_in<T, A>(t: thread_id_t, self: Box<T, A>, alloc_id: std::alloc::alloc_id_t, value: T);
-    pred Box_slice_in<T, A>(t: thread_id_t, self: Box<[T], A>, alloc_id: std::alloc::alloc_id_t, values: list<T>);
     
     lem own_to_Box_in<T, A>(self: Box<T, A>);
         req <Box<T, A>>.own(?t, self);
@@ -1214,30 +1243,6 @@ mod boxed {
         //@ ens thread_token(t) &*& Box_in(t, result, alloc_id, x) &*& drop_perm::<T>(charged, R, t, x);
         //@ on_unwind_ens thread_token(t);
         
-        fn from_raw_in(x: *T, alloc: A) -> Box<T, A>;
-        //@ req std::alloc::Allocator(?t, alloc, ?alloc_id) &*& std::alloc::alloc_block_in(alloc_id, x as *u8, std::alloc::Layout::new::<T>()) &*& points_to_at_lft(alloc_id.lft, x, ?value);
-        //@ ens Box_in(t, result, alloc_id, value);
-        //@ on_unwind_ens false;
-    
-        fn from_raw_slice_in(x: *[T], alloc: A) -> Box<[T], A>;
-        /*@
-        req std::alloc::Allocator(?t, alloc, ?alloc_id) &*&
-            array_at_lft(alloc_id.lft, x as *T, x.len(), ?vs) &*&
-            if x.len() * std::mem::size_of::<T>() == 0 {
-                true
-            } else {
-                std::alloc::alloc_block_in(
-                    alloc_id,
-                    x as *u8,
-                    std::alloc::Layout::from_size_align(
-                        x.len() * std::mem::size_of::<T>(),
-                        std::mem::align_of::<T>()
-                    ))
-            };
-        @*/
-        //@ ens Box_slice_in(t, result, alloc_id, vs);
-        //@ on_unwind_ens false;
-    
         fn into_inner(b: Box<T, A>) -> T;
         //@ req thread_token(?t) &*& Box_in::<T, A>(t, b, ?alloc_id, ?value);
         //@ ens thread_token(t) &*& result == value;
@@ -1257,6 +1262,23 @@ mod boxed {
         //@ req Box_minus_contents_in(?f, ?t, ?fs, self, ?alloc_id, ?contents_ptr);
         //@ ens Box_minus_contents_in(f, t, fs, self, alloc_id, contents_ptr) &*& result == contents_ptr;
         
+    }
+    
+    impl<T: ?Sized, A> Box<T, A> {
+    
+        fn from_raw_in(x: *T, alloc: A) -> Box<T, A>;
+        /*@
+        req std::alloc::Allocator(?t, alloc, ?alloc_id) &*&
+            points_to_at_lft(alloc_id.lft, x, ?value) &*&
+            if std::mem::size_of_val(x) == 0 {
+                true
+            } else {
+                std::alloc::alloc_block_in(alloc_id, x as *u8, std::alloc::Layout::for_value(x))
+            };
+        @*/
+        //@ ens Box_in(t, result, alloc_id, value);
+        //@ on_unwind_ens false;
+    
     }
     
     impl<T, A> Box<std::mem::MaybeUninit<T>, A> {

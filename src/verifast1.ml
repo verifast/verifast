@@ -3394,7 +3394,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       Bool | AbstractType _ -> false
     | GhostTypeParam x | BoundedGhostTypeParam (x, _) | RealTypeParam x -> true
     | RustChar | Float | Double | LongDouble -> true (* FIXME: Aren't these finite types? *)
-    | Int (_, _) | RealType | PtrType _ | RustRefType _ | PredType (_, _, _, _) | ObjType _ | ArrayType _ | BoxIdType | HandleIdType | AnyType | Str -> true
+    | Int (_, _) | RealType | PtrType _ | RustRefType _ | PredType (_, _, _, _) | ObjType _ | ArrayType _ | Slice _ | BoxIdType | HandleIdType | AnyType | Str -> true
     | PureFuncType (t1, t2) -> is_universal_type t1 && is_universal_type t2
     | InductiveType (i0, targs) ->
       let (_, _, _, _, _, cond, _, _, _) = List.assoc i0 inductivemap in

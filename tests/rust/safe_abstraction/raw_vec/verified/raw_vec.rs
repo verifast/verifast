@@ -1171,7 +1171,7 @@ impl<T, A: Allocator> RawVec<T, A> {
     /// an allocator could overallocate and return a greater memory block than requested.
     pub(crate) unsafe fn into_box(self, len: usize) -> Box<[MaybeUninit<T>], A>
     //@ req thread_token(?t) &*& RawVec(t, self, ?alloc_id, ?ptr, len) &*& array_at_lft_(alloc_id.lft, ptr as *T, len, ?vs);
-    //@ ens thread_token(t) &*& std::boxed::Box_slice_in::<std::mem::MaybeUninit<T>, A>(t, result, alloc_id, map(std::mem::MaybeUninit::new_maybe_uninit, vs));
+    //@ ens thread_token(t) &*& std::boxed::Box_in::<[std::mem::MaybeUninit<T>], A>(t, result, alloc_id, slice_of_elems(map(std::mem::MaybeUninit::new_maybe_uninit, vs)));
     //@ on_unwind_ens thread_token(t);
     {
         // Sanity-check one half of the safety requirement (we cannot check the other half).
@@ -1227,6 +1227,7 @@ impl<T, A: Allocator> RawVec<T, A> {
             //@ open RawVecInner(_, _, _, _, _, _);
             //@ size_align::<T>();
             //@ if len * std::mem::size_of::<T>() != 0 { std::alloc::Layout_repeat_some_size_aligned(Layout::new::<T>(), len); }
+            //@ close_points_to_slice_at_lft(slice);
             Box::from_raw_in(slice, alloc)
         }
     }
@@ -1307,6 +1308,7 @@ impl<T, A: Allocator> RawVec<T, A> {
         // SAFETY: Precondition passed to the caller
         unsafe {
             let ptr = ptr.cast();
+            //@ std::ptr::NonNull_Sized_as_ptr(ptr);
             //@ std::alloc::Layout_inv(Layout::new::<T>());
             /*@
             if 1 <= std::mem::size_of::<T>() && capacity != 0 {
