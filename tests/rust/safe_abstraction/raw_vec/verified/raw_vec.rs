@@ -1974,8 +1974,8 @@ impl<A: Allocator> RawVecInner<A> {
             cap: unsafe { Cap::new_unchecked(capacity) },
             alloc,
         };
-        //@ std::alloc::alloc_block_in_aligned(ptr.ptr.as_ptr());
-        //@ close RawVecInner(t, res, elem_layout, alloc_id, ptr.ptr.as_ptr(), _);
+        //@ std::alloc::alloc_block_in_aligned(ptr.as_ptr() as *u8);
+        //@ close RawVecInner(t, res, elem_layout, alloc_id, ptr.as_ptr() as *u8, _);
         Ok(res)
     }
 
@@ -2442,9 +2442,9 @@ impl<A: Allocator> RawVecInner<A> {
     #[inline]
     unsafe fn set_ptr_and_cap(&mut self, ptr: NonNull<[u8]>, cap: usize)
     //@ req (*self).ptr |-> _ &*& (*self).cap |-> _ &*& cap <= isize::MAX;
-    //@ ens (*self).ptr |-> Unique::from_non_null::<u8>(ptr.ptr) &*& (*self).cap |-> UsizeNoHighBit::new(cap);
+    //@ ens (*self).ptr |-> Unique::from_non_null::<u8>(ptr.as_non_null_ptr()) &*& (*self).cap |-> UsizeNoHighBit::new(cap);
     {
-        //@ std::ptr::NonNull_new_as_ptr(ptr.ptr);
+        //@ std::ptr::NonNull_new_as_ptr(ptr.as_non_null_ptr());
         // Allocators currently return a `NonNull<[u8]>` whose length matches
         // the size requested. If that ever changes, the capacity here should
         // change to `ptr.len() / size_of::<T>()`.
@@ -2561,7 +2561,7 @@ impl<A: Allocator> RawVecInner<A> {
                 unsafe {
                     self.set_ptr_and_cap(ptr, cap);
                     //@ let self1 = *self;
-                    //@ std::alloc::alloc_block_in_aligned(ptr.ptr.as_ptr());
+                    //@ std::alloc::alloc_block_in_aligned(ptr.as_ptr() as *u8);
                     //@ std::num::niche_types::UsizeNoHighBit_as_inner_new(cap);
                     //@ mul_zero(elem_layout.size(), cap);
                     //@ assert 0 <= self0.cap.as_inner();
@@ -2670,7 +2670,7 @@ impl<A: Allocator> RawVecInner<A> {
                     //@ mul_mono_l(1, elem_layout.size(), cap);
                     self.set_ptr_and_cap(ptr, cap);
                     //@ let self1 = *self;
-                    //@ std::alloc::alloc_block_in_aligned(ptr.ptr.as_ptr());
+                    //@ std::alloc::alloc_block_in_aligned(ptr.as_ptr() as *u8);
                     //@ std::num::niche_types::UsizeNoHighBit_as_inner_new(cap);
                     //@ mul_zero(elem_layout.size(), cap);
                     //@ assert 0 <= self0.cap.as_inner();
@@ -2855,7 +2855,7 @@ impl<A: Allocator> RawVecInner<A> {
             unsafe {
                 //@ std::num::niche_types::UsizeNoHighBit_inv(self01.cap);
                 self.set_ptr_and_cap(ptr, cap);
-                //@ std::alloc::alloc_block_in_aligned(ptr_1.ptr.as_ptr());
+                //@ std::alloc::alloc_block_in_aligned(ptr_1.as_ptr() as *u8);
                 //@ mul_zero(cap, elem_layout.size());
                 //@ std::alloc::Layout_repeat_size_aligned_intro(elem_layout, cap);
                 //@ close RawVecInner(t, *self, elem_layout, alloc_id, _, _);
@@ -2941,8 +2941,8 @@ req thread_token(?t) &*& t == currentThread &*&
 ens thread_token(t) &*& *alloc |-> ?alloc1 &*& Allocator(t, alloc1, alloc_id) &*&
     match result {
         Result::Ok(ptr) =>
-            alloc_block_in(alloc_id, ptr.ptr.as_ptr(), new_layout) &*&
-            array_at_lft_(alloc_id.lft, ptr.ptr.as_ptr(), new_layout.size(), _) &*&
+            alloc_block_in(alloc_id, ptr.as_ptr() as *u8, new_layout) &*&
+            array_at_lft_(alloc_id.lft, ptr.as_ptr() as *u8, new_layout.size(), _) &*&
             new_layout.size() <= isize::MAX,
         Result::Err(e) =>
             match current_memory {
