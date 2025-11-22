@@ -221,6 +221,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         (zip2 xmap xmap0)
     end;
     if nonghost_callers_only <> nonghost_callers_only0 then static_error l (msg ^ "nonghost_callers_only clauses do not match.") None;
+    check_focus l l $. fun () ->
     execute_branch begin fun () ->
     with_context (Executing ([], [], l, msg0 ^ ": " ^ msg1)) $. fun () ->
     let tparam_typeid_env = tparams0_with_bounds |> flatmap @@ fun (x, _) ->
