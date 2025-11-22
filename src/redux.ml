@@ -1705,7 +1705,7 @@ and context () =
     method end_formal = formal_depth <- formal_depth - 1
     method mk_bound (i: int) (s: unit): (symbol, termnode) term = BoundVar i
     method assume_forall (description: string) (pats: ((symbol, termnode) term) list) (tps: unit list) (body: (symbol, termnode) term): unit =
-      if tps = [] then ignore (self#assume body) else
+      if tps = [] && pats = [] then ignore (self#assume body) else
       let pats =
         if pats = [] then
           let check_pat pat =
@@ -1759,6 +1759,7 @@ and context () =
       pats |> List.iter (fun pat ->
         match pat with
           App (symb, args, _) ->
+          if args = [] then ignore (self#assume body) else
           (* We ignore existing applications of this symbol for now. *)
           symb#add_apply_listener (self :> context) (fun term ->
             (* printff "Axiom %s: toplevel symbol listener triggered\n" (self#pprint body); *)
