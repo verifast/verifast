@@ -111,6 +111,14 @@ let string_of_statement ({source_info; kind}: statement) =
   match kind with
   | Assign {lhs_place; rhs_rvalue} ->
       Printf.sprintf "%s = %s;" (string_of_place lhs_place) (string_of_rvalue rhs_rvalue)
+  | SetDiscriminant -> "set_discriminant;"
+  | Deinit -> "deinit;"
+  | StorageLive local_decl -> Printf.sprintf "storage_live %s;" local_decl.name
+  | StorageDead local_decl -> Printf.sprintf "storage_dead %s;" local_decl.name
+  | PlaceMention place ->
+      Printf.sprintf "place_mention %s;" (string_of_place place)
+  | Assume operand -> Printf.sprintf "assume %s;" (string_of_operand operand)
+  | CopyNonOverlapping -> "copy_non_overlapping;"
   | Nop -> "nop;"
 
 let string_of_unwind_action = function

@@ -5947,9 +5947,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             in
             Ok (Mir.Struct, fds, fds_no_zst, struct_decl, [struct_typedef_aux])
         | EnumKind ->
+            let _, simple_name = split_item_name name in
             let ctors =
               (* VeriFast does not support zero-ctor inductives, so add a dummy ctor. *)
-              if variants = [] then [ Ast.Ctor (def_loc, name ^ "::Dummy", []) ]
+              if variants = [] then [ Ast.Ctor (def_loc, simple_name ^ "::Dummy", []) ]
               else
                 variants
                 |> List.map @@ fun Mir.{ loc; name = variant_name; fields } ->
@@ -5957,10 +5958,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                      fields
                      |> List.map @@ fun Mir.{ name; ty } -> (name, ty.vf_ty)
                    in
-                   Ast.Ctor (loc, name ^ "::" ^ variant_name, ps)
+                   Ast.Ctor (loc, simple_name ^ "::" ^ variant_name, ps)
             in
             let decl = Ast.Inductive (def_loc, name, vf_tparams, ctors) in
-            Ok (Mir.Enum, [], [], decl, [])
+            Ok (Mir.Enum, [], [], decl, Rust_parser.own_pred_decls_for_enum def_loc name ctors vf_tparams)
         | UnionKind -> failwith "Todo: AdtDef::Union"
         | Undefined _ -> Error (`TrAdtDef "Unknown ADT kind")
       in

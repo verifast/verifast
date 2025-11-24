@@ -2741,7 +2741,13 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
       in
       match ss_i0, ss_i1 with
         [], [] -> check_terminator_refines_terminator env1
-      | _, [] -> error (Printf.sprintf "In function %s, cannot prove that statement %d of basic block %s in the original version refines the terminator of basic block %s in the verified version" def_path i_s0 i_bb0#to_string i_bb1#to_string)
+      | _, [] ->
+        begin match i_bb1#terminator with
+          {kind=Call ({func=Constant {const=Val {const_value=ZeroSized; ty={kind=FnDef {id={name=("core::hint::unreachable_unchecked"|"std::hint::unreachable_unchecked")}}}}}} as call)} ->
+            () (* Anything refines a call of unreachable_unchecked *)
+        | _ ->
+          error (Printf.sprintf "In function %s, cannot prove that statement %d of basic block %s in the original version refines the terminator of basic block %s in the verified version" def_path i_s0 i_bb0#to_string i_bb1#to_string)
+        end
       | Ref {place={projection=[Deref]}}::_, _ -> check_command_refines_command ()
       | _, Ref {place={projection=[Deref]; local={name=rhsPlaceLocalName1}}}::ss_i1_plus_1 ->
         (* Process assignments of the form `x = &*y;` where x and y are locals whose address is not taken.

@@ -125,7 +125,8 @@ cd safe_abstraction
     cd verified
       cargo verifast -allow_assume
     cd ..
-    refinement-checker --rustc-args "--edition 2024" original/lib.rs verified/lib.rs
+    refinement-checker --rustc-args "--edition 2024" with-directives/lib.rs verified/lib.rs
+    refinement-checker --rustc-args "--edition 2024" --ignore-directives original/lib.rs with-directives/lib.rs
   cd ..
 cd ..
 cd refinement_checker

@@ -41,13 +41,7 @@ impl TryReserveError {
         reason = "Uncertain how much info should be exposed",
         issue = "48043"
     )]
-    pub fn kind(&self) -> TryReserveErrorKind
-    //@ req [?f](*self |-> ?err); // NOTE: This assumes that TryReserveError has no UnsafeCell inside.
-    //@ ens [f](*self |-> err);
-    //@ on_unwind_ens true;
-    //@ safety_proof { assume(false); }
-    //@ assume_correct
-    {
+    pub fn kind(&self) -> TryReserveErrorKind {
         self.kind.clone()
     }
 }

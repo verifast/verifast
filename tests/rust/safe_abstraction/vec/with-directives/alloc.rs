@@ -8,8 +8,6 @@ pub use core::alloc::*;
 use core::hint;
 use core::ptr::{self, NonNull};
 
-//@ use std::alloc::{alloc_id_t, Allocator};
-
 unsafe extern "Rust" {
     // These are the magic symbols to call the global allocator. rustc generates
     // them to call the global allocator if there is a `#[global_allocator]` attribute
@@ -51,19 +49,6 @@ unsafe extern "Rust" {
 // the compiler needs to know when a Box uses the global allocator vs a custom one
 #[lang = "global_alloc_ty"]
 pub struct Global;
-
-/*@
-
-fix Global_alloc_id() -> alloc_id_t;
-
-lem produce_Allocator_Global(t: thread_id_t)
-    req true;
-    ens Allocator(t, Global {}, Global_alloc_id);
-{
-    assume(false);
-}
-
-@*/
 
 /// Allocates memory with the global allocator.
 ///
@@ -410,14 +395,7 @@ unsafe extern "Rust" {
 #[cfg(not(no_global_oom_handling))]
 #[cold]
 #[optimize(size)]
-pub const fn handle_alloc_error(layout: Layout) -> !
-//@ req true;
-//@ ens false;
-//@ on_unwind_ens true;
-//@ terminates;
-//@ safety_proof { assume(false); }
-//@ assume_correct
-{
+pub const fn handle_alloc_error(layout: Layout) -> ! {
     const fn ct_error(_: Layout) -> ! {
         panic!("allocation failed");
     }
