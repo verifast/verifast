@@ -1455,6 +1455,15 @@ mod result {
         //@ on_unwind_ens false;
         
     }
+    
+    impl<T, E, F> std::ops::FromResidual<std::result::Result<std::convert::Infallible, E>> for std::result::Result<T, F> {
+    
+        fn from_residual(residual: std::result::Result<std::convert::Infallible, E>) -> std::result::Result<T, F>;
+        //@ req residual == std::result::Result::Err(?e0) &*& <E>.own(?t, e0);
+        //@ ens result == std::result::Result::Err(?e1) &*& <F>.own(t, e1);
+        //@ on_unwind_ens true;
+
+    }
 
 }
 
@@ -1475,7 +1484,7 @@ mod collections {
         fn kind<'a>(self: &'a TryReserveError) -> TryReserveErrorKind;
         //@ req [?f](*self |-> ?err); // NOTE: This assumes that TryReserveError has no UnsafeCell inside.
         //@ ens [f](*self |-> err);
-        //@ on_unwind_ens false;
+        //@ on_unwind_ens true;
         
     }
     

@@ -218,8 +218,6 @@ mod thin;
 #[unstable(feature = "thin_box", issue = "92791")]
 pub use thin::ThinBox;
 
-//@ use std::alloc::alloc_id_t;
-
 /// A pointer type that uniquely owns a heap allocation of type `T`.
 ///
 /// See the [module-level documentation](../../std/boxed/index.html) for more.
@@ -234,67 +232,6 @@ pub struct Box<
     T: ?Sized,
     #[unstable(feature = "allocator_api", issue = "32838")] A: Allocator = Global,
 >(Unique<T>, A);
-
-/*@
-
-pred Box<T>(self: Box<T, alloc::Global>, value: T);
-
-lem Box_to_own<T>(self: Box<T, alloc::Global>)
-    req thread_token(?t) &*& Box::<T>(self, ?value) &*& <T>.own(t, value);
-    ens thread_token(t) &*& <Box<T, alloc::Global>>.own(t, self);
-{ assume(false); }
-
-pred Box_in<T, A>(t: thread_id_t, self: Box<T, A>, alloc_id: alloc_id_t, value: T);
-
-lem own_to_Box_in<T, A>(self: Box<T, A>)
-    req <Box<T, A>>.own(?t, self);
-    ens Box_in::<T, A>(t, self, ?alloc_id, ?value) &*& <T>.own(t, value);
-{ assume(false); }
-
-lem Box_in_to_own<T, A>(self: Box<T, A>)
-    req Box_in::<T, A>(?t, self, ?alloc_id, ?value) &*& <T>.own(t, value);
-    ens <Box<T, A>>.own(t, self);
-{ assume(false); }
-
-@*/
-
-/*@
-
-// This takes a pointer to a Box because moving the Box invalidates the pointer to the contents! https://github.com/verifast/verifast/issues/685#issuecomment-2626864223
-pred Box_minus_contents_in<T, A>(boxFrac: real, t: thread_id_t, placeFrac: real, self: *Box<T, A>, alloc_id: alloc_id_t; contents_ptr: *T);
-
-lem Box_separate_contents<T, A>(self: *Box<T, A>) -> *T
-    req [?fs](*self |-> ?self0) &*& [?f]Box_in::<T, A>(?t, self0, ?alloc_id, ?value);
-    ens Box_minus_contents_in(f, t, fs, self, alloc_id, result) &*& [f]points_to_at_lft(alloc_id.lft, result, value);
-{ assume(false); }
-
-lem Box_unseparate_contents<T, A>(self: *Box<T, A>)
-    req Box_minus_contents_in(?f, ?t, ?fs, self, ?alloc_id, ?contents_ptr) &*& [f]points_to_at_lft(alloc_id.lft, contents_ptr, ?value);
-    ens [fs](*self |-> ?self1) &*& [f]Box_in(t, self1, alloc_id, value);
-{ assume(false); }
-
-@*/
-
-/*@
-
-pred init_ref_Box_in_token<T, A>(t: thread_id_t, p: *Box<T, A>, fs: real, x: *Box<T, A>, alloc_id: alloc_id_t, p_contents_ptr: *T, x_contents_ptr: *T, f: real);
-
-lem open_ref_init_perm_Box_in<T, A>(p: *Box<T, A>) -> *T
-    req ref_init_perm::<Box<T, A>>(p, ?x) &*& Box_minus_contents_in::<T, A>(?f, ?t, ?fs, x, ?alloc_id, ?x_contents_ptr);
-    ens init_ref_Box_in_token::<T, A>(t, p, fs, x, alloc_id, result, x_contents_ptr, f) &*& ref_init_perm::<T>(result, x_contents_ptr);
-{ assume(false); }
-
-lem init_ref_Box_in<T, A>(p: *Box<T, A>, coef: real)
-    req init_ref_Box_in_token::<T, A>(?t, p, ?fs, ?x, ?alloc_id, ?p_contents_ptr, ?x_contents_ptr, ?f) &*& ref_initialized::<T>(p_contents_ptr) &*& 0 < coef &*& coef < 1;
-    ens ref_initialized::<Box<T, A>>(p) &*& Box_minus_contents_in::<T, A>((1-coef)*f, t, (1-coef)*fs, x, alloc_id, x_contents_ptr) &*& Box_minus_contents_in::<T, A>(coef*f, t, coef*fs, p, alloc_id, p_contents_ptr) &*& ref_end_token(p, x, coef*f);
-{ assume(false); }
-
-lem end_ref_Box_in<T, A>(p: *Box<T, A>)
-    req ref_initialized::<Box<T, A>>(p) &*& ref_end_token(p, ?x, ?f) &*& Box_minus_contents_in::<T, A>(f, ?t, ?fs, p, ?alloc_id, ?p_contents_ptr);
-    ens Box_minus_contents_in::<T, A>(f, t, fs, x, alloc_id, _) &*& ref_initialized::<T>(p_contents_ptr);
-{ assume(false); }
-
-@*/
 
 /// Constructs a `Box<T>` by calling the `exchange_malloc` lang item and moving the argument into
 /// the newly allocated memory. This is an intrinsic to avoid unnecessary copies.
@@ -1331,20 +1268,7 @@ impl<T: ?Sized, A: Allocator> Box<T, A> {
     /// [memory layout]: self#memory-layout
     #[unstable(feature = "allocator_api", issue = "32838")]
     #[inline]
-    pub unsafe fn from_raw_in(raw: *mut T, alloc: A) -> Self
-    /*@
-    req std::alloc::Allocator(?t, alloc, ?alloc_id) &*&
-        points_to_at_lft(alloc_id.lft, raw, ?value) &*&
-        if std::mem::size_of_val(raw) == 0 {
-            true
-        } else {
-            std::alloc::alloc_block_in(alloc_id, raw as *u8, std::alloc::Layout::for_value(raw))
-        };
-    @*/
-    //@ ens Box_in(t, result, alloc_id, value);
-    //@ on_unwind_ens false;
-    //@ assume_correct
-    {
+    pub unsafe fn from_raw_in(raw: *mut T, alloc: A) -> Self {
         Box(unsafe { Unique::new_unchecked(raw) }, alloc)
     }
 

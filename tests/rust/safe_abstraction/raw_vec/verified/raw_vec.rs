@@ -1825,10 +1825,10 @@ impl<A: Allocator> RawVecInner<A> {
                 RawVecInner(t, v, elem_layout, alloc_id, ?ptr, ?capacity_) &*&
                 capacity <= capacity_ &*&
                 match init {
-                    raw_vec::AllocInit::Uninitialized =>
+                    AllocInit::Uninitialized =>
                         array_at_lft_(alloc_id.lft, ptr, ?n, _) &*&
                         elem_layout.size() % elem_layout.align() != 0 || n == capacity_ * elem_layout.size(),
-                    raw_vec::AllocInit::Zeroed =>
+                    AllocInit::Zeroed =>
                         array_at_lft(alloc_id.lft, ptr, ?n, ?bs) &*&
                         elem_layout.size() % elem_layout.align() != 0 || n == capacity_ * elem_layout.size() &*&
                         forall(bs, (eq)(0)) == true
@@ -1851,8 +1851,8 @@ impl<A: Allocator> RawVecInner<A> {
                 close RawVecInner0(r, elem_layout, ptr, capacity_);
                 close <RawVecInner<A>>.own(_t, r);
                 match init {
-                    raw_vec::AllocInit::Uninitialized => { leak array_at_lft_(_, _, _, _); }
-                    raw_vec::AllocInit::Zeroed => { leak array_at_lft(_, _, _, _); }
+                    AllocInit::Uninitialized => { leak array_at_lft_(_, _, _, _); }
+                    AllocInit::Zeroed => { leak array_at_lft(_, _, _, _); }
                 }
             }
             Result::Err(e) => { }
@@ -1891,8 +1891,8 @@ impl<A: Allocator> RawVecInner<A> {
             //@ mul_zero(capacity, elem_layout.size());
             /*@
             match init {
-                raw_vec::AllocInit::Uninitialized => { close array_at_lft_(alloc_id.lft, ptr_, 0, []); }
-                raw_vec::AllocInit::Zeroed => { close array_at_lft(alloc_id.lft, ptr_, 0, []); }
+                AllocInit::Uninitialized => { close array_at_lft_(alloc_id.lft, ptr_, 0, []); }
+                AllocInit::Zeroed => { close array_at_lft(alloc_id.lft, ptr_, 0, []); }
             }
             @*/
             return Ok(r);
