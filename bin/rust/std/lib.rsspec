@@ -537,7 +537,7 @@ mod ptr {
     //@ ens result as *T == data &*& result.len() == len;
     //@ on_unwind_ens false;
 
-    unsafe fn drop_in_place<T>(to_drop: *mut T);
+    unsafe fn drop_in_place<T: ?Sized>(to_drop: *mut T);
     //@ req thread_token(?t) &*& *to_drop |-> ?v &*& <T>.own(t, v);
     //@ ens thread_token(t) &*& *to_drop |-> _;
     //@ on_unwind_ens thread_token(t) &*& *to_drop |-> _;

@@ -181,6 +181,10 @@ pred foreach<t>(xs: list<t>, p: pred(t)) =
         cons(h, t) => p(h) &*& foreach(t, p)
     };
 
+lem foreach_take_drop<t>(n: usize, xs: list<t>, p: pred(t));
+    req foreach(xs, p) &*& 0 <= n &*& n <= length(xs);
+    ens foreach(take(n, xs), p) &*& foreach(drop(n, xs), p) &*& xs == append(take(n, xs), drop(n, xs));
+
 lem foreach_append<t>(xs: list<t>, ys: list<t>);
     req foreach(xs, ?p) &*& foreach(ys, p);
     ens foreach(append(xs, ys), p);

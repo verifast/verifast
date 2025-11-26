@@ -220,8 +220,9 @@ lem MutexGuardU32_full_share(k: lifetime_t, t: thread_id_t, l: *MutexGuardU32)
 @*/
 impl MutexGuardU32 {
     unsafe fn new<'a>(lock: &'a MutexU32) -> MutexGuardU32
-    /*@ req thread_token(?t) &*& [?qa]lifetime_token(?a) &*& [_]exists_np(?km) &*& lifetime_inclusion(a, km) == true
-        &*& [_]frac_borrow(a, MutexU32_frac_borrow_content(km, lock))
+    /*@ req thread_token(?t) &*& [_]exists_np(?km)
+        &*& [_]frac_borrow(?a, MutexU32_frac_borrow_content(km, lock)) &*& [?qa]lifetime_token(a)
+        &*& lifetime_inclusion(a, km) == true
         &*& pointer_within_limits(&(*lock).inner) == true
         &*& SysMutex_locked(&(*lock).inner, full_borrow_(km, u32_full_borrow_content(t0, ref_origin(&(*lock).data))), t)
         &*& full_borrow(km, u32_full_borrow_content(t0, ref_origin(&(*lock).data)));
