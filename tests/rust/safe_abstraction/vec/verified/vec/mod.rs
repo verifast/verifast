@@ -2968,14 +2968,32 @@ impl<T, A: Allocator> Vec<T, A> {
     /// [`spare_capacity_mut()`]: Vec::spare_capacity_mut
     #[inline]
     #[stable(feature = "rust1", since = "1.0.0")]
-    pub unsafe fn set_len(&mut self, new_len: usize) {
-        ub_checks::assert_unsafe_precondition!(
-            check_library_ub,
-            "Vec::set_len requires that new_len <= capacity()",
-            (new_len: usize = new_len, capacity: usize = self.capacity()) => new_len <= capacity
-        );
+    pub unsafe fn set_len(&mut self, new_len: usize)
+    //@ req *self |-> ?self0 &*& Vec(?t, self0, ?alloc_id, ?ptr, ?capacity, ?length) &*& new_len <= capacity;
+    //@ ens *self |-> ?self1 &*& Vec(t, self1, alloc_id, ptr, capacity, new_len);
+    {
+        const fn precondition_check(new_len: usize, capacity: usize) {
+            if !(new_len <= capacity) {
+                let msg = concat!("unsafe precondition(s) violated: ", "Vec::set_len requires that new_len <= capacity()",
+                    "\n\nThis indicates a bug in the program. This Undefined Behavior check is optional, and cannot be relied on for safety.");
+                ::core::panicking::panic_nounwind_fmt(::core::fmt::Arguments::new_const(&[msg]), false);
+            }
+        }
+        if ::core::ub_checks::check_library_ub() { //~allow_dead_code
+            precondition_check(new_len, self.capacity()); //~allow_dead_code
+        }
+        //ub_checks::assert_unsafe_precondition!(
+        //    check_library_ub,
+        //    "Vec::set_len requires that new_len <= capacity()",
+        //    (new_len: usize = new_len, capacity: usize = self.capacity()) => new_len <= capacity
+        //);
 
+        //@ open_points_to(self);
         self.len = new_len;
+        //@ open Vec(t, self0, alloc_id, ptr, capacity, length);
+        //@ let self1 = *self;
+        //@ close Vec(t, self1, alloc_id, ptr, capacity, new_len);
+        //@ close_points_to(self);
     }
 
     /// Removes an element from the vector and returns it.
