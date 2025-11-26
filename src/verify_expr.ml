@@ -191,7 +191,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     check_breakpoint [] env l;
     major_success ()
   
-  let check_func_header_compat_core l msg0 msg env00 (k, tparams_with_bounds, rt, xmap, nonghost_callers_only, pre, post, epost, terminates) (k0, tparams0_with_bounds, rt0, xmap0, nonghost_callers_only0, tpenv0, cenv0, pre0, post0, epost0, terminates0) prolog =
+  let check_func_header_compat_core l l' msg0 msg env00 (k, tparams_with_bounds, rt, xmap, nonghost_callers_only, pre, post, epost, terminates) (k0, tparams0_with_bounds, rt0, xmap0, nonghost_callers_only0, tpenv0, cenv0, pre0, post0, epost0, terminates0) prolog =
     let msg1 = msg in
     let msg = msg ^ ": " in
     if k <> k0 then 
@@ -221,7 +221,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         (zip2 xmap xmap0)
     end;
     if nonghost_callers_only <> nonghost_callers_only0 then static_error l (msg ^ "nonghost_callers_only clauses do not match.") None;
-    check_focus l l $. fun () ->
+    check_focus l l' $. fun () ->
     execute_branch begin fun () ->
     with_context (Executing ([], [], l, msg0 ^ ": " ^ msg1)) $. fun () ->
     let tparam_typeid_env = tparams0_with_bounds |> flatmap @@ fun (x, _) ->
@@ -293,7 +293,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let check_func_header_compat l msg0 msg env00 (k, tparams, rt, xmap, nonghost_callers_only, pre, post, epost, terminates) (k0, tparams0, rt0, xmap0, nonghost_callers_only0, tpenv0, cenv0, pre0, post0, epost0, terminates0) =
     let epilog h result cont = cont h in
     let prolog h env cont = cont h epilog in
-    check_func_header_compat_core l msg0 msg env00 (k, tparams, rt, xmap, nonghost_callers_only, pre, post, epost, terminates) (k0, tparams0, rt0, xmap0, nonghost_callers_only0, tpenv0, cenv0, pre0, post0, epost0, terminates0) prolog
+    check_func_header_compat_core l l msg0 msg env00 (k, tparams, rt, xmap, nonghost_callers_only, pre, post, epost, terminates) (k0, tparams0, rt0, xmap0, nonghost_callers_only0, tpenv0, cenv0, pre0, post0, epost0, terminates0) prolog
   
   (** Adds the assumption of the form "is_x(y) == true" to the set
     * of symbolic assumptions, where y is a name of a function that
@@ -509,7 +509,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           | _ -> []
         in
         begin match body, prototypeImplementationProof_opt with
-          None, Some (l, ss) -> static_error l "Function prototype implementation must have a body." None
+          None, Some (l, ss, _) -> static_error l "Function prototype implementation must have a body." None
         | _ -> ()
         end;
         begin fun cont ->
@@ -517,7 +517,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             None ->
             begin match prototypeImplementationProof_opt with
               None -> ()
-            | Some (l, ss) -> static_error l "This function does not have a prototype." None
+            | Some (l, ss, _) -> static_error l "This function does not have a prototype." None
             end;
             cont (fn, FuncInfo ([], fterm, l, k, tparams_with_bounds, rt, xmap, nonghost_callers_only, pre, pre_tenv, post, terminates, (functype_opt, (None, None)), body', is_virtual, overrides)) prototypes_implemented
           | Some (FuncInfo ([], fterm0, l0, k0, tparams0, rt0, xmap0, nonghost_callers_only0, pre0, pre_tenv0, post0, terminates0, _, Some _, is_virtual0, overrides0)) ->

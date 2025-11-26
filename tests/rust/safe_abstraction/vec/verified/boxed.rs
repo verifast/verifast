@@ -251,7 +251,7 @@ lem own_to_Box_in<T, A>(self: Box<T, A>)
     ens Box_in::<T, A>(t, self, ?alloc_id, ?value) &*& <T>.own(t, value);
 { assume(false); }
 
-lem Box_in_to_own<T, A>(self: Box<T, A>)
+lem Box_in_to_own<T: ?Sized, A>(self: Box<T, A>)
     req Box_in::<T, A>(?t, self, ?alloc_id, ?value) &*& <T>.own(t, value);
     ens <Box<T, A>>.own(t, self);
 { assume(false); }
@@ -1052,7 +1052,14 @@ impl<T, A: Allocator> Box<[mem::MaybeUninit<T>], A> {
     /// ```
     #[stable(feature = "new_uninit", since = "1.82.0")]
     #[inline]
-    pub unsafe fn assume_init(self) -> Box<[T], A> {
+    pub unsafe fn assume_init(self) -> Box<[T], A>
+    /*@
+    req thread_token(?t) &*& t == currentThread &*&
+        exists::<list<T>>(?vs) &*& Box_in(t, self, ?alloc_id, slice_of_elems(map(std::mem::MaybeUninit::new, vs)));
+    @*/
+    //@ ens thread_token(t) &*& Box_in(t, result, alloc_id, slice_of_elems(vs));
+    //@ assume_correct
+    {
         let (raw, alloc) = Box::into_raw_with_allocator(self);
         unsafe { Box::from_raw_in(raw as *mut [T], alloc) }
     }

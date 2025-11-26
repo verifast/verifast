@@ -193,11 +193,21 @@ fix ptr_add_(p: pointer, offset: i32, elemTypeid: *_) -> pointer {
 fix transmute_uint<T>(n: u128) -> T;
 
 fix u8s__of<T>(v: T) -> list<option<u8>>;
-fix of_u8s_<T>(cs: list<option<u8>>) -> T;
+
+// Note: `std::mem::size_of::<Infallible>() == 0`, so `of_u8s_::<Infallible>([]) == none`
+// For an inhabited ZST T with a value v: `of_u8s_::<T>([]) == some(v)`
+
+fix of_u8s_<T>(cs: list<option<u8>>) -> option<T>;
 
 lem_auto(of_u8s_::<T>(u8s__of::<T>(v as T))) of_u8s__u8s__of<T: ?Sized>(v: T);
 req true;
-ens of_u8s_::<T>(u8s__of::<T>(v)) == v;
+ens of_u8s_::<T>(u8s__of::<T>(v)) == some(v);
+
+fix vals__of_u8s_<T>(bs: list<option<u8>>, count: usize) -> list<option<T>>;
+
+lem vals__of_u8s__take<T>(count0: usize, bs: list<option<u8>>, count: usize);
+    req length(bs) == count * std::mem::size_of::<T>() &*& 0 <= count0 &*& count0 <= count;
+    ens vals__of_u8s_::<T>(take(count0 * std::mem::size_of::<T>(), bs), count0) == take(count0, vals__of_u8s_::<T>(bs, count));
 
 pred points_to_<t>(p: *t; v: option<t>);
 pred points_to<t>(p: *t; v: t) = points_to_::<t>(p, some(v));

@@ -721,6 +721,20 @@ lem RawVec_inv<T, A>()
     close RawVec(t, self_, alloc_id, ptr, capacity);
 }
 
+lem RawVec_inv2<T, A>()
+    req RawVec::<T, A>(?t, ?self_, ?alloc_id, ?ptr, ?capacity);
+    ens RawVec::<T, A>(t, self_, alloc_id, ptr, capacity) &*&
+        lifetime_inclusion(lft_of_type::<A>(), alloc_id.lft) == true &*&
+        ptr != 0 &*& ptr as usize % std::mem::align_of::<T>() == 0 &*&
+        0 <= capacity &*&
+        Layout::new::<T>().repeat(capacity) != none &*&
+        if std::mem::size_of::<T>() == 0 { capacity == usize::MAX } else { capacity <= isize::MAX };
+{
+    open RawVec(t, self_, alloc_id, ptr, capacity);
+    RawVecInner_inv2();
+    close RawVec(t, self_, alloc_id, ptr, capacity);
+}
+
 lem RawVec_to_own<T, A>(self_: RawVec<T, A>)
     req RawVec(?t, self_, ?alloc_id, ?ptr, ?capacity) &*& array_at_lft_(alloc_id.lft, ptr, capacity, _);
     ens <RawVec<T, A>>.own(t, self_);
@@ -1170,10 +1184,12 @@ impl<T, A: Allocator> RawVec<T, A> {
     /// Note, that the requested capacity and `self.capacity()` could differ, as
     /// an allocator could overallocate and return a greater memory block than requested.
     pub(crate) unsafe fn into_box(self, len: usize) -> Box<[MaybeUninit<T>], A>
-    //@ req thread_token(?t) &*& RawVec(t, self, ?alloc_id, ?ptr, len) &*& array_at_lft_(alloc_id.lft, ptr as *T, len, ?vs);
+    //@ req thread_token(?t) &*& RawVec(t, self, ?alloc_id, ?ptr, ?capacity_) &*& array_at_lft_(alloc_id.lft, ptr as *T, len, ?vs) &*& if std::mem::size_of::<T>() == 0 { true } else { len == capacity_ };
     //@ ens thread_token(t) &*& boxed::Box_in::<[std::mem::MaybeUninit<T>], A>(t, result, alloc_id, slice_of_elems(map(std::mem::MaybeUninit::new_maybe_uninit, vs)));
     //@ on_unwind_ens thread_token(t);
     {
+        //@ RawVec_inv2();
+        
         // Sanity-check one half of the safety requirement (we cannot check the other half).
         if cfg!(debug_assertions) { //~allow_dead_code
             //@ let k = begin_lifetime();
@@ -1649,8 +1665,44 @@ impl<T, A: Allocator> RawVec<T, A> {
     #[cfg(not(no_global_oom_handling))]
     #[track_caller]
     #[inline]
-    pub(crate) fn shrink_to_fit(&mut self, cap: usize) {
-        self.inner.shrink_to_fit(cap, T::LAYOUT)
+    pub(crate) fn shrink_to_fit(&mut self, cap: usize)
+    /*@
+    req thread_token(?t) &*& t == currentThread &*&
+        *self |-> ?self0 &*&
+        RawVec(t, self0, ?alloc_id, ?ptr0, ?capacity0) &*&
+        array_at_lft_(alloc_id.lft, ptr0, capacity0, ?vs0);
+    @*/
+    /*@
+    ens thread_token(t) &*&
+        *self |-> ?self1 &*&
+        RawVec(t, self1, alloc_id, ?ptr1, ?capacity1) &*&
+        array_at_lft_(alloc_id.lft, ptr1, capacity1, take(capacity1, vs0)) &*&
+        cap <= capacity0 &*&
+        cap <= capacity1 &*&
+        capacity1 == if std::mem::size_of::<T>() == 0 { usize::MAX } else { cap };
+    @*/
+    /*@
+    safety_proof {
+        open <RawVec<T, A>>.own(_t, ?self0);
+        call();
+        assert RawVec(_, ?self1, _, _, _);
+        close <RawVec<T, A>>.own(_t, self1);
+    }
+    @*/
+    {
+        //@ size_align::<T>();
+        //@ open_points_to(self);
+        //@ open RawVec(t, self0, alloc_id, ptr0, capacity0);
+        //@ RawVecInner_inv2();
+        //@ array_at_lft__to_u8s_at_lft_(ptr0, capacity0);
+        //@ assert array_at_lft_::<u8>(_, _, _, ?bs);
+        //@ array_at_lft__inv();
+        let r = self.inner.shrink_to_fit(cap, T::LAYOUT);
+        //@ close_points_to(self);
+        //@ close RawVec(t, *self, alloc_id, ?ptr1, ?capacity1);
+        //@ u8s_at_lft__to_array_at_lft_(ptr1, capacity1);
+        //@ vals__of_u8s__take::<T>(capacity1, bs, capacity0);
+        r
     }
 }
 
@@ -1682,7 +1734,7 @@ impl<A: Allocator> RawVecInner<A> {
     /*@
     ens thread_token(t) &*&
         RawVecInner(t, result, Layout::from_size_align(elemSize, align.as_nonzero().get()), alloc_id, ?ptr, ?capacity) &*&
-        array_at_lft_(alloc_id.lft, ptr, capacity * elemSize, _) &*&
+        array_at_lft_(alloc_id.lft, ptr, capacity * elemSize, []) &*&
         capacity * elemSize == 0;
     @*/
     //@ on_unwind_ens false;
@@ -2410,7 +2462,25 @@ impl<A: Allocator> RawVecInner<A> {
     #[cfg(not(no_global_oom_handling))]
     #[inline]
     #[track_caller]
-    fn shrink_to_fit(&mut self, cap: usize, elem_layout: Layout) {
+    fn shrink_to_fit(&mut self, cap: usize, elem_layout: Layout)
+    /*@
+    req thread_token(?t) &*& t == currentThread &*&
+        elem_layout.size() % elem_layout.align() == 0 &*&
+        *self |-> ?self0 &*&
+        RawVecInner(t, self0, elem_layout, ?alloc_id, ?ptr0, ?capacity0) &*&
+        array_at_lft_(alloc_id.lft, ptr0, capacity0 * elem_layout.size(), ?bs0);
+    @*/
+    /*@
+    ens thread_token(t) &*&
+        *self |-> ?self1 &*&
+        RawVecInner(t, self1, elem_layout, alloc_id, ?ptr1, ?capacity1) &*&
+        array_at_lft_(alloc_id.lft, ptr1, capacity1 * elem_layout.size(), take(capacity1 * elem_layout.size(), bs0)) &*&
+        cap <= capacity0 &*&
+        cap <= capacity1 &*&
+        capacity1 == if elem_layout.size() == 0 { usize::MAX } else { cap };
+    @*/
+    //@ safety_proof { assume(false); } // This function should be marked `unsafe`; see https://github.com/rust-lang/rust/pull/145067
+    {
         if let Err(err) = self.shrink(cap, elem_layout) {
             handle_error(err);
         }
@@ -2694,7 +2764,7 @@ impl<A: Allocator> RawVecInner<A> {
         elem_layout.size() % elem_layout.align() == 0 &*&
         *self |-> ?self0 &*&
         RawVecInner(t, self0, elem_layout, ?alloc_id, ?ptr0, ?capacity0) &*&
-        array_at_lft_(alloc_id.lft, ptr0, capacity0 * elem_layout.size(), _);
+        array_at_lft_(alloc_id.lft, ptr0, capacity0 * elem_layout.size(), ?bs0);
     @*/
     /*@
     ens thread_token(t) &*&
@@ -2702,11 +2772,13 @@ impl<A: Allocator> RawVecInner<A> {
         match result {
             Result::Ok(u) =>
                 RawVecInner(t, self1, elem_layout, alloc_id, ?ptr1, ?capacity1) &*&
-                array_at_lft_(alloc_id.lft, ptr1, capacity1 * elem_layout.size(), _) &*&
-                cap <= capacity1,
+                array_at_lft_(alloc_id.lft, ptr1, capacity1 * elem_layout.size(), take(capacity1 * elem_layout.size(), bs0)) &*&
+                cap <= capacity0 &*&
+                cap <= capacity1 &*&
+                capacity1 == if elem_layout.size() == 0 { usize::MAX } else { cap },
             Result::Err(e) =>
                 RawVecInner(t, self1, elem_layout, alloc_id, ptr0, capacity0) &*&
-                array_at_lft_(alloc_id.lft, ptr0, capacity0 * elem_layout.size(), _) &*&
+                array_at_lft_(alloc_id.lft, ptr0, capacity0 * elem_layout.size(), bs0) &*&
                 <collections::TryReserveError>.own(t, e)
         };
     @*/
@@ -2749,7 +2821,7 @@ impl<A: Allocator> RawVecInner<A> {
         elem_layout.size() % elem_layout.align() == 0 &*&
         *self |-> ?self0 &*&
         RawVecInner(t, self0, elem_layout, ?alloc_id, ?ptr0, ?capacity0) &*&
-        array_at_lft_(alloc_id.lft, ptr0, capacity0 * elem_layout.size(), _) &*&
+        array_at_lft_(alloc_id.lft, ptr0, capacity0 * elem_layout.size(), ?bs0) &*&
         cap <= capacity0;
     @*/
     /*@
@@ -2758,11 +2830,12 @@ impl<A: Allocator> RawVecInner<A> {
         match result {
             Result::Ok(u) =>
                 RawVecInner(t, self1, elem_layout, alloc_id, ?ptr1, ?capacity1) &*&
-                array_at_lft_(alloc_id.lft, ptr1, capacity1 * elem_layout.size(), _) &*&
-                cap <= capacity1,
+                array_at_lft_(alloc_id.lft, ptr1, capacity1 * elem_layout.size(), take(capacity1 * elem_layout.size(), bs0)) &*&
+                cap <= capacity1 &*&
+                capacity1 == if elem_layout.size() == 0 { usize::MAX } else { cap },
             Result::Err(e) =>
                 RawVecInner(t, self1, elem_layout, alloc_id, ptr0, capacity0) &*&
-                array_at_lft_(alloc_id.lft, ptr0, capacity0 * elem_layout.size(), _) &*&
+                array_at_lft_(alloc_id.lft, ptr0, capacity0 * elem_layout.size(), bs0) &*&
                 <collections::TryReserveError>.own(t, e)
         };
     @*/
@@ -2781,6 +2854,9 @@ impl<A: Allocator> RawVecInner<A> {
         
         let (ptr, layout) =
             if let Some(mem) = current_memory { mem } else {
+                //@ std::alloc::Layout_inv(elem_layout);
+                //@ mul_zero(capacity0, elem_layout.size());
+                //@ RawVecInner_inv2();
                 return Ok(())
             };
             

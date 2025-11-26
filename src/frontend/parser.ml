@@ -221,7 +221,7 @@ type spec_clause = (* ?spec_clause *)
 | OnUnwindEnsuresClause of asn
 | TerminatesClause of loc
 | AssumeCorrectClause of loc
-| PrototypeImplementationProofClause of loc * stmt list
+| PrototypeImplementationProofClause of loc * stmt list * loc
 
 let next_body_rank =
   let counter = ref 0 in

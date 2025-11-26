@@ -1001,7 +1001,7 @@ and
       bool (* nonghost_callers_only *) *
       (
         (string * type_expr list * (loc * string) list) option (* implemented function type, with function type type arguments and function type arguments *) *
-        (loc * stmt list) option (* prototype implementation proof *)
+        (loc * stmt list * loc) option (* prototype implementation proof *)
       ) *
       (asn * (string (* result variable *) * asn)) option *  (* contract *)
       bool *  (* terminates *)
@@ -1145,16 +1145,22 @@ let type_expr_loc t =
     ManifestTypeExpr (l, t) -> l
   | StructTypeExpr (l, sn, _, _, _) -> l
   | UnionTypeExpr (l, un, _) -> l
+  | EnumTypeExpr (l, _, _) -> l
   | IdentTypeExpr (l, _, x) -> l
   | ConstructedTypeExpr (l, x, targs) -> l
   | PtrTypeExpr (l, te) -> l
   | RustRefTypeExpr (l, _, _, _) -> l
-  | ArrayTypeExpr(l, te) -> l
+  | ArrayTypeExpr (l, te) -> l
+  | StaticArrayTypeExpr (l, te, _) -> l
+  | LiteralConstTypeExpr (l, c) -> l
   | PredTypeExpr(l, te, _) -> l
   | PureFuncTypeExpr (l, tes, _) -> l
+  | LValueRefTypeExpr (l, te) -> l
   | FuncTypeExpr (l, _, _) -> l
   | ConstTypeExpr (l, te) -> l
   | ProjectionTypeExpr (l, te, _, _, _) -> l
+  | InferredTypeExpr l -> l
+  | SliceTypeExpr (l, te) -> l
 
 let string_of_func_kind f=
   match f with
@@ -1340,7 +1346,7 @@ let stmt_fold_open f state s =
       let state = match body with None -> state | Some (ss, _) -> List.fold_left f state ss in
       begin match prototypeImplementationProof with
         None -> state
-      | Some (_, ss) -> List.fold_left f state ss
+      | Some (_, ss, _) -> List.fold_left f state ss
       end
     | _ -> state
     in
