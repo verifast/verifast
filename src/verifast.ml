@@ -3249,6 +3249,57 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           cont None env ghostenv
       end @@ fun this_term_opt env ghostenv -> 
       produce_asn_with_post env [] [] ghostenv env pre real_unit (Some (PredicateChunkSize 0)) None (fun h ghostenv env post' ->
+        begin fun cont ->
+          if is_rust && tparams <> [] then begin
+            with_context (Executing (h, env, l, "Producing function lifetime token")) @@ fun () ->
+            let lifetime_t = check_pure_type (pn,ilist) [] Ghost (IdentTypeExpr (l, None, "lifetime_t")) in
+            let func_lft = get_unique_var_symb "func_lft" lifetime_t in
+            let lifetime_inclusion_func_symb = get_pure_func_symb "lifetime_inclusion" in
+            let lft_of_typeid_func_symb = get_pure_func_symb "lft_of" in
+            let lft_of_type_func_symb = get_pure_func_symb "lft_of_type" in
+            let rec iter tparam_typeid_env cont =
+              match tparam_typeid_env with
+                [] -> cont ()
+              | (typeid_name, typeid_term) :: tparam_typeid_env ->
+                let lft_term =
+                  if String.starts_with typeid_name ~prefix:"'" then
+                    mk_app lft_of_typeid_func_symb [typeid_term]
+                  else
+                    mk_app lft_of_type_func_symb [typeid_term]
+                in
+                assume (mk_app lifetime_inclusion_func_symb [func_lft; lft_term]) @@ fun () ->
+                iter tparam_typeid_env cont
+            in
+            iter tparam_typeid_env @@ fun () ->
+            let lifetime_token_pred_symb = get_pred_symb "lifetime_token" in
+            let h =
+              Chunk ((lifetime_token_pred_symb, true), [], real_unit, [func_lft], None) :: h
+            in
+            let func_lft_var_name =
+              if not (List.mem_assoc "func_lft" env) then
+                "func_lft"
+              else
+                let rec iter k =
+                  let name = Printf.sprintf "func_lft_%d" k in
+                  if not (List.mem_assoc name env) then
+                    name
+                  else
+                    iter (k + 1)
+                in
+                iter 0
+            in
+            let env = (func_lft_var_name, func_lft) :: env in
+            let ghostenv = func_lft_var_name :: ghostenv in
+            let tenv = (func_lft_var_name, lifetime_t) :: tenv in
+            let consume_func_lft_token h cont =
+              with_context (Executing (h, env, l, "Consuming function lifetime token"))  @@ fun () ->
+              consume_chunk rules h env [] [] [] l (lifetime_token_pred_symb, true) [] real_unit real_unit_pat (Some 1) [TermPat func_lft] $. fun _ h _ _ _ _ _ _ ->
+              cont h
+            in
+            cont h tenv env ghostenv consume_func_lft_token
+          end else
+            cont h tenv env ghostenv (fun h cont -> cont h)
+        end $. fun h tenv env ghostenv consume_func_lft_token ->
         let (result_var, post) =
           match post' with
             None -> post
@@ -3256,6 +3307,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             post'
         in
         let do_return h env_post =
+          consume_func_lft_token h @@ fun h ->
           consume_asn rules [] h env ghostenv env_post post true real_unit @@ fun _ h ghostenv env size_first ->
             (* 
               Only do the cleanup for locals that are still in env. 

@@ -20,10 +20,10 @@ fix lifetime_inclusion(k: lifetime_t, k1: lifetime_t) -> bool;
 // LftL-incl
 pred close_lifetime_trade_token(q1: real, k1: lifetime_t, q: real, k: lifetime_t);
 
-lem lifetime_token_trade(k: lifetime_t, q: real, k1: lifetime_t);
+lem lifetime_token_trade(k: lifetime_t, q: real, k1: lifetime_t) -> real;
     nonghost_callers_only
     req lifetime_inclusion(k, k1) == true &*& [q]lifetime_token(k);
-    ens [?q1]lifetime_token(k1) &*& close_lifetime_trade_token(q1, k1, q, k);
+    ens [result]lifetime_token(k1) &*& close_lifetime_trade_token(result, k1, q, k);
 
 lem lifetime_token_trade_back(q1: real, k1: lifetime_t);
     nonghost_callers_only

@@ -16,19 +16,19 @@ lem borrow_points_to_at_lft_end<T>(p: *T);
 
 pred close_points_to_at_lft_token<T>(f: real, k: lifetime_t, p: *T, q: real);
 
-lem open_points_to_at_lft_<T>(p: *T);
+lem open_points_to_at_lft_<T: ?Sized>(p: *T);
     req [?f]points_to_at_lft_(?k, p, ?v) &*& [?q]lifetime_token(k);
     ens close_points_to_at_lft_token(f, k, p, q) &*& [f](*p |-?-> v);
 
-lem open_points_to_at_lft<T>(p: *T);
+lem open_points_to_at_lft<T: ?Sized>(p: *T);
     req [?f]points_to_at_lft(?k, p, ?v) &*& [?q]lifetime_token(k);
     ens close_points_to_at_lft_token(f, k, p, q) &*& [f](*p |-> v);
 
-lem close_points_to_at_lft_<T>(p: *T);
+lem close_points_to_at_lft_<T: ?Sized>(p: *T);
     req close_points_to_at_lft_token(?f, ?k, p, ?q) &*& [f](*p |-?-> ?v);
     ens [f]points_to_at_lft_(k, p, v) &*& [q]lifetime_token(k);
 
-lem close_points_to_at_lft<T>(p: *T);
+lem close_points_to_at_lft<T: ?Sized>(p: *T);
     req close_points_to_at_lft_token(?f, ?k, p, ?q) &*& [f](*p |-> ?v);
     ens [f]points_to_at_lft(k, p, v) &*& [q]lifetime_token(k);
 
@@ -73,6 +73,10 @@ lem array_at_lft__split<T>(p: *T, n1: usize);
     req array_at_lft_(?k, p, ?n, ?vs) &*& 0 <= n1 &*& n1 <= n;
     ens array_at_lft_(k, p, n1, take(n1, vs)) &*& array_at_lft_(k, p + n1, n - n1, drop(n1, vs));
 
+lem array_at_lft_split<T>(p: *T, n1: usize);
+    req array_at_lft(?k, p, ?n, ?vs) &*& 0 <= n1 &*& n1 <= n;
+    ens array_at_lft(k, p, n1, take(n1, vs)) &*& array_at_lft(k, p + n1, n - n1, drop(n1, vs));
+
 lem array_at_lft_to_array_at_lft_<T>(p: *T);
     req array_at_lft(?k, p, ?n, ?vs);
     ens array_at_lft_(k, p, n, map(some, vs));
@@ -110,5 +114,13 @@ lem array_at_lft__to_u8s_at_lft_<T>(p: *T, count: usize);
 lem close_points_to_slice_at_lft<T>(p: *[T]);
     req [?f]array_at_lft(?k, p as *T, p.len(), ?vs);
     ens [f]points_to_at_lft(k, p, slice_of_elems(vs));
+
+lem close_points_to_slice_at_lft_<T>(p: *[T]);
+    req [?f]array_at_lft_(?k, p as *T, p.len(), _);
+    ens [f]points_to_at_lft_(k, p, _);
+
+lem open_points_to_slice_at_lft_<T>(p: *[T]);
+    req [?f]points_to_at_lft_(?k, p, _);
+    ens [f]array_at_lft_(k, p as *T, p.len(), _);
 
 @*/

@@ -231,7 +231,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       else
         []
     in
-    let env0_0 = List.map (function (p, t) -> (p, get_unique_var_symb p t)) xmap0 in
+    let params_are_ghost = k <> Regular in
+    let env0_0 = List.map (function (p, t) -> (p, get_unique_var_symb_ p t params_are_ghost)) xmap0 in
     let currentThreadEnv = [(current_thread_name, get_unique_var_symb current_thread_name current_thread_type)] in
     let env0 = tparam_typeid_env @ currentThreadEnv @ env0_0 @ cenv0 in
     produce_asn_with_post tparam_typeid_env tpenv0 [] [] env0 pre0 real_unit None None (fun h _ env0 post0_opt ->

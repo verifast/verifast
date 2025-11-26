@@ -191,9 +191,9 @@ impl ArcU32 {
     @*/
 
     unsafe fn strong_count_inner<'a>(ptr: &'a ArcInnerU32) -> usize
-    /*@ req [?qa]lifetime_token(?a) &*& [_]exists(?dk) &*& [_]exists(?gid) &*& [_]atomic_space(Marc, Arc_inv(dk, gid, ptr)) &*&
+    /*@ req [_]exists(?dk) &*& [_]exists(?gid) &*& [_]atomic_space(Marc, Arc_inv(dk, gid, ptr)) &*&
         pointer_within_limits(&(*ptr).strong) == true &*&
-        [_]exists(?frac) &*& [_]frac_borrow(a, ticket_(dk, gid, frac)) &*& [_]frac_borrow(a, lifetime_token_(frac, dk));
+        [_]exists(?frac) &*& [_]frac_borrow(?a, ticket_(dk, gid, frac)) &*& [_]frac_borrow(a, lifetime_token_(frac, dk)) &*& [?qa]lifetime_token(a);
     @*/
     //@ ens [qa]lifetime_token(a);
     {

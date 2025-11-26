@@ -2274,11 +2274,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                                Ast.Add,
                                [
                                  arg1;
-                                 CastExpr
-                                   ( fn_loc,
-                                     ManifestTypeExpr
-                                       (fn_loc, Int (Signed, PtrRank)),
-                                     arg2 );
+                                 arg2
                                ] )) )
                 | _ ->
                     Error

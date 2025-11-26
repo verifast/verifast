@@ -449,7 +449,9 @@ pred Vec<T, A>(t: thread_id_t, self: Vec<T, A>, alloc_id: alloc_id_t, ptr: *T, c
 
 lem Vec_inv<T, A>()
     req Vec::<T, A>(?t, ?self_, ?alloc_id, ?ptr, ?capacity, ?length);
-    ens Vec::<T, A>(t, self_, alloc_id, ptr, capacity, length) &*& ptr != 0 &*& 0 <= length &*& length <= capacity &*& capacity <= usize::MAX;
+    ens Vec::<T, A>(t, self_, alloc_id, ptr, capacity, length) &*&
+        lifetime_inclusion(lft_of_type::<A>(), alloc_id.lft) == true &*&
+        ptr != 0 &*& 0 <= length &*& length <= capacity &*& capacity <= usize::MAX;
 {
     open Vec(t, self_, alloc_id, ptr, capacity, length);
     raw_vec::RawVec_inv();
@@ -459,6 +461,7 @@ lem Vec_inv<T, A>()
 lem Vec_inv2<T, A>()
     req Vec::<T, A>(?t, ?self_, ?alloc_id, ?ptr, ?capacity, ?length);
     ens Vec::<T, A>(t, self_, alloc_id, ptr, capacity, length) &*&
+        lifetime_inclusion(lft_of_type::<A>(), alloc_id.lft) == true &*&
         ptr != 0 &*& 0 <= length &*& length <= capacity &*&
         if std::mem::size_of::<T>() == 0 { capacity == usize::MAX } else { capacity <= isize::MAX &*& length <= isize::MAX / std::mem::size_of::<T>() };
 {
@@ -2437,7 +2440,37 @@ impl<T, A: Allocator> Vec<T, A> {
     /// [`clear`]: Vec::clear
     /// [`drain`]: Vec::drain
     #[stable(feature = "rust1", since = "1.0.0")]
-    pub fn truncate(&mut self, len: usize) {
+    pub fn truncate(&mut self, len: usize)
+    /*@
+    req thread_token(?t) &*& t == currentThread &*&
+        *self |-> ?self0 &*& Vec(t, self0, ?alloc_id, ?ptr, ?capacity, ?length) &*&
+        if len > length {
+            ens thread_token(t) &*& *self |-> self0 &*& Vec(t, self0, alloc_id, ptr, capacity, length)
+        } else {
+            array_at_lft(alloc_id.lft, ptr + len, length - len, ?vs) &*& foreach(vs, own(t)) &*&
+            ens thread_token(t) &*& *self |-> ?self1 &*& Vec(t, self1, alloc_id, ptr, capacity, len) &*&
+                array_at_lft_(alloc_id.lft, ptr + len, length - len, _)
+        };
+    @*/
+    //@ ens true;
+    /*@
+    safety_proof {
+        open <Vec<T, A>>.own(_t, ?self0);
+        assert Vec(_t, self0, ?alloc_id, ?ptr, ?capacity, ?length);
+        if len <= length {
+            array_at_lft_split(ptr, len);
+            assert foreach(?vs, _);
+            foreach_take_drop(len, vs, own(_t));
+        }
+        call();
+        if len <= length {
+            array_at_lft__join(ptr + len);
+        }
+        assert Vec(_, ?self1, _, _, _, _);
+        close <Vec<T, A>>.own(_t, self1);
+    }
+    @*/
+    {
         // This is safe because:
         //
         // * the slice passed to `drop_in_place` is valid; the `len > self.len`
@@ -2449,13 +2482,33 @@ impl<T, A: Allocator> Vec<T, A> {
             // Note: It's intentional that this is `>` and not `>=`.
             //       Changing it to `>=` has negative performance
             //       implications in some cases. See #78884 for more.
-            if len > self.len {
+            //@ open Vec(t, self0, alloc_id, ptr, capacity, length);
+            //@ close Vec(t, self0, alloc_id, ptr, capacity, length);
+            let self_len = self.len;
+            //@ produce_limits(self_len);
+            if len > self_len {
                 return;
             }
+            //@ assert array_at_lft(_, ptr + len, length - len, ?vs);
             let remaining_len = self.len - len;
+            //@ Vec_inv2();
+            //@ if std::mem::size_of::<T>() == 0 { } else { }
             let s = ptr::slice_from_raw_parts_mut(self.as_mut_ptr().add(len), remaining_len);
+            //@ open_points_to(self);
             self.len = len;
+            //@ let self2 = *self;
+            //@ close_points_to(self);
+            //@ open Vec(t, ?self1, alloc_id, ptr, capacity, length);
+            //@ close Vec(t, self2, alloc_id, ptr, capacity, len);
+            //@ close_points_to_slice_at_lft(s);
+            //@ lifetime_inclusion_trans(func_lft, lft_of_type::<A>(), alloc_id.lft);
+            //@ let q = lifetime_token_trade(func_lft, 1/2, alloc_id.lft);
+            //@ open_points_to_at_lft(s);
+            //@ close <[T]>.own(t, slice_of_elems(vs));
             ptr::drop_in_place(s);
+            //@ close_points_to_at_lft_(s);
+            //@ lifetime_token_trade_back(q, alloc_id.lft);
+            //@ open_points_to_slice_at_lft_(s);
         }
     }
 
