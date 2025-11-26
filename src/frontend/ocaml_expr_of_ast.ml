@@ -1018,10 +1018,11 @@ and of_decl = function
           of_list (fun (l, x) -> T [of_loc l; S x]) args
         ]
       end funcTypeClause;
-      of_option begin fun (l, ss) ->
+      of_option begin fun (l, ss, l') ->
         T [
           of_loc l;
-          of_list of_stmt ss
+          of_list of_stmt ss;
+          of_loc l'
         ]
       end prototypeImplementationProof
     ];

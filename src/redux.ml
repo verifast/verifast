@@ -987,7 +987,7 @@ and context () =
       | _ -> None
     method mk_div (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term =
       match self#eval_term t1, self#eval_term t2 with
-        Some n1, Some n2 -> NumLit (if sign_num n1 < 0 then minus_num (quo_num (minus_num n1) n2) else quo_num n1 n2)
+        Some n1, Some n2 when sign_num n2 <> 0 -> NumLit (if sign_num n1 < 0 then minus_num (quo_num (minus_num n1) n2) else quo_num n1 n2)
       | _ -> self#mk_app int_div_symbol [t1;t2]
     method mk_mod(t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term =
       match self#eval_term t1, self#eval_term t2 with

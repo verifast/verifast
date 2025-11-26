@@ -77,6 +77,10 @@ lem array_at_lft_to_array_at_lft_<T>(p: *T);
     req array_at_lft(?k, p, ?n, ?vs);
     ens array_at_lft_(k, p, n, map(some, vs));
 
+lem array_at_lft__to_array_at_lft<T>(p: *T, vs: list<T>);
+    req array_at_lft_(?k, p, ?n, map(some, vs));
+    ens array_at_lft(k, p, n, vs);
+
 pred close_array_at_lft_token<T>(f: real, k: lifetime_t, p: *T, n: usize, q: real);
 
 lem open_array_at_lft_<T>(p: *T);
@@ -95,13 +99,13 @@ lem close_array_at_lft<T>(p: *T);
     req close_array_at_lft_token(?f, ?k, p, ?n, ?q) &*& [f](p[..n] |-> ?vs);
     ens [f]array_at_lft(k, p, n, vs) &*& [q]lifetime_token(k);
 
-lem u8s_at_lft__to_array_at_lft_<T>(p: *T, size: usize);
-    req [?f]array_at_lft_(?k, p as *u8, size * std::mem::size_of::<T>(), _) &*& p as usize % std::mem::align_of::<T>() == 0;
-    ens [f]array_at_lft_(k, p, size, _);
+lem u8s_at_lft__to_array_at_lft_<T>(p: *T, count: usize);
+    req [?f]array_at_lft_(?k, p as *u8, count * std::mem::size_of::<T>(), ?bs) &*& p as usize % std::mem::align_of::<T>() == 0;
+    ens [f]array_at_lft_(k, p, count, vals__of_u8s_(bs, count));
 
-lem array_at_lft__to_u8s_at_lft_<T>(p: *T, size: usize);
-    req [?f]array_at_lft_(?k, p, size, _);
-    ens [f]array_at_lft_(k, p as *u8, size * std::mem::size_of::<T>(), _) &*& p as usize % std::mem::align_of::<T>() == 0;
+lem array_at_lft__to_u8s_at_lft_<T>(p: *T, count: usize);
+    req [?f]array_at_lft_(?k, p, count, ?vs);
+    ens [f]array_at_lft_(k, p as *u8, count * std::mem::size_of::<T>(), ?bs) &*& p as usize % std::mem::align_of::<T>() == 0 &*& vals__of_u8s_(bs, count) == vs;
 
 lem close_points_to_slice_at_lft<T>(p: *[T]);
     req [?f]array_at_lft(?k, p as *T, p.len(), ?vs);

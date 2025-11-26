@@ -4,6 +4,10 @@ lem take_append<t>(n: i32, xs: list<t>, ys: list<t>);
     req length(xs) <= n;
     ens take(n, append(xs, ys)) == append(xs, take(n - length(xs), ys));
 
+lem take_append_l<t>(n: i32, xs: list<t>, ys: list<t>);
+    req 0 <= n &*& n <= length(xs);
+    ens take(n, append(xs, ys)) == take(n, xs);
+
 lem drop_append<t>(n: i32, xs: list<t>, ys: list<t>);
     req length(xs) <= n;
     ens drop(n, append(xs, ys)) == drop(n - length(xs), ys);
@@ -32,6 +36,10 @@ fix repeat<t>(n: nat, x: t) -> list<t> {
         succ(n0) => cons(x, repeat(n0, x))
     }
 }
+
+lem_auto(repeat(n, x)) length_repeat<t>(n: nat, x: t);
+    req true;
+    ens length(repeat(n, x)) == int_of_nat(n);
 
 fix head_or_else<t>(xs: list<t>, default: t) -> t {
     match xs {

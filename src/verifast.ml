@@ -3844,13 +3844,13 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             register_tparam_sized x;
             x
         in
-        let prolog =
+        let prolog, lproof_end =
           match prototypeImplementationProof_opt with
             None ->
             let epilog h result cont = cont h in
             let prolog h env cont = cont h epilog in
-            prolog
-          | Some (lproof, ss) ->
+            prolog, l
+          | Some (lproof, ss, lproof_end) ->
             let pure = true in
             let leminfo =
               match k0 with
@@ -3902,9 +3902,9 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               in
               iter pre_tenv0 (List.map fst pre_tenv0) h env ss
             in
-            prolog
+            prolog, lproof_end
         in
-        check_func_header_compat_core l ("Function '" ^ g ^ "'") "Function prototype implementation check" fenv
+        check_func_header_compat_core l lproof_end ("Function '" ^ g ^ "'") "Function prototype implementation check" fenv
           (k, tparams', rt, ps, nonghost_callers_only, pre, post, [], terminates)
           (k0, tparams0_with_bounds, rt0, ps0, nonghost_callers_only0, [], fenv, pre0, post0, [], terminates0)
           prolog

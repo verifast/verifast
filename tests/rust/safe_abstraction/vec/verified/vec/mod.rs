@@ -445,7 +445,47 @@ pub struct Vec<T, #[unstable(feature = "allocator_api", issue = "32838")] A: All
 fix Vec::alloc<T, A>(v: Vec<T, A>) -> A { v.buf.alloc() }
 
 pred Vec<T, A>(t: thread_id_t, self: Vec<T, A>, alloc_id: alloc_id_t, ptr: *T, capacity: usize, length: usize) =
-    RawVec(t, self.buf, alloc_id, ptr, capacity) &*& length == self.len &*& length <= capacity;
+    RawVec(t, self.buf, alloc_id, ptr, capacity) &*& length == self.len &*& 0 <= length &*& length <= capacity;
+
+lem Vec_inv<T, A>()
+    req Vec::<T, A>(?t, ?self_, ?alloc_id, ?ptr, ?capacity, ?length);
+    ens Vec::<T, A>(t, self_, alloc_id, ptr, capacity, length) &*& ptr != 0 &*& 0 <= length &*& length <= capacity &*& capacity <= usize::MAX;
+{
+    open Vec(t, self_, alloc_id, ptr, capacity, length);
+    raw_vec::RawVec_inv();
+    close Vec(t, self_, alloc_id, ptr, capacity, length);
+}
+
+lem Vec_inv2<T, A>()
+    req Vec::<T, A>(?t, ?self_, ?alloc_id, ?ptr, ?capacity, ?length);
+    ens Vec::<T, A>(t, self_, alloc_id, ptr, capacity, length) &*&
+        ptr != 0 &*& 0 <= length &*& length <= capacity &*&
+        if std::mem::size_of::<T>() == 0 { capacity == usize::MAX } else { capacity <= isize::MAX &*& length <= isize::MAX / std::mem::size_of::<T>() };
+{
+    open Vec(t, self_, alloc_id, ptr, capacity, length);
+    raw_vec::RawVec_inv2();
+    if std::mem::size_of::<T>() != 0 {
+        assert Layout::new::<T>().repeat(capacity) == some(pair(?allocLayout, ?stride));
+        std::alloc::Layout_repeat_some(Layout::new::<T>(), capacity);
+        std::alloc::Layout_inv(Layout::new::<T>());
+        std::alloc::Layout_inv(allocLayout);
+        div_rem_nonneg(isize::MAX, std::mem::size_of::<T>());
+        let len = length;
+        if len > isize::MAX / std::mem::size_of::<T>() {
+            mul_mono_l(isize::MAX / std::mem::size_of::<T>() + 1, len, std::mem::size_of::<T>());
+            assert (isize::MAX / std::mem::size_of::<T>() + 1) * std::mem::size_of::<T>() <= len * std::mem::size_of::<T>();
+            assert isize::MAX < (isize::MAX / std::mem::size_of::<T>() + 1) * std::mem::size_of::<T>();
+            mul_mono_l(std::mem::size_of::<T>(), stride, capacity);
+            assert capacity * std::mem::size_of::<T>() <= allocLayout.size();
+            mul_mono_l(len, capacity, std::mem::size_of::<T>());
+            assert len * std::mem::size_of::<T>() <= allocLayout.size();
+            div_rem_nonneg(isize::MAX, allocLayout.align());
+            //assert allocLayout.size() <= isize::MAX;
+            assert false;
+        }
+    }
+    close Vec(t, self_, alloc_id, ptr, capacity, length);
+}
 
 lem Vec_send_<T, A>(t1: thread_id_t)
     req type_interp::<A>() &*& is_Send(typeid(A)) == true &*& Vec::<T, A>(?t0, ?v, ?alloc_id, ?ptr, ?capacity, ?length);
@@ -456,11 +496,9 @@ lem Vec_send_<T, A>(t1: thread_id_t)
     close Vec(t1, v, alloc_id, ptr, capacity, length);
 }
 
-pred_ctor elem_own<T>(t: thread_id_t)(elem: T) = <T>.own(t, elem);
-
 pred<T, A> <Vec<T, A>>.own(t, v) =
     Vec(t, v, ?alloc_id, ?ptr, ?capacity, ?len) &*&
-    array_at_lft(alloc_id.lft, ptr, len, ?elems) &*& foreach(elems, elem_own(t)) &*&
+    array_at_lft(alloc_id.lft, ptr, len, ?elems) &*& foreach(elems, own(t)) &*&
     array_at_lft_(alloc_id.lft, ptr + len, capacity - len, _);
 
 lem Vec_own_mono<T0, T1, A0, A1>()
@@ -478,20 +516,20 @@ lem Vec_send<T, A>(t1: thread_id_t)
     Vec_send_(t1);
     {
         lem iter()
-            req foreach::<T>(?elems, elem_own(t0)) &*& type_interp::<T>();
-            ens foreach(elems, elem_own(t1)) &*& type_interp::<T>();
+            req foreach::<T>(?elems, own(t0)) &*& type_interp::<T>();
+            ens foreach(elems, own(t1)) &*& type_interp::<T>();
         {
-            open foreach(elems, elem_own(t0));
+            open foreach(elems, own(t0));
             match elems {
                 nil => {}
                 cons(elem, elems0) => {
-                    open elem_own::<T>(t0)(elem);
+                    open own::<T>(t0)(elem);
                     Send::send(t0, t1, elem);
-                    close elem_own::<T>(t1)(elem);
+                    close own::<T>(t1)(elem);
                     iter();
                 }
             }
-            close foreach(elems, elem_own(t1));
+            close foreach(elems, own(t1));
         }
         iter();
     }
@@ -504,6 +542,34 @@ pred Vec_share_<T, A>(k: lifetime_t, t: thread_id_t, l: *Vec<T, A>, alloc_id: al
     pointer_within_limits(&(*l).buf) == true &*&
     [_]raw_vec::RawVec_share_(k, t, &(*l).buf, alloc_id, ptr, capacity) &*& length <= capacity &*&
     [_]frac_borrow(k, Vec_frac_borrow_content(l, length));
+
+lem Vec_share__inv<T, A>()
+    req [_]Vec_share_::<T, A>(?k, ?t, ?l, ?alloc_id, ?ptr, ?capacity, ?length);
+    ens if std::mem::size_of::<T>() == 0 { true } else { length <= isize::MAX / std::mem::size_of::<T>() };
+{
+    open Vec_share_(k, t, l, alloc_id, ptr, capacity, length);
+    raw_vec::RawVec_share__inv();
+    if std::mem::size_of::<T>() != 0 {
+        assert Layout::new::<T>().repeat(capacity) == some(pair(?allocLayout, ?stride));
+        std::alloc::Layout_repeat_some(Layout::new::<T>(), capacity);
+        std::alloc::Layout_inv(Layout::new::<T>());
+        std::alloc::Layout_inv(allocLayout);
+        div_rem_nonneg(isize::MAX, std::mem::size_of::<T>());
+        let len = length;
+        if len > isize::MAX / std::mem::size_of::<T>() {
+            mul_mono_l(isize::MAX / std::mem::size_of::<T>() + 1, len, std::mem::size_of::<T>());
+            assert (isize::MAX / std::mem::size_of::<T>() + 1) * std::mem::size_of::<T>() <= len * std::mem::size_of::<T>();
+            assert isize::MAX < (isize::MAX / std::mem::size_of::<T>() + 1) * std::mem::size_of::<T>();
+            mul_mono_l(std::mem::size_of::<T>(), stride, capacity);
+            assert capacity * std::mem::size_of::<T>() <= allocLayout.size();
+            mul_mono_l(len, capacity, std::mem::size_of::<T>());
+            assert len * std::mem::size_of::<T>() <= allocLayout.size();
+            div_rem_nonneg(isize::MAX, allocLayout.align());
+            //assert allocLayout.size() <= isize::MAX;
+            assert false;
+        }
+    }
+}
 
 pred Vec_share_end_token<T, A>(k: lifetime_t, t: thread_id_t, l: *Vec<T, A>, alloc_id: alloc_id_t, ptr: *T, capacity: usize, length: usize) =
     raw_vec::RawVec_share_end_token(k, t, &(*l).buf, alloc_id, ptr, capacity) &*& length <= capacity &*&
@@ -722,7 +788,7 @@ pred<T, A> <Vec<T, A>>.share(k, t, l) =
     [_]Vec_share_(k, t, l, ?alloc_id, ?ptr, ?capacity, ?length) &*& [_]array_share::<T>(k, t, ptr, length);
 
 pred_ctor array_at_lft_fbc<T>(k: lifetime_t, t: thread_id_t, p: *T, length: usize)() =
-    array_at_lft(k, p, length, ?elems) &*& foreach(elems, elem_own(t));
+    array_at_lft(k, p, length, ?elems) &*& foreach(elems, own(t));
 
 lem array_at_lft_share_full<T>(k: lifetime_t, k0: lifetime_t, t: thread_id_t, p: *T, length: usize)
     req type_interp::<T>() &*& atomic_mask(MaskTop) &*& [?q]lifetime_token(k) &*& full_borrow(k, array_at_lft_fbc(k0, t, p, length)) &*& lifetime_inclusion(k, k0) == true;
@@ -745,7 +811,7 @@ lem array_at_lft_share_full<T>(k: lifetime_t, k0: lifetime_t, t: thread_id_t, p:
         open array_at_lft_fbc::<T>(k0, t, p1, n)();
         open array_at_lft(k0, p1, n, cons(?v, _));
         open foreach(_, _);
-        open elem_own::<T>(t)(v);
+        open own::<T>(t)(v);
         close full_borrow_content_at_lft::<T>(k0, t, p1)();
         close array_at_lft_fbc::<T>(k0, t, p1 + 1, n - 1)();
         close sep(full_borrow_content_at_lft::<T>(k0, t, p1), array_at_lft_fbc::<T>(k0, t, p1 + 1, n - 1))();
@@ -754,9 +820,9 @@ lem array_at_lft_share_full<T>(k: lifetime_t, k0: lifetime_t, t: thread_id_t, p:
             open full_borrow_content_at_lft::<T>(k0, t, p1)();
             open array_at_lft_fbc::<T>(k0, t, p1 + 1, n - 1)();
             assert points_to_at_lft(k0, p1, ?elem);
-            assert foreach(?elems0, elem_own(t));
-            close elem_own::<T>(t)(elem);
-            close foreach(cons(elem, elems0), elem_own(t));
+            assert foreach(?elems0, own(t));
+            close own::<T>(t)(elem);
+            close foreach(cons(elem, elems0), own(t));
             close array_at_lft_fbc::<T>(k0, t, p1, n)();
         } {
             close_full_borrow_strong_m(klong, array_at_lft_fbc(k0, t, p1, n), sep(full_borrow_content_at_lft::<T>(k0, t, p1), array_at_lft_fbc::<T>(k0, t, p1 + 1, n - 1)));
@@ -1788,7 +1854,7 @@ impl<T, A: Allocator> Vec<T, A> {
         close usize_own(currentThread, result.2);
         std::alloc::Allocator_to_own(result.3);
         close_tuple_4_own(currentThread, result);
-        leak array_at_lft(alloc_id.lft, ptr, length, ?elems) &*& array_at_lft_(alloc_id.lft, ptr + length, capacity - length, _) &*& foreach(elems, elem_own(currentThread));
+        leak array_at_lft(alloc_id.lft, ptr, length, ?elems) &*& array_at_lft_(alloc_id.lft, ptr + length, capacity - length, _) &*& foreach(elems, own(currentThread));
         if capacity * std::mem::size_of::<T>() != 0 {
             leak alloc_block_in(alloc_id, ptr as *u8, _);
         }
@@ -1809,7 +1875,13 @@ impl<T, A: Allocator> Vec<T, A> {
             //@ init_ref_Vec_(me_ref1);
             //@ open_frac_borrow(k, ref_initialized_(me_ref1), 1/4);
             //@ open [?f1]ref_initialized_::<Vec<T, A>>(me_ref1)();
+            //@ Vec_share__inv();
+            //@ open Vec_share_('a, currentThread, me_ref1, alloc_id, ptr_, capacity_, length);
+            //@ open_frac_borrow('a, Vec_frac_borrow_content(me_ref1, length), 1/8);
+            //@ open [?flen]Vec_frac_borrow_content::<T, A>(me_ref1, length)();
             len = me.len/*@::<T, A, 'a>@*/();
+            //@ close [flen]Vec_frac_borrow_content::<T, A>(me_ref1, length)();
+            //@ close_frac_borrow(flen, Vec_frac_borrow_content(me_ref1, length));
             //@ close [f1]ref_initialized_::<Vec<T, A>>(me_ref1)();
             //@ close_frac_borrow(f1, ref_initialized_(me_ref1));
             
@@ -2119,13 +2191,75 @@ impl<T, A: Allocator> Vec<T, A> {
     #[stable(feature = "rust1", since = "1.0.0")]
     #[track_caller]
     #[inline]
-    pub fn shrink_to_fit(&mut self) {
+    pub fn shrink_to_fit(&mut self)
+    /*@
+    req thread_token(?t) &*& t == currentThread &*&
+        *self |-> ?self0 &*& Vec(t, self0, ?alloc_id, ?ptr0, ?capacity0, ?length) &*&
+        array_at_lft_(alloc_id.lft, ptr0, capacity0, ?vs0);
+    @*/
+    /*@
+    ens thread_token(t) &*&
+        *self |-> ?self1 &*& Vec(t, self1, alloc_id, ?ptr1, ?capacity1, length) &*&
+        capacity1 == if std::mem::size_of::<T>() == 0 { usize::MAX } else { length } &*&
+        array_at_lft_(alloc_id.lft, ptr1, capacity1, take(capacity1, vs0));
+    @*/
+    /*@
+    safety_proof {
+        open <Vec<T, A>>.own(_, _);
+        assert Vec(_, _, ?alloc_id, ?ptr0, _, _);
+        Vec_inv2();
+        assert array_at_lft(_, ptr0, _, ?vs) &*& array_at_lft_(_, _, _, ?vs_);
+        array_at_lft_to_array_at_lft_(ptr0);
+        array_at_lft__join(ptr0);
+        call();
+        assert Vec(_, _, _, ?ptr1, ?capacity1, _);
+        if std::mem::size_of::<T>() == 0 {
+            assert capacity1 == usize::MAX;
+            array_at_lft__split(ptr1, length(vs));
+            assert capacity1 == length(vs) + length(vs_);
+            take_append_l(length(vs), map(some, vs), vs_);
+            {
+                pred P() = array_at_lft_(alloc_id.lft, ptr1 + length(vs), capacity1 - length(vs), _);
+                close P();
+                array_at_lft__to_array_at_lft(ptr1, vs);
+                open P();
+            }
+        } else {
+            take_append_l(length(vs), map(some, vs), vs_);
+            array_at_lft__to_array_at_lft(ptr1, vs);
+        }
+        close <Vec<T, A>>.own(_t, *self);
+    }
+    @*/
+    {
+        //@ let k = begin_lifetime();
+        //@ share_Vec(k, self);
+        //@ let self_ref = precreate_ref(self);
+        let capacity;
+        {
+            //@ let_lft 'a = k;
+            //@ init_ref_Vec_(self_ref);
+            //@ open_frac_borrow(k, ref_initialized_(self_ref), 1/4);
+            //@ open [?f]ref_initialized_::<Vec<T, A>>(self_ref)();
+            capacity = self.capacity/*@::<T, A, 'a>@*/();
+            //@ close [f]ref_initialized_::<Vec<T, A>>(self_ref)();
+            //@ close_frac_borrow(f, ref_initialized_(self_ref));
+        }
+        //@ end_lifetime(k);
+        //@ end_share_Vec(self);
+        
         // The capacity is never less than the length, and there's nothing to do when
         // they are equal, so we can avoid the panic case in `RawVec::shrink_to_fit`
         // by only calling it with a greater capacity.
-        if self.capacity() > self.len {
+        //@ open Vec(_, _, _, _, _, _);
+        if capacity > self.len {
+            //@ open vec::Vec_buf(self, _);
+            //@ points_to_limits(&(*self).buf);
             self.buf.shrink_to_fit(self.len);
+            
         }
+        //@ close Vec(t, *self, alloc_id, ?ptr1, ?capacity1, ?len1);
+        //@ Vec_inv2();
     }
 
     /// Shrinks the capacity of the vector with a lower bound.
@@ -2183,12 +2317,79 @@ impl<T, A: Allocator> Vec<T, A> {
     #[cfg(not(no_global_oom_handling))]
     #[stable(feature = "rust1", since = "1.0.0")]
     #[track_caller]
-    pub fn into_boxed_slice(mut self) -> Box<[T], A> {
+    pub fn into_boxed_slice(mut self) -> Box<[T], A>
+    /*@
+    req thread_token(?t) &*& t == currentThread &*&
+        Vec(t, self, ?alloc_id, ?ptr, ?capacity, ?length) &*&
+        array_at_lft(alloc_id.lft, ptr, length, ?vs) &*&
+        array_at_lft_(alloc_id.lft, ptr + length, capacity - length, ?vs_);
+    @*/
+    //@ ens thread_token(t) &*& boxed::Box_in(t, result, alloc_id, slice_of_elems(vs));
+    /*@
+    safety_proof {
+        open <Vec<T, A>>.own(_t, self);
+        let result = call();
+        assert boxed::Box_in(_, _, _, ?v);
+        close <[T]>.own(_t, v);
+        boxed::Box_in_to_own(result);
+    }
+    @*/
+    {
         unsafe {
+            //@ Vec_inv2();
+            //@ array_at_lft_to_array_at_lft_(ptr);
+            //@ array_at_lft__join(ptr);
             self.shrink_to_fit();
-            let me = ManuallyDrop::new(self);
+            //@ assert Vec(_, ?self1, _, ?ptr1, ?capacity1, _);
+            //@ open_points_to(&self);
+            let /*@~mut@*/ me = ManuallyDrop::new(self);
+            //@ close_points_to(&self);
+            
+            //@ let me_ref = precreate_ref(&me);
+            //@ close_points_to(&me.buf);
+            //@ init_ref_readonly(me_ref, 1/2);
+            //@ open_points_to(me_ref);
+            //@ close_points_to(&(*me_ref).buf, 1/2);
+            //@ let buf_ref = precreate_ref(&(*me_ref).buf);
+            //@ init_ref_readonly(buf_ref, 1/2);
+            //@ open_points_to(buf_ref);
             let buf = ptr::read(&me.buf);
-            let len = me.len();
+            //@ close_points_to(buf_ref, 1/4);
+            //@ end_ref_readonly(buf_ref);
+            //@ end_ref_readonly(me_ref);
+            
+            //@ Vec_inv2();
+            //@ open Vec(t, self1, alloc_id, ptr1, capacity1, length);
+            //@ close Vec(t, self1, alloc_id, ptr1, capacity1, length);
+            //@ let me_ref2 = precreate_ref(&me);
+            //@ init_ref_readonly(me_ref2, 1/2);
+            let len = (&me).len();
+            //@ end_ref_readonly(me_ref2);
+            //@ open_points_to(&me);
+            
+            /*@
+            if std::mem::size_of::<T>() == 0 {
+                array_at_lft__split(ptr1, len);
+                assert capacity == usize::MAX;
+                assert capacity1 == usize::MAX;
+                take_append_l(len, map(some, vs), vs_);
+                assert array_at_lft_(_, ptr1, len, map(some, vs));
+                leak array_at_lft_(_, _, capacity1 - len, _);
+            } else {
+                assert capacity1 == length(vs);
+                take_append_l(capacity1, map(some, vs), vs_);
+                assert take(capacity1, append(map(some, vs), vs_)) == map(some, vs);
+            }
+            @*/
+            /*@
+            if map(std::mem::MaybeUninit::new_maybe_uninit, map(some, vs)) != map(std::mem::MaybeUninit::new, vs) {
+                let v = map_map_neq_map(std::mem::MaybeUninit::new_maybe_uninit, some, std::mem::MaybeUninit::new, vs);
+                assert false;
+            }
+            @*/
+            
+            //@ open Vec(_, _, _, _, _, _);
+            //@ close exists(vs);
             buf.into_box(len).assume_init()
         }
     }
@@ -3598,46 +3799,26 @@ impl<T, A: Allocator> Vec<T, A> {
     #[rustc_const_stable(feature = "const_vec_string_slice", since = "1.87.0")]
     #[rustc_confusables("length", "size")]
     pub const fn len<'a>(&'a self) -> usize
-    //@ req [?q]lifetime_token('a) &*& [_]Vec_share_('a, currentThread, self, ?alloc_id, ?ptr, ?capacity, ?length);
-    //@ ens [q]lifetime_token('a) &*& result == length;
+    // req [?q]lifetime_token('a) &*& [_]Vec_share_('a, currentThread, self, ?alloc_id, ?ptr, ?capacity, ?length);
+    // ens [q]lifetime_token('a) &*& result == length;
+    //@ req [?f](*self).len |-> ?length &*& std::mem::size_of::<T>() == 0 || length <= isize::MAX / std::mem::size_of::<T>();
+    //@ ens [f](*self).len |-> length &*& result == length;
     /*@
     safety_proof {
         open <Vec<T, A>>.share('a, _t, self);
-        call();
+        Vec_share__inv();
+        open Vec_share_('a, currentThread, self, ?alloc_id, ?ptr, ?capacity, ?length);
+        
+        open_frac_borrow('a, Vec_frac_borrow_content(self, length), _q_a);
+        open [?f]Vec_frac_borrow_content::<T, A>(self, length)();
+        let result = call();
+        close [f]Vec_frac_borrow_content::<T, A>(self, length)();
+        close_frac_borrow(f, Vec_frac_borrow_content(self, length));
     }
     @*/
     {
-        //@ open Vec_share_('a, currentThread, self, alloc_id, ptr, capacity, length);
-        //@ open_frac_borrow('a, Vec_frac_borrow_content(self, length), q);
-        //@ open [?f]Vec_frac_borrow_content::<T, A>(self, length)();
         let len = self.len;
-        //@ close [f]Vec_frac_borrow_content::<T, A>(self, length)();
-        //@ close_frac_borrow(f, Vec_frac_borrow_content(self, length));
         
-        //@ raw_vec::RawVec_share__inv();
-        /*@
-        if std::mem::size_of::<T>() == 0 {
-        } else {
-            assert Layout::new::<T>().repeat(capacity) == some(pair(?allocLayout, ?stride));
-            std::alloc::Layout_repeat_some(Layout::new::<T>(), capacity);
-            std::alloc::Layout_inv(Layout::new::<T>());
-            std::alloc::Layout_inv(allocLayout);
-            div_rem_nonneg(isize::MAX, std::mem::size_of::<T>());
-            if len > isize::MAX / std::mem::size_of::<T>() {
-                mul_mono_l(isize::MAX / std::mem::size_of::<T>() + 1, len, std::mem::size_of::<T>());
-                assert (isize::MAX / std::mem::size_of::<T>() + 1) * std::mem::size_of::<T>() <= len * std::mem::size_of::<T>();
-                assert isize::MAX < (isize::MAX / std::mem::size_of::<T>() + 1) * std::mem::size_of::<T>();
-                mul_mono_l(std::mem::size_of::<T>(), stride, capacity);
-                assert capacity * std::mem::size_of::<T>() <= allocLayout.size();
-                mul_mono_l(len, capacity, std::mem::size_of::<T>());
-                assert len * std::mem::size_of::<T>() <= allocLayout.size();
-                div_rem_nonneg(isize::MAX, allocLayout.align());
-                //assert allocLayout.size() <= isize::MAX;
-                assert false;
-            }
-        }
-        @*/
-
         // SAFETY: The maximum capacity of `Vec<T>` is `isize::MAX` bytes, so the maximum value can
         // be returned is `usize::checked_div(size_of::<T>()).unwrap_or(usize::MAX)`, which
         // matches the definition of `T::MAX_SLICE_LEN`.

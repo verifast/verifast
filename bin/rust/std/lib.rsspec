@@ -415,13 +415,9 @@ mod mem {
     /*@
     
     fix MaybeUninit::inner<T>(v: MaybeUninit<T>) -> option<T>;
-    fix MaybeUninit::new<T>(v: T) -> MaybeUninit<T>;
     fix MaybeUninit::uninit<T>() -> MaybeUninit<T>;
     fix MaybeUninit::new_maybe_uninit<T>(v: option<T>) -> MaybeUninit<T>;
-    
-    lem_auto MaybeUninit_inner_new<T: ?Sized>(v: T);
-        req true;
-        ens MaybeUninit::new(v).inner() == some(v);
+    fix MaybeUninit::new<T>(v: T) -> MaybeUninit<T> { MaybeUninit::new_maybe_uninit(some(v)) }
     
     lem_auto MaybeUninit_inner_new_maybe_uninit<T: ?Sized>(v: option<T>);
         req true;
@@ -1146,7 +1142,7 @@ mod alloc {
             match result {
                 Result::Ok(new_ptr) =>
                     alloc_block_in(alloc_id, new_ptr.as_ptr() as *u8, new_layout) &*&
-                    array_at_lft_(alloc_id.lft, new_ptr.as_ptr() as *u8, new_layout.size(), _) &*&
+                    array_at_lft_(alloc_id.lft, new_ptr.as_ptr() as *u8, new_layout.size(), take(new_layout.size(), bs)) &*&
                     new_layout.size() <= new_ptr.len() &*&
                     is_valid_layout(new_ptr.len(), new_layout.align()) == true,
                 Result::Err(e) =>

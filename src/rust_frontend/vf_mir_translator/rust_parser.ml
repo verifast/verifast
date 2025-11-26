@@ -526,6 +526,8 @@ let parse_pred_asn = function%parser
       (None, sn ^ "_" ^ g, targs, [], args)
     | (StructTypeExpr (_, Some sn, _, _, targs)) ->
       (None, sn ^ "_" ^ g, targs, [], args)
+    | (SliceTypeExpr (_, elemTp)) ->
+      (None, "slice_" ^ g, [elemTp], [], args)
     | _ ->
       raise (ParseException (type_expr_loc te, "Opening or closing a type predicate for this type is not yet supported"))
     end
@@ -550,8 +552,8 @@ let rec parse_pure_spec_clause = function%parser
 | [ (_, Kwd "req"); parse_asn as p; (_, Kwd ";") ] -> RequiresClause p
 | [ (_, Kwd "ens"); parse_asn as p; (_, Kwd ";") ] -> EnsuresClause p
 | [ (_, Kwd "on_unwind_ens"); parse_asn as p; (_, Kwd ";") ] -> OnUnwindEnsuresClause p
-| [ (l, Kwd "safety_proof"); (_, Kwd "{"); parse_stmts as ss; (_, Kwd "}") ] ->
-  PrototypeImplementationProofClause (l, ss)
+| [ (l, Kwd "safety_proof"); (_, Kwd "{"); parse_stmts as ss; (l', Kwd "}") ] ->
+  PrototypeImplementationProofClause (l, ss, l')
 and parse_spec_clause = function%parser
   [ [%let c = peek_in_ghost_range @@ function%parser
     [ parse_pure_spec_clause as c; (_, Kwd "@*/") ] -> c ] ] -> c
@@ -590,7 +592,7 @@ and parse_spec_clauses l k = function%parser
   in
   let safetyProof, cs =
     match cs with
-      PrototypeImplementationProofClause (l, ss)::cs -> Some (l, ss), cs
+      PrototypeImplementationProofClause (l, ss, l')::cs -> Some (l, ss, l'), cs
     | _ -> None, cs
   in
   let assume_correct, cs =

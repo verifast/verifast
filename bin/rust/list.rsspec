@@ -146,6 +146,10 @@ fix map<a, b>(f: fix(a, b), xs: list<a>) -> list<b> {
     }
 }
 
+lem map_map_neq_map<a, b, c>(f: fix(b, c), g: fix(a, b), h: fix(a, c), xs: list<a>) -> a;
+    req map(f, map(g, xs)) != map(h, xs);
+    ens f(g(result)) != h(result);
+
 fix filter<t>(f: fix(t, bool), xs: list<t>) -> list<t> {
     match xs {
         nil => nil,
