@@ -1857,7 +1857,7 @@ mod vf_mir_builder {
                     let output_cpn = fn_ptr_ty_cpn.init_output();
                     Self::encode_ty(tcx, enc_ctx, fn_sig.output(), output_cpn);
                 }
-                ty::TyKind::Dynamic(preds, region, dyn_kind) => {
+                ty::TyKind::Dynamic(preds, region) => {
                     let mut dynamic_ty_cpn = ty_kind_cpn.init_dynamic();
                     dynamic_ty_cpn.set_is_just_trait(false);
                     if preds.len() == 1 {
@@ -2034,7 +2034,8 @@ mod vf_mir_builder {
                 }
                 ty::RegionKind::ReBound(de_bruijn_index, bound_region) => match bound_region.kind {
                     ty::BoundRegionKind::Anon => {
-                        let id = Self::anonymous_late_bound_lifetime_name(de_bruijn_index.as_usize());
+                        let ty::BoundVarIndexKind::Bound(index) = de_bruijn_index else { todo!(); };
+                        let id = Self::anonymous_late_bound_lifetime_name(index.as_usize());
                         region_cpn.set_id(&id);
                     }
                     ty::BoundRegionKind::Named(def_id) => {
@@ -2743,6 +2744,7 @@ mod vf_mir_builder {
                         unevaluated_cpn.fill_args(unevaluated_const.args, |arg_cpn, arg| {
                             Self::encode_gen_arg(tcx, enc_ctx, arg, arg_cpn);
                         });
+                        Self::encode_ty(tcx, enc_ctx, *ty, unevaluated_cpn.init_ty());
                     }
                 }
             }
@@ -2998,10 +3000,6 @@ mod vf_mir_builder {
                 }
                 mir::ProjectionElem::OpaqueCast(_) => {
                     place_elm_cpn.set_opaque_cast(());
-                    PlaceKind::Other
-                }
-                mir::ProjectionElem::Subtype(_) => {
-                    place_elm_cpn.set_subtype(());
                     PlaceKind::Other
                 }
                 mir::ProjectionElem::UnwrapUnsafeBinder(_) => todo!(),

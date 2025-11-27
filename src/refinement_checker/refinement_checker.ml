@@ -1995,7 +1995,6 @@ let check_place_element_refines_place_element (elem0: place_elem) (elem1: place_
   | Downcast variant_idx0, Downcast variant_idx1 ->
     if variant_idx0 <> variant_idx1 then failwith "Variant indices do not match"
   | OpaqueCast, OpaqueCast -> failwith "PlaceElement::OpaqueCast not supported"
-  | Subtype, Subtype -> failwith "PlaceElement::Subtype not supported"
   | _ -> failwith "Place elements do not match"
 
 type place =

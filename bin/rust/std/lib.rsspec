@@ -12,6 +12,11 @@ mod verifast {
     //@ ens thread_token(t) &*& <&'static T>.own(t, result) &*& [_]ref_initialized(result);
     //@ on_unwind_ens false;
 
+    fn unevaluated_constant<T>() -> T; // For now, the MIR translator translates a use of a const item to a call to this function
+    //@ req true;
+    //@ ens true;
+    //@ on_unwind_ens false;
+    
 }
 
 mod hint {
