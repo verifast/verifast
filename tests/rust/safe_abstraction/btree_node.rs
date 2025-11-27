@@ -154,7 +154,8 @@ impl<K, V> LeafNode<K, V> {
             //@ let contents_ptr = std::boxed::Box_separate_contents(leaf_ref);
             //@ assume(alloc_id.lft == 'static);
             //@ produce_lifetime_token_static();
-            //@ open_points_to_at_lft(contents_ptr);
+            //@ assert [?qstatic]lifetime_token('static);
+            //@ open_points_to_at_lft(contents_ptr, qstatic);
             //@ std::mem::open_MaybeUninit(contents_ptr);
             //@ let contents_ptr_ = contents_ptr as *LeafNode<K, V>;
             LeafNode::init(Box::as_mut_ptr(leaf_ref) as *mut LeafNode<K, V>);
@@ -204,7 +205,8 @@ impl<K, V> InternalNode<K, V> {
             //@ let contents_ptr = std::boxed::Box_separate_contents(node_ref);
             //@ assume(alloc_id.lft == 'static);
             //@ produce_lifetime_token_static();
-            //@ open_points_to_at_lft(contents_ptr);
+            //@ assert [?qstatic]lifetime_token('static);
+            //@ open_points_to_at_lft(contents_ptr, qstatic);
             //@ std::mem::open_MaybeUninit(contents_ptr);
             //@ let contents_ptr_ = contents_ptr as *InternalNode<K, V>;
             //@ open_points_to_(contents_ptr_);
@@ -767,7 +769,8 @@ impl<K, V> NodeRef<marker::Owned, K, V, marker::Leaf> {
         let leaf_ptr = Box::leak(leaf) as *mut LeafNode<K, V>;
         //@ assume(alloc_id.lft == 'static);
         //@ produce_lifetime_token_static();
-        //@ open_points_to_at_lft(leaf_ptr);
+        //@ assert [?qstatic]lifetime_token('static);
+        //@ open_points_to_at_lft(leaf_ptr, qstatic);
         //@ leak close_points_to_at_lft_token(_, _, _, _);
         //@ open_points_to(leaf_ptr);
         let r = NodeRef { height: 0, node: NonNull::new_unchecked(leaf_ptr), _marker: PhantomData };

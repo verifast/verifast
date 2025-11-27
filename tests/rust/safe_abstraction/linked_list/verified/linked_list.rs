@@ -1089,7 +1089,8 @@ impl<T, A: Allocator> LinkedList<T, A> {
                     //@ assert std::boxed::Box_minus_contents_in(_, _, _, _, _, ?contents_ptr);
                     //@ assume(alloc_id.lft == 'static);
                     //@ produce_lifetime_token_static();
-                    //@ open_points_to_at_lft(contents_ptr);
+                    //@ assert [?qstatic]lifetime_token('static);
+                    //@ open_points_to_at_lft(contents_ptr, qstatic);
                     *head_ref = node.next;
                     //@ close_points_to_at_lft(contents_ptr);
                     //@ std::boxed::Box_unseparate_contents(&node_1);
@@ -2147,7 +2148,8 @@ impl<T, A: Allocator> LinkedList<T, A> {
             //@ assert Allocator(_, _, ?alloc_id);
             //@ assume(alloc_id.lft == 'static);
             //@ produce_lifetime_token_static();
-            //@ open_points_to_at_lft(node_ptr.as_ptr());
+            //@ assert [?qstatic]lifetime_token('static);
+            //@ open_points_to_at_lft(node_ptr.as_ptr(), qstatic);
             //@ leak close_points_to_at_lft_token(_, _, _, _);
             //@ assert Nodes(alloc_id, ll0.head, None, ll0.tail, None, ?nodes);
             // SAFETY: node_ptr is a unique pointer to a node we boxed with self.alloc and leaked

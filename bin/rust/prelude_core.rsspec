@@ -284,6 +284,10 @@ lem array_to_array_<T>(p: *T);
     req [?f]array(p, ?count, ?vs);
     ens [f]array_(p, count, map(some, vs));
 
+lem array__to_array<T>(p: *T, vs: list<T>);
+    req [?f]array_(p, ?count, map(some, vs));
+    ens [f]array(p, count, vs);
+
 fix const_of_usize(n: usize) -> *_;
 fix usize_of_const(type_id: *_) -> usize;
 
@@ -319,12 +323,12 @@ lem array_to_Array<T, N>(p: *[T; N]);
     ens [f](*p |-> Array_of_elems(elems));
 
 lem from_u8s_<T>(p: *T);
-    req [?f](p as *u8)[..std::mem::size_of::<T>()] |-> _ &*& p as usize % std::mem::align_of::<T>() == 0;
-    ens [f](*p |-> _);
+    req [?f](p as *u8)[..std::mem::size_of::<T>()] |-?-> ?bs &*& p as usize % std::mem::align_of::<T>() == 0;
+    ens [f](*p |-?-> of_u8s_(bs));
 
 lem to_u8s_<T>(p: *T);
-    req [?f](*p |-> _);
-    ens [f](p as *u8)[..std::mem::size_of::<T>()] |-> _ &*& p as usize % std::mem::align_of::<T>() == 0;
+    req [?f](*p |-?-> ?v);
+    ens [f](p as *u8)[..std::mem::size_of::<T>()] |-?-> ?bs &*& p as usize % std::mem::align_of::<T>() == 0 &*& v == of_u8s_(bs);
 
 lem u8s__to_array_<T>(p: *T, size: usize);
     req [?f](p as *u8)[..size * std::mem::size_of::<T>()] |-> _ &*& p as usize % std::mem::align_of::<T>() == 0;
