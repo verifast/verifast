@@ -454,13 +454,12 @@ struct PlaceElem {
     union {
         deref @0: Void;
         field @1: FieldData;
-        boxAsNonNull @8: Ty; # The MIR pattern `(X.0: std::ptr::Unique<T>).0: std::ptr::NonNull<T>` when X is a Box<T>. The Ty is T. Always appears as part of an RValue::Cast(CastKind::Transmute, Operand::Copy(local.BoxAsNonNull)) (https://github.com/rust-lang/rust/blob/18491d5be00eb3ed2f1ccee2ac5b792694f2a7a0/compiler/rustc_mir_transform/src/elaborate_box_derefs.rs#L71)
+        boxAsNonNull @7: Ty; # The MIR pattern `(X.0: std::ptr::Unique<T>).0: std::ptr::NonNull<T>` when X is a Box<T>. The Ty is T. Always appears as part of an RValue::Cast(CastKind::Transmute, Operand::Copy(local.BoxAsNonNull)) (https://github.com/rust-lang/rust/blob/18491d5be00eb3ed2f1ccee2ac5b792694f2a7a0/compiler/rustc_mir_transform/src/elaborate_box_derefs.rs#L71)
         index @3: Void;
         constantIndex @4: Void;
         subslice @5: Void;
         downcast @2: UInt32;
         opaqueCast @6: Void;
-        subtype @7: Void;
     }
 }
 
@@ -527,6 +526,7 @@ struct MirConst {
         unevaluated :group {
             def @3: Text;
             args @4: List(GenericArg);
+            ty @5: Ty;
         }
     }
 }

@@ -26,8 +26,6 @@ let string_of_place {local; projection; local_is_mutable} =
       iter (Printf.sprintf "(%s as %s)" inner (Stdint.Uint32.to_string k)) rest
     | OpaqueCast::rest ->
       iter (Printf.sprintf "opaque_cast(%s)" inner) rest
-    | Subtype::rest ->
-      iter (Printf.sprintf "subtype(%s)" inner) rest
   in
   let mut = if local_is_mutable then "mut " else "" in
   iter (Printf.sprintf "%s%s" mut local.name) projection

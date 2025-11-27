@@ -48,8 +48,7 @@ lem mul_zero(x: i32, y: i32)
 // ensure that the code generation related to these panics is minimal as there's
 // only one location which panics rather than a bunch throughout the module.
 #[cfg(not(no_global_oom_handling))]
-#[cfg_attr(not(feature = "panic_immediate_abort"), inline(never))]
-#[track_caller]
+#[cfg_attr(not(panic = "immediate-abort"), inline(never))]
 fn capacity_overflow() -> !
 //@ req thread_token(?t);
 //@ ens false;
@@ -1041,7 +1040,6 @@ impl<T> RawVec<T, Global> {
     #[cfg(not(any(no_global_oom_handling, test)))]
     #[must_use]
     #[inline]
-    #[track_caller]
     pub(crate) fn with_capacity(capacity: usize) -> Self {
         Self { inner: RawVecInner::with_capacity(capacity, T::LAYOUT), _marker: PhantomData }
     }
@@ -1050,7 +1048,6 @@ impl<T> RawVec<T, Global> {
     #[cfg(not(any(no_global_oom_handling, test)))]
     #[must_use]
     #[inline]
-    #[track_caller]
     pub(crate) fn with_capacity_zeroed(capacity: usize) -> Self {
         Self {
             inner: RawVecInner::with_capacity_zeroed_in(capacity, Global, T::LAYOUT),
@@ -1063,7 +1060,6 @@ impl RawVecInner<Global> {
     #[cfg(not(any(no_global_oom_handling, test)))]
     #[must_use]
     #[inline]
-    #[track_caller]
     fn with_capacity(capacity: usize, elem_layout: Layout) -> Self {
         match Self::try_allocate_in(capacity, AllocInit::Uninitialized, Global, elem_layout) {
             Ok(res) => res,
@@ -1073,7 +1069,7 @@ impl RawVecInner<Global> {
 }
 
 // Tiny Vecs are dumb. Skip to:
-// - 8 if the element size is 1, because any heap allocators is likely
+// - 8 if the element size is 1, because any heap allocator is likely
 //   to round up a request of less than 8 bytes to at least 8 bytes.
 // - 4 if elements are moderate-sized (<= 1 KiB).
 // - 1 otherwise, to avoid wasting too much space for very short Vecs.
@@ -1109,6 +1105,8 @@ impl<T, A: Allocator> RawVec<T, A> {
     }
     @*/
     {
+        // Check assumption made in `current_memory`
+        const { assert!(T::LAYOUT.size() % T::LAYOUT.align() == 0) };
         //@ close exists(std::mem::size_of::<T>());
         //@ std::alloc::Layout_inv(Layout::new::<T>());
         //@ std::alloc::is_valid_layout_size_of_align_of::<T>();
@@ -1123,7 +1121,6 @@ impl<T, A: Allocator> RawVec<T, A> {
     /// allocator for the returned `RawVec`.
     #[cfg(not(no_global_oom_handling))]
     #[inline]
-    #[track_caller]
     pub(crate) fn with_capacity_in(capacity: usize, alloc: A) -> Self
     //@ req thread_token(?t) &*& Allocator(t, alloc, ?alloc_id) &*& t == currentThread;
     /*@
@@ -1164,7 +1161,6 @@ impl<T, A: Allocator> RawVec<T, A> {
     /// of allocator for the returned `RawVec`.
     #[cfg(not(no_global_oom_handling))]
     #[inline]
-    #[track_caller]
     pub(crate) fn with_capacity_zeroed_in(capacity: usize, alloc: A) -> Self {
         Self {
             inner: RawVecInner::with_capacity_zeroed_in(capacity, alloc, T::LAYOUT),
@@ -1488,18 +1484,18 @@ impl<T, A: Allocator> RawVec<T, A> {
     /// Aborts on OOM.
     #[cfg(not(no_global_oom_handling))]
     #[inline]
-    #[track_caller]
     pub(crate) fn reserve(&mut self, len: usize, additional: usize) {
-        self.inner.reserve(len, additional, T::LAYOUT)
+        // SAFETY: All calls on self.inner pass T::LAYOUT as the elem_layout
+        unsafe { self.inner.reserve(len, additional, T::LAYOUT) }
     }
 
     /// A specialized version of `self.reserve(len, 1)` which requires the
     /// caller to ensure `len == self.capacity()`.
     #[cfg(not(no_global_oom_handling))]
     #[inline(never)]
-    #[track_caller]
     pub(crate) fn grow_one(&mut self) {
-        self.inner.grow_one(T::LAYOUT)
+        // SAFETY: All calls on self.inner pass T::LAYOUT as the elem_layout
+        unsafe { self.inner.grow_one(T::LAYOUT) }
     }
 
     /// The same as `reserve`, but returns on errors instead of panicking or aborting.
@@ -1547,7 +1543,8 @@ impl<T, A: Allocator> RawVec<T, A> {
         //@ close_points_to(&(*self).inner);
         //@ open RawVec(t, self0, alloc_id, ptr0, capacity0);
         //@ array_at_lft__to_u8s_at_lft_(ptr0, capacity0);
-        let r = self.inner.try_reserve(len, additional, T::LAYOUT);
+        // SAFETY: All calls on self.inner pass T::LAYOUT as the elem_layout
+        let r = unsafe { self.inner.try_reserve(len, additional, T::LAYOUT) };
         //@ open_points_to(&(*self).inner);
         //@ close_points_to(self);
         //@ assert *self |-> ?self1;
@@ -1584,9 +1581,9 @@ impl<T, A: Allocator> RawVec<T, A> {
     ///
     /// Aborts on OOM.
     #[cfg(not(no_global_oom_handling))]
-    #[track_caller]
     pub(crate) fn reserve_exact(&mut self, len: usize, additional: usize) {
-        self.inner.reserve_exact(len, additional, T::LAYOUT)
+        // SAFETY: All calls on self.inner pass T::LAYOUT as the elem_layout
+        unsafe { self.inner.reserve_exact(len, additional, T::LAYOUT) }
     }
 
     /// The same as `reserve_exact`, but returns on errors instead of panicking or aborting.
@@ -1634,7 +1631,8 @@ impl<T, A: Allocator> RawVec<T, A> {
         //@ close_points_to(&(*self).inner);
         //@ open RawVec(t, self0, alloc_id, ptr0, capacity0);
         //@ array_at_lft__to_u8s_at_lft_(ptr0, capacity0);
-        let r = self.inner.try_reserve_exact(len, additional, T::LAYOUT);
+        // SAFETY: All calls on self.inner pass T::LAYOUT as the elem_layout
+        let r = unsafe { self.inner.try_reserve_exact(len, additional, T::LAYOUT) };
         //@ open_points_to(&(*self).inner);
         //@ close_points_to(self);
         //@ assert *self |-> ?self1;
@@ -1664,7 +1662,6 @@ impl<T, A: Allocator> RawVec<T, A> {
     ///
     /// Aborts on OOM.
     #[cfg(not(no_global_oom_handling))]
-    #[track_caller]
     #[inline]
     pub(crate) fn shrink_to_fit(&mut self, cap: usize)
     /*@
@@ -1698,7 +1695,8 @@ impl<T, A: Allocator> RawVec<T, A> {
         //@ array_at_lft__to_u8s_at_lft_(ptr0, capacity0);
         //@ assert array_at_lft_::<u8>(_, _, _, ?bs);
         //@ array_at_lft__inv();
-        let r = self.inner.shrink_to_fit(cap, T::LAYOUT);
+        // SAFETY: All calls on self.inner pass T::LAYOUT as the elem_layout
+        let r = unsafe { self.inner.shrink_to_fit(cap, T::LAYOUT) };
         //@ close_points_to(self);
         //@ close RawVec(t, *self, alloc_id, ?ptr1, ?capacity1);
         //@ u8s_at_lft__to_array_at_lft_(ptr1, capacity1);
@@ -1786,7 +1784,6 @@ impl<A: Allocator> RawVecInner<A> {
 
     #[cfg(not(no_global_oom_handling))]
     #[inline]
-    #[track_caller]
     fn with_capacity_in(capacity: usize, alloc: A, elem_layout: Layout) -> Self
     /*@
     req thread_token(?t) &*&
@@ -1852,7 +1849,6 @@ impl<A: Allocator> RawVecInner<A> {
 
     #[cfg(not(no_global_oom_handling))]
     #[inline]
-    #[track_caller]
     fn with_capacity_zeroed_in(capacity: usize, alloc: A, elem_layout: Layout) -> Self {
         match Self::try_allocate_in(capacity, AllocInit::Zeroed, alloc, elem_layout) {
             Ok(res) => res,
@@ -1949,11 +1945,6 @@ impl<A: Allocator> RawVecInner<A> {
             }
             @*/
             return Ok(r);
-        }
-        
-        if let Err(err) = alloc_guard(layout.size()) {
-            //@ std::alloc::Allocator_to_own(alloc);
-            return Err(err);
         }
 
         let result = match init {
@@ -2238,8 +2229,12 @@ impl<A: Allocator> RawVecInner<A> {
         r
     }
 
+    /// # Safety
+    /// - `elem_layout` must be valid for `self`, i.e. it must be the same `elem_layout` used to
+    ///   initially construct `self`
+    /// - `elem_layout`'s size must be a multiple of its alignment
     #[inline]
-    fn current_memory(&self, elem_layout: Layout) -> Option<(NonNull<u8>, Layout)>
+    unsafe fn current_memory(&self, elem_layout: Layout) -> Option<(NonNull<u8>, Layout)>
     /*@
     req [_]RawVecInner_share_(?k, ?t, self, elem_layout, ?alloc_id, ?ptr, ?capacity) &*&
         [?q]lifetime_token(k) &*& elem_layout.size() % elem_layout.align() == 0;
@@ -2255,7 +2250,6 @@ impl<A: Allocator> RawVecInner<A> {
         };
     @*/
     //@ on_unwind_ens false;
-    //@ safety_proof { assume(false); } // This function should be marked `unsafe`; see https://github.com/rust-lang/rust/pull/145067
     {
         //@ open RawVecInner_share_(k, t, self, elem_layout, alloc_id, ptr, capacity);
         //@ open_frac_borrow(k, RawVecInner_frac_borrow_content(self, elem_layout, ptr, capacity), q);
@@ -2290,41 +2284,55 @@ impl<A: Allocator> RawVecInner<A> {
         }
     }
 
+    /// # Safety
+    /// - `elem_layout` must be valid for `self`, i.e. it must be the same `elem_layout` used to
+    ///   initially construct `self`
+    /// - `elem_layout`'s size must be a multiple of its alignment
     #[cfg(not(no_global_oom_handling))]
     #[inline]
-    #[track_caller]
-    fn reserve(&mut self, len: usize, additional: usize, elem_layout: Layout) {
+    unsafe fn reserve(&mut self, len: usize, additional: usize, elem_layout: Layout) {
         // Callers expect this function to be very cheap when there is already sufficient capacity.
         // Therefore, we move all the resizing and error-handling logic from grow_amortized and
         // handle_reserve behind a call, while making sure that this function is likely to be
         // inlined as just a comparison and a call if the comparison fails.
         #[cold]
-        fn do_reserve_and_handle<A: Allocator>(
+        unsafe fn do_reserve_and_handle<A: Allocator>(
             slf: &mut RawVecInner<A>,
             len: usize,
             additional: usize,
             elem_layout: Layout,
         ) {
-            if let Err(err) = slf.grow_amortized(len, additional, elem_layout) {
+            // SAFETY: Precondition passed to caller
+            if let Err(err) = unsafe { slf.grow_amortized(len, additional, elem_layout) } {
                 handle_error(err);
             }
         }
 
         if self.needs_to_grow(len, additional, elem_layout) {
-            do_reserve_and_handle(self, len, additional, elem_layout);
+            unsafe {
+                do_reserve_and_handle(self, len, additional, elem_layout);
+            }
         }
     }
 
+    /// # Safety
+    /// - `elem_layout` must be valid for `self`, i.e. it must be the same `elem_layout` used to
+    ///   initially construct `self`
+    /// - `elem_layout`'s size must be a multiple of its alignment
     #[cfg(not(no_global_oom_handling))]
     #[inline]
-    #[track_caller]
-    fn grow_one(&mut self, elem_layout: Layout) {
-        if let Err(err) = self.grow_amortized(self.cap.as_inner(), 1, elem_layout) {
+    unsafe fn grow_one(&mut self, elem_layout: Layout) {
+        // SAFETY: Precondition passed to caller
+        if let Err(err) = unsafe { self.grow_amortized(self.cap.as_inner(), 1, elem_layout) } {
             handle_error(err);
         }
     }
 
-    fn try_reserve(
+    /// # Safety
+    /// - `elem_layout` must be valid for `self`, i.e. it must be the same `elem_layout` used to
+    ///   initially construct `self`
+    /// - `elem_layout`'s size must be a multiple of its alignment
+    unsafe fn try_reserve(
         &mut self,
         len: usize,
         additional: usize,
@@ -2351,7 +2359,6 @@ impl<A: Allocator> RawVecInner<A> {
                 <collections::TryReserveError>.own(t, e)
         };
     @*/
-    //@ safety_proof { assume(false); } // This function should be marked `unsafe`; see https://github.com/rust-lang/rust/pull/145067
     {
         //@ let k = begin_lifetime();
         //@ share_RawVecInner(k, self);
@@ -2366,7 +2373,10 @@ impl<A: Allocator> RawVecInner<A> {
         //@ end_share_RawVecInner(self);
         
         if needs_to_grow {
-            self.grow_amortized(len, additional, elem_layout)?;
+            // SAFETY: Precondition passed to caller
+            unsafe {
+                self.grow_amortized(len, additional, elem_layout)?;
+            }
         }
         unsafe {
             //@ let k2 = begin_lifetime();
@@ -2388,15 +2398,23 @@ impl<A: Allocator> RawVecInner<A> {
         Ok(())
     }
 
+    /// # Safety
+    /// - `elem_layout` must be valid for `self`, i.e. it must be the same `elem_layout` used to
+    ///   initially construct `self`
+    /// - `elem_layout`'s size must be a multiple of its alignment
     #[cfg(not(no_global_oom_handling))]
-    #[track_caller]
-    fn reserve_exact(&mut self, len: usize, additional: usize, elem_layout: Layout) {
-        if let Err(err) = self.try_reserve_exact(len, additional, elem_layout) {
+    unsafe fn reserve_exact(&mut self, len: usize, additional: usize, elem_layout: Layout) {
+        // SAFETY: Precondition passed to caller
+        if let Err(err) = unsafe { self.try_reserve_exact(len, additional, elem_layout) } {
             handle_error(err);
         }
     }
 
-    fn try_reserve_exact(
+    /// # Safety
+    /// - `elem_layout` must be valid for `self`, i.e. it must be the same `elem_layout` used to
+    ///   initially construct `self`
+    /// - `elem_layout`'s size must be a multiple of its alignment
+    unsafe fn try_reserve_exact(
         &mut self,
         len: usize,
         additional: usize,
@@ -2423,7 +2441,6 @@ impl<A: Allocator> RawVecInner<A> {
                 <collections::TryReserveError>.own(t, e)
         };
     @*/
-    //@ safety_proof { assume(false); } // This function should be marked `unsafe`; see https://github.com/rust-lang/rust/pull/145067
     {
         //@ let k = begin_lifetime();
         //@ share_RawVecInner(k, self);
@@ -2438,7 +2455,10 @@ impl<A: Allocator> RawVecInner<A> {
         //@ end_share_RawVecInner(self);
         
         if needs_to_grow {
-            self.grow_exact(len, additional, elem_layout)?;
+            // SAFETY: Precondition passed to caller
+            unsafe {
+                self.grow_exact(len, additional, elem_layout)?;
+            }
         }
         unsafe {
             //@ let k2 = begin_lifetime();
@@ -2460,10 +2480,14 @@ impl<A: Allocator> RawVecInner<A> {
         Ok(())
     }
 
+    /// # Safety
+    /// - `elem_layout` must be valid for `self`, i.e. it must be the same `elem_layout` used to
+    ///   initially construct `self`
+    /// - `elem_layout`'s size must be a multiple of its alignment
+    /// - `cap` must be less than or equal to `self.capacity(elem_layout.size())`
     #[cfg(not(no_global_oom_handling))]
     #[inline]
-    #[track_caller]
-    fn shrink_to_fit(&mut self, cap: usize, elem_layout: Layout)
+    unsafe fn shrink_to_fit(&mut self, cap: usize, elem_layout: Layout)
     /*@
     req thread_token(?t) &*& t == currentThread &*&
         elem_layout.size() % elem_layout.align() == 0 &*&
@@ -2480,9 +2504,8 @@ impl<A: Allocator> RawVecInner<A> {
         cap <= capacity1 &*&
         capacity1 == if elem_layout.size() == 0 { usize::MAX } else { cap };
     @*/
-    //@ safety_proof { assume(false); } // This function should be marked `unsafe`; see https://github.com/rust-lang/rust/pull/145067
     {
-        if let Err(err) = self.shrink(cap, elem_layout) {
+        if let Err(err) = unsafe { self.shrink(cap, elem_layout) } {
             handle_error(err);
         }
     }
@@ -2525,7 +2548,13 @@ impl<A: Allocator> RawVecInner<A> {
         self.cap = unsafe { Cap::new_unchecked(cap) };
     }
 
-    fn grow_amortized(
+    /// # Safety
+    /// - `elem_layout` must be valid for `self`, i.e. it must be the same `elem_layout` used to
+    ///   initially construct `self`
+    /// - `elem_layout`'s size must be a multiple of its alignment
+    /// - The sum of `len` and `additional` must be greater than or equal to
+    ///   `self.capacity(elem_layout.size())`
+    unsafe fn grow_amortized(
         &mut self,
         len: usize,
         additional: usize,
@@ -2553,7 +2582,6 @@ impl<A: Allocator> RawVecInner<A> {
                 <collections::TryReserveError>.own(t, e)
         };
     @*/
-    //@ safety_proof { assume(false); } // This function should be marked `unsafe`; see https://github.com/rust-lang/rust/pull/145067
     {
         // This is ensured by the calling contexts.
         if cfg!(debug_assertions) { //~allow_dead_code // FIXME: The source location associated with a dead `else` branch is the entire `if` statement :-(
@@ -2588,7 +2616,8 @@ impl<A: Allocator> RawVecInner<A> {
         //@ init_ref_RawVecInner_(self_ref);
         //@ open_frac_borrow(k, ref_initialized_(self_ref), 1/2);
         //@ open [?f]ref_initialized_::<RawVecInner<A>>(self_ref)();
-        let current_memory = self.current_memory(elem_layout);
+        // SAFETY: Precondition passed to caller
+        let current_memory = unsafe { self.current_memory(elem_layout) };
         //@ close [f]ref_initialized_::<RawVecInner<A>>(self_ref)();
         //@ close_frac_borrow(f, ref_initialized_(self_ref));
         //@ end_lifetime(k);
@@ -2623,15 +2652,16 @@ impl<A: Allocator> RawVecInner<A> {
         
         //@ open_points_to(self);
         
-        match core::ops::Try::branch(finish_grow(new_layout, current_memory, &mut self.alloc)) {
+        // SAFETY: Precondition passed to caller + `current_memory` does the right thing
+        match core::ops::Try::branch(unsafe { finish_grow(new_layout, current_memory, &mut self.alloc) }) {
             core::ops::ControlFlow::Break(residual) => {
                 //@ let self1 = *self;
                 //@ close RawVecInner(t, self1, elem_layout, alloc_id, ptr0, capacity0);
                 core::ops::FromResidual::from_residual(residual)
             }
             core::ops::ControlFlow::Continue(ptr) => {
-                // SAFETY: finish_grow would have resulted in a capacity overflow if we tried to allocate more than `isize::MAX` items
                 unsafe {
+                    // SAFETY: layout_array would have resulted in a capacity overflow if we tried to allocate more than `isize::MAX` items
                     self.set_ptr_and_cap(ptr, cap);
                     //@ let self1 = *self;
                     //@ std::alloc::alloc_block_in_aligned(ptr.as_ptr() as *u8);
@@ -2648,7 +2678,13 @@ impl<A: Allocator> RawVecInner<A> {
         }
     }
 
-    fn grow_exact(
+    /// # Safety
+    /// - `elem_layout` must be valid for `self`, i.e. it must be the same `elem_layout` used to
+    ///   initially construct `self`
+    /// - `elem_layout`'s size must be a multiple of its alignment
+    /// - The sum of `len` and `additional` must be greater than or equal to
+    ///   `self.capacity(elem_layout.size())`
+    unsafe fn grow_exact(
         &mut self,
         len: usize,
         additional: usize,
@@ -2676,7 +2712,6 @@ impl<A: Allocator> RawVecInner<A> {
                 <collections::TryReserveError>.own(t, e)
         };
     @*/
-    //@ safety_proof { assume(false); } // This function should be marked `unsafe`; see https://github.com/rust-lang/rust/pull/145067
     {
         if elem_layout.size() == 0 {
             // Since we return a capacity of `usize::MAX` when the type size is
@@ -2698,7 +2733,8 @@ impl<A: Allocator> RawVecInner<A> {
         //@ init_ref_RawVecInner_(self_ref);
         //@ open_frac_borrow(k, ref_initialized_(self_ref), 1/2);
         //@ open [?f]ref_initialized_::<RawVecInner<A>>(self_ref)();
-        let current_memory = self.current_memory(elem_layout);
+        // SAFETY: Precondition passed to caller
+        let current_memory = unsafe { self.current_memory(elem_layout) };
         //@ close [f]ref_initialized_::<RawVecInner<A>>(self_ref)();
         //@ close_frac_borrow(f, ref_initialized_(self_ref));
         //@ end_lifetime(k);
@@ -2730,14 +2766,15 @@ impl<A: Allocator> RawVecInner<A> {
         //@ mul_mono_l(1, elem_layout.size(), cap);
         //@ mul_mono_l(capacity0, cap, elem_layout.size());
         
-        match core::ops::Try::branch(finish_grow(new_layout, current_memory, &mut self.alloc)) {
+        // SAFETY: Precondition passed to caller + `current_memory` does the right thing
+        match core::ops::Try::branch(unsafe { finish_grow(new_layout, current_memory, &mut self.alloc) }) {
             core::ops::ControlFlow::Break(residual) => {
                 //@ let self1 = *self;
                 //@ close RawVecInner(t, self1, elem_layout, alloc_id, ptr0, capacity0);
                 core::ops::FromResidual::from_residual(residual)
             }
             core::ops::ControlFlow::Continue(ptr) => {
-                // SAFETY: finish_grow would have resulted in a capacity overflow if we tried to allocate more than `isize::MAX` items
+                // SAFETY: layout_array would have resulted in a capacity overflow if we tried to allocate more than `isize::MAX` items
                 unsafe {
                     //@ assert new_layout.size() == elem_layout.size() * cap;
                     //@ mul_mono_l(1, elem_layout.size(), cap);
@@ -2757,9 +2794,14 @@ impl<A: Allocator> RawVecInner<A> {
         }
     }
 
+    /// # Safety
+    /// - `elem_layout` must be valid for `self`, i.e. it must be the same `elem_layout` used to
+    ///   initially construct `self`
+    /// - `elem_layout`'s size must be a multiple of its alignment
+    /// - `cap` must be less than or equal to `self.capacity(elem_layout.size())`
     #[cfg(not(no_global_oom_handling))]
     #[inline]
-    fn shrink(&mut self, cap: usize, elem_layout: Layout) -> Result<(), TryReserveError>
+    unsafe fn shrink(&mut self, cap: usize, elem_layout: Layout) -> Result<(), TryReserveError>
     /*@
     req thread_token(?t) &*& t == currentThread &*&
         elem_layout.size() % elem_layout.align() == 0 &*&
@@ -2783,7 +2825,6 @@ impl<A: Allocator> RawVecInner<A> {
                 <collections::TryReserveError>.own(t, e)
         };
     @*/
-    //@ safety_proof { assume(false); } // This function should be marked `unsafe`; see https://github.com/rust-lang/rust/pull/145067
     {
         //@ let k = begin_lifetime();
         //@ share_RawVecInner(k, self);
@@ -2847,7 +2888,8 @@ impl<A: Allocator> RawVecInner<A> {
         //@ init_ref_RawVecInner_(self_ref);
         //@ open_frac_borrow(k, ref_initialized_(self_ref), 1/2);
         //@ open [?f]ref_initialized_::<RawVecInner<A>>(self_ref)();
-        let current_memory = self.current_memory(elem_layout);
+        // SAFETY: Precondition passed to caller
+        let current_memory = unsafe { self.current_memory(elem_layout) };
         //@ close [f]ref_initialized_::<RawVecInner<A>>(self_ref)();
         //@ close_frac_borrow(f, ref_initialized_(self_ref));
         //@ end_lifetime(k);
@@ -2967,7 +3009,8 @@ impl<A: Allocator> RawVecInner<A> {
         //@ init_ref_RawVecInner_(self_ref);
         //@ open_frac_borrow(k, ref_initialized_(self_ref), 1/2);
         //@ open [?f]ref_initialized_::<RawVecInner<A>>(self_ref)();
-        let current_memory = self.current_memory(elem_layout);
+        // SAFETY: Precondition passed to caller
+        let current_memory = unsafe { self.current_memory(elem_layout) };
         //@ close [f]ref_initialized_::<RawVecInner<A>>(self_ref)();
         //@ close_frac_borrow(f, ref_initialized_(self_ref));
         //@ end_lifetime(k);
@@ -2994,10 +3037,17 @@ impl<A: Allocator> RawVecInner<A> {
     }
 }
 
+/// # Safety
+/// If `current_memory` matches `Some((ptr, old_layout))`:
+/// - `ptr` must denote a block of memory *currently allocated* via `alloc`
+/// - `old_layout` must *fit* that block of memory
+/// - `new_layout` must have the same alignment as `old_layout`
+/// - `new_layout.size()` must be greater than or equal to `old_layout.size()`
+/// If `current_memory` is `None`, this function is safe.
 // not marked inline(never) since we want optimizers to be able to observe the specifics of this
 // function, see tests/codegen-llvm/vec-reserve-extend.rs.
 #[cold]
-fn finish_grow<A>(
+unsafe fn finish_grow<A>(
     new_layout: Layout,
     current_memory: Option<(NonNull<u8>, Layout)>,
     alloc: &mut A,
@@ -3033,10 +3083,7 @@ ens thread_token(t) &*& *alloc |-> ?alloc1 &*& Allocator(t, alloc1, alloc_id) &*
             <collections::TryReserveError>.own(currentThread, e)
     };
 @*/
-//@ safety_proof { assume(false); } // This function should be marked `unsafe`; see https://github.com/rust-lang/rust/pull/145067
 {
-    alloc_guard(new_layout.size())?;
-
     let memory = if let Some((ptr, old_layout)) = current_memory {
         // debug_assert_eq!(old_layout.align(), new_layout.align());
         if cfg!(debug_assertions) { //~allow_dead_code // FIXME: The source location associated
@@ -3097,7 +3144,6 @@ ens thread_token(t) &*& *alloc |-> ?alloc1 &*& Allocator(t, alloc1, alloc_id) &*
 #[cfg(not(no_global_oom_handling))]
 #[cold]
 #[optimize(size)]
-#[track_caller]
 fn handle_error(e: TryReserveError) -> !
 //@ req thread_token(?t);
 //@ ens false;
@@ -3105,42 +3151,6 @@ fn handle_error(e: TryReserveError) -> !
     match e.kind() {
         CapacityOverflow => capacity_overflow(),
         AllocError { layout, .. } => handle_alloc_error(layout),
-    }
-}
-
-// We need to guarantee the following:
-// * We don't ever allocate `> isize::MAX` byte-size objects.
-// * We don't overflow `usize::MAX` and actually allocate too little.
-//
-// On 64-bit we just need to check for overflow since trying to allocate
-// `> isize::MAX` bytes will surely fail. On 32-bit and 16-bit we need to add
-// an extra guard for this in case we're running on a platform which can use
-// all 4GB in user-space, e.g., PAE or x32.
-#[inline]
-fn alloc_guard(alloc_size: usize) -> Result<(), TryReserveError>
-//@ req thread_token(currentThread);
-/*@
-ens thread_token(currentThread) &*&
-    match result {
-        Result::Ok(dummy) => true,
-        Result::Err(err) => <collections::TryReserveError>.own(currentThread, err)
-    };
-@*/
-/*@
-safety_proof {
-    let result = call();
-    match result {
-        Result::Ok(r) => { tuple_0_eq(r); close_tuple_0_own(_t); }
-        Result::Err(e) => { }
-    }
-    close <std::result::Result<std_tuple_0_, collections::TryReserveError>>.own(_t, result);
-}
-@*/
-{
-    if usize::BITS < 64 && alloc_size > isize::MAX as usize { //~allow_dead_code
-        Err(CapacityOverflow.into()) //~allow_dead_code
-    } else {
-        Ok(())
     }
 }
 

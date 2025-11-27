@@ -1939,6 +1939,12 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
            (Ast.Var (loc, id))
            local_is_mutable)
 
+    let result_of_outcome loc expr =
+      if TranslatorArgs.ignore_unwind_paths then expr
+      else
+        Ast.CallExpr
+          (loc, "fn_outcome_result", [], [], [ LitPat expr ], Static)
+
     let translate_scalar (s_cpn : D.scalar) (ty : Ast.type_expr) (loc : Ast.loc)
         =
       let open ScalarRd in
@@ -1948,12 +1954,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           match ty with
           | Ast.RustRefTypeExpr (_, _, Shared, pointee_ty) ->
             let expr = Ast.CallExpr (loc, "std::verifast::produce_const_ref", [pointee_ty], [], [], Static) in
-            let expr =
-              if TranslatorArgs.ignore_unwind_paths then expr
-              else
-                Ast.CallExpr
-                  (loc, "fn_outcome_result", [], [], [ LitPat expr ], Static)
-            in
+            let expr = result_of_outcome loc expr in
             Ok expr
           | _ -> Ast.static_error loc "TODO: Scalar::Ptr with non-ref type" None
 
@@ -2018,7 +2019,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                 (D.decode_const_value (const_value_get val_cpn))
                 ty_expr loc)
       | Unevaluated _ ->
-        let Unevaluated {def; args} = D.decode_mir_const constant_kind_cpn in
+        let Unevaluated {def; args; ty} = D.decode_mir_const constant_kind_cpn in
         let* args = ListAux.try_map (fun arg -> translate_generic_arg arg loc) args in
         begin match def, args with
           "core::mem::SizedTypeProperties::IS_ZST", [ Mir.GenArgType ty ] ->
@@ -2027,7 +2028,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           Ok (`TrTypedConstantScalar (Ast.CallExpr (loc, "std::alloc::Layout::new", [ty.Mir.vf_ty], [], [], Static)))
         | "core::mem::SizedTypeProperties::MAX_SLICE_LEN", [ Mir.GenArgType ty ] ->
           Ok (`TrTypedConstantScalar (Ast.CallExpr (loc, "std::mem::MAX_SLICE_LEN", [ty.Mir.vf_ty], [], [], Static)))
-        | _ -> Ast.static_error loc (Printf.sprintf "Unevaluated MIR constant %s is not yet supported" def) None
+        | _ ->
+          let* ty_info = translate_decoded_ty ty loc in
+          let expr = Ast.CallExpr (loc, "std::verifast::unevaluated_constant", [ty_info.vf_ty], [], [], Static) in
+          Ok (`TrTypedConstantScalar (result_of_outcome loc expr))
         end
       | Undefined _ -> Error (`TrConstantKind "Unknown ConstantKind")
 
