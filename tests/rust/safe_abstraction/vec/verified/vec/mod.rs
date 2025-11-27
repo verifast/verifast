@@ -447,22 +447,12 @@ fix Vec::alloc<T, A>(v: Vec<T, A>) -> A { v.buf.alloc() }
 pred Vec<T, A>(t: thread_id_t, self: Vec<T, A>, alloc_id: alloc_id_t, ptr: *T, capacity: usize, length: usize) =
     RawVec(t, self.buf, alloc_id, ptr, capacity) &*& length == self.len &*& 0 <= length &*& length <= capacity;
 
-lem Vec_inv<T, A>()
-    req Vec::<T, A>(?t, ?self_, ?alloc_id, ?ptr, ?capacity, ?length);
-    ens Vec::<T, A>(t, self_, alloc_id, ptr, capacity, length) &*&
-        lifetime_inclusion(lft_of_type::<A>(), alloc_id.lft) == true &*&
-        ptr != 0 &*& 0 <= length &*& length <= capacity &*& capacity <= usize::MAX;
-{
-    open Vec(t, self_, alloc_id, ptr, capacity, length);
-    raw_vec::RawVec_inv();
-    close Vec(t, self_, alloc_id, ptr, capacity, length);
-}
-
 lem Vec_inv2<T, A>()
     req Vec::<T, A>(?t, ?self_, ?alloc_id, ?ptr, ?capacity, ?length);
     ens Vec::<T, A>(t, self_, alloc_id, ptr, capacity, length) &*&
         lifetime_inclusion(lft_of_type::<A>(), alloc_id.lft) == true &*&
         ptr != 0 &*& 0 <= length &*& length <= capacity &*&
+        length <= std::mem::MAX_SLICE_LEN::<T>() &*&
         if std::mem::size_of::<T>() == 0 { capacity == usize::MAX } else { capacity <= isize::MAX &*& length <= isize::MAX / std::mem::size_of::<T>() };
 {
     open Vec(t, self_, alloc_id, ptr, capacity, length);
@@ -488,6 +478,17 @@ lem Vec_inv2<T, A>()
         }
     }
     close Vec(t, self_, alloc_id, ptr, capacity, length);
+    std::mem::MAX_SLICE_LEN_def::<T>();
+}
+
+lem Vec_inv<T, A>()
+    req Vec::<T, A>(?t, ?self_, ?alloc_id, ?ptr, ?capacity, ?length);
+    ens Vec::<T, A>(t, self_, alloc_id, ptr, capacity, length) &*&
+        lifetime_inclusion(lft_of_type::<A>(), alloc_id.lft) == true &*&
+        length <= std::mem::MAX_SLICE_LEN::<T>() &*&
+        ptr != 0 &*& 0 <= length &*& length <= capacity &*& capacity <= usize::MAX;
+{
+    Vec_inv2();
 }
 
 lem Vec_send_<T, A>(t1: thread_id_t)
@@ -548,7 +549,8 @@ pred Vec_share_<T, A>(k: lifetime_t, t: thread_id_t, l: *Vec<T, A>, alloc_id: al
 
 lem Vec_share__inv<T, A>()
     req [_]Vec_share_::<T, A>(?k, ?t, ?l, ?alloc_id, ?ptr, ?capacity, ?length);
-    ens if std::mem::size_of::<T>() == 0 { true } else { length <= isize::MAX / std::mem::size_of::<T>() };
+    ens length <= std::mem::MAX_SLICE_LEN::<T>() &*&
+        if std::mem::size_of::<T>() == 0 { true } else { length <= isize::MAX / std::mem::size_of::<T>() };
 {
     open Vec_share_(k, t, l, alloc_id, ptr, capacity, length);
     raw_vec::RawVec_share__inv();
@@ -572,6 +574,7 @@ lem Vec_share__inv<T, A>()
             assert false;
         }
     }
+    std::mem::MAX_SLICE_LEN_def::<T>();
 }
 
 pred Vec_share_end_token<T, A>(k: lifetime_t, t: thread_id_t, l: *Vec<T, A>, alloc_id: alloc_id_t, ptr: *T, capacity: usize, length: usize) =
@@ -1882,6 +1885,7 @@ impl<T, A: Allocator> Vec<T, A> {
             //@ open Vec_share_('a, currentThread, me_ref1, alloc_id, ptr_, capacity_, length);
             //@ open_frac_borrow('a, Vec_frac_borrow_content(me_ref1, length), 1/8);
             //@ open [?flen]Vec_frac_borrow_content::<T, A>(me_ref1, length)();
+            //@ std::mem::MAX_SLICE_LEN_def::<T>();
             len = me.len/*@::<T, A, 'a>@*/();
             //@ close [flen]Vec_frac_borrow_content::<T, A>(me_ref1, length)();
             //@ close_frac_borrow(flen, Vec_frac_borrow_content(me_ref1, length));
@@ -2366,6 +2370,7 @@ impl<T, A: Allocator> Vec<T, A> {
             //@ close Vec(t, self1, alloc_id, ptr1, capacity1, length);
             //@ let me_ref2 = precreate_ref(&me);
             //@ init_ref_readonly(me_ref2, 1/2);
+            //@ std::mem::MAX_SLICE_LEN_def::<T>();
             let len = (&me).len();
             //@ end_ref_readonly(me_ref2);
             //@ open_points_to(&me);
@@ -2460,7 +2465,7 @@ impl<T, A: Allocator> Vec<T, A> {
         if len <= length {
             array_at_lft_split(ptr, len);
             assert foreach(?vs, _);
-            foreach_take_drop(len, vs, own(_t));
+            foreach_split(vs, own(_t), len);
         }
         call();
         if len <= length {
@@ -2503,7 +2508,7 @@ impl<T, A: Allocator> Vec<T, A> {
             //@ close_points_to_slice_at_lft(s);
             //@ lifetime_inclusion_trans(func_lft, lft_of_type::<A>(), alloc_id.lft);
             //@ let q = lifetime_token_trade(func_lft, 1/2, alloc_id.lft);
-            //@ open_points_to_at_lft(s);
+            //@ open_points_to_at_lft(s, q);
             //@ close <[T]>.own(t, slice_of_elems(vs));
             ptr::drop_in_place(s);
             //@ close_points_to_at_lft_(s);
@@ -2634,10 +2639,27 @@ impl<T, A: Allocator> Vec<T, A> {
     #[rustc_never_returns_null_ptr]
     #[rustc_as_ptr]
     #[inline]
-    pub const fn as_ptr(&self) -> *const T {
+    pub const fn as_ptr(&self) -> *const T
+    //@ req [_]Vec_share_(?k, ?t, self, ?alloc_id, ?ptr, ?capacity, ?length) &*& [?q]lifetime_token(k);
+    //@ ens [q]lifetime_token(k) &*& result == ptr;
+    /*@
+    safety_proof {
+        open <Vec<T, A>>.share(?k, ?t, self);
+        let result = call();
+    }
+    @*/
+    {
         // We shadow the slice method of the same name to avoid going through
         // `deref`, which creates an intermediate reference.
-        self.buf.ptr()
+        //@ open Vec_share_(k, t, self, alloc_id, ptr, capacity, length);
+        //@ let buf_ref = precreate_ref(&(*self).buf);
+        //@ raw_vec::init_ref_RawVec_(buf_ref);
+        //@ open_frac_borrow(k, ref_initialized_(buf_ref), q/2);
+        //@ open [?f]ref_initialized_::<RawVec<T, A>>(buf_ref)();
+        let r = self.buf.ptr();
+        //@ close [f]ref_initialized_::<RawVec<T, A>>(buf_ref)();
+        //@ close_frac_borrow(f, ref_initialized_(buf_ref));
+        r
     }
 
     /// Returns a raw mutable pointer to the vector's buffer, or a dangling
@@ -3022,7 +3044,74 @@ impl<T, A: Allocator> Vec<T, A> {
     /// ```
     #[inline]
     #[stable(feature = "rust1", since = "1.0.0")]
-    pub fn swap_remove(&mut self, index: usize) -> T {
+    pub fn swap_remove(&mut self, index: usize) -> T
+    /*@
+    req *self |-> ?self0 &*& Vec(?t, self0, ?alloc_id, ?ptr, ?capacity, ?length) &*& t == currentThread &*&
+        if index >= length {
+            ens false
+        } else {
+            points_to_at_lft(alloc_id.lft, ptr + index, ?v) &*&
+            if index == length - 1 {
+                ens *self |-> ?self1 &*& Vec(t, self1, alloc_id, ptr, capacity, length - 1) &*&
+                    points_to_at_lft(alloc_id.lft, ptr + index, v) &*&
+                    result == v
+            } else {
+                [?f]array_at_lft_(alloc_id.lft, (ptr + length - 1) as *u8, std::mem::size_of::<T>(), ?bs) &*&
+                ens *self |-> ?self1 &*& Vec(t, self1, alloc_id, ptr, capacity, length - 1) &*&
+                    array_at_lft_(alloc_id.lft, (ptr + index) as *u8, std::mem::size_of::<T>(), bs) &*&
+                    [f]array_at_lft_(alloc_id.lft, (ptr + length - 1) as *u8, std::mem::size_of::<T>(), bs) &*&
+                    result == v
+            }
+        };
+    @*/
+    //@ ens true;
+    /*@
+    safety_proof {
+        open <Vec<T, A>>.own(_t, ?self0);
+        assert Vec(_t, self0, ?alloc_id, ?ptr, ?capacity, ?length);
+        assert array_at_lft(_, ptr, length, ?vs);
+        if index < length {
+            array_at_lft_split(ptr, index);
+            foreach_split(vs, own(_t), index);
+            open array_at_lft(_, ptr + index, _, _);
+            open foreach(drop(index, vs), own(_t));
+            points_to_at_lft_inv(ptr + index);
+            if index < length - 1 {
+                array_at_lft_split(ptr + index + 1, length - 1 - (index + 1));
+                foreach_split(tail(drop(index, vs)), own(_t), length - 1 - (index + 1));
+                open array_at_lft(_, ptr + length - 1, _, _);
+                open array_at_lft(_, ptr + length, _, _);
+                open foreach(drop(length - 1 - (index + 1), tail(drop(index, vs))), own(_t));
+                open foreach(tail(drop(length - 1 - (index + 1), tail(drop(index, vs)))), own(_t));
+                open points_to_at_lft(_, ptr + length - 1, _);
+                to_u8s__at_lft(ptr + length - 1);
+            } else {
+                open array_at_lft(_, ptr + index + 1, _, _);
+                open foreach(tail(drop(index, vs)), own(_t));
+            }
+        }
+        let result = call();
+        assert Vec(_, ?self1, _, _, _, _);
+        if index < length {
+            let vl = head(drop(length - 1 - index, drop(index, vs)));
+            if index < length - 1 {
+                from_u8s__at_lft(ptr + index);
+
+                close points_to_at_lft(alloc_id.lft, ptr + index, vl);
+                close array_at_lft(alloc_id.lft, ptr + index, length - 1 - index, cons(vl, take(length - 1 - (index + 1), tail(drop(index, vs)))));
+                close foreach(cons(vl, take(length - 1 - (index + 1), tail(drop(index, vs)))), own(_t));
+                array_at_lft_join(ptr);
+                foreach_append(take(index, vs), cons(vl, take(length - 1 - (index + 1), tail(drop(index, vs)))));
+                
+                from_u8s__at_lft(ptr + length - 1);
+                close array_at_lft_(alloc_id.lft, ptr + length - 1, capacity - (length - 1), _);
+            }
+            open own::<T>(_t)(result);
+        }
+        close <Vec<T, A>>.own(_t, self1);
+    }
+    @*/
+    {
         #[cold]
         #[cfg_attr(not(feature = "panic_immediate_abort"), inline(never))]
         #[track_caller]
@@ -3031,17 +3120,62 @@ impl<T, A: Allocator> Vec<T, A> {
             panic!("swap_remove index (is {index}) should be < len (is {len})");
         }
 
+        //@ Vec_inv();
+        //@ open Vec(t, self0, alloc_id, ptr, capacity, length);
+        //@ close Vec(t, self0, alloc_id, ptr, capacity, length);
+        //@ let self_ref = precreate_ref(self);
+        //@ init_ref_readonly(self_ref, 1/2);
         let len = self.len();
+        //@ end_ref_readonly(self_ref);
+        
         if index >= len {
-            assert_failed(index, len);
+            //@ assume(false); // TODO! Requires dealing with local function `assert_failed`
+            assert_failed(index, len); //~allow_dead_code
         }
         unsafe {
             // We replace self[index] with the last element. Note that if the
             // bounds check above succeeds there must be a last element (which
             // can be self[index] itself).
+            
+            //@ lifetime_inclusion_trans(func_lft, lft_of_type::<A>(), alloc_id.lft);
+            //@ let q = lifetime_token_trade(func_lft, 1/2, alloc_id.lft);
+            //@ open_points_to_at_lft(ptr + index, q/2);
+            //@ points_to_limits(ptr + index);
+            
+            //@ let k = begin_lifetime();
+            //@ share_Vec(k, self);
+            //@ let self_ref2 = precreate_ref(self);
+            //@ init_ref_Vec_(self_ref2);
+            //@ open_frac_borrow(k, ref_initialized_(self_ref2), 1/2);
+            //@ open [?f]ref_initialized_::<Vec<T, A>>(self_ref2)();
             let value = ptr::read(self.as_ptr().add(index));
+            //@ close [f]ref_initialized_::<Vec<T, A>>(self_ref2)();
+            //@ close_frac_borrow(f, ref_initialized_(self_ref2));
+            //@ end_lifetime(k);
+            //@ end_share_Vec(self);
+            
             let base_ptr = self.as_mut_ptr();
+            //@ to_u8s_(ptr + index);
+            /*@
+            if index == len - 1 {
+                close exists::<option<isize>>(some(0));
+            } else {
+                open_array_at_lft_((ptr + len - 1) as *u8, q/2);
+                close exists::<option<isize>>(none);
+            }
+            @*/
             ptr::copy(base_ptr.add(len - 1), base_ptr.add(index), 1);
+            /*@
+            if index == len - 1 {
+                from_u8s_(ptr + index);
+                close_points_to_at_lft(ptr + index);
+            } else {
+                close_points_to_at_lft_token_to_close_u8s_at_lft_token(ptr + index);
+                close_array_at_lft_((ptr + index) as *u8);
+                close_array_at_lft_((ptr + len - 1) as *u8);
+            }
+            @*/
+            //@ lifetime_token_trade_back(q, alloc_id.lft);
             self.set_len(len - 1);
             value
         }
@@ -3872,7 +4006,7 @@ impl<T, A: Allocator> Vec<T, A> {
     pub const fn len<'a>(&'a self) -> usize
     // req [?q]lifetime_token('a) &*& [_]Vec_share_('a, currentThread, self, ?alloc_id, ?ptr, ?capacity, ?length);
     // ens [q]lifetime_token('a) &*& result == length;
-    //@ req [?f](*self).len |-> ?length &*& std::mem::size_of::<T>() == 0 || length <= isize::MAX / std::mem::size_of::<T>();
+    //@ req [?f](*self).len |-> ?length &*& length <= std::mem::MAX_SLICE_LEN::<T>();
     //@ ens [f](*self).len |-> length &*& result == length;
     /*@
     safety_proof {

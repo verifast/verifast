@@ -373,6 +373,12 @@ mod mem {
         req true;
         ens align_of_val(x) == std::mem::align_of::<T>();
     
+    fix MAX_SLICE_LEN<T>() -> usize;
+    
+    lem MAX_SLICE_LEN_def<T>();
+        req true;
+        ens MAX_SLICE_LEN::<T>() == if std::mem::size_of::<T>() == 0 { usize::MAX } else { isize::MAX / std::mem::size_of::<T>() };
+    
     @*/
     
 
@@ -388,7 +394,7 @@ mod mem {
     
     fn MAX_SLICE_LEN<T>() -> usize; // The VeriFast MIR translator translates T::MAX_SLICE_LEN unevaluated constants to MAX_SLICE_LEN::<T>() calls.
     //@ req true;
-    //@ ens result == if std::mem::size_of::<T>() == 0 { usize::MAX } else { isize::MAX / std::mem::size_of::<T>() };
+    //@ ens result == MAX_SLICE_LEN::<T>();
     
     fn align_of<T>() -> usize;
     //@ req true;
@@ -498,21 +504,31 @@ mod ptr {
 
     unsafe fn copy<T>(src: *mut T, dst: *mut T, count: usize);
     /*@
-    req src[..count] |-> ?vs &*&
-        if src <= dst {
-            ((src + count) as *u8)[..dst as *u8 - src as *u8] |-> _
-        } else {
-            (dst as *u8)[..src as *u8 - dst as *u8] |-> _
+    req exists::<option<isize>>(?offset_opt) &*&
+        match offset_opt {
+            none => // No overlap
+                [?f](src as *u8)[..count * std::mem::size_of::<T>()] |-?-> ?bs &*& (dst as *u8)[..count * std::mem::size_of::<T>()] |-> _ &*&
+                ens [f](src as *u8)[..count * std::mem::size_of::<T>()] |-?-> bs &*& (dst as *u8)[..count * std::mem::size_of::<T>()] |-?-> bs,
+            some(offset) =>
+                dst == src + offset &*&
+                if offset == 0 {
+                    // The docs require write access even in this case
+                    (dst as *u8)[..count * std::mem::size_of::<T>()] |-?-> ?bs &*&
+                    ens (dst as *u8)[..count * std::mem::size_of::<T>()] |-?-> bs
+                } else if offset > 0 {
+                    // TODO: Require only read access for the part of `src` that does not overlap with `dst`
+                    (src as *u8)[..count * std::mem::size_of::<T>()] |-?-> ?bs &*& ((src + count) as *u8)[..offset * std::mem::size_of::<T>()] |-> _ &*&
+                    ens (src as *u8)[..offset * std::mem::size_of::<T>()] |-?-> take(offset * std::mem::size_of::<T>(), bs) &*&
+                        (dst as *u8)[..count * std::mem::size_of::<T>()] |-?-> bs
+                } else {
+                    // TODO: Require only read access for the part of `src` that does not overlap with `dst`
+                    (src as *u8)[..count * std::mem::size_of::<T>()] |-?-> ?bs &*& (dst as *u8)[..-offset * std::mem::size_of::<T>()] |-> _ &*&
+                    ens ((dst + count) as *u8)[..-offset * std::mem::size_of::<T>()] |-?-> drop((count + offset) * std::mem::size_of::<T>(), bs) &*&
+                        (dst as *u8)[..count * std::mem::size_of::<T>()] |-?-> bs
+                }
         };
     @*/
-    /*@
-    ens dst[..count] |-> vs &*&
-        if src <= dst {
-            (src as *u8)[..dst as *u8 - src as *u8] |-> _
-        } else {
-            ((dst + count) as *u8)[..src as *u8 - dst as *u8] |-> _
-        };
-    @*/
+    //@ ens true;
     //@ on_unwind_ens false;
     //@ terminates;
 

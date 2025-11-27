@@ -239,12 +239,12 @@ pred_ctor RawVecInner_frac_borrow_content<A>(l: *RawVecInner<A>, elemLayout: Lay
 pred RawVecInner_share_<A>(k: lifetime_t, t: thread_id_t, l: *RawVecInner<A>, elemLayout: Layout, alloc_id: alloc_id_t, ptr: *u8, capacity: usize) =
     pointer_within_limits(&(*l).alloc) == true &*&
     [_]std::alloc::Allocator_share(k, t, &(*l).alloc, alloc_id) &*&
-    elemLayout.repeat(capacity) != none &*&
+    elemLayout.repeat(capacity) != none &*& capacity <= usize::MAX &*&
     [_]frac_borrow(k, RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity)) &*& ptr != 0;
 
 lem RawVecInner_share__inv<A>()
     req [_]RawVecInner_share_::<A>(?k, ?t, ?l, ?elemLayout, ?alloc_id, ?ptr, ?capacity);
-    ens ptr != 0 &*& elemLayout.repeat(capacity) != none;
+    ens ptr != 0 &*& elemLayout.repeat(capacity) != none &*& capacity <= usize::MAX;
 {
     open RawVecInner_share_(k, t, l, elemLayout, alloc_id, ptr, capacity);
 }
@@ -524,7 +524,7 @@ lem RawVecInner_share_full<A>(k: lifetime_t, t: thread_id_t, l: *RawVecInner<A>)
     open <RawVecInner<A>>.own(t, *l);
     std::alloc::open_Allocator_own((*l).alloc);
     assert Allocator(_, _, ?alloc_id);
-    open RawVecInner0(_, ?elemLayout, ?ptr, ?capacity);
+    open RawVecInner0(?self_, ?elemLayout, ?ptr, ?capacity);
     {
         pred Ctx() = true;
         produce_lem_ptr_chunk full_borrow_convert_strong(Ctx, sep(std::alloc::Allocator_full_borrow_content_(t, &(*l).alloc, alloc_id), RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity)), klong, RawVecInner_full_borrow_content(t, l))() {
@@ -548,6 +548,7 @@ lem RawVecInner_share_full<A>(k: lifetime_t, t: thread_id_t, l: *RawVecInner<A>)
     }
     std::alloc::share_Allocator_full_borrow_content_m(k, t, &(*l).alloc, alloc_id);
     full_borrow_into_frac_m(k, RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity));
+    std::num::niche_types::UsizeNoHighBit_inv(self_.cap);
     close RawVecInner_share_::<A>(k, t, l, elemLayout, alloc_id, ptr, capacity);
     leak RawVecInner_share_::<A>(k, t, l, elemLayout, alloc_id, ptr, capacity);
     close RawVecInner_share::<A>(k, t, l);
@@ -754,7 +755,7 @@ pred RawVec_share_<T, A>(k: lifetime_t, t: thread_id_t, l: *RawVec<T, A>, alloc_
 
 lem RawVec_share__inv<T, A>()
     req [_]RawVec_share_::<T, A>(?k, ?t, ?l, ?alloc_id, ?ptr, ?capacity);
-    ens ptr != 0 &*& Layout::new::<T>().repeat(capacity) != none;
+    ens ptr != 0 &*& Layout::new::<T>().repeat(capacity) != none &*& capacity <= usize::MAX;
 {
     open RawVec_share_(k, t, l, alloc_id, ptr, capacity);
     RawVecInner_share__inv();

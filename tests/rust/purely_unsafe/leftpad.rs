@@ -16,7 +16,10 @@ ens result == (if n < ns { ns } else { n }) &*&
     if ns < n {
         let p = n - ns;
         
+        //@ close exists::<option<isize>>(some(p));
+        //@ array_to_array_(s);
         std::ptr::copy(s, s.add(p), ns);
+        //@ array__to_array(s + p, cs);
         //@ div_rem_nonneg(s as usize, 1);
         std::ptr::write_bytes(s, c, p);
         n
