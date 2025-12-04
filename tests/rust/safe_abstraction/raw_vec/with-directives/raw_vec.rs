@@ -226,7 +226,7 @@ impl<T, A: Allocator> RawVec<T, A> {
     ///
     /// Note, that the requested capacity and `self.capacity()` could differ, as
     /// an allocator could overallocate and return a greater memory block than requested.
-    pub(crate) unsafe fn into_box(self, len: usize) -> Box<[MaybeUninit<T>], A> {
+    pub(crate) unsafe fn into_box(/*@~mut@*/ self, len: usize) -> Box<[MaybeUninit<T>], A> {
         // Sanity-check one half of the safety requirement (we cannot check the other half).
         debug_assert!(
             len <= self.capacity(),
@@ -453,7 +453,7 @@ impl<A: Allocator> RawVecInner<A> {
     fn try_allocate_in(
         capacity: usize,
         init: AllocInit,
-        alloc: A,
+        /*@~mut@*/ alloc: A,
         elem_layout: Layout,
     ) -> Result<Self, TryReserveError> {
         // We avoid `unwrap_or_else` here because it bloats the amount of
