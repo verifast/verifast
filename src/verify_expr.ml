@@ -340,22 +340,24 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | None -> ()
     end;
     let rt = match rt with None -> None | Some rt -> Some (check_pure_type (pn,ilist) tparams1 Ghost rt) in
-    let xmap =
-      let rec iter xm xs =
+    let xmap, const_params =
+      let rec iter xm const_params xs =
         match xs with
-          [] -> List.rev xm
+          [] -> List.rev xm, const_params
         | (te, x)::xs ->
           if String.empty <> x && List.mem_assoc x xm then static_error l ("Duplicate parameter name '" ^ x ^ "'") None;
           if List.mem_assoc x tenv0 then static_error l ("Parameter '" ^ x ^ "' hides existing variable '" ^ x ^ "'.") None;
+          let is_const_param = match te with ConstTypeExpr _ -> true | _ -> false in
           let t = check_pure_type (pn,ilist) tparams1 Ghost te in
           let t =
             match t with
               ArrayType elemType | StaticArrayType (elemType, _) when language = CLang && not is_rust -> PtrType elemType
             | _ -> t
           in
-          iter ((x, t)::xm) xs
+          let const_params = if is_const_param then x::const_params else const_params in
+          iter ((x, t)::xm) const_params xs
       in
-      iter [] xs
+      iter [] [] xs
     in
     let tenv = [(current_thread_name, current_thread_type); "#pre", match rt with None -> Void | Some rt -> rt] @ xmap @ tparam_typeid_tenv @ tenv0 in
     let (pre, pre_tenv, post) =
@@ -450,7 +452,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         end
     in
     pop_tparam_bounds_table ();
-    (rt, xmap, functype_opt, pre, pre_tenv, post)
+    (rt, xmap, const_params, functype_opt, pre, pre_tenv, post)
   
   let is_transparent_stmt s =
     match s with
@@ -498,10 +500,10 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           ctxt#assert_term (ctxt#mk_eq (ctxt#mk_app func_rank [fterm]) (ctxt#mk_reallit !func_counter));
         if report_skipped_stmts || match contract_opt with Some ((False _ | ExprAsn (_, False _)), _) -> false | _ -> true then begin match body with None -> () | Some (ss, _) -> reportStmts ss end;
         incr func_counter;
-        let (rt, xmap, functype_opt, pre, pre_tenv, post) =
+        let (rt, xmap, const_params, functype_opt, pre, pre_tenv, post) =
           check_func_header pn ilist [] [] [] l k tparams_with_bounds rt fn (Some fterm) xs nonghost_callers_only functype_opt contract_opt terminates body
         in
-        let body' = match body with None -> None | Some body -> Some (Some body) in
+        let body' = match body with None -> None | Some body -> Some (Some (const_params, body)) in
         let fenv = 
           match xmap, dialect with
           | ("this", PtrType (StructType (sn, []))) :: _, Some Cxx ->
@@ -573,7 +575,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let this_type = PtrType (StructType (struct_name, [])) in
         let thisType_type = PtrType (StructType ("std::type_info", [])) in
         let contract_opt = Option.map (fun (pre, post) -> (pre, ("result", post))) contract_opt in
-        let None, xmap, None, pre, pre_tenv, post =
+        let None, xmap, _, None, pre, pre_tenv, post =
           check_func_header pn ilist [] ["this", this_type; "thisType", thisType_type] [] loc Regular [] None struct_name None params false None contract_opt terminates (if body_opt = None then None else Some ([], dummy_loc))
         in
         begin
@@ -651,7 +653,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let this_type = PtrType (StructType (struct_name, [])) in
         let thisType_type = PtrType (StructType ("std::type_info", [])) in
         let contract_opt = Option.map (fun (pre, post) -> (pre, ("result", post))) contract_opt in
-        let None, [], None, pre, pre_tenv, post =
+        let None, [], [], None, pre, pre_tenv, post =
           check_func_header pn ilist [] ["this", this_type; "thisType", thisType_type] [] loc Regular [] None struct_name None [] false None contract_opt terminates body_opt
         in
         let this_term = get_unique_var_symb_non_ghost "this" this_type in

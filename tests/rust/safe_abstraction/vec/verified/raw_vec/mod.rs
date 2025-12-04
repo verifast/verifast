@@ -1180,7 +1180,7 @@ impl<T, A: Allocator> RawVec<T, A> {
     ///
     /// Note, that the requested capacity and `self.capacity()` could differ, as
     /// an allocator could overallocate and return a greater memory block than requested.
-    pub(crate) unsafe fn into_box(self, len: usize) -> Box<[MaybeUninit<T>], A>
+    pub(crate) unsafe fn into_box(mut self, len: usize) -> Box<[MaybeUninit<T>], A>
     //@ req thread_token(?t) &*& RawVec(t, self, ?alloc_id, ?ptr, ?capacity_) &*& array_at_lft_(alloc_id.lft, ptr as *T, len, ?vs) &*& if std::mem::size_of::<T>() == 0 { true } else { len == capacity_ };
     //@ ens thread_token(t) &*& boxed::Box_in::<[std::mem::MaybeUninit<T>], A>(t, result, alloc_id, slice_of_elems(map(std::mem::MaybeUninit::new_maybe_uninit, vs)));
     //@ on_unwind_ens thread_token(t);
@@ -1859,7 +1859,7 @@ impl<A: Allocator> RawVecInner<A> {
     fn try_allocate_in(
         capacity: usize,
         init: AllocInit,
-        alloc: A,
+        mut alloc: A,
         elem_layout: Layout,
     ) -> Result<Self, TryReserveError>
     /*@

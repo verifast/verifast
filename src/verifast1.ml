@@ -964,7 +964,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       * ((string * pred_fam_info map * type_ list * (loc * string) list) option (* implemented function type, with function type type arguments and function type arguments *)
          * ((func_kind * (string * tparam_bounds_expr) list * type_ option * (string * type_) list * bool * (string * termnode) list * asn * (string * type_) list * (string * asn) * bool) option * (* Function prototype *)
             (loc * stmt list * loc) option)) (* Prototype implementation proof *)
-      * (stmt list * loc (* closing brace *) ) option option (* body; None if prototype; Some None if ? *)
+      * ( string list (* const params *) * (stmt list * loc (* closing brace *) ) ) option option (* body; None if prototype; Some None if ? *)
       * bool (* virtual *)
       * string list (* overrides *)
     type func_type_info =

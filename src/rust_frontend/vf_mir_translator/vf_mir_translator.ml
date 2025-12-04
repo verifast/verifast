@@ -4746,16 +4746,18 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         in
         let param_decls =
           List.map2
-            (fun (decl : Mir.local_decl) ty -> (decl.loc, decl.id, ty))
+            (fun (decl : Mir.local_decl) ty -> (decl.loc, decl.mutability, decl.id, ty))
             param_decls param_tys
         in
         let vf_param_decls =
           List.map
-            (fun (loc, id, ty_info) ->
+            (fun (loc, mutability, id, ty_info) ->
               let ty = ty_info.Mir.vf_ty in
+              let ty = match mutability with Mir.Not -> Ast.ConstTypeExpr (loc, ty) | Mir.Mut -> ty in
               (ty, id))
             param_decls
         in
+        let param_decls = param_decls |> List.map (fun (loc, _, id, ty_info) -> (loc, id, ty_info)) in
         let contract_cpn = contract_get body_cpn in
         let* contract_loc, contract_opt = translate_contract contract_cpn in
         let* is_unsafe = translate_unsafety @@ unsafety_get @@ body_cpn in

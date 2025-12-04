@@ -2520,10 +2520,10 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let funcmap' =
         List.map
           begin fun (fn, (auto, trigger, fterm, l, tparams', rt, xs, nonghost_callers_only, functype_opt, contract_opt, terminates, body)) ->
-            let (rt, xmap, functype_opt, pre, pre_tenv, post) =
+            let (rt, xmap, const_params, functype_opt, pre, pre_tenv, post) =
               check_func_header pn ilist tparams tenv env l (Lemma(auto, trigger)) tparams' rt fn (Some fterm) xs nonghost_callers_only functype_opt contract_opt terminates (Some body)
             in
-            (fn, FuncInfo (env, fterm, l, Lemma(auto, trigger), tparams', rt, xmap, nonghost_callers_only, pre, pre_tenv, post, terminates, (functype_opt, (None, None)), Some (Some body), false, []))
+            (fn, FuncInfo (env, fterm, l, Lemma(auto, trigger), tparams', rt, xmap, nonghost_callers_only, pre, pre_tenv, post, terminates, (functype_opt, (None, None)), Some (Some (const_params, body)), false, []))
           end
           lems
       in
@@ -2531,8 +2531,8 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let funcmap = funcmap' @ funcmap in
       let verify_lems lems0 =
         List.fold_left
-          begin fun lems0 (fn, FuncInfo (funenv, fterm, l, k, tparams', rt, xmap, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, Some (Some (ss, closeBraceLoc)), _, _)) ->
-            let gs', lems' = verify_func pn ilist [] lems0 boxes predinstmap funcmap tparams funenv l k tparams' rt fn xmap nonghost_callers_only pre pre_tenv post terminates ss closeBraceLoc in
+          begin fun lems0 (fn, FuncInfo (funenv, fterm, l, k, tparams', rt, xmap, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, Some (Some (const_params, (ss, closeBraceLoc))), _, _)) ->
+            let gs', lems' = verify_func pn ilist [] lems0 boxes predinstmap funcmap tparams funenv l k tparams' rt fn xmap const_params nonghost_callers_only pre pre_tenv post terminates ss closeBraceLoc in
             lems'
           end
           lems0
@@ -3108,10 +3108,11 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   and heapify_params h tenv env ps cont =
     begin match ps with
       [] -> cont h tenv env
-    | (l, x, t, addr) :: ps -> 
+    | (l, x, x_is_const, t, addr) :: ps -> 
       let xvalue = List.assoc x env in
       let tenv' = update tenv x (RefType (List.assoc x tenv)) in
-      produce_points_to_chunk l h t real_unit addr xvalue $. fun h' ->
+      let coef = if x_is_const then real_half else real_unit in
+      produce_points_to_chunk l h t coef addr xvalue $. fun h' ->
       let env' = update env x addr in
       heapify_params h' tenv' env' ps cont
     end
@@ -3119,8 +3120,9 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let rec cleanup_heapy_locals_core (pn, ilist) l h env ps cont= 
     match ps with
       [] -> cont h
-    | (_, x, t, addr) :: ps ->
-      consume_points_to_chunk_ rules h env [] [] [] l t real_unit real_unit_pat addr RegularPointsTo dummypat true $. fun chunk h _ value _ _ _ ->
+    | (_, x, x_is_const, t, addr) :: ps ->
+      let coef = if x_is_const then real_half else real_unit in
+      consume_points_to_chunk_ rules h env [] [] [] l t coef real_unit_pat addr RegularPointsTo dummypat true $. fun chunk h _ value _ _ _ ->
       cleanup_heapy_locals_core (pn, ilist) l h env ps cont
     in
     match ps, varargsLastParam with
@@ -3131,11 +3133,11 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       match varargsLastParam with
         None -> cont h
       | Some x ->
-        let [_, _, _, addr] = List.filter (fun (_, y, _, _) -> y = x) ps in
+        let [_, _, _, _, addr] = List.filter (fun (_, y, _, _, _) -> y = x) ps in
         consume_chunk rules h env [] [] [] l (varargs__pred (), true) [] real_unit real_unit_pat (Some 1) [TermPat addr; dummypat] $. fun _ h _ _ _ _ _ _ ->
         cont h
 
-  and compute_heapy_params loc func_kind params pre_tenv ss =
+  and compute_heapy_params loc func_kind params const_params pre_tenv ss =
     let is_ghost = func_kind |> function Regular -> false | _ -> true in
     let penv = params |> List.map @@ function 
       | (x, RefType t) -> x, get_unique_var_symb_ (x ^ "_addr") (PtrType t) is_ghost
@@ -3153,7 +3155,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let heapy_ps = pre_tenv |> List.filter (function (x, RefType _) -> false | _ -> true) |> List.fold_left (fun acc (x, tp) ->
       if List.mem_assoc x params && List.mem x heapy_vars then 
         let addr = get_unique_var_symb_non_ghost (x ^ "_addr") (PtrType tp) in
-        (loc, x, tp, addr) :: acc
+        (loc, x, List.mem x const_params, tp, addr) :: acc
       else
         acc   
       ) [] |> List.rev
@@ -3197,7 +3199,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     end @@ fun sizemap tenv ghostenv h env ->
     verify_return_stmt (pn, ilist) [] [] tparams boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env false close_brace_loc None [] return_cont (fun _ _ _ -> assert false)
 
-  and verify_func pn ilist gs lems boxes predinstmap funcmap tparams env l k tparams'_with_bounds rt g ps nonghost_callers_only pre pre_tenv post terminates ss closeBraceLoc =
+  and verify_func pn ilist gs lems boxes predinstmap funcmap tparams env l k tparams'_with_bounds rt g ps const_params nonghost_callers_only pre pre_tenv post terminates ss closeBraceLoc =
     if startswith g "vf__" then static_error l "The name of a user-defined function must not start with 'vf__'." None;
     push_tparam_bounds_table ();
     let tparams' = tparams'_with_bounds |> List.map @@ fun (x, {sized}) ->
@@ -3217,7 +3219,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let tparam_typeid_tenv = tparam_typeid_env |> List.map (fun (x, t) -> (x, voidPtrType)) in
     let pre_tenv = tparam_typeid_tenv @ pre_tenv in
     let env = env @ tparam_typeid_env in
-    let penv, heapy_ps, varargsLastParam = compute_heapy_params l k ps pre_tenv ss in
+    let penv, heapy_ps, varargsLastParam = compute_heapy_params l k ps const_params pre_tenv ss in
     let sizemap, indinfo = compute_size_info penv ss in
     let prolog, ss = partition_ss k ss in
     let tenv =
@@ -3315,7 +3317,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               verifying copy elision in a return statement: the local that is being returned must not be cleaned
               and is therefore not part of env to mark this.
             *)
-            let heapy_ps = heapy_ps |> List.filter (fun (_, n, _, _) -> List.mem_assoc n env_post) in
+            let heapy_ps = heapy_ps |> List.filter (fun (_, n, _, _, _) -> List.mem_assoc n env_post) in
             cleanup_heapy_locals (pn, ilist) closeBraceLoc h env heapy_ps varargsLastParam @@ fun h ->
             check_leaks h env closeBraceLoc "Function leaks heap chunks."
         in
@@ -3486,7 +3488,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       iter h fields
     in 
     let _ = push () in 
-    let penv, heapy_ps, varargsLastParam = compute_heapy_params loc Regular params pre_tenv ss in
+    let penv, heapy_ps, varargsLastParam = compute_heapy_params loc Regular params [] pre_tenv ss in
     let sizemap, indinfo = compute_size_info penv ss in
     let prolog, ss = partition_ss Regular ss in
     let leminfo, gs', lems', ghostenv = RealFuncInfo (gs, g, terminates), g :: gs, lems, ["thisType"] in 
@@ -3886,7 +3888,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let g = full_name pn g in
       let gs', lems' =
       record_fun_timing l g begin fun () ->
-      let FuncInfo ([], fterm, l, k, tparams', rt, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, (_, (prototype_opt, prototypeImplementationProof_opt)), Some (Some (ss, closeBraceLoc)), is_virtual, overrides) = List.assoc g funcmap in
+      let FuncInfo ([], fterm, l, k, tparams', rt, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, (_, (prototype_opt, prototypeImplementationProof_opt)), Some (Some (const_params, (ss, closeBraceLoc))), is_virtual, overrides) = List.assoc g funcmap in
       push_tparam_bounds_table ();
       begin match prototype_opt, prototypeImplementationProof_opt with
         None, None -> ()
@@ -3964,7 +3966,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       pop_tparam_bounds_table ();
       let tparams = [] in
       let env = [] in
-      verify_func pn ilist gs lems boxes predinstmap funcmap tparams env l k tparams' rt g ps nonghost_callers_only pre pre_tenv post terminates ss closeBraceLoc
+      verify_func pn ilist gs lems boxes predinstmap funcmap tparams env l k tparams' rt g ps const_params nonghost_callers_only pre pre_tenv post terminates ss closeBraceLoc
       end in
       verify_funcs (pn, ilist) boxes gs' lems' ds
     | BoxClassDecl (l, bcn, _, _, _, _)::ds -> let bcn=full_name pn bcn in
