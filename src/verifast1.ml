@@ -94,6 +94,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let extern_specs = List.rev @@ Vfbindings.get Vfparam_extern_specs vfbindings
   let externs = List.rev @@ Vfbindings.get Vfparam_externs vfbindings
 
+  let rocq_writer = Rocq_writer.rocq_create_writer options.option_emit_rocq
+
   let rustc_args =
     let externs_rustc_args =
       externs |> flatmap @@ fun path ->

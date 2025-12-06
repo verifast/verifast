@@ -4233,6 +4233,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let allow_ignore_ref_creation = allow_ignore_ref_creation
             let ignore_ref_creation = Vfbindings.get Vfparam_ignore_ref_creation vfbindings
             let ignore_unwind_paths = Vfbindings.get Vfparam_ignore_unwind_paths vfbindings
+            let rocq_writer = rocq_writer
           end
         )
         in
@@ -4250,6 +4251,12 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       match !shouldFailLocs with
         [] -> ()
       | l::_ -> static_error (Lexed l) "No error found on line." None
+    end;
+    if options.option_emit_rocq then begin
+      let rocq_file = Filename.chop_extension path ^ ".v" in
+      let oc = open_out rocq_file in
+      Rocq_writer.rocq_write_to_channel rocq_writer oc;
+      close_out oc
     end;
     result
   

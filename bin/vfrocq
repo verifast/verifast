@@ -1,0 +1,23 @@
+#!/bin/bash
+
+VFHOME=$(dirname "$(dirname "$(realpath "$0")")")
+if [[ ! -e "$VFHOME/bin/rust/rocq/VfMir.vo" ]]; then
+    pushd "$VFHOME/bin/rust/rocq" || exit 1
+    coqc -R . VeriFast VfMir.v || exit 1
+    popd || exit 1
+fi
+
+case "$1" in
+    compile)
+        shift
+        coqc -R "$VFHOME/bin/rust/rocq" VeriFast "$@"
+        ;;
+    ide)
+        shift
+        coqide -R "$VFHOME/bin/rust/rocq" VeriFast "$@"
+        ;;
+    *)
+        # Compile as the default behavior
+        coqc -R "$VFHOME/bin/rust/rocq" VeriFast "$@"
+        ;;
+esac

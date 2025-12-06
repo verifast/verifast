@@ -1,5 +1,13 @@
 open Vf_mir_decoder
 
+let rec zip_with_remainder xs ys =
+  match (xs, ys) with
+    ([], _) -> ([], [], ys)
+  | (_, []) -> ([], xs, [])
+  | (x :: xs, y :: ys) ->
+    let (zs, xs', ys') = zip_with_remainder xs ys in
+    ((x, y) :: zs, xs', ys')
+
 let string_of_ty ty = "<ty>"
 
 let string_of_gen_arg gen_arg = "<gen_arg>"
@@ -92,7 +100,7 @@ let string_of_rvalue = function
   | Repeat {operand; count} -> Printf.sprintf "repeat(%s; <TyConst>)" (string_of_operand operand)
   | Ref data -> string_of_rvalue_ref_data data
   | ThreadLocalRef -> "<ThreadLocalRef>"
-  | AddressOf {place} -> Printf.sprintf "&raw %s" (string_of_place place)
+  | RawPtr {place} -> Printf.sprintf "&raw %s" (string_of_place place)
   | Cast {operand; ty} ->
     Printf.sprintf "(%s as %s)" (string_of_operand operand) (string_of_ty ty)
   | BinaryOp {operator; operandl; operandr} ->
@@ -128,24 +136,23 @@ let string_of_unwind_action = function
 let string_of_terminator {source_info; kind} =
   match kind with
   | Goto bb_id -> Printf.sprintf "goto %s;" (string_of_basic_block_id bb_id)
-  | SwitchInt {discr; targets={branches; otherwise}} ->
+  | SwitchInt {discr; values; targets} ->
+      let branches, [], [otherwise] = zip_with_remainder values targets in
       let otherwise =
-        match otherwise with
-        | Something bb_id -> [Printf.sprintf "otherwise -> %s" (string_of_basic_block_id bb_id)]
-        | Nothing -> []
+        [Printf.sprintf "otherwise -> %s" (string_of_basic_block_id otherwise)]
       in
-      let targets = List.map (fun {val_; target} -> Printf.sprintf "%s -> %s" (string_of_uint128 val_) (string_of_basic_block_id target)) branches @ otherwise in
+      let targets = List.map (fun (val_, target) -> Printf.sprintf "%s -> %s" (string_of_uint128 val_) (string_of_basic_block_id target)) branches @ otherwise in
       Printf.sprintf "switch %s {%s}" (string_of_operand discr) (String.concat ", " targets)
   | UnwindResume -> "unwind_resume;"
   | UnwindTerminate -> "unwind_terminate;"
   | Return -> "return;"
   | Unreachable -> "unreachable;"
-  | Call {func; args; destination; unwind_action} ->
+  | Call {func; args; destination; target; unwind_action} ->
       let prolog, epilog =
-        match destination with
+        match target with
         | Nothing -> "", "unreachable;"
-        | Something {place; basic_block_id} ->
-            Printf.sprintf "%s = " (string_of_place place), Printf.sprintf "goto %s;" (string_of_basic_block_id basic_block_id)
+        | Something basic_block_id ->
+            Printf.sprintf "%s = " (string_of_place destination), Printf.sprintf "goto %s;" (string_of_basic_block_id basic_block_id)
       in
       let args_str = String.concat ", " (List.map string_of_operand args) in
       Printf.sprintf "%s%s(%s) on_unwind %s; %s" prolog (string_of_operand func) args_str (string_of_unwind_action unwind_action) epilog
