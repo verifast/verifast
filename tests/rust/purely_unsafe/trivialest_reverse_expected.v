@@ -302,3 +302,13 @@ Definition bodies := [
         ]
     |}
 ].
+
+From VeriFast Require Export Annotations.
+
+Definition preds := [
+    {|
+        pred_name := "Nodes";
+        params := [("n", RawPtr (Uint U8))];
+        body := IfAsn (Eq (Var "n") NullPtr) (BoolAsn True) (SepAsn (PointsToAsn (RawPtr (Uint U8)) (Var "n") (VarPat "next")) (PredAsn "Nodes" [LitPat (Var "next")]))
+    |}
+].

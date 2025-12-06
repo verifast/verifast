@@ -7613,6 +7613,33 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     iter' predinstmap1 ps
   
+  let () =
+    if options.option_emit_rocq && filepath = path then begin
+      Rocq_writer.rocq_print rocq_writer "\nFrom VeriFast Require Export Annotations.\n\nDefinition preds := ";
+      Rocq_writer.rocq_print_big_list rocq_writer begin fun () ->
+        predinstmap1 |> List.iter @@ fun ((p, idxs), (env, l, tparams, ps, predfamsymb, inputParamCount, body)) ->
+          Rocq_writer.rocq_print_big_record rocq_writer @@ fun () ->
+            Rocq_writer.rocq_print_big_record_field rocq_writer "pred_name" begin fun () ->
+              Rocq_writer.rocq_print_string_literal rocq_writer p
+            end;
+            Rocq_writer.rocq_print_big_record_field rocq_writer "params" begin fun () ->
+              Rocq_writer.rocq_print_small_list rocq_writer @@ fun () ->
+                ps |> List.iter @@ fun (x, tp) ->
+                  Rocq_writer.rocq_print_tuple rocq_writer @@ fun () ->
+                    Rocq_writer.rocq_print_tuple_element rocq_writer begin fun () ->
+                      Rocq_writer.rocq_print_string_literal rocq_writer x
+                    end;
+                    Rocq_writer.rocq_print_tuple_element rocq_writer begin fun () ->
+                      Rocq_writer.rocq_print_small_term rocq_writer (Rocq_of_ast.of_type tp)
+                    end
+            end;
+            Rocq_writer.rocq_print_big_record_field rocq_writer "body" begin fun () ->
+              Rocq_writer.rocq_print_big_term rocq_writer (Rocq_of_ast.of_asn body)
+            end
+      end;
+      Rocq_writer.rocq_print rocq_writer ".\n"
+    end
+  
   let predinstmap = predinstmap1 @ predinstmap0
   
   let predctormap1 =
