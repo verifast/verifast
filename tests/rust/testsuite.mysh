@@ -41,6 +41,18 @@ cd purely_unsafe
   verifast scalars.rs
   verifast -ignore_unwind_paths alloc.rs
   verifast -ignore_unwind_paths reverse.rs
+  begin_sequential
+    verifast -emit_rocq trivialest_reverse.rs
+    diff -q trivialest_reverse.v trivialest_reverse_expected.v
+    ifrocq vfrocq compile trivialest_reverse.v
+    ifrocq del trivialest_reverse.v
+    ifrocq del trivialest_reverse.vo
+    ifrocq del trivialest_reverse.vos
+    ifrocq del trivialest_reverse.vok
+    ifrocq del trivialest_reverse.glob
+  end_sequential
+  verifast trivialer_reverse.rs
+  verifast trivial_reverse.rs
   verifast simple_reverse.rs
   verifast -ignore_unwind_paths account.rs
   verifast -ignore_unwind_paths account_value.rs

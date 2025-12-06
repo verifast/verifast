@@ -1,3 +1,7 @@
+# Rocq
+*.vo*
+*.glob
+
 .DS_Store
 
 # /bin/

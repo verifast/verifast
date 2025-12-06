@@ -585,6 +585,23 @@ struct IntegerType {
     }
 }
 
+struct CastKind {
+    union {
+        pointerExposeProvenance @0: Void;
+        pointerWithExposedProvenance @1: Void;
+        pointerCoercion @2: Void; # TODO: Elaborate
+        intToInt @3: Void;
+        floatToInt @4: Void;
+        floatToFloat @5: Void;
+        intToFloat @6: Void;
+        ptrToPtr @7: Void;
+        fnPtrToPtr @8: Void;
+        transmute @9: Void;
+        subtype @10: Void;
+    }
+
+}
+
 struct Rvalue {
 
     struct RepeatData {
@@ -592,7 +609,7 @@ struct Rvalue {
         count @1: TyConst;
     }
 
-    struct AddressOfData {
+    struct RawPtrData {
         mutability @0: Mutability;
         place @1: Place;
     }
@@ -666,6 +683,7 @@ struct Rvalue {
     }
 
     struct CastData {
+        kind @2: CastKind;
         operand @0: Operand;
         ty @1: Ty;
     }
@@ -687,7 +705,7 @@ struct Rvalue {
         repeat @8: RepeatData;
         ref @1: RefData;
         threadLocalRef @9: Void;
-        addressOf @2: AddressOfData;
+        rawPtr @2: RawPtrData;
         cast @3: CastData;
         binaryOp @4: BinaryOpData;
         nullaryOp @11: NullaryOpData;
@@ -722,15 +740,6 @@ struct Statement {
     kind @1: StatementKind;
 }
 
-struct SwitchTargets {
-    struct Branch {
-        val @0: UInt128;
-        target @1: BasicBlockId;
-    }
-    branches @0: List(Branch);
-    otherwise @1: Option(BasicBlockId);
-}
-
 struct UnwindAction {
     union {
         continue @0: Void;
@@ -744,17 +753,15 @@ struct TerminatorKind {
     struct SwitchIntData {
         discr @0: Operand;
         discrTy @1: Ty;
-        targets @2: SwitchTargets;
+        values @2: List(UInt128);
+        targets @3: List(BasicBlockId); # targets.len() == values.len() + 1
     }
 
     struct FnCallData {
-        struct DestinationData {
-            place @0: Place;
-            basicBlockId @1: BasicBlockId;
-        }
         func @0: Operand;
         args @1: List(Operand);
-        destination @2: Option(DestinationData);
+        destination @2: Place;
+        target @6: Option(BasicBlockId);
         unwindAction @5: UnwindAction;
         # The span of the call, without the dot and receiver e.g. `foo(a, b)` in `x.foo(a, b)`
         callSpan @3: SpanData;

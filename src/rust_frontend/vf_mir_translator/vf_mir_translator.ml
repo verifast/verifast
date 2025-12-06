@@ -1,19 +1,10 @@
 module AstAux = Ast_aux
 module D = Vf_mir_decoder
 
-module DecoderAux = struct
-  let uint128_get (n : D.uint128) =
-    let open Stdint.Uint128 in
-    let h = n.h in
-    let l = n.l in
-    let r = of_uint64 h in
-    let r = shift_left r 64 in
-    let r = add r (of_uint64 l) in
-    r
-end
-
 module RustBelt = Rustbelt
 module LocAux = Src_loc_aux
+
+module DecoderAux = Decoder_aux
 
 module IntAux = struct
   module Make (StdintMod : sig
@@ -341,6 +332,7 @@ module type VF_MIR_TRANSLATOR_ARGS = sig
   val allow_ignore_ref_creation : bool
   val ignore_ref_creation : bool
   val ignore_unwind_paths : bool
+  val rocq_writer : Rocq_writer.rocq_writer
 end
 
 module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
@@ -1846,10 +1838,25 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let id = translate_local_decl_id id_cpn in
       let src_info_cpn = source_info_get local_decl_cpn in
       let* { Mir.span = loc; Mir.scope } = translate_source_info src_info_cpn in
-      let ty_cpn = ty_get local_decl_cpn in
+      let ty_cpn = ty_get local_decl_cpn |> D.decode_ty in
+      Rocq_writer.rocq_print_small_record TranslatorArgs.rocq_writer begin fun () ->
+        Rocq_writer.rocq_print_small_record_field TranslatorArgs.rocq_writer "id" begin fun () ->
+          Rocq_writer.rocq_print_string_literal TranslatorArgs.rocq_writer id
+        end;
+        Rocq_writer.rocq_print_small_record_field TranslatorArgs.rocq_writer "mutability" begin fun () ->
+          Rocq_writer.rocq_print_ident TranslatorArgs.rocq_writer
+            begin match mutability with
+            | Mir.Mut -> "Mut"
+            | Mir.Not -> "Not"
+            end
+        end;
+        Rocq_writer.rocq_print_small_record_field TranslatorArgs.rocq_writer "ty" begin fun () ->
+          Rocq_writer.rocq_print_data TranslatorArgs.rocq_writer Vf_mir_rocq.rocq_print_ty ty_cpn
+        end;
+      end;
       let ty_info =
         lazy
-          (match translate_ty ty_cpn loc with
+          (match translate_decoded_ty ty_cpn loc with
           | Ok ty -> ty
           | _ ->
               Ast.static_error loc
@@ -1877,11 +1884,17 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       | Deref
       | Field of string option * int
       | Downcast of int
+      | BoxAsNonNull
 
     let decode_place_element (place_elm : PlaceElementRd.t) : place_element =
       let open PlaceElementRd in
       match get place_elm with
-      | Deref -> Deref
+      | Deref ->
+        Rocq_writer.rocq_print_ident TranslatorArgs.rocq_writer "Deref";
+        Deref
+      | BoxAsNonNull _ ->
+        Rocq_writer.rocq_print_ident TranslatorArgs.rocq_writer "BoxAsNonNull";
+        BoxAsNonNull
       | Field field_data_cpn ->
           let open FieldData in
           let index = index_get field_data_cpn in
@@ -1923,17 +1936,28 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             let e1, e1_is_mutable = iter elems in
             (Ast.Select (loc, e1, name), e1_is_mutable)
         | Downcast _ :: _ -> failwith "Not yet supported: Downcast _::_"
+        | BoxAsNonNull :: _ -> Ast.EmpAsn loc, false (* Dummy result; never used *)
       in
       iter elems
 
     let translate_place (place_cpn : PlaceRd.t) (loc : Ast.loc) :
         (Ast.expr * bool (* the place is mutable *), _) result =
       let open PlaceRd in
+      Rocq_writer.rocq_print_tuple TranslatorArgs.rocq_writer @@ fun () ->
       let id_cpn = local_get place_cpn in
       let local_is_mutable = local_is_mutable_get place_cpn in
       let id = translate_local_decl_id id_cpn in
+      Rocq_writer.rocq_print_tuple_element TranslatorArgs.rocq_writer begin fun () ->
+        Rocq_writer.rocq_print_string_literal TranslatorArgs.rocq_writer id
+      end;
       let projection_cpn = projection_get_list place_cpn in
-      let place_elems = List.map decode_place_element projection_cpn in
+      let place_elems =
+        Rocq_writer.rocq_print_tuple_element TranslatorArgs.rocq_writer @@ fun () ->
+          Rocq_writer.rocq_print_small_list TranslatorArgs.rocq_writer @@ fun () ->
+            projection_cpn |> List.map @@ fun pe_cpn ->
+              Rocq_writer.rocq_print_small_list_element TranslatorArgs.rocq_writer @@ fun () ->
+                decode_place_element pe_cpn
+      in
       Ok
         (translate_projection loc (List.rev place_elems)
            (Ast.Var (loc, id))
@@ -1966,14 +1990,22 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
 
     let translate_unit_constant (loc : Ast.loc) = Ok `TrUnitConstant
 
-    let translate_const_value (cv_cpn : D.const_value) (ty : Ast.type_expr)
+    let translate_const_value (cv_cpn : D.const_value) (ty_cpn : D.ty)
         (loc : Ast.loc) =
       let open ConstValueRd in
+      let* ty_info = translate_decoded_ty ty_cpn loc in
+      let ty = ty_info.vf_ty in
       match cv_cpn with
       | Scalar scalar_cpn ->
           let* expr = translate_scalar scalar_cpn ty loc in
           Ok (`TrTypedConstantScalar expr)
       | ZeroSized -> (
+          Rocq_writer.rocq_print_argument TranslatorArgs.rocq_writer begin fun () ->
+            Rocq_writer.rocq_print_ident TranslatorArgs.rocq_writer "ZeroSized"
+          end;
+          Rocq_writer.rocq_print_argument TranslatorArgs.rocq_writer begin fun () ->
+            Rocq_writer.rocq_print_data TranslatorArgs.rocq_writer Vf_mir_rocq.rocq_print_ty ty_cpn
+          end;
           match ty with
           | Ast.ManifestTypeExpr (_, Ast.StructType (sn, _))
             when sn = TrTyTuple.tuple0_name ->
@@ -2001,23 +2033,30 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       match get constant_kind_cpn with
       | Ty ty_const_cpn -> translate_mir_ty_const ty_const_cpn loc
       | Val val_cpn -> (
+          Rocq_writer.rocq_print_application TranslatorArgs.rocq_writer "Val" @@ fun () ->
           let open VfMirRd.MirConst.Val in
-          let ty = decode_ty (D.decode_ty (ty_get val_cpn)) in
+          let ty_cpn = D.decode_ty (ty_get val_cpn) in
+          let ty = decode_ty ty_cpn in
           match ty with
-          | `FnDef fn_def_ty_cpn -> Ok (`TrTypedConstantFn fn_def_ty_cpn)
+          | `FnDef fn_def_ty_cpn ->
+              Rocq_writer.rocq_print_argument TranslatorArgs.rocq_writer begin fun () ->
+                Rocq_writer.rocq_print_ident TranslatorArgs.rocq_writer "ZeroSized"
+              end;
+              Rocq_writer.rocq_print_argument TranslatorArgs.rocq_writer begin fun () ->
+                Rocq_writer.rocq_print_data TranslatorArgs.rocq_writer Vf_mir_rocq.rocq_print_ty ty_cpn
+              end;
+              Ok (`TrTypedConstantFn fn_def_ty_cpn)
           | `Ref (_, _, `Str) -> (
               match ConstValueRd.get @@ const_value_get val_cpn with
               | Slice bytes ->
                   Ok
                     (`TrTypedConstantScalar
-                      (StringLit (loc, bytes)))
+                      (Ast.StringLit (loc, bytes)))
               | _ -> failwith "TODO")
           | _ ->
-              let* ty_info = translate_ty (ty_get val_cpn) loc in
-              let ty_expr = ty_info.vf_ty in
               translate_const_value
                 (D.decode_const_value (const_value_get val_cpn))
-                ty_expr loc)
+                ty_cpn loc)
       | Unevaluated _ ->
         let Unevaluated {def; args; ty} = D.decode_mir_const constant_kind_cpn in
         let* args = ListAux.try_map (fun arg -> translate_generic_arg arg loc) args in
@@ -2050,15 +2089,22 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       *)
       match get operand_cpn with
       | Copy place_cpn ->
+          Rocq_writer.rocq_print_application TranslatorArgs.rocq_writer "Copy" @@ fun () ->
+          Rocq_writer.rocq_print_argument TranslatorArgs.rocq_writer @@ fun () ->
           let* place, place_is_mutable = translate_place place_cpn loc in
           Ok (`TrOperandCopy place)
       | Move place_cpn ->
+          Rocq_writer.rocq_print_application TranslatorArgs.rocq_writer "Move" @@ fun () ->
+          Rocq_writer.rocq_print_argument TranslatorArgs.rocq_writer @@ fun () ->
           let* place, place_is_mutable = translate_place place_cpn loc in
           Ok (`TrOperandMove (place, place_is_mutable))
-      | Constant constant_cpn -> translate_const_operand constant_cpn
+      | Constant constant_cpn ->
+          Rocq_writer.rocq_print_application TranslatorArgs.rocq_writer "Constant" @@ fun () ->
+          Rocq_writer.rocq_print_argument TranslatorArgs.rocq_writer @@ fun () ->
+          translate_const_operand constant_cpn
       | Undefined _ -> Error (`TrOperand "Unknown Mir Operand kind")
 
-    let translate_operands (oprs : (OperandRd.t * Ast.loc) list) =
+    let translate_operands_core (is_variable_length : bool) (oprs : (OperandRd.t * Ast.loc) list) =
       (* We want to preserve Rust's left to right argument evaluation *)
       let tmp_rvalue_binders = ref [] in
       let translate_opr ((opr_cpn, loc) : OperandRd.t * Ast.loc) =
@@ -2080,9 +2126,20 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               "Todo: Functions as operand in rvalues are not supported yet"
         | `TrTypedConstantScalar expr -> Ok expr
       in
-      let* oprs = ListAux.try_map translate_opr oprs in
+      let* oprs =
+        if is_variable_length then
+          Rocq_writer.rocq_print_small_list TranslatorArgs.rocq_writer @@ fun () ->
+          oprs |> ListAux.try_map @@ fun opr ->
+            Rocq_writer.rocq_print_small_list_element TranslatorArgs.rocq_writer @@ fun () ->
+            translate_opr opr
+        else
+          ListAux.try_map translate_opr oprs
+      in
       Ok (!tmp_rvalue_binders, oprs)
 
+    let translate_operands (oprs : (OperandRd.t * Ast.loc) list) =
+      translate_operands_core false oprs
+    
     let translate_ghost_generic_arg_list (ggal_cpn : AnnotationRd.t) =
       let* ggal = translate_annotation ggal_cpn in
       let ggal = translate_annot_to_vf_parser_inp ggal in
@@ -2095,10 +2152,13 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let translate_fn_call_rexpr (callee_cpn : OperandRd.t)
         (args_cpn : OperandRd.t list) (call_loc : Ast.loc) (fn_loc : Ast.loc)
         (ghost_generic_arg_list_opt_cpn : OptionRd.t) =
+      (* Todo @Nima: There should be a way to get separated source spans for args *)
+      let args = List.map (fun arg_cpn -> (arg_cpn, fn_loc)) args_cpn in
+      let* tmp_rvalue_binders, args =
+        Rocq_writer.rocq_print_big_record_field TranslatorArgs.rocq_writer "args" @@ fun () ->
+        translate_operands_core true args
+      in
       let translate_regular_fn_call substs fn_name =
-        (* Todo @Nima: There should be a way to get separated source spans for args *)
-        let args = List.map (fun arg_cpn -> (arg_cpn, fn_loc)) args_cpn in
-        let* tmp_rvalue_binders, args = translate_operands args in
         let targs =
           substs
           |> Util.flatmap @@ function
@@ -2126,7 +2186,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         in
         Ok (tmp_rvalue_binders, FnCallOutcome call_expr)
       in
-      let* callee = translate_operand callee_cpn call_loc in
+      let* callee =
+        Rocq_writer.rocq_print_big_record_field TranslatorArgs.rocq_writer "func" @@ fun () ->
+        translate_operand callee_cpn call_loc
+      in
       match callee with
       | `TrOperandMove (Var (_, fn_name), place_is_mutable) ->
           translate_regular_fn_call [] fn_name
@@ -2167,10 +2230,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                            Static )) )
             | "VF_free" ->
                 let [ Mir.GenArgType ty_info ] = substs in
-                let [ arg_cpn ] = args_cpn in
-                let* tmp_rvalue_binders, [ arg ] =
-                  translate_operands [ (arg_cpn, fn_loc) ]
-                in
+                let [ arg ] = args in
                 Ok
                   ( tmp_rvalue_binders,
                     FnCallResult
@@ -2184,9 +2244,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             | "std::ptr::mut_ptr::<impl *mut T>::is_null" -> (
                 match (substs, args_cpn) with
                 | [ Mir.GenArgType gen_arg_ty_info ], [ arg_cpn ] ->
-                    let* tmp_rvalue_binders, [ arg ] =
-                      translate_operands [ (arg_cpn, fn_loc) ]
-                    in
+                    let [ arg ] = args in
                     Ok
                       ( tmp_rvalue_binders,
                         FnCallResult
@@ -2212,9 +2270,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                 let [ _; Mir.GenArgType gen_arg_ty_info ], [ arg_cpn ] =
                   (substs, args_cpn)
                 in
-                let* tmp_rvalue_binders, [ arg ] =
-                  translate_operands [ (arg_cpn, fn_loc) ]
-                in
+                let [ arg ] = args in
                 Ok
                   ( tmp_rvalue_binders,
                     FnCallResult
@@ -2226,10 +2282,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             | "std::ptr::mut_ptr::<impl *mut T>::offset" -> (
                 match (substs, args_cpn) with
                 | [ Mir.GenArgType gen_arg_ty_info ], [ arg1_cpn; arg2_cpn ] ->
-                    let* tmp_rvalue_binders, [ arg1; arg2 ] =
-                      translate_operands
-                        [ (arg1_cpn, fn_loc); (arg2_cpn, fn_loc) ]
-                    in
+                    let [ arg1; arg2 ] = args in
                     Ok
                       ( tmp_rvalue_binders,
                         FnCallResult
@@ -2243,10 +2296,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             | "std::ptr::mut_ptr::<impl *mut T>::offset_from" -> (
                 match (substs, args_cpn) with
                 | [ Mir.GenArgType gen_arg_ty_info ], [ arg1_cpn; arg2_cpn ] ->
-                    let* tmp_rvalue_binders, [ arg1; arg2 ] =
-                      translate_operands
-                        [ (arg1_cpn, fn_loc); (arg2_cpn, fn_loc) ]
-                    in
+                    let [ arg1; arg2 ] = args in
                     Ok
                       ( tmp_rvalue_binders,
                         FnCallOutcome
@@ -2266,10 +2316,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             | "std::ptr::mut_ptr::<impl *mut T>::add" -> (
                 match (substs, args_cpn) with
                 | [ Mir.GenArgType gen_arg_ty_info ], [ arg1_cpn; arg2_cpn ] ->
-                    let* tmp_rvalue_binders, [ arg1; arg2 ] =
-                      translate_operands
-                        [ (arg1_cpn, fn_loc); (arg2_cpn, fn_loc) ]
-                    in
+                    let [ arg1; arg2 ] = args in
                     Ok
                       ( tmp_rvalue_binders,
                         FnCallResult
@@ -2289,10 +2336,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             | "std::ptr::mut_ptr::<impl *mut T>::sub" -> (
                 match (substs, args_cpn) with
                 | [ Mir.GenArgType gen_arg_ty_info ], [ arg1_cpn; arg2_cpn ] ->
-                    let* tmp_rvalue_binders, [ arg1; arg2 ] =
-                      translate_operands
-                        [ (arg1_cpn, fn_loc); (arg2_cpn, fn_loc) ]
-                    in
+                    let [ arg1; arg2 ] = args in
                     Ok
                       ( tmp_rvalue_binders,
                         FnCallResult
@@ -2325,15 +2369,11 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             | "std::ptr::read" | "std::ptr::mut_ptr::<impl *mut T>::read"
             | "std::ptr::const_ptr::<impl *const T>::read" ->
                 let [ src_cpn ] = args_cpn in
-                let* tmp_rvalue_binders, [ src ] =
-                  translate_operands [ (src_cpn, fn_loc) ]
-                in
+                let [ src ] = args in
                 Ok (tmp_rvalue_binders, FnCallResult (Ast.Deref (fn_loc, src)))
             | "std::ptr::write" | "std::ptr::mut_ptr::<impl *mut T>::write" ->
                 let [ dst_cpn; src_cpn ] = args_cpn in
-                let* tmp_rvalue_binders, [ dst; src ] =
-                  translate_operands [ (dst_cpn, fn_loc); (src_cpn, fn_loc) ]
-                in
+                let [ dst; src ] = args in
                 Ok
                   ( tmp_rvalue_binders
                     @ [
@@ -2347,15 +2387,11 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             | "std::mem::ManuallyDrop::deref"
             | "std::mem::ManuallyDrop::deref_mut" ->
                 let [ arg_cpn ] = args_cpn in
-                let* tmp_rvalue_binders, [ arg ] =
-                  translate_operands [ (arg_cpn, fn_loc) ]
-                in
+                let [ arg ] = args in
                 Ok (tmp_rvalue_binders, FnCallResult arg)
             | "std::cell::UnsafeCell::<T>::get" ->
                 let [ arg_cpn ] = args_cpn in
-                let* tmp_rvalue_binders, [ arg ] =
-                  translate_operands [ (arg_cpn, fn_loc) ]
-                in
+                let [ arg ] = args in
                 Ok
                   ( tmp_rvalue_binders,
                     FnCallResult
@@ -2364,34 +2400,23 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   )
             | "std::str::<impl str>::as_ptr" ->
                 let [ arg_cpn ] = args_cpn in
-                let* tmp_rvalue_binders, [ arg ] =
-                  translate_operands [ (arg_cpn, fn_loc) ]
-                in
+                let [ arg ] = args in
                 Ok
                   ( tmp_rvalue_binders,
                     FnCallResult (CastExpr (fn_loc, PtrTypeExpr (fn_loc, ManifestTypeExpr (fn_loc, Int (Unsigned, FixedWidthRank 0))), arg)) )
             | "std::slice::<impl [T]>::as_ptr" ->
                 let [ Mir.GenArgType gen_arg_ty_info; _ ] = substs in
-                let [ arg_cpn ] = args_cpn in
-                let* tmp_rvalue_binders, [ arg ] =
-                  translate_operands [ (arg_cpn, fn_loc) ]
-                in
+                let [ arg ] = args in
                 Ok
                   ( tmp_rvalue_binders,
                     FnCallResult (Ast.CastExpr (fn_loc, PtrTypeExpr (fn_loc, gen_arg_ty_info.vf_ty), arg)) )
             | "std::str::<impl str>::len" | "std::slice::<impl [T]>::len" ->
-                let [ arg_cpn ] = args_cpn in
-                let* tmp_rvalue_binders, [ arg ] =
-                  translate_operands [ (arg_cpn, fn_loc) ]
-                in
+                let [ arg ] = args in
                 Ok
                   ( tmp_rvalue_binders,
                     FnCallResult (CallExpr (fn_loc, "ptr_len", [], [], [LitPat arg], Static)) )
             | "std::str::<impl str>::as_bytes" ->
-                let [ arg_cpn ] = args_cpn in
-                let* tmp_rvalue_binders, [ arg ] =
-                  translate_operands [ (arg_cpn, fn_loc) ]
-                in
+                let [ arg ] = args in
                 let slice_u8_ref_ty =
                   Ast.RustRefTypeExpr
                     ( fn_loc,
@@ -2416,16 +2441,6 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let translate_basic_block_id (bblock_id_cpn : BasicBlockIdRd.t) =
       Stdint.Uint32.to_string (BasicBlockIdRd.index_get bblock_id_cpn)
 
-    let translate_destination_data (dst_data_cpn : DestinationDataRd.t)
-        (loc : Ast.loc) =
-      let open DestinationDataRd in
-      let place_cpn = place_get dst_data_cpn in
-      let* dst = translate_place place_cpn loc in
-      let dst_bblock_id_cpn = basic_block_id_get dst_data_cpn in
-      let dst_bblock_id = translate_basic_block_id dst_bblock_id_cpn in
-      let dst_data : Mir.fn_call_dst_data = { dst; dst_bblock_id } in
-      Ok dst_data
-
     let translate_unwind_action (unwind_action_cpn : UnwindActionRd.t)
         (loc : Ast.loc) =
       let open UnwindActionRd in
@@ -2449,6 +2464,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
 
     let translate_fn_call (fn_call_data_cpn : FnCallDataRd.t) (loc : Ast.loc) =
       let open FnCallDataRd in
+      Rocq_writer.rocq_print_application TranslatorArgs.rocq_writer "Call" @@ fun () ->
+      Rocq_writer.rocq_print_argument TranslatorArgs.rocq_writer @@ fun () ->
+      Rocq_writer.rocq_print_big_record TranslatorArgs.rocq_writer @@ fun () ->
       let func_cpn = func_get fn_call_data_cpn in
       let fn_span_cpn = call_span_get fn_call_data_cpn in
       let* fn_loc = translate_span_data fn_span_cpn in
@@ -2456,18 +2474,23 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let ghost_generic_arg_list_opt_cpn =
         ghost_generic_arg_list_get fn_call_data_cpn
       in
-      let unwind_stmts, unwind_targets =
-        if TranslatorArgs.ignore_unwind_paths then ([], [])
-        else translate_unwind_action (unwind_action_get fn_call_data_cpn) loc
-      in
       let* fn_call_tmp_rval_ctx, fn_call_rexpr =
         translate_fn_call_rexpr func_cpn args_cpn loc fn_loc
           ghost_generic_arg_list_opt_cpn
       in
-      let destination_cpn = destination_get fn_call_data_cpn in
+      let unwind_stmts, unwind_targets =
+        if TranslatorArgs.ignore_unwind_paths then ([], [])
+        else translate_unwind_action (unwind_action_get fn_call_data_cpn) loc
+      in
+      let* dst, dst_is_mutable =
+        Rocq_writer.rocq_print_big_record_field TranslatorArgs.rocq_writer "destination" @@ fun () ->
+        translate_place (destination_get fn_call_data_cpn) loc
+      in
       let* call_stmts, terminator, targets =
-        match OptionRd.get destination_cpn with
+        Rocq_writer.rocq_print_big_record_field TranslatorArgs.rocq_writer "target" @@ fun () ->
+        match OptionRd.get (target_get fn_call_data_cpn) with
         | Nothing ->
+            Rocq_writer.rocq_print_ident TranslatorArgs.rocq_writer "None";
             (*Diverging call*)
             let call_expr =
               match fn_call_rexpr with
@@ -2479,10 +2502,13 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                 Mir.EncodedTerminator,
                 [] )
         | Something ptr_cpn ->
-            let destination_data_cpn = VfMirRd.of_pointer ptr_cpn in
-            let* { Mir.dst = dst, dst_is_mutable; Mir.dst_bblock_id } =
-              translate_destination_data destination_data_cpn loc
-            in
+            let target_cpn = VfMirRd.of_pointer ptr_cpn in
+            let dst_bblock_id = translate_basic_block_id target_cpn in
+            Rocq_writer.rocq_print_application TranslatorArgs.rocq_writer "Some" begin fun () ->
+              Rocq_writer.rocq_print_argument TranslatorArgs.rocq_writer begin fun () ->
+                Rocq_writer.rocq_print_string_literal TranslatorArgs.rocq_writer dst_bblock_id
+              end
+            end;
             let assignment e =
               Ast.ExprStmt
                 (Ast.AssignExpr
@@ -2562,40 +2588,35 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       in
       Ok (full_call_stmts, terminator, targets)
 
-    let translate_sw_targets_branch (br_cpn : SwitchTargetsBranchRd.t) =
-      let open SwitchTargetsBranchRd in
-      let v_cpn = val_get br_cpn in
-      let v = D.decode_uint128 v_cpn in
-      let target_cpn = target_get br_cpn in
-      let target = translate_basic_block_id target_cpn in
-      (v, target)
-
     let translate_sw_int (sw_int_data_cpn : SwitchIntDataRd.t) (loc : Ast.loc) =
       let open SwitchIntDataRd in
+      Rocq_writer.rocq_print_application TranslatorArgs.rocq_writer "SwitchInt" @@ fun () ->
       let discr_cpn = discr_get sw_int_data_cpn in
       let* tmp_rvalue_binders, [ discr ] =
+        Rocq_writer.rocq_print_argument TranslatorArgs.rocq_writer @@ fun () ->
         translate_operands [ (discr_cpn, loc) ]
       in
       let discr_ty_cpn = discr_ty_get sw_int_data_cpn in
       let* discr_ty = translate_ty discr_ty_cpn loc in
-      let targets_cpn = targets_get sw_int_data_cpn in
-      let open SwitchTargetsRd in
-      let branches_cpn = branches_get_list targets_cpn in
-      let branches = List.map translate_sw_targets_branch branches_cpn in
-      let otherwise_cpn = otherwise_get targets_cpn in
-      let otherwise_op =
-        match OptionRd.get otherwise_cpn with
-        | Nothing -> None
-        | Something ptr_cpn ->
-            let otherwise_cpn = VfMirRd.of_pointer ptr_cpn in
-            let otherwise = translate_basic_block_id otherwise_cpn in
-            Some otherwise
-      in
+      let values = values_get_list sw_int_data_cpn |> List.map D.decode_uint128 in
+      Rocq_writer.rocq_print_argument TranslatorArgs.rocq_writer begin fun () ->
+        Rocq_writer.rocq_print_small_list TranslatorArgs.rocq_writer @@ fun () ->
+        values |> List.iter @@ fun v ->
+          Rocq_writer.rocq_print_small_list_element TranslatorArgs.rocq_writer @@ fun () ->
+            Rocq_writer.rocq_print_data TranslatorArgs.rocq_writer Vf_mir_rocq.rocq_print_u128 v
+      end;
+      let targets = targets_get_list sw_int_data_cpn |> List.map translate_basic_block_id in
+      Rocq_writer.rocq_print_argument TranslatorArgs.rocq_writer begin fun () ->
+        Rocq_writer.rocq_print_small_list TranslatorArgs.rocq_writer @@ fun () ->
+        targets |> List.iter @@ fun t ->
+          Rocq_writer.rocq_print_small_list_element TranslatorArgs.rocq_writer @@ fun () ->
+            Rocq_writer.rocq_print_string_literal TranslatorArgs.rocq_writer t
+      end;
       let* main_stmt, targets =
         match discr_ty.vf_ty with
         | Ast.ManifestTypeExpr ((*loc*) _, Ast.Bool) -> (
-            match (branches, otherwise_op) with
-            | [ (v, false_tgt) ], Some true_tgt when Stdint.Uint128.(zero = DecoderAux.uint128_get v)
+            match (values, targets) with
+            | [ v ], [ false_tgt; true_tgt ] when Stdint.Uint128.(zero = DecoderAux.uint128_get v)
               ->
                 Ok
                   ( Ast.IfStmt
@@ -2620,6 +2641,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               | _ -> failwith (Printf.sprintf "Todo: SwitchInt TerminatorKind for discriminant type %s" (Verifast0.rust_string_of_type tp))
             in
             let size = 1 lsl width in
+            let branches, [], [ otherwise_target ] = Util.zip_with_remainder values targets in
             let* clauses =
               branches
               |> ListAux.try_map @@ fun (data, target) ->
@@ -2631,17 +2653,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                      [ Ast.GotoStmt (loc, target) ] ))
             in
             let default_clause =
-              match otherwise_op with
-              | None -> []
-              | Some tgt ->
-                  [
-                    Ast.SwitchStmtDefaultClause
-                      (loc, [ Ast.GotoStmt (loc, tgt) ]);
-                  ]
-            in
-            let targets =
-              List.map snd branches
-              @ match otherwise_op with None -> [] | Some tgt -> [ tgt ]
+              [
+                Ast.SwitchStmtDefaultClause
+                  (loc, [ Ast.GotoStmt (loc, otherwise_target) ]);
+              ]
             in
             Ok (Ast.SwitchStmt (loc, discr, clauses @ default_clause), targets)
       in
@@ -2662,11 +2677,16 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       match get tkind_cpn with
       | Goto bblock_id_cpn ->
           let bb_id = translate_basic_block_id bblock_id_cpn in
+          Rocq_writer.rocq_print_application TranslatorArgs.rocq_writer "Goto" @@ fun () ->
+          Rocq_writer.rocq_print_argument TranslatorArgs.rocq_writer begin fun () ->
+            Rocq_writer.rocq_print_string_literal TranslatorArgs.rocq_writer bb_id
+          end;
           Ok ([], Mir.GotoTerminator (loc, bb_id), [ bb_id ])
       | SwitchInt sw_int_data_cpn ->
           let* sw_stmt, targets = translate_sw_int sw_int_data_cpn loc in
           Ok ([ sw_stmt ], Mir.EncodedTerminator, targets)
       | Return ->
+          Rocq_writer.rocq_print_ident TranslatorArgs.rocq_writer "Return";
           let result = Ast.Var (loc, ret_place_id) in
           let result =
             if TranslatorArgs.ignore_unwind_paths then result
@@ -2675,6 +2695,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           in
           Ok ([ Ast.ReturnStmt (loc, Some result) ], EncodedTerminator, [])
       | Unreachable ->
+          Rocq_writer.rocq_print_ident TranslatorArgs.rocq_writer "Unreachable";
           Ok ([ Ast.Assert (loc, False loc) ], EncodedTerminator, [])
       | Call fn_call_data_cpn -> translate_fn_call fn_call_data_cpn loc
       | Drop drop_data_cpn ->
@@ -2953,6 +2974,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       in
       match get rvalue_cpn with
       | Use operand_cpn ->
+          Rocq_writer.rocq_print_application TranslatorArgs.rocq_writer "Use" @@ fun () ->
+          Rocq_writer.rocq_print_argument TranslatorArgs.rocq_writer @@ fun () ->
           let* operand = translate_operand operand_cpn loc in
           tr_operand operand
       | Repeat repeat_data_cpn ->
@@ -3050,15 +3073,47 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       | ThreadLocalRef ->
           Ast.static_error loc
             "Thread-local static references are not yet supported" None
-      | AddressOf address_of_data_cpn ->
-          let open AddressOfData in
-          let mut_cpn = mutability_get address_of_data_cpn in
-          let place_cpn = place_get address_of_data_cpn in
-          let* place_expr, place_is_mutable = translate_place place_cpn loc in
+      | RawPtr raw_ptr_data_cpn ->
+          let open RawPtrData in
+          Rocq_writer.rocq_print_application TranslatorArgs.rocq_writer "RawPtr_" @@ fun () ->
+          let mut_cpn = mutability_get raw_ptr_data_cpn in
+          let place_cpn = place_get raw_ptr_data_cpn in
+          let* place_expr, place_is_mutable =
+            Rocq_writer.rocq_print_argument TranslatorArgs.rocq_writer @@ fun () ->
+            translate_place place_cpn loc
+          in
           let expr = Ast.AddressOf (loc, place_expr) in
           Ok (`TrRvalueExpr expr)
       | Cast cast_data_cpn -> (
-          match D.decode_rvalue_cast_data cast_data_cpn with
+          let cast_data = D.decode_rvalue_cast_data cast_data_cpn in
+          Rocq_writer.rocq_print_application TranslatorArgs.rocq_writer "Cast" @@ fun () ->
+          Rocq_writer.rocq_print_argument TranslatorArgs.rocq_writer begin fun () ->
+            Rocq_writer.rocq_print_ident TranslatorArgs.rocq_writer
+              begin match cast_data.kind with
+              | PointerExposeProvenance -> "PointerExposeProvenance"
+              | PointerWithExposedProvenance -> "PointerWithExposedProvenance"
+              | PointerCoercion -> "PointerCoercion"
+              | IntToInt -> "IntToInt"
+              | FloatToInt -> "FloatToInt"
+              | FloatToFloat -> "FloatToFloat"
+              | IntToFloat -> "IntToFloat"
+              | PtrToPtr -> "PtrToPtr"
+              | FnPtrToPtr -> "FnPtrToPtr"
+              | Transmute -> "Transmute"
+              | Subtype -> "Subtype"
+              end
+          end;
+          let open CastData in
+          let operand_cpn = operand_get cast_data_cpn in
+          let* operand =
+            Rocq_writer.rocq_print_argument TranslatorArgs.rocq_writer @@ fun () ->
+            translate_operand operand_cpn loc
+          in
+          Rocq_writer.rocq_print_argument TranslatorArgs.rocq_writer begin fun () ->
+            Rocq_writer.rocq_print_data TranslatorArgs.rocq_writer Vf_mir_rocq.rocq_print_ty
+              cast_data.ty
+          end;
+          match cast_data with
             {operand=Copy {local; projection=[BoxAsNonNull _]}} ->
             let id = translate_local_decl_id_ local.name in
             let e =
@@ -3072,11 +3127,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             in
             Ok (`TrRvalueExpr e)
           | _ ->
-          let open CastData in
-          let operand_cpn = operand_get cast_data_cpn in
-          let* operand = translate_operand operand_cpn loc in
-          let ty_cpn = ty_get cast_data_cpn in
-          let* ty_info = translate_ty ty_cpn loc in
+          let* ty_info = translate_decoded_ty cast_data.ty loc in
           let ty = ty_info.vf_ty in
           match operand with
           | `TrOperandCopy expr
@@ -3170,12 +3221,17 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let open StatementKindRd in
       match get statement_kind_cpn with
       | Assign assign_data_cpn -> (
+          Rocq_writer.rocq_print_application TranslatorArgs.rocq_writer "Assign" @@ fun () ->
           let lhs_place_cpn = AssignData.lhs_place_get assign_data_cpn in
           let* lhs_place, lhs_place_is_mutable =
+            Rocq_writer.rocq_print_argument TranslatorArgs.rocq_writer @@ fun () ->
             translate_place lhs_place_cpn loc
           in
           let rhs_rvalue_cpn = AssignData.rhs_rvalue_get assign_data_cpn in
-          let* rhs_rvalue = translate_rvalue rhs_rvalue_cpn loc in
+          let* rhs_rvalue =
+            Rocq_writer.rocq_print_argument TranslatorArgs.rocq_writer @@ fun () ->
+            translate_rvalue rhs_rvalue_cpn loc
+          in
           match rhs_rvalue with
           | `TrRvalueExpr rhs_expr ->
               let assign_stmt =
@@ -3314,8 +3370,18 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               Ok (init_stmts_builder (lhs_place, lhs_place_is_mutable)))
       | SetDiscriminant -> failwith "TODO: StatementKind::SetDiscriminant"
       | Deinit -> failwith "TODO: StatementKind::Deinit"
-      | StorageLive _ -> Ok [] (* FIXME https://github.com/verifast/verifast/issues/947 *)
-      | StorageDead _ -> Ok [] (* FIXME https://github.com/verifast/verifast/issues/947 *)
+      | StorageLive local ->
+          let local = translate_local_decl_id local in
+          Rocq_writer.rocq_print_application TranslatorArgs.rocq_writer "StorageLive" @@ fun () ->
+          Rocq_writer.rocq_print_argument TranslatorArgs.rocq_writer @@ fun () ->
+          Rocq_writer.rocq_print_string_literal TranslatorArgs.rocq_writer local;
+          Ok [] (* FIXME https://github.com/verifast/verifast/issues/947 *)
+      | StorageDead local ->
+          let local = translate_local_decl_id local in
+          Rocq_writer.rocq_print_application TranslatorArgs.rocq_writer "StorageDead" @@ fun () ->
+          Rocq_writer.rocq_print_argument TranslatorArgs.rocq_writer @@ fun () ->
+          Rocq_writer.rocq_print_string_literal TranslatorArgs.rocq_writer local;
+          Ok [] (* FIXME https://github.com/verifast/verifast/issues/947 *)
       | PlaceMention _ -> failwith "TODO: StatementKind::PlaceMention"
       | Assume operand_cpn ->
           let* operand = translate_operand operand_cpn loc in
@@ -3337,7 +3403,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                    Static ))
           in
           Ok [ assert_unchecked_call ]
-      | Nop -> Ok []
+      | Nop ->
+          Rocq_writer.rocq_print_ident TranslatorArgs.rocq_writer "Nop";
+          Ok []
       | Undefined _ -> Error (`TrStatementKind "Unknown StatementKind")
 
     let translate_statement (statement_cpn : StatementRd.t) =
@@ -3365,12 +3433,24 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         (* Todo @Nima: For now we are ignoring cleanup basic-blocks *)
         Ok None
       else
+        Rocq_writer.rocq_print_big_list_element TranslatorArgs.rocq_writer @@ fun () ->
+        Rocq_writer.rocq_print_big_record TranslatorArgs.rocq_writer @@ fun () ->
+        Rocq_writer.rocq_print_big_record_field TranslatorArgs.rocq_writer "bb_id" begin fun () ->
+          Rocq_writer.rocq_print_string_literal TranslatorArgs.rocq_writer id
+        end;
         let statements_cpn = statements_get_list bblock_cpn in
-        let* statements = ListAux.try_map translate_statement statements_cpn in
+        let* statements =
+          Rocq_writer.rocq_print_big_record_field TranslatorArgs.rocq_writer "statements" @@ fun () ->
+            Rocq_writer.rocq_print_big_list TranslatorArgs.rocq_writer @@ fun () ->
+              statements_cpn |> ListAux.try_map @@ fun statement_cpn ->
+                Rocq_writer.rocq_print_big_list_element TranslatorArgs.rocq_writer @@ fun () ->
+                  translate_statement statement_cpn
+        in
         let statements = List.concat statements in
         let terminator_cpn = terminator_get bblock_cpn in
         let* terminator_stmts, terminator, successors =
-          translate_terminator ret_place_id terminator_cpn
+          Rocq_writer.rocq_print_big_record_field TranslatorArgs.rocq_writer "terminator" @@ fun () ->
+            translate_terminator ret_place_id terminator_cpn
         in
         let bblock : Mir.basic_block =
           {
@@ -4640,15 +4720,22 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     end) in
     let vdis_cpn = var_debug_info_get_list body_cpn in
     (* Since var id translation map is empty var debug info contains the plain Mir ids *)
-    let* vdis = ListAux.try_map translate_var_debug_info vdis_cpn in
+    let* vdis =
+      Rocq_writer.rocq_suppress_output Args.rocq_writer @@ fun () ->
+      ListAux.try_map translate_var_debug_info vdis_cpn
+    in
     let env_map, trs_map = make_var_id_name_maps imp_loc vdis in
     let _ = var_id_trs_map_ref := trs_map in
     let def_kind_cpn = def_kind_get body_cpn in
     let def_kind = DefKind.get def_kind_cpn in
     match def_kind with
     | DefKind.Fn ->
+        Rocq_writer.rocq_print_big_record Args.rocq_writer @@ fun () ->
         let def_path = def_path_get body_cpn in
         let name = TrName.translate_def_path def_path in
+        Rocq_writer.rocq_print_big_record_field Args.rocq_writer "name" begin fun () ->
+          Rocq_writer.rocq_print_string_literal Args.rocq_writer name
+        end;
         let moduleName = module_def_path_get body_cpn in
         (* print_endline ("Translating Mod: " ^ moduleName ^ " --- Body: " ^ name); *)
         let split_name = TrName.split_def_path moduleName name in
@@ -4704,25 +4791,39 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                | `Outlives (r1, r2) -> [ (r1, r2) ]
                | _ -> [])
         in
+        let inputs = inputs_get_list body_cpn |> List.map D.decode_ty in
+        Rocq_writer.rocq_print_big_record_field Args.rocq_writer "inputs" begin fun () ->
+          Rocq_writer.rocq_print_small_list Args.rocq_writer @@ fun () ->
+          inputs |> List.iter @@ fun ty ->
+            Rocq_writer.rocq_print_small_list_element Args.rocq_writer @@ fun () ->
+              Rocq_writer.rocq_print_data Args.rocq_writer Vf_mir_rocq.rocq_print_ty ty
+        end;
+        let output = D.decode_ty (output_get body_cpn) in
+        Rocq_writer.rocq_print_big_record_field Args.rocq_writer "output" begin fun () ->
+          Rocq_writer.rocq_print_data Args.rocq_writer Vf_mir_rocq.rocq_print_ty output
+        end;
         let implicit_outlives_preds =
-          output_get body_cpn :: inputs_get_list body_cpn
+          output :: inputs
           |> Util.flatmap @@ fun ty_cpn ->
-             ty_cpn |> D.decode_ty |> decode_ty
+             ty_cpn |> decode_ty
              |> extract_implicit_outlives_preds []
         in
         let outlives_preds = implicit_outlives_preds @ outlives_preds in
         let send_tparams = compute_send_tparams preds in
         let sync_tparams = compute_sync_tparams preds in
-        let inputs = inputs_get_list body_cpn in
         let arg_count = List.length inputs in
         let local_decls_cpn = local_decls_get_list body_cpn in
         let* local_decls =
-          ListAux.try_map translate_local_decl local_decls_cpn
+          Rocq_writer.rocq_print_big_record_field Args.rocq_writer "local_decls" @@ fun () ->
+            Rocq_writer.rocq_print_big_list Args.rocq_writer @@ fun () ->
+              local_decls_cpn |> ListAux.try_map @@ fun local_decl_cpn ->
+                Rocq_writer.rocq_print_big_list_element Args.rocq_writer @@ fun () ->
+                  translate_local_decl local_decl_cpn
         in
         (* There should always be a return place for each function *)
         let (ret_place_decl :: local_decls) = local_decls in
         let* ret_ty_info =
-          translate_ty (output_get body_cpn) ret_place_decl.loc
+          translate_decoded_ty output ret_place_decl.loc
         in
         let ret_place_decl = { ret_place_decl with ty = lazy ret_ty_info } in
         let ({
@@ -4741,7 +4842,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         let* param_tys =
           ListAux.try_map
             (fun (ty_cpn, ({ loc } : Mir.local_decl)) ->
-              translate_ty ty_cpn loc)
+              translate_decoded_ty ty_cpn loc)
             (List.combine inputs param_decls)
         in
         let param_decls =
@@ -4874,10 +4975,12 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             in
             let bblocks_cpn = basic_blocks_get_list body_cpn in
             let* bblocks =
-              ListAux.try_filter_map
-                (fun bblock_cpn ->
-                  translate_basic_block ret_place_id bblock_cpn)
-                bblocks_cpn
+              Rocq_writer.rocq_print_big_record_field Args.rocq_writer "basic_blocks" @@ fun () ->
+                Rocq_writer.rocq_print_big_list Args.rocq_writer @@ fun () ->
+                  ListAux.try_filter_map
+                    (fun bblock_cpn ->
+                      translate_basic_block ret_place_id bblock_cpn)
+                    bblocks_cpn
             in
             let toplevel_blocks = find_blocks bblocks in
             let vf_bblocks =
@@ -7574,6 +7677,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
   let translate_vf_mir (extern_specs : string list)
       (vf_mir_cpn : VfMirRd.VfMir.t) =
     let job _ =
+      Rocq_writer.rocq_print Args.rocq_writer "From VeriFast Require Export VfMir.\n\n";
       (* Todo @Nima: we should add necessary inclusions during translation *)
       let extern_header_names =
         extern_specs
@@ -7765,8 +7869,13 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         { adt_defs; directives = vf_mir_translator_directives; fn_specializer }
       in
       let* bodies_tr_res =
-        ListAux.try_map (translate_body body_tr_defs_ctx) bodies_cpn
+        Rocq_writer.rocq_print Args.rocq_writer "Definition bodies := ";
+        Rocq_writer.rocq_print_big_list Args.rocq_writer @@ fun () ->
+        bodies_cpn |> ListAux.try_map @@ fun body_cpn ->
+          Rocq_writer.rocq_print_big_list_element Args.rocq_writer @@ fun () ->
+          translate_body body_tr_defs_ctx body_cpn
       in
+      Rocq_writer.rocq_print Args.rocq_writer ".\n";
       let body_sig_opts, body_decls, debug_infos =
         ListAux.split3 bodies_tr_res
       in

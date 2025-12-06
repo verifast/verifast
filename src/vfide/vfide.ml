@@ -1709,6 +1709,7 @@ let show_ide initialPath prover codeFont traceFont vfbindings layout javaFronten
                 option_safe_mode = false;
                 option_header_whitelist = [];
                 option_report_skipped_stmts = false;
+                option_emit_rocq = false;
               }
               in
               let reportExecutionForest =

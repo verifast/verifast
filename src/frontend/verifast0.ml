@@ -488,6 +488,7 @@ type options = {
   option_enforce_annotations : bool;
   option_report_skipped_stmts: bool; (* Report statements in functions or methods that have no contract. *)
   option_allow_ignore_ref_creation: bool;
+  option_emit_rocq: bool;
 } (* ?options *)
 
 (* Region: verify_program_core: the toplevel function *)

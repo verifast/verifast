@@ -8,6 +8,7 @@ module type RUST_FE_ARGS = sig
   val allow_ignore_ref_creation : bool
   val ignore_ref_creation : bool
   val ignore_unwind_paths : bool
+  val rocq_writer : Rocq_writer.rocq_writer
 end
 
 module Make (Args : RUST_FE_ARGS) = struct

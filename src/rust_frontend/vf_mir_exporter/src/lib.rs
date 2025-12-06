@@ -533,7 +533,6 @@ mod vf_mir_builder {
     use crate::vf_mir_capnp::statement_kind as statement_kind_cpn;
     use std::collections::LinkedList;
     use std::sync::Arc;
-    use crate::vf_mir_capnp::switch_targets as switch_targets_cpn;
     use crate::vf_mir_capnp::terminator_kind as terminator_kind_cpn;
     use terminator_kind_cpn::fn_call_data as fn_call_data_cpn;
     use crate::vf_mir_capnp::unwind_action as unwind_action_cpn;
@@ -2274,18 +2273,32 @@ mod vf_mir_builder {
                 }
                 mir::Rvalue::ThreadLocalRef(def_id) => rvalue_cpn.set_thread_local_ref(()),
                 mir::Rvalue::RawPtr(raw_ptr_kind, place) => {
-                    let mut ao_data_cpn = rvalue_cpn.init_address_of();
-                    let mutability_cpn = ao_data_cpn.reborrow().init_mutability();
+                    let mut raw_ptr_data_cpn = rvalue_cpn.init_raw_ptr();
+                    let mutability_cpn = raw_ptr_data_cpn.reborrow().init_mutability();
                     Self::encode_mutability(match raw_ptr_kind {
                         mir::RawPtrKind::Mut => mir::Mutability::Mut,
                         mir::RawPtrKind::Const => mir::Mutability::Not,
                         mir::RawPtrKind::FakeForPtrMetadata => mir::Mutability::Mut,
                     }, mutability_cpn);
-                    let place_cpn = ao_data_cpn.init_place();
+                    let place_cpn = raw_ptr_data_cpn.init_place();
                     Self::encode_place(enc_ctx, place, place_cpn);
                 }
                 mir::Rvalue::Cast(cast_kind, operand, ty) => {
                     let mut cast_data_cpn = rvalue_cpn.init_cast();
+                    let mut cast_kind_cpn = cast_data_cpn.reborrow().init_kind();
+                    match cast_kind {
+                        mir::CastKind::PointerExposeProvenance => cast_kind_cpn.set_pointer_expose_provenance(()),
+                        mir::CastKind::PointerWithExposedProvenance => cast_kind_cpn.set_pointer_with_exposed_provenance(()),
+                        mir::CastKind::PointerCoercion { .. } => cast_kind_cpn.set_pointer_coercion(()),
+                        mir::CastKind::IntToInt => cast_kind_cpn.set_int_to_int(()),
+                        mir::CastKind::FloatToInt => cast_kind_cpn.set_float_to_int(()),
+                        mir::CastKind::FloatToFloat => cast_kind_cpn.set_float_to_float(()),
+                        mir::CastKind::IntToFloat => cast_kind_cpn.set_int_to_float(()),
+                        mir::CastKind::PtrToPtr => cast_kind_cpn.set_ptr_to_ptr(()),
+                        mir::CastKind::FnPtrToPtr => cast_kind_cpn.set_fn_ptr_to_ptr(()),
+                        mir::CastKind::Transmute => cast_kind_cpn.set_transmute(()),
+                        mir::CastKind::Subtype => cast_kind_cpn.set_subtype(()),
+                    }
                     let operand_cpn = cast_data_cpn.reborrow().init_operand();
                     Self::encode_operand(tcx, enc_ctx, operand, operand_cpn);
                     let ty_cpn = cast_data_cpn.init_ty();
@@ -2568,34 +2581,12 @@ mod vf_mir_builder {
             Self::encode_operand(tcx, enc_ctx, discr, discr_cpn);
             let discr_ty_cpn = switch_int_data_cpn.reborrow().init_discr_ty();
             Self::encode_ty(tcx, enc_ctx, discr_ty, discr_ty_cpn);
-            let targets_cpn = switch_int_data_cpn.init_targets();
-            Self::encode_switch_targets(targets, targets_cpn);
-        }
-
-        fn encode_switch_targets(
-            targets: &mir::SwitchTargets,
-            mut targets_cpn: switch_targets_cpn::Builder<'_>,
-        ) {
-            debug!("Encoding Switch targets {:?}", targets);
-            let len = targets
-                .all_targets()
-                .len()
-                .checked_sub(1 /*`otherwise` case*/)
-                .expect(&format!(
-                    "Compiler invariant failed. SwitchInt must always have at least one branch"
-                ));
-            let mut branches_cpn = targets_cpn.reborrow().init_branches(len);
-            for (idx, (val, target)) in targets.iter().enumerate() {
-                let mut branch_cpn = branches_cpn.reborrow().get(idx);
-                let val_cpn = branch_cpn.reborrow().init_val();
-                capnp_utils::encode_u_int128(val, val_cpn);
-                let target_cpn = branch_cpn.init_target();
-                Self::encode_basic_block_id(target, target_cpn);
-            }
-            let otherwise_cpn = targets_cpn.init_otherwise();
-            // Todo @Nima: For now there is always an `otherwise` case in SwitchInt targets. The compiler may change this invariant.
-            let target_cpn = otherwise_cpn.init_something();
-            Self::encode_basic_block_id(targets.otherwise(), target_cpn);
+            switch_int_data_cpn.fill_values(targets.all_values(), |value_cpn, val| {
+                capnp_utils::encode_u_int128(val.0, value_cpn);
+            });
+            switch_int_data_cpn.fill_targets(targets.all_targets(), |target_cpn, target| {
+                Self::encode_basic_block_id(*target, target_cpn);
+            });
         }
 
         fn encode_unwind_action(
@@ -2632,16 +2623,15 @@ mod vf_mir_builder {
                 Self::encode_operand(tcx, enc_ctx, &arg.node, arg_cpn);
             });
 
-            // Encode destination
-            let mut destination_cpn = fn_call_data_cpn.reborrow().init_destination();
+            let destination_cpn = fn_call_data_cpn.reborrow().init_destination();
+            Self::encode_place(enc_ctx, destination, destination_cpn);
+
             match target {
-                Option::None => destination_cpn.set_nothing(()), // diverging call
+                Option::None => (), // diverging call
                 Option::Some(dest_bblock_id) => {
-                    let mut destination_data_cpn = destination_cpn.init_something();
-                    let place_cpn = destination_data_cpn.reborrow().init_place();
-                    Self::encode_place(enc_ctx, destination, place_cpn);
-                    let basic_block_id_cpn = destination_data_cpn.init_basic_block_id();
-                    Self::encode_basic_block_id(*dest_bblock_id, basic_block_id_cpn);
+                    let target_opt_cpn = fn_call_data_cpn.reborrow().init_target();
+                    let target_cpn = target_opt_cpn.init_something();
+                    Self::encode_basic_block_id(*dest_bblock_id, target_cpn);
                 }
             }
 

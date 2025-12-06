@@ -42,6 +42,7 @@ if [ $(uname -s) = "Linux" ]; then
        patch unzip libgtk2.0-dev \
        valac \
        cmake build-essential ninja-build \
+       coq \
        software-properties-common # For add-apt-repository
   if ! sudo apt-get install -y --no-install-recommends libgtksourceview2.0-dev; then
     # libgtksourceview2.0-dev is not in recent Ubuntu releases, so add focal (20.04 LTS) repo

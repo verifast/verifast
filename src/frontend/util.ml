@@ -122,6 +122,14 @@ let rec zip2 xs ys =
   | (_, []) -> []
   | (x :: xs, y :: ys) -> (x, y) :: (zip2 xs ys)
 
+let rec zip_with_remainder xs ys =
+  match (xs, ys) with
+    ([], _) -> ([], [], ys)
+  | (_, []) -> ([], xs, [])
+  | (x :: xs, y :: ys) ->
+    let (zs, xs', ys') = zip_with_remainder xs ys in
+    ((x, y) :: zs, xs', ys')
+
 let do_finally tryBlock finallyBlock =
   let result =
     try

@@ -212,6 +212,21 @@ let read_file_lines path file =
   in
   iter [] 1
 
+let read_file_lines_raw path =
+  try
+    let file = open_in path in
+    let rec iter lines =
+      match read_line_canon file with
+        exception End_of_file -> List.rev lines
+      | line ->
+        iter (line::lines)
+    in
+    let lines = iter [] in
+    close_in file;
+    lines
+  with Sys_error s ->
+    failwith (Printf.sprintf "Could not read file '%s': %s" path s)
+
 type loc = string * int
 
 type cmd =
@@ -361,12 +376,39 @@ let rec exec_cmds macros cwd parallel cmds =
       | ["ifnotmac"; line] -> if Vfconfig.platform <> MacOS then exec_line line
       | ["ifz3"; line] -> if Vfconfig.z3_present then exec_line line
       | ["ifz3v4.5"; line] -> if Vfconfig.z3v4dot5_present then exec_line line
+      | ["ifrocq"; line] ->
+        let has_rocq =
+          match Vfconfig.platform with
+            Windows -> Sys.command "where coqc > nul 2>&1" = 0
+          | _ -> Sys.command "which coqc > /dev/null 2>&1" = 0
+        in
+        if has_rocq then
+          exec_line line
+        else
+          Printf.printf "SKIP: coqc not found in PATH, skipping line: %s\n" line
       | ["ifdef"; line] ->
         let space = try String.index line ' ' with Not_found -> error "Syntax error: 'ifdef ENVVAR CMD' expected" in
         let var = String.sub line 0 space in
         let cmd = String.sub line (space + 1) (String.length line - space - 1) in
         if try ignore (Sys.getenv var); true with Not_found -> false then
           exec_line cmd
+      | ["diff"; line'] ->
+        let diff_line = line in
+        if not (String.starts_with ~prefix:"-q " line') then
+          error "Only 'diff -q FILE1 FILE2' is supported";
+        let line = String.sub line' 3 (String.length line' - 3) in
+        let space = try String.index line ' ' with Not_found -> error "Syntax error: 'diff -q FILE1 FILE2' expected" in
+        let file1 = String.sub line 0 space in
+        let file2 = String.sub line (space + 1) (String.length line - space - 1) in
+        let contents1 = read_file_lines_raw (get_abs_path file1) in
+        let contents2 = read_file_lines_raw (get_abs_path file2) in
+        if contents1 <> contents2 then begin
+          let cwd = getcwd () in
+          let line' = if cwd = "." then diff_line else cwd ^ "$ " ^ diff_line in
+          let msg = Printf.sprintf "FAIL: %s: files differ" line' in
+          print_endline msg;
+          push failed_processes_log [ msg ]
+        end
       | [""] -> () (* Do not launch a process for empty lines. *)
       | ["call"|"include"; calleepath] ->
         let file = try open_in (get_abs_path calleepath) with Sys_error s -> error (Printf.sprintf "Could not open callee file '%s': %s" calleepath s) in

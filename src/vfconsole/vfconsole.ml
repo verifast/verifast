@@ -482,6 +482,7 @@ let _ =
   let useJavaFrontend = ref false in
   let enforceAnnotations = ref false in
   let vroots = ref [Util.crt_vroot Util.default_bindir] in
+  let emit_rocq = ref false in
   let add_vroot vroot =
     let (root, expansion) = Util.split_around_char vroot '=' in
     let expansion = Util.abs_path expansion in
@@ -537,6 +538,7 @@ let _ =
             ; "-allow_dead_code", Set allowDeadCode, " "
             ; "-provides", String (fun path -> provides := !provides @ [path]), " "
             ; "-keep_provide_files", Set keepProvideFiles, " "
+            ; "-emit_rocq", Set emit_rocq, "Emit Rocq definitions for foo.rs to foo.v"
             ; "-emit_sexpr",
               String begin fun str ->
                 outputSExpressions := Some str;
@@ -588,6 +590,7 @@ let _ =
           option_use_java_frontend = !useJavaFrontend;
           option_enforce_annotations = !enforceAnnotations;
           option_report_skipped_stmts = false;
+          option_emit_rocq = !emit_rocq;
         } in
         if not !json then print_endline filename;
         let emitter_callback (path : string) (dir : string) (packages : package list) =

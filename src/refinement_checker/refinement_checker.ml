@@ -441,6 +441,7 @@ let fns_to_be_inlined: (string * body) list =
               kind=Assign {
                 lhs_place=local "contents_ptr";
                 rhs_rvalue=Cast {
+                  kind=PtrToPtr;
                   operand=Copy {
                     local={name="self"};
                     projection=[
@@ -470,6 +471,7 @@ let fns_to_be_inlined: (string * body) list =
               kind=Assign {
                 lhs_place=local "contents_ptr2";
                 rhs_rvalue=Cast {
+                  kind=PtrToPtr;
                   operand=Copy {
                     local={name="self"};
                     projection=[
@@ -518,10 +520,8 @@ let fns_to_be_inlined: (string * body) list =
               args=[
                 Move (local "ref_self");
               ];
-              destination=Something {
-                place=local "drop_result";
-                basic_block_id={index=Stdint.Uint32.of_int 1}
-              };
+              destination=local "drop_result";
+              target=Something {index=Stdint.Uint32.of_int 1};
               unwind_action=Cleanup {index=Stdint.Uint32.of_int 3};
               call_span=span;
               ghost_generic_arg_list=Nothing
@@ -657,6 +657,7 @@ let fns_to_be_inlined: (string * body) list =
             kind=Assign {
               lhs_place=local "result";
               rhs_rvalue=Cast {
+                kind=PtrToPtr;
                 operand=Copy {
                   local={name="b"};
                   projection=[
@@ -747,13 +748,8 @@ let fns_to_be_inlined: (string * body) list =
           kind=SwitchInt {
             discr=Move (local "discr");
             discr_ty={kind=Int ISize};
-            targets={
-              branches=[
-                {val_=encode_uint128 (Stdint.Uint128.of_int 0); target={index=Stdint.Uint32.of_int 3}};
-                {val_=encode_uint128 (Stdint.Uint128.of_int 1); target={index=Stdint.Uint32.of_int 2}};
-              ];
-              otherwise=Something {index=Stdint.Uint32.of_int 1}
-            }
+            values=[encode_uint128 (Stdint.Uint128.of_int 0); encode_uint128 (Stdint.Uint128.of_int 1)];
+            targets=[{index=Stdint.Uint32.of_int 3}; {index=Stdint.Uint32.of_int 2}; {index=Stdint.Uint32.of_int 1}]
           };
           source_info={span}
         };
@@ -865,10 +861,8 @@ let fns_to_be_inlined: (string * body) list =
               Move (local "f");
               Move (local (*"argsTuple"*)"payload")
             ];
-            destination=Something {
-              place=local "fResult";
-              basic_block_id={index=Stdint.Uint32.of_int 4}
-            };
+            destination=local "fResult";
+            target=Something {index=Stdint.Uint32.of_int 4};
             unwind_action=Cleanup {index=Stdint.Uint32.of_int 5};
             call_span=span;
             ghost_generic_arg_list=Nothing
@@ -992,13 +986,8 @@ let fns_to_be_inlined: (string * body) list =
           kind=SwitchInt {
             discr=Move (local "discr");
             discr_ty={kind=Int ISize};
-            targets={
-              branches=[
-                {val_=encode_uint128 (Stdint.Uint128.of_int 0); target={index=Stdint.Uint32.of_int 2}};
-                {val_=encode_uint128 (Stdint.Uint128.of_int 1); target={index=Stdint.Uint32.of_int 3}};
-              ];
-              otherwise=Something {index=Stdint.Uint32.of_int 1}
-            }
+            values=[encode_uint128 (Stdint.Uint128.of_int 0); encode_uint128 (Stdint.Uint128.of_int 1)];
+            targets=[{index=Stdint.Uint32.of_int 2}; {index=Stdint.Uint32.of_int 3}; {index=Stdint.Uint32.of_int 1}]
           };
           source_info={span}
         };
@@ -1110,10 +1099,8 @@ let fns_to_be_inlined: (string * body) list =
               Move (local "op");
               Move (local (*"argsTuple"*)"error")
             ];
-            destination=Something {
-              place=local "fResult";
-              basic_block_id={index=Stdint.Uint32.of_int 4}
-            };
+            destination=local "fResult";
+            target=Something {index=Stdint.Uint32.of_int 4};
             unwind_action=Cleanup {index=Stdint.Uint32.of_int 5};
             call_span=span;
             ghost_generic_arg_list=Nothing
@@ -1236,13 +1223,8 @@ let fns_to_be_inlined: (string * body) list =
           kind=SwitchInt {
             discr=Move (local "discr");
             discr_ty={kind=Int ISize};
-            targets={
-              branches=[
-                {val_=encode_uint128 (Stdint.Uint128.of_int 0); target={index=Stdint.Uint32.of_int 2}};
-                {val_=encode_uint128 (Stdint.Uint128.of_int 1); target={index=Stdint.Uint32.of_int 3}};
-              ];
-              otherwise=Something {index=Stdint.Uint32.of_int 1}
-            }
+            values=[encode_uint128 (Stdint.Uint128.of_int 0); encode_uint128 (Stdint.Uint128.of_int 1)];
+            targets=[{index=Stdint.Uint32.of_int 2}; {index=Stdint.Uint32.of_int 3}; {index=Stdint.Uint32.of_int 1}];
           };
           source_info={span}
         };
@@ -1335,10 +1317,8 @@ let fns_to_be_inlined: (string * body) list =
               Move (local "f");
               Move (local (*"argsTuple"*)"payload")
             ];
-            destination=Something {
-              place=local "fResult";
-              basic_block_id={index=Stdint.Uint32.of_int 4}
-            };
+            destination=local "fResult";
+            target=Something {index=Stdint.Uint32.of_int 4};
             unwind_action=Cleanup {index=Stdint.Uint32.of_int 5};
             call_span=span;
             ghost_generic_arg_list=Nothing
@@ -1456,13 +1436,8 @@ let fns_to_be_inlined: (string * body) list =
           kind=SwitchInt {
             discr=Move (local "discr");
             discr_ty={kind=Int ISize};
-            targets={
-              branches=[
-                {val_=encode_uint128 (Stdint.Uint128.of_int 0); target={index=Stdint.Uint32.of_int 2}};
-                {val_=encode_uint128 (Stdint.Uint128.of_int 1); target={index=Stdint.Uint32.of_int 3}};
-              ];
-              otherwise=Something {index=Stdint.Uint32.of_int 1}
-            }
+            values=[encode_uint128 (Stdint.Uint128.of_int 0); encode_uint128 (Stdint.Uint128.of_int 1)];
+            targets=[{index=Stdint.Uint32.of_int 2}; {index=Stdint.Uint32.of_int 3}; {index=Stdint.Uint32.of_int 1}];
           };
           source_info={span}
         };
@@ -1505,10 +1480,8 @@ let fns_to_be_inlined: (string * body) list =
                 span
               }*)
             ];
-            destination=Something {
-              place=local "result";
-              basic_block_id={index=Stdint.Uint32.of_int 6}
-            };
+            destination=local "result";
+            target=Something {index=Stdint.Uint32.of_int 6};
             unwind_action=Cleanup {index=Stdint.Uint32.of_int 5};
             call_span=span;
             ghost_generic_arg_list=Nothing
@@ -1630,7 +1603,7 @@ type command =
 | Constant of const_operand (* Push a constant operand onto the operand stack *)
 | Repeat of ty_const
 | Ref of rvalue_ref_data
-| AddressOf of rvalue_address_of_data
+| RawPtr of rvalue_raw_ptr_data
 | Cast of Vf_mir_decoder.ty (* Pop a value from the top of the operand stack, cast it to the specified type, and push the result *)
 | BinaryOp of rvalue_binary_op_data_bin_op (* Pop two values from the top of the operand stack, apply the specified binary operator to them, and push the result *)
 | NullaryOp of rvalue_nullary_op_data (* Push the result of the specified nullary operator onto the operand stack *)
@@ -1652,7 +1625,7 @@ let string_of_command c =
   | Constant {const} -> Printf.sprintf "Constant %s" (string_of_mir_const const)
   | Repeat count -> Printf.sprintf "Repeat <TyConst>"
   | Ref data -> string_of_rvalue_ref_data data
-  | AddressOf {place} -> Printf.sprintf "AddressOf %s" (string_of_place place)
+  | RawPtr {place} -> Printf.sprintf "RawPtr %s" (string_of_place place)
   | Cast ty -> Printf.sprintf "Cast %s" (string_of_ty ty)
   | BinaryOp operator -> Printf.sprintf "BinaryOp %s" (string_of_bin_op operator)
   | NullaryOp data -> Printf.sprintf "NullaryOp"
@@ -1679,7 +1652,7 @@ let commands_of_rvalue = function
 | Repeat {operand; count} -> commands_of_operand operand @ [Repeat count]
 | Ref rvalue_ref_data -> [Ref rvalue_ref_data]
 | ThreadLocalRef -> failwith "TODO: ThreadLocalRef"
-| AddressOf rvalue_address_of_data -> [AddressOf rvalue_address_of_data]
+| RawPtr rvalue_raw_ptr_data -> [RawPtr rvalue_raw_ptr_data]
 | Cast {operand=Copy {local; projection=[BoxAsNonNull _]}} -> [LoadLocal local; BoxAsPtr]
 | Cast {operand; ty} -> commands_of_operand operand @ [Cast ty]
 | BinaryOp {operator; operandl; operandr} -> commands_of_operand operandl @ commands_of_operand operandr @ [BinaryOp operator]
@@ -1787,7 +1760,7 @@ let rec process_commands bodies (env: env) opnds (i_bb: basic_block_info) i_s (s
       eval_operand operand fallback (fun v -> eval_operands operands fallback (fun vs -> cont (v::vs)))
   in
   let inline_call0 funcName generic_params substs call (body: body) =
-    let {args; destination; unwind_action} = call in
+    let {args; destination; target; unwind_action} = call in
     let args = args |> List.map @@ fun arg ->
       eval_operand arg (fun msg -> failwith (msg ^ " are not yet supported as arguments of inlined calls")) (fun v -> v)
     in
@@ -1810,9 +1783,9 @@ let rec process_commands bodies (env: env) opnds (i_bb: basic_block_info) i_s (s
     let locals = Array.of_list body.local_decls in
     let env = List.mapi (fun i v -> let x = local_name locals (i + 1) in {lv_caller=caller; lv_name=x}, Value v) args @ env in
     let caller_info =
-      match destination with
+      match target with
         Nothing -> failwith "Diverging inlined calls are not yet supported"
-      | Something {place; basic_block_id={index}} -> Some (locals.(0).id.name, place, i_bb#sibling (Stdint.Uint32.to_int index))
+      | Something {index} -> Some (locals.(0).id.name, destination, i_bb#sibling (Stdint.Uint32.to_int index))
     in
     let rec bb_info_of predecessors i: basic_block_info =
       let callee_bb_id = {bb_caller=caller; bb_index=i} in
@@ -1938,10 +1911,10 @@ let rec process_commands bodies (env: env) opnds (i_bb: basic_block_info) i_s (s
     | Aggregate (Closure _, n) ->
       let vs, opnds = popn n opnds in
       cont env (Closure vs::opnds)
-    | AddressOf addr_of_data ->
-      begin match addr_of_data.place.projection with
+    | RawPtr raw_ptr_data ->
+      begin match raw_ptr_data.place.projection with
         [Deref] ->
-          let placeLocalPath = {lv_caller=i_bb#id.bb_caller; lv_name=addr_of_data.place.local.name} in
+          let placeLocalPath = {lv_caller=i_bb#id.bb_caller; lv_name=raw_ptr_data.place.local.name} in
           begin match List.assoc placeLocalPath env with
             Value placeValue ->
             cont env (placeValue::opnds)
@@ -2117,7 +2090,7 @@ let check_rvalue_refines_rvalue genv0 env0 span0 caller0 rhsRvalue0 genv1 env1 s
   | Nonlocal, Nonlocal -> ()
   end
 | ThreadLocalRef, ThreadLocalRef -> failwith "Rvalue::ThreadLocalRef not supported"
-| AddressOf address_of_data_cpn0, AddressOf address_of_data_cpn1 -> failwith "Rvalue::AddressOf not supported"
+| RawPtr raw_ptr_data_cpn0, RawPtr raw_ptr_data_cpn1 -> failwith "Rvalue::RawPtr not supported"
 | Cast cast_data_cpn0, Cast cast_data_cpn1 ->
   check_operand_refines_operand 0 genv0 env0 span0 caller0 cast_data_cpn0.operand genv1 env1 span1 caller1 cast_data_cpn1.operand;
   if decode_ty genv0 cast_data_cpn0.ty <> decode_ty genv1 cast_data_cpn1.ty then failwith "Rvalue::Cast: types do not match"
@@ -2524,32 +2497,22 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
           let discr0 = switch_int_data0.discr in
           let discr1 = switch_int_data1.discr in
           check_operand_refines_operand 0 i_bb0#genv env0 span0 caller0 discr0 i_bb1#genv env1 span1 caller1 discr1;
-          let targets0 = switch_int_data0.targets in
-          let targets1 = switch_int_data1.targets in
-          let branches0 = targets0.branches in
-          let branches1 = targets1.branches in
+          let branches0, [], [otherwise0] = Stringifier.zip_with_remainder switch_int_data0.values switch_int_data0.targets in
+          let branches1, [], [otherwise1] = Stringifier.zip_with_remainder switch_int_data1.values switch_int_data1.targets in
           if List.length branches0 <> List.length branches1 then error "The two switch statements have a different number of branches";
-          List.combine branches0 branches1 |> List.iter (fun (branch0, branch1) ->
-            let val0 = decode_uint128 @@ branch0.val_ in
-            let val1 = decode_uint128 @@ branch1.val_ in
+          List.combine branches0 branches1 |> List.iter (fun ((val0, target0), (val1, target1)) ->
+            let val0 = decode_uint128 @@ val0 in
+            let val1 = decode_uint128 @@ val1 in
             if val0 <> val1 then error "SwitchInt branch values do not match";
-            let target0 = branch0.target in
-            let target1 = branch1.target in
             let target0bbid = target0.index in
             let target1bbid = target1.index in
             let target0bbidx = Stdint.Uint32.to_int target0bbid in
             let target1bbidx = Stdint.Uint32.to_int target1bbid in
             check_basic_block_refines_basic_block env0 (i_bb0#sibling target0bbidx) env1 (i_bb1#sibling target1bbidx)
           );
-          let otherwise0 = targets0.otherwise in
-          let otherwise1 = targets1.otherwise in
-          begin match otherwise0, otherwise1 with
-            Nothing, Nothing -> ()
-          | Something target0, Something target1 ->
-            let target0bbidx = Stdint.Uint32.to_int target0.index in
-            let target1bbidx = Stdint.Uint32.to_int target1.index in
-            check_basic_block_refines_basic_block env0 (i_bb0#sibling target0bbidx) env1 (i_bb1#sibling target1bbidx)
-          end
+          let target0bbidx = Stdint.Uint32.to_int otherwise0.index in
+          let target1bbidx = Stdint.Uint32.to_int otherwise1.index in
+          check_basic_block_refines_basic_block env0 (i_bb0#sibling target0bbidx) env1 (i_bb1#sibling target1bbidx)
         | UnwindResume, UnwindResume -> ()
         | UnwindTerminate, UnwindTerminate -> ()
         | (Return, Return) ->
@@ -2569,13 +2532,13 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
           );
           let dest0 = call0.destination in
           let dest1 = call1.destination in
-          begin match dest0, dest1 with
+          begin match call0.target, call1.target with
             Nothing, Nothing -> ()
-          | Something dest0, Something dest1 ->
-            let dest0PlaceExpr = dest0.place in
-            let dest1PlaceExpr = dest1.place in
-            let dest0bbid = dest0.basic_block_id in
-            let dest1bbid = dest1.basic_block_id in
+          | Something tgt0, Something tgt1 ->
+            let dest0PlaceExpr = dest0 in
+            let dest1PlaceExpr = dest1 in
+            let dest0bbid = tgt0 in
+            let dest1bbid = tgt1 in
             let dest0bbidx = Stdint.Uint32.to_int dest0bbid.index in
             let dest1bbidx = Stdint.Uint32.to_int dest1bbid.index in
             let result = fresh_symbol () in
@@ -2693,7 +2656,7 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
               let v = fresh_symbol () in
               cont env0 (v::opnds0) env1 (v::opnds1)
             end
-        | AddressOf addrOfData0, AddressOf addrOfData1 -> error "AddressOf: not yet supported"
+        | RawPtr raw_ptr_data_cpn0, RawPtr raw_ptr_data_cpn1 -> error "RawPtr: not yet supported"
         | Cast ty0, Cast ty1 ->
             let v, opnds0, opnds1 = consume_operand opnds0 opnds1 in
             if decode_ty i_bb0#genv ty0 <> decode_ty i_bb1#genv ty1 then
