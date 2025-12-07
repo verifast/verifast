@@ -312,3 +312,18 @@ Definition preds := [
         body := IfAsn (Eq (Var "n") NullPtr) (BoolAsn True) (SepAsn (PointsToAsn (RawPtr (Uint U8)) (Var "n") (VarPat "next")) (PredAsn "Nodes" [LitPat (Var "next")]))
     |}
 ].
+
+Definition specs := [
+    ("reverse_iter", {|
+        pre := SepAsn (PredAsn "Nodes" [LitPat (Var "n")]) (PredAsn "Nodes" [LitPat (Var "m")]);
+        post := PredAsn "Nodes" [LitPat (Var "result")]
+    |});
+    ("reverse", {|
+        pre := PredAsn "Nodes" [LitPat (Var "n")];
+        post := PredAsn "Nodes" [LitPat (Var "result")]
+    |});
+    ("main", {|
+        pre := BoolAsn True;
+        post := BoolAsn True
+    |})
+].
