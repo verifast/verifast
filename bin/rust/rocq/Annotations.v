@@ -25,3 +25,8 @@ Record PredDef := {
     params: list (string * Ty);
     body: Asn
 }.
+
+Record Spec := {
+    pre: Asn;
+    post: Asn;
+}.

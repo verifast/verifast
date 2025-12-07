@@ -42,7 +42,7 @@ cd purely_unsafe
   verifast -ignore_unwind_paths alloc.rs
   verifast -ignore_unwind_paths reverse.rs
   begin_sequential
-    verifast -emit_rocq trivialest_reverse.rs
+    verifast -ignore_unwind_paths -emit_rocq trivialest_reverse.rs
     diff -q trivialest_reverse.v trivialest_reverse_expected.v
     ifrocq vfrocq compile trivialest_reverse.v
     ifrocq del trivialest_reverse.v

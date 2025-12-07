@@ -543,6 +543,31 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     iter' ([],[]) ps
   
+  let () =
+    if options.option_emit_rocq && filepath = path then begin
+      Rocq_writer.rocq_print rocq_writer "\nDefinition specs := ";
+      Rocq_writer.rocq_print_big_list rocq_writer begin fun () ->
+        List.rev funcmap1 |> List.iter @@ fun (fn, FuncInfo (env, fterm, l, k, tparams, rt, xmap, nonghost_callers_only, pre, pre_tenv, (result_var, post), terminates, (functype_opt, prototype_implemented_opt), body, is_virtual, overrides)) ->
+          if body <> None then begin
+            Rocq_writer.rocq_print_big_list_element rocq_writer @@ fun () ->
+            Rocq_writer.rocq_print_tuple rocq_writer @@ fun () ->
+            Rocq_writer.rocq_print_tuple_element rocq_writer begin fun () ->
+              Rocq_writer.rocq_print_string_literal rocq_writer fn
+            end;
+            Rocq_writer.rocq_print_tuple_element rocq_writer begin fun () ->
+              Rocq_writer.rocq_print_big_record rocq_writer @@ fun () ->
+                Rocq_writer.rocq_print_big_record_field rocq_writer "pre" begin fun () ->
+                  Rocq_writer.rocq_print_big_term rocq_writer (Rocq_of_ast.of_asn pre)
+                end;
+                Rocq_writer.rocq_print_big_record_field rocq_writer "post" begin fun () ->
+                  Rocq_writer.rocq_print_big_term rocq_writer (Rocq_of_ast.of_asn post)
+                end
+            end
+          end
+      end;
+      Rocq_writer.rocq_print rocq_writer ".\n"
+    end
+  
   let funcmap = funcmap1 @ funcmap0
 
   let cxx_ctor_map1, ctors_implemented =

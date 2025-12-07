@@ -33,7 +33,10 @@ unsafe fn reverse(mut n: *mut u8) -> *mut u8
     reverse_iter(n, std::ptr::null_mut())
 }
 
-fn main() {
+fn main()
+//@ req true;
+//@ ens true;
+{
     unsafe {
         //@ close Nodes(0);
         let mut node1: *mut u8 = std::ptr::null_mut();
