@@ -1,6 +1,7 @@
 # Rocq
 *.vo*
 *.glob
+*.aux
 
 .DS_Store
 

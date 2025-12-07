@@ -199,3 +199,31 @@ let rocq_print_argument writer body =
 
 let rocq_print_N writer n =
   rocq_print writer (Printf.sprintf "%s%%N" n)
+
+type term =
+| Ident of string
+| StringLiteral of string
+| App of string * term list
+| List of term list
+
+let rocq_print_small_term writer term =
+  let rec print_term term =
+    match term with
+    | Ident s ->
+      rocq_print_ident writer s
+    | StringLiteral s ->
+      rocq_print_string_literal writer s
+    | App (f, args) ->
+      rocq_print_application writer f @@ fun () ->
+      args |> List.iter @@ fun arg ->
+        rocq_print_argument writer (fun () -> print_term arg)
+    | List elements ->
+      rocq_print_small_list writer @@ fun () ->
+      elements |> List.iter @@ fun elem ->
+        rocq_print_small_list_element writer @@ fun () ->
+        print_term elem
+  in
+  print_term term
+
+let rocq_print_big_term writer term =
+  rocq_print_small_term writer term (* TODO: specialize *)
