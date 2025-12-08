@@ -327,3 +327,124 @@ Definition specs := [
         post := BoolAsn True
     |})
 ].
+
+Definition symex_trees := [
+    (Verifying "reverse_iter", 
+        ParamAddrTaken "n" false;;
+        ParamAddrTaken "m" false;;
+        LocalAddrTaken "$_0" false;;
+        LocalAddrTaken "$_3" true;;
+        LocalAddrTaken "$_4" true;;
+        LocalAddrTaken "$_5" false;;
+        LocalAddrTaken "$_6" false;;
+        LocalAddrTaken "$_7" true;;
+        LocalAddrTaken "k" false;;
+        LocalAddrTaken "$_9" false;;
+        LocalAddrTaken "$_10" false;;
+        LocalAddrTaken "$_11" false;;
+        LocalAddrTaken "$_12" false;;
+        LocalAddrTaken "$_13" false;;
+        LocalAddrTaken "$_14" true;;
+        LocalAddrTaken "$_15" false;;
+        LocalAddrTaken "$_16" false;;
+        Open;;
+        (* h = [[1]Nodes<>(m); [1]Nodes<>(n)] *)
+        ConsumeChunk 1%nat;;
+        Fork (
+            Fork (
+                (* h = [[1]Nodes<>(m)] *)
+                ConsumeChunk 0%nat;;
+                Done
+            ) (
+                Done
+            )
+        ) (
+            Fork (
+                Done
+            ) (
+                (* h = [[1]Nodes<>(next); [1]points_to<*u8>(n, next); [1]Nodes<>(m)] *)
+                ConsumeChunk 1%nat;;
+                (* h = [[1]points_to<*u8>(n, next); [1]Nodes<>(next); [1]Nodes<>(m)] *)
+                AutoOpen 0%nat;;
+                (* h = [[1]points_to_<*u8>(n, some(next)); [1]Nodes<>(next); [1]Nodes<>(m)] *)
+                ConsumeChunk 0%nat;;
+                Close (RealLit 1%Q) "Nodes" [] [LitPat (Var "n")];;
+                Fork (
+                    Done
+                ) (
+                    (* h = [[1]points_to<*u8>(n, m); [1]Nodes<>(next); [1]Nodes<>(m)] *)
+                    ConsumeChunk 0%nat;;
+                    (* h = [[1]Nodes<>(next); [1]Nodes<>(m)] *)
+                    ConsumeChunk 1%nat;;
+                    (* h = [[1]Nodes<>(n); [1]Nodes<>(next)] *)
+                    ConsumeChunk 1%nat;;
+                    (* h = [[1]Nodes<>(n)] *)
+                    ConsumeChunk 0%nat;;
+                    (* h = [[1]Nodes<>($_0)] *)
+                    ConsumeChunk 0%nat;;
+                    Done
+                )
+            )
+        ));
+    (Verifying "reverse", 
+        ParamAddrTaken "n" false;;
+        LocalAddrTaken "$_0" false;;
+        LocalAddrTaken "$_2" true;;
+        LocalAddrTaken "$_3" false;;
+        LocalAddrTaken "$_4" false;;
+        Close (RealLit 1%Q) "Nodes" [] [LitPat NullPtr];;
+        Fork (
+            (* h = [[1]Nodes<>(null_pointer); [1]Nodes<>(n)] *)
+            ConsumeChunk 1%nat;;
+            (* h = [[1]Nodes<>(null_pointer)] *)
+            ConsumeChunk 0%nat;;
+            (* h = [[1]Nodes<>($_0)] *)
+            ConsumeChunk 0%nat;;
+            Done
+        ) (
+            Done
+        ));
+    (Verifying "main", 
+        LocalAddrTaken "$_0" true;;
+        LocalAddrTaken "$_1" true;;
+        LocalAddrTaken "$_2" true;;
+        LocalAddrTaken "node1" true;;
+        LocalAddrTaken "$_4" true;;
+        LocalAddrTaken "node2" true;;
+        LocalAddrTaken "$_6" false;;
+        LocalAddrTaken "$_7" true;;
+        LocalAddrTaken "$_8" false;;
+        LocalAddrTaken "$_9" false;;
+        LocalAddrTaken "$_10" false;;
+        LocalAddrTaken "$_11" true;;
+        Close (RealLit 1%Q) "Nodes" [] [LitPat NullPtr];;
+        Fork (
+            (* h = [[1]Nodes<>(null_pointer); [1]points_to_<*u8>(node2_addr, dummy0); [1]points_to_<*u8>(node1_addr, dummy)] *)
+            ConsumeChunk 2%nat;;
+            Close (RealLit 1%Q) "Nodes" [] [LitPat (Var "node1")];;
+            Fork (
+                Done
+            ) (
+                (* h = [[1]points_to<*u8>(node1_addr, null_pointer); [1]points_to_<*u8>(node2_addr, dummy0); [1]Nodes<>(null_pointer)] *)
+                ConsumeChunk 0%nat;;
+                (* h = [[1]points_to_<*u8>(node2_addr, dummy0); [1]Nodes<>(null_pointer)] *)
+                ConsumeChunk 1%nat;;
+                (* h = [[1]Nodes<>(node1_addr); [1]points_to_<*u8>(node2_addr, dummy0)] *)
+                ConsumeChunk 1%nat;;
+                Close (RealLit 1%Q) "Nodes" [] [LitPat (Var "node2")];;
+                Fork (
+                    Done
+                ) (
+                    (* h = [[1]points_to<*u8>(node2_addr, node1_addr); [1]Nodes<>(node1_addr)] *)
+                    ConsumeChunk 0%nat;;
+                    (* h = [[1]Nodes<>(node1_addr)] *)
+                    ConsumeChunk 0%nat;;
+                    (* h = [[1]Nodes<>(node2_addr)] *)
+                    ConsumeChunk 0%nat;;
+                    Done
+                )
+            )
+        ) (
+            Done
+        ))
+].

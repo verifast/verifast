@@ -1,9 +1,12 @@
 Require Export VfMir.
 
+From Coq Require Export QArith.
+
 Inductive Expr :=
 | True
-| Var(x: string)
+| RealLit(q: Q)
 | NullPtr
+| Var(x: string)
 | Eq(e1: Expr)(e2: Expr)
 .
 
@@ -30,3 +33,24 @@ Record Spec := {
     pre: Asn;
     post: Asn;
 }.
+
+Inductive ProofObligation :=
+| Verifying(func_name: string)
+.
+
+Inductive StepData :=
+| ParamAddrTaken(x: string)(addr_taken: bool)
+| LocalAddrTaken(x: string)(addr_taken: bool)
+| Open
+| ConsumeChunk(chunk_index: nat)
+| AutoOpen(chunk_index: nat)
+| Close(coef: Expr)(pred_name: string)(targs: list Ty)(arg_pats: list Pat)
+.
+
+Inductive SymexTree :=
+| Step(data: StepData)(tree: SymexTree)
+| Fork(left: SymexTree)(right: SymexTree)
+| Done
+.
+
+Infix ";;" := Step (at level 60, right associativity).

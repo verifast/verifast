@@ -37,11 +37,13 @@ let rec of_expr = function
 | WOperation (l, Eq, [e1; e2], _) -> App ("Eq", [of_expr e1; of_expr e2])
 | Upcast (e, t1, t2) -> of_expr e
 | CastExpr (l, _, e) -> of_expr e
+| RealLit (l, n, None) -> App ("RealLit", [RealLiteral n])
 | _ -> Ident "UnknownExpr"
 
 let of_pat = function
 | LitPat e -> App ("LitPat", [of_expr e])
 | VarPat (l, x) -> App ("VarPat", [StringLiteral x])
+| DummyPat -> Ident "DummyPat"
 
 let rec of_asn = function
 | WPointsTo (l, WDeref (_, lhs, _), tp, _, rhs) ->

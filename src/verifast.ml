@@ -993,6 +993,19 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let t = option_map (fun te -> check_pure_type_core typedefmap (pn,ilist) tparams te (if pure then Ghost else Real) allow_inferred_types) te in
           if List.mem_assoc x tenv then static_error l ("Declaration hides existing local variable '" ^ x ^ "'.") None;
           let ghostenv = if pure then x::ghostenv else List.filter (fun y -> y <> x) ghostenv in
+          let rocq_print_local_addr_taken addr_taken =
+            if options.option_emit_rocq then begin
+              Rocq_writer.rocq_print_application rocq_writer "LocalAddrTaken" begin fun () ->
+                Rocq_writer.rocq_print_argument rocq_writer begin fun () ->
+                  Rocq_writer.rocq_print_string_literal rocq_writer x
+                end;
+                Rocq_writer.rocq_print_argument rocq_writer begin fun () ->
+                  Rocq_writer.rocq_print_bool_literal rocq_writer addr_taken
+                end
+              end;
+              Rocq_writer.rocq_print_symex_step_terminator rocq_writer
+            end
+          in
           match t with
             None ->
             let w, t =
@@ -1004,10 +1017,12 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               verify_expr false h env (Some x) w cont econt
             end $. fun h env v ->
             if !address_taken then static_error l "Taking the address of an auto variable is not yet supported" None;
+            rocq_print_local_addr_taken false;
             iter h ((x, t)::tenv) ghostenv ((x, v)::env) xs
           | Some t ->
           let produce_object envTp =
             if pure then static_error l "Cannot declare a variable of this type in a ghost context." None;
+            rocq_print_local_addr_taken true;
             begin let Some block = !blockPtr in if not (List.mem_assoc x !block) then block := (x, is_const_var)::!block end;
             let addr_name = x ^ "_addr" in 
             let addr = get_unique_var_symb_non_ghost addr_name (PtrType Void) in
@@ -1094,6 +1109,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 verify_expr false h env (Some x) w (fun h env v -> cont h env v) econt
             in
             get_initial_value h env x t e $. fun h env v ->
+            rocq_print_local_addr_taken !address_taken;
             if !address_taken then begin
               let addr = get_unique_var_symb_non_ghost (x ^ "_addr") (PtrType t) in
               if pure then static_error l "Taking the address of a ghost variable is not allowed." None;
@@ -1413,9 +1429,38 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | Some coefpat -> check_pat (pn,ilist) tparams tenv RealType coefpat
       in
       let (wpats, tenv') = check_pats (pn,ilist) l tparams tenv (List.map (fun (x, t0, t) -> t) ps) pats in
-      let wpats = (List.map (function (LitPat e | WCtorPat (_, _, _, _, _, _, _, Some e)) -> TermPat (eval_non_pure true h env e) | wpat -> SrcPat wpat) wpats) in
-      let pats = pats0 @ wpats in
+      if options.option_emit_rocq then begin
+        Rocq_writer.rocq_print_ident rocq_writer "Open";
+        Rocq_writer.rocq_print_symex_step_terminator rocq_writer
+      end;
+      let pats = pats0 @ List.map (function (LitPat e | WCtorPat (_, _, _, _, _, _, _, Some e)) -> TermPat (eval_non_pure true h env e) | wpat -> SrcPat wpat) wpats in
       consume_chunk rules h env ghostenv env [] l g_symb targs real_unit (SrcPat coefpat) inputParamCount pats (fun _ h coef ts chunk_size ghostenv env [] ->
+        (*
+        In the future, we will need to emit the predicate name and the VarPats (for binding variables). For now, knowing which chunk is opened is sufficient.
+
+        if options.option_emit_rocq && rocq_writer.buf <> None then begin
+          Rocq_writer.rocq_print_application rocq_writer "Opening" @@ fun () ->
+          Rocq_writer.rocq_print_argument rocq_writer begin fun () ->
+            Rocq_writer.rocq_print_data rocq_writer Rocq_writer.rocq_print_small_term (Rocq_of_ast.of_pat coefpat)
+          end;
+          Rocq_writer.rocq_print_argument rocq_writer begin fun () ->
+            Rocq_writer.rocq_print_string_literal rocq_writer (ctxt#pprint (fst g_symb))
+          end;
+          Rocq_writer.rocq_print_argument rocq_writer begin fun () ->
+            Rocq_writer.rocq_print_small_list rocq_writer @@ fun () ->
+            targs |> List.iter @@ fun tp ->
+            Rocq_writer.rocq_print_small_list_element rocq_writer @@ fun () ->
+            Rocq_writer.rocq_print_data rocq_writer Rocq_writer.rocq_print_small_term (Rocq_of_ast.of_type tp)
+          end;
+          Rocq_writer.rocq_print_argument rocq_writer begin fun () ->
+            Rocq_writer.rocq_print_small_list rocq_writer @@ fun () ->
+            wpats |> List.iter @@ fun wpat ->
+            Rocq_writer.rocq_print_small_list_element rocq_writer @@ fun () ->
+            Rocq_writer.rocq_print_data rocq_writer Rocq_writer.rocq_print_small_term (Rocq_of_ast.of_pat wpat)
+          end;
+          Rocq_writer.rocq_print_symex_step_terminator rocq_writer
+        end;
+        *)
         let ts = drop dropcount ts in
         let env' =
           List.map
@@ -1637,7 +1682,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             consume_chunk rules h env ghostenv env [] l (g_symb, true) [] real_unit (TermPat real_unit) None (srcpats pats) $. fun _ h _ _ _ _ _ _ ->
             with_context PopSubcontext $. fun () ->
               tcont sizemap tenv ghostenv h env
-    | Close (l, target, g, targs, pats0, pats, coef) ->
+    | Close (l, target, g, targs, pats0, pats, coefpat) ->
       let targs = List.map (check_pure_type (pn, ilist) tparams Ghost) targs in
       let close_instance_predicate target target_tn =
         let lpred, pmap, symb, body, index, target, family_target = get_pred_instance_info l g pats0 target target_tn in
@@ -1735,21 +1780,47 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           List.map
             begin fun (pat, (p, tp0)) ->
               let tp = instantiate_type tpenv tp0 in
-              let t =
+              let pat, t =
                 match pat with
-                  LitPat e -> Some (ev (check_expr_t (pn,ilist) tparams tenv e tp))
-                | _ -> None
+                  LitPat e ->
+                  let w = check_expr_t (pn,ilist) tparams tenv e tp in
+                  LitPat w, Some (ev w)
+                | _ -> pat, None
               in
               (p, pat, tp0, tp, t)
             end
             bs
       in
-      let coef =
-        match coef with
-          None -> real_unit
-        | Some (LitPat coef) -> let coef = check_expr_t (pn,ilist) tparams tenv coef RealType in ev coef
+      let wcoef, coef =
+        match coefpat with
+          None -> RealLit (l, num_of_big_int unit_big_int, None), real_unit
+        | Some (LitPat coef) ->
+          let wcoef = check_expr_t (pn,ilist) tparams tenv coef RealType in
+          wcoef, ev wcoef
         | _ -> static_error l "Coefficient in close statement must be expression." None
       in
+      if options.option_emit_rocq && rocq_writer.buf <> None then begin
+        Rocq_writer.rocq_print_application rocq_writer "Close" @@ fun () ->
+        Rocq_writer.rocq_print_argument rocq_writer begin fun () ->
+          Rocq_writer.rocq_print_data rocq_writer Rocq_writer.rocq_print_small_term (Rocq_of_ast.of_expr wcoef)
+        end;
+        Rocq_writer.rocq_print_argument rocq_writer begin fun () ->
+          Rocq_writer.rocq_print_string_literal rocq_writer (ctxt#pprint (fst g_symb))
+        end;
+        Rocq_writer.rocq_print_argument rocq_writer begin fun () ->
+          Rocq_writer.rocq_print_small_list rocq_writer @@ fun () ->
+          targs |> List.iter @@ fun tp ->
+          Rocq_writer.rocq_print_small_list_element rocq_writer @@ fun () ->
+          Rocq_writer.rocq_print_data rocq_writer Rocq_writer.rocq_print_small_term (Rocq_of_ast.of_type tp)
+        end;
+        Rocq_writer.rocq_print_argument rocq_writer begin fun () ->
+          Rocq_writer.rocq_print_small_list rocq_writer @@ fun () ->
+          ps |> List.iter @@ fun (_, pat, _, _, _) ->
+          Rocq_writer.rocq_print_small_list_element rocq_writer @@ fun () ->
+          Rocq_writer.rocq_print_data rocq_writer Rocq_writer.rocq_print_small_term (Rocq_of_ast.of_pat pat)
+        end;
+        Rocq_writer.rocq_print_symex_step_terminator rocq_writer
+      end;
       let env' = flatmap (function (p, pat, tp0, tp, Some t) -> [(p, prover_convert_term t tp tp0)] | _ -> []) ps in
       let env' = bs0 @ env' in
       let env' = typeid_env_of_tpenv l env tpenv @ env' in
@@ -3153,11 +3224,25 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let heapy_vars, varargsLastParam = check_varargs params in
     let heapy_vars = (heapy_vars @ (ss |> List.map stmt_address_taken |> List.flatten)) |> list_remove_dups in
     let heapy_ps = pre_tenv |> List.filter (function (x, RefType _) -> false | _ -> true) |> List.fold_left (fun acc (x, tp) ->
-      if List.mem_assoc x params && List.mem x heapy_vars then 
-        let addr = get_unique_var_symb_non_ghost (x ^ "_addr") (PtrType tp) in
-        (loc, x, List.mem x const_params, tp, addr) :: acc
+      if List.mem_assoc x params then
+        Rocq_writer.rocq_print_application rocq_writer "ParamAddrTaken" begin fun () ->
+          Rocq_writer.rocq_print_argument rocq_writer begin fun () ->
+            Rocq_writer.rocq_print_string_literal rocq_writer x
+          end;
+          let is_heapy_var = List.mem x heapy_vars in
+          Rocq_writer.rocq_print_argument rocq_writer begin fun () ->
+            Rocq_writer.rocq_print_bool_literal rocq_writer is_heapy_var
+          end;
+          Rocq_writer.rocq_print_symex_step_terminator rocq_writer;
+          if is_heapy_var then begin
+              let addr = get_unique_var_symb_non_ghost (x ^ "_addr") (PtrType tp) in
+              (loc, x, List.mem x const_params, tp, addr) :: acc
+          end else begin
+            acc
+          end
+        end
       else
-        acc   
+        acc
       ) [] |> List.rev
     in
     penv, heapy_ps, varargsLastParam
@@ -3201,6 +3286,17 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 
   and verify_func pn ilist gs lems boxes predinstmap funcmap tparams env l k tparams'_with_bounds rt g ps const_params nonghost_callers_only pre pre_tenv post terminates ss closeBraceLoc =
     if startswith g "vf__" then static_error l "The name of a user-defined function must not start with 'vf__'." None;
+    Rocq_writer.rocq_print_big_list_element rocq_writer @@ fun () ->
+    Rocq_writer.rocq_print_tuple rocq_writer @@ fun () ->
+    Rocq_writer.rocq_print_tuple_element rocq_writer begin fun () ->
+      Rocq_writer.rocq_print_application rocq_writer "Verifying" @@ fun () ->
+      Rocq_writer.rocq_print_argument rocq_writer begin fun () ->
+        Rocq_writer.rocq_print_string_literal rocq_writer g
+      end
+    end;
+    Rocq_writer.rocq_print_tuple_element rocq_writer @@ fun () ->
+    rocq_writer.pending_newline <- true;
+    Rocq_writer.rocq_indent rocq_writer @@ fun () ->
     push_tparam_bounds_table ();
     let tparams' = tparams'_with_bounds |> List.map @@ fun (x, {sized}) ->
       if sized then
@@ -3958,10 +4054,12 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             in
             prolog, lproof_end
         in
-        check_func_header_compat_core l lproof_end ("Function '" ^ g ^ "'") "Function prototype implementation check" fenv
-          (k, tparams', rt, ps, nonghost_callers_only, pre, post, [], terminates)
-          (k0, tparams0_with_bounds, rt0, ps0, nonghost_callers_only0, [], fenv, pre0, post0, [], terminates0)
-          prolog
+        Rocq_writer.rocq_suppress_output rocq_writer begin fun () ->
+          check_func_header_compat_core l lproof_end ("Function '" ^ g ^ "'") "Function prototype implementation check" fenv
+            (k, tparams', rt, ps, nonghost_callers_only, pre, post, [], terminates)
+            (k0, tparams0_with_bounds, rt0, ps0, nonghost_callers_only0, [], fenv, pre0, post0, [], terminates0)
+            prolog
+        end
       end;
       pop_tparam_bounds_table ();
       let tparams = [] in
@@ -4105,8 +4203,20 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         verify_funcs' boxes gs lems rest
     | [] -> verify_classes boxes lems classmap
   
-  let () = verify_funcs' [] gs0 lems0 ps
-  
+  let () =
+    let verify_funcs () =
+      verify_funcs' [] gs0 lems0 ps
+    in
+    if options.option_emit_rocq && filepath = path then begin
+      Rocq_writer.rocq_print rocq_writer "\nDefinition symex_trees := ";
+      Rocq_writer.rocq_print_big_list rocq_writer begin fun () ->
+        verify_funcs ()
+      end;
+      Rocq_writer.rocq_print rocq_writer "."
+    end else begin
+      Rocq_writer.rocq_suppress_output rocq_writer verify_funcs
+    end
+
   let result = 
     (
       (

@@ -438,9 +438,11 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let cenv0 = [("this", fterm)] @ ftargenv in
             let k' = match gh with Real -> Regular | Ghost -> Lemma(true, None) in
             let xmap0 = List.map (fun (x, t) -> (x, instantiate_type fttpenv t)) xmap0 in
-            check_func_header_compat l ("Function '" ^ fn ^ "'") "Function type implementation check" env0
-              (k, tparams_with_bounds, rt, xmap, nonghost_callers_only, pre, post, [], terminates)
-              (k', [], rt0, xmap0, false, fttpenv, cenv0, pre0, post0, [], terminates0);
+            Rocq_writer.rocq_suppress_output rocq_writer begin fun () ->
+              check_func_header_compat l ("Function '" ^ fn ^ "'") "Function type implementation check" env0
+                (k, tparams_with_bounds, rt, xmap, nonghost_callers_only, pre, post, [], terminates)
+                (k', [], rt0, xmap0, false, fttpenv, cenv0, pre0, post0, [], terminates0)
+            end;
             if gh = Real then
             begin
               if ftargs = [] && fttargs = [] then

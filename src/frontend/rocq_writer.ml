@@ -91,6 +91,9 @@ let rocq_print_string_literal writer s =
   rocq_print writer s; (* TODO: escape special chars *)
   rocq_print writer "\""
 
+let rocq_print_bool_literal writer b =
+  rocq_print writer (if b then "true" else "false")
+
 let rocq_print_small_list writer body =
   rocq_set_need_parens writer false @@ fun () ->
   rocq_print writer "[";
@@ -197,12 +200,19 @@ let rocq_print_argument writer body =
   writer.need_parens <- false;
   result
 
+let rocq_print_nat writer n =
+  rocq_print writer (Printf.sprintf "%d%%nat" n)
+
 let rocq_print_N writer n =
   rocq_print writer (Printf.sprintf "%s%%N" n)
+
+let rocq_print_Q writer n =
+  rocq_print writer (Printf.sprintf "%s%%Q" (Num.string_of_num n))
 
 type term =
 | Ident of string
 | StringLiteral of string
+| RealLiteral of Num.num
 | App of string * term list
 | List of term list
 
@@ -213,6 +223,8 @@ let rocq_print_small_term writer term =
       rocq_print_ident writer s
     | StringLiteral s ->
       rocq_print_string_literal writer s
+    | RealLiteral n ->
+      rocq_print_Q writer n
     | App (f, args) ->
       rocq_print_application writer f @@ fun () ->
       args |> List.iter @@ fun arg ->
@@ -227,3 +239,7 @@ let rocq_print_small_term writer term =
 
 let rocq_print_big_term writer term =
   rocq_print_small_term writer term (* TODO: specialize *)
+
+let rocq_print_symex_step_terminator writer =
+  rocq_print_ident writer ";;";
+  rocq_do_print_newline writer
