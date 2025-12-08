@@ -61,16 +61,27 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let leftForest = ref [] in
     let rightForest = ref [] in
     oldForest := Node (BranchNode, rightForest)::Node (BranchNode, leftForest)::!oldForest;
-    currentForest := leftForest;
-    push_context (Branching LeftBranch);
-    execute_branch cont1;
-    pop_context ();
-    if !leftForest = [] then leftForest := [Node (SuccessNode, ref [])];
-    currentForest := rightForest;
-    push_context (Branching RightBranch);
-    execute_branch cont2;
-    pop_context ();
-    if !rightForest = [] then rightForest := [Node (SuccessNode, ref [])];
+    Rocq_writer.rocq_print rocq_writer "Fork (";
+    Rocq_writer.rocq_indent rocq_writer begin fun () ->
+      Rocq_writer.rocq_do_print_newline rocq_writer;
+      currentForest := leftForest;
+      push_context (Branching LeftBranch);
+      execute_branch cont1;
+      pop_context ();
+      if !leftForest = [] then leftForest := [Node (SuccessNode, ref [])]
+    end;
+    Rocq_writer.rocq_do_print_newline rocq_writer;
+    Rocq_writer.rocq_print rocq_writer ") (";
+    Rocq_writer.rocq_indent rocq_writer begin fun () ->
+      Rocq_writer.rocq_do_print_newline rocq_writer;
+      currentForest := rightForest;
+      push_context (Branching RightBranch);
+      execute_branch cont2;
+      pop_context ();
+      if !rightForest = [] then rightForest := [Node (SuccessNode, ref [])];
+    end;
+    Rocq_writer.rocq_do_print_newline rocq_writer;
+    Rocq_writer.rocq_print rocq_writer ")";
     currentForest := oldForest;
     SymExecSuccess
   
@@ -1028,6 +1039,13 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     r := f value;
     do_finally body (fun () -> r := value)
   
+  let rocq_print_heap h =
+    let pprint_chunk (Chunk ((g, is_canonical), targs, coef, ts, size)) =
+      Printf.sprintf "[%s]%s<%s>(%s)" (ctxt#pprint coef) (ctxt#pprint g) (String.concat ", " (List.map string_of_type targs)) (String.concat ", " (List.map ctxt#pprint ts))
+    in
+    Rocq_writer.rocq_print rocq_writer (Printf.sprintf "(* h = [%s] *)" (String.concat "; " (List.map (fun chunk -> pprint_chunk chunk) h)));
+    Rocq_writer.rocq_do_print_newline rocq_writer
+
   let string_of_chunk_asn env g targs coef coefpat pats =
     let predname = match g with (g, _) -> ctxt#pprint g in
     let targs =
@@ -1111,7 +1129,18 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           match_chunk ghostenv h env env' l g targs coef coefpat inputParamCount pats tps0 tps chunk $. fun result ->
           match result with
             None -> iter (chunk::hprefix) h
-          | Some (chunk, coef, ts, size, ghostenv, env, env', newChunks) -> cont [(chunk, newChunks @ hprefix @ h, coef, ts, size, ghostenv, env, env')]
+          | Some (chunk, coef, ts, size, ghostenv, env, env', newChunks) ->
+            if options.option_emit_rocq && rocq_writer.buf <> None then begin
+              let h0 = List.rev_append hprefix (chunk::h) in
+              rocq_print_heap h0;
+              Rocq_writer.rocq_print_application rocq_writer "ConsumeChunk" begin fun () ->
+                Rocq_writer.rocq_print_argument rocq_writer begin fun () ->
+                  Rocq_writer.rocq_print_nat rocq_writer (List.length hprefix)
+                end
+              end;
+              Rocq_writer.rocq_print_symex_step_terminator rocq_writer
+            end;
+            cont [(chunk, newChunks @ hprefix @ h, coef, ts, size, ghostenv, env, env')]
       in
       iter [] h
       end $. fun matching_chunks ->
@@ -2130,7 +2159,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                             in
                             let actuals = (actual_this_opt |> Option.map snd |> Option.to_list) @ actual_indices @ actual_input_args in
                             if predname_eq outer_symb found_symb && for_all2 definitely_equal (take (List.length actuals) found_ts) actuals then
-                               Some ((chunk, hdone @ htodo, found_targs, found_coef, found_ts))
+                               Some ((chunk, hdone, htodo, found_targs, found_coef, found_ts))
                             else
                               let (osymb, _) = outer_symb in
                               let (fsymb, literal) = found_symb in 
@@ -2139,7 +2168,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                               | Some (symbol, symbol_term, targs, ctor_args, _) -> 
                                 if symbol_term == osymb && targs = [] then
                                   if for_all2 definitely_equal (take (List.length actuals) (ctor_args @ found_ts)) actuals then
-                                    Some ((chunk, hdone @ htodo, found_targs, found_coef, ctor_args @ found_ts))
+                                    Some ((chunk, hdone, htodo, found_targs, found_coef, ctor_args @ found_ts))
                                   else 
                                     iter (chunk::hdone) htodo
                                 else 
@@ -2150,7 +2179,16 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                       in
                       begin match result_opt with
                         None -> cont None
-                      | Some ((Chunk (consumed_symb, consumed_targs, consumed_coef, consumed_ts, consumed_size), h, found_targs, found_coef, found_ts)) -> 
+                      | Some ((Chunk (consumed_symb, consumed_targs, consumed_coef, consumed_ts, consumed_size), hdone, htodo, found_targs, found_coef, found_ts)) -> 
+                        if options.option_emit_rocq && rocq_writer.buf <> None then begin
+                          rocq_print_heap h;
+                          Rocq_writer.rocq_print_application rocq_writer "AutoOpen" begin fun () ->
+                            Rocq_writer.rocq_print_argument rocq_writer @@ fun () ->
+                            Rocq_writer.rocq_print_nat rocq_writer (List.length hdone)
+                          end;
+                          Rocq_writer.rocq_print_symex_step_terminator rocq_writer
+                        end;
+                        let h = hdone @ htodo in
                         (* produce from_symb body *)
                         let full_env = outer_typeid_env @ List.map2 
                           (fun (x, tp0) t -> 

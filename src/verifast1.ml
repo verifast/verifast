@@ -335,6 +335,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let success () = SymExecSuccess
 
   let major_success () =  (* A major success is a successful completion of a symbolic execution path that shows up as a green node in the execution tree. *)
+    Rocq_writer.rocq_print_ident rocq_writer "Done";
     push (Node (SuccessNode, ref [])) !currentForest;
     success ()
 
