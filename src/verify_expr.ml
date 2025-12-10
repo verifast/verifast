@@ -558,6 +558,25 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             end;
             Rocq_writer.rocq_print_tuple_element rocq_writer begin fun () ->
               Rocq_writer.rocq_print_big_record rocq_writer @@ fun () ->
+                Rocq_writer.rocq_print_big_record_field rocq_writer "spec_params" begin fun () ->
+                  Rocq_writer.rocq_print_small_list rocq_writer @@ fun () ->
+                    xmap |> List.iter @@ fun (x, t) ->
+                      Rocq_writer.rocq_print_small_list_element rocq_writer @@ fun () ->
+                      Rocq_writer.rocq_print_tuple rocq_writer @@ fun () ->
+                      Rocq_writer.rocq_print_tuple_element rocq_writer begin fun () ->
+                        Rocq_writer.rocq_print_string_literal rocq_writer x
+                      end;
+                      Rocq_writer.rocq_print_tuple_element rocq_writer begin fun () ->
+                        Rocq_writer.rocq_print_small_term rocq_writer (Rocq_of_ast.of_type t)
+                      end
+                end;
+                begin match rt with
+                  None -> ()
+                | Some rt ->
+                  Rocq_writer.rocq_print_big_record_field rocq_writer "spec_output" begin fun () ->
+                    Rocq_writer.rocq_print_small_term rocq_writer (Rocq_of_ast.of_type rt)
+                  end
+                end;
                 Rocq_writer.rocq_print_big_record_field rocq_writer "pre" begin fun () ->
                   Rocq_writer.rocq_print_big_term rocq_writer (Rocq_of_ast.of_asn pre)
                 end;

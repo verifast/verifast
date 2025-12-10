@@ -211,6 +211,7 @@ let rocq_print_Q writer n =
 
 type term =
 | Ident of string
+| BoolLiteral of bool
 | StringLiteral of string
 | RealLiteral of Num.num
 | App of string * term list
@@ -221,6 +222,8 @@ let rocq_print_small_term writer term =
     match term with
     | Ident s ->
       rocq_print_ident writer s
+    | BoolLiteral b ->
+      rocq_print_bool_literal writer b
     | StringLiteral s ->
       rocq_print_string_literal writer s
     | RealLiteral n ->

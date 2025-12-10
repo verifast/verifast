@@ -28,10 +28,12 @@ let rec of_type t =
     App ("Uint", [Ident size])
   | Int (Unsigned, PtrRank) ->
     App ("Uint", [Ident "Usize"])
+  | StructType ("std_tuple_0_", []) ->
+    Ident "Tuple0"
   | _ -> Ident "UnknownType"
 
 let rec of_expr = function
-| True l -> Ident "True"
+| True l -> App ("BoolLit", [BoolLiteral true])
 | WVar (l, x, LocalVar) -> App ("Var", [StringLiteral x])
 | WPureFunCall (l, "null_pointer", [], []) -> Ident "NullPtr"
 | WOperation (l, Eq, [e1; e2], _) -> App ("Eq", [of_expr e1; of_expr e2])

@@ -3,7 +3,7 @@ Require Export VfMir.
 From Coq Require Export QArith.
 
 Inductive Expr :=
-| True
+| BoolLit(b: bool)
 | RealLit(q: Q)
 | NullPtr
 | Var(x: string)
@@ -24,12 +24,13 @@ Inductive Asn :=
 .
 
 Record PredDef := {
-    pred_name: string;
     params: list (string * Ty);
     body: Asn
 }.
 
 Record Spec := {
+    spec_params: list (string * Ty);
+    spec_output: Ty;
     pre: Asn;
     post: Asn;
 }.
