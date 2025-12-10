@@ -4212,7 +4212,28 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       Rocq_writer.rocq_print_big_list rocq_writer begin fun () ->
         verify_funcs ()
       end;
-      Rocq_writer.rocq_print rocq_writer "."
+      Rocq_writer.rocq_print rocq_writer ".\n";
+      Rocq_writer.rocq_print rocq_writer {|
+From VeriFast Require Import SymbolicExecution.
+
+Ltac step :=
+  match goal with
+  | |- ?P /\ ?Q => split
+  | |- ?P -> ?Q => intro; try congruence
+  | |- forall _, _ => intro; repeat rewrite value_eqb_def_
+  | |- ?x = ?y => congruence
+  | |- _ => tauto
+  end.
+
+Goal bodies_are_correct preds specs symex_trees bodies.
+Proof.
+  Opaque Error.
+  Opaque not.
+  cbv.
+  Transparent not.
+  repeat step.
+Qed.
+|}
     end else begin
       Rocq_writer.rocq_suppress_output rocq_writer verify_funcs
     end

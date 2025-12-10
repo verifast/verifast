@@ -1,32 +1,30 @@
 From VeriFast Require Export VfMir.
 
 Definition bodies := [
-    {|
-        name := "reverse_iter";
+    ("reverse_iter", {|
         inputs := [RawPtr (Uint U8); RawPtr (Uint U8)];
         output := RawPtr (Uint U8);
         local_decls := [
-            {| id := "$_0"; mutability := Mut; ty := RawPtr (Uint U8) |};
-            {| id := "n"; mutability := Not; ty := RawPtr (Uint U8) |};
-            {| id := "m"; mutability := Not; ty := RawPtr (Uint U8) |};
-            {| id := "$_3"; mutability := Not; ty := Tuple0 |};
-            {| id := "$_4"; mutability := Not; ty := Tuple0 |};
-            {| id := "$_5"; mutability := Mut; ty := Bool |};
-            {| id := "$_6"; mutability := Mut; ty := RawPtr (Uint U8) |};
-            {| id := "$_7"; mutability := Mut; ty := Never |};
-            {| id := "k"; mutability := Not; ty := RawPtr (Uint U8) |};
-            {| id := "$_9"; mutability := Mut; ty := RawPtr (RawPtr (Uint U8)) |};
-            {| id := "$_10"; mutability := Mut; ty := RawPtr (Uint U8) |};
-            {| id := "$_11"; mutability := Mut; ty := RawPtr (Uint U8) |};
-            {| id := "$_12"; mutability := Mut; ty := RawPtr (RawPtr (Uint U8)) |};
-            {| id := "$_13"; mutability := Mut; ty := RawPtr (Uint U8) |};
-            {| id := "$_14"; mutability := Not; ty := Tuple0 |};
-            {| id := "$_15"; mutability := Mut; ty := RawPtr (Uint U8) |};
-            {| id := "$_16"; mutability := Mut; ty := RawPtr (Uint U8) |}
+            ("$_0", {| mutability := Mut; ty := RawPtr (Uint U8) |});
+            ("n", {| mutability := Not; ty := RawPtr (Uint U8) |});
+            ("m", {| mutability := Not; ty := RawPtr (Uint U8) |});
+            ("$_3", {| mutability := Not; ty := Tuple0 |});
+            ("$_4", {| mutability := Not; ty := Tuple0 |});
+            ("$_5", {| mutability := Mut; ty := Bool |});
+            ("$_6", {| mutability := Mut; ty := RawPtr (Uint U8) |});
+            ("$_7", {| mutability := Mut; ty := Never |});
+            ("k", {| mutability := Not; ty := RawPtr (Uint U8) |});
+            ("$_9", {| mutability := Mut; ty := RawPtr (RawPtr (Uint U8)) |});
+            ("$_10", {| mutability := Mut; ty := RawPtr (Uint U8) |});
+            ("$_11", {| mutability := Mut; ty := RawPtr (Uint U8) |});
+            ("$_12", {| mutability := Mut; ty := RawPtr (RawPtr (Uint U8)) |});
+            ("$_13", {| mutability := Mut; ty := RawPtr (Uint U8) |});
+            ("$_14", {| mutability := Not; ty := Tuple0 |});
+            ("$_15", {| mutability := Mut; ty := RawPtr (Uint U8) |});
+            ("$_16", {| mutability := Mut; ty := RawPtr (Uint U8) |})
         ];
         basic_blocks := [
-            {|
-                bb_id := "0";
+            ("0", {|
                 statements := [
                     StorageLive "$_3"
                 ];
@@ -36,9 +34,8 @@ Definition bodies := [
                     destination := ("$_3", []);
                     target := Some "1"
                 |}
-            |};
-            {|
-                bb_id := "1";
+            |});
+            ("1", {|
                 statements := [
                     StorageDead "$_3";
                     StorageLive "$_4";
@@ -52,14 +49,12 @@ Definition bodies := [
                     destination := ("$_5", []);
                     target := Some "2"
                 |}
-            |};
-            {|
-                bb_id := "2";
+            |});
+            ("2", {|
                 statements := [];
                 terminator := SwitchInt (Move ("$_5", [])) [0%N] ["4"; "3"]
-            |};
-            {|
-                bb_id := "3";
+            |});
+            ("3", {|
                 statements := [
                     StorageDead "$_6";
                     Assign ("$_0", []) (Use (Copy ("m", [])));
@@ -67,9 +62,8 @@ Definition bodies := [
                     StorageDead "$_4"
                 ];
                 terminator := Goto "7"
-            |};
-            {|
-                bb_id := "4";
+            |});
+            ("4", {|
                 statements := [
                     StorageDead "$_6";
                     Assign ("$_4", []) (Use (Constant (Val ZeroSized Tuple0)));
@@ -101,9 +95,8 @@ Definition bodies := [
                     destination := ("$_14", []);
                     target := Some "5"
                 |}
-            |};
-            {|
-                bb_id := "5";
+            |});
+            ("5", {|
                 statements := [
                     StorageDead "$_14";
                     StorageLive "$_15";
@@ -117,37 +110,33 @@ Definition bodies := [
                     destination := ("$_0", []);
                     target := Some "6"
                 |}
-            |};
-            {|
-                bb_id := "6";
+            |});
+            ("6", {|
                 statements := [
                     StorageDead "$_16";
                     StorageDead "$_15";
                     StorageDead "k"
                 ];
                 terminator := Goto "7"
-            |};
-            {|
-                bb_id := "7";
+            |});
+            ("7", {|
                 statements := [];
                 terminator := Return
-            |}
+            |})
         ]
-    |};
-    {|
-        name := "reverse";
+    |});
+    ("reverse", {|
         inputs := [RawPtr (Uint U8)];
         output := RawPtr (Uint U8);
         local_decls := [
-            {| id := "$_0"; mutability := Mut; ty := RawPtr (Uint U8) |};
-            {| id := "n"; mutability := Mut; ty := RawPtr (Uint U8) |};
-            {| id := "$_2"; mutability := Not; ty := Tuple0 |};
-            {| id := "$_3"; mutability := Mut; ty := RawPtr (Uint U8) |};
-            {| id := "$_4"; mutability := Mut; ty := RawPtr (Uint U8) |}
+            ("$_0", {| mutability := Mut; ty := RawPtr (Uint U8) |});
+            ("n", {| mutability := Mut; ty := RawPtr (Uint U8) |});
+            ("$_2", {| mutability := Not; ty := Tuple0 |});
+            ("$_3", {| mutability := Mut; ty := RawPtr (Uint U8) |});
+            ("$_4", {| mutability := Mut; ty := RawPtr (Uint U8) |})
         ];
         basic_blocks := [
-            {|
-                bb_id := "0";
+            ("0", {|
                 statements := [
                     StorageLive "$_2"
                 ];
@@ -157,9 +146,8 @@ Definition bodies := [
                     destination := ("$_2", []);
                     target := Some "1"
                 |}
-            |};
-            {|
-                bb_id := "1";
+            |});
+            ("1", {|
                 statements := [
                     StorageDead "$_2";
                     StorageLive "$_3";
@@ -172,9 +160,8 @@ Definition bodies := [
                     destination := ("$_4", []);
                     target := Some "2"
                 |}
-            |};
-            {|
-                bb_id := "2";
+            |});
+            ("2", {|
                 statements := [];
                 terminator := Call {|
                     args := [Move ("$_3", []); Move ("$_4", [])];
@@ -182,38 +169,35 @@ Definition bodies := [
                     destination := ("$_0", []);
                     target := Some "3"
                 |}
-            |};
-            {|
-                bb_id := "3";
+            |});
+            ("3", {|
                 statements := [
                     StorageDead "$_4";
                     StorageDead "$_3"
                 ];
                 terminator := Return
-            |}
+            |})
         ]
-    |};
-    {|
-        name := "main";
+    |});
+    ("main", {|
         inputs := [];
         output := Tuple0;
         local_decls := [
-            {| id := "$_0"; mutability := Mut; ty := Tuple0 |};
-            {| id := "$_1"; mutability := Mut; ty := Never |};
-            {| id := "$_2"; mutability := Not; ty := Tuple0 |};
-            {| id := "node1"; mutability := Mut; ty := RawPtr (Uint U8) |};
-            {| id := "$_4"; mutability := Not; ty := Tuple0 |};
-            {| id := "node2"; mutability := Mut; ty := RawPtr (Uint U8) |};
-            {| id := "$_6"; mutability := Mut; ty := RawPtr (RawPtr (Uint U8)) |};
-            {| id := "$_7"; mutability := Not; ty := Tuple0 |};
-            {| id := "$_8"; mutability := Not; ty := RawPtr (Uint U8) |};
-            {| id := "$_9"; mutability := Mut; ty := RawPtr (Uint U8) |};
-            {| id := "$_10"; mutability := Mut; ty := RawPtr (RawPtr (Uint U8)) |};
-            {| id := "$_11"; mutability := Not; ty := Never |}
+            ("$_0", {| mutability := Mut; ty := Tuple0 |});
+            ("$_1", {| mutability := Mut; ty := Never |});
+            ("$_2", {| mutability := Not; ty := Tuple0 |});
+            ("node1", {| mutability := Mut; ty := RawPtr (Uint U8) |});
+            ("$_4", {| mutability := Not; ty := Tuple0 |});
+            ("node2", {| mutability := Mut; ty := RawPtr (Uint U8) |});
+            ("$_6", {| mutability := Mut; ty := RawPtr (RawPtr (Uint U8)) |});
+            ("$_7", {| mutability := Not; ty := Tuple0 |});
+            ("$_8", {| mutability := Not; ty := RawPtr (Uint U8) |});
+            ("$_9", {| mutability := Mut; ty := RawPtr (Uint U8) |});
+            ("$_10", {| mutability := Mut; ty := RawPtr (RawPtr (Uint U8)) |});
+            ("$_11", {| mutability := Not; ty := Never |})
         ];
         basic_blocks := [
-            {|
-                bb_id := "0";
+            ("0", {|
                 statements := [
                     StorageLive "$_2"
                 ];
@@ -223,9 +207,8 @@ Definition bodies := [
                     destination := ("$_2", []);
                     target := Some "1"
                 |}
-            |};
-            {|
-                bb_id := "1";
+            |});
+            ("1", {|
                 statements := [
                     StorageDead "$_2";
                     StorageLive "node1"
@@ -236,9 +219,8 @@ Definition bodies := [
                     destination := ("node1", []);
                     target := Some "2"
                 |}
-            |};
-            {|
-                bb_id := "2";
+            |});
+            ("2", {|
                 statements := [
                     StorageLive "$_4"
                 ];
@@ -248,9 +230,8 @@ Definition bodies := [
                     destination := ("$_4", []);
                     target := Some "3"
                 |}
-            |};
-            {|
-                bb_id := "3";
+            |});
+            ("3", {|
                 statements := [
                     StorageDead "$_4";
                     StorageLive "node2";
@@ -266,9 +247,8 @@ Definition bodies := [
                     destination := ("$_7", []);
                     target := Some "4"
                 |}
-            |};
-            {|
-                bb_id := "4";
+            |});
+            ("4", {|
                 statements := [
                     StorageDead "$_7";
                     StorageLive "$_8";
@@ -284,9 +264,8 @@ Definition bodies := [
                     destination := ("$_8", []);
                     target := Some "5"
                 |}
-            |};
-            {|
-                bb_id := "5";
+            |});
+            ("5", {|
                 statements := [
                     StorageDead "$_9";
                     StorageDead "$_8";
@@ -298,33 +277,38 @@ Definition bodies := [
                     destination := ("$_11", []);
                     target := None
                 |}
-            |}
+            |})
         ]
-    |}
+    |})
 ].
 
 From VeriFast Require Export Annotations.
 
 Definition preds := [
-    {|
-        pred_name := "Nodes";
+    ("Nodes", {|
         params := [("n", RawPtr (Uint U8))];
-        body := IfAsn (Eq (Var "n") NullPtr) (BoolAsn True) (SepAsn (PointsToAsn (RawPtr (Uint U8)) (Var "n") (VarPat "next")) (PredAsn "Nodes" [LitPat (Var "next")]))
-    |}
+        body := IfAsn (Eq (Var "n") NullPtr) (BoolAsn (BoolLit true)) (SepAsn (PointsToAsn (RawPtr (Uint U8)) (Var "n") (VarPat "next")) (PredAsn "Nodes" [LitPat (Var "next")]))
+    |})
 ].
 
 Definition specs := [
     ("reverse_iter", {|
+        spec_params := [("n", RawPtr (Uint U8)); ("m", RawPtr (Uint U8))];
+        spec_output := RawPtr (Uint U8);
         pre := SepAsn (PredAsn "Nodes" [LitPat (Var "n")]) (PredAsn "Nodes" [LitPat (Var "m")]);
         post := PredAsn "Nodes" [LitPat (Var "result")]
     |});
     ("reverse", {|
+        spec_params := [("n", RawPtr (Uint U8))];
+        spec_output := RawPtr (Uint U8);
         pre := PredAsn "Nodes" [LitPat (Var "n")];
         post := PredAsn "Nodes" [LitPat (Var "result")]
     |});
     ("main", {|
-        pre := BoolAsn True;
-        post := BoolAsn True
+        spec_params := [];
+        spec_output := Tuple0;
+        pre := BoolAsn (BoolLit true);
+        post := BoolAsn (BoolLit true)
     |})
 ].
 
@@ -448,3 +432,23 @@ Definition symex_trees := [
             Done
         ))
 ].
+
+From VeriFast Require Import SymbolicExecution.
+
+Ltac step :=
+  match goal with
+  | |- ?P /\ ?Q => split
+  | |- ?P -> ?Q => intro; try congruence
+  | |- forall _, _ => intro; repeat rewrite value_eqb_def_
+  | |- ?x = ?y => congruence
+  | |- _ => tauto
+  end.
+
+Goal bodies_are_correct preds specs symex_trees bodies.
+Proof.
+  Opaque Error.
+  Opaque not.
+  cbv.
+  Transparent not.
+  repeat step.
+Qed.

@@ -42,16 +42,15 @@ Inductive Mutability :=
 Definition Local := string.
 
 Record LocalDecl := {
-    id: Local;
     mutability: Mutability;
     ty: Ty;
 }.
 
-Inductive PlaceElem :=
+Inductive PlaceExprElem :=
 | Deref
 .
 
-Definition Place: Set := Local * list PlaceElem.
+Definition PlaceExpr: Set := Local * list PlaceExprElem.
 
 Inductive ConstValue :=
 | ZeroSized
@@ -62,8 +61,8 @@ Inductive ConstOperand :=
 .
 
 Inductive Operand :=
-| Move(place: Place)
-| Copy(place: Place)
+| Move(place: PlaceExpr)
+| Copy(place: PlaceExpr)
 | Constant(const: ConstOperand)
 .
 
@@ -83,12 +82,12 @@ Inductive CastKind :=
 
 Inductive Rvalue :=
 | Use(operand: Operand)
-| RawPtr_(place: Place)
+| RawPtr_(place: PlaceExpr)
 | Cast(kind: CastKind)(operand: Operand)(ty: Ty)
 .
 
 Inductive Statement :=
-  Assign(lhs: Place)(rhs: Rvalue)
+  Assign(lhs: PlaceExpr)(rhs: Rvalue)
 | StorageLive(local: Local)
 | StorageDead(local: Local)
 | Nop
@@ -99,7 +98,7 @@ Definition BasicBlock := string.
 Record CallData := {
     func: Operand;
     args: list Operand;
-    destination: Place;
+    destination: PlaceExpr;
     target: option BasicBlock;
 }.
 
@@ -112,15 +111,13 @@ Inductive Terminator :=
 .
 
 Record BasicBlockData := {
-    bb_id: BasicBlock;
     statements: list Statement;
     terminator: Terminator;
 }.
 
 Record Body := {
-    name: string;
     inputs: list Ty;
     output: Ty;
-    local_decls: list LocalDecl;
-    basic_blocks: list BasicBlockData;
+    local_decls: list (Local * LocalDecl);
+    basic_blocks: list (BasicBlock * BasicBlockData);
 }.

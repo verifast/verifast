@@ -1839,20 +1839,24 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let src_info_cpn = source_info_get local_decl_cpn in
       let* { Mir.span = loc; Mir.scope } = translate_source_info src_info_cpn in
       let ty_cpn = ty_get local_decl_cpn |> D.decode_ty in
-      Rocq_writer.rocq_print_small_record TranslatorArgs.rocq_writer begin fun () ->
-        Rocq_writer.rocq_print_small_record_field TranslatorArgs.rocq_writer "id" begin fun () ->
+      Rocq_writer.rocq_print_tuple TranslatorArgs.rocq_writer begin fun () ->
+        Rocq_writer.rocq_print_tuple_element TranslatorArgs.rocq_writer begin fun () ->
           Rocq_writer.rocq_print_string_literal TranslatorArgs.rocq_writer id
         end;
-        Rocq_writer.rocq_print_small_record_field TranslatorArgs.rocq_writer "mutability" begin fun () ->
-          Rocq_writer.rocq_print_ident TranslatorArgs.rocq_writer
-            begin match mutability with
-            | Mir.Mut -> "Mut"
-            | Mir.Not -> "Not"
-            end
-        end;
-        Rocq_writer.rocq_print_small_record_field TranslatorArgs.rocq_writer "ty" begin fun () ->
-          Rocq_writer.rocq_print_data TranslatorArgs.rocq_writer Vf_mir_rocq.rocq_print_ty ty_cpn
-        end;
+        Rocq_writer.rocq_print_tuple_element TranslatorArgs.rocq_writer begin fun () ->
+          Rocq_writer.rocq_print_small_record TranslatorArgs.rocq_writer begin fun () ->
+            Rocq_writer.rocq_print_small_record_field TranslatorArgs.rocq_writer "mutability" begin fun () ->
+              Rocq_writer.rocq_print_ident TranslatorArgs.rocq_writer
+                begin match mutability with
+                | Mir.Mut -> "Mut"
+                | Mir.Not -> "Not"
+                end
+            end;
+            Rocq_writer.rocq_print_small_record_field TranslatorArgs.rocq_writer "ty" begin fun () ->
+              Rocq_writer.rocq_print_data TranslatorArgs.rocq_writer Vf_mir_rocq.rocq_print_ty ty_cpn
+            end;
+          end
+        end
       end;
       let ty_info =
         lazy
@@ -3434,10 +3438,12 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         Ok None
       else
         Rocq_writer.rocq_print_big_list_element TranslatorArgs.rocq_writer @@ fun () ->
-        Rocq_writer.rocq_print_big_record TranslatorArgs.rocq_writer @@ fun () ->
-        Rocq_writer.rocq_print_big_record_field TranslatorArgs.rocq_writer "bb_id" begin fun () ->
+        Rocq_writer.rocq_print_tuple TranslatorArgs.rocq_writer @@ fun () ->
+        Rocq_writer.rocq_print_tuple_element TranslatorArgs.rocq_writer begin fun () ->
           Rocq_writer.rocq_print_string_literal TranslatorArgs.rocq_writer id
         end;
+        Rocq_writer.rocq_print_tuple_element TranslatorArgs.rocq_writer @@ fun () ->
+        Rocq_writer.rocq_print_big_record TranslatorArgs.rocq_writer @@ fun () ->
         let statements_cpn = statements_get_list bblock_cpn in
         let* statements =
           Rocq_writer.rocq_print_big_record_field TranslatorArgs.rocq_writer "statements" @@ fun () ->
@@ -4730,12 +4736,14 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let def_kind = DefKind.get def_kind_cpn in
     match def_kind with
     | DefKind.Fn ->
-        Rocq_writer.rocq_print_big_record Args.rocq_writer @@ fun () ->
         let def_path = def_path_get body_cpn in
         let name = TrName.translate_def_path def_path in
-        Rocq_writer.rocq_print_big_record_field Args.rocq_writer "name" begin fun () ->
+        Rocq_writer.rocq_print_tuple Args.rocq_writer @@ fun () ->
+        Rocq_writer.rocq_print_tuple_element Args.rocq_writer begin fun () ->
           Rocq_writer.rocq_print_string_literal Args.rocq_writer name
         end;
+        Rocq_writer.rocq_print_tuple_element Args.rocq_writer @@ fun () ->
+        Rocq_writer.rocq_print_big_record Args.rocq_writer @@ fun () ->
         let moduleName = module_def_path_get body_cpn in
         (* print_endline ("Translating Mod: " ^ moduleName ^ " --- Body: " ^ name); *)
         let split_name = TrName.split_def_path moduleName name in
