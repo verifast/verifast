@@ -1,4 +1,4 @@
-Require Export Annotations.
+Require Export Annotations Values.
 From Coq Require Export ClassicalDescription.
 
 Notation "f @@ x" := (f x)
@@ -12,25 +12,6 @@ Fixpoint assoc_{A B}(eq_dec: forall (x1 x2: A), {x1 = x2} + {x1 <> x2})(x: A)(xy
       Some y
     else
       assoc_ eq_dec x xys
-  end.
-
-Fixpoint assoc{T}(x: string)(xys: list (string * T)): option T :=
-  match xys with
-    [] => None
-  | (x', y)::xys =>
-    if string_dec x x' then
-      Some y
-    else
-      assoc x xys
-  end.
-
-Fixpoint combine_{A B}(xs: list A)(ys: list B): list (A * B) * (list A * list B) :=
-  match xs, ys with
-    [], ys => ([], ([], ys))
-  | xs, [] => ([], (xs, []))
-  | (x::xs), (y::ys) =>
-    let '(xys, (xs, ys)) := combine_ xs ys in
-    ((x, y)::xys, (xs, ys))
   end.
 
 Fixpoint nth__iter{T}(k: nat)(xs_done: list T)(xs_todo: list T): option (T * list T) :=
@@ -47,25 +28,6 @@ Definition ProofObligation_eq_dec(o1 o2: ProofObligation): {o1 = o2} + {o1 <> o2
 decide equality.
 apply string_dec.
 Defined.
-
-Parameter Ptr: Set.
-
-Parameter null_ptr: Ptr.
-
-Inductive Value :=
-| VPtr(ptr: Ptr)
-| VBool(b: bool)
-| VReal(q: Q)
-| VDummy (* Used as the value of nonsensical expressions *)
-| VSome(v: Value)
-| VTuple0
-.
-
-Definition value_eqb(v1 v2: Value): bool.
-Admitted.
-
-Lemma value_eqb_def_(v1 v2: Value): (VBool (value_eqb v1 v2) = VBool true) = (v1 = v2).
-Admitted.
 
 Inductive LocalState :=
 | LSValue(v: Value)
