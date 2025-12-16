@@ -54,4 +54,7 @@ Inductive SymexTree :=
 | Done
 .
 
-Infix ";;" := Step (at level 60, right associativity).
+Declare Scope annot_scope.
+
+Notation "x ;; z" := (Step x z)
+  (at level 100, z at level 200, right associativity): annot_scope.

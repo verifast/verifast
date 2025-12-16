@@ -4208,7 +4208,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       verify_funcs' [] gs0 lems0 ps
     in
     if options.option_emit_rocq && filepath = path then begin
-      Rocq_writer.rocq_print rocq_writer "\nDefinition symex_trees := ";
+      Rocq_writer.rocq_print rocq_writer "\nOpen Scope annot_scope.\n\nDefinition symex_trees := ";
       Rocq_writer.rocq_print_big_list rocq_writer begin fun () ->
         verify_funcs ()
       end;

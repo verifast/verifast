@@ -1,6 +1,8 @@
 Require Export Annotations Values.
 From Coq Require Export ClassicalDescription.
 
+Open Scope annot_scope.
+
 Notation "f @@ x" := (f x)
   (at level 20, right associativity, only parsing).
 
@@ -66,16 +68,15 @@ Fixpoint havoc_vars(trace: Trace)(vars: list (string * Ty))(env: Env)(Q: Env -> 
   | (x, ty)::vars => havoc trace x ty env (fun env _ => havoc_vars trace vars env Q)
   end.
 
-Inductive Pred :=
-| PointsTo(ty: Ty)
-| PointsTo_(ty: Ty)
-| UserPred(name: string)
+Inductive PrimChunk :=
+| PointsTo(ty: Ty)(ptr: Value)(rhs: Value)
+| PointsTo_(ty: Ty)(ptr: Value)(rhs: Value)
 .
 
-Record Chunk := {
-    pred: Pred;
-    args: list Value
-}.
+Inductive Chunk :=
+| Prim(chunk: PrimChunk)
+| User(pred_name: string)(args: list Value)
+.
 
 Definition Heap := list Chunk.
 
@@ -137,10 +138,10 @@ Fixpoint produce(trace: Trace)(h: Heap)(env: Env)(tree: SymexTree)(a: Asn)(Q: He
     BoolAsn e => assume env e @@ Q h env tree
   | PointsToAsn ty ptr rhs =>
     produce_pat trace env ty rhs @@ fun env vrhs =>
-    Q ({| pred := PointsTo ty; args := [eval env ptr; vrhs] |}::h) env tree
+    Q (Prim (PointsTo ty (eval env ptr) vrhs)::h) env tree
   | PredAsn name args =>
     produce_pats trace env args @@ fun env vs =>
-    Q ({| pred := UserPred name; args := vs |}::h) env tree
+    Q (User name vs::h) env tree
   | SepAsn a1 a2 =>
     produce trace h env tree a1 @@ fun h env tree =>
     produce trace h env tree a2 Q
@@ -175,8 +176,8 @@ Fixpoint consume_chunk(trace: Trace)(h: Heap)(tree: SymexTree)(Q: Heap -> SymexT
       None => Error trace "consume_chunk: AutoOpen: bad heap index" (k, h)
     | Some (chunk, h) =>
       match chunk with
-        {| pred := PointsTo ty; args := [ptr; v] |} =>
-        let h := {| pred := PointsTo_ ty; args := [ptr; VSome v] |}::h in
+        Prim (PointsTo ty ptr v) =>
+        let h := Prim (PointsTo_ ty ptr (VSome v))::h in
         consume_chunk trace h tree Q
       | _ => Error trace "consume_chunk: AutoOpen: bad chunk" chunk
       end
@@ -192,22 +193,22 @@ Fixpoint consume_chunk(trace: Trace)(h: Heap)(tree: SymexTree)(Q: Heap -> SymexT
 
 Definition consume_points_to(trace: Trace)(h: Heap)(tree: SymexTree)(ty: Ty)(ptr: Value)(Q: Heap -> SymexTree -> Value -> Prop): Prop :=
   consume_chunk trace h tree @@ fun h tree chunk =>
-  pred chunk = PointsTo ty /\
-  match args chunk with
-    [ptr'; v] =>
+  match chunk with
+    Prim (PointsTo ty' ptr' v) =>
+    ty' = ty /\
     ptr' = ptr /\
     Q h tree v
-  | _ => Error trace "consume_points_to: bad PointsTo args" (args chunk)
+  | _ => Error trace "consume_points_to: bad chunk" chunk
   end.
 
 Definition consume_points_to_(trace: Trace)(h: Heap)(tree: SymexTree)(ty: Ty)(ptr: Value)(Q: Heap -> SymexTree -> Value -> Prop): Prop :=
   consume_chunk trace h tree @@ fun h tree chunk =>
-  pred chunk = PointsTo_ ty /\
-  match args chunk with
-    [ptr'; v] =>
+  match chunk with
+    Prim (PointsTo_ ty' ptr' v) =>
+    ty' = ty /\
     ptr' = ptr /\
     Q h tree v
-  | _ => Error trace "consume_points_to_: bad PointsTo_ args" (args chunk)
+  | _ => Error trace "consume_points_to_: bad chunk" chunk
   end.
 
 Fixpoint consume(trace: Trace)(h: Heap)(env: Env)(tree: SymexTree)(a: Asn)(Q: Heap -> Env -> SymexTree -> Prop): Prop :=
@@ -219,9 +220,12 @@ Fixpoint consume(trace: Trace)(h: Heap)(env: Env)(tree: SymexTree)(a: Asn)(Q: He
     Q h env tree
   | PredAsn name pats =>
     consume_chunk trace h tree @@ fun h tree chunk =>
-    pred chunk = UserPred name /\
-    match_pats trace env pats (args chunk) @@ fun env =>
-    Q h env tree
+    match chunk with
+      User name args =>
+      match_pats trace env pats args @@ fun env =>
+      Q h env tree
+    | _ => Error trace "consume: PredAsn: bad chunk" chunk
+    end
   | SepAsn a1 a2 =>
     consume trace h env tree a1 @@ fun h env tree =>
     consume trace h env tree a2 Q
@@ -263,7 +267,7 @@ Fixpoint process_local_addr_taken_steps(trace: Trace)(h: Heap)(env: Env)(tree: S
             match ty with
               Never | Tuple0 => (h, (fun cleanup_heapy_locals' => cleanup_heapy_locals'))
             | _ =>
-              ({| pred := PointsTo_ ty; args := [VPtr ptr; value] |}::h,
+              (Prim (PointsTo_ ty (VPtr ptr) value)::h,
                (fun cleanup_heapy_locals' h tree Q =>
                 consume_points_to_ trace h tree ty (VPtr ptr) @@ fun h tree _ =>
                 cleanup_heapy_locals' h tree Q))
@@ -287,7 +291,7 @@ Variable local_decls: list (Local * LocalDecl).
 
 Definition load_from_pointer(trace: Trace)(h: Heap)(tree: SymexTree)(ty: Ty)(ptr: Value)(Q: Heap -> SymexTree -> Value -> Prop): Prop :=
   consume_points_to trace h tree ty ptr @@ fun h tree v =>
-  let h := {| pred := PointsTo ty; args := [ptr; v] |}::h in
+  let h := Prim (PointsTo ty ptr v)::h in
   Q h tree v.
 
 Inductive Place :=
@@ -317,7 +321,7 @@ Definition store_to_place(trace: Trace)(h: Heap)(env: Env)(tree: SymexTree)(plac
       Q h env tree
     | PDeref ptr =>
       consume_points_to_ trace h tree ty ptr @@ fun h tree _ =>
-      let h := {| pred := PointsTo ty; args := [ptr; v] |}::h in
+      let h := Prim (PointsTo ty ptr v)::h in
       Q h env tree
     end
   end.
@@ -498,16 +502,16 @@ Definition verify_ghost_command(trace: Trace)(h: Heap)(env: Env)(tree: SymexTree
   match tree with
     Open;; tree =>
     consume_chunk trace h tree @@ fun h tree chunk =>
-    match pred chunk with
-      UserPred pred_name =>
+    match chunk with
+      User pred_name args =>
       match assoc pred_name preds with
         None => Error trace "verify_ghost_command: Open: no such predicate" pred_name
       | Some pred_def =>
-        let env' := combine (map fst (params pred_def)) (map LSValue (args chunk)) in
+        let env' := combine (map fst (params pred_def)) (map LSValue args) in
         produce trace h env' tree (body pred_def) @@ fun h _ tree =>
         Q h env tree
       end
-    | _ => Error trace "verify_ghost_command: Open: predicate not supported" (pred chunk)
+    | _ => Error trace "verify_ghost_command: Open: predicate not supported" chunk
     end
   | Close (RealLit 1%Q) pred_name [] arg_pats;; tree =>
     eval_pats trace env arg_pats @@ fun vs =>
@@ -516,7 +520,7 @@ Definition verify_ghost_command(trace: Trace)(h: Heap)(env: Env)(tree: SymexTree
     | Some pred_def =>
       let env' := combine (map fst (params pred_def)) (map LSValue vs) in
       consume trace h env' tree (body pred_def) @@ fun h _ tree =>
-      let h := {| pred := UserPred pred_name; args := vs |}::h in
+      let h := User pred_name vs::h in
       Q h env tree
     end
   | _ => Error trace "verify_ghost_command: bad tree: no ghost command found" tree
