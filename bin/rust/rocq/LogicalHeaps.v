@@ -403,9 +403,10 @@ Proof.
       destruct p as [params' args'].
       destruct params'; try tauto.
       destruct args'; try tauto.
+      destruct HHchunk as [env''' Hbody].
+      apply PredAsn_holds with (vs:=args0) (params:=params) (body:=body) (env'':=env'') (env''':=env'''); try assumption.
       
-      apply PredAsn_holds with (vs:=args0) (params:=params) (body:=body).
-    
+      
 Admitted.
 
 Lemma produce_sound(H0: LogHeap)(H: LogHeap)(trace: Trace)(h: Heap)(env: Env)(tree: SymexTree)(a: Asn)(env': Env)(Q: Heap → Env → SymexTree → Prop):
