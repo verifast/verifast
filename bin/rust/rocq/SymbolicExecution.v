@@ -69,12 +69,12 @@ Fixpoint havoc_vars(trace: Trace)(vars: list (string * Ty))(env: Env)(Q: Env -> 
   end.
 
 Inductive PrimChunk :=
-| PointsTo(ty: Ty)(ptr: Value)(rhs: Value)
 | PointsTo_(ty: Ty)(ptr: Value)(rhs: Value)
 .
 
 Inductive Chunk :=
 | Prim(chunk: PrimChunk)
+| PointsTo(ty: Ty)(ptr: Value)(rhs: Value)
 | User(pred_name: string)(args: list Value)
 .
 
@@ -138,7 +138,7 @@ Fixpoint produce(trace: Trace)(h: Heap)(env: Env)(tree: SymexTree)(a: Asn)(Q: He
     BoolAsn e => assume env e @@ Q h env tree
   | PointsToAsn ty ptr rhs =>
     produce_pat trace env ty rhs @@ fun env vrhs =>
-    Q (Prim (PointsTo ty (eval env ptr) vrhs)::h) env tree
+    Q (PointsTo ty (eval env ptr) vrhs::h) env tree
   | PredAsn name args =>
     produce_pats trace env args @@ fun env vs =>
     Q (User name vs::h) env tree
@@ -176,7 +176,7 @@ Fixpoint consume_chunk(trace: Trace)(h: Heap)(tree: SymexTree)(Q: Heap -> SymexT
       None => Error trace "consume_chunk: AutoOpen: bad heap index" (k, h)
     | Some (chunk, h) =>
       match chunk with
-        Prim (PointsTo ty ptr v) =>
+        PointsTo ty ptr v =>
         let h := Prim (PointsTo_ ty ptr (VSome v))::h in
         consume_chunk trace h tree Q
       | _ => Error trace "consume_chunk: AutoOpen: bad chunk" chunk
@@ -194,7 +194,7 @@ Fixpoint consume_chunk(trace: Trace)(h: Heap)(tree: SymexTree)(Q: Heap -> SymexT
 Definition consume_points_to(trace: Trace)(h: Heap)(tree: SymexTree)(ty: Ty)(ptr: Value)(Q: Heap -> SymexTree -> Value -> Prop): Prop :=
   consume_chunk trace h tree @@ fun h tree chunk =>
   match chunk with
-    Prim (PointsTo ty' ptr' v) =>
+    PointsTo ty' ptr' v =>
     ty' = ty /\
     ptr' = ptr /\
     Q h tree v
@@ -291,7 +291,7 @@ Variable local_decls: list (Local * LocalDecl).
 
 Definition load_from_pointer(trace: Trace)(h: Heap)(tree: SymexTree)(ty: Ty)(ptr: Value)(Q: Heap -> SymexTree -> Value -> Prop): Prop :=
   consume_points_to trace h tree ty ptr @@ fun h tree v =>
-  let h := Prim (PointsTo ty ptr v)::h in
+  let h := PointsTo ty ptr v::h in
   Q h tree v.
 
 Inductive Place :=
@@ -321,7 +321,7 @@ Definition store_to_place(trace: Trace)(h: Heap)(env: Env)(tree: SymexTree)(plac
       Q h env tree
     | PDeref ptr =>
       consume_points_to_ trace h tree ty ptr @@ fun h tree _ =>
-      let h := Prim (PointsTo ty ptr v)::h in
+      let h := PointsTo ty ptr v::h in
       Q h env tree
     end
   end.
