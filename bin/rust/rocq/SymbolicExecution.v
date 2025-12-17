@@ -118,7 +118,7 @@ Definition assert(trace: Trace)(env: Env)(e: Expr)(Q: Prop): Prop :=
 Definition produce_pat(trace: Trace)(env: Env)(ty: Ty)(pat: Pat)(Q: Env -> Value -> Prop): Prop :=
   match pat with
     LitPat e => Q env (eval env e)
-  | VarPat x => havoc trace x ty env Q
+  | VarPat x => forall v, Q ((x, LSValue v)::env) v
   end.
 
 Fixpoint produce_pats(trace: Trace)(env: Env)(pats: list Pat)(Q: Env -> list Value -> Prop): Prop :=
@@ -137,8 +137,9 @@ Fixpoint produce(trace: Trace)(h: Heap)(env: Env)(tree: SymexTree)(a: Asn)(Q: He
   match a with
     BoolAsn e => assume env e @@ Q h env tree
   | PointsToAsn ty ptr rhs =>
+    let ptr := eval env ptr in
     produce_pat trace env ty rhs @@ fun env vrhs =>
-    Q (PointsTo ty (eval env ptr) vrhs::h) env tree
+    Q (PointsTo ty ptr vrhs::h) env tree
   | PredAsn name args =>
     produce_pats trace env args @@ fun env vs =>
     Q (User name vs::h) env tree

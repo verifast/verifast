@@ -492,7 +492,43 @@ Qed.
 Lemma produce_pat_sound trace env ty pat Q v env':
   produce_pat trace env ty pat Q →
   pat_matches env pat v env' →
-  Q env' v
+  Q env' v.
+Proof.
+  destruct pat.
+  - (* LitPat *)
+    simpl.
+    intros.
+    inversion H0; subst.
+    assumption.
+  - (* VarPat *)
+    simpl.
+    intros.
+    inversion H0; subst.
+    apply H.
+Qed.
+
+Lemma produce_pats_sound trace env pats Q vs env':
+  produce_pats trace env pats Q →
+  pats_match env pats vs env' →
+  Q env' vs.
+Proof.
+  revert trace env Q vs env'.
+  induction pats.
+  - (* nil *)
+    intros trace env Q vs env' Hproduce Hmatch.
+    simpl in Hproduce.
+    inversion Hmatch; subst.
+    assumption.
+  - (* cons *)
+    intros trace env Q vs env' Hproduce Hmatch.
+    inversion Hmatch; subst.
+    simpl in Hproduce.
+    destruct a.
+    + (* LitPat *)
+      inversion H2; subst.
+      apply IHpats with (vs:=vs0) (env' := env') in Hproduce; assumption.
+    + tauto.
+Qed.
 
 Lemma produce_sound(H0: LogHeap)(H: LogHeap)(trace: Trace)(h: Heap)(env: Env)(tree: SymexTree)(a: Asn)(env': Env)(Q: Heap → Env → SymexTree → Prop):
   heap_holds H0 h →
@@ -516,5 +552,61 @@ Proof.
     intros Hh Hholds Hproduce.
     inversion Hholds; subst.
     simpl in Hproduce.
-    
+    apply produce_pat_sound with (2:=H9) in Hproduce.
+    exists (PointsTo ty (eval env ptr) v::h).
+    exists tree.
+    split. assumption.
+    simpl.
+    exists {[+ PointsTo_ ty (eval env ptr) (VSome v) +]}.
+    exists H0.
+    split. apply lh_comm.
+    split. reflexivity.
+    assumption.
+  - (* PredAsn *)
+    intros Hh Hholds Hproduce.
+    simpl in Hproduce.
+    inversion Hholds; subst.
+    apply produce_pats_sound with (2:=H10) in Hproduce.
+    exists (User pred_name vs::h).
+    exists tree.
+    split. assumption.
+    simpl.
+    exists H.
+    exists H0.
+    split. apply lh_comm.
+    split. {
+      rewrite H4.
+      rewrite H5.
+      exists env'''.
+      assumption.
+    }
+    assumption.
+  - (* SepAsn *)
+    intros Hh Hholds Hproduce.
+    inversion Hholds; subst.
+    simpl in Hproduce.
+    apply IHa1 with (1:=Hh) (2:=H7) in Hproduce.
+    destruct Hproduce as (h' & tree' & Hproduce & Hh').
+    apply IHa2 with (1:=Hh') (2:=H9) in Hproduce.
+    destruct Hproduce as (h'' & tree'' & HQ & Hh'').
+    exists h''.
+    exists tree''.
+    rewrite lh_assoc.
+    tauto.
+  - (* IfAsn *)
+    intros Hh Hholds Hproduce.
+    simpl in Hproduce.
+    destruct tree; try tauto.
+    destruct Hproduce as [Htrue Hfalse].
+    inversion Hholds; subst.
+    + (* true *)
+      apply assume_sound with (2:=H8) in Htrue.
+      apply IHa1 with (1:=Hh) (2:=H9) in Htrue.
+      assumption.
+    + (* false *)
+      apply assume_false_sound with (2:=H8) in Hfalse.
+      apply IHa2 with (1:=Hh) (2:=H9) in Hfalse.
+      assumption.
+Qed.
+
 End preds.
