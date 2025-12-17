@@ -4,6 +4,8 @@ Parameter Ptr: Set.
 
 Parameter null_ptr: Ptr.
 
+Parameter Ptr_eq_dec: forall (ptr1 ptr2: Ptr), {ptr1 = ptr2} + {ptr1 <> ptr2}.
+
 Inductive Value :=
 | VPtr(ptr: Ptr)
 | VBool(b: bool)
@@ -12,6 +14,9 @@ Inductive Value :=
 | VSome(v: Value)
 | VTuple0
 .
+
+Definition value_eq_dec(v1 v2: Value): {v1 = v2} + {v1 <> v2}.
+Admitted.
 
 Definition value_eqb(v1 v2: Value): bool.
 Admitted.

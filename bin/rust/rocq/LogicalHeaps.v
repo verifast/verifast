@@ -40,6 +40,13 @@ Axiom lh_right_id: forall H, H ⋅ ∅  = H.
 Axiom lh_assoc: forall H1 H2 H3, H1 ⋅ (H2 ⋅ H3) = (H1 ⋅ H2) ⋅ H3.
 Axiom lh_comm: forall H1 H2, H1 ⋅ H2 = H2 ⋅ H1.
 
+Inductive has_type: Value -> Ty -> Prop :=
+| has_type_Bool b:
+  has_type (VBool b) Bool
+| has_type_RawPtr ptr pointeeTy:
+  has_type (VPtr ptr) (RawPtr pointeeTy)
+.
+
 Section preds.
 
 Variable preds: list (string * PredDef).
@@ -336,6 +343,25 @@ Proof.
     assumption.
 Qed.
 
+Lemma assume_sound env e Q:
+  assume env e Q →
+  eval env e = VBool true → Q.
+Proof.
+  destruct e; try tauto.
+  destruct b; try tauto.
+  simpl.
+  intros.
+  discriminate.
+Qed.
+
+Lemma assume_false_sound env e Q:
+  assume_false env e Q →
+  eval env e ≠ VBool true → Q.
+Proof.
+  destruct e; try tauto.
+  destruct b; try tauto.
+Qed.
+
 Lemma consume_sound(H: LogHeap)(trace: Trace)(h: Heap)(env: Env)(tree: SymexTree)(a: Asn)(Q: Heap → Env → SymexTree → Prop):
   heap_holds H h →
   consume trace h env tree a Q →
@@ -386,8 +412,10 @@ Proof.
     apply consume_chunk_sound with (1:=Hh) in Hconsume.
     destruct Hconsume as (Hchunk & H' & h' & tree' & chunk & HH & HHchunk & HH' & ?).
     destruct chunk; try tauto.
-    apply match_pats_sound in H0.
-    destruct H0 as [env' [? ?]].
+    destruct H0.
+    subst pred_name0.
+    apply match_pats_sound in H1.
+    destruct H1 as [env' [? ?]].
     exists h'.
     exists env'.
     exists tree'.
@@ -396,7 +424,7 @@ Proof.
     split. assumption.
     split. {
       simpl in HHchunk.
-      case_eq (assoc pred_name0 preds); intros; rewrite H2 in HHchunk; try tauto.
+      case_eq (assoc pred_name preds); intros; rewrite H2 in HHchunk; try tauto.
       destruct p as [params body].
       case_eq (combine_ params args0); intros; rewrite H3 in HHchunk.
       rename l into env''.
@@ -405,9 +433,66 @@ Proof.
       destruct args'; try tauto.
       destruct HHchunk as [env''' Hbody].
       apply PredAsn_holds with (vs:=args0) (params:=params) (body:=body) (env'':=env'') (env''':=env'''); try assumption.
-      
-      
-Admitted.
+    }
+    tauto.
+  - (* SepAsn *)
+    apply IHa1 with (1:=Hh) in Hconsume.
+    destruct Hconsume as (h' & env' & tree' & Ha1 & H' & HH & HHa1 & HH' & Hconsume).
+    subst H.
+    apply IHa2 with (1:=HH') in Hconsume.
+    destruct Hconsume as (h'' & env'' & tree'' & Ha2 & H'' & HH'eq & HHa2 & Hh'' & HQ).
+    exists h''.
+    exists env''.
+    exists tree''.
+    exists (Ha1 ⋅ Ha2).
+    exists H''.
+    subst H'.
+    split. apply lh_assoc.
+    split. {
+      apply SepAsn_holds with (env':=env'); assumption.
+    }
+    tauto.
+  - (* IfAsn *)
+    destruct tree; try tauto.
+    destruct Hconsume as [Htrue Hfalse].
+    assert ({eval env cond = VBool true} + {eval env cond ≠ VBool true}). {
+      apply value_eq_dec.
+    }
+    destruct H0.
+    + (* true *)
+      apply assume_sound with (2:=e) in Htrue.
+      apply IHa1 with (1:=Hh) in Htrue.
+      destruct Htrue as (h' & env' & tree' & H1 & H2 & HH & Ha1 & Hh' & HQ).
+      exists h'.
+      exists env'.
+      exists tree'.
+      exists H1.
+      exists H2.
+      split. assumption.
+      split. {
+        constructor; assumption.
+      }
+      tauto.
+    + (* false *)
+      apply assume_false_sound with (2:=n) in Hfalse.
+      apply IHa2 with (1:=Hh) in Hfalse.
+      destruct Hfalse as (h' & env' & tree' & H1 & H2 & HH & Ha1 & Hh' & HQ).
+      exists h'.
+      exists env'.
+      exists tree'.
+      exists H1.
+      exists H2.
+      split. assumption.
+      split. {
+        constructor; assumption.
+      }
+      tauto.
+Qed.
+
+Lemma produce_pat_sound trace env ty pat Q v env':
+  produce_pat trace env ty pat Q →
+  pat_matches env pat v env' →
+  Q env' v
 
 Lemma produce_sound(H0: LogHeap)(H: LogHeap)(trace: Trace)(h: Heap)(env: Env)(tree: SymexTree)(a: Asn)(env': Env)(Q: Heap → Env → SymexTree → Prop):
   heap_holds H0 h →
@@ -415,5 +500,21 @@ Lemma produce_sound(H0: LogHeap)(H: LogHeap)(trace: Trace)(h: Heap)(env: Env)(tr
   produce trace h env tree a Q →
   ∃ h' tree',
   Q h' env' tree' ∧ heap_holds (H0 ⋅ H) h'.
-
+Proof.
+  revert H0 H trace h env tree env' Q.
+  induction a; intros H0 H trace h env tree env' Q.
+  - (* BoolAsn *)
+    intros Hh Hholds Hproduce.
+    inversion Hholds; subst.
+    simpl in Hproduce.
+    apply assume_sound with (2:=H3) in Hproduce.
+    exists h.
+    exists tree.
+    rewrite lh_right_id.
+    tauto.
+  - (* PointsToAsn *)
+    intros Hh Hholds Hproduce.
+    inversion Hholds; subst.
+    simpl in Hproduce.
+    
 End preds.

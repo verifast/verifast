@@ -221,7 +221,8 @@ Fixpoint consume(trace: Trace)(h: Heap)(env: Env)(tree: SymexTree)(a: Asn)(Q: He
   | PredAsn name pats =>
     consume_chunk trace h tree @@ fun h tree chunk =>
     match chunk with
-      User name args =>
+      User name' args =>
+      name = name' /\
       match_pats trace env pats args @@ fun env =>
       Q h env tree
     | _ => Error trace "consume: PredAsn: bad chunk" chunk
