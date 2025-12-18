@@ -6,6 +6,16 @@ Open Scope annot_scope.
 Notation "f @@ x" := (f x)
   (at level 20, right associativity, only parsing).
 
+Fixpoint remove_assoc{T}(x: string)(xys: list (string * T)): list (string * T) :=
+  match xys with
+    [] => []
+  | (x', y')::xys =>
+    if string_dec x' x then
+      remove_assoc x xys
+    else
+      (x', y')::remove_assoc x xys
+  end.
+
 Fixpoint assoc_{A B}(eq_dec: forall (x1 x2: A), {x1 = x2} + {x1 <> x2})(x: A)(xys: list (A * B)): option B :=
   match xys with
     [] => None
@@ -301,16 +311,16 @@ Inductive Place :=
 | PDeref(ptr: Value)
 .
 
-Definition load_from_place(trace: Trace)(h: Heap)(env: Env)(tree: SymexTree)(place: Place)(ty: Ty)(Q: Heap -> Env -> SymexTree -> Value -> Prop): Prop :=
+Definition load_from_place(trace: Trace)(h: Heap)(env: Env)(tree: SymexTree)(place: Place)(ty: Ty)(Q: Heap -> SymexTree -> Value -> Prop): Prop :=
   match place with
     PNonAddrTakenLocal x =>
     match assoc x env with
-      Some (LSValue v) => Q h env tree v
+      Some (LSValue v) => Q h tree v
     | _ => Error trace "load_from_place: dangling local" (x, env)
     end
   | PDeref ptr =>
     load_from_pointer trace h tree ty ptr @@ fun h tree v =>
-    Q h env tree v
+    Q h tree v
   end.
 
 Definition store_to_place(trace: Trace)(h: Heap)(env: Env)(tree: SymexTree)(place: Place)(ty: Ty)(v: Value)(Q: Heap -> Env -> SymexTree -> Prop): Prop :=
@@ -319,7 +329,7 @@ Definition store_to_place(trace: Trace)(h: Heap)(env: Env)(tree: SymexTree)(plac
   | _ =>
     match place with
       PNonAddrTakenLocal x =>
-      let env := (x, LSValue v)::env in
+      let env := (x, LSValue v)::remove_assoc x env in
       Q h env tree
     | PDeref ptr =>
       consume_points_to_ trace h tree ty ptr @@ fun h tree _ =>
@@ -337,18 +347,18 @@ Definition verify_local(trace: Trace)(env: Env)(x: Local)(Q: Place -> Ty -> Prop
     | None => Error trace "verify_local: dangling local" (x, env)
     end
   | None => Error trace "verify_local: no such local" x
- end.
+  end.
 
 Definition verify_place_expr_elem
     (trace: Trace)
     (h: Heap)(env: Env)(tree: SymexTree)(place: Place)(ty: Ty)(place_expr_elem: PlaceExprElem)
-    (Q: Heap -> Env -> SymexTree -> Place -> Ty -> Prop)
+    (Q: Heap -> SymexTree -> Place -> Ty -> Prop)
     : Prop :=
   match place_expr_elem with
   | Deref =>
-    load_from_place trace h env tree place ty @@ fun h env tree v =>
+    load_from_place trace h env tree place ty @@ fun h tree v =>
     match ty with
-      RawPtr ty => Q h env tree (PDeref v) ty
+      RawPtr ty => Q h tree (PDeref v) ty
     | _ => Error trace "verify_place_expr_elem: Deref: bad place type: must match RawPtr _" ty
     end
   end.
@@ -356,68 +366,68 @@ Definition verify_place_expr_elem
 Fixpoint verify_place_expr_elems
     (trace: Trace)
     (h: Heap)(env: Env)(tree: SymexTree)(place: Place)(ty: Ty)(place_expr_elems: list PlaceExprElem)
-    (Q: Heap -> Env -> SymexTree -> Place -> Ty -> Prop)
+    (Q: Heap -> SymexTree -> Place -> Ty -> Prop)
     : Prop :=
   match place_expr_elems with
-    [] => Q h env tree place ty
+    [] => Q h tree place ty
   | place_expr_elem::place_expr_elems =>
-    verify_place_expr_elem trace h env tree place ty place_expr_elem @@ fun h env tree place ty =>
+    verify_place_expr_elem trace h env tree place ty place_expr_elem @@ fun h tree place ty =>
     verify_place_expr_elems trace h env tree place ty place_expr_elems Q
   end.
 
-Definition verify_place_expr(trace: Trace)(h: Heap)(env: Env)(tree: SymexTree)(place_expr: PlaceExpr)(Q: Heap -> Env -> SymexTree -> Place -> Ty -> Prop): Prop :=
+Definition verify_place_expr(trace: Trace)(h: Heap)(env: Env)(tree: SymexTree)(place_expr: PlaceExpr)(Q: Heap -> SymexTree -> Place -> Ty -> Prop): Prop :=
   let '(x, place_expr_elems) := place_expr in
   verify_local trace env x @@ fun place ty =>
   verify_place_expr_elems trace h env tree place ty place_expr_elems Q.
 
-Definition verify_operand(trace: Trace)(h: Heap)(env: Env)(tree: SymexTree)(operand: Operand)(Q: Heap -> Env -> SymexTree -> Value -> Ty -> Prop): Prop :=
+Definition verify_operand(trace: Trace)(h: Heap)(env: Env)(tree: SymexTree)(operand: Operand)(Q: Heap -> SymexTree -> Value -> Ty -> Prop): Prop :=
   match operand with
     Move place_expr =>
-    verify_place_expr trace h env tree place_expr @@ fun h env tree place ty =>
-    load_from_place trace h env tree place ty @@ fun h env tree v =>
-    Q h env tree v ty
+    verify_place_expr trace h env tree place_expr @@ fun h tree place ty =>
+    load_from_place trace h env tree place ty @@ fun h tree v =>
+    Q h tree v ty
   | Copy place_expr =>
-    verify_place_expr trace h env tree place_expr @@ fun h env tree place ty =>
-    load_from_place trace h env tree place ty @@ fun h env tree v =>
-    Q h env tree v ty
+    verify_place_expr trace h env tree place_expr @@ fun h tree place ty =>
+    load_from_place trace h env tree place ty @@ fun h tree v =>
+    Q h tree v ty
   | Constant (Val ZeroSized Tuple0) =>
-    Q h env tree VTuple0 Tuple0
+    Q h tree VTuple0 Tuple0
   | _ => Error trace "verify_operand: unsupported operand" operand
   end.
 
 Fixpoint verify_operands
     (trace: Trace)(h: Heap)(env: Env)(tree: SymexTree)(operands: list Operand)
-    (Q: Heap -> Env -> SymexTree -> list Value -> Prop)
+    (Q: Heap -> SymexTree -> list Value -> Prop)
     : Prop :=
   match operands with
-    [] => Q h env tree []
+    [] => Q h tree []
   | operand::operands =>
-    verify_operand trace h env tree operand @@ fun h env tree v ty =>
-    verify_operands trace h env tree operands @@ fun h env tree vs =>
-    Q h env tree (v::vs)
+    verify_operand trace h env tree operand @@ fun h tree v ty =>
+    verify_operands trace h env tree operands @@ fun h tree vs =>
+    Q h tree (v::vs)
   end.
 
-Definition verify_rvalue(trace: Trace)(h: Heap)(env: Env)(tree: SymexTree)(rvalue: Rvalue)(Q: Heap -> Env -> SymexTree -> Value -> Ty -> Prop): Prop :=
+Definition verify_rvalue(trace: Trace)(h: Heap)(env: Env)(tree: SymexTree)(rvalue: Rvalue)(Q: Heap -> SymexTree -> Value -> Ty -> Prop): Prop :=
   match rvalue with
     Use operand =>
     verify_operand trace h env tree operand Q
   | RawPtr_ place_expr =>
-    verify_place_expr trace h env tree place_expr @@ fun h env tree place ty =>
+    verify_place_expr trace h env tree place_expr @@ fun h tree place ty =>
     match place with
       PNonAddrTakenLocal _ => Error trace "verify_rvalue: RawPtr_: place must not be PNonAddrTakenLocal" place
-    | PDeref ptr => Q h env tree ptr (RawPtr ty)
+    | PDeref ptr => Q h tree ptr (RawPtr ty)
     end
   | Cast PtrToPtr operand ty =>
-    verify_operand trace h env tree operand @@ fun h env tree v ty0 =>
-    Q h env tree v ty (* We do not support wide pointers yet, so this does not change the value *)
+    verify_operand trace h env tree operand @@ fun h tree v ty0 =>
+    Q h tree v ty (* We do not support wide pointers yet, so this does not change the value *)
   | _ => Error trace "verify_rvalue: unsupported rvalue" rvalue
   end.
 
 Definition verify_statement(trace: Trace)(h: Heap)(env: Env)(tree: SymexTree)(statement: Statement)(Q: Heap -> Env -> SymexTree -> Prop): Prop :=
   match statement with
   | Assign lhs rhs =>
-    verify_rvalue trace h env tree rhs @@ fun h env tree v ty_rhs =>
-    verify_place_expr trace h env tree lhs @@ fun h env tree place ty => (* SOUNDNESS: Is it okay to evaluate the RHS before the LHS? *)
+    verify_rvalue trace h env tree rhs @@ fun h tree v ty_rhs =>
+    verify_place_expr trace h env tree lhs @@ fun h tree place ty => (* SOUNDNESS: Is it okay to evaluate the RHS before the LHS? *)
     store_to_place trace h env tree place ty v Q
   | StorageLive x => Q h env tree (* SOUNDNESS BUG: Ignored for now. https://github.com/verifast/verifast/issues/948 *)
   | StorageDead x => Q h env tree (* SOUNDNESS BUG: Ignored for now. https://github.com/verifast/verifast/issues/948 *)
@@ -537,7 +547,7 @@ Definition verify_terminator
   match terminator with
     Goto bb => Qbb h env tree bb
   | SwitchInt discr values targets =>
-    verify_operand trace h env tree discr @@ fun h env tree v ty =>
+    verify_operand trace h env tree discr @@ fun h tree v ty =>
     verify_switch_int trace h env tree v ty values targets Qbb
   | Return => Qreturn h env tree
   | Unreachable => Error trace "verify_terminator: Unreachable: reached" tt
@@ -548,9 +558,9 @@ Definition verify_terminator
     | Some bb => Qbb h env tree bb
     end
   | Call ({| func := Constant (Val ZeroSized (FnDef name targs)) |} as call) =>
-    verify_operands trace h env tree (VfMir.args call) @@ fun h env tree args =>
+    verify_operands trace h env tree (VfMir.args call) @@ fun h tree args =>
     verify_call trace h tree name targs args @@ fun h tree result =>
-    verify_place_expr trace h env tree (destination call) @@ fun h env tree place ty =>
+    verify_place_expr trace h env tree (destination call) @@ fun h tree place ty =>
     store_to_place trace h env tree place ty result @@ fun h env tree =>
     match target call with
       None => Error trace "verify_terminator: Call: target expected" tt

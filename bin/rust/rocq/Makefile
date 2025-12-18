@@ -1,4 +1,4 @@
-all: VfMir.vo Annotations.vo Values.vo SymbolicExecution.vo AxSem.vo
+all: VfMir.vo Annotations.vo Values.vo SymbolicExecution.vo AxSem.vo LogicalHeaps.vo SymexSoundness.vo
 
 clean:
 	rm *.vo* *.glob
@@ -17,3 +17,9 @@ SymbolicExecution.vo: SymbolicExecution.v Annotations.vo
 
 AxSem.vo: AxSem.v Values.vo SymbolicExecution.vo
 	coqc -R . VeriFast AxSem.v
+
+LogicalHeaps.vo: LogicalHeaps.v SymbolicExecution.vo
+	coqc -R . VeriFast LogicalHeaps.v
+
+SymexSoundness.vo: SymexSoundness.v AxSem.vo LogicalHeaps.vo
+	coqc -R . VeriFast SymexSoundness.v
