@@ -22,7 +22,7 @@ Definition wp_PlaceExprElem(ptr: Value)(ty: Ty)(place_expr_elem: PlaceExprElem)(
 Admitted.
 
 Lemma wp_Deref_intro ptr ty ptr' (Q: Value -> Ty -> iProp Σ):
-  points_to (RawPtr ty) ptr ptr' ∗ (points_to (RawPtr ty) ptr ptr' -∗ Q ptr' ty) -∗
+  points_to ty ptr ptr' ∗ (points_to ty ptr ptr' -∗ ∃ pointee_ty, ⌜ ty = RawPtr pointee_ty ⌝ ∗ Q ptr' pointee_ty) -∗
   wp_PlaceExprElem ptr ty Deref Q.
 Admitted.
 

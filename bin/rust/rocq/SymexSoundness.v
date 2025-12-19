@@ -1,29 +1,26 @@
 From iris.proofmode Require Import proofmode.
 Require Export AxSem LogicalHeaps.
 
-Instance EqDecision_Ty: EqDecision Ty.
-Admitted.
-
-Instance Countable_Ty: Countable Ty.
-Admitted.
-
-Instance EqDecision_Ptr: EqDecision Ptr.
-Admitted.
-
-Instance Countable_Ptr: Countable Ptr.
-Admitted.
-
-Definition PhysHeap := gmap (Ty * Ptr) Value.
-
-Definition logheap_of_physheap(hp: PhysHeap): LogHeap :=
-  map_fold (fun '(ty, ptr) v H => {[+ PointsTo_ ty (VPtr ptr) v +]} ⋅ H) ∅ hp.
-
 Section gfunctors.
 
 Context {Σ: gFunctors}.
 
-Definition own_physheap(hp: PhysHeap): iProp Σ :=
-  [∗ map] '(ty, ptr) ↦ v ∈ hp, points_to_ ty (VPtr ptr) v.
+Parameter lh_big_ast: forall (H: LogHeap) (f: PrimChunk → iProp Σ), iProp Σ.
+Axiom lh_big_ast_lh_comp_intro:
+  forall (H1 H2: LogHeap) (f: PrimChunk → iProp Σ),
+  lh_big_ast H1 f ∗ lh_big_ast H2 f -∗ lh_big_ast (H1 ⋅ H2) f.
+Axiom lh_big_ast_lh_comp_elim:
+  forall (H1 H2: LogHeap) (f: PrimChunk → iProp Σ),
+  lh_big_ast (H1 ⋅ H2) f -∗ lh_big_ast H1 f ∗ lh_big_ast H2 f.
+Axiom lh_big_ast_lh_sing_intro:
+  forall chunk f,
+  f chunk -∗ lh_big_ast {[+ chunk +]} f.
+Axiom lh_big_ast_lh_sing_elim:
+  forall chunk f,
+  lh_big_ast {[+ chunk +]} f -∗ f chunk.
+
+Definition own_logheap(H: LogHeap): iProp Σ :=
+  lh_big_ast H (λ '(PointsTo_ ty ptr v), points_to_ ty ptr v).
 
 Definition place_as_ptr(env: AxSem.Env)(place: Place): Value :=
   match place with
@@ -36,9 +33,9 @@ Section preds.
 Variable preds: list (string * PredDef).
 
 Definition own_heap(h: Heap): iProp Σ :=
-  ∃ hp,
-  ⌜ heap_holds preds (logheap_of_physheap hp) h ⌝ ∗
-  own_physheap hp.
+  ∃ H,
+  ⌜ heap_holds preds H h ⌝ ∗
+  own_logheap H.
 
 Definition own_env_entry(Γ: AxSem.Env)(x: string)(state: LocalState): iProp Σ :=
   match state with
@@ -102,15 +99,32 @@ Lemma consume_points_to_sound trace h tree ty ptr Qsymex Q:
   ∃ v,
   points_to ty ptr v ∗ Q v.
 Proof.
-  intros.
+  intros Hconsume HQ.
   unfold own_heap.
-  iIntros "H".
-  iDestruct "H" as (hp) "[H1 H2]".
-  iDestruct "H1" as %H1.
-  apply consume_points_to_sound with (1:=H1) in H.
-  destruct H as (H' & h' & tree' & v & Hhp & Hh' & HQsymex).
-  apply H0 in HQsymex.
-  
+  iIntros "Hh".
+  iDestruct "Hh" as (H) "[Hh HH]".
+  iDestruct "Hh" as %Hh.
+  apply consume_points_to_sound with (1:=Hh) in Hconsume.
+  destruct Hconsume as (H' & h' & tree' & v & HHeq & Hh' & HQsymex).
+  apply HQ in HQsymex.
+  iExists v.
+  subst.
+  unfold own_logheap.
+  subst.
+  iPoseProof (lh_big_ast_lh_comp_elim with "HH") as "HH".
+  iDestruct "HH" as "[Hpoints_to_ HH']".
+  iPoseProof (lh_big_ast_lh_sing_elim with "Hpoints_to_") as "Hpoints_to_".
+  iSplitL "Hpoints_to_". {
+    iApply (points_to_def with "Hpoints_to_").
+  }
+  iApply HQsymex.
+  unfold own_heap.
+  iExists H'.
+  iSplitL "". {
+    iPureIntro.
+    assumption.
+  }
+  iAssumption.
 Qed.
 
 Lemma load_from_pointer_sound trace h tree ty ptr Qsymex Q:
@@ -120,6 +134,35 @@ Lemma load_from_pointer_sound trace h tree ty ptr Qsymex Q:
   ∃ v,
   points_to ty ptr v ∗
   (points_to ty ptr v -∗ Q v).
+Proof.
+  intros Hload HQ.
+  unfold load_from_pointer in Hload.
+  apply consume_points_to_sound with (Q:=λ v, (points_to ty ptr v -∗ Q v)%I) in Hload.
+  - assumption.
+  - intros.
+    apply HQ in H.
+    iIntros "Hh0 Hpoints_to".
+    iApply H.
+    unfold own_heap.
+    iDestruct "Hh0" as (H0) "[Hh0 HH0]".
+    iDestruct "Hh0" as %Hh0.
+    iExists ({[+ PointsTo_ ty ptr (VSome v) +]} ⋅ H0).
+    iSplitL "". {
+      iPureIntro.
+      simpl.
+      exists {[+ PointsTo_ ty ptr (VSome v) +]}.
+      exists H0.
+      tauto.
+    }
+    unfold own_logheap.
+    iApply lh_big_ast_lh_comp_intro.
+    iSplitL "Hpoints_to". {
+      iApply lh_big_ast_lh_sing_intro.
+      iApply points_to_def.
+      iAssumption.
+    }
+    iAssumption.
+Qed.
 
 Lemma load_from_place_sound trace h env tree place ty Qsymex Γ Q:
   load_from_place trace h env tree place ty Qsymex →
@@ -154,13 +197,48 @@ Proof.
     iAssumption.
   - (* PDeref *)
     simpl in H.
+    apply load_from_pointer_sound with (Q:=λ v, (own_env Γ env -∗ Q v)%I) in H.
+    + iDestruct (H with "Hh") as "Hh".
+      iDestruct "Hh" as (v) "[Hpoints_to HQ]".
+      iExists v.
+      iFrame.
+      iIntros "Hpoints_to".
+      iApply ("HQ" with "Hpoints_to").
+      iAssumption.
+    + assumption.
+Qed.
 
 Lemma verify_place_expr_elem_sound trace h env tree place ty place_expr_elem Qsymex Γ ptr Q:
   verify_place_expr_elem trace h env tree place ty place_expr_elem Qsymex →
+  place_has_ty Γ place ty →
   ptr = place_as_ptr Γ place →
   (∀ h tree place ty, Qsymex h tree place ty → own_heap h -∗ own_env Γ env -∗ Q (place_as_ptr Γ place) ty) →
   own_heap h -∗
   own_env Γ env -∗
   wp_PlaceExprElem ptr ty place_expr_elem Q.
 Proof.
-  
+  intros Hverify Hty Hptr HQ.
+  subst.
+  destruct place_expr_elem.
+  - (* Deref *)
+    unfold verify_place_expr_elem in Hverify.
+    apply load_from_place_sound with (Γ:=Γ)
+      (Q:=λ ptr, (∃ pointee_ty, ⌜ ty = RawPtr pointee_ty ⌝ ∗ Q ptr pointee_ty)%I) in Hverify.
+    + iIntros "Hh Henv".
+      iDestruct (Hverify with "Hh Henv") as "HQ".
+      iDestruct "HQ" as (v) "[Hpoints_to HQ]".
+      iApply wp_Deref_intro.
+      iFrame.
+    + assumption.
+    + intros.
+      destruct ty; try tauto.
+      apply HQ in H.
+      iIntros "Hh0 Henv".
+      iDestruct (H with "Hh0 Henv") as "HQ".
+      iExists ty.
+      iSplitL "". {
+        iPureIntro.
+        reflexivity.
+      }
+      iAssumption.
+Qed.
