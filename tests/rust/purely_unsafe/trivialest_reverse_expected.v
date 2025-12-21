@@ -312,6 +312,8 @@ Definition specs := [
     |})
 ].
 
+Open Scope annot_scope.
+
 Definition symex_trees := [
     (Verifying "reverse_iter", 
         ParamAddrTaken "n" false;;

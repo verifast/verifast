@@ -367,6 +367,7 @@ Fixpoint verify_place_expr_elems
     (trace: Trace)
     (h: Heap)(env: Env)(tree: SymexTree)(place: Place)(ty: Ty)(place_expr_elems: list PlaceExprElem)
     (Q: Heap -> SymexTree -> Place -> Ty -> Prop)
+    {struct place_expr_elems}
     : Prop :=
   match place_expr_elems with
     [] => Q h tree place ty

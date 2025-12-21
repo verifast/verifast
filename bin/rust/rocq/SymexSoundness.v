@@ -92,6 +92,43 @@ Proof.
       iAssumption.
 Qed.
 
+Lemma place_local_ptr_eq Γ env x ptr:
+  assoc x env = Some (LSPlace ptr) →
+  own_env Γ env -∗
+  ⌜ ptr = (Γ x).2 ⌝ ∗
+  own_env Γ env.
+Proof.
+  induction env.
+  - (* nil *)
+    intros.
+    discriminate.
+  - (* cons *)
+    simpl; intros.
+    destruct a as [x0 state].
+    destruct (string_dec x x0).
+    + (* x = x0 *)
+      subst.
+      injection H; intros; subst.
+      iIntros "[Hx0 Henv]".
+      simpl in *.
+      iDestruct "Hx0" as %Hx0.
+      subst.
+      iSplitL "". {
+        iPureIntro.
+        reflexivity.
+      }
+      iSplitL "". {
+        iPureIntro.
+        reflexivity.
+      }
+      iAssumption.
+    + (* x ≠ x0 *)
+      iIntros "[Hx0 Henv]".
+      iDestruct (IHenv H with "Henv") as "Henv".
+      iFrame.
+      iAssumption.
+Qed.
+
 Lemma consume_points_to_sound trace h tree ty ptr Qsymex Q:
   consume_points_to trace h tree ty ptr Qsymex →
   (∀ h tree v, Qsymex h tree v → own_heap h -∗ Q v) →
@@ -208,11 +245,62 @@ Proof.
     + assumption.
 Qed.
 
-Lemma verify_place_expr_elem_sound trace h env tree place ty place_expr_elem Qsymex Γ ptr Q:
+Section local_decls.
+
+Variable local_decls: list (Local * LocalDecl).
+
+Section Γ.
+
+Variable Γ: AxSem.Env.
+
+Hypothesis Γ_well_typed: ∀ x local_decl,
+  assoc x local_decls = Some local_decl → ty local_decl = (Γ x).1.
+
+Lemma verify_local_sound trace env x Qsymex ty vptr Q:
+  verify_local local_decls trace env x Qsymex →
+  vptr = VPtr (Γ x).2 →
+  ty = (Γ x).1 →
+  (∀ place, Qsymex place ty →
+   place_has_ty Γ place ty →
+   own_env Γ env -∗
+   Q (place_as_ptr Γ place) ty) →
+  own_env Γ env -∗
+  Q vptr ty.
+Proof.
+  unfold verify_local.
+  case_eq (assoc x local_decls); intros; try tauto.
+  pose proof (Γ_well_typed _ _ H).
+  subst.
+  destruct l.
+  simpl in H4.
+  subst.
+  case_eq (assoc x env); intros; rewrite H1 in H0; try tauto.
+  destruct l.
+  * apply H3 in H0.
+    -- simpl in H0.
+       assumption.
+    -- apply PNonAddrTakenLocal_has_ty.
+  * apply H3 in H0.
+    -- simpl in H0.
+       iIntros "Henv".
+       iDestruct (place_local_ptr_eq with "Henv") as "Henv". {
+         eassumption.
+       }
+       iDestruct "Henv" as "[Hptr Henv]".
+       iDestruct "Hptr" as %Hptr.
+       subst.
+       iApply (H0 with "Henv").
+    -- constructor.
+Qed.
+
+Lemma verify_place_expr_elem_sound trace h env tree place ty place_expr_elem Qsymex ptr Q:
   verify_place_expr_elem trace h env tree place ty place_expr_elem Qsymex →
   place_has_ty Γ place ty →
   ptr = place_as_ptr Γ place →
-  (∀ h tree place ty, Qsymex h tree place ty → own_heap h -∗ own_env Γ env -∗ Q (place_as_ptr Γ place) ty) →
+  (∀ h tree place ty,
+   Qsymex h tree place ty →
+   place_has_ty Γ place ty →
+   own_heap h -∗ own_env Γ env -∗ Q (place_as_ptr Γ place) ty) →
   own_heap h -∗
   own_env Γ env -∗
   wp_PlaceExprElem ptr ty place_expr_elem Q.
@@ -232,7 +320,7 @@ Proof.
     + assumption.
     + intros.
       destruct ty; try tauto.
-      apply HQ in H.
+      apply HQ in H. 2:constructor.
       iIntros "Hh0 Henv".
       iDestruct (H with "Hh0 Henv") as "HQ".
       iExists ty.
@@ -242,3 +330,70 @@ Proof.
       }
       iAssumption.
 Qed.
+
+Lemma verify_place_expr_elems_sound trace h env tree place ty place_expr_elems Qsymex ptr Q:
+  verify_place_expr_elems trace h env tree place ty place_expr_elems Qsymex →
+  place_has_ty Γ place ty →
+  ptr = place_as_ptr Γ place →
+  (∀ h tree place ty,
+   Qsymex h tree place ty →
+   place_has_ty Γ place ty →
+   own_heap h -∗ own_env Γ env -∗ Q (place_as_ptr Γ place) ty) →
+  own_heap h -∗
+  own_env Γ env -∗
+  wp_PlaceExprElems ptr ty place_expr_elems Q.
+Proof.
+  revert trace h env tree place ty Qsymex ptr Q.
+  induction place_expr_elems.
+  - (* nil *)
+    intros.
+    simpl in *.
+    subst.
+    apply H2 with (1:=H).
+    assumption.
+  - (* cons *)
+    intros.
+    simpl in *.
+    apply verify_place_expr_elem_sound with (1:=H) (2:=H0) (3:=H1).
+    intros.
+    apply IHplace_expr_elems with (1:=H3); try assumption.
+    reflexivity.
+Qed.
+
+Lemma verify_place_expr_sound trace h env tree place_expr Qsymex Q:
+  verify_place_expr local_decls trace h env tree place_expr Qsymex →
+  (∀ h tree place ty,
+   Qsymex h tree place ty →
+   place_has_ty Γ place ty →
+   own_heap h -∗ own_env Γ env -∗ Q (place_as_ptr Γ place) ty) →
+  own_heap h -∗
+  own_env Γ env -∗
+  wp_PlaceExpr Γ place_expr Q.
+Proof.
+  intros Hverify HQ.
+  destruct place_expr as [x place_expr_elems].
+  simpl in *.
+  case_eq (Γ x); intros ty ptr Hx.
+  iIntros "Hh Henv".
+  iRevert "Henv Hh".
+  iApply ((verify_local_sound _ _ _ _ _ (VPtr ptr) (λ vptr ty, (own_heap h -∗ wp_PlaceExprElems vptr ty place_expr_elems Q)%I))).
+  - apply Hverify.
+  - rewrite Hx; reflexivity.
+  - rewrite Hx; reflexivity.
+  - intros.
+    iIntros "Henv Hh".
+    iRevert "Hh Henv".
+    iApply verify_place_expr_elems_sound.
+    + apply H.
+    + assumption.
+    + reflexivity.
+    + assumption.
+Qed.
+
+End Γ.
+
+End local_decls.
+
+End preds.
+
+End gfunctors.
