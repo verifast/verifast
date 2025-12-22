@@ -39,7 +39,8 @@ Definition own_heap(h: Heap): iProp Σ :=
 
 Definition own_env_entry(Γ: AxSem.Env)(x: string)(state: LocalState): iProp Σ :=
   match state with
-    LSValue v => points_to (fst (Γ x)) (VPtr (snd (Γ x))) v
+    LSValue (Some v) => points_to (fst (Γ x)) (VPtr (snd (Γ x))) v
+  | LSValue None => ∃ v, points_to_ (fst (Γ x)) (VPtr (snd (Γ x))) v
   | LSPlace ptr => ⌜ ptr = snd (Γ x) ⌝
   end.
 
@@ -57,7 +58,7 @@ Inductive place_has_ty(Γ: AxSem.Env): Place -> Ty -> Prop :=
 .
 
 Lemma load_from_non_addr_taken_local Γ env x v:
-  assoc x env = Some (LSValue v) →
+  assoc x env = Some (LSValue (Some v)) →
   own_env Γ env -∗
   points_to (Γ x).1 (VPtr (Γ x).2) v ∗
   (points_to (Γ x).1 (VPtr (Γ x).2) v -∗ own_env Γ env).
@@ -90,6 +91,48 @@ Proof.
       iAssumption.
       iApply "H'".
       iAssumption.
+Qed.
+
+Lemma store_to_non_addr_taken_local x env v0 env' Γ:
+  remove1_assoc x env = Some (LSValue v0, env') →
+  own_env Γ env -∗
+  (∃ v0, points_to_ (Γ x).1 (VPtr (Γ x).2) v0) ∗
+  own_env Γ env'.
+Proof.
+  revert env'.
+  induction env as [|x'_state env]; simpl; intro env'.
+  - (* nil *)
+    discriminate.
+  - (* cons *)
+    destruct x'_state as [x' state].
+    destruct (string_dec x' x).
+    + (* x' = x *)
+      subst.
+      intros H; injection H; intros; subst.
+      iIntros "[Hx Henv']".
+      iSplitL "Hx". {
+        simpl.
+        destruct v0.
+        - (* Some v *)
+          iExists (VSome v).
+          iApply (points_to_def with "Hx").
+        - (* None *)
+          iAssumption.
+      }
+      iAssumption.
+    + (* x' ≠ x *)
+      destruct (remove1_assoc x env) as [[state0 env'']|].
+      * (* Some *)
+        intro Hstate0.
+        injection Hstate0; intros; subst.
+        iIntros "[Hx' Henv]".
+        simpl.
+        iDestruct ((IHenv env'') with "Henv") as "Henv".
+        reflexivity.
+        iFrame.
+        iFrame.
+      * (* None *)
+        intros; discriminate.
 Qed.
 
 Lemma place_local_ptr_eq Γ env x ptr:
@@ -164,6 +207,39 @@ Proof.
   iAssumption.
 Qed.
 
+Lemma consume_points_to__sound trace h tree ty ptr Qsymex Q:
+  consume_points_to_ trace h tree ty ptr Qsymex →
+  (∀ h tree v, Qsymex h tree v → own_heap h -∗ Q v) →
+  own_heap h -∗
+  ∃ v,
+  points_to_ ty ptr v ∗ Q v.
+Proof.
+  intros Hconsume HQ.
+  unfold own_heap.
+  iIntros "Hh".
+  iDestruct "Hh" as (H) "[Hh HH]".
+  iDestruct "Hh" as %Hh.
+  apply consume_points_to__sound with (1:=Hh) in Hconsume.
+  destruct Hconsume as (H' & h' & tree' & v & HHeq & Hh' & HQsymex).
+  apply HQ in HQsymex.
+  iExists v.
+  subst.
+  unfold own_logheap.
+  subst.
+  iPoseProof (lh_big_ast_lh_comp_elim with "HH") as "HH".
+  iDestruct "HH" as "[Hpoints_to_ HH']".
+  iPoseProof (lh_big_ast_lh_sing_elim with "Hpoints_to_") as "Hpoints_to_".
+  iFrame.
+  iApply HQsymex.
+  unfold own_heap.
+  iExists H'.
+  iSplitL "". {
+    iPureIntro.
+    assumption.
+  }
+  iAssumption.
+Qed.
+
 Lemma load_from_pointer_sound trace h tree ty ptr Qsymex Q:
   load_from_pointer trace h tree ty ptr Qsymex →
   (∀ h tree v, Qsymex h tree v → own_heap h -∗ Q v) →
@@ -223,6 +299,7 @@ Proof.
     case_eq (assoc x env); intros; rewrite H2 in H; try tauto.
     rename l into state.
     destruct state; try tauto.
+    destruct v; try tauto.
     iExists v.
     iPoseProof (load_from_non_addr_taken_local with "Henv") as "[H1 H2]".
     apply H2.
@@ -243,6 +320,84 @@ Proof.
       iApply ("HQ" with "Hpoints_to").
       iAssumption.
     + assumption.
+Qed.
+
+Lemma store_to_place_sound trace h env tree place ty v Qsymex Γ Q:
+  store_to_place trace h env tree place ty v Qsymex →
+  place_has_ty Γ place ty →
+  (∀ h env tree, Qsymex h env tree → own_heap h -∗ own_env Γ env -∗ Q) →
+  own_heap h -∗
+  own_env Γ env -∗
+  (∃ v0, points_to_ ty (place_as_ptr Γ place) v0) ∗
+  (points_to ty (place_as_ptr Γ place) v -∗
+   Q).
+Proof.
+  intros Hstore Hplace_has_ty HQ.
+  iIntros "Hh Henv".
+  unfold store_to_place in Hstore.
+  destruct (Ty_eq_dec ty Tuple0).
+  - (* ty = Tuple0 *)
+    subst.
+    iSplitL "". {
+      iApply points_to__Tuple0.
+    }
+    iIntros.
+    apply HQ in Hstore.
+    iApply (Hstore with "Hh Henv").
+  - destruct place.
+    + (* PNonAddrTakenLocal *)
+      simpl in Hstore.
+      simpl.
+      case_eq (remove1_assoc x env). 2:{
+        intro Hx; rewrite Hx in Hstore; tauto.
+      }
+      intros [y' xys'] Hxys'.
+      rewrite Hxys' in Hstore.
+      destruct y'; try tauto.
+      apply HQ in Hstore.
+      inversion Hplace_has_ty; subst.
+      iDestruct ((store_to_non_addr_taken_local _ _ _ _ _ Hxys') with "Henv") as "[Hx Henv]".
+      iFrame.
+      iIntros "Hx".
+      iApply (Hstore with "Hh").
+      simpl.
+      iFrame.
+    + (* PDeref *)
+      simpl in *.
+      iDestruct ((consume_points_to__sound _ _ _ _ _ _ (λ v0, (points_to ty ptr v -∗ own_env Γ env -∗ Q)%I) Hstore) with "Hh") as "Hh".
+      * intros h0 tree0 v0 HQ'.
+        apply HQ in HQ'.
+        iIntros "Hh0 Hptr".
+        iApply HQ'.
+        unfold own_heap.
+        iDestruct "Hh0" as (H) "[Hh0 HH]".
+        iDestruct "Hh0" as %Hh0.
+        simpl.
+        iExists ({[+ PointsTo_ ty ptr (VSome v) +]} ⋅ H).
+        iSplitL "". {
+          iPureIntro.
+          exists {[+ PointsTo_ ty ptr (VSome v) +]}.
+          exists H.
+          split. reflexivity.
+          split. reflexivity.
+          assumption.
+        }
+        unfold own_logheap.
+        iApply lh_big_ast_lh_comp_intro.
+        iSplitL "Hptr". {
+          iApply lh_big_ast_lh_sing_intro.
+          iApply points_to_def.
+          iAssumption.
+        }
+        iAssumption.
+      * iDestruct "Hh" as (v0) "[Hptr HQ]".
+        iSplitL "Hptr". {
+          iExists v0.
+          iAssumption.
+        }
+        iIntros "Hptr".
+        iApply ("HQ" with "Hptr").
+        iAssumption.
 Qed.
 
 Section local_decls.
@@ -389,6 +544,118 @@ Proof.
     + reflexivity.
     + assumption.
 Qed.
+
+Lemma verify_operand_sound trace h env tree operand Qsymex Q:
+  verify_operand local_decls trace h env tree operand Qsymex →
+  (∀ h tree v ty,
+   Qsymex h tree v ty →
+   own_heap h -∗ own_env Γ env -∗ Q v ty) →
+  own_heap h -∗ own_env Γ env -∗ wp_Operand Γ operand Q.
+Proof.
+  destruct operand; simpl; intros Hverify HQ; iIntros "Hh Henv".
+  - (* Move *)
+    iApply wp_Move_intro.
+    iRevert "Hh Henv".
+    iStopProof.
+    apply verify_place_expr_sound with (1:=Hverify).
+    intros h0 tree0 place0 ty Hload Hplace_has_ty.
+    apply load_from_place_sound with (1:=Hload); try assumption.
+    intros h1 tree1 v HQ'.
+    apply HQ with (1:=HQ').
+  - (* Copy *)
+    iApply wp_Copy_intro.
+    iRevert "Hh Henv".
+    iStopProof.
+    apply verify_place_expr_sound with (1:=Hverify).
+    intros h0 tree0 place0 ty Hload Hplace_has_ty.
+    apply load_from_place_sound with (1:=Hload); try assumption.
+    intros h1 tree1 v HQ'.
+    apply HQ with (1:=HQ').
+  - (* Constant *)
+    destruct const; try tauto.
+    destruct value; try tauto.
+    destruct ty; try tauto.
+    iApply wp_Constant_Tuple0_intro.
+    iApply ((HQ _ _ _ _ Hverify) with "Hh Henv").
+Qed.
+
+Lemma verify_rvalue_sound trace h env tree rvalue Qsymex Q:
+  verify_rvalue local_decls trace h env tree rvalue Qsymex →
+  (∀ h tree v ty,
+   Qsymex h tree v ty →
+   own_heap h -∗ own_env Γ env -∗ Q v ty) →
+  own_heap h -∗ own_env Γ env -∗ wp_Rvalue Γ rvalue Q.
+Proof.
+  destruct rvalue; simpl; intros Hverify HQ; iIntros "Hh Henv".
+  - (* Use *)
+    iApply wp_Use_intro.
+    iRevert "Hh Henv".
+    iStopProof.
+    apply verify_operand_sound with (1:=Hverify).
+    apply HQ.
+  - (* RawPtr_ *)
+    iApply wp_RawPtr__intro.
+    iRevert "Hh Henv".
+    iStopProof.
+    apply verify_place_expr_sound with (1:=Hverify).
+    intros h0 tree0 place0 ty HQ'.
+    destruct place0; try tauto.
+    apply HQ in HQ'.
+    intros.
+    apply HQ'.
+  - (* Cast *)
+    destruct kind; try tauto.
+    iApply wp_Cast_PtrToPtr_intro.
+    iRevert "Hh Henv".
+    iStopProof.
+    apply verify_operand_sound with (1:=Hverify).
+    intros h0 tree0 v ty' HQ'.
+    apply HQ with (1:=HQ').
+Qed.
+
+(* TODO: Once we support StorageLive and StorageDead, Γ will not be fixed across statement execution. *)
+
+Lemma verify_statement_sound trace h env tree statement Qsymex Q:
+  verify_statement local_decls trace h env tree statement Qsymex →
+  (∀ h env tree,
+   Qsymex h env tree → own_heap h -∗ own_env Γ env -∗ Q) →
+  own_heap h -∗ own_env Γ env -∗ wp_Statement Γ statement Q.
+Proof.
+  destruct statement; simpl; intros Hverify HQ; iIntros "Hh Henv".
+  - (* Assign *)
+    iApply wp_Assign_intro.
+    iRevert "Hh Henv".
+    iStopProof.
+    apply verify_rvalue_sound with (1:=Hverify).
+    intros h0 tree0 v ty Hverify'.
+    apply verify_place_expr_sound with (1:=Hverify').
+    intros h1 tree1 place ty0 Hstore Hplace_has_ty.
+    apply store_to_place_sound with (1:=Hstore) (2:=Hplace_has_ty).
+    assumption.
+  - (* StorageLive *)
+    apply HQ in Hverify.
+    iApply wp_StorageLive_intro_UNSOUND.
+    iApply (Hverify with "Hh").
+    iAssumption.
+  - (* StorageDead *)
+    apply HQ in Hverify.
+    iApply wp_StorageDead_intro_UNSOUND.
+    iApply (Hverify with "Hh").
+    iAssumption.
+  - (* Nop *)
+    apply HQ in Hverify.
+    iApply wp_Nop_intro.
+    iApply (Hverify with "Hh").
+    iAssumption.
+Qed.
+
+Lemma verify_statements_sound trace h env tree statements Qsymex Q:
+  verify_statements local_decls trace h env tree statements Qsymex →
+  (∀ h env tree,
+   Qsymex h env tree → own_heap h -∗ own_env Γ env -∗ Q) →
+  own_heap h -∗ own_env Γ env -∗ wp_Statements Γ statements Q.
+Proof.
+Admitted.
 
 End Γ.
 

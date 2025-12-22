@@ -56,7 +56,7 @@ Inductive pat_matches: forall (env: Env)(pat: Pat)(v: Value)(env': Env), Prop :=
   eval env e = v →
   pat_matches env (LitPat e) v env
 | VarPat_matches env x v:
-  pat_matches env (VarPat x) v ((x, LSValue v)::env)
+  pat_matches env (VarPat x) v ((x, LSValue (Some v))::env)
 .
 
 Inductive pats_match: forall (env: Env)(pats: list Pat)(vs: list Value)(env': Env), Prop :=
@@ -80,7 +80,7 @@ Inductive asn_holds: forall (H: LogHeap)(env: Env)(a: Asn)(env': Env), Prop :=
 | PredAsn_holds H env pred_name pats vs env' params body env'' env''':
   assoc pred_name preds = Some {| params := params; body := body |} →
   combine_ params vs = (env'', ([], [])) →
-  asn_holds H (map (fun '((x, ty), v) => (x, LSValue v)) env'') body env''' →
+  asn_holds H (map (fun '((x, ty), v) => (x, LSValue (Some v))) env'') body env''' →
   pats_match env pats vs env' →
   asn_holds H env (PredAsn pred_name pats) env'
 | SepAsn_holds H1 H2 env a1 env' a2 env'':
@@ -107,7 +107,7 @@ Definition chunk_holds(H: LogHeap)(chunk: Chunk): Prop :=
     | Some {| params := params; body := body |} =>
       match combine_ params vs with
         (env, ([], [])) =>
-        ∃ env', asn_holds H (map (fun '((x, ty), v) => (x, LSValue v)) env) body env'
+        ∃ env', asn_holds H (map (fun '((x, ty), v) => (x, LSValue (Some v))) env) body env'
       | _ => False
       end
     end
@@ -290,6 +290,34 @@ Proof.
   tauto.
 Qed.
 
+Lemma consume_points_to__sound H trace h tree ty ptr Q:
+  heap_holds H h →
+  consume_points_to_ trace h tree ty ptr Q →
+  ∃ H' h' tree' v,
+  H = {[+ PointsTo_ ty ptr v +]} ⋅ H' ∧
+  heap_holds H' h' ∧
+  Q h' tree' v.
+Proof.
+  intros.
+  unfold consume_points_to_ in H1.
+  apply consume_chunk_sound with (1:=H0) in H1.
+  destruct H1 as (Hchunk & H' & h' & tree' & chunk & ? & ? & ?).
+  destruct chunk; try tauto.
+  destruct chunk; try tauto.
+  destruct H3 as (? & ? & ? & ?).
+  subst.
+  simpl in H2.
+  exists H'.
+  exists h'.
+  exists tree'.
+  exists rhs.
+  split. {
+    rewrite H2.
+    reflexivity.
+  }
+  tauto.
+Qed.
+
 Lemma match_pat_sound env pat v Q:
   match_pat env pat v Q →
   ∃ env',
@@ -307,7 +335,7 @@ Proof.
     }
     assumption.
   - (* VarPat *)
-    exists ((x, LSValue v)::env).
+    exists ((x, LSValue (Some v))::env).
     split. {
       constructor.
     }

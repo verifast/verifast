@@ -27,12 +27,21 @@ Inductive Ty :=
 | Int(ty: IntTy)
 | Uint(ty: UintTy)
 | RawPtr(ty: Ty)
-| FnDef(id: string)(generic_args: list GenericArg)
+| FnDef(id: string)(generic_args: GenericArgList)
 | Never
 | Tuple0
 with GenericArg :=
 | Type_(ty: Ty)
+with GenericArgList :=
+| GALNil
+| GALCons(arg: GenericArg)(args: GenericArgList)
 .
+
+Fixpoint list_of_GenericArgList(args: GenericArgList): list GenericArg :=
+  match args with
+    GALNil => []
+  | GALCons arg args => arg::list_of_GenericArgList args
+  end.
 
 Inductive Mutability :=
 | Not

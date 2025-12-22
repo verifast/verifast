@@ -6,14 +6,18 @@ Open Scope annot_scope.
 Notation "f @@ x" := (f x)
   (at level 20, right associativity, only parsing).
 
-Fixpoint remove_assoc{T}(x: string)(xys: list (string * T)): list (string * T) :=
+Fixpoint remove1_assoc{T}(x: string)(xys: list (string * T)): option (T * list (string * T)) :=
   match xys with
-    [] => []
+    [] => None
   | (x', y')::xys =>
     if string_dec x' x then
-      remove_assoc x xys
+      Some (y', xys)
     else
-      (x', y')::remove_assoc x xys
+      match remove1_assoc x xys with
+        None => None
+      | Some (y, xys) =>
+        Some (y, (x', y')::xys)
+      end
   end.
 
 Fixpoint assoc_{A B}(eq_dec: forall (x1 x2: A), {x1 = x2} + {x1 <> x2})(x: A)(xys: list (A * B)): option B :=
@@ -41,8 +45,19 @@ decide equality.
 apply string_dec.
 Defined.
 
+Fixpoint Ty_eq_dec(ty1 ty2: Ty) {struct ty1}: {ty1 = ty2} + {ty1 <> ty2}
+with GenericArg_eq_dec(arg1 arg2: GenericArg) {struct arg1}: {arg1 = arg2} + {arg1 <> arg2}
+with GenericArgList_eq_dec(args1 args2: GenericArgList) {struct args1}: {args1 = args2} + {args1 <> args2}.
+- decide equality.
+  + decide equality.
+  + decide equality.
+  + apply string_dec.
+- decide equality.
+- decide equality.
+Defined.
+
 Inductive LocalState :=
-| LSValue(v: Value)
+| LSValue(v: option Value)
 | LSPlace(a: Ptr) (* The environment records (a pointer to) the place where this local variable's value is stored, not the value itself *)
 .
 
@@ -70,7 +85,7 @@ Definition forall_ty(trace: Trace)(ty: Ty)(Q: Value -> Prop): Prop :=
   end.
 
 Definition havoc(trace: Trace)(x: string)(ty: Ty)(env: Env)(Q: Env -> Value -> Prop): Prop :=
-  forall_ty trace ty @@ fun v => Q ((x, LSValue v)::env) v.
+  forall_ty trace ty @@ fun v => Q ((x, LSValue (Some v))::env) v.
 
 Fixpoint havoc_vars(trace: Trace)(vars: list (string * Ty))(env: Env)(Q: Env -> Prop): Prop :=
   match vars with
@@ -97,9 +112,9 @@ Fixpoint eval(env: Env)(e: Expr): Value :=
   | NullPtr => VPtr null_ptr
   | Var x =>
     match assoc x env with
-      Some (LSValue v) => v
+      Some (LSValue (Some v)) => v
     | Some (LSPlace ptr) => VPtr ptr
-    | None => VDummy
+    | _ => VDummy
     end
   | Eq e1 e2 => VBool (value_eqb (eval env e1) (eval env e2))
   end.
@@ -128,7 +143,7 @@ Definition assert(trace: Trace)(env: Env)(e: Expr)(Q: Prop): Prop :=
 Definition produce_pat(trace: Trace)(env: Env)(ty: Ty)(pat: Pat)(Q: Env -> Value -> Prop): Prop :=
   match pat with
     LitPat e => Q env (eval env e)
-  | VarPat x => forall v, Q ((x, LSValue v)::env) v
+  | VarPat x => forall v, Q ((x, LSValue (Some v))::env) v
   end.
 
 Fixpoint produce_pats(trace: Trace)(env: Env)(pats: list Pat)(Q: Env -> list Value -> Prop): Prop :=
@@ -168,7 +183,7 @@ Fixpoint produce(trace: Trace)(h: Heap)(env: Env)(tree: SymexTree)(a: Asn)(Q: He
 Definition match_pat(env: Env)(pat: Pat)(v: Value)(Q: Env -> Prop): Prop :=
   match pat with
     LitPat e => v = eval env e /\ Q env
-  | VarPat x => Q ((x, LSValue v)::env)
+  | VarPat x => Q ((x, LSValue (Some v))::env)
   end.
 
 Fixpoint match_pats(trace: Trace)(env: Env)(pats: list Pat)(vs: list Value)(Q: Env -> Prop): Prop :=
@@ -289,7 +304,7 @@ Fixpoint process_local_addr_taken_steps(trace: Trace)(h: Heap)(env: Env)(tree: S
           process_local_addr_taken_steps trace h env tree local_decls @@ fun h env tree cleanup_heapy_locals' =>
           Q h env tree (cleanup_heapy_locals cleanup_heapy_locals')
         else
-          let env := ((x, LSValue VDummy)::env) in
+          let env := ((x, LSValue None)::env) in
           process_local_addr_taken_steps trace h env tree local_decls Q
       else
         Error trace "process_local_addr_taken_steps: local variable name does not match" tree
@@ -315,7 +330,7 @@ Definition load_from_place(trace: Trace)(h: Heap)(env: Env)(tree: SymexTree)(pla
   match place with
     PNonAddrTakenLocal x =>
     match assoc x env with
-      Some (LSValue v) => Q h tree v
+      Some (LSValue (Some v)) => Q h tree v
     | _ => Error trace "load_from_place: dangling local" (x, env)
     end
   | PDeref ptr =>
@@ -324,19 +339,22 @@ Definition load_from_place(trace: Trace)(h: Heap)(env: Env)(tree: SymexTree)(pla
   end.
 
 Definition store_to_place(trace: Trace)(h: Heap)(env: Env)(tree: SymexTree)(place: Place)(ty: Ty)(v: Value)(Q: Heap -> Env -> SymexTree -> Prop): Prop :=
-  match ty with
-    Tuple0 => Q h env tree
-  | _ =>
+  if Ty_eq_dec ty Tuple0 then
+    Q h env tree
+  else
     match place with
       PNonAddrTakenLocal x =>
-      let env := (x, LSValue v)::remove_assoc x env in
-      Q h env tree
+      match remove1_assoc x env with
+      | Some (LSValue _, xys) =>
+        let env := (x, LSValue (Some v))::xys in
+        Q h env tree
+      | _ => Error trace "store_to_place: no such local" (x, env)
+      end
     | PDeref ptr =>
       consume_points_to_ trace h tree ty ptr @@ fun h tree _ =>
       let h := PointsTo ty ptr v::h in
       Q h env tree
-    end
-  end.
+    end.
 
 Definition verify_local(trace: Trace)(env: Env)(x: Local)(Q: Place -> Ty -> Prop): Prop :=
   match assoc x local_decls with
@@ -474,32 +492,30 @@ Fixpoint verify_switch_int
   end.
 
 Definition verify_call
-    (trace: Trace)(h: Heap)(tree: SymexTree)(func_name: string)(targs: list GenericArg)(args: list Value)
+    (trace: Trace)(h: Heap)(tree: SymexTree)(func_name: string)(targs: GenericArgList)(args: list Value)
     (Q: Heap -> SymexTree -> Value -> Prop)
     : Prop :=
-  match func_name with
-    "std::ptr::mut_ptr::<impl *mut T>::is_null" =>
+  if string_dec func_name "std::ptr::mut_ptr::<impl *mut T>::is_null" then
     match args with
       [ptr] =>
       Q h tree (VBool (value_eqb ptr (VPtr null_ptr)))
     | _ =>  Error trace "verify_call: is_null: bad args" args
     end
-  | "std::ptr::null_mut" =>
+  else if string_dec func_name "std::ptr::null_mut" then
     Q h tree (VPtr null_ptr)
-  | "std::process::abort" =>
+  else if string_dec func_name "std::process::abort" then
     True
-  | _ =>
+  else
     match assoc func_name specs with
       None => Error trace "verify_call: callee has no spec" func_name
     | Some spec =>
-      let env := combine (map fst (spec_params spec)) (map LSValue args) in
+      let env := combine (map fst (spec_params spec)) (map (fun v => LSValue (Some v)) args) in
       consume trace h env tree (pre spec) @@ fun h env tree =>
       forall_ty trace (spec_output spec) @@ fun result =>
-      let env := ("result", LSValue result)::env in
+      let env := ("result", LSValue (Some result))::env in
       produce trace h env tree (post spec) @@ fun h env tree =>
       Q h tree result
-    end
-  end.
+    end.
 
 Fixpoint eval_pats(trace: Trace)(env: Env)(pats: list Pat)(Q: list Value -> Prop): Prop :=
   match pats with
@@ -520,7 +536,7 @@ Definition verify_ghost_command(trace: Trace)(h: Heap)(env: Env)(tree: SymexTree
       match assoc pred_name preds with
         None => Error trace "verify_ghost_command: Open: no such predicate" pred_name
       | Some pred_def =>
-        let env' := combine (map fst (params pred_def)) (map LSValue args) in
+        let env' := combine (map fst (params pred_def)) (map (fun v => LSValue (Some v)) args) in
         produce trace h env' tree (body pred_def) @@ fun h _ tree =>
         Q h env tree
       end
@@ -531,7 +547,7 @@ Definition verify_ghost_command(trace: Trace)(h: Heap)(env: Env)(tree: SymexTree
     match assoc pred_name preds with
       None => Error trace "verify_ghost_command: Close: no such predicate" pred_name
     | Some pred_def =>
-      let env' := combine (map fst (params pred_def)) (map LSValue vs) in
+      let env' := combine (map fst (params pred_def)) (map (fun v => LSValue (Some v)) vs) in
       consume trace h env' tree (body pred_def) @@ fun h _ tree =>
       let h := User pred_name vs::h in
       Q h env tree
@@ -552,7 +568,7 @@ Definition verify_terminator
     verify_switch_int trace h env tree v ty values targets Qbb
   | Return => Qreturn h env tree
   | Unreachable => Error trace "verify_terminator: Unreachable: reached" tt
-  | Call ({| func := Constant (Val ZeroSized (FnDef "VeriFast_ghost_command" [])) |} as call) =>
+  | Call ({| func := Constant (Val ZeroSized (FnDef "VeriFast_ghost_command" GALNil)) |} as call) =>
     verify_ghost_command trace h env tree @@ fun h env tree =>
     match target call with
       None => Error trace "verify_terminator: Call: VeriFast_ghost_command: target expected" tt

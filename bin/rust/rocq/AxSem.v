@@ -18,6 +18,11 @@ Lemma points_to_def(ty: Ty)(ptr: Value)(rhs: Value):
   points_to_ ty ptr (VSome rhs) ∗-∗ points_to ty ptr rhs.
 Admitted.
 
+(* [points_to_ ty ptr val] does *NOT* imply [∃ p, ptr = VPtr p]! *)
+Lemma points_to__Tuple0(ptr: Value):
+  ⊢ ∃ v0, points_to_ Tuple0 ptr v0.
+Admitted.
+
 Definition wp_PlaceExprElem(ptr: Value)(ty: Ty)(place_expr_elem: PlaceExprElem)(Q: Value -> Ty -> iProp Σ): iProp Σ.
 Admitted.
 
@@ -66,7 +71,8 @@ Lemma wp_Use_intro(env: Env)(operand: Operand)(Q: Value -> Ty -> iProp Σ):
 Admitted.
 
 Lemma wp_RawPtr__intro(env: Env)(place_expr: PlaceExpr)(Q: Value -> Ty -> iProp Σ):
-  wp_PlaceExpr env place_expr Q -∗ wp_Rvalue env (RawPtr_ place_expr) Q.
+  wp_PlaceExpr env place_expr (λ ptr ty, Q ptr (RawPtr ty))
+  -∗ wp_Rvalue env (RawPtr_ place_expr) Q.
 Admitted.
 
 Lemma wp_Cast_PtrToPtr_intro(env: Env)(operand: Operand)(ty: Ty)(Q: Value -> Ty -> iProp Σ):
@@ -79,15 +85,15 @@ Admitted.
 Lemma wp_Assign_intro(env: Env)(lhs: PlaceExpr)(rhs: Rvalue)(Q: iProp Σ):
   wp_Rvalue env rhs (fun v ty =>
     wp_PlaceExpr env lhs (fun ptr ty' =>
-      ∃ state0, points_to_ ty' ptr state0 ∗ (points_to ty' ptr v -∗ Q)))
+      (∃ state0, points_to_ ty' ptr state0) ∗ (points_to ty' ptr v -∗ Q)))
   -∗ wp_Statement env (Assign lhs rhs) Q.
 Admitted.
 
-Lemma wp_StorageLive_intro_UNSOUND(env: Env)(x: Local)(Q: iProp Σ): (* TODO *)
+Lemma wp_StorageLive_intro_UNSOUND(env: Env)(x: Local)(Q: iProp Σ): (* SOUNDNESS BUG: Ignored for now. https://github.com/verifast/verifast/issues/948 *)
   Q -∗ wp_Statement env (StorageLive x) Q.
 Admitted.
 
-Lemma wp_StorageDead_intro_UNSOUND(env: Env)(x: Local)(Q: iProp Σ): (* TODO *)
+Lemma wp_StorageDead_intro_UNSOUND(env: Env)(x: Local)(Q: iProp Σ): (* SOUNDNESS BUG: Ignored for now. https://github.com/verifast/verifast/issues/948 *)
   Q -∗ wp_Statement env (StorageDead x) Q.
 Admitted.
 
@@ -182,13 +188,13 @@ Fixpoint wp_Operands(env: Env)(operands: list Operand)(Q: list Value -> iProp Σ
 
 Lemma wp_Call_intro
     (env: Env)
-    (func_name: string)(targs: list GenericArg)
+    (func_name: string)(targs: GenericArgList)
     (args: list Operand)(destination: PlaceExpr)(target: option BasicBlock)
     (wp_call: string -> list GenericArg -> list Value -> (Value -> iProp Σ) -> iProp Σ)
     (Qbasic_block: BasicBlock -> iProp Σ)
     (Qreturn: iProp Σ):
   wp_Operands env args (fun args =>
-    wp_call func_name targs args (fun result =>
+    wp_call func_name (list_of_GenericArgList targs) args (fun result =>
       wp_PlaceExpr env destination (fun ptr ty =>
         ∃ state0, points_to_ ty ptr state0 ∗ (points_to ty ptr result -∗
           match target with

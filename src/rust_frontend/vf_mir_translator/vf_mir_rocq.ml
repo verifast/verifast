@@ -29,11 +29,9 @@ let rec rocq_print_ty writer ({kind}: D.ty) =
         rocq_print_argument writer begin fun () ->
           rocq_print_string_literal writer name
         end;
-        rocq_print_argument writer @@ fun () ->
-          rocq_print_small_list writer @@ fun () ->
-            substs |> List.iter @@ fun subst_ty ->
-              rocq_print_small_list_element writer @@ fun () ->
-                rocq_print_generic_arg writer subst_ty
+        rocq_print_argument writer begin fun () ->
+          rocq_print_generic_arg_list writer substs
+        end
   | D.Never ->
       rocq_print_ident writer "Never"
   | D.Tuple [] ->
@@ -48,3 +46,14 @@ and rocq_print_generic_arg writer ({kind=arg}: D.generic_arg) =
           rocq_print_ty writer ty
   | _ ->
       rocq_print_ident writer "UnsupportedGenArg"
+and rocq_print_generic_arg_list writer (args: D.generic_arg list) =
+  match args with
+    [] -> rocq_print_ident writer "GALNil"
+  | arg::rest ->
+      rocq_print_application writer "GALCons" @@ fun () ->
+        rocq_print_argument writer begin fun () ->
+          rocq_print_generic_arg writer arg
+        end;
+        rocq_print_argument writer begin fun () ->
+          rocq_print_generic_arg_list writer rest
+        end
