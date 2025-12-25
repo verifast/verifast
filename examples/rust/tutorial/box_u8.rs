@@ -46,30 +46,50 @@ lem BoxU8_share_mono(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *BoxU8)
 lem BoxU8_share_full(k: lifetime_t, t: thread_id_t, l: *BoxU8)
     req atomic_mask(MaskTop) &*& [?q]lifetime_token(k) &*&
         full_borrow(k, <BoxU8>.full_borrow_content(t, l));
-    ens atomic_mask(MaskTop) &*& [q]lifetime_token(k) &*& [_](<BoxU8>.share(k, t, l));
+    ens atomic_mask(MaskTop) &*& [q]lifetime_token(k) &*&
+        [_](<BoxU8>.share(k, t, l));
 {
-    let klong = open_full_borrow_strong_m(k, BoxU8_full_borrow_content(t, l), q);
-    open BoxU8_full_borrow_content(t, l)();
-    open BoxU8_own(t, ?b);
+    open_full_borrow_strong_m_(k, <BoxU8>.full_borrow_content(t, l));
+    open <BoxU8>.full_borrow_content(t, l)();
+    open <BoxU8>.own(t, ?b);
     let p = b.ptr;
     {
         pred ctx(;) = alloc_block_(p);
-        close ctx();
-        close sep(BoxU8_ptr_field(l, p), u8_full_borrow_content(t, p))();
-        produce_lem_ptr_chunk full_borrow_convert_strong(ctx, sep(BoxU8_ptr_field(l, p), u8_full_borrow_content(t, p)), klong, BoxU8_full_borrow_content(t, l))() {
+        produce_lem_ptr_chunk restore_full_borrow_(ctx,
+                sep(BoxU8_ptr_field(l, p), <u8>.full_borrow_content(t, p)),
+                <BoxU8>.full_borrow_content(t, l))() {
             open ctx();
-            open sep(BoxU8_ptr_field(l, p), u8_full_borrow_content(t, p))();
-            close BoxU8_own(t, b);
-            close BoxU8_full_borrow_content(t, l)();
+            open sep(BoxU8_ptr_field(l, p), <u8>.full_borrow_content(t, p))();
+            open u8_full_borrow_content(t, p)();
+            close <BoxU8>.full_borrow_content(t, l)();
         }{
-            close_full_borrow_strong_m(klong, BoxU8_full_borrow_content(t, l), sep(BoxU8_ptr_field(l, p), u8_full_borrow_content(t, p)));
+            close ctx(); close u8_full_borrow_content(t, p)();
+            close sep(BoxU8_ptr_field(l, p), <u8>.full_borrow_content(t, p))();
+            close_full_borrow_strong_m_();
         }
     }
-    full_borrow_mono(klong, k, sep(BoxU8_ptr_field(l, p), u8_full_borrow_content(t, p)));
-    full_borrow_split_m(k, BoxU8_ptr_field(l, p), u8_full_borrow_content(t, p));
+    /*|\begin{vfHeap}
+    \vfResAdd{atomic_mask(MaskTop)}, \vfResAdd{[q]lifetime_token(k)},
+    \vfResAdd{fbor(k, sep(BoxU8_ptr_field(l, p), <u8>.fbc(t, p)))}
+    \end{vfHeap}|*/
+    full_borrow_split_m(k, BoxU8_ptr_field(l, p), <u8>.full_borrow_content(t, p));
+    /*|\begin{vfHeap}
+    atomic_mask(MaskTop), [q]lifetime_token(k),
+    \vfResRm{fbor(k, sep(BoxU8_ptr_field(l, p), <u8>.fbc(t, p)))},
+    \vfResAdd{fbor(k, BoxU8_ptr_field(l, p))}, \vfResAdd{fbor(k, <u8>.fbc(t, p))}
+    \end{vfHeap}|*/
     full_borrow_into_frac_m(k, BoxU8_ptr_field(l, p));
-    full_borrow_into_frac_m(k, u8_full_borrow_content(t, p));
+    /*|\begin{vfHeap}
+    atomic_mask(MaskTop), [q]lifetime_token(k), fbor(k, <u8>.fbc(t, p)),
+    \vfResRm{fbor(k, BoxU8_ptr_field(l, p))}, \vfResAdd{fcbor(k, BoxU8_ptr_field(l, p))}
+    \end{vfHeap}|*/
+    full_borrow_into_frac_m(k, <u8>.full_borrow_content(t, p));
     leak exists(p);
+    /*|\begin{vfHeap}
+    atomic_mask(MaskTop), [q]lifetime_token(k), fcbor(k, BoxU8_ptr_field(l, p)),
+    \vfResRm{fbor(k, <u8>.fbc(t, p))},
+    \vfResAdd{fcbor(k, <u8>.fbc(t, p))}, \vfResAdd{[_]exists(p)}
+    \end{vfHeap}|*/
     close BoxU8_share(k, t, l);
     leak BoxU8_share(k, t, l);
 }
@@ -108,13 +128,11 @@ unsafe { *this.ptr = new; }
 
 impl Drop for BoxU8 {
     fn drop<'a>(&'a mut self)
-    //@ req thread_token(?t) &*& BoxU8_full_borrow_content(t, self)();
+    //@ req thread_token(?t) &*& <BoxU8>.full_borrow_content(t, self)();
     //@ ens thread_token(t) &*& (*self).ptr |-> ?_;
     {
         unsafe {
-            //@ open BoxU8_full_borrow_content(t, self)();
-            //@ assert (*self).ptr |-> ?p;
-            //@ to_u8s_(p);
+            //@ open <BoxU8>.full_borrow_content(t, self)();
             dealloc(self.ptr as *mut u8, Layout::new::<u8>());
         }
     }
@@ -230,5 +248,41 @@ pub fn deref<'a>(this: &'a BoxU8) -> &'a u8
 
 impl std::ops::Deref for BoxU8 {
     type Target = u8;
-    fn deref<'a>(&'a self) -> &'a u8 { Self::deref/*@::<'a>@*/(self) }
+    fn deref<'a>(&'a self) -> &'a u8
+    //@ req [?qa]lifetime_token('a) &*& [_](<BoxU8>.share('a, ?t, self));
+    //@ ens [qa]lifetime_token('a) &*& [_](<u8>.share('a, t, result));
+    { Self::deref/*@::<'a>@*/(self) }
 }
+
+/*@
+lem BoxU8_sync(t1: thread_id_t)
+    req is_Sync(typeid(BoxU8)) == true &*& [_]BoxU8_share(?k, ?t0, ?l);
+    ens [_]BoxU8_share(k, t1, l);
+{
+    assume(false);
+}
+@*/
+
+impl BoxU8 {
+pub fn into_inner(b: BoxU8) -> u8
+//@ req thread_token(?t) &*& <BoxU8>.own(t, b);
+//@ ens thread_token(t);
+{
+    unsafe {
+        //| \verifast{} auto-opens \verb|<BoxU8>.own| to justify \verb|*b.ptr|
+        let ret = *b.ptr;
+        //@ close <BoxU8>.own(t, b);
+        ret
+    }
+/*|\begin{vfHeap}
+\vfResAdd{thread_token(t)}, \vfResAdd{<BoxU8>.own(t, b)}
+\end{vfHeap}|*/
+//| implicit destructor call for \verb|b|
+/*|\begin{vfHeap}
+thread_token(t), \vfResRm{<BoxU8>.own(t, b)}
+\end{vfHeap}|*/
+}
+}
+
+unsafe impl Send for BoxU8 {}
+unsafe impl Sync for BoxU8 {}
