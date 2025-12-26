@@ -254,15 +254,6 @@ impl std::ops::Deref for BoxU8 {
     { Self::deref/*@::<'a>@*/(self) }
 }
 
-/*@
-lem BoxU8_sync(t1: thread_id_t)
-    req is_Sync(typeid(BoxU8)) == true &*& [_]BoxU8_share(?k, ?t0, ?l);
-    ens [_]BoxU8_share(k, t1, l);
-{
-    assume(false);
-}
-@*/
-
 impl BoxU8 {
 pub fn into_inner(b: BoxU8) -> u8
 //@ req thread_token(?t) &*& <BoxU8>.own(t, b);
@@ -286,3 +277,12 @@ thread_token(t), \vfResRm{<BoxU8>.own(t, b)}
 
 unsafe impl Send for BoxU8 {}
 unsafe impl Sync for BoxU8 {}
+
+/*@
+lem BoxU8_sync(t1: thread_id_t)
+    req is_Sync(typeid(BoxU8)) == true &*& [_]BoxU8_share(?k, ?t0, ?l);
+    ens [_]BoxU8_share(k, t1, l);
+{
+    assume(false);
+}
+@*/
