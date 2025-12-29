@@ -3177,13 +3177,18 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         cont (Chunk ((array_symb (), true), [u8Type], coef, [thin_ptr; ctxt#mk_intlit (String.length s); cs], None)::h) env value
       | CLang, _ ->
         if unloadable then static_error l "The use of string literals as expressions in unloadable modules is not supported. Put the string literal in a named global array variable instead." None;
-        let (_, _, _, _, string_symb, _, _) = List.assoc "string" predfammap in
         let cs = get_unique_var_symb "stringLiteralChars" (InductiveType ("list", [charType])) in
         let value = get_unique_var_symb "stringLiteral" (PtrType charType) in
         let coef = get_dummy_frac_term () in
         assume (ctxt#mk_not (ctxt#mk_eq value (null_pointer_term ()))) $. fun () ->
-        assume (ctxt#mk_eq (mk_char_list_of_c_string (String.length s) s) cs) $. fun () ->
-        cont (Chunk ((string_symb, true), [], coef, [value; cs], None)::h) env value
+        if String.contains s '\000' then
+          let s = s ^ "\000" in
+          assume (ctxt#mk_eq (mk_char_list_of_c_string (String.length s) s) cs) $. fun () ->
+          cont (Chunk ((chars_pred_symb (), true), [], coef, [value; ctxt#mk_intlit (String.length s); cs], None)::h) env value
+        else
+          let (_, _, _, _, string_symb, _, _) = List.assoc "string" predfammap in
+          assume (ctxt#mk_eq (mk_char_list_of_c_string (String.length s) s) cs) $. fun () ->
+          cont (Chunk ((string_symb, true), [], coef, [value; cs], None)::h) env value
       end
     | WOperation (l, Add, [e1; e2], ObjType ("java.lang.String", [])) ->
       eval_h h env e1 $. fun h env v1 ->
