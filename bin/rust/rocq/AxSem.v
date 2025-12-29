@@ -123,7 +123,7 @@ Lemma wp_Goto_intro
     (wp_call: string -> list GenericArg -> list Value -> (Value -> iProp Σ) -> iProp Σ)
     (Qbasic_block: BasicBlock -> iProp Σ)
     (Qreturn: iProp Σ):
-  Qbasic_block bb -∗ wp_Terminator env (Goto bb) wp_call Qbasic_block Qreturn.
+  ▷ Qbasic_block bb -∗ wp_Terminator env (Goto bb) wp_call Qbasic_block Qreturn.
 Admitted.
 
 Definition wp_SwitchInt
@@ -132,32 +132,32 @@ Definition wp_SwitchInt
     : iProp Σ.
 Admitted.
 
-Lemma wp_SwitchInt_Bool_0_neq_true
-    (discr: Value)(values: list N)(target: BasicBlock)(targets: list BasicBlock)
+Parameter value_eqb_N: forall (ty: Ty)(value: Value)(n: N), option bool.
+
+Axiom value_eqb_N_Bool_0_eq_true: forall v, value_eqb_N Bool v 0 = Some true → v ≠ VBool true.
+Axiom value_eqb_N_Bool_1_eq_true: forall v, value_eqb_N Bool v 1 = Some true → v = VBool true.
+
+Axiom value_eqb_N_Bool_0_eq_false: forall v, value_eqb_N Bool v 0 = Some false → v = VBool true.
+Axiom value_eqb_N_Bool_1_eq_false: forall v, value_eqb_N Bool v 1 = Some false → v ≠ VBool true.
+
+Lemma wp_SwitchInt_compare
+    (discr: Value)(ty: Ty)(value: N)(values: list N)(target: BasicBlock)(targets: list BasicBlock)
     (Qbasic_block: BasicBlock → iProp Σ):
-  discr ≠ VBool true → Qbasic_block target
-  -∗ wp_SwitchInt discr Bool (0%N::values) (target::targets) Qbasic_block.
+  match value_eqb_N ty discr value with
+    None => True
+  | Some true =>
+    ▷ Qbasic_block target
+  | Some false =>
+    wp_SwitchInt discr ty values targets Qbasic_block
+  end -∗
+  wp_SwitchInt discr ty (value::values) (target::targets) Qbasic_block.
 Admitted.
 
-Lemma wp_SwitchInt_Bool_0_eq_true
-    (discr: Value)(values: list N)(target: BasicBlock)(targets: list BasicBlock)
+Lemma wp_SwitchInt_default
+    (discr: Value)(ty: Ty)(target: BasicBlock)
     (Qbasic_block: BasicBlock → iProp Σ):
-  discr = VBool true → wp_SwitchInt discr Bool values targets Qbasic_block
-  -∗ wp_SwitchInt discr Bool (0%N::values) (target::targets) Qbasic_block.
-Admitted.
-
-Lemma wp_SwitchInt_Bool_1_eq_true
-    (discr: Value)(values: list N)(target: BasicBlock)(targets: list BasicBlock)
-    (Qbasic_block: BasicBlock → iProp Σ):
-  discr = VBool true → Qbasic_block target
-  -∗ wp_SwitchInt discr Bool (1%N::values) (target::targets) Qbasic_block.
-Admitted.
-
-Lemma wp_SwitchInt_Bool_1_neq_true
-    (discr: Value)(values: list N)(target: BasicBlock)(targets: list BasicBlock)
-    (Qbasic_block: BasicBlock → iProp Σ):
-  discr ≠ VBool true → wp_SwitchInt discr Bool values targets Qbasic_block
-  -∗ wp_SwitchInt discr Bool (1%N::values) (target::targets) Qbasic_block.
+  ▷ Qbasic_block target
+  -∗ wp_SwitchInt discr ty [] [target] Qbasic_block.
 Admitted.
 
 Lemma wp_SwitchInt_intro
@@ -194,12 +194,12 @@ Lemma wp_Call_intro
     (Qbasic_block: BasicBlock -> iProp Σ)
     (Qreturn: iProp Σ):
   wp_Operands env args (fun args =>
-    wp_call func_name (list_of_GenericArgList targs) args (fun result =>
+    ▷ wp_call func_name (list_of_GenericArgList targs) args (fun result =>
       wp_PlaceExpr env destination (fun ptr ty =>
         ∃ state0, points_to_ ty ptr state0 ∗ (points_to ty ptr result -∗
           match target with
             None => ⌜ False ⌝
-          | Some basic_block => Qbasic_block basic_block
+          | Some basic_block => ▷ Qbasic_block basic_block
           end))))
   -∗ wp_Terminator env (Call {|
        func := Constant (Val ZeroSized (FnDef func_name targs));
@@ -265,16 +265,17 @@ Definition wp_call_std
     (func_name: string)(targs: list GenericArg)(args: list Value)
     (Q: Value -> iProp Σ)
     : iProp Σ :=
-  match func_name, args with
-    "std::ptr::mut_ptr::<impl *mut T>::is_null", [ptr] =>
-    Q (VBool (value_eqb ptr (VPtr null_ptr)))
-  | "std::ptr::null_mut", _ =>
+  if string_dec func_name "std::ptr::mut_ptr::<impl *mut T>::is_null" then
+    match args with
+      [ptr] => Q (VBool (value_eqb ptr (VPtr null_ptr)))
+    | _ => False%I
+    end
+  else if string_dec func_name "std::ptr::null_mut" then
     Q (VPtr null_ptr)
-  | "std::process::abort", _ =>
-    True
-  | _, _ =>
-    wp_call func_name targs args Q
-  end.
+  else if string_dec func_name "std::process::abort" then
+    True%I
+  else
+    wp_call func_name targs args Q.
 
 Definition wp_Bodies
     (program: Program)

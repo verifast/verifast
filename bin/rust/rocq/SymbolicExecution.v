@@ -476,23 +476,24 @@ Definition assume_value_neq_N(trace: Trace)(v: Value)(ty: Ty)(value: N)(Q: Prop)
   end.
 
 Fixpoint verify_switch_int
-    (trace: Trace)(h: Heap)(env: Env)(tree: SymexTree)(v: Value)(ty: Ty)(values: list N)(targets: list BasicBlock)
-    (Qbb: Heap -> Env -> SymexTree -> BasicBlock -> Prop)
+    (trace: Trace)(tree: SymexTree)(discr: Value)(ty: Ty)(values: list N)(targets: list BasicBlock)
+    (Qbb: SymexTree -> BasicBlock -> Prop)
+    {struct values}
     : Prop :=
   match values, targets with
-    [], [default_target] => Qbb h env tree default_target
+    [], [default_target] => Qbb tree default_target
   | value::values, target::targets =>
     match tree with
       Fork tree1 tree2 =>
-      (assume_value_neq_N trace v ty value @@ verify_switch_int (SecondBranch::trace) h env tree1 v ty values targets Qbb) /\
-      (assume_value_eq_N trace v ty value @@ Qbb h env tree2 target)
+      (assume_value_neq_N trace discr ty value @@ verify_switch_int (SecondBranch::trace) tree1 discr ty values targets Qbb) /\
+      (assume_value_eq_N trace discr ty value @@ Qbb tree2 target)
     | _ => Error trace "verify_switch_int: bad tree: Fork expected" tree
     end
   | _, _ => Error trace "verify_switch_int: length mismatch" (values, targets)
   end.
 
 Definition verify_call
-    (trace: Trace)(h: Heap)(tree: SymexTree)(func_name: string)(targs: GenericArgList)(args: list Value)
+    (trace: Trace)(h: Heap)(tree: SymexTree)(func_name: string)(targs: list GenericArg)(args: list Value)
     (Q: Heap -> SymexTree -> Value -> Prop)
     : Prop :=
   if string_dec func_name "std::ptr::mut_ptr::<impl *mut T>::is_null" then
@@ -565,7 +566,8 @@ Definition verify_terminator
     Goto bb => Qbb h env tree bb
   | SwitchInt discr values targets =>
     verify_operand trace h env tree discr @@ fun h tree v ty =>
-    verify_switch_int trace h env tree v ty values targets Qbb
+    verify_switch_int trace tree v ty values targets @@ fun tree bb =>
+    Qbb h env tree bb
   | Return => Qreturn h env tree
   | Unreachable => Error trace "verify_terminator: Unreachable: reached" tt
   | Call ({| func := Constant (Val ZeroSized (FnDef "VeriFast_ghost_command" GALNil)) |} as call) =>
@@ -576,7 +578,7 @@ Definition verify_terminator
     end
   | Call ({| func := Constant (Val ZeroSized (FnDef name targs)) |} as call) =>
     verify_operands trace h env tree (VfMir.args call) @@ fun h tree args =>
-    verify_call trace h tree name targs args @@ fun h tree result =>
+    verify_call trace h tree name (list_of_GenericArgList targs) args @@ fun h tree result =>
     verify_place_expr trace h env tree (destination call) @@ fun h tree place ty =>
     store_to_place trace h env tree place ty result @@ fun h env tree =>
     match target call with

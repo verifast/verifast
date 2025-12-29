@@ -22,6 +22,18 @@ Axiom lh_big_ast_lh_sing_elim:
 Definition own_logheap(H: LogHeap): iProp Σ :=
   lh_big_ast H (λ '(PointsTo_ ty ptr v), points_to_ ty ptr v).
 
+Lemma own_logheap_lh_comp_intro H1 H2:
+  own_logheap H1 ∗ own_logheap H2 -∗ own_logheap (H1 ⋅ H2).
+Proof.
+  apply lh_big_ast_lh_comp_intro.
+Qed.
+
+Lemma own_logheap_lh_comp_elim H1 H2:
+  own_logheap (H1 ⋅ H2) -∗ own_logheap H1 ∗ own_logheap H2.
+Proof.
+  apply lh_big_ast_lh_comp_elim.
+Qed.
+
 Definition place_as_ptr(env: AxSem.Env)(place: Place): Value :=
   match place with
     PNonAddrTakenLocal x => VPtr (snd (env x))
@@ -655,7 +667,271 @@ Lemma verify_statements_sound trace h env tree statements Qsymex Q:
    Qsymex h env tree → own_heap h -∗ own_env Γ env -∗ Q) →
   own_heap h -∗ own_env Γ env -∗ wp_Statements Γ statements Q.
 Proof.
-Admitted.
+  revert trace h env tree Qsymex Q.
+  induction statements.
+  - (* nil *)
+    intros trace h env tree Qsymex Q Hverify HQ.
+    apply HQ with (1:=Hverify).
+  - (* cons *)
+    intros trace h env tree Qsymex Q Hverify HQ.
+    simpl in *.
+    apply verify_statement_sound with (1:=Hverify).
+    intros h0 env0 tree0 Hverify_statements.
+    apply IHstatements with (1:=Hverify_statements).
+    assumption.
+Qed.
+
+Lemma assume_value_eq_N_sound trace v ty value Q:
+  assume_value_eq_N trace v ty value Q →
+  value_eqb_N ty v value = Some true →
+  Q.
+Proof.
+  intros Hassume Heq.
+  destruct value as [|[ | | ]]; destruct ty; simpl in Hassume; try tauto.
+  - (* 0%N *)
+    apply value_eqb_N_Bool_0_eq_true in Heq.
+    tauto.
+  - (* 1%N *)
+    apply value_eqb_N_Bool_1_eq_true in Heq.
+    tauto.
+Qed.
+
+Lemma assume_value_neq_N_sound trace v ty value Q:
+  assume_value_neq_N trace v ty value Q →
+  value_eqb_N ty v value = Some false →
+  Q.
+Proof.
+  intros Hassume Hneq.
+  destruct value as [|[ | | ]]; destruct ty; simpl in Hassume; try tauto.
+  - (* 0%N *)
+    apply value_eqb_N_Bool_0_eq_false in Hneq.
+    tauto.
+  - (* 1%N *)
+    apply value_eqb_N_Bool_1_eq_false in Hneq.
+    tauto.
+Qed.
+
+Lemma verify_switch_int_sound trace tree discr ty values targets Qsymex_bb (Qbb: BasicBlock → iProp Σ):
+  verify_switch_int trace tree discr ty values targets Qsymex_bb →
+  ▷ (∀ tree bb, ⌜ Qsymex_bb tree bb ⌝ -∗ Qbb bb) -∗
+  wp_SwitchInt discr ty values targets Qbb.
+Proof.
+  revert trace tree targets.
+  induction values as [|value values]; intros trace tree targets Hverify; iIntros "HQ".
+  - (* nil *)
+    destruct targets as [|target [|?]]; simpl in Hverify; try tauto.
+    iApply wp_SwitchInt_default.
+    iNext.
+    iApply "HQ".
+    iPureIntro.
+    apply Hverify.
+  - (* cons *)
+    destruct targets as [|target targets]; try tauto.
+    destruct tree; try tauto.
+    simpl in Hverify.
+    destruct Hverify as [Hverify_neq Hverify_eq].
+    iApply wp_SwitchInt_compare.
+    case_eq (value_eqb_N ty discr value).
+    + (* Some *)
+      intros b Hb.
+      destruct b.
+      * (* true *)
+        apply assume_value_eq_N_sound with (2:=Hb) in Hverify_eq.
+        iNext.
+        iApply "HQ".
+        iPureIntro.
+        apply Hverify_eq.
+      * (* false *)
+        apply assume_value_neq_N_sound with (2:=Hb) in Hverify_neq.
+        iApply IHvalues.
+        apply Hverify_neq.
+        iNext.
+        iAssumption.
+    + (* None *)
+      intros.
+      iPureIntro.
+      constructor.
+Qed.
+
+Definition own_asn(env: Env)(a: Asn)(env': Env): iProp Σ :=
+  ∃ H: LogHeap, ⌜ asn_holds preds H env a env' ⌝ ∗ own_logheap H.
+
+Lemma produce_sound trace h env tree a Qsymex env' Q:
+  produce trace h env tree a Qsymex →
+  (∀ h tree,
+   Qsymex h env' tree →
+   own_heap h -∗ Q) →
+  own_heap h -∗
+  own_asn env a env' -∗
+  Q.
+Proof.
+  intros Hproduce HQ.
+  iIntros "Hh Ha".
+  unfold own_heap.
+  unfold own_asn.
+  iDestruct "Hh" as (H) "[Hh HH]".
+  iDestruct "Hh" as %Hh.
+  iDestruct "Ha" as (H0) "[Ha HH0]".
+  iDestruct "Ha" as %Ha.
+  apply produce_sound with (1:=Hh) (2:=Ha) in Hproduce.
+  destruct Hproduce as (h' & tree' & HQsymex & Hh').
+  apply HQ in HQsymex.
+  iApply HQsymex.
+  unfold own_heap.
+  iExists (H ⋅ H0).
+  iSplitL "". {
+    iPureIntro.
+    assumption.
+  }
+  iApply own_logheap_lh_comp_intro.
+  iFrame.
+Qed.
+
+Lemma consume_sound trace h env tree a Qsymex Q:
+  consume trace h env tree a Qsymex →
+  (∀ h env' tree,
+   Qsymex h env' tree →
+   own_asn env a env' ∗ own_heap h -∗ Q) →
+  own_heap h -∗
+  Q.
+Proof.
+  intros Hconsume HQ.
+  iIntros "Hh".
+  unfold own_heap.
+  iDestruct "Hh" as (H) "[Hh HH]".
+  iDestruct "Hh" as %Hh.
+  apply consume_sound with (1:=Hh) in Hconsume.
+  destruct Hconsume as (h' & env' & tree' & H1 & H2 & HH & Ha & Hh' & HQsymex).
+  iApply HQ.
+  apply HQsymex.
+  subst H.
+  iDestruct (own_logheap_lh_comp_elim with "HH") as "[HH1 HH2]".
+  iSplitL "HH1". {
+    unfold own_asn.
+    iExists H1.
+    iSplitL "". {
+      iPureIntro.
+      assumption.
+    }
+    iAssumption.
+  }
+  unfold own_heap.
+  iExists H2.
+  iSplitL "". {
+    iPureIntro.
+    assumption.
+  }
+  iAssumption.
+Qed.
+
+Parameter value_has_ty0: Ty → Value → Prop.
+
+Inductive value_is_Bool: Value → Prop :=
+  value_is_Bool_intro(b: bool): value_is_Bool (VBool b).
+
+Inductive value_is_RawPtr: Value → Prop :=
+  value_is_RawPtr_intro(ptr: Ptr): value_is_RawPtr (VPtr ptr).
+
+Definition value_has_ty(ty: Ty): Value → Prop :=
+  match ty with
+    Bool => value_is_Bool
+  | RawPtr _ => value_is_RawPtr
+  | _ => value_has_ty0 ty
+  end.
+
+Lemma forall_ty_sound trace ty Q v:
+  forall_ty trace ty Q →
+  value_has_ty ty v →
+  Q v.
+Proof.
+  intros Hforall Hhas; destruct ty; try tauto; simpl in *; inversion Hhas; subst; auto.
+Qed.
+
+Fixpoint values_have_tys(tys: list Ty)(values: list Value): Prop :=
+  match tys, values with
+    [], [] => True
+  | ty::tys, value::values =>
+    value_has_ty ty value ∧ values_have_tys tys values
+  | _, _ => False
+  end.
+
+Section specs.
+
+Variable specs: list (string * Spec).
+
+Definition spec_sound
+    (func_name: string)(targs: list GenericArg)(args: list Value)
+    (wp_call: string → list GenericArg → list Value → (Value → iProp Σ) → iProp Σ)
+    : iProp Σ :=
+  match assoc func_name specs with
+    None => True
+  | Some spec =>
+    (* ⌜ values_have_tys (map snd (spec_params spec)) args ⌝ -∗ *)
+    let env := combine (map fst (spec_params spec)) (map (fun v => LSValue (Some v)) args) in
+    ∀ env',
+    own_asn env (pre spec) env' -∗
+    ∀ Q,
+    (∀ result,
+     ⌜ value_has_ty (spec_output spec) result ⌝ ∗
+     (∃ env'', own_asn (("result", LSValue (Some result))::env') (post spec) env'') -∗
+     Q result) -∗
+    wp_call func_name targs args Q
+  end.
+
+Lemma verify_call_sound trace h tree func_name targs args Qsymex wp_call Q:
+  verify_call specs trace h tree func_name targs args Qsymex →
+  (∀ h tree v, Qsymex h tree v → own_heap h -∗ Q v) →
+  □ (∀ func_name targs args, spec_sound func_name targs args wp_call) -∗
+  own_heap h -∗
+  wp_call_std wp_call func_name targs args Q.
+Proof.
+  intros Hverify HQ.
+  iIntros "#Hspecs Hh".
+  unfold wp_call_std.
+  unfold verify_call in Hverify.
+  destruct (string_dec func_name "std::ptr::mut_ptr::<impl *mut T>::is_null"). {
+    (* func_name = "std::ptr::mut_ptr::<impl *mut T>::is_null" *)
+    destruct args as [|arg [|]]; try tauto.
+    iApply (HQ with "Hh").
+    apply Hverify.
+  }
+  destruct (string_dec func_name "std::ptr::null_mut"). {
+    (* func_name = "std::ptr::null_mut" *)
+    iApply (HQ with "Hh").
+    apply Hverify.
+  }
+  destruct (string_dec func_name "std::process::abort"). {
+    (* func_name = "std::process:abort" *)
+    iPureIntro.
+    tauto.
+  }
+  iDestruct ("Hspecs" $! func_name targs args) as "Hspec".
+  iClear "Hspecs".
+  unfold spec_sound.
+  destruct (assoc func_name specs); try tauto.
+  eapply consume_sound in Hverify. {
+    iRevert "Hspec".
+    iRevert "Hh".
+    iStopProof.
+    apply Hverify.
+  }
+  intros h' env' tree' Hforall.
+  iIntros "[Hpre Hh'] #Hspec".
+  iDestruct ("Hspec" $! env' with "Hpre") as "Hpost".
+  iClear "Hspec".
+  iApply "Hpost".
+  iIntros (result) "[Hresult Hpost]".
+  iDestruct "Hresult" as %Hresult.
+  iDestruct "Hpost" as (env'') "Hpost".
+  apply forall_ty_sound with (2:=Hresult) in Hforall.
+  iRevert "Hh' Hpost".
+  iStopProof.
+  apply produce_sound with (1:=Hforall).
+  intros h'' tree''.
+  apply HQ.
+Qed.
+
+End specs.
 
 End Γ.
 
