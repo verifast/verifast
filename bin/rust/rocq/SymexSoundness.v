@@ -931,6 +931,148 @@ Proof.
   apply HQ.
 Qed.
 
+Definition own_chunk(chunk: Chunk): iProp Σ :=
+  ∃ H, ⌜ chunk_holds preds H chunk ⌝ ∗ own_logheap H.
+
+Lemma consume_chunk_sound trace h tree Qsymex Q:
+  consume_chunk trace h tree Qsymex →
+  (∀ h tree chunk,
+   Qsymex h tree chunk →
+   own_heap h -∗ own_chunk chunk -∗ Q) →
+  own_heap h -∗ Q.
+Proof.
+  intros Hconsume HQ.
+  iIntros "Hh".
+  unfold own_heap.
+  iDestruct "Hh" as (H) "[Hh HH]".
+  iDestruct "Hh" as %Hh.
+  apply consume_chunk_sound with (1:=Hh) in Hconsume.
+  destruct Hconsume as (Hchunk & H' & h' & tree' & chunk & HH & HHchunk & Hh' & HQsymex).
+  apply HQ in HQsymex.
+  subst H.
+  iDestruct (own_logheap_lh_comp_elim with "HH") as "[HHchunk HH']".
+  iApply (HQsymex with "[HH'] [HHchunk]").
+  - unfold own_heap.
+    iExists H'.
+    iSplitL "". {
+      iPureIntro. assumption.
+    }
+    iAssumption.
+  - unfold own_chunk.
+    iExists Hchunk.
+    iSplitL "". {
+      iPureIntro. assumption.
+    }
+    iAssumption.
+Qed.
+
+Lemma eval_pats_sound trace env pats Qsymex:
+  eval_pats trace env pats Qsymex →
+  ∃ vs, Qsymex vs.
+Proof.
+  revert trace env Qsymex.
+  induction pats as [|pat pats]; intros trace env Qsymex; simpl.
+  - (* nil *)
+    intro HQsymex.
+    exists [].
+    assumption.
+  - (* cons *)
+    destruct pat.
+    + (* LitPat *)
+      intros Hpats.
+      apply IHpats in Hpats.
+      destruct Hpats as [vs Hpats].
+      exists (eval env e::vs).
+      assumption.
+    + (* VarPat *)
+      intros; tauto.
+Qed.
+
+Lemma verify_ghost_command_sound trace h env tree Qsymex Q:
+  verify_ghost_command preds trace h env tree Qsymex →
+  (∀ h tree, Qsymex h tree → own_heap h -∗ Q) →
+  own_heap h -∗ Q.
+Proof.
+  intros Hverify HQ.
+  destruct tree; try tauto.
+  destruct data; try tauto; simpl in Hverify.
+  - (* Open *)
+    apply consume_chunk_sound with (1:=Hverify).
+    clear Hverify.
+    intros h' tree' chunk Hchunk.
+    destruct chunk; try tauto.
+    case_eq (assoc pred_name preds). {
+      intros pred_def Hpred_name.
+      rewrite Hpred_name in Hchunk.
+      iIntros "Hh' Hchunk".
+      unfold own_chunk.
+      iDestruct "Hchunk" as (H) "[Hchunk HH]".
+      iDestruct "Hchunk" as %Hchunk'.
+      simpl in Hchunk'.
+      rewrite Hpred_name in Hchunk'.
+      destruct pred_def.
+      simpl in Hchunk.
+      destruct (combine_ params args) as [env' [[] []]]; try tauto.
+      destruct Hchunk' as [env'' Hbody].
+      iApply ((produce_sound _ _ _ _ _ _ env'' Q Hchunk) with "Hh' [HH]").
+      - apply HQ.
+      - unfold own_asn.
+        iExists H.
+        iSplitL "". {
+          iPureIntro. assumption.
+        }
+        iAssumption.
+    }
+    intro Hpred_name.
+    rewrite Hpred_name in Hchunk.
+    tauto.
+  - (* Close *)
+    destruct coef; try tauto.
+    destruct q; try tauto.
+    destruct Qnum; try tauto.
+    destruct p; try tauto.
+    destruct Qden; try tauto.
+    destruct targs; try tauto.
+    apply eval_pats_sound in Hverify.
+    destruct Hverify as [vs Hverify].
+    case_eq (assoc pred_name preds). 2:{
+      intros Hpred_name.
+      rewrite Hpred_name in Hverify.
+      tauto.
+    }
+    intros pred_def Hpred_name.
+    rewrite Hpred_name in Hverify.
+    case_eq (combine_ (params pred_def) vs); intros env' [l l'] Hcombine_.
+    rewrite Hcombine_ in Hverify.
+    destruct l; try tauto.
+    destruct l'; try tauto.
+    apply consume_sound with (1:=Hverify).
+    intros h' env'' tree' HQsymex.
+    apply HQ in HQsymex.
+    iIntros "[Hbody Hh']".
+    iApply HQsymex.
+    unfold own_heap, own_asn.
+    iDestruct "Hbody" as (Hbody) "[Hbody_holds HHbody]".
+    iDestruct "Hbody_holds" as %Hbody_holds.
+    iDestruct "Hh'" as (Hh') "[Hh' HHh']".
+    iDestruct "Hh'" as %HHh'.
+    iExists (Hbody ⋅ Hh').
+    iSplitL "". {
+      iPureIntro.
+      simpl.
+      exists Hbody.
+      exists Hh'.
+      split. reflexivity.
+      rewrite Hpred_name.
+      destruct pred_def.
+      rewrite Hcombine_.
+      split. eexists; eassumption.
+      assumption.
+    }
+    iApply own_logheap_lh_comp_intro.
+    iFrame.
+Qed.
+
 End specs.
 
 End Γ.

@@ -528,7 +528,7 @@ Fixpoint eval_pats(trace: Trace)(env: Env)(pats: list Pat)(Q: list Value -> Prop
   | pat::pats => Error trace "eval_pats: pattern not supported here" pat
   end.
 
-Definition verify_ghost_command(trace: Trace)(h: Heap)(env: Env)(tree: SymexTree)(Q: Heap -> Env -> SymexTree -> Prop): Prop :=
+Definition verify_ghost_command(trace: Trace)(h: Heap)(env: Env)(tree: SymexTree)(Q: Heap -> SymexTree -> Prop): Prop :=
   match tree with
     Open;; tree =>
     consume_chunk trace h tree @@ fun h tree chunk =>
@@ -537,9 +537,13 @@ Definition verify_ghost_command(trace: Trace)(h: Heap)(env: Env)(tree: SymexTree
       match assoc pred_name preds with
         None => Error trace "verify_ghost_command: Open: no such predicate" pred_name
       | Some pred_def =>
-        let env' := combine (map fst (params pred_def)) (map (fun v => LSValue (Some v)) args) in
-        produce trace h env' tree (body pred_def) @@ fun h _ tree =>
-        Q h env tree
+        match combine_ (params pred_def) args with
+          (env, ([], [])) =>
+          let env := map (fun '((x, ty), v) => (x, LSValue (Some v))) env in
+          produce trace h env tree (body pred_def) @@ fun h _ tree =>
+          Q h tree
+        | _ => Error trace "verify_ghost_command: Open: bad chunk: has bad argument count" (chunk, pred_def)
+        end
       end
     | _ => Error trace "verify_ghost_command: Open: predicate not supported" chunk
     end
@@ -548,10 +552,14 @@ Definition verify_ghost_command(trace: Trace)(h: Heap)(env: Env)(tree: SymexTree
     match assoc pred_name preds with
       None => Error trace "verify_ghost_command: Close: no such predicate" pred_name
     | Some pred_def =>
-      let env' := combine (map fst (params pred_def)) (map (fun v => LSValue (Some v)) vs) in
-      consume trace h env' tree (body pred_def) @@ fun h _ tree =>
-      let h := User pred_name vs::h in
-      Q h env tree
+      match combine_ (params pred_def) vs with
+        (env, ([], [])) =>
+        let env := map (fun '((x, ty), v) => (x, LSValue (Some v))) env in
+        consume trace h env tree (body pred_def) @@ fun h _ tree =>
+        let h := User pred_name vs::h in
+        Q h tree
+      | _ => Error trace "verify_ghost_command: Close: bad argument count" (arg_pats, pred_def)
+      end
     end
   | _ => Error trace "verify_ghost_command: bad tree: no ghost command found" tree
   end.
@@ -571,7 +579,7 @@ Definition verify_terminator
   | Return => Qreturn h env tree
   | Unreachable => Error trace "verify_terminator: Unreachable: reached" tt
   | Call ({| func := Constant (Val ZeroSized (FnDef "VeriFast_ghost_command" GALNil)) |} as call) =>
-    verify_ghost_command trace h env tree @@ fun h env tree =>
+    verify_ghost_command trace h env tree @@ fun h tree =>
     match target call with
       None => Error trace "verify_terminator: Call: VeriFast_ghost_command: target expected" tt
     | Some bb => Qbb h env tree bb
