@@ -578,21 +578,22 @@ Definition verify_terminator
     Qbb h env tree bb
   | Return => Qreturn h env tree
   | Unreachable => Error trace "verify_terminator: Unreachable: reached" tt
-  | Call ({| func := Constant (Val ZeroSized (FnDef "VeriFast_ghost_command" GALNil)) |} as call) =>
-    verify_ghost_command trace h env tree @@ fun h tree =>
-    match target call with
-      None => Error trace "verify_terminator: Call: VeriFast_ghost_command: target expected" tt
-    | Some bb => Qbb h env tree bb
-    end
   | Call ({| func := Constant (Val ZeroSized (FnDef name targs)) |} as call) =>
-    verify_operands trace h env tree (VfMir.args call) @@ fun h tree args =>
-    verify_call trace h tree name (list_of_GenericArgList targs) args @@ fun h tree result =>
-    verify_place_expr trace h env tree (destination call) @@ fun h tree place ty =>
-    store_to_place trace h env tree place ty result @@ fun h env tree =>
-    match target call with
-      None => Error trace "verify_terminator: Call: target expected" tt
-    | Some bb => Qbb h env tree bb
-    end
+    if string_dec name "VeriFast_ghost_command" then
+      verify_ghost_command trace h env tree @@ fun h tree =>
+      match target call with
+        None => Error trace "verify_terminator: Call: VeriFast_ghost_command: target expected" tt
+      | Some bb => Qbb h env tree bb
+      end
+    else
+      verify_operands trace h env tree (VfMir.args call) @@ fun h tree args =>
+      verify_call trace h tree name (list_of_GenericArgList targs) args @@ fun h tree result =>
+      verify_place_expr trace h env tree (destination call) @@ fun h tree place ty =>
+      store_to_place trace h env tree place ty result @@ fun h env tree =>
+      match target call with
+        None => Error trace "verify_terminator: Call: target expected" tt
+      | Some bb => Qbb h env tree bb
+      end
   | _ => Error trace "verify_terminator: unsupported terminator" terminator
   end.
 

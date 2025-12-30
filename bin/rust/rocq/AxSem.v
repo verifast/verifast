@@ -186,6 +186,16 @@ Fixpoint wp_Operands(env: Env)(operands: list Operand)(Q: list Value -> iProp Σ
         Q (v::vs)))
   end.
 
+Lemma wp_ghost_command_intro env targs args destination target wp_call Qbasic_block Qreturn:
+  ▷ Qbasic_block target -∗
+  wp_Terminator env (Call {|
+    func := Constant (Val ZeroSized (FnDef "VeriFast_ghost_command" targs));
+    args := args;
+    destination := destination;
+    target := Some target
+  |}) wp_call Qbasic_block Qreturn.
+Admitted.
+
 Lemma wp_Call_intro
     (env: Env)
     (func_name: string)(targs: GenericArgList)
