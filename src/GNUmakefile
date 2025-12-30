@@ -314,7 +314,7 @@ endif
 .PHONY: build
 
 rocq_proofs:
-ifneq ($(shell echo 'From iris.base_logic Require Import iprop.' > ${TMPDIR:-/tmp}/iris_check.v && coqc -q ${TMPDIR:-/tmp}/iris_check.v || echo "no"),no)
+ifneq ($(shell echo 'From iris.base_logic Require Import iprop.' > $${TMPDIR:-/tmp}/iris_check.v && coqc -q $${TMPDIR:-/tmp}/iris_check.v || echo "no"),no)
 	@echo "  ROCQ     Checking proofs in ../bin/rust/rocq"
 	cd ../bin/rust/rocq && make
 else

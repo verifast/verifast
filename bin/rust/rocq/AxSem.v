@@ -226,23 +226,22 @@ Definition wp_BasicBlock
     (wp_Terminator env (terminator basic_block) wp_call Qbasic_block Qreturn).
 
 Definition wp_BasicBlocks
-    (env: Env)(basic_blocks: list (BasicBlock * BasicBlockData))(basic_block: BasicBlock)
+    (env: Env)(basic_blocks: list (BasicBlock * BasicBlockData))(basic_block_data: BasicBlockData)
     (wp_call: string -> list GenericArg -> list Value -> (Value -> iProp Σ) -> iProp Σ)
     (Qreturn: iProp Σ): iProp Σ.
 Admitted. (* To be defined by guarded recursion; involves proving that wp_BasicBlock is contractive in Qbasic_block. *)
 
 Lemma wp_BasicBlocks_intro
-    (env: Env)(basic_blocks: list (BasicBlock * BasicBlockData))(basic_block: BasicBlock)
+    (env: Env)(basic_blocks: list (BasicBlock * BasicBlockData))(basic_block_data: BasicBlockData)
     (wp_call: string -> list GenericArg -> list Value -> (Value -> iProp Σ) -> iProp Σ)
     (Qreturn: iProp Σ):
-  match assoc basic_block basic_blocks with
-    None => False
-  | Some basic_block_data =>
-    wp_BasicBlock env basic_block_data wp_call
-      (fun bb => wp_BasicBlocks env basic_blocks bb wp_call Qreturn)
-      Qreturn
-  end
-  -∗ wp_BasicBlocks env basic_blocks basic_block wp_call Qreturn.
+  wp_BasicBlock env basic_block_data wp_call (λ bb,
+    match assoc bb basic_blocks with
+      None => False
+    | Some basic_block_data =>
+      wp_BasicBlocks env basic_blocks basic_block_data wp_call Qreturn
+    end) Qreturn
+  -∗ wp_BasicBlocks env basic_blocks basic_block_data wp_call Qreturn.
 Admitted.
 
 Definition wp_Body
@@ -259,7 +258,7 @@ Definition wp_Body
     ([∗ list] '((x, {| ty := ty |}), v) ∈ param_env, points_to ty (VPtr (snd (env x))) v) -∗
     ([∗ list] '(x, {| ty := ty |}) ∈ result_var_decl::local_decls'', ∃ state0, points_to_ ty (VPtr (snd (env x))) state0) -∗
     match basic_blocks body with
-      (bb0, _)::_ =>
+      (_, bb0)::_ =>
       wp_BasicBlocks env (basic_blocks body) bb0 wp_call
         (let '(result_var, {| ty := ty |}) := result_var_decl in
          ∃ result,

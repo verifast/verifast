@@ -1051,7 +1051,10 @@ Lemma verify_terminator_sound trace h env tree terminator Qsymex_return Qsymex_b
   verify_terminator preds specs local_decls trace h env tree terminator Qsymex_return Qsymex_bb →
   (∀ h env tree, ⌜ Qsymex_return h env tree ⌝ -∗ own_heap h -∗ own_env Γ env -∗ Qreturn) -∗
   ▷ (∀ func_name targs args, spec_sound func_name targs args wp_call) -∗
-  ▷ (∀ h env tree bb, ⌜ Qsymex_bb h env tree bb ⌝ -∗ own_heap h -∗ own_env Γ env -∗ Qbb bb) -∗
+  ▷ (∀ h env tree bb,
+     ⌜ Qsymex_bb h env tree bb ⌝ -∗
+     (∀ h env tree, ⌜ Qsymex_return h env tree ⌝ -∗ own_heap h -∗ own_env Γ env -∗ Qreturn) -∗
+     own_heap h -∗ own_env Γ env -∗ Qbb bb) -∗
   own_heap h -∗
   own_env Γ env -∗
   wp_Terminator Γ terminator (wp_call_std wp_call) Qbb Qreturn.
@@ -1062,7 +1065,7 @@ Proof.
   - (* Goto *)
     iApply wp_Goto_intro.
     iNext.
-    iApply ("HQbb" $! h env tree target with "[% //] Hh Henv").
+    iApply ("HQbb" $! h env tree target with "[% //] Hreturn Hh Henv").
   - (* SwitchInt *)
     iApply wp_SwitchInt_intro.
     iApply (verify_operand_sound with "[Hreturn Hspecs HQbb] Hh Henv"); try eassumption.
@@ -1071,7 +1074,7 @@ Proof.
     iApply verify_switch_int_sound; try eassumption.
     iNext.
     iIntros (tree1 bb) "HQsymex_bb".
-    iApply ("HQbb" with "HQsymex_bb Hh Henv").
+    iApply ("HQbb" with "HQsymex_bb Hreturn Hh Henv").
   - (* Return *)
     iApply wp_Return_intro.
     iApply ("Hreturn" with "[% //] Hh Henv").
@@ -1094,7 +1097,7 @@ Proof.
       destruct target; try tauto.
       iApply wp_ghost_command_intro.
       iNext.
-      iApply ("HQbb" with "[% //] Hh0 Henv").
+      iApply ("HQbb" with "[% //] Hreturn Hh0 Henv").
     + (* name ≠ "VeriFast_ghost_command" *)
       iApply wp_Call_intro.
       iApply (verify_operands_sound with "[Hreturn Hspecs HQbb] Hh Henv"); try eassumption.
@@ -1118,7 +1121,54 @@ Proof.
       simpl in Hverify.
       destruct target; try tauto.
       iNext.
-      iApply ("HQbb" with "[% //] Hh3 Henv0").
+      iApply ("HQbb" with "[% //] Hreturn Hh3 Henv0").
+Qed.
+
+Lemma verify_basic_block_sound trace h env tree bb Qsymex_return Qsymex_bb wp_call Qbb Qreturn:
+  verify_basic_block preds specs local_decls trace h env tree bb Qsymex_return Qsymex_bb →
+  (∀ h env tree, ⌜ Qsymex_return h env tree ⌝ -∗ own_heap h -∗ own_env Γ env -∗ Qreturn) -∗
+  ▷ (∀ func_name targs args, spec_sound func_name targs args wp_call) -∗
+  ▷ (∀ h env tree bb,
+     ⌜ Qsymex_bb h env tree bb ⌝ -∗
+     (∀ h env tree, ⌜ Qsymex_return h env tree ⌝ -∗ own_heap h -∗ own_env Γ env -∗ Qreturn) -∗
+     own_heap h -∗ own_env Γ env -∗ Qbb bb) -∗
+  own_heap h -∗
+  own_env Γ env -∗
+  wp_BasicBlock Γ bb (wp_call_std wp_call) Qbb Qreturn.
+Proof.
+  iIntros (Hverify) "Hreturn Hspecs Hbb Hh Henv".
+  unfold verify_basic_block in Hverify.
+  unfold wp_BasicBlock.
+  iApply (verify_statements_sound with "[Hreturn Hspecs Hbb] Hh Henv"); try eassumption.
+  clear Hverify.
+  iIntros (h0 env0 tree0) "%Hverify Hh0 Henv".
+  iApply (verify_terminator_sound with "Hreturn Hspecs Hbb Hh0 Henv"); eassumption.
+Qed.
+
+Lemma verify_basic_blocks_sound trace basic_blocks fuel h env tree bb Qsymex_return wp_call Qreturn:
+  verify_basic_blocks preds specs local_decls trace basic_blocks fuel h env tree bb Qsymex_return →
+  (∀ h env tree, ⌜ Qsymex_return h env tree ⌝ -∗ own_heap h -∗ own_env Γ env -∗ Qreturn) -∗
+  □ ▷ (∀ func_name targs args, spec_sound func_name targs args wp_call) -∗
+  own_heap h -∗
+  own_env Γ env -∗
+  wp_BasicBlocks Γ basic_blocks bb (wp_call_std wp_call) Qreturn.
+Proof.
+  revert trace h env tree bb.
+  induction fuel as [|fuel].
+  - (* O *)
+    intros trace h env tree bb Hverify.
+    tauto.
+  - (* S fuel *)
+    intros trace h env tree bb Hverify.
+    iIntros "Hreturn #Hspecs Hh Henv".
+    iApply wp_BasicBlocks_intro.
+    simpl in Hverify.
+    iApply (verify_basic_block_sound with "Hreturn Hspecs [] Hh Henv"); try eassumption.
+    clear Hverify.
+    iNext.
+    iIntros (h0 env0 tree0 bb0) "%Hverify Hreturn Hh0 Henv0".
+    destruct (assoc bb0 basic_blocks) as [bb'|]; try tauto.
+    iApply (IHfuel with "Hreturn Hspecs Hh0 Henv0"); try eassumption.
 Qed.
 
 End specs.
