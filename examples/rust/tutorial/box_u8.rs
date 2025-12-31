@@ -275,14 +275,26 @@ thread_token(t), \vfResRm{<BoxU8>.own(t, b)}
 }
 }
 
-unsafe impl Send for BoxU8 {}
 unsafe impl Sync for BoxU8 {}
+unsafe impl Send for BoxU8 {}
 
 /*@
 lem BoxU8_sync(t1: thread_id_t)
-    req is_Sync(typeid(BoxU8)) == true &*& [_]BoxU8_share(?k, ?t0, ?l);
-    ens [_]BoxU8_share(k, t1, l);
+    req [_](<BoxU8>.share(?k, ?t0, ?l));
+    ens [_](<BoxU8>.share(k, t1, l));
 {
-    assume(false);
+    open <BoxU8>.share(k, t0, l);
+    assert [?df]exists(?p);
+    close [df]u8_share(k, t0, p);
+    u8_sync(t0, t1, p);
+    close <BoxU8>.share(k, t1, l);
+    leak <BoxU8>.share(k, t1, l);
+}
+
+lem BoxU8_send(t1: thread_id_t)
+    req <BoxU8>.own(?t0, ?v);
+    ens <BoxU8>.own(t1, v);
+{
+    close <BoxU8>.own(t1, v);
 }
 @*/
