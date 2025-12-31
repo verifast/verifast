@@ -626,30 +626,42 @@ Fixpoint verify_basic_blocks
 
 End LocalDecls.
 
-Definition body_is_correct(trace: Trace)(body: Body)(spec: Spec)(tree: SymexTree): Prop :=
+Definition verify_body(trace: Trace)(h: Heap)(tree: SymexTree)(body: Body)(args: list Value)(Q: Heap -> SymexTree -> Value -> Prop): Prop :=
   match local_decls body with
     [] => Error trace "body_is_correct: body has no return local" tt
-  | (result_var_decl::local_decls) as all_local_decls =>
-    let '(params, (local_decls, _)) := combine_ local_decls (inputs body) in
-    let param_tys := map (fun '((name, _), ty) => (name, ty)) params in
-    havoc_vars trace param_tys [] @@ fun env =>
-    produce trace [] env tree (pre spec) @@ fun h env tree =>
-    let env_after_pre := env in
+  | (result_var_decl::local_decls') =>
+    let '(param_env, (local_decls'', _)) := combine_ local_decls' args in
+    let env := map (fun '((name, _), arg) => (name, LSValue (Some arg))) param_env in
     process_param_addr_taken_steps trace h env tree @@ fun h env tree =>
-    process_local_addr_taken_steps trace h env tree (result_var_decl::local_decls) @@ fun h env tree cleanup_heapy_locals =>
+    process_local_addr_taken_steps trace h env tree (result_var_decl::local_decls'') @@ fun h env tree cleanup_heapy_locals =>
     match basic_blocks body with
       (_, bb)::_ =>
-      verify_basic_blocks all_local_decls trace (basic_blocks body) (List.length (basic_blocks body)) h env tree bb @@ fun h env tree =>
+      verify_basic_blocks (local_decls body) trace (basic_blocks body) (List.length (basic_blocks body)) h env tree bb @@ fun h env tree =>
       cleanup_heapy_locals h tree @@ fun h tree =>
       match assoc (fst result_var_decl) env with
-        Some (LSValue result) =>
-        consume trace h (("result", LSValue result)::env_after_pre) tree (post spec) @@ fun h env tree =>
-        True
+        Some (LSValue (Some result)) => Q h tree result
       | _ => Error trace "body_is_correct: could not find return local in env" (fst result_var_decl, env)
       end
     | _ => Error trace "body_is_correct: body has no basic blocks" tt
     end
   end.
+
+Fixpoint forall_tys(trace: Trace)(tys: list Ty)(Q: list Value -> Prop): Prop :=
+  match tys with
+    [] => Q []
+  | ty::tys =>
+    forall_ty trace ty @@ fun v =>
+    forall_tys trace tys @@ fun vs =>
+    Q (v::vs)
+  end.
+
+Definition body_is_correct(trace: Trace)(body: Body)(spec: Spec)(tree: SymexTree): Prop :=
+  forall_tys trace (map snd (spec_params spec)) @@ fun args =>
+  let env := combine (map fst (spec_params spec)) (map (fun v => LSValue (Some v)) args) in
+  produce trace [] env tree (pre spec) @@ fun h env tree =>
+  verify_body trace h tree body args @@ fun h tree result =>
+  consume trace h (("result", LSValue (Some result))::env) tree (post spec) @@ fun h env tree =>
+  True.
 
 Definition named_body_is_correct(func_name: string)(body: Body): Prop :=
   let trace := [VerifyingBody func_name] in
