@@ -307,19 +307,16 @@ TOOLS = $(TOOLS_EXCEPT_VFIDE) ../bin/vfide$(DOTEXE)
 vf: ../bin/verifast$(DOTEXE) ../bin/vfide$(DOTEXE)
 
 ifndef WITHOUT_LABLGTK
-build: $(TOOLS) $(STDLIB) tabhunt rocq_proofs
+build: $(TOOLS) $(STDLIB) tabhunt
 else
-build: $(TOOLS_EXCEPT_VFIDE) $(STDLIB) tabhunt rocq_proofs
+build: $(TOOLS_EXCEPT_VFIDE) $(STDLIB) tabhunt
 endif
 .PHONY: build
 
-rocq_proofs:
-ifneq ($(shell echo 'From iris.base_logic Require Import iprop.' > $${TMPDIR:-/tmp}/iris_check.v && coqc -q $${TMPDIR:-/tmp}/iris_check.v || echo "no"),no)
+rocq_metatheory_proofs:
 	@echo "  ROCQ     Checking proofs in ../bin/rust/rocq"
 	cd ../bin/rust/rocq && make
-else
-	@echo "  SKIP     rocq proofs (Coq or Iris not found)"
-endif
+.PHONY: rocq_metatheory_proofs
 
 # Only builds the C++ AST exporter tool binary (which checks macro expansions and serializes the C++ AST).
 # No need to use this target if you're working on (the C++ support of VeriFast) itself.
