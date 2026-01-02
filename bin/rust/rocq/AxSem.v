@@ -251,6 +251,7 @@ Definition wp_Body
     : iProp Σ :=
   ∀ (env: Env),
   ⌜ ∀ x info, assoc x (local_decls body) = Some info → ∃ ptr, env x = (ty info, ptr) ⌝ -∗
+  ⌜ Forall (λ '(x, info), assoc x (local_decls body) = Some info) (local_decls body) ⌝ -∗ (* Local variable names are unique *)
   match local_decls body with
     [] => False
   | result_var_decl::local_decls' =>
@@ -260,11 +261,10 @@ Definition wp_Body
     match basic_blocks body with
       (_, bb0)::_ =>
       wp_BasicBlocks env (basic_blocks body) bb0 wp_call
-        (let '(result_var, {| ty := ty |}) := result_var_decl in
-         ∃ result,
-         points_to ty (VPtr (snd (env result_var))) result
-         ∗ ([∗ list] '(x, {| ty := ty |}) ∈ local_decls', ∃ state, points_to_ ty (VPtr (snd (env x))) state)
-         ∗ Q result)
+        (wp_Operand env (Move (fst result_var_decl, [])) (fun result _ =>
+           ([∗ list] '(x, {| ty := ty |}) ∈ result_var_decl::local_decls'', ∃ state, points_to_ ty (VPtr (snd (env x))) state)
+           ∗ ([∗ list] '((x, {| ty := ty |}), _) ∈ param_env, ∃ state, points_to_ ty (VPtr (snd (env x))) state)
+           ∗ Q result))
     | _ => False
     end
   end.

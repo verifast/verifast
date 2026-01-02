@@ -105,7 +105,7 @@ Proof.
       iAssumption.
 Qed.
 
-Lemma store_to_non_addr_taken_local x env v0 env' Γ:
+Lemma remove1_assoc_own_env x env v0 env' Γ:
   remove1_assoc x env = Some (LSValue v0, env') →
   own_env Γ env -∗
   (∃ v0, points_to_ (Γ x).1 (VPtr (Γ x).2) v0) ∗
@@ -354,7 +354,7 @@ Proof.
       destruct y'; try tauto.
       iDestruct ("HQ" with "[% //] Hh") as "HQ".
       inversion Hplace_has_ty; subst.
-      iDestruct ((store_to_non_addr_taken_local _ _ _ _ _ Hxys') with "Henv") as "[Hx Henv]".
+      iDestruct ((remove1_assoc_own_env _ _ _ _ _ Hxys') with "Henv") as "[Hx Henv]".
       iFrame.
       iIntros "Hx".
       simpl.
@@ -1169,6 +1169,71 @@ Proof.
     iIntros (h0 env0 tree0 bb0) "%Hverify Hreturn Hh0 Henv0".
     destruct (assoc bb0 basic_blocks) as [bb'|]; try tauto.
     iApply (IHfuel with "Hreturn Hspecs Hh0 Henv0"); try eassumption.
+Qed.
+
+Lemma alloc_params_sound trace h tree param_env Qsymex Q:
+  Forall (λ '((x, info), arg), (Γ x).1 = ty info) param_env →
+  alloc_params trace h tree param_env Qsymex →
+  (∀ h env tree dealloc_params,
+   ⌜ Qsymex h env tree dealloc_params ⌝ -∗
+   (∀ trace h env tree Qsymex Q,
+    ⌜ dealloc_params trace h env tree Qsymex ⌝ -∗
+    (∀ h tree,
+     ⌜ Qsymex h tree ⌝ -∗
+     own_heap h -∗
+     Q) -∗
+    own_heap h -∗
+    own_env Γ env -∗
+    ([∗ list] '((x, {| ty := ty |}), _) ∈ param_env, ∃ state, points_to_ ty (VPtr (Γ x).2) state) ∗
+    Q) -∗
+   own_heap h -∗
+   own_env Γ env -∗
+   Q) -∗
+  own_heap h -∗
+  ([∗ list] '((x, {| ty := ty |}), v) ∈ param_env, points_to ty (VPtr (Γ x).2) v) -∗
+  Q.
+Proof.
+  revert trace h tree Qsymex Q.
+  induction param_env as [|[[x info] arg] param_env]; simpl.
+  - (* nil *)
+    iIntros (trace h tree Qsymex Q HΓ Halloc) "HQ Hh Hparam_env".
+    iApply ("HQ" with "[% //] [] Hh []").
+    + iIntros (_ h0 env tree0 Qsymex0 Q0) "%HQsymex0 HQ0 Hh0 Henv".
+      iSplitL "". done.
+      iApply ("HQ0" with "[% //] Hh0").
+    + simpl.
+      done.
+  - (* cons *)
+    iIntros (trace h etree Qsymex Q HΓ Halloc).
+    inversion HΓ; subst.
+    clear HΓ.
+    rename H1 into Hty_info.
+    rename H2 into HΓ.
+    destruct etree; try tauto.
+    destruct data; try tauto.
+    destruct (string_dec x0 x); try tauto.
+    subst.
+    iIntros "HQ Hh".
+    destruct info.
+    iIntros "[Hx Hparam_env]".
+    destruct addr_taken; try tauto.
+    iApply (IHparam_env with "[HQ Hx] Hh Hparam_env"); try eassumption.
+    iIntros (h0 env tree dealloc_params0) "%HQsymex Hdealloc_params0 Hh0 Henv".
+    iApply ("HQ" with "[% //] [Hdealloc_params0] Hh0 [Hx Henv]").
+    + iIntros (trace0 h1 env0 tree0 Qsymex0 Q0) "%Hdealloc HQ0 Hh1 Henv0".
+      case_eq (remove1_assoc x env0). 2:{
+        intros Hx; rewrite Hx in Hdealloc; tauto.
+      }
+      intros [xstate env1] Hx.
+      rewrite Hx in Hdealloc.
+      destruct xstate; try tauto.
+      iDestruct (remove1_assoc_own_env with "Henv0") as "[Hx Henv1]"; try eassumption.
+      rewrite Hty_info.
+      iFrame.
+      iApply ("Hdealloc_params0" with "[% //] HQ0 Hh1 Henv1").
+    + simpl.
+      rewrite Hty_info.
+      iFrame.
 Qed.
 
 End specs.

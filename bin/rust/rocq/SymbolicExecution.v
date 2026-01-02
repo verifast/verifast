@@ -271,18 +271,45 @@ Variable preds: list (string * PredDef).
 Variable specs: list (string * Spec).
 Variable trees: list (ProofObligation * SymexTree).
 
-Fixpoint process_param_addr_taken_steps(trace: Trace)(h: Heap)(env: Env)(tree: SymexTree)(Q: Heap -> Env -> SymexTree -> Prop): Prop :=
-  match tree with
-    ParamAddrTaken x true;; tree => Error trace "process_param_addr_taken_steps: ParamAddrTaken true is not yet supported" tree
-  | ParamAddrTaken x false;; tree => process_param_addr_taken_steps trace h env tree Q
-  | tree => Q h env tree
+Fixpoint alloc_params(trace: Trace)(h: Heap)(tree: SymexTree)(param_env: list ((Local * LocalDecl) * Value))
+    (Q: Heap -> Env -> SymexTree -> forall (dealloc_params: Trace -> Heap -> Env -> SymexTree -> (Heap -> SymexTree -> Prop) -> Prop), Prop)
+    {struct param_env}
+    : Prop :=
+  match param_env with
+    [] => Q h [] tree (fun trace h env tree Q => Q h tree)
+  | ((x, _), arg)::param_env =>
+    match tree with
+      ParamAddrTaken x' b;; tree =>
+      if string_dec x' x then
+        if b then
+          Error trace "alloc_params: ParamAddrTaken true is not yet supported" tree
+        else
+          alloc_params trace h tree param_env @@ fun h env tree dealloc_params =>
+          let dealloc_params trace h env tree Q :=
+            match remove1_assoc x env with
+            | Some (LSValue _, env) =>
+              dealloc_params trace h env tree Q
+            | remove_result => Error trace "alloc_params: dealloc_params: local not found" (x, env, remove_result)
+            end
+          in
+          let env := (x, LSValue (Some arg))::env in
+          Q h env tree dealloc_params
+      else
+        Error trace "alloc_params: ParamAddrTaken: param name does not match" (x', x)
+    | tree =>
+      Error trace "alloc_params: bad tree: ParamAddrTaken expected" tree
+    end
   end.
 
-Fixpoint process_local_addr_taken_steps(trace: Trace)(h: Heap)(env: Env)(tree: SymexTree)(local_decls: list (Local * LocalDecl))
-    (Q: Heap -> Env -> SymexTree -> forall (dealloc_heapy_locals: Heap -> SymexTree -> (Heap -> SymexTree -> Prop) -> Prop), Prop)
+Fixpoint alloc_locals(trace: Trace)(h: Heap)(env: Env)(tree: SymexTree)(local_decls: list (Local * LocalDecl))
+    (Q: Heap -> Env -> SymexTree -> forall (dealloc_locals: Trace -> Heap -> Env -> SymexTree -> (Heap -> Env -> SymexTree -> Prop) -> Prop), Prop)
     : Prop :=
   match local_decls with
-    [] => Q h env tree (fun h tree Q => Q h tree)
+    [] =>
+    let dealloc_locals trace h env tree Q :=
+      Q h env tree
+    in
+    Q h env tree dealloc_locals
   | (x, {| ty := ty |})::local_decls =>
     match tree with
       LocalAddrTaken x' b;; tree =>
@@ -290,22 +317,30 @@ Fixpoint process_local_addr_taken_steps(trace: Trace)(h: Heap)(env: Env)(tree: S
         if b then
           forall ptr value,
           ptr <> null_ptr ->
-          let '(h, cleanup_heapy_locals) :=
+          let '(h, dealloc_locals) :=
             match ty with
-              Never | Tuple0 => (h, (fun cleanup_heapy_locals' => cleanup_heapy_locals'))
+              Never | Tuple0 => (h, (fun dealloc_locals' => dealloc_locals'))
             | _ =>
               (Prim (PointsTo_ ty (VPtr ptr) value)::h,
-               (fun cleanup_heapy_locals' h tree Q =>
+               (fun dealloc_locals' trace h env tree Q =>
                 consume_points_to_ trace h tree ty (VPtr ptr) @@ fun h tree _ =>
-                cleanup_heapy_locals' h tree Q))
+                dealloc_locals' trace h env tree Q))
             end
           in
           let env := ((x, LSPlace ptr)::env) in
-          process_local_addr_taken_steps trace h env tree local_decls @@ fun h env tree cleanup_heapy_locals' =>
-          Q h env tree (cleanup_heapy_locals cleanup_heapy_locals')
+          alloc_locals trace h env tree local_decls @@ fun h env tree dealloc_locals' =>
+          Q h env tree (dealloc_locals dealloc_locals')
         else
           let env := ((x, LSValue None)::env) in
-          process_local_addr_taken_steps trace h env tree local_decls Q
+          alloc_locals trace h env tree local_decls @@ fun h env tree dealloc_locals' =>
+          let dealloc_locals trace h env tree Q :=
+            match remove1_assoc x env with
+            | Some (LSValue _, env) =>
+              dealloc_locals' trace h env tree Q
+            | remove_result => Error trace "alloc_locals: dealloc_locals: local not found" (x, env, remove_result)
+            end
+          in
+          Q h env tree dealloc_locals
       else
         Error trace "process_local_addr_taken_steps: local variable name does not match" tree
     | _ => Error trace "process_local_addr_taken_steps: bad tree: LocalAddrTaken expected" tree
@@ -631,17 +666,15 @@ Definition verify_body(trace: Trace)(h: Heap)(tree: SymexTree)(body: Body)(args:
     [] => Error trace "body_is_correct: body has no return local" tt
   | (result_var_decl::local_decls') =>
     let '(param_env, (local_decls'', _)) := combine_ local_decls' args in
-    let env := map (fun '((name, _), arg) => (name, LSValue (Some arg))) param_env in
-    process_param_addr_taken_steps trace h env tree @@ fun h env tree =>
-    process_local_addr_taken_steps trace h env tree (result_var_decl::local_decls'') @@ fun h env tree cleanup_heapy_locals =>
+    alloc_params trace h tree param_env @@ fun h env tree dealloc_params =>
+    alloc_locals trace h env tree (result_var_decl::local_decls'') @@ fun h env tree dealloc_locals =>
     match basic_blocks body with
       (_, bb)::_ =>
       verify_basic_blocks (local_decls body) trace (basic_blocks body) (List.length (basic_blocks body)) h env tree bb @@ fun h env tree =>
-      cleanup_heapy_locals h tree @@ fun h tree =>
-      match assoc (fst result_var_decl) env with
-        Some (LSValue (Some result)) => Q h tree result
-      | _ => Error trace "body_is_correct: could not find return local in env" (fst result_var_decl, env)
-      end
+      verify_operand (local_decls body) trace h env tree (Move (fst result_var_decl, [])) @@ fun h tree result _ =>
+      dealloc_locals trace h env tree @@ fun h env tree =>
+      dealloc_params trace h env tree @@ fun h tree =>
+      Q h tree result
     | _ => Error trace "body_is_correct: body has no basic blocks" tt
     end
   end.
