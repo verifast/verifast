@@ -250,7 +250,8 @@ Definition wp_Body
     (Q: Value -> iProp Σ)
     : iProp Σ :=
   ∀ (env: Env),
-  ⌜ ∀ x info, assoc x (local_decls body) = Some info → ∃ ptr, env x = (ty info, ptr) ⌝ -∗
+  ⌜ ∀ x info, assoc x (local_decls body) = Some info → (env x).1 = ty info ⌝ -∗
+  ⌜ ∀ x, (env x).2 ≠ null_ptr ⌝ -∗
   ⌜ Forall (λ '(x, info), assoc x (local_decls body) = Some info) (local_decls body) ⌝ -∗ (* Local variable names are unique *)
   match local_decls body with
     [] => False

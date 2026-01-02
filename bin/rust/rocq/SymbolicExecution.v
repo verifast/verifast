@@ -56,6 +56,8 @@ with GenericArgList_eq_dec(args1 args2: GenericArgList) {struct args1}: {args1 =
 - decide equality.
 Defined.
 
+Definition Ty_eqb(ty1 ty2: Ty): bool := if Ty_eq_dec ty1 ty2 then true else false.
+
 Inductive LocalState :=
 | LSValue(v: option Value)
 | LSPlace(a: Ptr) (* The environment records (a pointer to) the place where this local variable's value is stored, not the value itself *)
@@ -303,6 +305,7 @@ Fixpoint alloc_params(trace: Trace)(h: Heap)(tree: SymexTree)(param_env: list ((
 
 Fixpoint alloc_locals(trace: Trace)(h: Heap)(env: Env)(tree: SymexTree)(local_decls: list (Local * LocalDecl))
     (Q: Heap -> Env -> SymexTree -> forall (dealloc_locals: Trace -> Heap -> Env -> SymexTree -> (Heap -> Env -> SymexTree -> Prop) -> Prop), Prop)
+    {struct local_decls}
     : Prop :=
   match local_decls with
     [] =>
@@ -318,14 +321,13 @@ Fixpoint alloc_locals(trace: Trace)(h: Heap)(env: Env)(tree: SymexTree)(local_de
           forall ptr value,
           ptr <> null_ptr ->
           let '(h, dealloc_locals) :=
-            match ty with
-              Never | Tuple0 => (h, (fun dealloc_locals' => dealloc_locals'))
-            | _ =>
+            if Ty_eqb ty Never || Ty_eqb ty Tuple0 then
+              (h, (fun dealloc_locals' => dealloc_locals'))
+            else
               (Prim (PointsTo_ ty (VPtr ptr) value)::h,
                (fun dealloc_locals' trace h env tree Q =>
                 consume_points_to_ trace h tree ty (VPtr ptr) @@ fun h tree _ =>
                 dealloc_locals' trace h env tree Q))
-            end
           in
           let env := ((x, LSPlace ptr)::env) in
           alloc_locals trace h env tree local_decls @@ fun h env tree dealloc_locals' =>

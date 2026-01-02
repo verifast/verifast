@@ -49,6 +49,45 @@ Definition own_heap(h: Heap): iProp Σ :=
   ⌜ heap_holds preds H h ⌝ ∗
   own_logheap H.
 
+Definition own_chunk(chunk: Chunk): iProp Σ :=
+  ∃ H, ⌜ chunk_holds preds H chunk ⌝ ∗ own_logheap H.
+
+Lemma own_chunk_prim_intro ty ptr v:
+  points_to_ ty ptr v -∗
+  own_chunk (Prim (PointsTo_ ty ptr v)).
+Proof.
+  iIntros "Hptr".
+  unfold own_chunk.
+  iExists {[+ PointsTo_ ty ptr v +]}.
+  iSplitL "". {
+    iPureIntro.
+    constructor.
+  }
+  unfold own_logheap.
+  iApply (lh_big_ast_lh_sing_intro).
+  iAssumption.
+Qed.
+
+Lemma own_heap_cons_intro(chunk: Chunk)(h: Heap):
+  own_chunk chunk -∗
+  own_heap h -∗
+  own_heap (chunk::h).
+Proof.
+  unfold own_chunk, own_heap.
+  iIntros "[%Hchunk [%HHchunk HHchunk]] [%Hh [%HHh HHh]]".
+  iExists (Hchunk ⋅ Hh).
+  iSplitL "". {
+    iPureIntro.
+    simpl.
+    exists Hchunk.
+    exists Hh.
+    split. reflexivity.
+    tauto.
+  }
+  iApply (own_logheap_lh_comp_intro).
+  iFrame.
+Qed.
+
 Definition own_env_entry(Γ: AxSem.Env)(x: string)(state: LocalState): iProp Σ :=
   match state with
     LSValue (Some v) => points_to (fst (Γ x)) (VPtr (snd (Γ x))) v
@@ -395,13 +434,19 @@ Proof.
         iAssumption.
 Qed.
 
-Section local_decls.
+Section specs.
 
-Variable local_decls: list (Local * LocalDecl).
+Variable specs: list (string * Spec).
 
 Section Γ.
 
 Variable Γ: AxSem.Env.
+
+Hypothesis Γ_non_null: ∀ x, (Γ x).2 ≠ null_ptr.
+
+Section local_decls.
+
+Variable local_decls: list (Local * LocalDecl).
 
 Hypothesis Γ_well_typed: ∀ x local_decl,
   assoc x local_decls = Some local_decl → ty local_decl = (Γ x).1.
@@ -837,10 +882,6 @@ Fixpoint values_have_tys(tys: list Ty)(values: list Value): Prop :=
   | _, _ => False
   end.
 
-Section specs.
-
-Variable specs: list (string * Spec).
-
 Definition spec_sound
     (func_name: string)(targs: list GenericArg)(args: list Value)
     (wp_call: string → list GenericArg → list Value → (Value → iProp Σ) → iProp Σ)
@@ -903,9 +944,6 @@ Proof.
   iIntros (h'' tree'').
   iApply "HQ".
 Qed.
-
-Definition own_chunk(chunk: Chunk): iProp Σ :=
-  ∃ H, ⌜ chunk_holds preds H chunk ⌝ ∗ own_logheap H.
 
 Lemma consume_chunk_sound trace h tree Qsymex Q:
   consume_chunk trace h tree Qsymex →
@@ -1171,6 +1209,8 @@ Proof.
     iApply (IHfuel with "Hreturn Hspecs Hh0 Henv0"); try eassumption.
 Qed.
 
+End local_decls.
+
 Lemma alloc_params_sound trace h tree param_env Qsymex Q:
   Forall (λ '((x, info), arg), (Γ x).1 = ty info) param_env →
   alloc_params trace h tree param_env Qsymex →
@@ -1236,11 +1276,115 @@ Proof.
       iFrame.
 Qed.
 
-End specs.
+Lemma alloc_locals_sound trace h env tree local_decls Qsymex Q:
+  Forall (λ '(x, info), (Γ x).1 = ty info) local_decls →
+  alloc_locals trace h env tree local_decls Qsymex →
+  (∀ h env tree dealloc_locals,
+   ⌜ Qsymex h env tree dealloc_locals ⌝ -∗
+   (∀ trace h env tree Qsymex Q,
+    ⌜ dealloc_locals trace h env tree Qsymex ⌝ -∗
+    (∀ h env tree,
+     ⌜ Qsymex h env tree ⌝ -∗
+     own_heap h -∗
+     own_env Γ env -∗
+     Q) -∗
+    own_heap h -∗
+    own_env Γ env -∗
+    ([∗ list] '(x, {| ty := ty |}) ∈ local_decls, ∃ state, points_to_ ty (VPtr (Γ x).2) state) ∗
+    Q) -∗
+   own_heap h -∗
+   own_env Γ env -∗
+   Q) -∗
+  own_heap h -∗
+  own_env Γ env -∗
+  ([∗ list] '(x, {| ty := ty |}) ∈ local_decls, ∃ state, points_to_ ty (VPtr (Γ x).2) state) -∗
+  Q.
+Proof.
+  revert trace h env tree Qsymex Q.
+  induction local_decls as [|[x info] local_decls]; simpl.
+  - (* nil *)
+    iIntros (trace h env tree Qsymex Q _ Halloc) "HQ Hh Henv _".
+    iApply ("HQ" with "[% //] [] Hh Henv").
+    iIntros (trace0 h0 env0 tree0 Qsymex0 Q0) "%HQsymex0 HQ0 Hh0 Henv0".
+    iSplitL "". done.
+    iApply ("HQ0" with "[% //] Hh0 Henv0").
+  - (* cons *)
+    iIntros (trace h env tree Qsymex Q HΓ Halloc) "HQ Hh Henv [Hx Hlocal_decls]".
+    inversion HΓ; subst.
+    clear HΓ.
+    destruct info.
+    simpl in H1.
+    rename H1 into Hty.
+    rename H2 into HΓ.
+    destruct tree; try tauto.
+    destruct data; try tauto.
+    destruct (string_dec x x0); try tauto.
+    subst x0.
+    destruct addr_taken.
+    + (* true *)
+      destruct (Ty_eqb ty Never || Ty_eqb ty Tuple0).
+      * (* true *)
+        pose proof (Halloc':=Halloc (Γ x).2 VDummy (Γ_non_null x)).
+        iApply (IHlocal_decls with "[HQ Hx] Hh [Henv] Hlocal_decls"); try eassumption. 2:{
+          simpl.
+          iFrame.
+          done.
+        }
+        iIntros (h0 env0 tree0 dealloc_locals) "%HQsymex Hdealloc_locals_sound Hh0 Henv0".
+        iApply ("HQ" with "[% //] [Hdealloc_locals_sound Hx] Hh0 Henv0").
+        iIntros (trace0 h1 env1 tree1 Qsymex0 Q0) "%Hdealloc_locals HQ0 Hh1 Henv1".
+        iFrame.
+        iApply ("Hdealloc_locals_sound" with "[% //] [HQ0] Hh1 Henv1").
+        iAssumption.
+      * (* false *)
+        iDestruct "Hx" as (state) "Hx".
+        pose proof (Halloc':=Halloc (Γ x).2 state (Γ_non_null x)).
+        iApply (IHlocal_decls with "[HQ] [Hx Hh] [Henv] Hlocal_decls"); try eassumption.
+        2:{
+          iApply (own_heap_cons_intro with "[Hx] Hh").
+          iApply (own_chunk_prim_intro).
+          done.
+        }
+        2:{
+          simpl.
+          iSplitL "". done.
+          done.
+        }
+        iIntros (h0 env0 tree0 dealloc_locals) "%HQsymex Hdealloc_locals_sound Hh0 Henv0".
+        iApply ("HQ" with "[% //] [Hdealloc_locals_sound] Hh0 Henv0").
+        iIntros (trace0 h1 env1 tree1 Qsymex0 Q0) "%Hconsume HQ0 Hh1 Henv1".
+        assert (Hex: ∀ P (Q R: iProp Σ), (∃ (v: Value), P v ∗ Q ∗ R) -∗ ((∃ v, P v) ∗ Q) ∗ R). {
+          iIntros (P Q1 R) "[%v [HP [HQ HR]]]".
+          iFrame.
+        }
+        iApply Hex.
+        iApply (consume_points_to__sound with "[Hdealloc_locals_sound HQ0 Henv1] Hh1"); try eassumption.
+        iIntros (h2 tree2 v) "%Hdealloc Hh2".
+        iApply ("Hdealloc_locals_sound" with "[% //] [HQ0] Hh2 Henv1").
+        iAssumption.
+    + (* false *)
+      iApply (IHlocal_decls with "[HQ] Hh [Hx Henv] Hlocal_decls"); try eassumption. 2:{
+        rewrite <- Hty.
+        simpl. iFrame.
+      }
+      iIntros (h0 env0 tree0 dealloc_locals) "%HQsymex Hdealloc_locals_sound Hh0 Henv0".
+      iApply ("HQ" with "[% //] [Hdealloc_locals_sound] Hh0 Henv0").
+      iIntros (trace0 h1 env1 tree1 Qsymex0 Q0) "%Hdealloc HQ0 Hh1 Henv1".
+      case_eq (remove1_assoc x env1). 2:{
+        intros Hx; rewrite Hx in Hdealloc; tauto.
+      }
+      intros [xstate env2] Hx.
+      rewrite Hx in Hdealloc.
+      destruct xstate; try tauto.
+      iDestruct (remove1_assoc_own_env with "Henv1") as "[Hx Henv2]"; try eassumption.
+      rewrite Hty.
+      iFrame.
+      iApply ("Hdealloc_locals_sound" with "[% //] HQ0 Hh1 Henv2").
+Qed.
 
 End Γ.
 
-End local_decls.
+End specs.
 
 End preds.
 
