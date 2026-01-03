@@ -1212,7 +1212,7 @@ Qed.
 End local_decls.
 
 Lemma alloc_params_sound trace h tree param_env Qsymex Q:
-  Forall (λ '((x, info), arg), (Γ x).1 = ty info) param_env →
+  Forall (λ '((x, info), arg), ty info = (Γ x).1) param_env →
   alloc_params trace h tree param_env Qsymex →
   (∀ h env tree dealloc_params,
    ⌜ Qsymex h env tree dealloc_params ⌝ -∗
@@ -1268,16 +1268,16 @@ Proof.
       rewrite Hx in Hdealloc.
       destruct xstate; try tauto.
       iDestruct (remove1_assoc_own_env with "Henv0") as "[Hx Henv1]"; try eassumption.
-      rewrite Hty_info.
+      rewrite <- Hty_info.
       iFrame.
       iApply ("Hdealloc_params0" with "[% //] HQ0 Hh1 Henv1").
     + simpl.
-      rewrite Hty_info.
+      rewrite <- Hty_info.
       iFrame.
 Qed.
 
 Lemma alloc_locals_sound trace h env tree local_decls Qsymex Q:
-  Forall (λ '(x, info), (Γ x).1 = ty info) local_decls →
+  Forall (λ '(x, info), ty info = (Γ x).1) local_decls →
   alloc_locals trace h env tree local_decls Qsymex →
   (∀ h env tree dealloc_locals,
    ⌜ Qsymex h env tree dealloc_locals ⌝ -∗
@@ -1371,7 +1371,7 @@ Proof.
         iAssumption.
     + (* false *)
       iApply (IHlocal_decls with "[HQ] Hh [Hx Henv] Hlocal_decls"); try eassumption. 2:{
-        rewrite <- Hty.
+        rewrite Hty.
         simpl. iFrame.
       }
       iIntros (h0 env0 tree0 dealloc_locals) "%HQsymex Hdealloc_locals_sound Hh0 Henv0".
@@ -1390,6 +1390,89 @@ Proof.
 Qed.
 
 End Γ.
+
+Lemma verify_body_sound trace h tree body args Qsymex wp_call Q:
+  verify_body preds specs trace h tree body args Qsymex →
+  □ ▷ (∀ func_name targs args, spec_sound func_name targs args wp_call) -∗
+  (∀ h tree result,
+   ⌜ Qsymex h tree result ⌝ -∗
+   own_heap h -∗
+   Q result) -∗
+  own_heap h -∗
+  wp_Body body args (wp_call_std wp_call) Q.
+Proof.
+  iIntros (Hverify) "#Hspecs HQ Hh".
+  unfold verify_body in Hverify.
+  unfold wp_Body.
+  iIntros (Γ) "%Γ_well_typed %Γ_non_null %Hlocal_decls_unique".
+  case_eq (local_decls body). {
+    intros Hlocal_decls.
+    rewrite Hlocal_decls in Hverify.
+    tauto.
+  }
+  intros [result_var result_var_info] local_decls' Hlocal_decls.
+  rewrite {1}Hlocal_decls in Hverify.
+  case_eq (combine_ local_decls' args).
+  intros param_env [local_decls'' args'] Hcombine_.
+  rewrite Hcombine_ in Hverify.
+  destruct (combine__append local_decls' args param_env local_decls'' args' Hcombine_) as [Hcombine_1 Hcombine_2].
+  subst.
+  iApply (alloc_params_sound with "[HQ] Hh"); try eassumption. {
+    rewrite Hlocal_decls in Hlocal_decls_unique.
+    apply Forall_cons_1 in Hlocal_decls_unique.
+    destruct Hlocal_decls_unique as [_ Hlocal_decls'_unique].
+    apply Forall_app in Hlocal_decls'_unique.
+    destruct Hlocal_decls'_unique as [H1 H2].
+    apply Forall_map in H1.
+    apply Forall_impl with (2:=H1).
+    intros.
+    destruct a.
+    simpl in H.
+    destruct p.
+    apply Γ_well_typed.
+    rewrite Hlocal_decls.
+    apply H.
+  }
+  clear Hverify.
+  iIntros (h0 env0 tree0 dealloc_params) "%Halloc_locals Hdealloc_params_sound Hh0 Henv0".
+  iApply (alloc_locals_sound with "[Hdealloc_params_sound HQ] Hh0 Henv0"); try eassumption. {
+    rewrite Hlocal_decls in Hlocal_decls_unique.
+    apply Forall_cons_1 in Hlocal_decls_unique.
+    destruct Hlocal_decls_unique as [Hresult_var_unique Hlocal_decls'_unique].
+    apply Forall_app in Hlocal_decls'_unique.
+    destruct Hlocal_decls'_unique as [Hparams_unique Hlocal_decls''_unique].
+    apply Forall_cons. {
+      apply Γ_well_typed.
+      rewrite Hlocal_decls.
+      assumption.
+    }
+    apply Forall_impl with (2:=Hlocal_decls''_unique).
+    intros [x info] Hx.
+    apply Γ_well_typed.
+    rewrite Hlocal_decls.
+    apply Hx.
+  }
+  clear Halloc_locals.
+  iIntros (h1 env tree1 dealloc_locals) "%Hverify_bb Hdealloc_locals_sound Hh1 Henv".
+  case_eq (basic_blocks body). {
+    intros Hbasic_blocks.
+    rewrite Hbasic_blocks in Hverify_bb.
+    tauto.
+  }
+  intros [bb0 bb_data0] basic_blocks' Hbasic_blocks.
+  rewrite <- Hbasic_blocks.
+  rewrite {1}Hbasic_blocks in Hverify_bb.
+  iApply (verify_basic_blocks_sound with "[-Hh1 Henv] Hspecs Hh1 Henv"); try eassumption.
+  clear Hverify_bb.
+  iIntros (h2 env1 tree2) "%Hverify_operand Hh2 Henv1".
+  iApply (verify_operand_sound with "[-Hh2 Henv1] Hh2 Henv1"); try eassumption.
+  iIntros (h3 tree3 result result_ty) "%Hdealloc_locals Hh3 Henv1".
+  iApply ("Hdealloc_locals_sound" with "[% //] [-Hh3 Henv1] Hh3 Henv1").
+  iIntros (h4 env2 tree4) "%Hdealloc_params Hh4 Henv2".
+  iApply ("Hdealloc_params_sound" with "[% //] [-Hh4 Henv2] Hh4 Henv2").
+  iIntros (h5 tree5) "%HQsymex Hh5".
+  iApply ("HQ" with "[% //] Hh5").
+Qed.
 
 End specs.
 

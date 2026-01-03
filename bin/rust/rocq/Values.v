@@ -46,3 +46,37 @@ Fixpoint combine_{A B}(xs: list A)(ys: list B): list (A * B) * (list A * list B)
     ((x, y)::xys, (xs, ys))
   end.
 
+Lemma combine__append{A B}(xs: list A)(ys: list B) xys xs' ys':
+  combine_ xs ys = (xys, (xs', ys')) ->
+  xs = map fst xys ++ xs' /\
+  ys = map snd xys ++ ys'.
+Proof.
+  revert ys xys xs' ys'.
+  induction xs; simpl; intros ys zys xs' ys'.
+  - (* nil *)
+    intros.
+    injection H; clear H; intros; subst.
+    split. {
+      reflexivity.
+    }
+    reflexivity.
+  - (* cons *)
+    destruct ys as [|y ys].
+    + intros.
+      injection H; clear H; intros; subst.
+      split. {
+        reflexivity.
+      }
+      reflexivity.
+    + case_eq (combine_ xs ys).
+      intros xys' [xs'' ys''] Hcombine_.
+      apply IHxs in Hcombine_.
+      destruct Hcombine_.
+      subst.
+      intros.
+      injection H; clear H; intros; subst.
+      split. {
+        reflexivity.
+      }
+      reflexivity.
+Qed.
