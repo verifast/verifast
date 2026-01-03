@@ -1,6 +1,29 @@
 From iris.base_logic Require Export iprop.
 Require Export VfMir Values.
 
+Parameter value_has_ty0: Ty → Value → Prop.
+
+Inductive value_is_Bool: Value → Prop :=
+  value_is_Bool_intro(b: bool): value_is_Bool (VBool b).
+
+Inductive value_is_RawPtr: Value → Prop :=
+  value_is_RawPtr_intro(ptr: Ptr): value_is_RawPtr (VPtr ptr).
+
+Definition value_has_ty(ty: Ty): Value → Prop :=
+  match ty with
+    Bool => value_is_Bool
+  | RawPtr _ => value_is_RawPtr
+  | _ => value_has_ty0 ty
+  end.
+
+Fixpoint values_have_tys(tys: list Ty)(values: list Value): Prop :=
+  match tys, values with
+    [], [] => True
+  | ty::tys, value::values =>
+    value_has_ty ty value ∧ values_have_tys tys values
+  | _, _ => False
+  end.
+
 Definition Program := list (string * Body).
 Definition Env := string → Ty * Ptr.
 
@@ -270,6 +293,14 @@ Definition wp_Body
     end
   end.
 
+Definition wp_Body'
+    (body: Body)(args: list Value)
+    (wp_call: string -> list GenericArg -> list Value -> (Value -> iProp Σ) -> iProp Σ)
+    (Q: Value -> iProp Σ)
+    : iProp Σ :=
+  ⌜ values_have_tys (inputs body) args ⌝ -∗
+  wp_Body body args wp_call (λ result, (⌜ value_has_ty (output body) result ⌝ -∗ Q result)%I).
+
 Definition wp_call_std
     (wp_call: string -> list GenericArg -> list Value -> (Value -> iProp Σ) -> iProp Σ)
     (func_name: string)(targs: list GenericArg)(args: list Value)
@@ -299,7 +330,7 @@ Lemma wp_Bodies_intro
   match assoc func_name program with
     None => False
   | Some body =>
-    wp_Body body args (wp_call_std (wp_Bodies program)) Q
+    wp_Body' body args (wp_call_std (wp_Bodies program)) Q
   end -∗
   wp_Bodies program func_name targs args Q.
 Admitted.

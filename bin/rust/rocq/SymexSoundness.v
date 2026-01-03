@@ -18,6 +18,9 @@ Axiom lh_big_ast_lh_sing_intro:
 Axiom lh_big_ast_lh_sing_elim:
   forall chunk f,
   lh_big_ast {[+ chunk +]} f -∗ f chunk.
+Axiom lh_big_ast_lh_empty_intro:
+  forall f,
+  ⊢ lh_big_ast ∅ f. 
 
 Definition own_logheap(H: LogHeap): iProp Σ :=
   lh_big_ast H (λ '(PointsTo_ ty ptr v), points_to_ ty ptr v).
@@ -851,21 +854,6 @@ Proof.
   iAssumption.
 Qed.
 
-Parameter value_has_ty0: Ty → Value → Prop.
-
-Inductive value_is_Bool: Value → Prop :=
-  value_is_Bool_intro(b: bool): value_is_Bool (VBool b).
-
-Inductive value_is_RawPtr: Value → Prop :=
-  value_is_RawPtr_intro(ptr: Ptr): value_is_RawPtr (VPtr ptr).
-
-Definition value_has_ty(ty: Ty): Value → Prop :=
-  match ty with
-    Bool => value_is_Bool
-  | RawPtr _ => value_is_RawPtr
-  | _ => value_has_ty0 ty
-  end.
-
 Lemma forall_ty_sound trace ty Q v:
   forall_ty trace ty Q →
   value_has_ty ty v →
@@ -874,13 +862,20 @@ Proof.
   intros Hforall Hhas; destruct ty; try tauto; simpl in *; inversion Hhas; subst; auto.
 Qed.
 
-Fixpoint values_have_tys(tys: list Ty)(values: list Value): Prop :=
-  match tys, values with
-    [], [] => True
-  | ty::tys, value::values =>
-    value_has_ty ty value ∧ values_have_tys tys values
-  | _, _ => False
-  end.
+Definition spec_holds
+    (spec: Spec)(targs: list GenericArg)(args: list Value)
+    (wp_call: (Value → iProp Σ) → iProp Σ)
+    : iProp Σ :=
+  (* ⌜ values_have_tys (map snd (spec_params spec)) args ⌝ -∗ *)
+  let env := combine (map fst (spec_params spec)) (map (fun v => LSValue (Some v)) args) in
+  ∀ env',
+  own_asn env (pre spec) env' -∗
+  ∀ Q,
+  (∀ result,
+   ⌜ value_has_ty (spec_output spec) result ⌝ ∗
+   (∃ env'', own_asn (("result", LSValue (Some result))::env') (post spec) env'') -∗
+   Q result) -∗
+  wp_call Q.
 
 Definition spec_sound
     (func_name: string)(targs: list GenericArg)(args: list Value)
@@ -888,17 +883,7 @@ Definition spec_sound
     : iProp Σ :=
   match assoc func_name specs with
     None => True
-  | Some spec =>
-    (* ⌜ values_have_tys (map snd (spec_params spec)) args ⌝ -∗ *)
-    let env := combine (map fst (spec_params spec)) (map (fun v => LSValue (Some v)) args) in
-    ∀ env',
-    own_asn env (pre spec) env' -∗
-    ∀ Q,
-    (∀ result,
-     ⌜ value_has_ty (spec_output spec) result ⌝ ∗
-     (∃ env'', own_asn (("result", LSValue (Some result))::env') (post spec) env'') -∗
-     Q result) -∗
-    wp_call func_name targs args Q
+  | Some spec => spec_holds spec targs args (wp_call func_name targs args)
   end.
 
 Lemma verify_call_sound trace h tree func_name targs args Qsymex wp_call Q:
@@ -1472,6 +1457,65 @@ Proof.
   iApply ("Hdealloc_params_sound" with "[% //] [-Hh4 Henv2] Hh4 Henv2").
   iIntros (h5 tree5) "%HQsymex Hh5".
   iApply ("HQ" with "[% //] Hh5").
+Qed.
+
+Lemma forall_tys_sound trace tys Q vs:
+  forall_tys trace tys Q →
+  values_have_tys tys vs → Q vs.
+Proof.
+  revert trace Q vs.
+  induction tys as [|ty tys]; intros trace Q vs Hforall Hvs; destruct vs; simpl in *; try tauto.
+  destruct Hvs as [Hv Hvs].
+  apply forall_ty_sound with (v:=v) (2:=Hv) in Hforall.
+  apply IHtys with (1:=Hforall) (2:=Hvs).
+Qed.
+
+Lemma own_heap_nil:
+  ⊢ own_heap [].
+Proof.
+  unfold own_heap.
+  iExists ∅.
+  iSplitL "". {
+    iPureIntro.
+    unfold heap_holds.
+    reflexivity.
+  }
+  unfold own_logheap.
+  iApply lh_big_ast_lh_empty_intro.
+Qed.
+
+Lemma body_is_correct_sound trace body spec tree wp_call:
+  body_is_correct preds specs trace body spec tree →
+  inputs body = map snd (spec_params spec) →
+  output body = spec_output spec →
+  □ ▷ (∀ func_name targs args, spec_sound func_name targs args wp_call) -∗
+  ∀ targs args,
+  spec_holds spec targs args (wp_Body' body args (wp_call_std wp_call)).
+Proof.
+  iIntros (Hcorrect Hinputs Houtput) "#Hspecs %targs %args".
+  unfold spec_holds.
+  iIntros (env') "Hpre %Q HQ".
+  unfold body_is_correct in Hcorrect.
+  unfold wp_Body'.
+  iIntros "%Hvalues_have_tys".
+  rewrite -{1}Hinputs in Hcorrect.
+  apply forall_tys_sound with (2:=Hvalues_have_tys) in Hcorrect.
+  iApply (produce_sound with "[HQ] [] Hpre"); try eassumption. 2:{
+    iApply own_heap_nil.
+  }
+  iIntros (h tree0) "%Hverify Hh".
+  iApply (verify_body_sound with "Hspecs [HQ] Hh"); try eassumption.
+  iIntros (h0 tree1 result) "%Hconsume Hh0".
+  iApply (consume_sound with "[HQ] Hh0"); try eassumption.
+  iIntros (h1 env'0 tree2) "_ [Hpost Hh1] %Hresult".
+  iApply ("HQ" with "[Hpost]").
+  iSplitL "". {
+    iPureIntro.
+    rewrite <- Houtput.
+    done.
+  }
+  iExists env'0.
+  iFrame.
 Qed.
 
 End specs.
