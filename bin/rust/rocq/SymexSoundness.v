@@ -1355,7 +1355,14 @@ Proof.
         iIntros (trace0 h1 env1 tree1 Qsymex0 Q0) "%Hconsume HQ0 Hh1 Henv1".
         assert (Hex: ∀ P (Q R: iProp Σ), (∃ (v: Value), P v ∗ Q ∗ R) -∗ ((∃ v, P v) ∗ Q) ∗ R). {
           iIntros (P Q1 R) "[%v [HP [HQ HR]]]".
-          iFrame.
+          iSplitR "HR". {
+            iSplitR "HQ". {
+              iExists v.
+              done.
+            }
+            done.
+          }
+          done.
         }
         iApply Hex.
         iApply (consume_points_to__sound with "[Hdealloc_locals_sound HQ0 Henv1] Hh1"); try eassumption.
