@@ -43,7 +43,8 @@ fn main()
         //@ close Nodes(&node1 as *mut u8);
         let mut node2: *mut u8 = &raw mut node1 as *mut u8;
         //@ close Nodes(&node2 as *mut u8);
-        reverse(&raw mut node2 as *mut u8);
+        let reversed = reverse(&raw mut node2 as *mut u8);
+        reverse(reversed);
         std::process::abort();
     }
 }
