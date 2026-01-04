@@ -313,6 +313,11 @@ build: $(TOOLS_EXCEPT_VFIDE) $(STDLIB) tabhunt
 endif
 .PHONY: build
 
+rocq_metatheory_proofs:
+	@echo "  ROCQ     Checking proofs in ../bin/rust/rocq"
+	cd ../bin/rust/rocq && make
+.PHONY: rocq_metatheory_proofs
+
 # Only builds the C++ AST exporter tool binary (which checks macro expansions and serializes the C++ AST).
 # No need to use this target if you're working on (the C++ support of VeriFast) itself.
 # Only required if you worked on the C++ AST exporter tool, or edited the capnp serialization schema.

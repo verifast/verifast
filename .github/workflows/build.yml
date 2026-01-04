@@ -135,6 +135,26 @@ jobs:
           BODY=$(gh release view --repo ${{ github.event.repository.full_name }} ${{ github.event.release.tag_name }} --json body --template '{{.body}}')
           gh release edit --repo ${{ github.event.repository.full_name }} ${{ github.event.release.tag_name }} --notes "$BODY"$'\r\n'"- $ARTIFACT_NAME: [attestation]($ATTESTATION_URL)"
 
+  build_ubuntu_24:
+    runs-on: ubuntu-24.04
+    permissions: {}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Build setup
+        run: ./setup-build.sh
+
+      - name: Build
+        run: |
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            export VFVERSION=$GITHUB_REF_NAME
+          fi
+          ./build.sh rocq_metatheory_proofs
+
   build_macos:
     runs-on: macos-15-intel
     permissions: {}

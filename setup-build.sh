@@ -64,6 +64,7 @@ if [ $(uname -s) = "Linux" ]; then
   cd $script_dir/src/cxx_frontend/ast_exporter
   cmake -S . -B build -G Ninja -DLLVM_INSTALL_DIR=/tmp/vf-llvm-clang-build-$VF_LLVM_CLANG_BUILD_VERSION -DVFDEPS=/tmp/$VFDEPS_NAME -DCMAKE_BUILD_TYPE=Release
 
+  sudo apt-get install -y --no-install-recommends libcoq-iris || echo "Skipping libcoq-iris installation; may not be available for your Ubuntu version."
 
 elif [ $(uname -s) = "Darwin" ]; then
 

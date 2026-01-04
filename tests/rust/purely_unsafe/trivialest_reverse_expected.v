@@ -30,7 +30,7 @@ Definition bodies := [
                 ];
                 terminator := Call {|
                     args := [];
-                    func := Constant (Val ZeroSized (FnDef "VeriFast_ghost_command" []));
+                    func := Constant (Val ZeroSized (FnDef "VeriFast_ghost_command" GALNil));
                     destination := ("$_3", []);
                     target := Some "1"
                 |}
@@ -45,7 +45,7 @@ Definition bodies := [
                 ];
                 terminator := Call {|
                     args := [Move ("$_6", [])];
-                    func := Constant (Val ZeroSized (FnDef "std::ptr::mut_ptr::<impl *mut T>::is_null" [Type_ (Uint U8)]));
+                    func := Constant (Val ZeroSized (FnDef "std::ptr::mut_ptr::<impl *mut T>::is_null" (GALCons (Type_ (Uint U8)) GALNil)));
                     destination := ("$_5", []);
                     target := Some "2"
                 |}
@@ -91,7 +91,7 @@ Definition bodies := [
                 ];
                 terminator := Call {|
                     args := [];
-                    func := Constant (Val ZeroSized (FnDef "VeriFast_ghost_command" []));
+                    func := Constant (Val ZeroSized (FnDef "VeriFast_ghost_command" GALNil));
                     destination := ("$_14", []);
                     target := Some "5"
                 |}
@@ -106,7 +106,7 @@ Definition bodies := [
                 ];
                 terminator := Call {|
                     args := [Move ("$_15", []); Move ("$_16", [])];
-                    func := Constant (Val ZeroSized (FnDef "reverse_iter" []));
+                    func := Constant (Val ZeroSized (FnDef "reverse_iter" GALNil));
                     destination := ("$_0", []);
                     target := Some "6"
                 |}
@@ -142,7 +142,7 @@ Definition bodies := [
                 ];
                 terminator := Call {|
                     args := [];
-                    func := Constant (Val ZeroSized (FnDef "VeriFast_ghost_command" []));
+                    func := Constant (Val ZeroSized (FnDef "VeriFast_ghost_command" GALNil));
                     destination := ("$_2", []);
                     target := Some "1"
                 |}
@@ -156,7 +156,7 @@ Definition bodies := [
                 ];
                 terminator := Call {|
                     args := [];
-                    func := Constant (Val ZeroSized (FnDef "std::ptr::null_mut" [Type_ (Uint U8)]));
+                    func := Constant (Val ZeroSized (FnDef "std::ptr::null_mut" (GALCons (Type_ (Uint U8)) GALNil)));
                     destination := ("$_4", []);
                     target := Some "2"
                 |}
@@ -165,7 +165,7 @@ Definition bodies := [
                 statements := [];
                 terminator := Call {|
                     args := [Move ("$_3", []); Move ("$_4", [])];
-                    func := Constant (Val ZeroSized (FnDef "reverse_iter" []));
+                    func := Constant (Val ZeroSized (FnDef "reverse_iter" GALNil));
                     destination := ("$_0", []);
                     target := Some "3"
                 |}
@@ -203,7 +203,7 @@ Definition bodies := [
                 ];
                 terminator := Call {|
                     args := [];
-                    func := Constant (Val ZeroSized (FnDef "VeriFast_ghost_command" []));
+                    func := Constant (Val ZeroSized (FnDef "VeriFast_ghost_command" GALNil));
                     destination := ("$_2", []);
                     target := Some "1"
                 |}
@@ -215,7 +215,7 @@ Definition bodies := [
                 ];
                 terminator := Call {|
                     args := [];
-                    func := Constant (Val ZeroSized (FnDef "std::ptr::null_mut" [Type_ (Uint U8)]));
+                    func := Constant (Val ZeroSized (FnDef "std::ptr::null_mut" (GALCons (Type_ (Uint U8)) GALNil)));
                     destination := ("node1", []);
                     target := Some "2"
                 |}
@@ -226,7 +226,7 @@ Definition bodies := [
                 ];
                 terminator := Call {|
                     args := [];
-                    func := Constant (Val ZeroSized (FnDef "VeriFast_ghost_command" []));
+                    func := Constant (Val ZeroSized (FnDef "VeriFast_ghost_command" GALNil));
                     destination := ("$_4", []);
                     target := Some "3"
                 |}
@@ -243,7 +243,7 @@ Definition bodies := [
                 ];
                 terminator := Call {|
                     args := [];
-                    func := Constant (Val ZeroSized (FnDef "VeriFast_ghost_command" []));
+                    func := Constant (Val ZeroSized (FnDef "VeriFast_ghost_command" GALNil));
                     destination := ("$_7", []);
                     target := Some "4"
                 |}
@@ -260,7 +260,7 @@ Definition bodies := [
                 ];
                 terminator := Call {|
                     args := [Move ("$_9", [])];
-                    func := Constant (Val ZeroSized (FnDef "reverse" []));
+                    func := Constant (Val ZeroSized (FnDef "reverse" GALNil));
                     destination := ("$_8", []);
                     target := Some "5"
                 |}
@@ -273,7 +273,7 @@ Definition bodies := [
                 ];
                 terminator := Call {|
                     args := [];
-                    func := Constant (Val ZeroSized (FnDef "std::process::abort" []));
+                    func := Constant (Val ZeroSized (FnDef "std::process::abort" GALNil));
                     destination := ("$_11", []);
                     target := None
                 |}
@@ -311,6 +311,8 @@ Definition specs := [
         post := BoolAsn (BoolLit true)
     |})
 ].
+
+Open Scope annot_scope.
 
 Definition symex_trees := [
     (Verifying "reverse_iter", 

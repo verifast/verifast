@@ -5,6 +5,7 @@ if [[ ! -e "$VFHOME/bin/rust/rocq/VfMir.vo" ]]; then
     pushd "$VFHOME/bin/rust/rocq" || exit 1
     coqc -R . VeriFast VfMir.v || exit 1
     coqc -R . VeriFast Annotations.v || exit 1
+    coqc -R . VeriFast Values.v || exit 1
     coqc -R . VeriFast SymbolicExecution.v || exit 1
     popd || exit 1
 fi
