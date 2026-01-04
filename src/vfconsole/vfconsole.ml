@@ -44,6 +44,32 @@ end) = struct
 
 end
 
+module StringOf(ARGS: sig
+  val string_of_type: type_ -> string
+end) = struct
+  open ARGS
+
+  let rec strings_of_ctxts ctxts =
+    match ctxts with
+      [Executing (h, env, l, msg)] -> [string_of_loc l ^ ": " ^ msg]
+    | Executing (h, env, l, msg)::ctxts ->
+      (string_of_loc l ^ ": " ^ msg) :: skip_to_parent ctxts strings_of_ctxts
+    | _::ctxts -> strings_of_ctxts ctxts
+    | [] -> []
+  and skip_to_parent ctxts cont =
+    match ctxts with
+      [_] -> strings_of_ctxts ctxts
+    | PushSubcontext::ctxts -> cont ctxts
+    | PopSubcontext::ctxts -> skip_to_parent ctxts (fun ctxts -> skip_to_parent ctxts cont)
+    (*
+    | Branching b::((Executing (h, env, l, msg)::_) as ctxts) ->
+      (string_of_loc l ^ ": " ^ match b with LeftBranch -> "Left branch" | RightBranch -> "Right branch") :: skip_to_parent ctxts cont
+    *)
+    | _::ctxts -> skip_to_parent ctxts cont
+    | [] -> []
+
+end
+
 module HashedLoc = struct
   type t = loc0
   let equal l1 l2 = l1 == l2
@@ -334,11 +360,17 @@ let _ =
       end
     | SymbolicExecutionError (ctxts, l, msg, url) ->
       let language, dialect = file_specs path in
-      let open JsonOf(struct let string_of_type = string_of_type language dialect end) in
       if json then begin
+        let open JsonOf(struct let string_of_type = string_of_type language dialect end) in
         exit_with_json_result (A [S "SymbolicExecutionError"; A (List.map json_of_ctxt ctxts); json_of_loc l; S msg; json_of_error_attributes url])
-      end else
-        exit_with_msg l msg
+      end else begin
+        let open StringOf(struct let string_of_type = string_of_type language dialect end) in
+        print_endline "Symbolic execution failed:";
+        print_endline (string_of_loc l ^ ": " ^ msg);
+        print_endline "Context:";
+        strings_of_ctxts ctxts |> List.iter print_endline;
+        exit 1
+      end
     in
     if emitHighlightedSourceFiles then
     begin
