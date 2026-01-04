@@ -37,6 +37,13 @@ Proof.
   apply lh_big_ast_lh_comp_elim.
 Qed.
 
+Lemma own_logheap_lh_empty_intro:
+  ⊢ own_logheap ∅.
+Proof.
+  unfold own_logheap.
+  iApply lh_big_ast_lh_empty_intro.
+Qed.
+
 Definition place_as_ptr(env: AxSem.Env)(place: Place): Value :=
   match place with
     PNonAddrTakenLocal x => VPtr (snd (env x))
@@ -1486,19 +1493,23 @@ Qed.
 
 Lemma body_is_correct_sound trace body spec tree wp_call:
   body_is_correct preds specs trace body spec tree →
-  inputs body = map snd (spec_params spec) →
-  output body = spec_output spec →
   □ ▷ (∀ func_name targs args, spec_sound func_name targs args wp_call) -∗
   ∀ targs args,
   spec_holds spec targs args (wp_Body' body args (wp_call_std wp_call)).
 Proof.
-  iIntros (Hcorrect Hinputs Houtput) "#Hspecs %targs %args".
+  iIntros (Hcorrect) "#Hspecs %targs %args".
+  unfold body_is_correct in Hcorrect.
+  destruct (list_eq_dec Ty_eq_dec (map snd (spec_params spec)) (inputs body)) as [Hinputs|Hinputs]. 2:{
+    tauto.
+  }
+  destruct (Ty_eq_dec (spec_output spec) (output body)) as [Houtput|Houtput]. 2:{
+    tauto.
+  }
   unfold spec_holds.
   iIntros (env') "Hpre %Q HQ".
-  unfold body_is_correct in Hcorrect.
   unfold wp_Body'.
   iIntros "%Hvalues_have_tys".
-  rewrite -{1}Hinputs in Hcorrect.
+  rewrite {1}Hinputs in Hcorrect.
   apply forall_tys_sound with (2:=Hvalues_have_tys) in Hcorrect.
   iApply (produce_sound with "[HQ] [] Hpre"); try eassumption. 2:{
     iApply own_heap_nil.
@@ -1511,11 +1522,88 @@ Proof.
   iApply ("HQ" with "[Hpost]").
   iSplitL "". {
     iPureIntro.
-    rewrite <- Houtput.
+    rewrite Houtput.
     done.
   }
   iExists env'0.
   iFrame.
+Qed.
+
+Lemma spec_holds_mono spec targs args wp_call wp_call':
+  (∀ Q, wp_call Q ⊢ wp_call' Q) →
+  spec_holds spec targs args wp_call ⊢
+  spec_holds spec targs args wp_call'.
+Proof.
+  intro Hwp_call.
+  iStartProof.
+  iIntros "Hholds".
+  unfold spec_holds.
+  iIntros "%Γ Hpre %Q HQ".
+  iApply Hwp_call.
+  iApply ("Hholds" with "Hpre HQ").
+Qed.
+
+Lemma spec_holds_True spec targs args:
+  ⊢ spec_holds spec targs args (λ result, True%I).
+Proof.
+  unfold spec_holds.
+  iIntros "%Γ Hpre %Q HQ".
+  done.
+Qed.
+
+Lemma bodies_are_correct_assoc trees bodies func_name body:
+  bodies_are_correct preds specs trees bodies →
+  assoc func_name bodies = Some body →
+  named_body_is_correct preds specs trees func_name body.
+Proof.
+  revert trees func_name body.
+  induction bodies as [|[func_name0 body0] bodies]; simpl; intros trees func_name body Hcorrect Hfunc_name.
+  - (* nil *)
+    discriminate.
+  - (* cons *)
+    destruct Hcorrect as [Hcorrect0 Hcorrect].
+    destruct (string_dec func_name func_name0).
+    + (* func_name = func_name0 *)
+      injection Hfunc_name; clear Hfunc_name; intros; subst.
+      assumption.
+    + (* func_name ≠ func_name0 *)
+      apply IHbodies with (1:=Hcorrect) (2:=Hfunc_name).
+Qed.
+
+Lemma bodies_are_correct_sound trees program:
+  bodies_are_correct preds specs trees program →
+  ⊢ □ (∀ func_name targs args, spec_sound func_name targs args (wp_Program program)).
+Proof.
+  intro Hcorrect.
+  iStartProof.
+  iLöb as "IH".
+  iModIntro.
+  iIntros (func_name targs args).
+  unfold spec_sound at 2.
+  case_eq (assoc func_name specs). 2:{
+    done.
+  }
+  intros spec Hspec.
+  iApply spec_holds_mono. {
+    intro Q.
+    iIntros "HQ".
+    iApply (wp_Program_intro with "HQ").
+  }
+  case_eq (assoc func_name program). 2:{
+    intro Hfunc_name.
+    iApply spec_holds_True.
+  }
+  intros body Hfunc_name.
+  apply bodies_are_correct_assoc with (2:=Hfunc_name) in Hcorrect.
+  unfold named_body_is_correct in Hcorrect.
+  rewrite Hspec in Hcorrect.
+  destruct (assoc_ ProofObligation_eq_dec (Verifying func_name) trees). 2:{
+    tauto.
+  }
+  iApply (body_is_correct_sound with "[IH]"); try eassumption.
+  iModIntro.
+  iNext.
+  iAssumption.
 Qed.
 
 End specs.
@@ -1523,3 +1611,36 @@ End specs.
 End preds.
 
 End gfunctors.
+
+Theorem verified_program_has_no_ub preds specs trees program:
+  bodies_are_correct preds specs trees program →
+  assoc "main" specs = Some {|
+    spec_params := [];
+    spec_output := Tuple0;
+    pre := BoolAsn (BoolLit true);
+    post := BoolAsn (BoolLit true)
+  |} →
+  program_has_no_ub (Σ:=#[]) program.
+Proof.
+  intros Hcorrect Hmain.
+  unfold program_has_no_ub.
+  apply (bodies_are_correct_sound (Σ:=#[])) in Hcorrect.
+  unfold spec_sound in Hcorrect.
+  iDestruct Hcorrect as "#Hcorrect".
+  iSpecialize ("Hcorrect" $! "main" [] []).
+  rewrite Hmain.
+  unfold spec_holds.
+  simpl.
+  iSpecialize ("Hcorrect" $! [] with "[]"). {
+    unfold own_asn.
+    iExists ∅.
+    iSplitL "". {
+      iPureIntro.
+      constructor; done.
+    }
+    iApply own_logheap_lh_empty_intro.
+  }
+  iApply ("Hcorrect" with "[]").
+  iIntros "%result [%Hresult Hpost]".
+  done.
+Qed.

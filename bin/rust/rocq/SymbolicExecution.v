@@ -691,12 +691,18 @@ Fixpoint forall_tys(trace: Trace)(tys: list Ty)(Q: list Value -> Prop): Prop :=
   end.
 
 Definition body_is_correct(trace: Trace)(body: Body)(spec: Spec)(tree: SymexTree): Prop :=
-  forall_tys trace (map snd (spec_params spec)) @@ fun args =>
-  let env := combine (map fst (spec_params spec)) (map (fun v => LSValue (Some v)) args) in
-  produce trace [] env tree (pre spec) @@ fun h env tree =>
-  verify_body trace h tree body args @@ fun h tree result =>
-  consume trace h (("result", LSValue (Some result))::env) tree (post spec) @@ fun h env tree =>
-  True.
+  if list_eq_dec Ty_eq_dec (map snd (spec_params spec)) (inputs body) then
+    if Ty_eq_dec (spec_output spec) (output body) then
+      forall_tys trace (map snd (spec_params spec)) @@ fun args =>
+      let env := combine (map fst (spec_params spec)) (map (fun v => LSValue (Some v)) args) in
+      produce trace [] env tree (pre spec) @@ fun h env tree =>
+      verify_body trace h tree body args @@ fun h tree result =>
+      consume trace h (("result", LSValue (Some result))::env) tree (post spec) @@ fun h env tree =>
+      True
+    else
+      Error trace "body_is_correct: spec return type does not match body return type" (spec_output spec, output body)
+  else
+    Error trace "body_is_correct: spec parameter type list does not match body parameter type list" (spec_params spec, inputs body).
 
 Definition named_body_is_correct(func_name: string)(body: Body): Prop :=
   let trace := [VerifyingBody func_name] in

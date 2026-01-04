@@ -318,24 +318,24 @@ Definition wp_call_std
   else
     wp_call func_name targs args Q.
 
-Definition wp_Bodies
+Definition wp_Program
     (program: Program)
     (func_name: string)(targs: list GenericArg)(args: list Value)(Q: Value -> iProp Σ)
     : iProp Σ.
 Admitted. (* To be defined using guarded recursion, exploiting the contractiveness of wp_Body in wp_call *)
 
-Lemma wp_Bodies_intro
+Lemma wp_Program_intro
     (program: Program)
     (func_name: string)(targs: list GenericArg)(args: list Value)(Q: Value -> iProp Σ):
   match assoc func_name program with
-    None => False
+    None => True (* We ignore non-closed programs *)
   | Some body =>
-    wp_Body' body args (wp_call_std (wp_Bodies program)) Q
+    wp_Body' body args (wp_call_std (wp_Program program)) Q
   end -∗
-  wp_Bodies program func_name targs args Q.
+  wp_Program program func_name targs args Q.
 Admitted.
 
 Definition program_has_no_ub(program: Program): Prop :=
-  ⊢ wp_Bodies program "main" [] [] (fun _ => True).
+  ⊢ wp_Program program "main" [] [] (fun _ => True).
 
 End gfunctors.
