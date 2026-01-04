@@ -2057,7 +2057,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         assert_term dec_check2 h' env''' (expr_loc dec) "Cannot prove that the loop measure remains non-negative." None;
         cont h'''
       end $. fun h''' ->
-      check_leaks h''' env endBodyLoc "Loop leaks heap chunks."
+      check_leaks h''' env endBodyLoc "Loop leaks heap chunks"
     | WhileStmt (l, e, Some (LoopSpec (pre, post)), dec, ss, final_ss) ->
       if not pure then begin
         match ss with PureStmt (lp, _)::_ -> static_error lp "Pure statement not allowed here." None | _ -> ()
@@ -2757,7 +2757,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         reportStmtExec l;
         consume_asn rules [] h env ghostenv env inv true real_unit (fun _ h _ _ _ ->
           check_backedge_termination (List.assoc current_thread_name env) leminfo l tenv h env $. fun h ->
-          check_leaks h env l "Loop leaks heap chunks."
+          check_leaks h env l "Loop leaks heap chunks"
         )
       | (false, None) ->
         let blocks_done = block::blocks_done in
@@ -3606,7 +3606,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let return_cont h tenv2 env2 retval =
         consume_asn rules [] h env ghostenv env post true real_unit @@ fun _ h ghostenv env size_first -> 
         cleanup_heapy_locals (pn, ilist) close_brace_loc h env heapy_ps varargsLastParam @@ fun h ->
-        check_leaks h env close_brace_loc "Constructor leaks heap chunks."
+        check_leaks h env close_brace_loc "Constructor leaks heap chunks"
       in 
       begin fun tcont ->
         verify_cont (pn, ilist) [] [] [] boxes true leminfo funcmap predinstmap sizemap pre_tenv ghostenv h env prolog tcont (fun _ _ -> assert false) (fun _ _ _ -> assert false)
@@ -3713,7 +3713,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         end @@ fun h ->
         consume_bases bases h env tenv this_term ghostenv leminfo sizemap @@ fun h env tenv ->
         consume_asn rules [] h env ghostenv env post true real_unit @@ fun _ h ghostenv env size_first ->
-        check_leaks h env close_brace_loc "Destructor leaks heap chunks."
+        check_leaks h env close_brace_loc "Destructor leaks heap chunks"
       in 
       begin fun tcont ->
         verify_cont (pn, ilist) [] [] [] boxes true leminfo funcmap predinstmap sizemap pre_tenv ghostenv h env prolog tcont (fun _ _ -> assert false) (fun _ _ _ -> assert false)

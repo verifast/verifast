@@ -183,10 +183,10 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       check_breakpoint h env l;
       major_success ()
     | _ ->
-    with_context (Executing (h, env, l, "Cleaning up dummy fraction chunks")) $. fun () ->
+    with_context (Executing (h, env, l, "Cleaning up dummy fraction chunks and empty chunks")) $. fun () ->
     let h = List.filter (fun (Chunk (_, _, coef, _, _)) -> not (is_dummy_frac_term coef)) h in
-    with_context (Executing (h, env, l, "Leak check.")) $. fun () ->
     let h = List.filter (function (Chunk(name, targs, frac, args, _)) when is_empty_chunk name targs frac args -> false | _ -> true) h in
+    with_context (Executing (h, env, l, "Leak check.")) $. fun () ->
     if h <> [] then assert_false h env l msg (Some "leak");
     check_breakpoint [] env l;
     major_success ()
@@ -256,7 +256,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           produce_asn tparam_typeid_env tpenv h [] env post real_unit None None (fun h _ _ ->
             epilog h result @@ fun h ->
             consume_asn rules tpenv0 h tparam_typeid_env [] env0 post0 true real_unit (fun _ h _ env0 _ ->
-              check_leaks h env0 l (msg ^ "Implementation leaks heap chunks.")
+              check_leaks h env0 l (msg ^ "Implementation leaks heap chunks")
             )
           )
         end;

@@ -377,8 +377,8 @@ let _ =
         let open StringOf(struct let string_of_type = string_of_type language dialect end) in
         print_endline "Symbolic execution failed:";
         let msg =
-          match msg, ctxts with
-            "Function leaks heap chunks", (Executing (h, env, l, _)::_) ->
+          match ctxts with
+            (Executing (h, env, l, _)::_) when String.ends_with ~suffix:" leaks heap chunks" msg ->
             msg ^ ": " ^ String.concat ", " (List.map string_of_chunk h)
           | _ -> msg
         in
