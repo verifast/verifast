@@ -191,10 +191,12 @@ Definition bodies := [
             ("node2", {| mutability := Mut; ty := RawPtr (Uint U8) |});
             ("$_6", {| mutability := Mut; ty := RawPtr (RawPtr (Uint U8)) |});
             ("$_7", {| mutability := Not; ty := Tuple0 |});
-            ("$_8", {| mutability := Not; ty := RawPtr (Uint U8) |});
+            ("reversed", {| mutability := Not; ty := RawPtr (Uint U8) |});
             ("$_9", {| mutability := Mut; ty := RawPtr (Uint U8) |});
             ("$_10", {| mutability := Mut; ty := RawPtr (RawPtr (Uint U8)) |});
-            ("$_11", {| mutability := Not; ty := Never |})
+            ("$_11", {| mutability := Not; ty := RawPtr (Uint U8) |});
+            ("$_12", {| mutability := Mut; ty := RawPtr (Uint U8) |});
+            ("$_13", {| mutability := Not; ty := Never |})
         ];
         basic_blocks := [
             ("0", {|
@@ -251,7 +253,7 @@ Definition bodies := [
             ("4", {|
                 statements := [
                     StorageDead "$_7";
-                    StorageLive "$_8";
+                    StorageLive "reversed";
                     StorageLive "$_9";
                     StorageLive "$_10";
                     Assign ("$_10", []) (RawPtr_ ("node2", []));
@@ -261,20 +263,34 @@ Definition bodies := [
                 terminator := Call {|
                     args := [Move ("$_9", [])];
                     func := Constant (Val ZeroSized (FnDef "reverse" GALNil));
-                    destination := ("$_8", []);
+                    destination := ("reversed", []);
                     target := Some "5"
                 |}
             |});
             ("5", {|
                 statements := [
                     StorageDead "$_9";
-                    StorageDead "$_8";
-                    StorageLive "$_11"
+                    StorageLive "$_11";
+                    StorageLive "$_12";
+                    Assign ("$_12", []) (Use (Copy ("reversed", [])))
+                ];
+                terminator := Call {|
+                    args := [Move ("$_12", [])];
+                    func := Constant (Val ZeroSized (FnDef "reverse" GALNil));
+                    destination := ("$_11", []);
+                    target := Some "6"
+                |}
+            |});
+            ("6", {|
+                statements := [
+                    StorageDead "$_12";
+                    StorageDead "$_11";
+                    StorageLive "$_13"
                 ];
                 terminator := Call {|
                     args := [];
                     func := Constant (Val ZeroSized (FnDef "std::process::abort" GALNil));
-                    destination := ("$_11", []);
+                    destination := ("$_13", []);
                     target := None
                 |}
             |})
@@ -399,10 +415,12 @@ Definition symex_trees := [
         LocalAddrTaken "node2" true;;
         LocalAddrTaken "$_6" false;;
         LocalAddrTaken "$_7" true;;
-        LocalAddrTaken "$_8" false;;
+        LocalAddrTaken "reversed" false;;
         LocalAddrTaken "$_9" false;;
         LocalAddrTaken "$_10" false;;
-        LocalAddrTaken "$_11" true;;
+        LocalAddrTaken "$_11" false;;
+        LocalAddrTaken "$_12" false;;
+        LocalAddrTaken "$_13" true;;
         Close (RealLit 1%Q) "Nodes" [] [LitPat NullPtr];;
         Fork (
             (* h = [[1]Nodes<>(null_pointer); [1]points_to_<*u8>(node2_addr, dummy0); [1]points_to_<*u8>(node1_addr, dummy)] *)
@@ -426,6 +444,8 @@ Definition symex_trees := [
                     (* h = [[1]Nodes<>(node1_addr)] *)
                     ConsumeChunk 0%nat;;
                     (* h = [[1]Nodes<>(node2_addr)] *)
+                    ConsumeChunk 0%nat;;
+                    (* h = [[1]Nodes<>(reversed)] *)
                     ConsumeChunk 0%nat;;
                     Done
                 )
