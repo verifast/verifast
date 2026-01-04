@@ -27,11 +27,6 @@ Infix "⋅" := lh_comp (at level 50, left associativity) : logheap_scope.
 
 Open Scope logheap_scope.
 
-Definition lh_le(lh1 lh2: LogHeap): Prop :=
-  ∃ lh1', lh1 ⋅ lh1' = lh2.
-
-Infix "≼" := lh_le (at level 70) : logheap_scope.
-
 Notation "{[+ x +]}" := (lh_sing x)
   (at level 1, format "{[+ x +]}") : logheap_scope.
 
@@ -39,13 +34,6 @@ Axiom lh_left_id: forall H, ∅ ⋅ H = H.
 Axiom lh_right_id: forall H, H ⋅ ∅  = H.
 Axiom lh_assoc: forall H1 H2 H3, H1 ⋅ (H2 ⋅ H3) = (H1 ⋅ H2) ⋅ H3.
 Axiom lh_comm: forall H1 H2, H1 ⋅ H2 = H2 ⋅ H1.
-
-Inductive has_type: Value -> Ty -> Prop :=
-| has_type_Bool b:
-  has_type (VBool b) Bool
-| has_type_RawPtr ptr pointeeTy:
-  has_type (VPtr ptr) (RawPtr pointeeTy)
-.
 
 Section preds.
 
