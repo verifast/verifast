@@ -49,6 +49,16 @@ module StringOf(ARGS: sig
 end) = struct
   open ARGS
 
+  let string_of_chunk (Chunk ((p, _), typeArgs, coef, args, _)) =
+    let s =
+      p ^
+      (if typeArgs = [] then "" else "<" ^ String.concat ", " (List.map string_of_type typeArgs) ^ ">") ^
+      "(" ^ String.concat ", " args ^ ")"
+    in
+    let coef =
+      if coef = "1" then "" else "[" ^ coef ^ "]"
+    in
+    coef ^ s
   let rec strings_of_ctxts ctxts =
     match ctxts with
       [Executing (h, env, l, msg)] -> [string_of_loc l ^ ": " ^ msg]
@@ -366,6 +376,12 @@ let _ =
       end else begin
         let open StringOf(struct let string_of_type = string_of_type language dialect end) in
         print_endline "Symbolic execution failed:";
+        let msg =
+          match msg, ctxts with
+            "Function leaks heap chunks", (Executing (h, env, l, _)::_) ->
+            msg ^ ": " ^ String.concat ", " (List.map string_of_chunk h)
+          | _ -> msg
+        in
         print_endline (string_of_loc l ^ ": " ^ msg);
         print_endline "Context:";
         strings_of_ctxts ctxts |> List.iter print_endline;

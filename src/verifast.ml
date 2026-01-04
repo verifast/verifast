@@ -3415,7 +3415,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             *)
             let heapy_ps = heapy_ps |> List.filter (fun (_, n, _, _, _) -> List.mem_assoc n env_post) in
             cleanup_heapy_locals (pn, ilist) closeBraceLoc h env heapy_ps varargsLastParam @@ fun h ->
-            check_leaks h env closeBraceLoc "Function leaks heap chunks."
+            check_leaks h env closeBraceLoc "Function leaks heap chunks"
         in
         let return_cont h tenv2 env2 retval =
           match (rt, retval) with
@@ -3798,7 +3798,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let do_body h ghostenv env =
             let do_return h env_post =
               consume_asn rules [] h env ghostenv env_post post true real_unit $. fun _ h ghostenv env size_first ->
-              check_leaks h env closeBraceLoc "Function leaks heap chunks."
+              check_leaks h env closeBraceLoc "Function leaks heap chunks"
             in
             let return_cont h tenv2 env2 retval =
               assert (retval = None);
@@ -3915,7 +3915,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           produce_asn env [] [] ghostenv env pre real_unit None None $. fun h ghostenv env ->
           let do_return h env_post =
             consume_asn rules [] h env ghostenv env_post post true real_unit $. fun _ h ghostenv env size_first ->
-            check_leaks h env closeBraceLoc "Function leaks heap chunks."
+            check_leaks h env closeBraceLoc "Function leaks heap chunks"
           in
           let return_cont h tenv2 env2 retval =
             match (rt, retval) with
