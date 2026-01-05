@@ -9,6 +9,34 @@ open Json
 
 let () = Register_provers.register_provers ()
 
+let code_snippet_of_loc l =
+  let ((path1, line1, col1), (path2, line2, col2)) = root_caller_token l in
+  assert (path1 = path2);
+  let text = readFile path1 in
+  let lines = String.split_on_char '\n' text in
+  if line1 > List.length lines || line2 > List.length lines then
+    ""
+  else
+    let snippet_lines = lines |> Util.drop (line1 - 1) |> Util.take (line2 - line1 + 1) in
+    let max_lineno_digits = string_of_int line2 |> String.length in
+    snippet_lines |> List.mapi begin fun i line ->
+      let lineno = line1 + i in
+      let pointer_line =
+        if lineno = line1 && lineno = line2 then
+          String.make (col1 - 1) ' ' ^ String.make (col2 - col1) '^'
+        else if lineno = line1 then
+          String.make (col1 - 1) ' ' ^ String.make (String.length line - col1 + 1) '^'
+        else if lineno = line2 then
+          String.make (col2 - 1) ' ' ^ String.make 1 '^'
+        else
+          String.make (String.length line) '^'
+      in
+      Printf.sprintf "%*d | %s\n%*s | %s" max_lineno_digits lineno line max_lineno_digits "" pointer_line
+    end |> String.concat "\n"
+
+let pretty_string_of_msg l kind msg =
+  string_of_loc l ^ ": " ^ kind ^ ": " ^ msg ^ "\n" ^ code_snippet_of_loc l
+
 let json_of_srcpos (path, line, col) = A [S path; I line; I col]
 
 let json_of_loc0 (ls, le) = A [json_of_srcpos ls; json_of_srcpos le]
@@ -61,9 +89,9 @@ end) = struct
     coef ^ s
   let rec strings_of_ctxts ctxts =
     match ctxts with
-      [Executing (h, env, l, msg)] -> [string_of_loc l ^ ": " ^ msg]
+      [Executing (h, env, l, msg)] -> [pretty_string_of_msg l "note" msg]
     | Executing (h, env, l, msg)::ctxts ->
-      (string_of_loc l ^ ": " ^ msg) :: skip_to_parent ctxts strings_of_ctxts
+      (pretty_string_of_msg l "note" msg) :: skip_to_parent ctxts strings_of_ctxts
     | _::ctxts -> strings_of_ctxts ctxts
     | [] -> []
   and skip_to_parent ctxts cont =
@@ -213,7 +241,7 @@ let _ =
       if json then begin
         exit_with_json_result (A [S "StaticError"; json_of_loc l; S msg])
       end else begin
-        print_endline (string_of_loc l ^ ": " ^ msg);
+        print_endline (pretty_string_of_msg l "error" msg);
         exit 1
       end
     in
@@ -375,15 +403,13 @@ let _ =
         exit_with_json_result (A [S "SymbolicExecutionError"; A (List.map json_of_ctxt ctxts); json_of_loc l; S msg; json_of_error_attributes url])
       end else begin
         let open StringOf(struct let string_of_type = string_of_type language dialect end) in
-        print_endline "Symbolic execution failed:";
         let msg =
           match ctxts with
             (Executing (h, env, l, _)::_) when String.ends_with ~suffix:" leaks heap chunks" msg ->
             msg ^ ": " ^ String.concat ", " (List.map string_of_chunk h)
           | _ -> msg
         in
-        print_endline (string_of_loc l ^ ": " ^ msg);
-        print_endline "Context:";
+        print_endline (pretty_string_of_msg l "error" msg);
         strings_of_ctxts ctxts |> List.iter print_endline;
         exit 1
       end
@@ -640,7 +666,7 @@ let _ =
           option_report_skipped_stmts = false;
           option_emit_rocq = !emit_rocq;
         } in
-        if not !json then print_endline filename;
+        (* if not !json then print_endline filename; *)
         let emitter_callback (path : string) (dir : string) (packages : package list) =
           begin match !dumpAST with
             | Some (allASTs, noLocs, target_file) ->

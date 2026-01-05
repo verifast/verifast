@@ -480,8 +480,8 @@ cd ..
 cd tests
   verifast -c issue974.c
   verifast -c issue766.c
-  [ "$(verifast issue739.c)" = $'issue739.c\nissue739.c(1,11-13): Parse error: Bad fraction literal' ]
-  [ "$(verifast issue731.c)" = $'issue731.c\nissue731.c(1,1-2,1): Parse error: Unterminated comment.' ]
+  [ "$(verifast issue739.c)" = $'issue739.c(1,11-13): error: Parse error: Bad fraction literal\n1 | float i = 0e;\n  |           ^^' ]
+  [ "$(verifast issue731.c)" = $'issue731.c(1,1-2,1): error: Parse error: Unterminated comment.\n1 | /*\n  | ^^\n2 | \n  | ^' ]
   verifast_both -c chars__of_struct.c
   verifast -c -allow_should_fail issue681.c
   verifast -c -allow_should_fail const_vars.c
