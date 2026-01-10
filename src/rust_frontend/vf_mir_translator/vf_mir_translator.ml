@@ -1118,10 +1118,18 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let open Ast in
     if mut <> Mir.Not then
       static_error loc "Mutable string references are not yet supported" None;
+    let lft_expr = Rust_parser.expr_of_lft_param_expr loc lft in
     let vf_ty = RustRefTypeExpr (loc, lft, (match mut with Mir.Not -> Shared | Mir.Mut -> Mutable), ManifestTypeExpr (loc, Str)) in
     let size = SizeofExpr (loc, TypeExpr vf_ty) in
-    let own tid vs =
-      Error "Expressing ownership of &str values is not yet supported"
+    let own tid v =
+      Ok
+        (CoefAsn
+           ( loc,
+             DummyPat,
+             ExprCallExpr
+               ( loc,
+                 TypePredExpr (loc, ManifestTypeExpr (loc, Str), "share"),
+                 [ LitPat lft_expr; LitPat tid; LitPat v ] ) ))
     in
     let shr lft tid l =
       Error "Expressing shared ownership of &str values is not yet supported"
