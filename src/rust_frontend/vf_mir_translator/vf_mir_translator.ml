@@ -2422,7 +2422,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                 Ok
                   ( tmp_rvalue_binders,
                     FnCallResult (Ast.CastExpr (fn_loc, PtrTypeExpr (fn_loc, gen_arg_ty_info.vf_ty), arg)) )
-            | "std::str::<impl str>::len" | "std::slice::<impl [T]>::len" ->
+            | "std::str::<impl str>::len" | "std::slice::<impl [T]>::len" | "std::ptr::const_ptr::<impl *const [T]>::len" | "std::ptr::mut_ptr::<impl *mut [T]>::len" ->
                 let [ arg ] = args in
                 Ok
                   ( tmp_rvalue_binders,
