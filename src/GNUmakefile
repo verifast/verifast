@@ -200,6 +200,7 @@ endif
 
 # Number of CPUs
 ifeq ($(OS), Darwin)
+  # sysctl is not available inside a Codex sandbox
   NUMCPU ?= $(shell sh -c 'sysctl -n hw.ncpu 2>/dev/null || echo 1')
 else
 # Works on Linux and Cygwin (Cygwin has no /sys).
