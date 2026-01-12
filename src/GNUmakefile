@@ -200,7 +200,8 @@ endif
 
 # Number of CPUs
 ifeq ($(OS), Darwin)
-  NUMCPU ?= $(shell sysctl -n hw.ncpu)
+  # sysctl is not available inside a Codex sandbox
+  NUMCPU ?= $(shell sh -c 'sysctl -n hw.ncpu 2>/dev/null || echo 1')
 else
 # Works on Linux and Cygwin (Cygwin has no /sys).
   NUMCPU ?= $(shell cat /proc/cpuinfo | grep 'processor' | wc -l)

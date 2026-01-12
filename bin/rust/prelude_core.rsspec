@@ -246,6 +246,8 @@ pred array<T>(p: *T, count: usize; values: list<T>) =
         *p |-> ?value &*& array(p + 1, count - 1, ?values0) &*& values == cons(value, values0)
     };
 
+pred_ctor mk_array<T>(l: *T, n: usize, vs: list<T>)(;) = l[..n] |-> vs;
+
 lem_auto array__inv<T: ?Sized>();
     req [?f]array_::<T>(?p, ?count, ?elems);
     ens [f]array_::<T>(p, count, elems) &*& count == length(elems) &*& count * std::mem::size_of::<T>() <= isize::MAX &*& pointer_within_limits(p) == true &*& pointer_within_limits(p + count) == true;
@@ -337,6 +339,53 @@ lem u8s__to_array_<T>(p: *T, size: usize);
 lem array__to_u8s_<T>(p: *T, size: usize);
     req [?f]p[..size] |-> _;
     ens [f](p as *u8)[..size * std::mem::size_of::<T>()] |-> _ &*& p as usize % std::mem::align_of::<T>() == 0;
+
+fix is_utf8_tail(b: u8) -> bool {
+    0x80 <= b && b <= 0xBF
+}
+
+fix is_valid_utf8(bs: list<u8>) -> bool {
+    match bs {
+        nil => true,
+        cons(b0, rest0) =>
+            if b0 <= 0x7F {
+                is_valid_utf8(rest0)
+            } else {
+                match rest0 {
+                    nil => false,
+                    cons(b1, rest1) =>
+                        is_utf8_tail(b1) &&
+                        if b0 <= 0xDF {
+                            0xC2 <= b0 && // Not overlong
+                            is_valid_utf8(rest1)
+                        } else {
+                            match rest1 {
+                                nil => false,
+                                cons(b2, rest2) =>
+                                    is_utf8_tail(b2) &&
+                                    if b0 <= 0xEF {
+                                        (0xE1 <= b0 || 0xA0 <= b1) && // Not overlong
+                                        (b0 != 0xED || b1 < 0x9F) && // Not a surrogate
+                                        is_valid_utf8(rest2)
+                                    } else {
+                                        match rest2 {
+                                            nil => false,
+                                            cons(b3, rest3) =>
+                                                is_utf8_tail(b3) &&
+                                                (b0 != 0xF0 || 0x90 <= b0) && // Not overlong
+                                                (b0 < 0xF4 || b0 == 0xF4 && b1 <= 0x8F) && // Max. codepoint = 0x10FFFF
+                                                is_valid_utf8(rest3)
+                                        }
+                                    }
+                            }
+                        }
+                }
+            }
+    }
+}
+
+pred str_share(k: lifetime_t, t: thread_id_t, l: *str) = exists(?bs) &*& [_]frac_borrow(k, mk_array(l as *u8, l.len(), bs)) &*& is_valid_utf8(bs) == true;
+type_pred_def <str>.share = str_share;
 
 pred ghost_rec_perm(depth: i32;); // Permission to perform `depth` nested lemma function pointer calls.
 

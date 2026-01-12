@@ -22,6 +22,17 @@ ifeq ($(OS), Windows_NT)
 endif
 ../bin/vf-cxx-ast-exporter$(DOTEXE): $(CXX_FE_STUBS_DIR)/stubs_ast.capnp $(CXX_FE_AST_EXPORTER_DIR)/*.h $(CXX_FE_AST_EXPORTER_DIR)/*.cpp
 	@echo "  MAKE " $@
+	cd $(CXX_FE_AST_EXPORTER_DIR) && mkdir -p build
+	cd $(CXX_FE_AST_EXPORTER_DIR) && if [ ! -f build/CMakeCache.txt ]; then \
+		if [ "$(OS)" = "Darwin" ]; then \
+			LLVM_INSTALL_DIR="/usr/local/vf-llvm-clang-build-$(VF_LLVM_CLANG_BUILD_VERSION)"; \
+			VFDEPS_DIR="/usr/local/$(VFDEPS_NAME)"; \
+		else \
+			LLVM_INSTALL_DIR="/tmp/vf-llvm-clang-build-$(VF_LLVM_CLANG_BUILD_VERSION)"; \
+			VFDEPS_DIR="/tmp/$(VFDEPS_NAME)"; \
+		fi; \
+		cmake -S . -B build -DLLVM_INSTALL_DIR="$$LLVM_INSTALL_DIR" -DVFDEPS="$$VFDEPS_DIR" -DCMAKE_BUILD_TYPE=Release; \
+	fi
 	cd $(CXX_FE_AST_EXPORTER_DIR) && cmake --build build
 	cd $(CXX_FE_AST_EXPORTER_DIR)/build && mv vf-cxx-ast-exporter$(DOTEXE) ../../../$@
 
