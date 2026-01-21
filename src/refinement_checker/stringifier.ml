@@ -118,7 +118,6 @@ let string_of_statement ({source_info; kind}: statement) =
   | Assign {lhs_place; rhs_rvalue} ->
       Printf.sprintf "%s = %s;" (string_of_place lhs_place) (string_of_rvalue rhs_rvalue)
   | SetDiscriminant -> "set_discriminant;"
-  | Deinit -> "deinit;"
   | StorageLive local_decl -> Printf.sprintf "storage_live %s;" local_decl.name
   | StorageDead local_decl -> Printf.sprintf "storage_dead %s;" local_decl.name
   | PlaceMention place ->

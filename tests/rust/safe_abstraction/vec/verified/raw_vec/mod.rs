@@ -279,6 +279,11 @@ pred RawVecInner_share_end_token<A>(k: lifetime_t, t: thread_id_t, l: *RawVecInn
         alloc_block_in(alloc_id, ptr, allocLayout)
     };
 
+pred RawVecInner_share0_end_token<A>(k: lifetime_t, t: thread_id_t, l: *RawVecInner<A>, elemLayout: Layout, alloc_id: alloc_id_t, ptr: *u8, capacity: usize) =
+    borrow_end_token(k, std::alloc::Allocator_full_borrow_content_(t, &(*l).alloc, alloc_id)) &*&
+    borrow_end_token(k, RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity)) &*&
+    elemLayout.repeat(capacity) == some(pair(?allocLayout, ?stride));
+
 lem RawVecInner_share_full_<A>(k: lifetime_t, l: *RawVecInner<A>)
     req type_interp::<A>() &*& atomic_mask(MaskTop) &*& [?q]lifetime_token(k) &*&
         RawVecInner_full_borrow(k, ?t, l, ?elemLayout, ?alloc_id, ?ptr, ?capacity);
@@ -366,6 +371,51 @@ lem end_share_RawVecInner<A>(l: *RawVecInner<A>)
     borrow_end(k, RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity));
     open RawVecInner_frac_borrow_content::<A>(l, elemLayout, ptr, capacity)();
     close RawVecInner(t, *l, elemLayout, alloc_id, ptr, capacity);
+}
+
+lem share_RawVecInner0<A>(k: lifetime_t, l: *RawVecInner<A>, elemLayout: Layout, ptr: *u8, capacity: usize)
+    nonghost_callers_only
+    req [?q]lifetime_token(k) &*&
+        *l |-> ?self_ &*&
+        Allocator(?t, self_.alloc, ?alloc_id) &*&
+        capacity == logical_capacity(self_.cap, elemLayout.size()) &*&
+        ptr == self_.ptr.as_non_null_ptr().as_ptr() &*&
+        ptr as usize % elemLayout.align() == 0 &*&
+        pointer_within_limits(ptr) == true &*&
+        elemLayout.repeat(capacity) == some(pair(?allocLayout, ?stride));
+    ens [q]lifetime_token(k) &*&
+        [_]RawVecInner_share_(k, t, l, elemLayout, alloc_id, ptr, capacity) &*&
+        RawVecInner_share0_end_token(k, t, l, elemLayout, alloc_id, ptr, capacity);
+{
+    close RawVecInner_frac_borrow_content::<A>(l, elemLayout, ptr, capacity)();
+    borrow(k, RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity));
+    full_borrow_into_frac(k, RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity));
+    points_to_limits(&(*l).alloc);
+    std::alloc::close_Allocator_full_borrow_content_(t, &(*l).alloc);
+    borrow(k, std::alloc::Allocator_full_borrow_content_(t, &(*l).alloc, alloc_id));
+    std::alloc::share_Allocator_full_borrow_content_(k, t, &(*l).alloc, alloc_id);
+    std::num::niche_types::UsizeNoHighBit_inv(self_.cap);
+    close RawVecInner_share_(k, t, l, elemLayout, alloc_id, ptr, capacity);
+    close RawVecInner_share0_end_token(k, t, l, elemLayout, alloc_id, ptr, capacity);
+    leak RawVecInner_share_(k, t, l, elemLayout, alloc_id, ptr, capacity);
+}
+
+lem end_share_RawVecInner0<A>(l: *RawVecInner<A>)
+    nonghost_callers_only
+    req RawVecInner_share0_end_token(?k, ?t, l, ?elemLayout, ?alloc_id, ?ptr, ?capacity) &*& [_]lifetime_dead_token(k);
+    ens *l |-> ?self_ &*&
+        Allocator(t, self_.alloc, alloc_id) &*&
+        capacity == logical_capacity(self_.cap, elemLayout.size()) &*&
+        ptr == self_.ptr.as_non_null_ptr().as_ptr() &*&
+        ptr as usize % elemLayout.align() == 0 &*&
+        pointer_within_limits(ptr) == true &*&
+        elemLayout.repeat(capacity) == some(pair(?allocLayout, ?stride));
+{
+    open RawVecInner_share0_end_token(k, t, l, elemLayout, alloc_id, ptr, capacity);
+    borrow_end(k, std::alloc::Allocator_full_borrow_content_(t, &(*l).alloc, alloc_id));
+    std::alloc::open_Allocator_full_borrow_content_(t, &(*l).alloc, alloc_id);
+    borrow_end(k, RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity));
+    open RawVecInner_frac_borrow_content::<A>(l, elemLayout, ptr, capacity)();
 }
 
 lem init_ref_RawVecInner_<A>(l: *RawVecInner<A>)
@@ -2552,8 +2602,7 @@ impl<A: Allocator> RawVecInner<A> {
     /// - `elem_layout` must be valid for `self`, i.e. it must be the same `elem_layout` used to
     ///   initially construct `self`
     /// - `elem_layout`'s size must be a multiple of its alignment
-    /// - The sum of `len` and `additional` must be greater than or equal to
-    ///   `self.capacity(elem_layout.size())`
+    /// - The sum of `len` and `additional` must be greater than the current capacity
     unsafe fn grow_amortized(
         &mut self,
         len: usize,
@@ -2607,53 +2656,29 @@ impl<A: Allocator> RawVecInner<A> {
         let cap0 = cmp::max(self.cap.as_inner() * 2, required_cap);
         let cap = cmp::max(min_non_zero_cap(elem_layout.size()), cap0);
 
-        let new_layout = layout_array(cap, elem_layout)?;
-        //@ std::alloc::Layout_repeat_some_size_aligned(elem_layout, cap);
-        
         //@ let k = begin_lifetime();
-        //@ share_RawVecInner(k, self);
+        //@ open RawVecInner(t, self0, elem_layout, alloc_id, ptr0, capacity0);
+        //@ share_RawVecInner0(k, self, elem_layout, ptr0, capacity0);
         //@ let self_ref = precreate_ref(self);
         //@ init_ref_RawVecInner_(self_ref);
         //@ open_frac_borrow(k, ref_initialized_(self_ref), 1/2);
         //@ open [?f]ref_initialized_::<RawVecInner<A>>(self_ref)();
-        // SAFETY: Precondition passed to caller
-        let current_memory = unsafe { self.current_memory(elem_layout) };
+        let finish_grow_result;
+        {
+            //@ let_lft 'a = k;
+            finish_grow_result = unsafe { self.finish_grow/*@::<A, 'a>@*/(cap, elem_layout) };
+        }
         //@ close [f]ref_initialized_::<RawVecInner<A>>(self_ref)();
         //@ close_frac_borrow(f, ref_initialized_(self_ref));
         //@ end_lifetime(k);
-        //@ end_share_RawVecInner(self);
-        
-        //@ open RawVecInner(t, ?self01, elem_layout, alloc_id, ptr0, capacity0);
-        //@ let ptr0_ = self01.ptr;
-        //@ let cap0_ = self01.cap;
-        //@ assert ptr0_.as_non_null_ptr().as_ptr() == ptr0;
-        //@ std::alloc::Layout_inv(elem_layout);
-        /*@
-        if capacity0 * elem_layout.size() != 0 {
-            let elemLayout = elem_layout;
-            assert elemLayout.repeat(capacity0) == some(pair(?allocLayout, ?stride));
-            std::alloc::Layout_repeat_some_size_aligned(elemLayout, capacity0);
-            std::alloc::Layout_inv(allocLayout);
-        }
-        @*/
-
-        //@ std::alloc::Layout_size_Layout_from_size_align(capacity0 * elem_layout.size(), elem_layout.align());
-        //@ std::alloc::Layout_align_Layout_from_size_align(capacity0 * elem_layout.size(), elem_layout.align());
-        
-        //@ if capacity0 * elem_layout.size() == 0 { leak ptr0[..0] |-> _; }
-        
-        //@ std::num::niche_types::UsizeNoHighBit_inv(self01.cap);
-        //@ assert cap >= len + additional;
-        //@ mul_mono_l(1, elem_layout.size(), self01.cap.as_inner());
-        //@ mul_mono_l(1, elem_layout.size(), cap);
-        //@ assert new_layout.size() == cap * elem_layout.size();
-        //@ assert cap <= new_layout.size();
-        //@ mul_mono_l(self01.cap.as_inner(), cap, elem_layout.size());
+        //@ end_share_RawVecInner0(self);
         
         //@ open_points_to(self);
         
+        //@ mul_mono_l(1, elem_layout.size(), cap);
+
         // SAFETY: Precondition passed to caller + `current_memory` does the right thing
-        match core::ops::Try::branch(unsafe { finish_grow(new_layout, current_memory, &mut self.alloc) }) {
+        match core::ops::Try::branch(finish_grow_result) {
             core::ops::ControlFlow::Break(residual) => {
                 //@ let self1 = *self;
                 //@ close RawVecInner(t, self1, elem_layout, alloc_id, ptr0, capacity0);
@@ -2670,8 +2695,13 @@ impl<A: Allocator> RawVecInner<A> {
                     //@ assert 0 <= self0.cap.as_inner();
                     //@ assert 0 <= logical_capacity(self0.cap, elem_layout.size());
                     //@ assert cap != 0;
-                    //@ std::alloc::Layout_inv(new_layout);
-                    //@ close RawVecInner::<A>(t, self1, elem_layout, alloc_id, _, _);
+                    //@ std::alloc::Layout_inv(elem_layout);
+                    //@ assert 0 <= cap * elem_layout.size();
+                    //@ assert cap * elem_layout.size() <= isize::MAX - isize::MAX % elem_layout.align();
+                    //@ std::alloc::Layout_repeat_some_size_aligned(elem_layout, cap);
+                    //@ assert ptr.as_ptr() as usize % Layout::from_size_align(cap * elem_layout.size(), elem_layout.align()).align() == 0;
+                    //@ std::alloc::Layout_align_Layout_from_size_align(cap * elem_layout.size(), elem_layout.align());
+                    //@ close RawVecInner::<A>(t, self1, elem_layout, alloc_id, ptr.as_ptr() as *u8, cap);
                 }
                 Ok(())
             }
@@ -2682,8 +2712,7 @@ impl<A: Allocator> RawVecInner<A> {
     /// - `elem_layout` must be valid for `self`, i.e. it must be the same `elem_layout` used to
     ///   initially construct `self`
     /// - `elem_layout`'s size must be a multiple of its alignment
-    /// - The sum of `len` and `additional` must be greater than or equal to
-    ///   `self.capacity(elem_layout.size())`
+    /// - The sum of `len` and `additional` must be greater than the current capacity
     unsafe fn grow_exact(
         &mut self,
         len: usize,
@@ -2724,50 +2753,30 @@ impl<A: Allocator> RawVecInner<A> {
         //@ close <collections::TryReserveErrorKind>.own(t, collections::TryReserveErrorKind::CapacityOverflow);
         let cap = len.checked_add(additional).ok_or(CapacityOverflow)?;
         //@ leak <collections::TryReserveErrorKind>.own(t, collections::TryReserveErrorKind::CapacityOverflow);
-        let new_layout = layout_array(cap, elem_layout)?;
-        //@ std::alloc::Layout_repeat_some_size_aligned(elem_layout, cap);
 
         //@ let k = begin_lifetime();
-        //@ share_RawVecInner(k, self);
+        //@ open RawVecInner(t, self0, elem_layout, alloc_id, ptr0, capacity0);
+        //@ share_RawVecInner0(k, self, elem_layout, ptr0, capacity0);
         //@ let self_ref = precreate_ref(self);
         //@ init_ref_RawVecInner_(self_ref);
         //@ open_frac_borrow(k, ref_initialized_(self_ref), 1/2);
         //@ open [?f]ref_initialized_::<RawVecInner<A>>(self_ref)();
-        // SAFETY: Precondition passed to caller
-        let current_memory = unsafe { self.current_memory(elem_layout) };
+        let finish_grow_result;
+        {
+            //@ let_lft 'a = k;
+            finish_grow_result = unsafe { self.finish_grow/*@::<A, 'a>@*/(cap, elem_layout) };
+        }
         //@ close [f]ref_initialized_::<RawVecInner<A>>(self_ref)();
         //@ close_frac_borrow(f, ref_initialized_(self_ref));
         //@ end_lifetime(k);
-        //@ end_share_RawVecInner(self);
+        //@ end_share_RawVecInner0(self);
         
         //@ open_points_to(self);
         
-        //@ open RawVecInner(t, *self, elem_layout, alloc_id, ptr0, capacity0);
-        //@ let ptr0_ = (*self).ptr;
-        //@ let cap0_ = (*self).cap;
-        //@ assert ptr0_.as_non_null_ptr().as_ptr() == ptr0;
-        //@ std::alloc::Layout_inv(elem_layout);
-        /*@
-        if capacity0 * elem_layout.size() != 0 {
-            let elemLayout = elem_layout;
-            assert elemLayout.repeat(capacity0) == some(pair(?allocLayout, ?stride));
-            std::alloc::Layout_repeat_some_size_aligned(elemLayout, capacity0);
-            std::alloc::Layout_inv(allocLayout);
-        }
-        @*/
-        //@ std::alloc::Layout_size_Layout_from_size_align(capacity0 * elem_layout.size(), elem_layout.align());
-        //@ std::alloc::Layout_align_Layout_from_size_align(capacity0 * elem_layout.size(), elem_layout.align());
-        
-        //@ if capacity0 * elem_layout.size() == 0 { leak ptr0[..0] |-> _; }
-        
-        //@ std::num::niche_types::UsizeNoHighBit_inv(self0.cap);
-        //@ assert cap == len + additional;
-        //@ mul_mono_l(1, elem_layout.size(), self0.cap.as_inner());
         //@ mul_mono_l(1, elem_layout.size(), cap);
-        //@ mul_mono_l(capacity0, cap, elem_layout.size());
-        
+
         // SAFETY: Precondition passed to caller + `current_memory` does the right thing
-        match core::ops::Try::branch(unsafe { finish_grow(new_layout, current_memory, &mut self.alloc) }) {
+        match core::ops::Try::branch(finish_grow_result) {
             core::ops::ControlFlow::Break(residual) => {
                 //@ let self1 = *self;
                 //@ close RawVecInner(t, self1, elem_layout, alloc_id, ptr0, capacity0);
@@ -2776,6 +2785,9 @@ impl<A: Allocator> RawVecInner<A> {
             core::ops::ControlFlow::Continue(ptr) => {
                 // SAFETY: layout_array would have resulted in a capacity overflow if we tried to allocate more than `isize::MAX` items
                 unsafe {
+                    //@ let elemLayout = elem_layout;
+                    //@ assert elemLayout.repeat(cap) == some(pair(?new_layout, ?stride));
+                    //@ std::alloc::Layout_repeat_some_size_aligned(elemLayout, cap);
                     //@ assert new_layout.size() == elem_layout.size() * cap;
                     //@ mul_mono_l(1, elem_layout.size(), cap);
                     self.set_ptr_and_cap(ptr, cap);
@@ -2793,6 +2805,149 @@ impl<A: Allocator> RawVecInner<A> {
             }
         }
     }
+
+    /// # Safety
+    /// - `elem_layout` must be valid for `self`, i.e. it must be the same `elem_layout` used to
+    ///   initially construct `self`
+    /// - `elem_layout`'s size must be a multiple of its alignment
+    /// - `cap` must be greater than the current capacity
+    // not marked inline(never) since we want optimizers to be able to observe the specifics of this
+    // function, see tests/codegen-llvm/vec-reserve-extend.rs.
+    #[cold]
+    unsafe fn finish_grow<'a>(
+        &'a self,
+        cap: usize,
+        elem_layout: Layout,
+    ) -> Result<NonNull<[u8]>, TryReserveError>
+    /*@
+    req thread_token(?t) &*& t == currentThread &*&
+        1 <= elem_layout.size() &*&
+        elem_layout.size() % elem_layout.align() == 0 &*&
+        [_]RawVecInner_share_('a, t, self, elem_layout, ?alloc_id, ?ptr0, ?capacity0) &*& [?q]lifetime_token('a) &*&
+        if capacity0 * elem_layout.size() == 0 {
+            true
+        } else {
+            elem_layout.repeat(capacity0) == some(pair(?allocLayout, ?stride)) &*&
+            std::alloc::alloc_block_in(alloc_id, ptr0, allocLayout)
+        } &*&
+        array_at_lft_(alloc_id.lft, ptr0, capacity0 * elem_layout.size(), _) &*&
+        capacity0 <= cap;
+    @*/
+    /*@
+    ens thread_token(t) &*& [q]lifetime_token('a) &*&
+        match result {
+            Result::Ok(new_ptr) =>
+                elem_layout.repeat(cap) == some(pair(?allocLayout, ?stride)) &*&
+                alloc_block_in(alloc_id, new_ptr.as_ptr() as *u8, allocLayout) &*&
+                array_at_lft_(alloc_id.lft, new_ptr.as_ptr() as *u8, cap * elem_layout.size(), _) &*&
+                cap * elem_layout.size() <= isize::MAX &*&
+                std::alloc::is_valid_layout(cap * elem_layout.size(), elem_layout.align()) == true,
+            Result::Err(e) =>
+                if capacity0 * elem_layout.size() == 0 {
+                    true
+                } else {
+                    elem_layout.repeat(capacity0) == some(pair(?allocLayout, ?stride)) &*&
+                    std::alloc::alloc_block_in(alloc_id, ptr0, allocLayout)
+                } &*&
+                array_at_lft_(alloc_id.lft, ptr0, capacity0 * elem_layout.size(), _) &*&
+                <collections::TryReserveError>.own(currentThread, e)
+        };
+    @*/
+    {
+        //@ std::alloc::Layout_inv(elem_layout);
+        
+        let new_layout = layout_array(cap, elem_layout)?;
+        //@ std::alloc::Layout_repeat_some_size_aligned(elem_layout, cap);
+        
+        //@ let self_ref = precreate_ref(self);
+        //@ init_ref_RawVecInner_(self_ref);
+        //@ open_frac_borrow('a, ref_initialized_(self_ref), q/2);
+        //@ open [?f]ref_initialized_::<RawVecInner<A>>(self_ref)();
+        // SAFETY: Precondition passed to caller
+        let current_memory = unsafe { (&*(self as *const RawVecInner<A>)).current_memory(elem_layout) };
+        //@ close [f]ref_initialized_::<RawVecInner<A>>(self_ref)();
+        //@ close_frac_borrow(f, ref_initialized_(self_ref));
+        
+        //@ open RawVecInner_share_('a, t, self, elem_layout, alloc_id, ptr0, capacity0);
+        //@ std::alloc::Layout_inv(elem_layout);
+        /*@
+        if capacity0 * elem_layout.size() != 0 {
+            let elemLayout = elem_layout;
+            assert elemLayout.repeat(capacity0) == some(pair(?allocLayout, ?stride));
+            std::alloc::Layout_repeat_some_size_aligned(elemLayout, capacity0);
+            std::alloc::Layout_inv(allocLayout);
+        }
+        @*/
+        //@ std::alloc::Layout_size_Layout_from_size_align(capacity0 * elem_layout.size(), elem_layout.align());
+        //@ std::alloc::Layout_align_Layout_from_size_align(capacity0 * elem_layout.size(), elem_layout.align());
+        
+        //@ open_frac_borrow('a, RawVecInner_frac_borrow_content(self, elem_layout, ptr0, capacity0), q/2);
+        //@ open [?f1]RawVecInner_frac_borrow_content::<A>(self, elem_layout, ptr0, capacity0)();
+        //@ let cap0 = (*self).cap;
+        //@ std::num::niche_types::UsizeNoHighBit_inv(cap0);
+        //@ close [f1]RawVecInner_frac_borrow_content::<A>(self, elem_layout, ptr0, capacity0)();
+        //@ close_frac_borrow(f1, RawVecInner_frac_borrow_content(self, elem_layout, ptr0, capacity0));
+        //@ mul_mono_l(1, elem_layout.size(), cap0.as_inner());
+        //@ mul_mono_l(1, elem_layout.size(), cap);
+        //@ mul_mono_l(capacity0, cap, elem_layout.size());
+        
+        let memory = if let Some((ptr, old_layout)) = current_memory {
+            // debug_assert_eq!(old_layout.align(), new_layout.align());
+            if cfg!(debug_assertions) { //~allow_dead_code // FIXME: The source location associated
+                                        //with a dead `else` branch is the entire `if` statement :-(
+                match (&old_layout.align(), &new_layout.align()) {
+                    (left_val, right_val) =>
+                    if !(*left_val == *right_val) {
+                        let kind = core::panicking::AssertKind::Eq; //~allow_dead_code
+                        core::panicking::assert_failed(kind, &*left_val, &*right_val, None); //~allow_dead_code
+                    }
+                }
+            }
+            unsafe {
+                // The allocator checks for alignment equality
+                hint::assert_unchecked(old_layout.align() == new_layout.align());
+                //@ std::alloc::Layout_repeat_some_size_aligned(elem_layout, capacity0);
+                //@ assert elem_layout.repeat(capacity0) == some(pair(?allocLayout, ?stride));
+                //@ assert allocLayout == old_layout;
+                //@ assert ptr.as_ptr() as *u8 == ptr0;
+                //@ assert std::alloc::alloc_block_in(alloc_id, ptr0, allocLayout);
+                //@ let alloc_ref = precreate_ref(&(*self).alloc);
+                //@ std::alloc::init_ref_Allocator_share::<A>('a, t, alloc_ref);
+                //@ open_frac_borrow('a, ref_initialized_::<A>(alloc_ref), q/2);
+                //@ open [?f2]ref_initialized_::<A>(alloc_ref)();
+                //@ std::alloc::close_Allocator_ref::<'a, A>(t, alloc_ref);
+                let r = self.alloc.grow/*@::<A, 'a>@*/(ptr, old_layout, new_layout);
+                //@ close [f2]ref_initialized_::<A>(alloc_ref)();
+                //@ close_frac_borrow(f2, ref_initialized_::<A>(alloc_ref));
+                //@ leak Allocator(_, _, _);
+                r
+            }
+        } else {
+            //@ let alloc_ref = precreate_ref(&(*self).alloc);
+            //@ std::alloc::init_ref_Allocator_share::<A>('a, t, alloc_ref);
+            //@ open_frac_borrow('a, ref_initialized_::<A>(alloc_ref), q/2);
+            //@ open [?f2]ref_initialized_::<A>(alloc_ref)();
+            //@ std::alloc::close_Allocator_ref::<'a, A>(t, alloc_ref);
+            let r = self.alloc.allocate/*@::<A, 'a>@*/(new_layout);
+            //@ close [f2]ref_initialized_::<A>(alloc_ref)();
+            //@ close_frac_borrow(f2, ref_initialized_::<A>(alloc_ref));
+            //@ leak Allocator(_, _, _);
+            r
+        };
+
+        let new_layout_ref = &new_layout;
+        match memory {
+            Ok(ptr) => Ok(ptr),
+            Err(err) => {
+                let e = AllocError { layout: *new_layout_ref, non_exhaustive: () };
+                //@ std::alloc::close_Layout_own(t, new_layout);
+                //@ close_tuple_0_own(t);
+                //@ close <collections::TryReserveErrorKind>.own(t, e);
+                Err(e.into())
+            }
+        }
+    }
+
 
     /// # Safety
     /// - `elem_layout` must be valid for `self`, i.e. it must be the same `elem_layout` used to
@@ -3034,109 +3189,6 @@ impl<A: Allocator> RawVecInner<A> {
         //@ std::alloc::Allocator_to_own((*self).alloc);
         //@ close RawVecInner0(*self, elem_layout, ptr_, capacity);
         //@ close <RawVecInner<A>>.own(t, *self);
-    }
-}
-
-/// # Safety
-/// If `current_memory` matches `Some((ptr, old_layout))`:
-/// - `ptr` must denote a block of memory *currently allocated* via `alloc`
-/// - `old_layout` must *fit* that block of memory
-/// - `new_layout` must have the same alignment as `old_layout`
-/// - `new_layout.size()` must be greater than or equal to `old_layout.size()`
-/// If `current_memory` is `None`, this function is safe.
-// not marked inline(never) since we want optimizers to be able to observe the specifics of this
-// function, see tests/codegen-llvm/vec-reserve-extend.rs.
-#[cold]
-unsafe fn finish_grow<A>(
-    new_layout: Layout,
-    current_memory: Option<(NonNull<u8>, Layout)>,
-    alloc: &mut A,
-) -> Result<NonNull<[u8]>, TryReserveError>
-where
-    A: Allocator,
-/*@
-req thread_token(?t) &*& t == currentThread &*&
-    *alloc |-> ?alloc0 &*& Allocator(t, alloc0, ?alloc_id) &*&
-    match current_memory {
-        Option::None => true,
-        Option::Some(memory) =>
-            alloc_block_in(alloc_id, memory.0.as_ptr(), memory.1) &*&
-            array_at_lft_(alloc_id.lft, memory.0.as_ptr(), memory.1.size(), _) &*&
-            memory.1.size() <= new_layout.size() &*&
-            memory.1.align() == new_layout.align()
-    };
-@*/
-/*@
-ens thread_token(t) &*& *alloc |-> ?alloc1 &*& Allocator(t, alloc1, alloc_id) &*&
-    match result {
-        Result::Ok(ptr) =>
-            alloc_block_in(alloc_id, ptr.as_ptr() as *u8, new_layout) &*&
-            array_at_lft_(alloc_id.lft, ptr.as_ptr() as *u8, new_layout.size(), _) &*&
-            new_layout.size() <= isize::MAX,
-        Result::Err(e) =>
-            match current_memory {
-                Option::None => true,
-                Option::Some(memory) =>
-                    alloc_block_in(alloc_id, memory.0.as_ptr(), memory.1) &*&
-                    array_at_lft_(alloc_id.lft, memory.0.as_ptr(), memory.1.size(), _)
-            } &*&
-            <collections::TryReserveError>.own(currentThread, e)
-    };
-@*/
-{
-    let memory = if let Some((ptr, old_layout)) = current_memory {
-        // debug_assert_eq!(old_layout.align(), new_layout.align());
-        if cfg!(debug_assertions) { //~allow_dead_code // FIXME: The source location associated
-                                    //with a dead `else` branch is the entire `if` statement :-(
-            match (&old_layout.align(), &new_layout.align()) {
-                (left_val, right_val) =>
-                if !(*left_val == *right_val) {
-                    let kind = core::panicking::AssertKind::Eq; //~allow_dead_code
-                    core::panicking::assert_failed(kind, &*left_val, &*right_val, None); //~allow_dead_code
-                }
-            }
-        }
-        unsafe {
-            // The allocator checks for alignment equality
-            hint::assert_unchecked(old_layout.align() == new_layout.align());
-            let r;
-            //@ let alloc_ref = precreate_ref(alloc);
-            //@ let k1 = begin_lifetime();
-            {
-                //@ let_lft 'a = k1;
-                //@ std::alloc::init_ref_Allocator_at_lifetime::<'a, A>(alloc_ref);
-                r = alloc.grow/*@::<A, 'a>@*/(ptr, old_layout, new_layout);
-                //@ leak Allocator(_, _, _);
-            }
-            //@ end_lifetime(k1);
-            //@ std::alloc::end_ref_Allocator_at_lifetime::<A>();
-            r
-        }
-    } else {
-        let r;
-        //@ let alloc_ref = precreate_ref(alloc);
-        //@ let k1 = begin_lifetime();
-        {
-            //@ let_lft 'a = k1;
-            //@ std::alloc::init_ref_Allocator_at_lifetime::<'a, A>(alloc_ref);
-            r = alloc.allocate/*@::<A, 'a>@*/(new_layout);
-            //@ leak Allocator(_, _, _);
-        }
-        //@ end_lifetime(k1);
-        //@ std::alloc::end_ref_Allocator_at_lifetime::<A>();
-        r
-    };
-
-    let new_layout_ref = &new_layout;
-    match memory {
-        Ok(ptr) => Ok(ptr),
-        Err(err) => {
-            let e = AllocError { layout: *new_layout_ref, non_exhaustive: () };
-            //@ std::alloc::close_Layout_own(t, new_layout);
-            //@ close_tuple_0_own(t);
-            //@ close <collections::TryReserveErrorKind>.own(t, e);
-            Err(e.into())
-        }
     }
 }
 

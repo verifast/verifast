@@ -3159,9 +3159,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           let* operandl = tr_operand operandl in
           let* operandr = tr_operand operandr in
           Ok (`TrRvalueBinaryOp (operator, operandl, operandr))
-      | NullaryOp nullary_op_data_cpn ->
-          let open NullaryOpData in
-          begin match operator_get nullary_op_data_cpn |> NullOp.get with
+      | NullaryOp null_op_cpn ->
+          let open VfMirRd.NullOp in
+          let runtime_checks_cpn = runtime_checks_get null_op_cpn in
+          begin match VfMirRd.RuntimeChecks.get runtime_checks_cpn with
             UbChecks ->
               let expr = Ast.CallExpr (loc, "std::intrinsics::ub_checks", [], [], [], Static) in
               let expr =
@@ -3381,7 +3382,6 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           | `TrRvalueAggregate init_stmts_builder ->
               Ok (init_stmts_builder (lhs_place, lhs_place_is_mutable)))
       | SetDiscriminant -> failwith "TODO: StatementKind::SetDiscriminant"
-      | Deinit -> failwith "TODO: StatementKind::Deinit"
       | StorageLive local ->
           let local = translate_local_decl_id local in
           Rocq_writer.rocq_print_application TranslatorArgs.rocq_writer "StorageLive" @@ fun () ->

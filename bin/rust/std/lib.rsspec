@@ -1849,16 +1849,12 @@ mod fmt {
 
     struct Arguments<'a>;
     
-    mod rt {
+    impl<'a> Arguments<'a> {
     
-        impl<'a> std::fmt::Arguments<'a> {
-        
-            fn new_const<N>(pieces: &'a [&'a str; N]) -> std::fmt::Arguments<'a>;
-            //@ req thread_token(?t) &*& <&'a [&'a str; N]>.own(t, pieces);
-            //@ ens thread_token(t) &*& <std::fmt::Arguments<'a>>.own(t, result);
-            //@ on_unwind_ens thread_token(t);
-        
-        }
+        fn from_str(msg: &'a str) -> Arguments<'a>;
+        //@ req thread_token(?t) &*& [_](msg as *u8)[..msg.len()] |-> ?cs;
+        //@ ens thread_token(t) &*& <Arguments<'a>>.own(t, result);
+        //@ on_unwind_ens false;
     
     }
 

@@ -1606,7 +1606,7 @@ type command =
 | RawPtr of rvalue_raw_ptr_data
 | Cast of Vf_mir_decoder.ty (* Pop a value from the top of the operand stack, cast it to the specified type, and push the result *)
 | BinaryOp of rvalue_binary_op_data_bin_op (* Pop two values from the top of the operand stack, apply the specified binary operator to them, and push the result *)
-| NullaryOp of rvalue_nullary_op_data (* Push the result of the specified nullary operator onto the operand stack *)
+| NullaryOp of null_op (* Push the result of the specified nullary operator onto the operand stack *)
 | UnaryOp of rvalue_unary_op_data_un_op (* Pop a value from the top of the operand stack, apply the specified unary operator to it, and push the result *)
 | Aggregate of aggregate_kind * int (* Pop the specified number of values from the top of the operand stack and push an aggregate value *)
 | Discriminant (* Pop a value from the top of the operand stack, which is an enum value, and push the discriminant of the enum value *)
@@ -1669,7 +1669,6 @@ let commands_of_statement_kind = function
      it might have a side-effects on the Tree Borrows state? *)
   commands_of_rvalue rhs_rvalue @ [Store lhs_place]
 | SetDiscriminant -> failwith "TODO: SetDiscriminant"
-| Deinit -> failwith "TODO: Deinit"
 | StorageLive _ -> [] (* FIXME https://github.com/verifast/verifast/issues/948 *)
 | StorageDead _ -> [] (* FIXME https://github.com/verifast/verifast/issues/948 *)
 | PlaceMention _ -> failwith "TODO: PlaceMention"
@@ -2104,17 +2103,15 @@ let check_rvalue_refines_rvalue genv0 env0 span0 caller0 rhsRvalue0 genv1 env1 s
   let rhs0 = binary_op_data_cpn0.operandr in
   let rhs1 = binary_op_data_cpn1.operandr in
   check_operand_refines_operand 1 genv0 env0 span0 caller0 rhs0 genv1 env1 span1 caller1 rhs1
-| NullaryOp {operator=op0; ty=ty0}, NullaryOp {operator=op1; ty=ty1} ->
-  let ty0 = decode_ty genv0 ty0 in
-  let ty1 = decode_ty genv1 ty1 in
-  if ty0 <> ty1 then error "NullaryOp: The types do not match";
+| NullaryOp op0, NullaryOp op1 ->
   begin match op0, op1 with
-  | SizeOf, SizeOf -> ()
-  | AlignOf, AlignOf -> ()
-  | OffsetOf _, OffsetOf _ -> failwith "Rvalue::NullaryOp: OffsetOf not supported"
-  | UbChecks, UbChecks -> ()
-  | ContractChecks, ContractChecks -> ()
-  | _ -> failwith "Rvalue::NullaryOp: operators do not match"
+  | {runtime_checks=checks0}, {runtime_checks=checks1} ->
+    begin match checks0, checks1 with
+    | UbChecks, UbChecks -> ()
+    | ContractChecks, ContractChecks -> ()
+    | OverflowChecks, OverflowChecks -> ()
+    | _ -> failwith "Rvalue::NullaryOp: operators do not match"
+    end
   end
 | UnaryOp unary_op_data_cpn0, UnaryOp unary_op_data_cpn1 -> failwith "Rvalue::UnaryOp not supported"
 | Aggregate aggregate_data_cpn0, Aggregate aggregate_data_cpn1 ->
@@ -2669,16 +2666,14 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
             let v = fresh_symbol () in
             cont env0 (v::opnds0) env1 (v::opnds1)
         | NullaryOp op0, NullaryOp op1 ->
-            begin match op0.operator, op1.operator with
-              SizeOf, SizeOf -> ()
-            | AlignOf, AlignOf -> ()
-            | OffsetOf _, OffsetOf _ -> error "OffsetOf not yet supported"
-            | UbChecks, UbChecks -> ()
-            | ContractChecks, ContractChecks -> ()
+            begin match op0, op1 with
+              {runtime_checks=checks0}, {runtime_checks=checks1} ->
+              begin match checks0, checks1 with
+              | UbChecks, UbChecks -> ()
+              | ContractChecks, ContractChecks -> ()
+              | OverflowChecks, OverflowChecks -> ()
+              end
             end;
-            let ty0 = decode_ty i_bb0#genv op0.ty in
-            let ty1 = decode_ty i_bb1#genv op1.ty in
-            if ty0 <> ty1 then error "NullaryOp: The types do not match";
             let v = fresh_symbol () in
             cont env0 (v::opnds0) env1 (v::opnds1)
         | UnaryOp op0, UnaryOp op1 ->
@@ -2702,13 +2697,15 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
         | _ -> error "Command kinds do not match"
       in
       match ss_i0, ss_i1 with
-        [], [] -> check_terminator_refines_terminator env1
       | _, [] ->
         begin match i_bb1#terminator with
           {kind=Call ({func=Constant {const=Val {const_value=ZeroSized; ty={kind=FnDef {id={name=("core::hint::unreachable_unchecked"|"std::hint::unreachable_unchecked")}}}}}} as call)} ->
             () (* Anything refines a call of unreachable_unchecked *)
         | _ ->
-          error (Printf.sprintf "In function %s, cannot prove that statement %d of basic block %s in the original version refines the terminator of basic block %s in the verified version" def_path i_s0 i_bb0#to_string i_bb1#to_string)
+          if ss_i0 = [] then
+            check_terminator_refines_terminator env1
+          else
+            error (Printf.sprintf "In function %s, cannot prove that statement %d of basic block %s in the original version refines the terminator of basic block %s in the verified version" def_path i_s0 i_bb0#to_string i_bb1#to_string)
         end
       | Ref {place={projection=[Deref]}}::_, _ -> check_command_refines_command ()
       | _, Ref {place={projection=[Deref]; local={name=rhsPlaceLocalName1}}}::ss_i1_plus_1 ->

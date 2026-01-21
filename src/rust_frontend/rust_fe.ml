@@ -102,7 +102,7 @@ module Make (Args : RUST_FE_ARGS) = struct
   let run_vf_mir_exporter (rustc_args : string list) (rs_file_path : string) =
     try
       (*** TODO @Nima: Get these names from build system *)
-      let tchain_name = "nightly-2025-10-09" in
+      let tchain_name = "nightly-2025-11-25" in
       let* tchain_root = RustTChain.find_tchain_root tchain_name in
       let tchain_lib, rustc_driver_prefix =
         match Vfconfig.platform with
