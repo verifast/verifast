@@ -602,6 +602,18 @@ struct CastKind {
 
 }
 
+struct RuntimeChecks {
+    union {
+        ubChecks @0: Void;
+        contractChecks @1: Void;
+        overflowChecks @2: Void;
+    }
+}
+
+struct NullOp {
+    runtimeChecks @0: RuntimeChecks;
+}
+
 struct Rvalue {
 
     struct RepeatData {
@@ -639,20 +651,6 @@ struct Rvalue {
         operator @0: BinOp;
         operandl @1: Operand;
         operandr @2: Operand;
-    }
-
-    struct NullaryOpData {
-        struct NullOp {
-            union {
-                sizeOf @0: Void;
-                alignOf @1: Void;
-                offsetOf @2: Void; # TODO: Elaborate
-                ubChecks @3: Void;
-                contractChecks @4: Void;
-            }
-        }
-        operator @0: NullOp;
-        ty @1: Ty;
     }
 
     struct UnaryOpData {
@@ -708,7 +706,7 @@ struct Rvalue {
         rawPtr @2: RawPtrData;
         cast @3: CastData;
         binaryOp @4: BinaryOpData;
-        nullaryOp @11: NullaryOpData;
+        nullaryOp @11: NullOp;
         unaryOp @6: UnaryOpData;
         aggregate @5: AggregateData;
         discriminant @7: DiscriminantData;
@@ -725,7 +723,6 @@ struct StatementKind {
     union {
         assign @0: AssignData;
         setDiscriminant @2: Void; # TODO: Elaborate
-        deinit @8: Void; # TODO: Elaborate
         storageLive @3: LocalDeclId;
         storageDead @4: LocalDeclId;
         placeMention @5: Place;

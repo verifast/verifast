@@ -1,21 +1,26 @@
 use core::ops::{Range, RangeBounds};
 use core::{fmt, ptr, slice};
 
-use super::Vec;
+use super::VecDeque;
 use crate::alloc::{Allocator, Global};
 
 /// An iterator which uses a closure to determine if an element should be removed.
 ///
-/// This struct is created by [`Vec::extract_if`].
+/// This struct is created by [`VecDeque::extract_if`].
 /// See its documentation for more.
 ///
 /// # Example
 ///
 /// ```
-/// let mut v = vec![0, 1, 2];
-/// let iter: std::vec::ExtractIf<'_, _, _> = v.extract_if(.., |x| *x % 2 == 0);
+/// #![feature(vec_deque_extract_if)]
+///
+/// use std::collections::vec_deque::ExtractIf;
+/// use std::collections::vec_deque::VecDeque;
+///
+/// let mut v = VecDeque::from([0, 1, 2]);
+/// let iter: ExtractIf<'_, _, _> = v.extract_if(.., |x| *x % 2 == 0);
 /// ```
-#[stable(feature = "extract_if", since = "1.87.0")]
+#[unstable(feature = "vec_deque_extract_if", issue = "147750")]
 #[must_use = "iterators are lazy and do nothing unless consumed; \
     use `retain_mut` or `extract_if().for_each(drop)` to remove and discard elements"]
 pub struct ExtractIf<
@@ -24,7 +29,7 @@ pub struct ExtractIf<
     F,
     #[unstable(feature = "allocator_api", issue = "32838")] A: Allocator = Global,
 > {
-    vec: &'a mut Vec<T, A>,
+    vec: &'a mut VecDeque<T, A>,
     /// The index of the item that will be inspected by the next call to `next`.
     idx: usize,
     /// Elements at and beyond this point will be retained. Must be equal or smaller than `old_len`.
@@ -38,14 +43,16 @@ pub struct ExtractIf<
 }
 
 impl<'a, T, F, A: Allocator> ExtractIf<'a, T, F, A> {
-    pub(super) fn new<R: RangeBounds<usize>>(vec: &'a mut Vec<T, A>, pred: F, range: R) -> Self {
+    pub(super) fn new<R: RangeBounds<usize>>(
+        vec: &'a mut VecDeque<T, A>,
+        pred: F,
+        range: R,
+    ) -> Self {
         let old_len = vec.len();
         let Range { start, end } = slice::range(range, ..old_len);
 
-        // Guard against the vec getting leaked (leak amplification)
-        unsafe {
-            vec.set_len(0);
-        }
+        // Guard against the deque getting leaked (leak amplification)
+        vec.len = 0;
         ExtractIf { vec, idx: start, del: 0, end, old_len, pred }
     }
 
@@ -57,7 +64,7 @@ impl<'a, T, F, A: Allocator> ExtractIf<'a, T, F, A> {
     }
 }
 
-#[stable(feature = "extract_if", since = "1.87.0")]
+#[unstable(feature = "vec_deque_extract_if", issue = "147750")]
 impl<T, F, A: Allocator> Iterator for ExtractIf<'_, T, F, A>
 where
     F: FnMut(&mut T) -> bool,
@@ -74,9 +81,10 @@ where
             //  Additionally, the i-th element is valid because each element is visited at most once
             //  and it is the first time we access vec[i].
             //
-            //  Note: we can't use `vec.get_unchecked_mut(i)` here since the precondition for that
-            //  function is that i < vec.len(), but we've set vec's length to zero.
-            let cur = unsafe { &mut *self.vec.as_mut_ptr().add(i) };
+            //  Note: we can't use `vec.get_mut(i).unwrap()` here since the precondition for that
+            //  function is that i < vec.len, but we've set vec's length to zero.
+            let idx = self.vec.to_physical_idx(i);
+            let cur = unsafe { &mut *self.vec.ptr().add(idx) };
             let drained = (self.pred)(cur);
             // Update the index *after* the predicate is called. If the index
             // is updated prior and the predicate panics, the element at this
@@ -87,12 +95,10 @@ where
                 // SAFETY: We never touch this element again after returning it.
                 return Some(unsafe { ptr::read(cur) });
             } else if self.del > 0 {
+                let hole_slot = self.vec.to_physical_idx(i - self.del);
                 // SAFETY: `self.del` > 0, so the hole slot must not overlap with current element.
                 // We use copy for move, and never touch this element again.
-                unsafe {
-                    let hole_slot = self.vec.as_mut_ptr().add(i - self.del);
-                    ptr::copy_nonoverlapping(cur, hole_slot, 1);
-                }
+                unsafe { self.vec.wrap_copy(idx, hole_slot, 1) };
             }
         }
         None
@@ -103,27 +109,21 @@ where
     }
 }
 
-#[stable(feature = "extract_if", since = "1.87.0")]
+#[unstable(feature = "vec_deque_extract_if", issue = "147750")]
 impl<T, F, A: Allocator> Drop for ExtractIf<'_, T, F, A> {
     fn drop(&mut self) {
         if self.del > 0 {
+            let src = self.vec.to_physical_idx(self.idx);
+            let dst = self.vec.to_physical_idx(self.idx - self.del);
+            let len = self.old_len - self.idx;
             // SAFETY: Trailing unchecked items must be valid since we never touch them.
-            unsafe {
-                ptr::copy(
-                    self.vec.as_ptr().add(self.idx),
-                    self.vec.as_mut_ptr().add(self.idx - self.del),
-                    self.old_len - self.idx,
-                );
-            }
+            unsafe { self.vec.wrap_copy(src, dst, len) };
         }
-        // SAFETY: After filling holes, all items are in contiguous memory.
-        unsafe {
-            self.vec.set_len(self.old_len - self.del);
-        }
+        self.vec.len = self.old_len - self.del;
     }
 }
 
-#[stable(feature = "extract_if", since = "1.87.0")]
+#[unstable(feature = "vec_deque_extract_if", issue = "147750")]
 impl<T, F, A> fmt::Debug for ExtractIf<'_, T, F, A>
 where
     T: fmt::Debug,
@@ -131,6 +131,7 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let peek = if self.idx < self.end {
+            let idx = self.vec.to_physical_idx(self.idx);
             // This has to use pointer arithmetic as `self.vec[self.idx]` or
             // `self.vec.get_unchecked(self.idx)` wouldn't work since we
             // temporarily set the length of `self.vec` to zero.
@@ -140,7 +141,7 @@ where
             // smaller than `self.old_len`, `idx` is valid for indexing the
             // buffer. Also, per the invariant of `self.idx`, this element
             // has not been inspected/moved out yet.
-            Some(unsafe { &*self.vec.as_ptr().add(self.idx) })
+            Some(unsafe { &*self.vec.ptr().add(idx) })
         } else {
             None
         };

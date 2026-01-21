@@ -735,7 +735,6 @@ mod vf_mir_builder {
                 let trait_ref = self
                     .tcx
                     .impl_trait_ref(trait_impl.def_id)
-                    .unwrap()
                     .skip_binder();
                 trait_impl_cpn.fill_gen_args(trait_ref.args, |gen_arg_cpn, gen_arg| {
                     Self::encode_gen_arg(enc_ctx.tcx, &mut enc_ctx, gen_arg, gen_arg_cpn);
@@ -2156,9 +2155,6 @@ mod vf_mir_builder {
                 mir::StatementKind::SetDiscriminant { place, variant_index } => {
                     statement_kind_cpn.set_set_discriminant(()); // TODO encode data
                 }
-                mir::StatementKind::Deinit(place) => {
-                    statement_kind_cpn.set_deinit(()); // TODO encode data
-                }
                 mir::StatementKind::StorageLive(local) => {
                     let storage_live_cpn = statement_kind_cpn.init_storage_live();
                     Self::encode_local_decl_id(*local, storage_live_cpn);
@@ -2313,18 +2309,18 @@ mod vf_mir_builder {
                     let operandr_cpn = bin_op_data_cpn.init_operandr();
                     Self::encode_operand(tcx, enc_ctx, operandr, operandr_cpn);
                 }
-                mir::Rvalue::NullaryOp(null_op, ty) => {
-                    let mut nullary_op_data_cpn = rvalue_cpn.init_nullary_op();
-                    let mut operator_cpn = nullary_op_data_cpn.reborrow().init_operator();
+                mir::Rvalue::NullaryOp(null_op) => {
+                    let mut null_op_cpn = rvalue_cpn.init_nullary_op();
                     match null_op {
-                        mir::NullOp::SizeOf => operator_cpn.set_size_of(()),
-                        mir::NullOp::AlignOf => operator_cpn.set_align_of(()),
-                        mir::NullOp::OffsetOf(fields) => operator_cpn.set_offset_of(()),
-                        mir::NullOp::UbChecks => operator_cpn.set_ub_checks(()),
-                        mir::NullOp::ContractChecks => operator_cpn.set_contract_checks(()),
+                        mir::NullOp::RuntimeChecks(runtime_checks) => {
+                            let mut runtime_checks_cpn = null_op_cpn.reborrow().init_runtime_checks();
+                            match runtime_checks {
+                                mir::RuntimeChecks::UbChecks => runtime_checks_cpn.set_ub_checks(()),
+                                mir::RuntimeChecks::ContractChecks => runtime_checks_cpn.set_contract_checks(()),
+                                mir::RuntimeChecks::OverflowChecks => runtime_checks_cpn.set_overflow_checks(()),
+                            }
+                        }
                     }
-                    let ty_cpn = nullary_op_data_cpn.init_ty();
-                    Self::encode_ty(tcx, enc_ctx, *ty, ty_cpn);
                 }
                 mir::Rvalue::UnaryOp(un_op, operand) => {
                     let mut un_op_data_cpn = rvalue_cpn.init_unary_op();
