@@ -62,7 +62,19 @@ lem Mutex_share_full<T>(k: lifetime_t, t: thread_id_t, l: *Mutex<T>)
         close Mutex_data(l, _);
         assert (*l).inner |-> ?inner &*& (*l).data |-> ?data;
         ghost_rec_perm_top_weaken(type_depth(typeid(T)));
-        Send::send(t0, t, data);
+        {
+            pred pre() = <T>.own(t0, data);
+            pred post() = <T>.own(t, data);
+            produce_lem_ptr_chunk with_type_interp_body<T>(pre, post)() {
+                open pre();
+                Send::send(t0, t, data);
+                close post();
+            } {
+                close pre();
+                with_type_interp::<T>();
+                open post();
+            }
+        }
         ghost_rec_perm_top_unweaken();
         close Mutex_own::<T>()(t, Mutex::<T> { inner, data });
         close Mutex_full_borrow_content::<T>(t, l)();
@@ -74,7 +86,19 @@ lem Mutex_share_full<T>(k: lifetime_t, t: thread_id_t, l: *Mutex<T>)
             close Mutex_fbc_inner::<T>(l)();
             open Mutex_data(l, _);
             ghost_rec_perm_top_weaken(type_depth(typeid(T)));
-            Send::send(t, t0, data);
+            {
+                pred pre() = <T>.own(t, data);
+                pred post() = <T>.own(t0, data);
+                produce_lem_ptr_chunk with_type_interp_body<T>(pre, post)() {
+                    open pre();
+                    Send::send(t, t0, data);
+                    close post();
+                } {
+                    close pre();
+                    with_type_interp::<T>();
+                    open post();
+                }
+            }
             ghost_rec_perm_top_unweaken();
             close_full_borrow_content::<T>(t0, &(*l).data);
             close sep(Mutex_fbc_inner(l), <T>.full_borrow_content(t0, &(*l).data))();
@@ -276,7 +300,19 @@ impl<'b, T: Send> DerefMut for MutexGuard<'b, T> {
             open_full_borrow_content(t0, ref_origin(&(*lock).data));
             ghost_rec_perm_top_weaken(type_depth(typeid(T)));
             assert *ref_origin(&(*lock).data) |-> ?data;
-            Send::send(t0, t, data);
+            {
+                pred pre() = <T>.own(t0, data);
+                pred post() = <T>.own(t, data);
+                produce_lem_ptr_chunk with_type_interp_body<T>(pre, post)() {
+                    open pre();
+                    Send::send(t0, t, data);
+                    close post();
+                } {
+                    close pre();
+                    with_type_interp::<T>();
+                    open post();
+                }
+            }
             ghost_rec_perm_top_unweaken();
             close_full_borrow_content(t, ref_origin(&(*lock).data));
         } {
@@ -284,7 +320,19 @@ impl<'b, T: Send> DerefMut for MutexGuard<'b, T> {
                 open_full_borrow_content(t, ref_origin(&(*lock).data));
                 ghost_rec_perm_top_weaken(type_depth(typeid(T)));
                 assert *ref_origin(&(*lock).data) |-> ?data;
-                Send::send(t, t0, data);
+                {
+                    pred pre() = <T>.own(t, data);
+                    pred post() = <T>.own(t0, data);
+                    produce_lem_ptr_chunk with_type_interp_body<T>(pre, post)() {
+                        open pre();
+                        Send::send(t, t0, data);
+                        close post();
+                    } {
+                        close pre();
+                        with_type_interp::<T>();
+                        open post();
+                    }
+                }
                 ghost_rec_perm_top_unweaken();
                 close_full_borrow_content(t0, ref_origin(&(*lock).data));
             } {

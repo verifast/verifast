@@ -205,7 +205,15 @@ lem close_full_borrow_content<T>(t: thread_id_t, l: *T);
 
 fix type_depth(typeId: *_) -> i32;
 
-pred type_interp<T>(;) = ghost_rec_perm(type_depth(typeid(T)));
+pred type_interp<T>(;);
+
+lem_type with_type_interp_body<T>(pre: pred(), post: pred()) = lem();
+    req type_interp::<T>() &*& pre();
+    ens type_interp::<T>() &*& post();
+
+lem with_type_interp<T>();
+    req ghost_rec_perm(type_depth(typeid(T))) &*& is_with_type_interp_body::<T>(?body, ?pre, ?post) &*& pre();
+    ens ghost_rec_perm(type_depth(typeid(T))) &*& is_with_type_interp_body::<T>(body, pre, post) &*& post();
 
 // The intersection of the lifetimes that appear in type T, or 'static if no lifetimes appear in T
 fix lft_of_type<T>() -> lifetime_t;
