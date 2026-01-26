@@ -40,7 +40,7 @@ lem BoxU8_share_mono(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *BoxU8)
     [_]exists(p), [_]fcbor(k1, BoxU8_ptr_field(l, p)),
     \vfResRm{[_]fcbor(k, <u8>.fbc(t, p))}, \vfResAdd{[_]fcbor(k1, <u8>.fbc(t, p))}
     \end{vfHeap}|*/
-    close BoxU8_share(k1, t, l); leak BoxU8_share(k1, t, l);
+    close <BoxU8>.share(k1, t, l); leak <BoxU8>.share(k1, t, l);
 }
 
 lem BoxU8_share_full(k: lifetime_t, t: thread_id_t, l: *BoxU8)
@@ -56,8 +56,9 @@ lem BoxU8_share_full(k: lifetime_t, t: thread_id_t, l: *BoxU8)
     {
         pred ctx(;) = alloc_block_(p);
         produce_lem_ptr_chunk restore_full_borrow_(ctx,
-                sep(BoxU8_ptr_field(l, p), <u8>.full_borrow_content(t, p)),
-                <BoxU8>.full_borrow_content(t, l))() {
+            sep(BoxU8_ptr_field(l, p), <u8>.full_borrow_content(t, p)),
+            <BoxU8>.full_borrow_content(t, l))()
+        {
             open ctx();
             open sep(BoxU8_ptr_field(l, p), <u8>.full_borrow_content(t, p))();
             open u8_full_borrow_content(t, p)();
@@ -284,8 +285,8 @@ lem BoxU8_sync(t1: thread_id_t)
     ens [_](<BoxU8>.share(k, t1, l));
 {
     open <BoxU8>.share(k, t0, l);
-    assert [?df]exists(?p);
-    close [df]u8_share(k, t0, p);
+    assert [_]exists(?p); //|binding \verb+p+
+    leak <u8>.share(k, t0, p);
     u8_sync(t0, t1, p);
     close <BoxU8>.share(k, t1, l);
     leak <BoxU8>.share(k, t1, l);
