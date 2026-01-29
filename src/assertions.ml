@@ -1521,7 +1521,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       cont_with_post [] h ghostenv env env' None (Some (result_var, body))
     | WPredExprAsn (l, e, pts, inputParamCount, pats) -> pred_expr_asn l real_unit_pat e pts inputParamCount pats
     | CoefAsn (l, coefpat, WPredExprAsn (_, e, pts, inputParamCount, pats)) -> pred_expr_asn l (SrcPat coefpat) e pts inputParamCount pats
-    | CoefAsn (l, _) -> static_error l "A fractional assertion must be applied only to a single points-to assertion or a single predicate assertion" None
+    | CoefAsn (l, _, _) -> static_error l "A fractional assertion must be applied only to a single points-to assertion or a single predicate assertion" None
     )
   
   let rec consume_asn_core rules tpenv h typeid_env ghostenv env env' p checkDummyFracs coef cont =
