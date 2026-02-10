@@ -159,6 +159,7 @@ impl<T: Sync + Send> Arc<T> {
             //@ close Arc_inv::<T>(dk, gid, p)();
             //@ create_atomic_space(Marc, Arc_inv(dk, gid, p));
             //@ leak atomic_space(Marc, Arc_inv(dk, gid, p));
+            //@ produce_type_interp::<T>();
             //@ share_full_borrow::<T>(dk, default_tid, &(*p).data);
             //@ leak exists(p);
             //@ leak exists(dk);
@@ -166,6 +167,7 @@ impl<T: Sync + Send> Arc<T> {
             //@ std::ptr::close_NonNull_own::<ArcInner<T>>()(default_tid, nnp);
             //@ leak std::ptr::NonNull_own::<ArcInner<T>>()(default_tid, nnp);
             //@ close Arc_own::<T>()(_t, ret);
+            //@ leak type_interp::<T>();
             ret
         }
     }
