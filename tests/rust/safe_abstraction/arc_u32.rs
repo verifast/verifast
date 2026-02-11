@@ -299,7 +299,7 @@ impl std::ops::Deref for ArcU32 {
             //@ close_frac_borrow(qnnp, Arc_frac_bc(self, nnp));
             //@ frac_borrow_lft_incl('a, frac, dk);
             //@ u32_share_mono(dk, 'a, default_tid, ret);
-            //@ u32_sync('a, default_tid, _t, ret);
+            //@ u32_sync(default_tid, _t, ret);
             //@ open u32_share('a, _t, _);
             ret
         }
