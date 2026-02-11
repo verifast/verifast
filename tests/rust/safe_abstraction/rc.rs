@@ -170,8 +170,10 @@ impl<T> Rc<T> {
             //@ borrow(dk, <T>.full_borrow_content(_t, &(*p).value));
             //@ close rc_na_inv::<T>(dk, gid, p, _t)();
             //@ na_inv_new(_t, MaskNshrSingle(p), rc_na_inv(dk, gid, p, _t));
+            //@ produce_type_interp::<T>();
             //@ share_full_borrow::<T>(dk, _t, &(*p).value);
             //@ close Rc_own::<T>(_t, ret);
+            //@ leak type_interp::<T>();
             ret
         }
     }

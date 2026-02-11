@@ -319,6 +319,10 @@ rocq_metatheory_proofs:
 	cd ../bin/rust/rocq && make
 .PHONY: rocq_metatheory_proofs
 
+clean::
+	@echo "  ROCQ     Cleaning ../bin/rust/rocq artifacts"
+	cd ../bin/rust/rocq && make clean
+
 # Only builds the C++ AST exporter tool binary (which checks macro expansions and serializes the C++ AST).
 # No need to use this target if you're working on (the C++ support of VeriFast) itself.
 # Only required if you worked on the C++ AST exporter tool, or edited the capnp serialization schema.

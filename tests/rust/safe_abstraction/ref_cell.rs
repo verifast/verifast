@@ -284,7 +284,9 @@ impl<T> RefCell<T> {
                     if qklong < 1 { }
                     close_lifetime_intersection_token(qklong, klong, dlft_max);
 
+                    produce_type_interp::<T>();
                     share_full_borrow::<T>(dlft, _t, &(*ref_origin(this)).value);
+                    leak type_interp::<T>();
 
                     open_lifetime_intersection_token(qklong, klong, dlft_max);
 

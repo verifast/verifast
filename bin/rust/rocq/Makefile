@@ -1,7 +1,7 @@
 all: VfMir.vo Annotations.vo Values.vo SymbolicExecution.vo AxSem.vo LogicalHeaps.vo SymexSoundness.vo
 
 clean:
-	rm *.vo* *.glob
+	rm -f *.vo* *.glob
 
 VfMir.vo: VfMir.v
 	coqc -R . VeriFast VfMir.v
