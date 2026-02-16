@@ -1057,7 +1057,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           in
           match t with
             StaticArrayType (elemTp, elemCount) ->
-            produce_object t
+            produce_object (if dialect = Some Rust then RefType t else t)
           | StructType (sn, targs) when
               !address_taken ||
               language = CLang && dialect = Some Cxx ||
@@ -2781,6 +2781,25 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           cont h (Some v) no_cleanups) econt
         in
         match dialect, tp, w, leminfo with
+        | Some Rust, StaticArrayType _, _, _ ->
+          begin
+            match eo with
+            | Some (CallExpr (_, "returning", [], [], [LitPat (Var (_, x))], Static)) ->
+              begin
+                match try_assoc x tenv, try_assoc x env with
+                | Some (RefType ((StaticArrayType _ as t))), Some addr ->
+                  consume_c_object_core_core l dummypat addr t h env false false $. fun chunks h (Some value) ->
+                  let env_for_return = (x, value) :: List.remove_assoc x env in
+                  let tenv_for_return = (x, t) :: List.remove_assoc x tenv in
+                  let w_for_return = check_expr_t_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv_for_return (Some pure) e tp in
+                  verify_expr false (pn,ilist) tparams pure leminfo funcmap sizemap tenv_for_return ghostenv (chunks @ h) env_for_return None w_for_return (fun h _ v ->
+                    cont h (Some v) []) econt
+                | _ ->
+                  verify_return_expr w []
+              end
+            | _ ->
+              verify_return_expr w []
+          end
         | Some Cxx, StructType (sn, []), WCxxConstruct (_, _, StructType (sn', []), [Var (var_l, var_name) as var]), RealFuncInfo (_, func_name, _) when sn = sn' -> 
           let wvar, skip_elision_check =
             match check_expr_t_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (Some pure) var tp with
