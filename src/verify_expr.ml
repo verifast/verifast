@@ -2587,6 +2587,20 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | _ ->
         eval_h_core readonly h env w cont
     in
+    let try_rust_static_array_addr env arr =
+      let local_static_array_addr x =
+        match dialect, try_assoc x tenv, try_assoc x env with
+        | Some Rust, Some (RefType (StaticArrayType (_, _))), Some addr -> Some addr
+        | _ -> None
+      in
+      match arr with
+      | WVar (_, x, LocalVar) ->
+        local_static_array_addr x
+      | WDeref (_, WVar (_, x, LocalVar), StaticArrayType (_, _)) ->
+        local_static_array_addr x
+      | _ ->
+        None
+    in
     let rec lhs_to_lvalue h env lhs cont =
       match lhs with
         WVar (l, x, scope) -> cont h env (LValues.Var (l, x, scope))
@@ -2619,9 +2633,16 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         lhs_to_lvalue h env w $. fun h env w ->
         cont h env (LValues.ValueField (l, w, getter, setter, type_, type_instantiated))
       | WReadArray (l, arr, elem_tp, i) ->
-        eval_h h env arr $. fun h env arr ->
-        eval_h h env i $. fun h env i ->
-        cont h env (LValues.ArrayElement (l, arr, elem_tp, i))
+        begin
+          match try_rust_static_array_addr env arr with
+          | Some addr ->
+            eval_h h env i $. fun h env i ->
+            cont h env (LValues.ArrayElement (l, addr, elem_tp, i))
+          | None ->
+            eval_h h env arr $. fun h env arr ->
+            eval_h h env i $. fun h env i ->
+            cont h env (LValues.ArrayElement (l, arr, elem_tp, i))
+        end
       | WDeref (l, w, pointeeType) ->
         eval_h_core_and_activate_union_members readonly h env w $. fun h env target ->
         cont h env (LValues.Deref (l, target, pointeeType))
@@ -2658,7 +2679,18 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         LValues.Var (l, x, _) ->
         check_assign l x;
         let (tpx, symb) = vartp l x in
-        update_local_or_global h env tpx x symb value cont
+        begin
+          match dialect, symb, unfold_inferred_type tpx, try_assoc x env with
+          | Some Rust, None, RefType ((StaticArrayType (_, _) as t)), Some addr ->
+            has_heap_effects();
+            if pure then static_error l "Cannot write in a pure context." None;
+            let coefpat, coef = match assignment_kind with Mutation -> real_unit_pat, real_unit | Initialization -> TermPat real_half, real_half in
+            consume_c_object_core_core l coefpat addr t h env true true $. fun _ h _ ->
+            produce_c_object l coef addr t eval_h (Term value) false true h env $. fun h env ->
+            cont h env
+          | _ ->
+            update_local_or_global h env tpx x symb value cont
+        end
       | LValues.Field (l, target, fparent, tparams, fname, tp, targs, fvalue, fghost, f_symb, f_symb__opt) ->
         has_heap_effects();
         if pure && fghost = Real then static_error l "Cannot write in a pure context" None;
@@ -3254,9 +3286,16 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         cont h env v
       end
     | WReadArray (l, arr, elem_tp, i) when language = CLang ->
-      eval_h h env arr $. fun h env arr ->
-      eval_h h env i $. fun h env i ->
-      cont h env (read_c_array h env l arr i elem_tp)
+      begin
+        match try_rust_static_array_addr env arr with
+        | Some addr ->
+          eval_h h env i $. fun h env i ->
+          cont h env (read_c_array h env l addr i elem_tp)
+        | None ->
+          eval_h h env arr $. fun h env arr ->
+          eval_h h env i $. fun h env i ->
+          cont h env (read_c_array h env l arr i elem_tp)
+      end
     | WDeref (l, w, pointeeType) as e ->
       lhs_to_lvalue h env e $. fun h env lvalue ->
       read_lvalue h env lvalue cont
@@ -3327,6 +3366,10 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | CommaExpr (l, e1, e2) ->
       eval_h_core readonly h env e1 $. fun h env _ ->
       eval_h_core readonly h env e2 cont
+    | AddressOf (_, WVar (l, x, LocalVar))
+      when dialect = Some Rust &&
+           begin match try_assoc x tenv with Some (RefType (StaticArrayType (_, _))) -> true | _ -> false end ->
+      cont h env (List.assoc x env)
     | AddressOf (_, WDeref (_, w, _)) ->
       eval_h_core readonly h env w cont
     | e ->
