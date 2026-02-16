@@ -1794,6 +1794,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         produce_array_chunk h env false elemTp addr elems elemCountTerm
       | _, MaybeUninitTerm term ->
         produce_array_chunk h env true elemTp addr term elemCountTerm
+      | _, Term term ->
+        produce_array_chunk h env false elemTp addr term elemCountTerm
       | _ ->
         let elems = get_unique_var_symb "elems" (list_type (if init = Uninitialized then option_type elemTp else elemTp)) in
         begin fun cont ->
@@ -1930,9 +1932,31 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let elemCountTerm = eval_const_type l typeid_env elemCount in
       begin match dialect with
         Some Rust ->
-        let pats = [TermPat addr; TermPat (elemCountTerm); dummypat] in
-        consume_chunk rules h typeid_env [] [] [] l ((if consumeUninitChunk then array__symb () else array_symb ()), true) [elemTp] real_unit coefpat (Some 2) pats $. fun chunk h _ [_; _; elems] _ _ _ _ ->
-        cont [chunk] h (Some elems)
+        let consume_rust_array_chunk () =
+          let pats = [TermPat addr; TermPat (elemCountTerm); dummypat] in
+          consume_chunk rules h typeid_env [] [] [] l (array_symb (), true) [elemTp] real_unit coefpat (Some 2) pats $. fun chunk h _ [_; _; elems] _ _ _ _ ->
+          cont [chunk] h (Some elems)
+        in
+        if consumeUninitChunk then
+          begin
+            match h |> extract begin function
+              Chunk ((g, true), [elemTp'], _, [addr'; count'; elems], _) as chunk
+                when
+                  g == array__symb () &&
+                  unify elemTp' elemTp &&
+                  definitely_equal addr' addr &&
+                  definitely_equal count' elemCountTerm ->
+                Some (chunk, elems)
+            | _ -> None
+            end
+            with
+            | Some ((Chunk _ as chunk, elems), h) ->
+              cont [chunk] h (Some elems)
+            | None ->
+              consume_rust_array_chunk ()
+          end
+        else
+          consume_rust_array_chunk ()
       | _ ->
       match try_pointee_pred_symb0 elemTp with
         Some (_, _, _, arrayPredSymb, _, _, _, _, _, _, _, uninitArrayPredSymb) ->
