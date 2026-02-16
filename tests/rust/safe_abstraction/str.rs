@@ -17,6 +17,9 @@ fn test_str<'a>(s: &'a str) -> &'a str
                 assert rest1 == cons(?b2, ?rest2);
                 if 0xF0 <= b0 {
                     assert rest2 == cons(?b3, ?rest3);
+                    if b0 == 0xF0 {
+                        assert 0x90 <= b1;
+                    }
                 }
             }
         }

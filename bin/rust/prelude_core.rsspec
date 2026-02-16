@@ -372,7 +372,7 @@ fix is_valid_utf8(bs: list<u8>) -> bool {
                                             nil => false,
                                             cons(b3, rest3) =>
                                                 is_utf8_tail(b3) &&
-                                                (b0 != 0xF0 || 0x90 <= b0) && // Not overlong
+                                                (b0 != 0xF0 || 0x90 <= b1) && // Not overlong
                                                 (b0 < 0xF4 || b0 == 0xF4 && b1 <= 0x8F) && // Max. codepoint = 0x10FFFF
                                                 is_valid_utf8(rest3)
                                         }
