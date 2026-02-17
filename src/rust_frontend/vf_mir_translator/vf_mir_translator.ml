@@ -1675,7 +1675,11 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     in
     let size = Ast.SizeofExpr (loc, TypeExpr vf_ty) in
     let own tid vs =
-      Error "Expressing ownership of an array is not yet supported"
+      Ok
+        (Ast.ExprCallExpr
+           ( loc,
+             Ast.TypePredExpr (loc, vf_ty, "own"),
+             [ Ast.LitPat tid; Ast.LitPat vs ] ))
     in
     let full_bor_content t l =
       Error

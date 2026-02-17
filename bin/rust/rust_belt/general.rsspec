@@ -170,6 +170,15 @@ pred_ctor slice_own<T>()(t: thread_id_t, v: [T]) = foreach(slice_elems(v), (own)
 
 type_pred_def for<T> <[T]>.own = slice_own::<T>;
 
+pred_ctor Array_own<T, N>()(t: thread_id_t, v: [T; N]) =
+    foreach(Array_elems(v), (own)(t));
+
+pred_ctor Array_full_borrow_content<T, N>(t: thread_id_t, l: *[T; N])() =
+    *l |-> ?v &*& Array_own::<T, N>()(t, v);
+
+type_pred_def for<T, N> <[T; N]>.own = Array_own::<T, N>;
+type_pred_def for<T, N> <[T; N]>.full_borrow_content = Array_full_borrow_content::<T, N>;
+
 type_pred_def <bool>.full_borrow_content = bool_full_borrow_content;
 type_pred_def <*_>.full_borrow_content = raw_ptr_full_borrow_content;
 
