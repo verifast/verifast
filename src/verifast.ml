@@ -2788,12 +2788,9 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               begin
                 match try_assoc x tenv, try_assoc x env with
                 | Some (RefType ((StaticArrayType _ as t))), Some addr ->
-                  consume_c_object_core_core l dummypat addr t h env false false $. fun chunks h (Some value) ->
-                  let env_for_return = (x, value) :: List.remove_assoc x env in
-                  let tenv_for_return = (x, t) :: List.remove_assoc x tenv in
-                  let w_for_return = check_expr_t_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv_for_return (Some pure) e tp in
-                  verify_expr false (pn,ilist) tparams pure leminfo funcmap sizemap tenv_for_return ghostenv (chunks @ h) env_for_return None w_for_return (fun h _ v ->
-                    cont h (Some v) []) econt
+                  consume_c_object_core_core l dummypat addr t h env false false $. fun _ h (Some value) ->
+                  produce_c_object l real_unit addr t (fun _ _ _ _ -> assert false) (Term value) false false h env $. fun h _ ->
+                  cont h (Some value) []
                 | _ ->
                   verify_return_expr w []
               end
