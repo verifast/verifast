@@ -59,7 +59,44 @@ unsafe fn test3(xs: *mut [i32; 3])
     //@ array_to_Array(xs);
 }
 
+/*@
+lem foreach_own_u8(t: thread_id_t, elems: list<u8>)
+    req true;
+    ens foreach(elems, own::<u8>(t));
+{
+    match elems {
+        nil => {
+            close foreach(elems, own::<u8>(t));
+        }
+        cons(elem, elems0) => {
+            close u8_own(t, elem);
+            close own::<u8>(t)(elem);
+            foreach_own_u8(t, elems0);
+            close foreach(elems, own::<u8>(t));
+        }
+    }
+}
+@*/
+
+fn array_roundtrip(xs: [u8; 3]) -> [u8; 3] {
+    xs
+}
+
+fn consume(_xs: [u8; 3]) {
+    //@ leak <[u8; 3]>.own(_, _xs);
+}
+
+fn test4() {
+    let xs: [u8; 3] = [1, 2, 3];
+    //@ let xs_val = xs;
+    //@ foreach_own_u8(currentThread, Array_elems(xs_val));
+    //@ close <[u8; 3]>.own(currentThread, xs_val);
+    let ys = array_roundtrip(xs);
+    consume(ys);
+}
+
 fn main() {
     test1();
     test2();
+    test4();
 }

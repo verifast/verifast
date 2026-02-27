@@ -1057,7 +1057,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           in
           match t with
             StaticArrayType (elemTp, elemCount) ->
-            produce_object t
+            produce_object (if dialect = Some Rust then RefType t else t)
           | StructType (sn, targs) when
               !address_taken ||
               language = CLang && dialect = Some Cxx ||
@@ -2781,6 +2781,22 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           cont h (Some v) no_cleanups) econt
         in
         match dialect, tp, w, leminfo with
+        | Some Rust, StaticArrayType _, _, _ ->
+          begin
+            match eo with
+            | Some (CallExpr (_, "returning", [], [], [LitPat (Var (_, x))], Static)) ->
+              begin
+                match try_assoc x tenv, try_assoc x env with
+                | Some (RefType ((StaticArrayType _ as t))), Some addr ->
+                  consume_c_object_core_core l dummypat addr t h env false false $. fun _ h (Some value) ->
+                  produce_c_object l real_unit addr t (fun _ _ _ _ -> assert false) (Term value) false false h env $. fun h _ ->
+                  cont h (Some value) []
+                | _ ->
+                  verify_return_expr w []
+              end
+            | _ ->
+              verify_return_expr w []
+          end
         | Some Cxx, StructType (sn, []), WCxxConstruct (_, _, StructType (sn', []), [Var (var_l, var_name) as var]), RealFuncInfo (_, func_name, _) when sn = sn' -> 
           let wvar, skip_elision_check =
             match check_expr_t_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (Some pure) var tp with
