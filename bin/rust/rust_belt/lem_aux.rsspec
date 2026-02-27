@@ -1,7 +1,11 @@
+// TODO: Move the proofs to separate files so they do not get checked with every library
 /*@
+lem u8_sync(t: thread_id_t, t1: thread_id_t, l: *u8);
+    req [_](<u8>.share(?k, t, l));
+    ens [_](<u8>.share(k, t1, l));
 
-lem u32_sync(k: lifetime_t, t: thread_id_t, t1: thread_id_t, l: *u32)
-    req [_]u32_share(k, t, l);
+lem u32_sync(t: thread_id_t, t1: thread_id_t, l: *u32)
+    req [_]u32_share(?k, t, l);
     ens [_]u32_share(k, t1, l);
 {
     open u32_share(k, t, l);
