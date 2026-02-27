@@ -1,4 +1,5 @@
 use std::alloc::{alloc, dealloc, handle_alloc_error, Layout};
+use std::process::abort;
 //@ use std::alloc_block_;
 
 pub struct Box<T> { ptr: *mut T }
@@ -107,14 +108,10 @@ lem init_ref_Box<T>(p: *Box<T>)
 impl<T> Box<T> {
     pub fn new(v: T) -> Box<T> {
         let l = Layout::new::<T>();
-        if l.size() == 0 {
-            std::process::abort();
-        }
+        if l.size() == 0 { abort(); }
         unsafe {
             let p = alloc(l) as *mut T;
-            if p.is_null() {
-                handle_alloc_error(l);
-            }
+            if p.is_null() { handle_alloc_error(l); }
             //@ from_u8s_(p);
             std::ptr::write(p, v);
             let r = Self { ptr: p };
@@ -123,7 +120,7 @@ impl<T> Box<T> {
         }
     }
 
-    pub fn set(& mut self, new: T) {
+    pub fn set(&mut self, new: T) {
         unsafe {
             //@ open <Box<T>>.own(_t, ?b);
             *self.ptr = new;
@@ -149,12 +146,12 @@ impl<T> Drop for Box<T> {
 impl<T> std::ops::Deref for Box<T> {
     type Target = T;
     fn deref<'a>(&'a self) -> &'a T
-//@ req thread_token(?_t) &*& [?_q_a]lifetime_token('a) &*& [_](<Box<T>>.share)('a, _t, self);
-    //@ ens thread_token(_t) &*& [_q_a]lifetime_token('a) &*& [_](<T>.share('a, _t, result));
+    //@ req thread_token(?t) &*& [?qa]lifetime_token('a) &*& [_](<Box<T>>.share('a, t, self));
+    //@ ens thread_token(t) &*& [qa]lifetime_token('a) &*& [_](<T>.share('a, t, result));
     {
-        //@ open <Box<T>>.share('a, _t, self);
+        //@ open <Box<T>>.share('a, t, self);
         //@ assert [_]exists(?p);
-        //@ open_frac_borrow('a, Box_ptr_field(self, p), _q_a);
+        //@ open_frac_borrow('a, Box_ptr_field(self, p), qa);
         //@ open [?qp]Box_ptr_field::<T>(self, p)();
         let r = unsafe { &*self.ptr };
         //@ close [qp]Box_ptr_field::<T>(self, p)();
@@ -198,7 +195,20 @@ lem Box_send<T>(t1: thread_id_t)
 {
     open <Box<T>>.own(t, b);
     assert *b.ptr |-> ?v;
+    /*|\begin{vfPathCond}
+    \vfResAdd{is_Send(typeid(T)) == true}
+    \end{vfPathCond}
+    \begin{vfHeap}
+    \vfResAdd{type_interp::<T>()}, \vfResAdd{*b.ptr |-> v}, \vfResAdd{<T>.own(t, v)}, \vfResAdd{alloc_block_(b.ptr)}
+    \end{vfHeap}|*/
     Send::send(t, t1, v);
+    /*|\begin{vfPathCond}
+    is_Send(typeid(T)) == true
+    \end{vfPathCond}
+    \begin{vfHeap}
+    \vfResAssert{type_interp::<T>()}, *b.ptr |-> v, alloc_block_(b.ptr),
+    \vfResRm{<T>.own(t, v)}, \vfResAdd{<T>.own(t1, v)}
+    \end{vfHeap}|*/
     close <Box<T>>.own(t1, b);
 }
 @*/
