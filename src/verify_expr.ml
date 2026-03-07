@@ -1932,8 +1932,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let elemCountTerm = eval_const_type l typeid_env elemCount in
       begin match dialect with
         Some Rust ->
+        let pats = [TermPat addr; TermPat elemCountTerm; dummypat] in
         let consume_rust_array_chunk () =
-          let pats = [TermPat addr; TermPat (elemCountTerm); dummypat] in
           consume_chunk rules h typeid_env [] [] [] l (array_symb (), true) [elemTp] real_unit coefpat (Some 2) pats $. fun chunk h _ [_; _; elems] _ _ _ _ ->
           cont [chunk] h (Some elems)
         in
@@ -1950,8 +1950,13 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             | _ -> None
             end
             with
-            | Some ((Chunk _ as chunk, elems), h) ->
-              cont [chunk] h (Some elems)
+            | Some ((Chunk _ as chunk, elems), h') ->
+              match_chunk [] h [] [] l (array__symb (), true) [elemTp] real_unit coefpat (Some 2) pats [intType; intType; intType] [intType; intType; intType] chunk $. begin function
+                Some (chunk, _, _, _, _, _, _, newChunks) ->
+                cont [chunk] (newChunks @ h') (Some elems)
+              | None ->
+                consume_rust_array_chunk ()
+              end
             | None ->
               consume_rust_array_chunk ()
           end

@@ -95,6 +95,27 @@ fn test4() {
     consume(ys);
 }
 
+fn test5() {
+    unsafe {
+        let mut xs: [i32; 3] = [10, 20, 30];
+        let p: *mut i32 = &raw mut xs as *mut i32;
+        let mut sum = 0;
+        sum += *p;
+        sum += *p.add(1);
+        sum += *p.add(2);
+        std::hint::assert_unchecked(sum == 60);
+        //@ close [1/2]array_(p + 2, 1, _);
+        //@ close [1/2]array_(p + 1, 2, _);
+        //@ close [1/2]array_(p, 3, _);
+        //@ close [1/2]array(p + 2, 1, [30]);
+        //@ close [1/2]array(p + 1, 2, [20, 30]);
+        //@ close [1/2]array(p, 3, [10, 20, 30]);
+        //@ leak [1/2]array(p, 3, [10, 20, 30]);
+        let ys: [i32; 3] = [40, 50, 60];
+        xs = ys; //~should_fail
+    }
+}
+
 fn main() {
     test1();
     test2();
