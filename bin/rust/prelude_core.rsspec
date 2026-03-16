@@ -390,7 +390,7 @@ type_pred_def <str>.share = str_share;
 pred_ctor slice_share<T>()(k: lifetime_t, t: thread_id_t, l: *[T]) = exists(?elems) &*& [_]frac_borrow(k, mk_array(l as *T, l.len(), elems));
 type_pred_def for<T> <[T]>.share = slice_share::<T>;
 
-pred_ctor slice_full_borrow_content<T>(t: thread_id_t, l: *[T])(;) = exists(?elems) &*& (l as *T)[..l.len()] |-> elems &*& foreach(elems, (own)(t));
+pred_ctor slice_full_borrow_content<T>(t: thread_id_t, l: *[T])(;) = (l as *T)[..l.len()] |-> ?elems &*& foreach(elems, (own)(t));
 type_pred_def for<T> <[T]>.full_borrow_content = slice_full_borrow_content::<T>;
 
 pred ghost_rec_perm(depth: i32;); // Permission to perform `depth` nested lemma function pointer calls.
