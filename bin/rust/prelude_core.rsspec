@@ -387,7 +387,7 @@ fix is_valid_utf8(bs: list<u8>) -> bool {
 pred str_share(k: lifetime_t, t: thread_id_t, l: *str) = exists(?bs) &*& [_]frac_borrow(k, mk_array(l as *u8, l.len(), bs)) &*& is_valid_utf8(bs) == true;
 type_pred_def <str>.share = str_share;
 
-pred slice_share<T>(k: lifetime_t, t: thread_id_t, l: *[T]) = exists(?elems) &*& [_]frac_borrow(k, mk_array(l as *T, l.len(), elems));
+pred_ctor slice_share<T>()(k: lifetime_t, t: thread_id_t, l: *[T]) = exists(?elems) &*& [_]frac_borrow(k, mk_array(l as *T, l.len(), elems));
 type_pred_def for<T> <[T]>.share = slice_share::<T>;
 
 pred_ctor slice_full_borrow_content<T>(t: thread_id_t, l: *[T])(;) = exists(?elems) &*& (l as *T)[..l.len()] |-> elems &*& foreach(elems, (own)(t));
