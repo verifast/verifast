@@ -2686,7 +2686,11 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             Rocq_writer.rocq_print_string_literal TranslatorArgs.rocq_writer t
       end;
       let* main_stmt, targets =
-        match discr_ty.vf_ty with
+        let rec unwrap_const = function
+          | Ast.ConstTypeExpr (_, te) -> unwrap_const te
+          | te -> te
+        in
+        match unwrap_const discr_ty.vf_ty with
         | Ast.ManifestTypeExpr ((*loc*) _, Ast.Bool) -> (
             match (values, targets) with
             | [ v ], [ false_tgt; true_tgt ] when Stdint.Uint128.(zero = DecoderAux.uint128_get v)
@@ -2732,6 +2736,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               ]
             in
             Ok (Ast.SwitchStmt (loc, discr, clauses @ default_clause), targets)
+        | _ ->
+            failwith (Printf.sprintf "Todo: SwitchInt for discriminant type %s" (Verifast0.string_of_type discr_ty.vf_ty))
       in
       if ListAux.is_empty tmp_rvalue_binders then Ok (main_stmt, targets)
       else
