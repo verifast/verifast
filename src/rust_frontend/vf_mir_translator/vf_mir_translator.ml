@@ -217,6 +217,7 @@ module Mir = struct
         fields : D.aggregate_kind_adt_data_field_info list;
       }
     | AggKindTuple
+    | AggKindClosure
 
   type field_def_tr = {
     name : string;
@@ -1752,9 +1753,19 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | FnDef fn_def_ty_cpn -> translate_fn_def_ty fn_def_ty_cpn loc
     | FnPtr fn_ptr_ty_cpn -> translate_fn_ptr_ty fn_ptr_ty_cpn loc
     | Dynamic _ -> Ast.static_error loc "Dynamic types are not yet supported" None
-    | Closure _ ->
-        Ast.static_error loc "Closure types are not yet supported" None
-        (* CAVEAT: Once we allow closure types to appear as function call generic arguments, we must also verify closure bodies. *)
+    | Closure closure_ty_cpn ->
+        (* Preliminary closure support: translate the closure type as an opaque
+           struct-like type using the closure's DefId as the type name.
+           LIMITATIONS:
+           - Closures are represented with an empty type interpretation. In reality,
+             closures contain captured values and are not zero-sized unless they
+             capture nothing. A proper implementation needs the schema to expose
+             upvar types so they can be translated as struct fields.
+           - Closure bodies are NOT verified. Functions containing closures must
+             guard closure calls with assume(false) or similar. *)
+        let name = TrName.translate_def_path closure_ty_cpn.def_id in
+        let vf_ty = Ast.ManifestTypeExpr (loc, Ast.StructType (name, [])) in
+        Ok { Mir.vf_ty; interp = RustBelt.emp_ty_interp loc }
     | CoroutineClosure ->
         Ast.static_error loc "Coroutine closure types are not yet supported"
           None
@@ -2858,7 +2869,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           let fields = fields_get_list adt_data_cpn |> List.map D.decode_aggregate_kind_adt_data_field_info in
           Ok Mir.(AggKindAdt { adt_kind; adt_name; variant_name; fields })
       | Closure _ ->
-          failwith "Todo: AggregateKind::Closure"
+          (* Preliminary: treat closure aggregate as an opaque construction.
+             In reality, the operands are the captured upvars and should be
+             translated as struct field initializations. *)
+          Ok Mir.(AggKindClosure)
           (* CAVEAT: Once we allow closure values, we must also check closure bodies. *)
       | Coroutine -> failwith "Todo: AggregateKind::Coroutine"
       | CoroutineClosure -> failwith "Todo: AggregateKind::CoroutineClosure"
@@ -2917,6 +2931,16 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                 operand_exprs
             in
             tmp_rvalue_binders @ field_init_stmts
+          in
+          Ok (`TrRvalueAggregate init_stmts_builder)
+      | AggKindClosure ->
+          (* Preliminary closure aggregate handling. The operands are the captured
+             upvars. Since closure types are currently translated as opaque structs
+             without field information, we skip field assignments. A proper
+             implementation should translate each operand as a field initialization
+             once the schema exposes upvar field names and types. *)
+          let init_stmts_builder (_lhs_place, _lhs_place_is_mutable) =
+            tmp_rvalue_binders
           in
           Ok (`TrRvalueAggregate init_stmts_builder)
       | AggKindAdt { adt_kind; adt_name; variant_name; fields } -> (
