@@ -1254,7 +1254,13 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               begin match ty, size with
                 {kind=UInt USize}, 8 ->
                   Ast.LiteralConstTypeExpr (loc, Stdint.Uint128.to_int v)
-              | _ -> 
+              | {kind=Bool}, 1 ->
+                  Ast.LiteralConstTypeExpr (loc, Stdint.Uint128.to_int v)
+              | {kind=UInt _}, _ ->
+                  Ast.LiteralConstTypeExpr (loc, Stdint.Uint128.to_int v)
+              | {kind=Int _}, _ ->
+                  Ast.LiteralConstTypeExpr (loc, Stdint.Uint128.to_int v)
+              | _ ->
                   failwith "Unsupported constant type or size"
               end
           | _ -> 
