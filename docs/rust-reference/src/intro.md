@@ -185,6 +185,23 @@ rules](https://marketplace.visualstudio.com/items?itemName=VeriFast.verifast)).
 no effect when verifying Rust programs.) All of these options can also be
 specified on the command line.
 
+## Unimplemented functions in VeriFast
+
+Not every function in the Rust standard library is formalized in VeriFast. 
+If this is the case, you may encounter an error like 
+`No such function std::mem::zeroed` in the IDE, or 
+
+```rs
+./bin/verifast ./examples/zeroed.rs
+./examples/zeroed.rs(5,23-38): error: No such function: std::mem::zeroed
+5 |         let x: i32 = zeroed::<i32>();
+  |                       ^^^^^^^^^^^^^^^
+```
+on the command line. To rectify these, a suitable formalization would need
+to be added. Existing formalizations can be found in 
+[this directory of the source](https://github.com/verifast/verifast/tree/master/bin/rust),
+and may serve as a good starting point. 
+
 ## Further reading
 
 - [A tour of the RawVec proof](tests/rust/safe_abstraction/raw_vec/)
