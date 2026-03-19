@@ -1755,7 +1755,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             LiteralConstType n -> n
           | _ -> static_error l "String literals in array initializers are only supported for arrays with a known size." None
         in
-        produce_array_chunk h env false elemTp addr (mk_char_list_of_c_string elemCount s) elemCountTerm
+        produce_array_chunk h env false elemTp addr (mk_char_list_of_c_string (Z.to_int elemCount) s) elemCountTerm
       | (UnionType _ | StructType _ | StaticArrayType (_, _)), Expr (InitializerList (ll, es)) ->
         let rec iter h env i es =
           let addr = mk_ptr_add_ l env addr (ctxt#mk_intlit i) elemTp in
@@ -1790,7 +1790,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             iter h env (n - 1) es $. fun h env elems ->
             cont h env (mk_cons elemTp elem elems)
         in
-        iter h env elemCount es $. fun h env elems ->
+        iter h env (Z.to_int elemCount) es $. fun h env elems ->
         produce_array_chunk h env false elemTp addr elems elemCountTerm
       | _, MaybeUninitTerm term ->
         produce_array_chunk h env true elemTp addr term elemCountTerm

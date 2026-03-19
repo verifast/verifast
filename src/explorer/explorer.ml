@@ -259,7 +259,7 @@ let _ =
         | ObjType(name, _) -> name
         | ArrayType(type_in) -> string_of_type_ type_in ^ "[]"
         | StaticArrayType(type_in, nb_elems) -> string_of_type_ type_in ^ "[" ^ string_of_type_ nb_elems ^ "]"
-        | LiteralConstType n -> string_of_int n
+        | LiteralConstType n -> Z.to_string n
         | GhostTypeParam(name) -> name
         | RealTypeParam(name) -> name
         | PackageName(name) -> name
@@ -280,7 +280,7 @@ let _ =
         | PtrTypeExpr(_, type_expr_in) -> string_of_type_expr type_expr_in ^ " *"
         | ArrayTypeExpr(_, type_expr_in) -> string_of_type_expr type_expr_in ^ "[]"
         | StaticArrayTypeExpr(_, type_expr_in, nb_elems) -> string_of_type_expr type_expr_in ^ "[" ^ string_of_type_expr nb_elems ^ "]"
-        | LiteralConstTypeExpr (_, n) -> string_of_int n
+        | LiteralConstTypeExpr (_, n) -> Z.to_string n
         | ManifestTypeExpr(_, type_) -> string_of_type_ type_
         | IdentTypeExpr(_, _, name) -> name
         | ConstructedTypeExpr(_, name, type_expr_list) -> name ^ "<" ^ string_of_type_expr_list type_expr_list ^ ">"

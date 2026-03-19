@@ -165,7 +165,7 @@ type type_ = (* ?type_ *)
   | ObjType of string * type_ list (* type arguments *)
   | ArrayType of type_
   | StaticArrayType of type_ (* element type *) * type_ (* size; in C this is always a LiteralConstType *) (* C array type T[N]; Rust array type [T; N] *)
-  | LiteralConstType of int (* Rust const generic argument *)
+  | LiteralConstType of Z.t (* Rust const generic argument *)
   | BoxIdType (* box type, for shared boxes *)
   | HandleIdType (* handle type, for shared boxes *)
   | AnyType (* supertype of all inductive datatypes; useful in combination with predicate families *)
@@ -404,7 +404,7 @@ type type_expr = (* ?type_expr *)
   | RustRefTypeExpr of loc * type_expr * rust_ref_kind * type_expr
   | ArrayTypeExpr of loc * type_expr
   | StaticArrayTypeExpr of loc * type_expr (* type *) * type_expr (* number of elements; in C this is always a LiteralConstTypeExpr *)
-  | LiteralConstTypeExpr of loc * int
+  | LiteralConstTypeExpr of loc * Z.t
   | FuncTypeExpr of loc * type_expr (* return type *) * (type_expr * string) list (* parameters *)
   | ManifestTypeExpr of loc * type_  (* A type expression that is obviously a given type. *)
   | IdentTypeExpr of loc * string option (* package name *) * string
