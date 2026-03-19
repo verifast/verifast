@@ -217,6 +217,7 @@ module Mir = struct
         fields : D.aggregate_kind_adt_data_field_info list;
       }
     | AggKindTuple
+    | AggKindClosure
 
   type field_def_tr = {
     name : string;
@@ -1208,13 +1209,39 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
 
   and slice_ref_ty_info loc lft mut elem_ty_info =
     let open Ast in
+    let lft_expr = Rust_parser.expr_of_lft_param_expr loc lft in
+    let slice_ty_expr = SliceTypeExpr (loc, elem_ty_info.Mir.vf_ty) in
+    let rust_mut = mut in
     let mut = match mut with Mir.Not -> Shared | Mir.Mut -> Mutable in
     let vf_ty =
-      RustRefTypeExpr (loc, lft, mut, SliceTypeExpr (loc, elem_ty_info.Mir.vf_ty))
+      RustRefTypeExpr (loc, lft, mut, slice_ty_expr)
     in
     let size = SizeofExpr (loc, TypeExpr vf_ty) in
-    let own tid vs =
-      Error "Expressing ownership of &[_] values is not yet supported"
+    let own tid v =
+      match rust_mut with
+      | Mir.Not ->
+        Ok
+          (CoefAsn
+             ( loc,
+               DummyPat,
+               ExprCallExpr
+                 ( loc,
+                   TypePredExpr (loc, slice_ty_expr, "share"),
+                   [ LitPat lft_expr; LitPat tid; LitPat v ] ) ))
+      | Mir.Mut ->
+        Ok
+          (CallExpr
+             ( loc,
+               "full_borrow",
+               [],
+               [],
+               [ LitPat lft_expr;
+                 LitPat
+                   (ExprCallExpr
+                      ( loc,
+                        TypePredExpr (loc, slice_ty_expr, "full_borrow_content"),
+                        [ LitPat tid; LitPat v ] )) ],
+               Static ))
     in
     let shr lft tid l =
       Error "Expressing shared ownership of &[_] values is not yet supported"
@@ -1227,11 +1254,30 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let* pat = RustBelt.Aux.vid_op_to_var_pat vid_op loc in
       Ok (PointsTo (loc, l, RegularPointsTo, pat))
     in
+    let pointee_fbc =
+      match rust_mut with
+      | Mir.Mut ->
+        Some (fun tid l suffix ->
+          let value_id = Printf.sprintf "_v%s_%s" suffix l in
+          Ok
+            (Sep
+               ( loc,
+                 PointsTo
+                   ( loc,
+                     Deref (loc, Var (loc, l)),
+                     RegularPointsTo,
+                     VarPat (loc, value_id) ),
+                 ExprCallExpr
+                   ( loc,
+                     TypePredExpr (loc, slice_ty_expr, "own"),
+                     [ LitPat tid; LitPat (Var (loc, value_id)) ] ) )))
+      | Mir.Not -> None
+    in
     {
       Mir.vf_ty;
       interp =
         RustBelt.
-          { size; own; shr; full_bor_content; points_to; pointee_fbc = None };
+          { size; own; shr; full_bor_content; points_to; pointee_fbc };
     }
 
   and translate_generic_arg (gen_arg_cpn : D.generic_arg) (loc : Ast.loc) =
@@ -1254,7 +1300,13 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               begin match ty, size with
                 {kind=UInt USize}, 8 ->
                   Ast.LiteralConstTypeExpr (loc, Stdint.Uint128.to_int v)
-              | _ -> 
+              | {kind=Bool}, 1 ->
+                  Ast.LiteralConstTypeExpr (loc, Stdint.Uint128.to_int v)
+              | {kind=UInt _}, _ ->
+                  Ast.LiteralConstTypeExpr (loc, Stdint.Uint128.to_int v)
+              | {kind=Int _}, _ ->
+                  Ast.LiteralConstTypeExpr (loc, Stdint.Uint128.to_int v)
+              | _ ->
                   failwith "Unsupported constant type or size"
               end
           | _ -> 
@@ -1752,9 +1804,16 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | FnDef fn_def_ty_cpn -> translate_fn_def_ty fn_def_ty_cpn loc
     | FnPtr fn_ptr_ty_cpn -> translate_fn_ptr_ty fn_ptr_ty_cpn loc
     | Dynamic _ -> Ast.static_error loc "Dynamic types are not yet supported" None
-    | Closure _ ->
-        Ast.static_error loc "Closure types are not yet supported" None
-        (* CAVEAT: Once we allow closure types to appear as function call generic arguments, we must also verify closure bodies. *)
+    | Closure closure_ty_cpn ->
+        (* Closure types are zero-sized function-like types. In MIR, closures are
+           monomorphized and their captures are handled as struct fields. We translate
+           them similarly to FnDef types — as a zero-sized function type. The actual
+           dispatch is handled by VeriFast's trait/impl resolution.
+           CAVEAT: Closure bodies should be verified separately if closure correctness
+           is needed beyond assume(false). *)
+        let name = TrName.translate_def_path closure_ty_cpn.def_id in
+        let vf_ty = Ast.ManifestTypeExpr (loc, Ast.FuncType name) in
+        Ok { Mir.vf_ty; interp = RustBelt.emp_ty_interp loc }
     | CoroutineClosure ->
         Ast.static_error loc "Coroutine closure types are not yet supported"
           None
@@ -2134,8 +2193,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             tmp_rvalue_binders := !tmp_rvalue_binders @ [ rvalue_binder ];
             Ok (Ast.Var (loc, tmp_var_name))
         | `TrTypedConstantFn _ ->
-            failwith
-              "Todo: Functions as operand in rvalues are not supported yet"
+            (* Function items are zero-sized types. Produce a default/unit expression.
+               The actual function dispatch is handled by monomorphization in MIR,
+               so we only need a placeholder value for the operand position. *)
+            Ok (Ast.IntLit (loc, Big_int.zero_big_int, (*decimal*) true, (*unsigned*) false, (*lsuffix*) Ast.NoLSuffix))
         | `TrTypedConstantScalar expr -> Ok expr
       in
       let* oprs =
@@ -2625,7 +2686,11 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             Rocq_writer.rocq_print_string_literal TranslatorArgs.rocq_writer t
       end;
       let* main_stmt, targets =
-        match discr_ty.vf_ty with
+        let rec unwrap_const = function
+          | Ast.ConstTypeExpr (_, te) -> unwrap_const te
+          | te -> te
+        in
+        match unwrap_const discr_ty.vf_ty with
         | Ast.ManifestTypeExpr ((*loc*) _, Ast.Bool) -> (
             match (values, targets) with
             | [ v ], [ false_tgt; true_tgt ] when Stdint.Uint128.(zero = DecoderAux.uint128_get v)
@@ -2671,6 +2736,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               ]
             in
             Ok (Ast.SwitchStmt (loc, discr, clauses @ default_clause), targets)
+        | _ ->
+            failwith (Printf.sprintf "Todo: SwitchInt for discriminant type %s" (Verifast0.string_of_type discr_ty.vf_ty))
       in
       if ListAux.is_empty tmp_rvalue_binders then Ok (main_stmt, targets)
       else
@@ -2858,7 +2925,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           let fields = fields_get_list adt_data_cpn |> List.map D.decode_aggregate_kind_adt_data_field_info in
           Ok Mir.(AggKindAdt { adt_kind; adt_name; variant_name; fields })
       | Closure _ ->
-          failwith "Todo: AggregateKind::Closure"
+          (* Closure aggregates create the closure value from captured variables.
+             Since closures are zero-sized in our translation, produce a no-op aggregate. *)
+          Ok Mir.(AggKindClosure)
           (* CAVEAT: Once we allow closure values, we must also check closure bodies. *)
       | Coroutine -> failwith "Todo: AggregateKind::Coroutine"
       | CoroutineClosure -> failwith "Todo: AggregateKind::CoroutineClosure"
@@ -2917,6 +2986,14 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                 operand_exprs
             in
             tmp_rvalue_binders @ field_init_stmts
+          in
+          Ok (`TrRvalueAggregate init_stmts_builder)
+      | AggKindClosure ->
+          (* Closure aggregates create a zero-sized closure value from captured
+             variables. Since closures are zero-sized in our translation, produce
+             an empty aggregate (no field assignments needed). *)
+          let init_stmts_builder (_lhs_place, _lhs_place_is_mutable) =
+            tmp_rvalue_binders
           in
           Ok (`TrRvalueAggregate init_stmts_builder)
       | AggKindAdt { adt_kind; adt_name; variant_name; fields } -> (

@@ -387,6 +387,20 @@ fix is_valid_utf8(bs: list<u8>) -> bool {
 pred str_share(k: lifetime_t, t: thread_id_t, l: *str) = exists(?bs) &*& [_]frac_borrow(k, mk_array(l as *u8, l.len(), bs)) &*& is_valid_utf8(bs) == true;
 type_pred_def <str>.share = str_share;
 
+// Per-element shared ownership for slices, using <T>.share for each element.
+// This is correct for all T, including types with interior mutability.
+pred array_share<T>(k: lifetime_t, t: thread_id_t, l: *T, length: usize) =
+    if length == 0 { true }
+    else { [_](<T>.share(k, t, l)) &*& [_]array_share(k, t, l + 1, length - 1) };
+
+pred_ctor slice_share<T>()(k: lifetime_t, t: thread_id_t, l: *[T]) =
+    array_share::<T>(k, t, l as *T, l.len());
+type_pred_def for<T> <[T]>.share = slice_share::<T>;
+
+// Note: <[T]>.full_borrow_content is not yet defined because VeriFast's preciseness
+// checker rejects foreach(elems, (own)(t)) in a pred_ctor with (;) params.
+// For &mut [T] support, proofs should establish borrow relationships manually.
+
 pred ghost_rec_perm(depth: i32;); // Permission to perform `depth` nested lemma function pointer calls.
 
 pred ghost_rec_perm_top();
