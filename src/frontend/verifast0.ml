@@ -125,7 +125,7 @@ let rec c_string_of_type t =
   | InferredType (_, t) -> begin match !t with EqConstraint t -> c_string_of_type t | _ -> "?" end
   | ArrayType(t) -> (c_string_of_type t) ^ "[]"
   | StaticArrayType(t, s) -> c_string_of_type t ^ "[" ^ c_string_of_type s ^ "]" 
-  | LiteralConstType n -> string_of_int n
+  | LiteralConstType n -> Z.to_string n
   | ClassOrInterfaceName(n) -> n (* not a real type; used only during type checking *)
   | PackageName(n) -> n (* not a real type; used only during type checking *)
   | RefType(t) -> "ref " ^ (c_string_of_type t)
@@ -193,7 +193,7 @@ let rec java_string_of_type t =
   | InferredType (_, t) -> begin match !t with EqConstraint t -> java_string_of_type t | _ -> "?" end
   | ArrayType(t) -> (java_string_of_type t) ^ "[]"
   | StaticArrayType(t, s) -> java_string_of_type t ^ "[" ^ java_string_of_type s ^ "]" 
-  | LiteralConstType n -> string_of_int n
+  | LiteralConstType n -> Z.to_string n
   | ClassOrInterfaceName(n) -> n (* not a real type; used only during type checking *)
   | PackageName(n) -> n (* not a real type; used only during type checking *)
   | RefType(t) -> "ref " ^ (java_string_of_type t)
@@ -265,7 +265,7 @@ let rec rust_string_of_type t =
   | InferredType (_, t) -> begin match !t with EqConstraint t -> rust_string_of_type t | _ -> "?" end
   | ArrayType(t) -> (rust_string_of_type t) ^ "[]"
   | StaticArrayType(t, s) -> Printf.sprintf "[%s; %s]" (rust_string_of_type t) (rust_string_of_type s)
-  | LiteralConstType n -> string_of_int n
+  | LiteralConstType n -> Z.to_string n
   | ClassOrInterfaceName(n) -> n (* not a real type; used only during type checking *)
   | PackageName(n) -> n (* not a real type; used only during type checking *)
   | RefType(t) -> "ref " ^ (rust_string_of_type t)

@@ -1252,8 +1252,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           | Leaf {data; size} ->
               let v = DecoderAux.uint128_get data in
               begin match ty, size with
-                {kind=UInt USize}, 8 ->
-                  Ast.LiteralConstTypeExpr (loc, Stdint.Uint128.to_int v)
+                {kind=UInt _}, _ ->
+                  Ast.LiteralConstTypeExpr (loc, Z.of_uint128 v)
               | _ -> 
                   failwith "Unsupported constant type or size"
               end
@@ -1671,7 +1671,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     in
     let vf_ty =
       Ast.StaticArrayTypeExpr
-        (loc, elem_ty, LiteralConstTypeExpr (loc, Big_int.int_of_big_int len))
+        (loc, elem_ty, LiteralConstTypeExpr (loc, Z.of_big_int len))
     in
     let size = Ast.SizeofExpr (loc, TypeExpr vf_ty) in
     let own tid vs =
