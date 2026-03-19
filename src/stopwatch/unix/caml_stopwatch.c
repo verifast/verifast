@@ -25,8 +25,12 @@ value caml_lock_process_to_processor_1() {
 }
 
 static unsigned long long get_processor_ticks() {
-#if __aarch64__
+#if __aarch64__ && __APPLE__
     return clock_gettime_nsec_np(CLOCK_UPTIME_RAW);
+#elif __aarch64__
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
+    return (unsigned long long)ts.tv_sec * 1000000000ULL + (unsigned long long)ts.tv_nsec;
 #else
     return __rdtsc();
 #endif

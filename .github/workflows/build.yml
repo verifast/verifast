@@ -155,6 +155,47 @@ jobs:
           fi
           ./build.sh rocq_metatheory_proofs
 
+  # Verify the aarch64-Linux stopwatch fix compiles.
+  # The original code used clock_gettime_nsec_np (macOS-only)
+  # under a bare #if __aarch64__ guard, which broke Linux ARM.
+  # This cross-compiles the C file to catch regressions.
+  check_aarch64_linux_stopwatch:
+    runs-on: ubuntu-24.04
+    permissions: {}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install aarch64 cross-compiler
+        run: sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu
+
+      - name: Cross-compile stopwatch for aarch64 Linux
+        run: |
+          # Create fake caml/ headers with minimal stubs
+          mkdir -p /tmp/caml-stubs/caml
+          cat > /tmp/caml-stubs/caml/mlvalues.h << 'HDR'
+          #ifndef CAML_MLVALUES_H
+          #define CAML_MLVALUES_H
+          #include <stdint.h>
+          typedef intptr_t value;
+          #define Val_unit ((value)1)
+          #define Abstract_tag 251
+          #endif
+          HDR
+          cat > /tmp/caml-stubs/caml/alloc.h << 'HDR'
+          #ifndef CAML_ALLOC_H
+          #define CAML_ALLOC_H
+          #include <caml/mlvalues.h>
+          static inline value caml_copy_int32(int32_t x) { (void)x; return 0; }
+          static inline value caml_copy_int64(int64_t x) { (void)x; return 0; }
+          static inline void* caml_alloc_small(int n, int t) { (void)n; (void)t; return (void*)0; }
+          #endif
+          HDR
+          aarch64-linux-gnu-gcc -fsyntax-only -Wall -Werror \
+            -I /tmp/caml-stubs \
+            src/stopwatch/unix/caml_stopwatch.c
+          echo "aarch64 Linux stopwatch compiles successfully"
+
   build_macos:
     runs-on: macos-15-intel
     permissions: {}
