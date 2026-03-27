@@ -140,7 +140,8 @@ pred_ctor u64_full_borrow_content(t: thread_id_t, l: *u64)(;) = *l |-> ?_;
 pred_ctor u128_full_borrow_content(t: thread_id_t, l: *u128)(;) = *l |-> ?_;
 pred_ctor usize_full_borrow_content(t: thread_id_t, l: *usize)(;) = *l |-> ?_;
 
-pred u32_share(k: lifetime_t, t: thread_id_t, l: *u32) = [_]frac_borrow(k, u32_full_borrow_content(t, l));
+pred u8_share(k: lifetime_t, t: thread_id_t, l: *u8;) = [_]frac_borrow(k, u8_full_borrow_content(t, l));
+pred u32_share(k: lifetime_t, t: thread_id_t, l: *u32;) = [_]frac_borrow(k, u32_full_borrow_content(t, l));
 
 type_pred_decl <Self>.own : pred(thread_id_t, Self);
 type_pred_decl <Self>.full_borrow_content : fix(thread_id_t, *_, pred());
@@ -187,6 +188,8 @@ type_pred_def <u64>.full_borrow_content = u64_full_borrow_content;
 type_pred_def <u128>.full_borrow_content = u128_full_borrow_content;
 type_pred_def <usize>.full_borrow_content = usize_full_borrow_content;
 
+type_pred_def <u8>.share = u8_share;
+
 lem close_ref_mut_own<'a, T>(t: thread_id_t, l: &'a mut T);
     req full_borrow('a, <T>.full_borrow_content(t, l));
     ens <&'a mut T>.own(t, l);
@@ -196,12 +199,12 @@ lem close_ref_own<'a, T>(l: &'a T);
     ens thread_token(t) &*& <&'a T>.own(t, l);
 
 lem open_full_borrow_content<T>(t: thread_id_t, l: *T);
-    req ((<T>.full_borrow_content)(t, l))();
-    ens *l |-> ?v &*& (<T>.own)(t, v);
+    req <T>.full_borrow_content(t, l)();
+    ens *l |-> ?v &*& <T>.own(t, v);
 
 lem close_full_borrow_content<T>(t: thread_id_t, l: *T);
-    req *l |-> ?v &*& (<T>.own)(t, v);
-    ens ((<T>.full_borrow_content)(t, l))();
+    req *l |-> ?v &*& <T>.own(t, v);
+    ens <T>.full_borrow_content(t, l)();
 
 fix type_depth(typeId: *_) -> i32;
 
