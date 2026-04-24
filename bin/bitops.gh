@@ -113,7 +113,7 @@ lemma void bitand_limits(int x, int y, nat n);
     ensures 0 <= (x & y) &*& (x & y) < pow_nat(2, n);
 
 lemma void bitand_signed_limits(int x, int y, nat n);
-    requires -pow_nat(2, n) <= x && x < pow_nat(2, n) || -pow_nat(2, n) <= y && y < pow_nat(2, n);
+    requires -pow_nat(2, n) <= x &*& x < pow_nat(2, n) &*& -pow_nat(2, n) <= y &*& y < pow_nat(2, n);
     ensures -pow_nat(2, n) <= (x & y) &*& (x & y) < pow_nat(2, n);
 
 lemma void bitxor_limits(int x, int y, nat n);
@@ -122,7 +122,7 @@ lemma void bitxor_limits(int x, int y, nat n);
 
 lemma void bitxor_signed_limits(int x, int y, nat n);
     requires -pow_nat(2, n) <= x &*& x < pow_nat(2, n) &*& -pow_nat(2, n) <= y &*& y < pow_nat(2, n);
-    ensures -pow_nat(2, n) <= (x | y) &*& (x | y) < pow_nat(2, n);
+    ensures -pow_nat(2, n) <= (x ^ y) &*& (x ^ y) < pow_nat(2, n);
 
 lemma void bitor_limits(int x, int y, nat n);
     requires 0 <= x &*& x < pow_nat(2, n) &*& 0 <= y &*& y < pow_nat(2, n);
