@@ -2410,6 +2410,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                       (CallExpr
                          (fn_loc, "ref_origin", [], [], [ LitPat arg ], Static))
                   )
+            | "std::cell::UnsafeCell::<T>::into_inner" ->
+                let [ arg ] = args in Ok (tmp_rvalue_binders, FnCallResult arg)
             | "std::str::<impl str>::as_ptr" ->
                 let [ arg_cpn ] = args_cpn in
                 let [ arg ] = args in
