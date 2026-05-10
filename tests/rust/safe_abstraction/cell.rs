@@ -128,11 +128,16 @@ impl<T> Cell<T> {
     }
 }
 
-impl<T> Drop for Cell<T> {
+/*@
+lem Cell_drop<T>()
+    req <Cell<T>>.own(?t, ?c);
+    ens <T>.own(t, c.v);
+{ open <Cell<T>>.own(t, c); }
+@*/
 
-    fn drop<'a>(self: &'a mut Cell<T>) {
-        //@ open <Cell<T>>.full_borrow_content(_t, self)();
-        //@ open <Cell<T>>.own(_t, ?v);
+impl<T> Cell<T> {
+    pub fn into_inner(self) -> T {
+        //@ open <Cell<T>>.own(_t, self);
+        self.v.into_inner()
     }
-
 }
