@@ -42,7 +42,13 @@ module Make (Args : Sig.CXX_TRANSLATOR_ARGS) : Sig.Cxx_Ast_Translator = struct
   let invoke_exporter (file : string) (allow_expansions : string list) =
     let bin_dir = Filename.dirname Sys.executable_name in
     let frontend_macro = "__VF_CXX_CLANG_FRONTEND__" in
-    let allow_expansions = frontend_macro :: allow_expansions in
+    (* The C11/GCC atomic memory-order macros are compiler builtins; allow their
+       expansion so atomic builtins parse (see docs/weak-memory.md). *)
+    let atomic_order_macros = [
+      "__ATOMIC_RELAXED"; "__ATOMIC_CONSUME"; "__ATOMIC_ACQUIRE";
+      "__ATOMIC_RELEASE"; "__ATOMIC_ACQ_REL"; "__ATOMIC_SEQ_CST";
+    ] in
+    let allow_expansions = frontend_macro :: atomic_order_macros @ allow_expansions in
     (*
        -allow_macro_expansion=<expansions>   Don't check context-free expasions for <expansions>
        -x<language>                          Treat input files as having type <language>

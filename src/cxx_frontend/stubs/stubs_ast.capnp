@@ -451,6 +451,28 @@ struct Expr {
     rhs @1 :ExprNode;
   }
 
+  enum AtomicOp {
+    load @0;
+    store @1;
+    fetchAdd @2;
+    fetchSub @3;
+    fetchAnd @4;
+    fetchOr @5;
+    fetchXor @6;
+    addFetch @7;
+    subFetch @8;
+    andFetch @9;
+    orFetch @10;
+    xorFetch @11;
+    unsupported @12;
+  }
+
+  struct Atomic {
+    op @0 :AtomicOp;
+    ptr @1 :ExprNode;
+    val @2 :ExprNode; # value operand (store / read-modify-write); unused for load
+  }
+
   union {
     unionNotInitialized @0 :Void;
     unaryOp @1 :UnaryOp;
@@ -480,6 +502,7 @@ struct Expr {
     initList @25 :List(ExprNode);
     realLit @26 :Text; # floating-point literal, as its source spelling (e.g. "3.14f", "0x1.0p-112")
     stmtExpr @27 :List(StmtNode); # GCC statement expression ({ stmts; expr; })
+    atomic @28 :Atomic; # C11/GCC atomic operation, lowered to an ordinary memory op (see docs/weak-memory.md)
   }
 }
 

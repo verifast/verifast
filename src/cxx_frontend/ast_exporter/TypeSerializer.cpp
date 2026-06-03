@@ -127,6 +127,11 @@ struct TypeSerializerImpl
     return Visit(type->getInnerType().getTypePtr());
   }
 
+  // _Atomic T: model it as the underlying type T (see docs/weak-memory.md).
+  bool VisitAtomicType(const clang::AtomicType *type) {
+    return Visit(type->getValueType().getTypePtr());
+  }
+
   bool VisitLValueReferenceType(const clang::LValueReferenceType *type) {
     stubs::Type::Builder refBuilder = m_builder.initLValueRef().initDesc();
     m_ASTSerializer->serialize(refBuilder, type->getPointeeType());

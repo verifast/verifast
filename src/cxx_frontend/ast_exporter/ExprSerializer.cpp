@@ -230,6 +230,52 @@ struct ExprSerializerImpl
     return true;
   }
 
+  bool VisitAtomicExpr(const clang::AtomicExpr *expr) {
+    // C11/GCC atomic builtins. Lowered (OCaml side) to ordinary memory ops
+    // under a sequentially-consistent, single-owner reading; the memory order
+    // is ignored. See docs/weak-memory.md for the soundness caveats.
+    auto atomicBuilder = m_builder.initAtomic();
+    using Op = stubs::Expr::AtomicOp;
+    Op op;
+    bool hasVal = true;
+    switch (expr->getOp()) {
+    case clang::AtomicExpr::AO__atomic_load_n:
+    case clang::AtomicExpr::AO__c11_atomic_load:
+      op = Op::LOAD; hasVal = false; break;
+    case clang::AtomicExpr::AO__atomic_store_n:
+    case clang::AtomicExpr::AO__c11_atomic_store:
+      op = Op::STORE; break;
+    case clang::AtomicExpr::AO__atomic_fetch_add:
+    case clang::AtomicExpr::AO__c11_atomic_fetch_add:
+      op = Op::FETCH_ADD; break;
+    case clang::AtomicExpr::AO__atomic_fetch_sub:
+    case clang::AtomicExpr::AO__c11_atomic_fetch_sub:
+      op = Op::FETCH_SUB; break;
+    case clang::AtomicExpr::AO__atomic_fetch_and:
+    case clang::AtomicExpr::AO__c11_atomic_fetch_and:
+      op = Op::FETCH_AND; break;
+    case clang::AtomicExpr::AO__atomic_fetch_or:
+    case clang::AtomicExpr::AO__c11_atomic_fetch_or:
+      op = Op::FETCH_OR; break;
+    case clang::AtomicExpr::AO__atomic_fetch_xor:
+    case clang::AtomicExpr::AO__c11_atomic_fetch_xor:
+      op = Op::FETCH_XOR; break;
+    case clang::AtomicExpr::AO__atomic_add_fetch: op = Op::ADD_FETCH; break;
+    case clang::AtomicExpr::AO__atomic_sub_fetch: op = Op::SUB_FETCH; break;
+    case clang::AtomicExpr::AO__atomic_and_fetch: op = Op::AND_FETCH; break;
+    case clang::AtomicExpr::AO__atomic_or_fetch:  op = Op::OR_FETCH; break;
+    case clang::AtomicExpr::AO__atomic_xor_fetch: op = Op::XOR_FETCH; break;
+    default:
+      op = Op::UNSUPPORTED; hasVal = false; break;
+    }
+    atomicBuilder.setOp(op);
+    m_ASTSerializer->serialize(atomicBuilder.initPtr(), expr->getPtr());
+    if (hasVal) {
+      m_ASTSerializer->serialize(atomicBuilder.initVal(), expr->getVal1());
+    }
+    return true;
+  }
+
   bool VisitStmtExpr(const clang::StmtExpr *expr) {
     // GCC statement expression ({ stmts; expr; }). Serialize the sub-statements;
     // the OCaml side desugars it by hoisting the leading statements and using

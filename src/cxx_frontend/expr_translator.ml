@@ -24,6 +24,7 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
           stmts |> Capnp_util.arr_map (fun n -> !(Node_translator.translate_stmt_hook) n)
         in
         Ast.StmtExpr (loc, ss)
+    | Atomic a -> transl_atomic_expr loc a
     | BoolLit bool_lit -> transl_bool_lit_expr loc bool_lit
     | StringLit str_lit -> transl_str_lit_expr loc str_lit
     | Call c -> transl_call_expr loc c
@@ -165,6 +166,33 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
       else Util.num_of_decimal_fraction body
     in
     Ast.RealLit (loc, value, suffix)
+
+  (* C11/GCC atomic operations, lowered to ordinary memory operations under a
+     sequentially-consistent, single-owner reading (memory order ignored).
+     See docs/weak-memory.md for the soundness caveats. Read-modify-write ops
+     use AssignOpExpr with post=true for the fetch_* forms (return the old
+     value) and post=false for the *_fetch forms (return the new value). *)
+  and transl_atomic_expr (loc : Ast.loc) (a : E.Atomic.t) : Ast.expr =
+    let open E.Atomic in
+    let ptr = ptr_get a |> translate in
+    let deref = Ast.Deref (loc, ptr) in
+    let rmw op post = Ast.AssignOpExpr (loc, deref, op, val_get a |> translate, post) in
+    match op_get a with
+    | E.AtomicOp.Load -> deref
+    | E.AtomicOp.Store -> Ast.AssignExpr (loc, deref, Ast.Mutation, val_get a |> translate)
+    | E.AtomicOp.FetchAdd -> rmw Ast.Add true
+    | E.AtomicOp.FetchSub -> rmw Ast.Sub true
+    | E.AtomicOp.FetchAnd -> rmw Ast.BitAnd true
+    | E.AtomicOp.FetchOr -> rmw Ast.BitOr true
+    | E.AtomicOp.FetchXor -> rmw Ast.BitXor true
+    | E.AtomicOp.AddFetch -> rmw Ast.Add false
+    | E.AtomicOp.SubFetch -> rmw Ast.Sub false
+    | E.AtomicOp.AndFetch -> rmw Ast.BitAnd false
+    | E.AtomicOp.OrFetch -> rmw Ast.BitOr false
+    | E.AtomicOp.XorFetch -> rmw Ast.BitXor false
+    | _ ->
+        Error.error loc
+          "This atomic operation is not yet supported by the C-via-Clang front-end (see docs/weak-memory.md). Supported: load, store, fetch_{add,sub,and,or,xor}, {add,sub,and,or,xor}_fetch."
 
   and transl_bool_lit_expr (loc : Ast.loc) (bool_lit : bool) : Ast.expr =
     match bool_lit with true -> Ast.True loc | false -> Ast.False loc
