@@ -19,6 +19,11 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
     | BinaryOp op -> transl_binary_op_expr loc op
     | IntLit int_lit -> transl_int_lit_expr loc int_lit
     | RealLit spelling -> transl_real_lit_expr loc spelling
+    | StmtExpr stmts ->
+        let ss =
+          stmts |> Capnp_util.arr_map (fun n -> !(Node_translator.translate_stmt_hook) n)
+        in
+        Ast.StmtExpr (loc, ss)
     | BoolLit bool_lit -> transl_bool_lit_expr loc bool_lit
     | StringLit str_lit -> transl_str_lit_expr loc str_lit
     | Call c -> transl_call_expr loc c

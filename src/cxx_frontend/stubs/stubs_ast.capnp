@@ -479,6 +479,7 @@ struct Expr {
     arraySubscript @24 :ArraySubscript;
     initList @25 :List(ExprNode);
     realLit @26 :Text; # floating-point literal, as its source spelling (e.g. "3.14f", "0x1.0p-112")
+    stmtExpr @27 :List(StmtNode); # GCC statement expression ({ stmts; expr; })
   }
 }
 

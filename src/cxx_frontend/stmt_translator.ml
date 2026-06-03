@@ -11,6 +11,63 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
   module Var_translator = Var_translator.Make (Node_translator)
   module AP = Node_translator.Annotation_parser
 
+  (* Desugar GCC statement expressions ({ stmts; expr; }). A statement
+     expression's leading statements are hoisted out before the enclosing
+     statement, and the expression is replaced by the value of its final
+     expression statement. The hoisted statements' declarations harmlessly
+     remain in the enclosing scope (sound for verification: it only adds names).
+     Only the common statement-level positions are handled here (expression
+     statement, initializer, assignment RHS, return, if-condition); a statement
+     expression nested more deeply in an expression is left in place and
+     rejected with a clean error by the verifier. The recursion descends into
+     nested blocks, so desugaring a function body handles all of it. *)
+  let rec desugar_stmts (ss : Ast.stmt list) : Ast.stmt list =
+    List.concat_map desugar_stmt ss
+  and desugar_stmt (s : Ast.stmt) : Ast.stmt list =
+    let open Ast in
+    (* Desugar an inner block and split off its final value expression. *)
+    let split ss =
+      match List.rev (desugar_stmts ss) with
+      | ExprStmt efinal :: rev_init -> Some (List.rev rev_init, efinal)
+      | _ -> None
+    in
+    match s with
+    | ExprStmt (StmtExpr (_, ss)) ->
+        (* value discarded: just inline the block's statements *)
+        desugar_stmts ss
+    | DeclStmt (l, [ (ld, ty, x, Some (StmtExpr (_, ss)), addr) ]) -> (
+        match split ss with
+        | Some (init, efinal) ->
+            init @ [ DeclStmt (l, [ (ld, ty, x, Some efinal, addr) ]) ]
+        | None -> [ s ])
+    | ReturnStmt (l, Some (StmtExpr (_, ss))) -> (
+        match split ss with
+        | Some (init, efinal) -> init @ [ ReturnStmt (l, Some efinal) ]
+        | None -> [ s ])
+    | ExprStmt (AssignExpr (la, lhs, k, StmtExpr (_, ss))) -> (
+        match split ss with
+        | Some (init, efinal) ->
+            init @ [ ExprStmt (AssignExpr (la, lhs, k, efinal)) ]
+        | None -> [ s ])
+    | IfStmt (l, StmtExpr (_, ss), t, e) -> (
+        match split ss with
+        | Some (init, efinal) ->
+            init @ [ IfStmt (l, efinal, desugar_stmts t, desugar_stmts e) ]
+        | None -> [ IfStmt (l, s_cond_unchanged ss l, desugar_stmts t, desugar_stmts e) ])
+    | IfStmt (l, c, t, e) -> [ IfStmt (l, c, desugar_stmts t, desugar_stmts e) ]
+    | BlockStmt (l, ds, ss, cb, lf) -> [ BlockStmt (l, ds, desugar_stmts ss, cb, lf) ]
+    | WhileStmt (l, c, sp, d, body, fin) ->
+        [ WhileStmt (l, c, sp, d, desugar_stmts body, desugar_stmts fin) ]
+    | SwitchStmt (l, c, clauses) ->
+        let dc = function
+          | SwitchStmtClause (lc, e, ss) -> SwitchStmtClause (lc, e, desugar_stmts ss)
+          | SwitchStmtDefaultClause (lc, ss) ->
+              SwitchStmtDefaultClause (lc, desugar_stmts ss)
+        in
+        [ SwitchStmt (l, c, List.map dc clauses) ]
+    | _ -> [ s ]
+  and s_cond_unchanged ss l = Ast.StmtExpr (l, ss)
+
   let rec translate_decomposed loc stmt_desc =
     match S.get stmt_desc with
     | UnionNotInitialized -> Error.union_no_init_err "statement"
@@ -52,6 +109,7 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
             in
             let stmts =
               S.Compound.stmts_get c |> Capnp_util.arr_map translate
+              |> desugar_stmts
             in
             Some (stmts, r_brace_loc)
         | _ -> None)
@@ -78,7 +136,7 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
 
   and transl_compound_stmt (loc : Ast.loc) (c : S.Compound.t) : Ast.stmt =
     let open S.Compound in
-    let stmts = stmts_get c |> Capnp_util.arr_map translate in
+    let stmts = stmts_get c |> Capnp_util.arr_map translate |> desugar_stmts in
     Ast.BlockStmt
       (loc, [], stmts, Node_translator.translate_loc @@ r_brace_get c, ref [])
 
@@ -190,4 +248,8 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
     in
     let cases = cases_get s |> Capnp_util.arr_map map_case in
     Ast.SwitchStmt (loc, cond, cases)
+
+  (* Install the forward reference so Expr_translator can translate the
+     sub-statements of a GCC statement expression. *)
+  let () = Node_translator.translate_stmt_hook := translate
 end

@@ -451,6 +451,7 @@ and
   | IntLit of loc * big_int * bool (* decimal *) * bool (* U suffix *) * int_literal_lsuffix   (* int literal*)
   | WIntLit of loc * big_int
   | RealLit of loc * num * float_literal_suffix option
+  | StmtExpr of loc * stmt list (* GCC statement expression ({ stmts; expr; }); value is that of the final expression statement *)
   | StringLit of loc * string (* string literal *)
   | ClassLit of loc * string (* class literal in java *)
   | Typeid of loc * expr
@@ -1177,6 +1178,7 @@ let rec expr_loc e =
   | False l -> l
   | Null l -> l
   | Var (l, x) | WVar (l, x, _) -> l
+  | StmtExpr (l, _) -> l
   | IntLit (l, n, _, _, _) -> l
   | WIntLit (l, n) -> l
   | RealLit (l, n, _) -> l

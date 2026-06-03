@@ -230,6 +230,19 @@ struct ExprSerializerImpl
     return true;
   }
 
+  bool VisitStmtExpr(const clang::StmtExpr *expr) {
+    // GCC statement expression ({ stmts; expr; }). Serialize the sub-statements;
+    // the OCaml side desugars it by hoisting the leading statements and using
+    // the final expression's value.
+    const clang::CompoundStmt *body = expr->getSubStmt();
+    auto stmts = m_builder.initStmtExpr(body->size());
+    unsigned i = 0;
+    for (const clang::Stmt *child : body->body()) {
+      m_ASTSerializer->serialize(stmts[i++], child);
+    }
+    return true;
+  }
+
   bool VisitFloatingLiteral(const clang::FloatingLiteral *lit) {
     // Serialize the literal by its source spelling (e.g. "3.14f",
     // "0x1.0p-112") and let the OCaml side parse it into an exact rational,

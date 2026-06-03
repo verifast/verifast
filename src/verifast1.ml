@@ -4826,6 +4826,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               rank1
         in
           (wintlit l n, type_, Some n)
+    | StmtExpr (l, _) ->
+      static_error l "GCC statement expressions are only supported at statement level (as an expression statement, initializer, assignment right-hand side, return value, or if-condition), not nested deeper inside an expression." None
     | RealLit(l, n, suffix) ->
       if inAnnotation = Some true then
         (e, RealType, None)

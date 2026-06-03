@@ -12,6 +12,11 @@ module type Translator = sig
   val map : f:(Ast.loc -> 'a reader -> 'b) -> N.t -> 'b
   val map_annotation : R.Clause.t -> Ast.loc0 * string
 
+  (* Forward reference to the statement translator, installed by Stmt_translator.
+     Breaks the expr<->stmt cycle so that expression-position statements (GCC
+     statement expressions) can translate their sub-statements. *)
+  val translate_stmt_hook : (N.t -> Ast.stmt) ref
+
   module Annotation_parser : Annotation_parser.Parser
 end
 
@@ -21,6 +26,9 @@ module Make (Args : sig
   val path_of_int : int -> string
 end) : Translator = struct
   module Annotation_parser = Annotation_parser.Make (Args)
+
+  let translate_stmt_hook : (N.t -> Ast.stmt) ref =
+    ref (fun _ -> failwith "Node_translator.translate_stmt_hook not installed")
 
   let transl_srcpos srcpos =
     let l = S.l_get srcpos in
