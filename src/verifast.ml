@@ -578,6 +578,39 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         if body' = None then register_prototype_used lf fn (Some fterm)
       end;
       cont h env
+    | ExprStmt (CallExpr (l, "__vf_asm_havoc", [], [], args, Static)) when language = CLang ->
+      (* Inline-asm output havoc (emitted by the C-via-Clang front-end for a
+         GCC/Clang asm statement; see cxx_frontend/stmt_translator.ml). Each
+         argument is an output-operand lvalue; we set each to a fresh,
+         unconstrained value of its type by consuming its points-to chunk and
+         producing a fresh one. This is sound with respect to the output
+         operands an asm declares it writes. It does NOT model a "memory"
+         clobber (asm writing arbitrary other memory) -- such asm needs a
+         hand-written contract. An asm with no outputs (a pure barrier) is a
+         no-op. *)
+      let rec havoc_outputs h env args cont =
+        match args with
+          [] -> cont h env
+        | LitPat e :: rest ->
+          let w_addr, addr_tp = check_expr (pn,ilist) tparams tenv (AddressOf (expr_loc e, e)) in
+          let tp =
+            match addr_tp with
+              PtrType t -> t
+            | _ -> static_error l "Inline-asm output operand must be an lvalue." None
+          in
+          begin match tp with
+            StructType _ | UnionType _ | StaticArrayType _ ->
+              static_error l "Inline-asm with a non-scalar output operand is not supported; provide a contract for this asm instead." None
+          | _ -> ()
+          end;
+          eval_h h env w_addr $. fun h env addr ->
+          consume_c_object l addr tp h env true $. fun h ->
+          let fresh = get_unique_var_symb_non_ghost "asm_out" tp in
+          produce_c_object l real_unit addr tp eval_h (Term fresh) false true h env $. fun h env ->
+          havoc_outputs h env rest cont
+        | _ :: rest -> havoc_outputs h env rest cont
+      in
+      havoc_outputs h env args cont
     | ExprStmt (CallExpr (l, "upcast_new_block", [], [], [LitPat e], Static)) when dialect = Some Cxx ->
       if not pure then static_error l "This function may be called only from a pure context." None;
       let w, tp = check_expr (pn, ilist) tparams tenv e in

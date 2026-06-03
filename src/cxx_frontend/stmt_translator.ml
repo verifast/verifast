@@ -27,6 +27,7 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
     | Continue -> transl_continue_stmt loc
     | Compound c -> transl_compound_stmt loc c
     | Switch s -> transl_switch_stmt loc s
+    | Asm a -> transl_asm_stmt loc a
     | Undefined _ -> failwith "Undefined statement."
     | _ -> Error.error loc "Unsupported statement."
 
@@ -83,6 +84,16 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
 
   and transl_expr_stmt (e : R.Node.t) : Ast.stmt =
     Ast.ExprStmt (Expr_translator.translate e)
+
+  (* Inline asm: modelled by havocing its output operands. We emit a call to the
+     recognized intrinsic __vf_asm_havoc(out0, out1, ...), which the verifier
+     handles by assigning each output lvalue a fresh, unconstrained value. An asm
+     with no outputs yields a no-op call (a pure barrier). See verify_stmt. *)
+  and transl_asm_stmt (loc : Ast.loc) (a : S.Asm.t) : Ast.stmt =
+    let open S.Asm in
+    let outputs = outputs_get a |> Capnp_util.arr_map Expr_translator.translate in
+    let args = List.map (fun e -> Ast.LitPat e) outputs in
+    Ast.ExprStmt (Ast.CallExpr (loc, "__vf_asm_havoc", [], [], args, Ast.Static))
 
   and transl_return_stmt (loc : Ast.loc) (r : S.Return.t) : Ast.stmt =
     let open S.Return in

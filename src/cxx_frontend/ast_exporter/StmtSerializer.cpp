@@ -92,13 +92,20 @@ struct StmtSerializerImpl
 
   // Inline GCC/Clang assembly (`__asm__ volatile(...)`), pervasive in the Linux
   // kernel (barriers, READ_ONCE/WRITE_ONCE, per-cpu ops, atomics). VeriFast
-  // cannot reason about assembly semantically, so we model an asm statement as a
-  // no-op. WARNING: this is UNSOUND for asm that writes memory or output
-  // operands (e.g. `"=m"(x)`); it is only sound for pure barriers such as
-  // `__asm__ volatile("" ::: "memory")`. Treating it as a no-op lets kernel code
-  // parse and verify; a future, sound treatment would havoc the output operands.
+  // cannot reason about assembly semantically. We model an asm statement by its
+  // declared *output operands*: each output lvalue is havoced (set to an
+  // arbitrary value of its type) by the OCaml side. This is sound w.r.t. the
+  // output operands an asm declares it writes. NOTE: it does NOT model a
+  // "memory" clobber (asm writing arbitrary other memory); such asm needs a
+  // hand-written contract. Asm with no outputs (a pure barrier) becomes a no-op.
   bool VisitGCCAsmStmt(const clang::GCCAsmStmt *stmt) {
-    m_builder.setNull();
+    auto asmBuilder = m_builder.initAsm();
+    unsigned n = stmt->getNumOutputs();
+    auto outputs = asmBuilder.initOutputs(n);
+    for (unsigned i = 0; i < n; ++i) {
+      ExprNodeBuilder out = outputs[i];
+      m_ASTSerializer->serialize(out, stmt->getOutputExpr(i));
+    }
     return true;
   }
 

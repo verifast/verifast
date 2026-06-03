@@ -163,6 +163,10 @@ struct Stmt {
     stmts @0 :List(StmtNode); # optional
   }
 
+  struct Asm {
+    outputs @0 :List(ExprNode); # lvalue expressions of the asm output operands
+  }
+
   struct Switch {
     cond @0 :ExprNode;
     cases @1 :List(StmtNode);
@@ -185,6 +189,7 @@ struct Stmt {
     case @13 :Case;
     defCase @14 :DefCase;
     for @15 :For;
+    asm @16 :Asm;
   }
 }
 
