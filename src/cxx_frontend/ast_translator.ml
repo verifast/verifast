@@ -46,18 +46,34 @@ module Make (Args : Sig.CXX_TRANSLATOR_ARGS) : Sig.Cxx_Ast_Translator = struct
     (*
        -allow_macro_expansion=<expansions>   Don't check context-free expasions for <expansions>
        -x<language>                          Treat input files as having type <language>
+       -std=<standard>                       Language standard to compile for
        -I<dir>                               Include dir
        -D<macros>                            Define macros <macros>
     *)
+    (* Pick the source language and language standard based on the dialect.
+       For C we default to gnu11 so that the GCC/Clang extensions used throughout
+       real-world code (and the Linux kernel in particular) are accepted. *)
+    let language, std =
+      match Args.dialect_opt with
+      | Some Cxx -> "c++", "c++17"
+      | _ -> "c", "gnu11"
+    in
+    (* Forward the user-supplied -D define-macros to Clang. Each entry may be a
+       bare name (defined to 1) or "NAME=VALUE"; Clang accepts both as -D<entry>. *)
+    let define_macro_flags =
+      Args.define_macros |> List.map (fun s -> "-D" ^ s) |> String.concat " "
+    in
     let cmd =
       Printf.sprintf
         "%s/vf-cxx-ast-exporter %s -allow_macro_expansion=%s -- -x%s \
-         -std=c++17 -I%s -D%s %s"
+         -std=%s -I%s -D%s %s %s"
         bin_dir file
         (String.concat "," allow_expansions)
-        (match Args.dialect_opt with Some Cxx -> "c++" | _ -> "c")
+        language
+        std
         bin_dir frontend_macro
         (Args.include_paths |> List.map (fun s -> "-I" ^ s) |> String.concat " ")
+        define_macro_flags
     in
     let inchan, outchan, errchan = Unix.open_process_full cmd [||] in
     (inchan, outchan, errchan)

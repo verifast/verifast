@@ -22,6 +22,7 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
     | SubstTemplateTypeParam s -> transl_subst_template_type_param loc s
     | ConstantArray ca -> transl_constant_array_type loc ca
     | IncompleteArray ia -> transl_incomplete_array loc ia
+    | FunctionProto fp -> transl_function_proto_type loc fp
     | Undefined _ -> failwith "Undefined type."
     | _ -> Error.error loc "Unsupported type."
 
@@ -45,6 +46,9 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
     | UShort -> make_int Ast.Unsigned @@ Ast.ShortRank
     | Void -> make_man Ast.Void
     | Bool -> make_man Ast.Bool
+    | Float -> make_man Ast.Float
+    | Double -> make_man Ast.Double
+    | LongDouble -> make_man Ast.LongDouble
     | Int -> make_int Ast.Signed IntRank
     | UInt -> make_int Ast.Unsigned IntRank
     | Long -> make_int Ast.Signed LongRank
@@ -56,6 +60,21 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
   and transl_pointer_type (loc : Ast.loc) (ptr : R.Node.t) : Ast.type_expr =
     let pointee_type = translate ptr in
     Ast.PtrTypeExpr (loc, pointee_type)
+
+  (* A function type appearing in type position, e.g. the pointee of a
+     function-pointer field or variable declarator. We represent it with
+     Ast.FuncTypeExpr; the surrounding Pointer node wraps it into a pointer. *)
+  and transl_function_proto_type (loc : Ast.loc)
+      (proto_type : T.FunctionProto.t) : Ast.type_expr =
+    let open T.FunctionProto in
+    let return_type = return_type_get proto_type |> translate in
+    let params =
+      params_get proto_type
+      |> Capnp_util.arr_map (fun param ->
+             let open R.Param in
+             (type_get param |> translate, name_get param))
+    in
+    Ast.FuncTypeExpr (loc, return_type, params)
 
   and transl_lvalue_ref_type (loc : Ast.loc) (l : R.Node.t) : Ast.type_expr =
     let ref_type = translate l in

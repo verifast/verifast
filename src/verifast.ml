@@ -4321,6 +4321,33 @@ Qed.
           let context = List.map (fun (Lexed ((b, _, _), _), (_, p, _), _, _) -> Util.concat (Filename.dirname b) ((Filename.chop_extension p) ^ ".jar")) headers in
           let ds = Java_frontend_bridge.parse_java_files javas context reportRange reportShouldFail options.option_verbose options.option_enforce_annotations options.option_use_java_frontend in
           (headers, ds, (*dbg_info*) None)
+      | CLang, None when Vfbindings.get Vfparam_c_frontend_clang vfbindings -> begin
+        (* Route C (.c/.h) through the Clang-based front-end instead of the native
+           VeriFast parser. This handles real-world C, including the GCC/Clang
+           extensions pervasive in the Linux kernel (inline asm, __attribute__,
+           typeof, statement expressions, function-pointer struct fields, ...). *)
+        let open Cxx_frontend in
+        let module Translator = Ast_translator.Make(
+          struct
+            let enforce_annotations = options.option_enforce_annotations
+            let data_model_opt = data_model
+            let report_should_fail = reportShouldFail
+            let report_range = reportRange
+            let dialect_opt = None
+            let report_macro_call = reportMacroCall
+            let path = path
+            let verbose = options.option_verbose
+            let include_paths = if Filename.check_suffix path ".h" then [] else include_paths
+            let define_macros = define_macros
+          end
+        )
+        in
+        try
+          let headers, ds = Translator.parse_cxx_file () in (headers, ds, (*dbg_info*) None)
+        with
+        | Annotation_parser.CxxAnnParseException (l, msg)
+        | Error.CxxAstTranslException (l, msg) -> static_error l msg None
+      end
       | CLang, None ->
         let headers, ds =
         if Filename.check_suffix path ".h" then

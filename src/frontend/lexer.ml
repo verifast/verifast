@@ -795,9 +795,17 @@ let make_lexer_core keywords ghostKeywords startpos text reportRange inComment i
     | ('p'|'P') as c -> text_junk (); store c; hex_fraction_exponent ()
     | _ -> fraction_suffix (num_of_hex_fraction (get_string ()))
   and hex_fraction_exponent () =
+    (* The binary exponent of a C99 hex float (after 'p'/'P') may carry an
+       explicit sign. Previously only '-' was handled, so '+' was dropped and
+       the (now empty) exponent string crashed int_of_string. *)
     match text_peek () with
-      '-' -> text_junk (); store '-'; hex_fraction_exponent_digits ()
-    | _ -> hex_fraction_exponent_digits ()
+      '-' -> text_junk (); store '-'; hex_fraction_exponent_first_digit ()
+    | '+' -> text_junk (); store '+'; hex_fraction_exponent_first_digit ()
+    | _ -> hex_fraction_exponent_first_digit ()
+  and hex_fraction_exponent_first_digit () =
+    match text_peek () with
+      '0'..'9' as c -> text_junk (); store c; hex_fraction_exponent_digits ()
+    | _ -> error "Malformed hexadecimal floating-point literal: binary exponent has no digits"
   and hex_fraction_exponent_digits () =
     match text_peek () with
       '0'..'9' as c -> text_junk (); store c; hex_fraction_exponent_digits ()

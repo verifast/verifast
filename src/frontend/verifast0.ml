@@ -335,6 +335,7 @@ type _ vfparam =
 | Vfparam_skip_specless_fns: bool vfparam (* Skip verification of functions for which the user did not provide a precondition and postcondition. This is the default behavior for C, C++ and Java but not for Rust. *)
 | Vfparam_ignore_ref_creation: bool vfparam
 | Vfparam_ignore_unwind_paths: bool vfparam (* In Rust, ignore control flow paths due to stack unwinding after a panic. *)
+| Vfparam_c_frontend_clang: bool vfparam (* Parse C (.c/.h) using the Clang-based front-end instead of the native VeriFast parser. Enables real-world C, including GCC/Clang extensions (inline asm, __attribute__, typeof, statement expressions, ...). *)
 
 let cast_vfarg: type t1 t2. t1 vfparam -> t1 -> t2 vfparam -> t2 option = fun p0 a0 p ->
   (* if Obj.magic p0 = Obj.magic p then Some (Obj.magic a0) else None *)
@@ -358,6 +359,7 @@ let cast_vfarg: type t1 t2. t1 vfparam -> t1 -> t2 vfparam -> t2 option = fun p0
   | Vfparam_skip_specless_fns, Vfparam_skip_specless_fns -> Some a0
   | Vfparam_ignore_ref_creation, Vfparam_ignore_ref_creation -> Some a0
   | Vfparam_ignore_unwind_paths, Vfparam_ignore_unwind_paths -> Some a0
+  | Vfparam_c_frontend_clang, Vfparam_c_frontend_clang -> Some a0
   | _ -> None
 
 type _ vfparam_info =
@@ -390,6 +392,7 @@ let vfparam_info_of: type a. a vfparam -> a vfparam_info = function
 | Vfparam_skip_specless_fns -> BoolParam
 | Vfparam_ignore_ref_creation -> BoolParam
 | Vfparam_ignore_unwind_paths -> BoolParam
+| Vfparam_c_frontend_clang -> BoolParam
 
 let default_vfarg: type ta. ta vfparam -> ta = fun p ->
   match vfparam_info_of p with
@@ -423,6 +426,7 @@ let vfparams = [
   "skip_specless_fns", (Vfparam Vfparam_skip_specless_fns, "Skip verification of functions for which the user did not provide a precondition and postcondition. This is the default behavior for C, C++ and Java but not for Rust.");
   "ignore_ref_creation", (Vfparam Vfparam_ignore_ref_creation, "In Rust, treat &E or &mut E like &raw E. This is unsound!");
   "ignore_unwind_paths", (Vfparam Vfparam_ignore_unwind_paths, "In Rust, ignore control flow paths due to stack unwinding after a panic. This is sound only when compiling with -C panic=abort.");
+  "c_frontend_clang", (Vfparam Vfparam_c_frontend_clang, "Parse C source and header files (.c/.h) using the Clang-based front-end instead of the native VeriFast parser. Enables real-world C, including GCC/Clang extensions (inline asm, __attribute__, typeof, statement expressions). Required for code such as the Linux kernel.");
 ]
 
 type vfbinding = Vfbinding: 'a vfparam * 'a -> vfbinding

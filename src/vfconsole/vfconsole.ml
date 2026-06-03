@@ -11,10 +11,15 @@ let () = Register_provers.register_provers ()
 
 let code_snippet_of_loc l =
   let ((path1, line1, col1), (path2, line2, col2)) = root_caller_token l in
-  assert (path1 = path2);
-  let text = readFile path1 in
+  (* Errors can carry a synthetic location (e.g. ast.ml's dummy "<nowhere>"
+     source position) for which no readable file exists. In that case just omit
+     the source snippet rather than crashing while reporting the diagnostic. *)
+  if path1 <> path2 then "" else
+  match (try Some (readFile path1) with Sys_error _ -> None) with
+    None -> ""
+  | Some text ->
   let lines = String.split_on_char '\n' text in
-  if line1 > List.length lines || line2 > List.length lines then
+  if line1 < 1 || line2 < 1 || line1 > List.length lines || line2 > List.length lines then
     ""
   else
     let snippet_lines = lines |> Util.drop (line1 - 1) |> Util.take (line2 - line1 + 1) in

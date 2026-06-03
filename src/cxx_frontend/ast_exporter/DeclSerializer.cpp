@@ -253,6 +253,46 @@ struct DeclSerializerImpl
     serializer << annotations;
   }
 
+  // Plain C structs/unions are RecordDecls, not CXXRecordDecls. Clang's
+  // DeclVisitor dispatches the most-derived match, so C++ records still go
+  // through VisitCXXRecordDecl below; this handles the C case (fields only,
+  // no bases, methods, or virtual machinery).
+  bool VisitRecordDecl(const clang::RecordDecl *decl) {
+    // A CXXRecordDecl coming through here would mean C++ constructs are being
+    // parsed in C mode; defer to the C++ path in that case.
+    if (llvm::isa<clang::CXXRecordDecl>(decl)) {
+      return VisitCXXRecordDecl(llvm::cast<clang::CXXRecordDecl>(decl));
+    }
+
+    stubs::Decl::Record::Builder recordBuilder = m_builder.initRecord();
+
+    recordBuilder.setName(decl->getQualifiedNameAsString());
+
+    stubs::RecordKind kind =
+        decl->isUnion() ? stubs::RecordKind::UNIO : stubs::RecordKind::STRUC;
+    recordBuilder.setKind(kind);
+
+    if (decl->isThisDeclarationADefinition()) {
+      capnp::Orphanage orphanage =
+          capnp::Orphanage::getForMessageContaining(m_builder);
+
+      DeclListSerializer declListSerializer(orphanage,
+                                            DeclSerializer(*m_ASTSerializer));
+      serializeContext(decl, decl->getBraceRange(), declListSerializer);
+
+      stubs::Decl::Record::Body::Builder bodyBuilder = recordBuilder.initBody();
+      bodyBuilder.setPolymorphic(false);
+      bodyBuilder.initBases(0);
+      bodyBuilder.setIsAbstract(false);
+      bodyBuilder.initNonOverriddenMethods(0);
+
+      ListBuilder<stubs::Node<stubs::Decl>> declsBuilder =
+          bodyBuilder.initDecls(declListSerializer.size());
+      declListSerializer.adoptToListBuilder(declsBuilder);
+    }
+    return true;
+  }
+
   bool VisitCXXRecordDecl(const clang::CXXRecordDecl *decl) {
     stubs::Decl::Record::Builder recordBuilder = m_builder.initRecord();
 

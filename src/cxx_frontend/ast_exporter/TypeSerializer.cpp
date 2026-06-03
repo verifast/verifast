@@ -39,6 +39,9 @@ struct TypeSerializerImpl
       CASE_TYPE(ULong, U_LONG)
       CASE_TYPE(ULongLong, U_LONG_LONG)
       CASE_TYPE(Bool, BOOL)
+      CASE_TYPE(Float, FLOAT)
+      CASE_TYPE(Double, DOUBLE)
+      CASE_TYPE(LongDouble, LONG_DOUBLE)
       CASE_TYPE_FW(Int128, INT, 128)
       CASE_TYPE_FW(UInt128, U_INT, 128)
     default:
@@ -115,6 +118,13 @@ struct TypeSerializerImpl
   bool VisitTypedefType(const clang::TypedefType *type) {
     m_builder.setTypedef(type->getDecl()->getQualifiedNameAsString());
     return true;
+  }
+
+  // A ParenType is just parentheses around an inner type (e.g. the pointer in a
+  // function-pointer declarator `void (*p)(int)`). It is semantically
+  // transparent, so unwrap it into the same builder.
+  bool VisitParenType(const clang::ParenType *type) {
+    return Visit(type->getInnerType().getTypePtr());
   }
 
   bool VisitLValueReferenceType(const clang::LValueReferenceType *type) {
@@ -202,6 +212,12 @@ struct TypeLocSerializerImpl
     TypeNodeBuilder elaboratedBuilder = m_builder.initElaborated();
     m_ASTSerializer->serialize(elaboratedBuilder, typeLoc.getNamedTypeLoc());
     return true;
+  }
+
+  // See VisitParenType: parentheses are semantically transparent, so unwrap the
+  // ParenTypeLoc into its inner TypeLoc (e.g. function-pointer declarators).
+  bool VisitParenTypeLoc(const clang::ParenTypeLoc typeLoc) {
+    return Visit(typeLoc.getInnerLoc());
   }
 
   bool

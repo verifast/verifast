@@ -85,6 +85,9 @@ struct Type {
     uLong @9;
     longLong @10;
     uLongLong @11;
+    float @12;
+    double @13;
+    longDouble @14;
   }
 
   struct FixedWidth {
@@ -470,6 +473,7 @@ struct Expr {
     conditionalOp @23 :ConditionalOp;
     arraySubscript @24 :ArraySubscript;
     initList @25 :List(ExprNode);
+    realLit @26 :Text; # floating-point literal, as its source spelling (e.g. "3.14f", "0x1.0p-112")
   }
 }
 

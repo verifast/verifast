@@ -90,6 +90,18 @@ struct StmtSerializerImpl
     return true;
   }
 
+  // Inline GCC/Clang assembly (`__asm__ volatile(...)`), pervasive in the Linux
+  // kernel (barriers, READ_ONCE/WRITE_ONCE, per-cpu ops, atomics). VeriFast
+  // cannot reason about assembly semantically, so we model an asm statement as a
+  // no-op. WARNING: this is UNSOUND for asm that writes memory or output
+  // operands (e.g. `"=m"(x)`); it is only sound for pure barriers such as
+  // `__asm__ volatile("" ::: "memory")`. Treating it as a no-op lets kernel code
+  // parse and verify; a future, sound treatment would havoc the output operands.
+  bool VisitGCCAsmStmt(const clang::GCCAsmStmt *stmt) {
+    m_builder.setNull();
+    return true;
+  }
+
   template <typename While>
   bool serializeWhileStmt(stubs::Stmt::While::Builder builder,
                           const While *stmt, clang::SourceLocation whileLoc,

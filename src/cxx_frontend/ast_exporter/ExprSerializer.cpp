@@ -54,8 +54,15 @@ struct ExprSerializerImpl
       return serializeCast(ce, expr);
     }
     default:
-      if (isExplicit)
-        return false;
+      if (isExplicit) {
+        // General explicit (C-style or functional) scalar conversion:
+        // int<->float, int<->pointer, pointer<->pointer, float<->float, etc.
+        // The "integralCast" stub node is a generic (expr, type) cast and the
+        // OCaml side lowers it to Ast.CastExpr, which VeriFast type-checks for
+        // any scalar cast. This is essential for C, where casts are pervasive.
+        stubs::Expr::Cast::Builder ce = m_builder.initIntegralCast();
+        return serializeCast(ce, expr);
+      }
       serialize(expr->getSubExpr());
       return true;
     }
@@ -220,6 +227,28 @@ struct ExprSerializerImpl
     intLit.setLowBits(lit->getValue());
     intLit.setHighBits(0);
 
+    return true;
+  }
+
+  bool VisitFloatingLiteral(const clang::FloatingLiteral *lit) {
+    // Serialize the literal by its source spelling (e.g. "3.14f",
+    // "0x1.0p-112") and let the OCaml side parse it into an exact rational,
+    // matching the native parser's semantics. Fall back to the APFloat's
+    // decimal rendering if the spelling is unavailable (e.g. macro-synthesized).
+    llvm::SmallString<32> buffer;
+    bool invalid(false);
+    auto spelling = clang::Lexer::getSpelling(
+        m_ASTSerializer->getASTContext().getSourceManager().getSpellingLoc(
+            lit->getBeginLoc()),
+        buffer, m_ASTSerializer->getASTContext().getSourceManager(),
+        m_ASTSerializer->getASTContext().getLangOpts(), &invalid);
+    if (invalid || spelling.empty()) {
+      llvm::SmallString<32> rendered;
+      lit->getValue().toString(rendered);
+      m_builder.setRealLit(rendered.c_str());
+    } else {
+      m_builder.setRealLit(spelling.str());
+    }
     return true;
   }
 

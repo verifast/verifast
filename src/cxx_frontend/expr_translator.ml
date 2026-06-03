@@ -18,6 +18,7 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
     | UnaryOp op -> transl_unary_op_expr loc op
     | BinaryOp op -> transl_binary_op_expr loc op
     | IntLit int_lit -> transl_int_lit_expr loc int_lit
+    | RealLit spelling -> transl_real_lit_expr loc spelling
     | BoolLit bool_lit -> transl_bool_lit_expr loc bool_lit
     | StringLit str_lit -> transl_str_lit_expr loc str_lit
     | Call c -> transl_call_expr loc c
@@ -138,6 +139,27 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
     let high_bits = big_int_of_uint64 (high_bits_get int_lit) in
     let value = or_big_int (shift_left_big_int high_bits 64) low_bits in
     Ast.IntLit (loc, value, dec, u_suf, l_suf)
+
+  (* A floating-point literal, serialized by its source spelling. We strip the
+     optional f/F/l/L suffix and parse the remaining mantissa/exponent into an
+     exact rational (num), reusing the same helpers as the native lexer. *)
+  and transl_real_lit_expr (loc : Ast.loc) (spelling : string) : Ast.expr =
+    let n = String.length spelling in
+    let suffix, body =
+      if n = 0 then (None, spelling)
+      else match spelling.[n - 1] with
+        | 'f' | 'F' -> (Some Ast.FloatFSuffix, String.sub spelling 0 (n - 1))
+        | 'l' | 'L' -> (Some Ast.FloatLSuffix, String.sub spelling 0 (n - 1))
+        | _ -> (None, spelling)
+    in
+    let is_hex =
+      String.length body >= 2 && body.[0] = '0' && (body.[1] = 'x' || body.[1] = 'X')
+    in
+    let value =
+      if is_hex then Util.num_of_hex_fraction body
+      else Util.num_of_decimal_fraction body
+    in
+    Ast.RealLit (loc, value, suffix)
 
   and transl_bool_lit_expr (loc : Ast.loc) (bool_lit : bool) : Ast.expr =
     match bool_lit with true -> Ast.True loc | false -> Ast.False loc
