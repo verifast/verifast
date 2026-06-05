@@ -2134,8 +2134,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             tmp_rvalue_binders := !tmp_rvalue_binders @ [ rvalue_binder ];
             Ok (Ast.Var (loc, tmp_var_name))
         | `TrTypedConstantFn _ ->
-            failwith
-              "Todo: Functions as operand in rvalues are not supported yet"
+            (* Function items are zero-sized types. The actual function dispatch
+               is handled by monomorphization in MIR, so we only need a placeholder
+               value for the operand position. *)
+            Ok (Ast.IntLit (loc, Big_int.zero_big_int, (*decimal*) true, (*unsigned*) false, (*lsuffix*) Ast.NoLSuffix))
         | `TrTypedConstantScalar expr -> Ok expr
       in
       let* oprs =
