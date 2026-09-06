@@ -446,12 +446,20 @@ let rec exec_cmds macros cwd parallel cmds =
         let cin = Unix.open_process_in (line ^ " 2>&1") in
         Mutex.unlock global_mutex;
         let current_alarm = ref None in
+        let process_finished = ref false in
         let rec produce_alarm i =
           let runtime = i * 5 in
           let alarm = create_alarm (time0 +. float_of_int runtime) begin fun () ->
               Mutex.lock global_mutex;
-              print_endline (Printf.sprintf "SLOW: %s has been running for %ds" line' runtime);
-              produce_alarm (i + 1);
+              (* The process may have terminated after the alarm thread took this alarm off
+                 the alarm list but before we acquired global_mutex. In that case the reader
+                 thread's cancel_alarm call was a no-op, so re-arming here would produce an
+                 alarm that nobody ever cancels, and we would keep reporting an already
+                 finished process as slow forever. *)
+              if not !process_finished then begin
+                print_endline (Printf.sprintf "SLOW: %s has been running for %ds" line' runtime);
+                produce_alarm (i + 1)
+              end;
               Mutex.unlock global_mutex
             end
           in
@@ -481,6 +489,7 @@ let rec exec_cmds macros cwd parallel cmds =
             if !verbose then print_endline (Printf.sprintf "[%d]%f seconds\n" pid (time1 -. time0));
             let Some alarm = !current_alarm in
             cancel_alarm alarm;
+            process_finished := true;
             let success =
               match expected_output with
                 None ->
