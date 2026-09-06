@@ -137,9 +137,7 @@ impl SourceFiles {
     ) {
         let mut source_files = core::mem::replace(&mut self.source_files, Vec::new());
         for mut source_file in source_files.drain(..) {
-            let filename = rustc_span::FileName::Real(rustc_span::RealFileName::LocalPath(
-                std::path::PathBuf::from(source_file.path),
-            ));
+            let filename = rustc_span::FileName::Real(sm.path_mapping().to_real_filename(sm.working_dir(), &*source_file.path));
             let rustc_source_file = sm.get_source_file(&filename).unwrap();
             let start_pos = rustc_source_file.start_pos;
             for mut directive in source_file.directives.drain(..) {
@@ -160,6 +158,10 @@ struct FileLoader {
 }
 
 impl rustc_span::source_map::FileLoader for FileLoader {
+    fn current_directory(&self) -> std::io::Result<std::path::PathBuf> {
+        std::env::current_dir()
+    }
+
     fn file_exists(&self, path: &std::path::Path) -> bool {
         path.exists()
     }
@@ -478,7 +480,8 @@ mod vf_mir_builder {
     use crate::vf_mir_capnp::ident as ident_cpn;
     use crate::vf_mir_capnp::mutability as mutability_cpn;
     use crate::vf_mir_capnp::predicate as predicate_cpn;
-    use crate::vf_mir_capnp::span_data as span_data_cpn;
+    use crate::vf_mir_capnp::real_file_name::remapped_data;
+use crate::vf_mir_capnp::span_data as span_data_cpn;
     use crate::vf_mir_capnp::symbol as symbol_cpn;
     use crate::vf_mir_capnp::ty as ty_cpn;
     use crate::vf_mir_capnp::unsafety as unsafety_cpn;
@@ -490,6 +493,7 @@ mod vf_mir_builder {
     use crate::vf_mir_capnp::statement as statement_cpn;
     use crate::vf_mir_capnp::terminator as terminator_cpn;
     use binary_op_data_cpn::bin_op as bin_op_cpn;
+use rustc_span::RemapPathScopeComponents;
     use crate::vf_mir_capnp::basic_block as basic_block_cpn;
     use crate::vf_mir_capnp::basic_block_id as basic_block_id_cpn;
     use crate::vf_mir_capnp::const_operand as const_operand_cpn;
@@ -821,7 +825,7 @@ mod vf_mir_builder {
                                                     ty::BoundRegionKind::Named(
                                                         def_id,
                                                     ) => self.tcx.item_name(def_id).to_string(),
-                                                    ty::BoundRegionKind::NamedAnon(name) => name.to_string(),
+                                                    ty::BoundRegionKind::NamedForPrinting(name) => name.to_string(),
                                                     ty::BoundRegionKind::ClosureEnv => todo!(),
                                                 }
                                             }
@@ -1692,31 +1696,17 @@ mod vf_mir_builder {
             mut real_fname_cpn: real_file_name_cpn::Builder<'_>,
         ) {
             //debug!("Encoding RealFileName {:?}", real_fname);
-            fn get_path_str(path_buf: &std::path::PathBuf) -> &str {
-                path_buf.to_str().expect(&format!(
+            fn get_path_str(path: &std::path::Path) -> &str {
+                path.to_str().expect(&format!(
                     "Failed to get the unicode string of PathBuf {:?}",
-                    path_buf
+                    path
                 ))
             }
-            match real_fname {
-                rustc_span::RealFileName::LocalPath(path_buf) => {
-                    real_fname_cpn.set_local_path(get_path_str(path_buf));
-                }
-                rustc_span::RealFileName::Remapped {
-                    local_path,
-                    virtual_name,
-                } => {
-                    let mut remapped_data_cpn = real_fname_cpn.init_remapped();
-                    let mut local_path_opt_cpn = remapped_data_cpn.reborrow().init_local_path();
-                    match local_path {
-                        None => local_path_opt_cpn.set_nothing(()),
-                        Some(local_path) => {
-                            let mut text_wrapper_cpn = local_path_opt_cpn.init_something();
-                            text_wrapper_cpn.set_text(get_path_str(local_path));
-                        }
-                    }
-                    remapped_data_cpn.set_virtual_name(get_path_str(virtual_name));
-                }
+            if let Some(path) = real_fname.local_path() {
+                real_fname_cpn.set_local_path(get_path_str(path));
+            } else {
+                let mut remapped_data_cpn = real_fname_cpn.init_remapped();
+                remapped_data_cpn.set_virtual_name(get_path_str(real_fname.path(RemapPathScopeComponents::DOCUMENTATION)));
             }
         }
 
@@ -2045,7 +2035,7 @@ mod vf_mir_builder {
                             region_cpn.set_id(symbol.as_str());
                         }
                     }
-                    ty::BoundRegionKind::NamedAnon(name) => region_cpn.set_id(name.as_str()),
+                    ty::BoundRegionKind::NamedForPrinting(name) => region_cpn.set_id(name.as_str()),
                     ty::BoundRegionKind::ClosureEnv => todo!(),
                 },
                 ty::RegionKind::ReLateParam(_debruijn_index) => bug!(),
@@ -2308,19 +2298,6 @@ mod vf_mir_builder {
                     Self::encode_operand(tcx, enc_ctx, operandl, operandl_cpn);
                     let operandr_cpn = bin_op_data_cpn.init_operandr();
                     Self::encode_operand(tcx, enc_ctx, operandr, operandr_cpn);
-                }
-                mir::Rvalue::NullaryOp(null_op) => {
-                    let mut null_op_cpn = rvalue_cpn.init_nullary_op();
-                    match null_op {
-                        mir::NullOp::RuntimeChecks(runtime_checks) => {
-                            let mut runtime_checks_cpn = null_op_cpn.reborrow().init_runtime_checks();
-                            match runtime_checks {
-                                mir::RuntimeChecks::UbChecks => runtime_checks_cpn.set_ub_checks(()),
-                                mir::RuntimeChecks::ContractChecks => runtime_checks_cpn.set_contract_checks(()),
-                                mir::RuntimeChecks::OverflowChecks => runtime_checks_cpn.set_overflow_checks(()),
-                            }
-                        }
-                    }
                 }
                 mir::Rvalue::UnaryOp(un_op, operand) => {
                     let mut un_op_data_cpn = rvalue_cpn.init_unary_op();
@@ -2676,6 +2653,15 @@ mod vf_mir_builder {
                     let constant_cpn = operand_cpn.init_constant();
                     Some(Self::encode_const_operand(tcx, enc_ctx, constant, constant_cpn))
                 }
+                mir::Operand::RuntimeChecks(checks) => {
+                    let mut runtime_checks_cpn = operand_cpn.init_runtime_checks();
+                    match checks {
+                        mir::RuntimeChecks::UbChecks => runtime_checks_cpn.set_ub_checks(()),
+                        mir::RuntimeChecks::ContractChecks => runtime_checks_cpn.set_contract_checks(()),
+                        mir::RuntimeChecks::OverflowChecks => runtime_checks_cpn.set_overflow_checks(()),
+                    }
+                    None
+                }
             }
         }
 
@@ -2781,7 +2767,7 @@ mod vf_mir_builder {
                 CK::Value(value) => {
                     let mut value_cpn = const_kind_cpn.init_value();
                     Self::encode_ty(tcx, enc_ctx, value.ty, value_cpn.reborrow().init_ty());
-                    Self::encode_val_tree(tcx, &value.valtree, value_cpn.init_val_tree());
+                    Self::encode_val_tree(tcx, enc_ctx, &value.valtree, value_cpn.init_val_tree());
                 }
                 // A placeholder for a const which could not be computed; this is
                 // propagated to avoid useless error messages.
@@ -2792,6 +2778,7 @@ mod vf_mir_builder {
 
         fn encode_val_tree(
             tcx: TyCtxt<'tcx>,
+            enc_ctx: &mut EncCtx<'tcx, 'a>,
             val_tree: &ty::ValTree<'tcx>,
             mut val_tree_cpn: val_tree_cpn::Builder<'_>,
         ) {
@@ -2805,7 +2792,7 @@ mod vf_mir_builder {
                 // Used only for `&[u8]` and `&str`
                 VT::Branch(children) => {
                     val_tree_cpn.fill_branch(children, |child_cpn, child| {
-                        Self::encode_val_tree(tcx, child, child_cpn);
+                        Self::encode_typesystem_constant(tcx, enc_ctx, child, child_cpn);
                     });
                 }
             }

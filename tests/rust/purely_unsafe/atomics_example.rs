@@ -3,6 +3,7 @@
 use std::{ptr::null_mut, sync::atomic::{AtomicUsize, Ordering::SeqCst}};
 //@ use std::sync::atomic::{AtomicUsize, AtomicUsize_fetch_add_ghop, is_AtomicUsize_fetch_add_op, AtomicUsize_load_ghop, is_AtomicUsize_load_op};
 
+#[allow(deref_nullptr)]
 unsafe fn assert(b: bool)
 //@ req b;
 //@ ens true;
