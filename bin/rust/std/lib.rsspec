@@ -915,6 +915,31 @@ mod alloc {
         @*/
         //@ on_unwind_ens false;
         
+        fn pad_to_align<'a>(self: &'a Layout) -> Layout;
+        //@ req [?f](*self |-> ?l);
+        /*@
+        ens [f](*self |-> l) &*&
+            result.align() == l.align() &*&
+            if l.size() % l.align() == 0 { result.size() == l.size() } else { l.size() < result.size() };
+        @*/
+        //@ on_unwind_ens false;
+
+        fn repeat_packed<'a>(self: &'a Layout, n: usize) -> std::result::Result<Layout, LayoutError>;
+        //@ req [?f](*self |-> ?l);
+        /*@
+        ens [f](*self |-> l) &*&
+            match result {
+                Result::Ok(r) =>
+                    is_valid_layout(n * l.size(), l.align()) == true &*&
+                    n * l.size() <= isize::MAX &*&
+                    r == Layout::from_size_align(n * l.size(), l.align()) &*&
+                    r.size() == n * l.size() &*&
+                    r.align() == l.align(),
+                Result::Err(e) => true
+            };
+        @*/
+        //@ on_unwind_ens false;
+        
     }
     
     //@ pred alloc_block(ptr: *u8; layout: Layout);
