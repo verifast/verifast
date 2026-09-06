@@ -8673,9 +8673,7 @@ let check_if_list_is_defined () =
         assume_eq_bounded_op t;
         begin match e2, op with
           WIntLit (_, i), BitAnd when le_big_int zero_big_int i ->
-          ctxt#assert_term (ctxt#mk_and (ctxt#mk_le int_zero_term v) (ctxt#mk_le v v2));
-          if eq_big_int i unit_big_int then
-            ctxt#assert_term (ctxt#mk_eq (ctxt#mk_mod v1 (ctxt#mk_intlit 2)) v)
+          ctxt#assert_term (ctxt#mk_and (ctxt#mk_le int_zero_term v) (ctxt#mk_le v v2))
         | _ -> ()
         end
       end;
