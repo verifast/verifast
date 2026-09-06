@@ -184,6 +184,11 @@ mod num {
         //@ ens result == wrapping_sub_usize(self, other);
         //@ on_unwind_ens false;
         
+        fn saturating_sub(self: usize, other: usize) -> usize;
+        //@ req true;
+        //@ ens result == (if self < other { 0 } else { self - other });
+        //@ on_unwind_ens false;
+        
     }
     
     impl std::cmp::Ord for usize {
@@ -915,6 +920,31 @@ mod alloc {
         @*/
         //@ on_unwind_ens false;
         
+        fn pad_to_align<'a>(self: &'a Layout) -> Layout;
+        //@ req [?f](*self |-> ?l);
+        /*@
+        ens [f](*self |-> l) &*&
+            result.align() == l.align() &*&
+            if l.size() % l.align() == 0 { result.size() == l.size() } else { l.size() < result.size() };
+        @*/
+        //@ on_unwind_ens false;
+
+        fn repeat_packed<'a>(self: &'a Layout, n: usize) -> std::result::Result<Layout, LayoutError>;
+        //@ req [?f](*self |-> ?l);
+        /*@
+        ens [f](*self |-> l) &*&
+            match result {
+                Result::Ok(r) =>
+                    is_valid_layout(n * l.size(), l.align()) == true &*&
+                    n * l.size() <= isize::MAX &*&
+                    r == Layout::from_size_align(n * l.size(), l.align()) &*&
+                    r.size() == n * l.size() &*&
+                    r.align() == l.align(),
+                Result::Err(e) => true
+            };
+        @*/
+        //@ on_unwind_ens false;
+        
     }
     
     //@ pred alloc_block(ptr: *u8; layout: Layout);
@@ -1268,6 +1298,16 @@ mod boxed {
         fn leak<'a>(b: Box<T, A>) -> &'a mut T;
         //@ req Box_in::<T, A>(?t, b, ?alloc_id, ?value);
         //@ ens points_to_at_lft(alloc_id.lft, result, value) &*& std::alloc::alloc_block_in(alloc_id, result as *u8, std::alloc::Layout::new::<T>()) &*& result as *_ as usize != 0;
+        //@ on_unwind_ens false;
+    
+        fn into_non_null_with_allocator(b: Box<T, A>) -> (std::ptr::NonNull<T>, A);
+        //@ req Box_in::<T, A>(?t, b, ?alloc_id, ?value);
+        /*@
+        ens points_to_at_lft(alloc_id.lft, result.0.as_ptr(), value) &*&
+            std::alloc::alloc_block_in(alloc_id, result.0.as_ptr() as *u8, std::alloc::Layout::new::<T>()) &*&
+            result.0.as_ptr() as usize != 0 &*&
+            std::alloc::Allocator(t, result.1, alloc_id);
+        @*/
         //@ on_unwind_ens false;
     
         fn new_uninit_in(alloc: A) -> Box<std::mem::MaybeUninit<T>, A>;

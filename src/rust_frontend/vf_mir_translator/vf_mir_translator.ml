@@ -2114,6 +2114,21 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           Rocq_writer.rocq_print_application TranslatorArgs.rocq_writer "Constant" @@ fun () ->
           Rocq_writer.rocq_print_argument TranslatorArgs.rocq_writer @@ fun () ->
           translate_const_operand constant_cpn
+      | RuntimeChecks checks_cpn ->
+          begin match VfMirRd.RuntimeChecks.get checks_cpn with
+            UbChecks ->
+              let expr = Ast.CallExpr (loc, "std::intrinsics::ub_checks", [], [], [], Static) in
+              let expr =
+                if TranslatorArgs.ignore_unwind_paths then
+                  expr
+                else
+                  Ast.CallExpr (loc, "fn_outcome_result", [], [], [ LitPat expr ], Static)
+              in
+              Ok (`TrOperandCopy expr)
+          | _ ->
+              Ast.static_error loc
+                "Nullary operations are not yet supported" None
+          end
       | Undefined _ -> Error (`TrOperand "Unknown Mir Operand kind")
 
     let translate_operands_core (is_variable_length : bool) (oprs : (OperandRd.t * Ast.loc) list) =
@@ -3161,23 +3176,6 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           let* operandl = tr_operand operandl in
           let* operandr = tr_operand operandr in
           Ok (`TrRvalueBinaryOp (operator, operandl, operandr))
-      | NullaryOp null_op_cpn ->
-          let open VfMirRd.NullOp in
-          let runtime_checks_cpn = runtime_checks_get null_op_cpn in
-          begin match VfMirRd.RuntimeChecks.get runtime_checks_cpn with
-            UbChecks ->
-              let expr = Ast.CallExpr (loc, "std::intrinsics::ub_checks", [], [], [], Static) in
-              let expr =
-                if TranslatorArgs.ignore_unwind_paths then
-                  expr
-                else
-                  Ast.CallExpr (loc, "fn_outcome_result", [], [], [ LitPat expr ], Static)
-              in
-              Ok (`TrRvalueExpr expr)
-          | _ ->
-              Ast.static_error loc
-                "Nullary operations are not yet supported" None
-          end
       | UnaryOp un_op_data_cpn ->
           let* operator, operand =
             translate_unary_operation un_op_data_cpn loc

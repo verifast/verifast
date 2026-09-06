@@ -1606,7 +1606,7 @@ type command =
 | RawPtr of rvalue_raw_ptr_data
 | Cast of Vf_mir_decoder.ty (* Pop a value from the top of the operand stack, cast it to the specified type, and push the result *)
 | BinaryOp of rvalue_binary_op_data_bin_op (* Pop two values from the top of the operand stack, apply the specified binary operator to them, and push the result *)
-| NullaryOp of null_op (* Push the result of the specified nullary operator onto the operand stack *)
+| RuntimeChecks of runtime_checks (* Push the specified runtime checks settings onto the operand stack *)
 | UnaryOp of rvalue_unary_op_data_un_op (* Pop a value from the top of the operand stack, apply the specified unary operator to it, and push the result *)
 | Aggregate of aggregate_kind * int (* Pop the specified number of values from the top of the operand stack and push an aggregate value *)
 | Discriminant (* Pop a value from the top of the operand stack, which is an enum value, and push the discriminant of the enum value *)
@@ -1628,7 +1628,7 @@ let string_of_command c =
   | RawPtr {place} -> Printf.sprintf "RawPtr %s" (string_of_place place)
   | Cast ty -> Printf.sprintf "Cast %s" (string_of_ty ty)
   | BinaryOp operator -> Printf.sprintf "BinaryOp %s" (string_of_bin_op operator)
-  | NullaryOp data -> Printf.sprintf "NullaryOp"
+  | RuntimeChecks checks -> Printf.sprintf "RuntimeChecks"
   | Aggregate (aggregate_kind, n) -> Printf.sprintf "Aggregate %s %d" (string_of_aggregate_kind aggregate_kind) n
   | Discriminant -> "Discriminant"
   | SourceInfo {span} -> Printf.sprintf "SourceInfo %s" (string_of_span span)
@@ -1646,6 +1646,7 @@ let commands_for_loading_place {local; projection}: command list =
 let commands_of_operand = function
   Copy place | Move place -> commands_for_loading_place place
 | Constant c -> [Constant c]
+| RuntimeChecks checks -> [RuntimeChecks checks]
 
 let commands_of_rvalue = function
   Use operand -> commands_of_operand operand
@@ -1656,7 +1657,6 @@ let commands_of_rvalue = function
 | Cast {operand=Copy {local; projection=[BoxAsNonNull _]}} -> [LoadLocal local; BoxAsPtr]
 | Cast {operand; ty} -> commands_of_operand operand @ [Cast ty]
 | BinaryOp {operator; operandl; operandr} -> commands_of_operand operandl @ commands_of_operand operandr @ [BinaryOp operator]
-| NullaryOp nullary_op_data -> [NullaryOp nullary_op_data]
 | UnaryOp {operator; operand} -> commands_of_operand operand @ [UnaryOp operator]
 | Aggregate {aggregate_kind; operands} -> List.concat_map commands_of_operand operands @ [Aggregate (aggregate_kind, List.length operands)]
 | Discriminant {place} -> commands_for_loading_place place @ [Discriminant]
@@ -2026,6 +2026,13 @@ let check_operand_refines_operand i genv0 env0 span0 caller0 operand0 genv1 env1
     let term0 = eval_const_operand genv0 const_operand_cpn0 in
     let term1 = eval_const_operand genv1 const_operand_cpn1 in
     if term0 <> term1 then failwith (Printf.sprintf "The constants %s at %s and %s at %s are not equal" (string_of_term term0) (string_of_span span0) (string_of_term term1) (string_of_span span1))
+  | RuntimeChecks checks0, RuntimeChecks checks1 ->
+    begin match checks0, checks1 with
+    | UbChecks, UbChecks -> ()
+    | ContractChecks, ContractChecks -> ()
+    | OverflowChecks, OverflowChecks -> ()
+    | _ -> failwith "Operand::RuntimeChecks: checks do not match"
+    end
   | _ -> failwith "Operand kinds do not match"
 
 let check_aggregate_kind_refines_aggregate_kind genv0 (aggregate_kind0: aggregate_kind) genv1 (aggregate_kind1: aggregate_kind) =
@@ -2103,16 +2110,6 @@ let check_rvalue_refines_rvalue genv0 env0 span0 caller0 rhsRvalue0 genv1 env1 s
   let rhs0 = binary_op_data_cpn0.operandr in
   let rhs1 = binary_op_data_cpn1.operandr in
   check_operand_refines_operand 1 genv0 env0 span0 caller0 rhs0 genv1 env1 span1 caller1 rhs1
-| NullaryOp op0, NullaryOp op1 ->
-  begin match op0, op1 with
-  | {runtime_checks=checks0}, {runtime_checks=checks1} ->
-    begin match checks0, checks1 with
-    | UbChecks, UbChecks -> ()
-    | ContractChecks, ContractChecks -> ()
-    | OverflowChecks, OverflowChecks -> ()
-    | _ -> failwith "Rvalue::NullaryOp: operators do not match"
-    end
-  end
 | UnaryOp unary_op_data_cpn0, UnaryOp unary_op_data_cpn1 -> failwith "Rvalue::UnaryOp not supported"
 | Aggregate aggregate_data_cpn0, Aggregate aggregate_data_cpn1 ->
   check_aggregate_refines_aggregate genv0 env0 span0 caller0 aggregate_data_cpn0 genv1 env1 span1 caller1 aggregate_data_cpn1
@@ -2665,14 +2662,11 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
             if op0 <> op1 then error "BinaryOp: The operators do not match";
             let v = fresh_symbol () in
             cont env0 (v::opnds0) env1 (v::opnds1)
-        | NullaryOp op0, NullaryOp op1 ->
-            begin match op0, op1 with
-              {runtime_checks=checks0}, {runtime_checks=checks1} ->
-              begin match checks0, checks1 with
+        | RuntimeChecks checks0, RuntimeChecks checks1 ->
+            begin match checks0, checks1 with
               | UbChecks, UbChecks -> ()
               | ContractChecks, ContractChecks -> ()
               | OverflowChecks, OverflowChecks -> ()
-              end
             end;
             let v = fresh_symbol () in
             cont env0 (v::opnds0) env1 (v::opnds1)

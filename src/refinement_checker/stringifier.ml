@@ -61,6 +61,7 @@ let string_of_operand = function
   | Copy place -> Printf.sprintf "copy %s" (string_of_place place)
   | Move place -> Printf.sprintf "move %s" (string_of_place place)
   | Constant {const} -> string_of_mir_const const
+  | RuntimeChecks _ -> "<RuntimeChecks>"
 
 let string_of_rvalue_ref_data {region; bor_kind; place} =
   Printf.sprintf "&%s%s %s" (match bor_kind with Shared -> "" | Mut -> "mut ") region.id (string_of_place place)
@@ -105,7 +106,6 @@ let string_of_rvalue = function
     Printf.sprintf "(%s as %s)" (string_of_operand operand) (string_of_ty ty)
   | BinaryOp {operator; operandl; operandr} ->
     Printf.sprintf "%s %s %s" (string_of_operand operandl) (string_of_bin_op operator) (string_of_operand operandr)
-  | NullaryOp _ -> "<NullaryOp>"
   | UnaryOp _ -> "<UnaryOp>"
   | Aggregate {aggregate_kind; operands} ->
     Printf.sprintf "%s(%s)" (string_of_aggregate_kind aggregate_kind) (String.concat ", " (List.map string_of_operand operands))
