@@ -301,6 +301,14 @@ fix Array_elems<T, N>(array: [T; N]) -> list<T>;
 // If `length(elems)` is not `usize_of_const(typeid(N))` then the result is unspecified.
 fix Array_of_elems<T, N>(elems: list<T>) -> [T; N];
 
+lem Array_elems_Array_of_elems<T, N>(elems: list<T>);
+    req length(elems) == usize_of_const(typeid(N));
+    ens Array_elems(Array_of_elems::<T, N>(elems)) == elems;
+
+lem Array_of_elems_Array_elems<T, N>(array: [T; N]);
+    req true;
+    ens Array_of_elems::<T, N>(Array_elems(array)) == array;
+
 fix slice_elems<T>(slice: [T]) -> list<T>;
 fix slice_of_elems<T>(elems: list<T>) -> [T];
 

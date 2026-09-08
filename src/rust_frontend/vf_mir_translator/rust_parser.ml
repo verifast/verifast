@@ -528,6 +528,8 @@ let parse_pred_asn = function%parser
       (None, sn ^ "_" ^ g, targs, [], args)
     | (SliceTypeExpr (_, elemTp)) ->
       (None, "slice_" ^ g, [elemTp], [], args)
+    | (StaticArrayTypeExpr (_, elemTp, lenTp)) ->
+      (None, "Array_" ^ g, [elemTp; lenTp], [], args)
     | _ ->
       raise (ParseException (type_expr_loc te, "Opening or closing a type predicate for this type is not yet supported"))
     end
@@ -539,6 +541,8 @@ let parse_pred_asn = function%parser
       (None, sn ^ "_" ^ g, targs, args1, args2)
     | (StructTypeExpr (_, Some sn, _, _, targs)) ->
       (None, sn ^ "_" ^ g, targs, args1, args2)
+    | (StaticArrayTypeExpr (_, elemTp, lenTp)) ->
+      (None, "Array_" ^ g, [elemTp; lenTp], args1, args2)
     | _ ->
       raise (ParseException (type_expr_loc te, "Opening or closing a type predicate for this type is not yet supported"))
     end
