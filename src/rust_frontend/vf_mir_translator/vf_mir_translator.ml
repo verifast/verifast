@@ -1228,19 +1228,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                    TypePredExpr (loc, slice_ty_expr, "share"),
                    [ LitPat lft_expr; LitPat tid; LitPat v ] ) ))
       | Mir.Mut ->
-        Ok
-          (CallExpr
-             ( loc,
-               "full_borrow",
-               [],
-               [],
-               [ LitPat lft_expr;
-                 LitPat
-                   (ExprCallExpr
-                      ( loc,
-                        TypePredExpr (loc, slice_ty_expr, "full_borrow_content"),
-                        [ LitPat tid; LitPat v ] )) ],
-               Static ))
+        Error "Expressing ownership of &mut [_] values is not yet supported"
     in
     let shr lft tid l =
       Error "Expressing shared ownership of &[_] values is not yet supported"
@@ -1253,30 +1241,11 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let* pat = RustBelt.Aux.vid_op_to_var_pat vid_op loc in
       Ok (PointsTo (loc, l, RegularPointsTo, pat))
     in
-    let pointee_fbc =
-      match rust_mut with
-      | Mir.Mut ->
-        Some (fun tid l suffix ->
-          let value_id = Printf.sprintf "_v%s_%s" suffix l in
-          Ok
-            (Sep
-               ( loc,
-                 PointsTo
-                   ( loc,
-                     Deref (loc, Var (loc, l)),
-                     RegularPointsTo,
-                     VarPat (loc, value_id) ),
-                 ExprCallExpr
-                   ( loc,
-                     TypePredExpr (loc, slice_ty_expr, "own"),
-                     [ LitPat tid; LitPat (Var (loc, value_id)) ] ) )))
-      | Mir.Not -> None
-    in
     {
       Mir.vf_ty;
       interp =
         RustBelt.
-          { size; own; shr; full_bor_content; points_to; pointee_fbc };
+          { size; own; shr; full_bor_content; points_to; pointee_fbc = None };
     }
 
   and translate_generic_arg (gen_arg_cpn : D.generic_arg) (loc : Ast.loc) =
