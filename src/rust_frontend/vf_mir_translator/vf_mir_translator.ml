@@ -2693,7 +2693,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             in
             Ok (Ast.SwitchStmt (loc, discr, clauses @ default_clause), targets)
         | _ ->
-            failwith (Printf.sprintf "Todo: SwitchInt for discriminant type %s" (Verifast0.string_of_type discr_ty.vf_ty))
+            Ast.static_error loc "Todo: SwitchInt for this discriminant type" None
       in
       if ListAux.is_empty tmp_rvalue_binders then Ok (main_stmt, targets)
       else
