@@ -10,7 +10,7 @@ fn apply(f: fn(i32) -> i32, x: i32) -> i32
 //@ req true;
 //@ ens true;
 {
-    //@ assume(false);
+    //@ assume(false); // calling through a fn pointer is out of scope for this test
     f(x)
 }
 
@@ -18,6 +18,6 @@ fn main()
 //@ req true;
 //@ ens true;
 {
-    //@ assume(false);
-    let result = apply(identity, 42);
+    // The point of the test: `identity` appears as an operand (a function item passed by value).
+    let _result = apply(identity, 42);
 }
