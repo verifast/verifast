@@ -2534,7 +2534,19 @@ use rustc_span::RemapPathScopeComponents;
                     Self::encode_unwind_action(unwind, drop_data_cpn.reborrow().init_unwind_action());
                 }
                 mir::TerminatorKind::TailCall { .. } => terminator_kind_cpn.set_tail_call(()),
-                mir::TerminatorKind::Assert { .. } => terminator_kind_cpn.set_assert(()),
+                mir::TerminatorKind::Assert {
+                    cond,
+                    expected,
+                    msg: _,
+                    target,
+                    unwind,
+                } => {
+                    let mut assert_data_cpn = terminator_kind_cpn.init_assert();
+                    Self::encode_operand(tcx, enc_ctx, cond, assert_data_cpn.reborrow().init_cond());
+                    assert_data_cpn.set_expected(*expected);
+                    Self::encode_basic_block_id(*target, assert_data_cpn.reborrow().init_target());
+                    Self::encode_unwind_action(unwind, assert_data_cpn.reborrow().init_unwind_action());
+                }
                 mir::TerminatorKind::Yield { .. } => terminator_kind_cpn.set_yield(()),
                 mir::TerminatorKind::CoroutineDrop { .. } => terminator_kind_cpn.set_coroutine_drop(()),
                 mir::TerminatorKind::FalseEdge { .. } => terminator_kind_cpn.set_false_edge(()),

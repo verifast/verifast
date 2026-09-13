@@ -2560,7 +2560,13 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
           (* Todo: follow unwind path *)
           check_basic_block_refines_basic_block env0 i_bb_target0 env1 i_bb_target1
         | TailCall, TailCall -> error "TailCall not supported"
-        | Assert, Assert -> error "Assert not supported"
+        | Assert assert0, Assert assert1 ->
+          check_operand_refines_operand 0 i_bb0#genv env0 span0 caller0 assert0.cond i_bb1#genv env1 span1 caller1 assert1.cond;
+          if assert0.expected <> assert1.expected then error "The two assert terminators expect different values";
+          let i_bb_target0 = i_bb0#sibling (Stdint.Uint32.to_int assert0.target.index) in
+          let i_bb_target1 = i_bb1#sibling (Stdint.Uint32.to_int assert1.target.index) in
+          (* Todo: follow unwind path *)
+          check_basic_block_refines_basic_block env0 i_bb_target0 env1 i_bb_target1
         | Yield, Yield -> error "Yield not supported"
         | CoroutineDrop, CoroutineDrop -> error "CoroutineDrop not supported"
         | FalseEdge, FalseEdge -> error "FalseEdge not supported"

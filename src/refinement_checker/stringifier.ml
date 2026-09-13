@@ -157,7 +157,8 @@ let string_of_terminator {source_info; kind} =
       Printf.sprintf "%s%s(%s) on_unwind %s; %s" prolog (string_of_operand func) args_str (string_of_unwind_action unwind_action) epilog
   | Drop {place; target; unwind_action} ->
       Printf.sprintf "drop %s on_unwind %s; goto %s;" (string_of_place place) (string_of_unwind_action unwind_action) (string_of_basic_block_id target)
-  | Assert -> "assert;"
+  | Assert {cond; expected; target; unwind_action} ->
+      Printf.sprintf "assert %s == %b on_unwind %s; goto %s;" (string_of_operand cond) expected (string_of_unwind_action unwind_action) (string_of_basic_block_id target)
 
 let string_of_basic_block bb =
   string_of_basic_block_id bb.id ^ ":\n" ^

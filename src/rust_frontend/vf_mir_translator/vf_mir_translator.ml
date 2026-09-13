@@ -2778,6 +2778,34 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               @ freeze_stmts,
               Mir.GotoTerminator (loc, target),
               [ target ] )
+      | Assert assert_data_cpn ->
+          (* `Assert { cond, expected, target, unwind }`: continue at `target` if `cond == expected`,
+             otherwise panic (i.e. unwind). With -ignore_unwind_paths the panicking branch is
+             modelled as an abort, as the `Terminate` unwind action is. *)
+          let open AssertData in
+          let* tmp_rvalue_binders, [ cond ] =
+            translate_operands [ (cond_get assert_data_cpn, loc) ]
+          in
+          let expected = expected_get assert_data_cpn in
+          let target = translate_basic_block_id (target_get assert_data_cpn) in
+          let fail_stmts, fail_targets =
+            if TranslatorArgs.ignore_unwind_paths then
+              ( [
+                  Ast.ExprStmt
+                    (Ast.CallExpr (loc, "std::process::abort", [], [], [], Ast.Static));
+                ],
+                [] )
+            else translate_unwind_action (unwind_action_get assert_data_cpn) loc
+          in
+          let goto_target = [ Ast.GotoStmt (loc, target) ] in
+          let if_stmt =
+            if expected then Ast.IfStmt (loc, cond, goto_target, fail_stmts)
+            else Ast.IfStmt (loc, cond, fail_stmts, goto_target)
+          in
+          Ok
+            ( [ Ast.BlockStmt (loc, [], tmp_rvalue_binders @ [ if_stmt ], loc, ref []) ],
+              Mir.EncodedTerminator,
+              target :: fail_targets )
       | UnwindResume ->
           Ok
             ( [
