@@ -1228,7 +1228,23 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                    TypePredExpr (loc, slice_ty_expr, "share"),
                    [ LitPat lft_expr; LitPat tid; LitPat v ] ) ))
       | Mir.Mut ->
-        Error "Expressing ownership of &mut [_] values is not yet supported"
+        (* Same shape as for `&mut T`: a full borrow of the pointee's full borrow content. *)
+        Ok
+          (CallExpr
+             ( loc,
+               "full_borrow",
+               (*type arguments*) [],
+               (*indices*) [],
+               (*arguments*)
+               [
+                 LitPat lft_expr;
+                 LitPat
+                   (ExprCallExpr
+                      ( loc,
+                        TypePredExpr (loc, slice_ty_expr, "full_borrow_content"),
+                        [ LitPat tid; LitPat v ] ));
+               ],
+               Static ))
     in
     let shr lft tid l =
       Error "Expressing shared ownership of &[_] values is not yet supported"
