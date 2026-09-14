@@ -461,7 +461,7 @@ mod mem {
     
     lem Array__MaybeUninit_to_Array_MaybeUninit<T, N>(self: *[MaybeUninit<T>; N]);
         req *self |-?-> ?value_;
-        ens *self |-> match value_ { none => Array_of_elems(repeat(nat_of_int(usize_of_const(typeid(N))), MaybeUninit::uninit())), some(value) => value };
+        ens *self |-> match value_ { none => Array_of_elems(repeat(nat_of_int(int_of_const(typeid(N))), MaybeUninit::uninit())), some(value) => value };
     
     lem array__MaybeUninit_to_array_MaybeUninit<T>(self: *MaybeUninit<T>);
         req self[..?n] |-?-> ?elems_;

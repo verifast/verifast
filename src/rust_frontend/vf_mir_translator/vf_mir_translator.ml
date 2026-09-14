@@ -1268,6 +1268,18 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               begin match ty, size with
                 {kind=UInt _}, _ ->
                   Ast.LiteralConstTypeExpr (loc, Z.of_uint128 v)
+              | {kind=Bool}, 1 ->
+                  Ast.LiteralConstTypeExpr (loc, Z.of_uint128 v)
+              | {kind=Int _}, _ ->
+                  (* Sign-extend the [size]-byte two's-complement value. *)
+                  let bits = 8 * size in
+                  let i = Stdint.Int128.of_uint128 v in
+                  let i =
+                    if bits < 128 then
+                      Stdint.Int128.shift_right (Stdint.Int128.shift_left i (128 - bits)) (128 - bits)
+                    else i
+                  in
+                  Ast.LiteralConstTypeExpr (loc, Z.of_int128 i)
               | _ -> 
                   failwith "Unsupported constant type or size"
               end
