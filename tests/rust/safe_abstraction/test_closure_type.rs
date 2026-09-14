@@ -5,14 +5,13 @@
 // - Closures are translated as opaque struct types (captures are not modeled)
 // - Closure bodies are NOT verified (require assume(false) guards)
 
-#![no_std]
 #![allow(dead_code)]
 
 fn call_with_one<F: FnOnce(i32) -> i32>(f: F) -> i32
-//@ req true;
+//@ req false;
 //@ ens true;
+//@ safety_proof { assume(false); }
 {
-    //@ assume(false);
     f(1)
 }
 

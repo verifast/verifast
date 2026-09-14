@@ -1754,17 +1754,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | FnPtr fn_ptr_ty_cpn -> translate_fn_ptr_ty fn_ptr_ty_cpn loc
     | Dynamic _ -> Ast.static_error loc "Dynamic types are not yet supported" None
     | Closure closure_ty_cpn ->
-        (* Preliminary closure support: translate the closure type as an opaque
-           struct-like type using the closure's DefId as the type name.
-           LIMITATIONS:
-           - Closures are represented with an empty type interpretation. In reality,
-             closures contain captured values and are not zero-sized unless they
-             capture nothing. A proper implementation needs the schema to expose
-             upvar types so they can be translated as struct fields.
-           - Closure bodies are NOT verified. Functions containing closures must
-             guard closure calls with assume(false) or similar. *)
-        let name = TrName.translate_def_path closure_ty_cpn.def_id in
-        let vf_ty = Ast.ManifestTypeExpr (loc, Ast.StructType (name, [])) in
+        (* This translation is sound provided that closures are consumed only by calls and such calls are rejected by VeriFast. *)
+        let vf_ty = Ast.ManifestTypeExpr (loc, Ast.StructType (TrTyTuple.tuple0_name, [])) in
         Ok { Mir.vf_ty; interp = RustBelt.emp_ty_interp loc }
     | CoroutineClosure ->
         Ast.static_error loc "Coroutine closure types are not yet supported"
@@ -2175,6 +2166,27 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let translate_fn_call_rexpr (callee_cpn : OperandRd.t)
         (args_cpn : OperandRd.t list) (call_loc : Ast.loc) (fn_loc : Ast.loc)
         (ghost_generic_arg_list_opt_cpn : OptionRd.t) =
+      let has_closure_substs =
+        match D.decode_operand callee_cpn with
+          Constant {const = Val {ty = {kind = FnDef { id = { name }; substs }}}} ->
+            Printf.printf "%s\n" (String.concat ", " (List.map (fun arg -> string_of_generic_arg (decode_generic_arg arg)) substs));
+            List.exists
+              (fun arg -> match (arg : D.generic_arg) with { kind = Type { kind = Closure _ } } -> true | _ -> false)
+              substs
+        | _ -> false
+      in
+      if has_closure_substs then
+        Ok
+          ( [],
+            FnCallResult
+              (Ast.CallExpr
+                  ( fn_loc,
+                    "#verifast_call_with_closure_genargs",
+                    [],
+                    [],
+                    [],
+                    Static )) )
+      else
       (* Todo @Nima: There should be a way to get separated source spans for args *)
       let args = List.map (fun arg_cpn -> (arg_cpn, fn_loc)) args_cpn in
       let* tmp_rvalue_binders, args =
@@ -2869,11 +2881,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           let fields = fields_get_list adt_data_cpn |> List.map D.decode_aggregate_kind_adt_data_field_info in
           Ok Mir.(AggKindAdt { adt_kind; adt_name; variant_name; fields })
       | Closure _ ->
-          (* Preliminary: treat closure aggregate as an opaque construction.
-             In reality, the operands are the captured upvars and should be
-             translated as struct field initializations. *)
           Ok Mir.(AggKindClosure)
-          (* CAVEAT: Once we allow closure values, we must also check closure bodies. *)
       | Coroutine -> failwith "Todo: AggregateKind::Coroutine"
       | CoroutineClosure -> failwith "Todo: AggregateKind::CoroutineClosure"
       | RawPtr -> failwith "Todo: AggregateKind::RawPtr"
@@ -2934,11 +2942,6 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           in
           Ok (`TrRvalueAggregate init_stmts_builder)
       | AggKindClosure ->
-          (* Preliminary closure aggregate handling. The operands are the captured
-             upvars. Since closure types are currently translated as opaque structs
-             without field information, we skip field assignments. A proper
-             implementation should translate each operand as a field initialization
-             once the schema exposes upvar field names and types. *)
           let init_stmts_builder (_lhs_place, _lhs_place_is_mutable) =
             tmp_rvalue_binders
           in

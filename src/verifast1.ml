@@ -5023,6 +5023,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let (x, tp) = List.nth param_names_types (int_of_big_int arg_index) in
       let tp = instantiate_type tpenv tp in
       (WFunCall (l, "#inductive_projection", [t], [w; i1; i2], Static), tp, None)
+    | CallExpr (l, "#verifast_call_with_closure_genargs", _, _, _, Static) ->
+      let rt = InferredType (object end, ref Unconstrained) in
+      (WFunCall (l, "#verifast_call_with_closure_genargs", [], [], Static), rt, None)
     | ExprCallExpr (l, e, es) ->
       let es = List.map (function LitPat e -> e | _ -> static_error l "Patterns are not supported here" None) es in
       let (w, t, _) = check e in
