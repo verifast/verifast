@@ -1208,13 +1208,27 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
 
   and slice_ref_ty_info loc lft mut elem_ty_info =
     let open Ast in
+    let lft_expr = Rust_parser.expr_of_lft_param_expr loc lft in
+    let slice_ty_expr = SliceTypeExpr (loc, elem_ty_info.Mir.vf_ty) in
+    let rust_mut = mut in
     let mut = match mut with Mir.Not -> Shared | Mir.Mut -> Mutable in
     let vf_ty =
-      RustRefTypeExpr (loc, lft, mut, SliceTypeExpr (loc, elem_ty_info.Mir.vf_ty))
+      RustRefTypeExpr (loc, lft, mut, slice_ty_expr)
     in
     let size = SizeofExpr (loc, TypeExpr vf_ty) in
-    let own tid vs =
-      Error "Expressing ownership of &[_] values is not yet supported"
+    let own tid v =
+      match rust_mut with
+      | Mir.Not ->
+        Ok
+          (CoefAsn
+             ( loc,
+               DummyPat,
+               ExprCallExpr
+                 ( loc,
+                   TypePredExpr (loc, slice_ty_expr, "share"),
+                   [ LitPat lft_expr; LitPat tid; LitPat v ] ) ))
+      | Mir.Mut ->
+        Error "Expressing ownership of &mut [_] values is not yet supported"
     in
     let shr lft tid l =
       Error "Expressing shared ownership of &[_] values is not yet supported"

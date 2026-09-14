@@ -763,13 +763,6 @@ lem init_ref_Vec_m<T, A>(l: *Vec<T, A>)
     leak Vec_share_(k, t, l, alloc_id, ptr, capacity, length);
 }
 
-pred array_share<T>(k: lifetime_t, t: thread_id_t, l: *T, length: usize) =
-    if length == 0 {
-        true
-    } else {
-        [_](<T>.share(k, t, l)) &*& [_]array_share(k, t, l + 1, length - 1)
-    };
-
 lem array_share_mono<T>(k: lifetime_t, k1: lifetime_t, l: *T)
     req [_]array_share(k, ?t, l, ?length) &*& type_interp::<T>() &*& lifetime_inclusion(k1, k) == true;
     ens type_interp::<T>() &*& [_]array_share(k1, t, l, length);
