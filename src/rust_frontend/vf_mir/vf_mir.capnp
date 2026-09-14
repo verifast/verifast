@@ -767,6 +767,13 @@ struct TerminatorKind {
         unwindAction @2: UnwindAction;
     }
 
+    struct AssertData {
+        cond @0: Operand;
+        expected @1: Bool;
+        target @2: BasicBlockId;
+        unwindAction @3: UnwindAction;
+    }
+
     union {
         goto @0: BasicBlockId;
         switchInt @1: SwitchIntData;
@@ -777,7 +784,7 @@ struct TerminatorKind {
         call @4: FnCallData;
         drop @5: DropData;
         tailCall @8: Void;
-        assert @9: Void;
+        assert @9: AssertData;
         yield @10: Void;
         coroutineDrop @11: Void;
         falseEdge @12: Void;

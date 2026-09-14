@@ -2668,7 +2668,11 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             Rocq_writer.rocq_print_string_literal TranslatorArgs.rocq_writer t
       end;
       let* main_stmt, targets =
-        match discr_ty.vf_ty with
+        let rec unwrap_const = function
+          | Ast.ConstTypeExpr (_, te) -> unwrap_const te
+          | te -> te
+        in
+        match unwrap_const discr_ty.vf_ty with
         | Ast.ManifestTypeExpr ((*loc*) _, Ast.Bool) -> (
             match (values, targets) with
             | [ v ], [ false_tgt; true_tgt ] when Stdint.Uint128.(zero = DecoderAux.uint128_get v)
@@ -2714,6 +2718,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               ]
             in
             Ok (Ast.SwitchStmt (loc, discr, clauses @ default_clause), targets)
+        | _ ->
+            Ast.static_error loc "Todo: SwitchInt for this discriminant type" None
       in
       if ListAux.is_empty tmp_rvalue_binders then Ok (main_stmt, targets)
       else
@@ -2798,6 +2804,34 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               @ freeze_stmts,
               Mir.GotoTerminator (loc, target),
               [ target ] )
+      | Assert assert_data_cpn ->
+          (* `Assert { cond, expected, target, unwind }`: continue at `target` if `cond == expected`,
+             otherwise panic (i.e. unwind). With -ignore_unwind_paths the panicking branch is
+             modelled as an abort, as the `Terminate` unwind action is. *)
+          let open AssertData in
+          let* tmp_rvalue_binders, [ cond ] =
+            translate_operands [ (cond_get assert_data_cpn, loc) ]
+          in
+          let expected = expected_get assert_data_cpn in
+          let target = translate_basic_block_id (target_get assert_data_cpn) in
+          let fail_stmts, fail_targets =
+            if TranslatorArgs.ignore_unwind_paths then
+              ( [
+                  Ast.ExprStmt
+                    (Ast.CallExpr (loc, "std::process::abort", [], [], [], Ast.Static));
+                ],
+                [] )
+            else translate_unwind_action (unwind_action_get assert_data_cpn) loc
+          in
+          let goto_target = [ Ast.GotoStmt (loc, target) ] in
+          let if_stmt =
+            if expected then Ast.IfStmt (loc, cond, goto_target, fail_stmts)
+            else Ast.IfStmt (loc, cond, fail_stmts, goto_target)
+          in
+          Ok
+            ( [ Ast.BlockStmt (loc, [], tmp_rvalue_binders @ [ if_stmt ], loc, ref []) ],
+              Mir.EncodedTerminator,
+              target :: fail_targets )
       | UnwindResume ->
           Ok
             ( [
