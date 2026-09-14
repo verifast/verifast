@@ -217,6 +217,7 @@ module Mir = struct
         fields : D.aggregate_kind_adt_data_field_info list;
       }
     | AggKindTuple
+    | AggKindClosure
 
   type field_def_tr = {
     name : string;
@@ -1778,9 +1779,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | FnDef fn_def_ty_cpn -> translate_fn_def_ty fn_def_ty_cpn loc
     | FnPtr fn_ptr_ty_cpn -> translate_fn_ptr_ty fn_ptr_ty_cpn loc
     | Dynamic _ -> Ast.static_error loc "Dynamic types are not yet supported" None
-    | Closure _ ->
-        Ast.static_error loc "Closure types are not yet supported" None
-        (* CAVEAT: Once we allow closure types to appear as function call generic arguments, we must also verify closure bodies. *)
+    | Closure closure_ty_cpn ->
+        (* This translation is sound provided that closures are consumed only by calls and such calls are rejected by VeriFast. *)
+        let vf_ty = Ast.ManifestTypeExpr (loc, Ast.StructType (TrTyTuple.tuple0_name, [])) in
+        Ok { Mir.vf_ty; interp = RustBelt.emp_ty_interp loc }
     | CoroutineClosure ->
         Ast.static_error loc "Coroutine closure types are not yet supported"
           None
@@ -2205,6 +2207,27 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let translate_fn_call_rexpr (callee_cpn : OperandRd.t)
         (args_cpn : OperandRd.t list) (call_loc : Ast.loc) (fn_loc : Ast.loc)
         (ghost_generic_arg_list_opt_cpn : OptionRd.t) =
+      let has_closure_substs =
+        match D.decode_operand callee_cpn with
+          Constant {const = Val {ty = {kind = FnDef { id = { name }; substs }}}} ->
+            Printf.printf "%s\n" (String.concat ", " (List.map (fun arg -> string_of_generic_arg (decode_generic_arg arg)) substs));
+            List.exists
+              (fun arg -> match (arg : D.generic_arg) with { kind = Type { kind = Closure _ } } -> true | _ -> false)
+              substs
+        | _ -> false
+      in
+      if has_closure_substs then
+        Ok
+          ( [],
+            FnCallResult
+              (Ast.CallExpr
+                  ( fn_loc,
+                    "#verifast_call_with_closure_genargs",
+                    [],
+                    [],
+                    [],
+                    Static )) )
+      else
       (* Todo @Nima: There should be a way to get separated source spans for args *)
       let args = List.map (fun arg_cpn -> (arg_cpn, fn_loc)) args_cpn in
       let* tmp_rvalue_binders, args =
@@ -2935,8 +2958,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           let fields = fields_get_list adt_data_cpn |> List.map D.decode_aggregate_kind_adt_data_field_info in
           Ok Mir.(AggKindAdt { adt_kind; adt_name; variant_name; fields })
       | Closure _ ->
-          failwith "Todo: AggregateKind::Closure"
-          (* CAVEAT: Once we allow closure values, we must also check closure bodies. *)
+          Ok Mir.(AggKindClosure)
       | Coroutine -> failwith "Todo: AggregateKind::Coroutine"
       | CoroutineClosure -> failwith "Todo: AggregateKind::CoroutineClosure"
       | RawPtr -> failwith "Todo: AggregateKind::RawPtr"
@@ -2994,6 +3016,11 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                 operand_exprs
             in
             tmp_rvalue_binders @ field_init_stmts
+          in
+          Ok (`TrRvalueAggregate init_stmts_builder)
+      | AggKindClosure ->
+          let init_stmts_builder (_lhs_place, _lhs_place_is_mutable) =
+            tmp_rvalue_binders
           in
           Ok (`TrRvalueAggregate init_stmts_builder)
       | AggKindAdt { adt_kind; adt_name; variant_name; fields } -> (
