@@ -108,7 +108,7 @@ let rec sexpr_of_type_ (t : type_) : sexpression =
                                         sexpr_of_type_ t;
                                         sexpr_of_type_ n ]
     | LiteralConstType n      -> List [ Symbol "type-literal-const";
-                                        Number (Big_int.big_int_of_int n) ]
+                                        Number (Z.to_big_int n) ]
     | BoxIdType               -> aux2 "type-box-id"
     | HandleIdType            -> aux2 "type-handle-id-type"
     | AnyType                 -> aux2 "AnyType"
@@ -143,7 +143,7 @@ let rec sexpr_of_type_expr : type_expr -> sexpression = function
   | StaticArrayTypeExpr (_, te, n) ->
       List [ Symbol "type-expr-static-array"; sexpr_of_type_expr te; sexpr_of_type_expr n ]
   | LiteralConstTypeExpr (_, n) ->
-      List [ Symbol "type-expr-literal-const"; Number (Big_int.big_int_of_int n) ]
+      List [ Symbol "type-expr-literal-const"; Number (Z.to_big_int n) ]
   | IdentTypeExpr (_, package, name) ->
       build_list
         [ Symbol "type-expr-ident" ]

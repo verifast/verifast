@@ -57,7 +57,7 @@ let rec of_type = function
 | ObjType (cn, ts) -> C ("ObjType", [S cn; of_list of_type ts])
 | ArrayType t -> C ("ArrayType", [of_type t])
 | StaticArrayType (t, n) -> C ("StaticArrayType", [of_type t; of_type n])
-| LiteralConstType n -> C ("LiteralConstType", [I n])
+| LiteralConstType n -> C ("LiteralConstType", [BigInt (Z.to_big_int n)])
 | BoxIdType -> c "BoxIdType"
 | HandleIdType -> c "HandleIdType"
 | AnyType -> c "AnyType"
@@ -185,7 +185,7 @@ let rec of_type_expr = function
     of_type_expr elemTp;
     of_type_expr nbElems
   ])
-| LiteralConstTypeExpr (l, n) -> C ("LiteralConstTypeExpr", [of_loc l; I n])
+| LiteralConstTypeExpr (l, n) -> C ("LiteralConstTypeExpr", [of_loc l; BigInt (Z.to_big_int n)])
 | FuncTypeExpr (l, retTp, params) ->
   C ("FuncTypeExpr", [
     of_loc l;

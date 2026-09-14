@@ -649,7 +649,7 @@ and
         (_, Kwd "]") 
       ] ->
       if sign_big_int size <= 0 then raise (ParseException (lsize, "Array must have size > 0."));
-      fun t -> f (StaticArrayTypeExpr (l, t, LiteralConstTypeExpr (lsize, int_of_big_int size)))
+      fun t -> f (StaticArrayTypeExpr (l, t, LiteralConstTypeExpr (lsize, Z.of_big_int size)))
     end
     ]; 
     [%l f = parse_declarator_suffix f]
@@ -670,7 +670,7 @@ and
   let tx =
     match tx, init with
       ArrayTypeExpr (l, elemTp), Some (InitializerList (_, es)) when language = CLang ->
-      StaticArrayTypeExpr (l, elemTp, LiteralConstTypeExpr (l, List.length es))
+      StaticArrayTypeExpr (l, elemTp, LiteralConstTypeExpr (l, Z.of_int (List.length es)))
     | _ -> tx
   in
   register_varname x;
@@ -1292,7 +1292,7 @@ and
       let t =
         match t, init with
           ArrayTypeExpr (l, elemTp), Some (InitializerList (_, es)) ->
-          StaticArrayTypeExpr (l, elemTp, LiteralConstTypeExpr (l, List.length es))
+          StaticArrayTypeExpr (l, elemTp, LiteralConstTypeExpr (l, Z.of_int (List.length es)))
         | _ -> t
       in
       Global (l, t, g, init)
@@ -2144,7 +2144,7 @@ and parse_array_braces te = function%parser
         [%l te = parse_array_braces te] 
       ] ->
         if sign_big_int size <= 0 then raise (ParseException (lsize, "Array must have size > 0."));
-        StaticArrayTypeExpr (l, te, LiteralConstTypeExpr (l, int_of_big_int size))
+        StaticArrayTypeExpr (l, te, LiteralConstTypeExpr (l, Z.of_big_int size))
     | [ (_, Kwd "]") ] ->
       ArrayTypeExpr (l, te)
     end
@@ -2194,7 +2194,7 @@ and
     let tx =
       match tx, init with
         ArrayTypeExpr (l, elemTp), Some (InitializerList (_, es)) when language = CLang ->
-        StaticArrayTypeExpr (l, elemTp, LiteralConstTypeExpr (l, List.length es))
+        StaticArrayTypeExpr (l, elemTp, LiteralConstTypeExpr (l, Z.of_int (List.length es)))
       | _ -> tx
     in
     DeclStmt(type_expr_loc te, (lx, Some tx, x, init, (ref false, ref None))::ds)

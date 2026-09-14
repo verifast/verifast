@@ -1209,13 +1209,27 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
 
   and slice_ref_ty_info loc lft mut elem_ty_info =
     let open Ast in
+    let lft_expr = Rust_parser.expr_of_lft_param_expr loc lft in
+    let slice_ty_expr = SliceTypeExpr (loc, elem_ty_info.Mir.vf_ty) in
+    let rust_mut = mut in
     let mut = match mut with Mir.Not -> Shared | Mir.Mut -> Mutable in
     let vf_ty =
-      RustRefTypeExpr (loc, lft, mut, SliceTypeExpr (loc, elem_ty_info.Mir.vf_ty))
+      RustRefTypeExpr (loc, lft, mut, slice_ty_expr)
     in
     let size = SizeofExpr (loc, TypeExpr vf_ty) in
-    let own tid vs =
-      Error "Expressing ownership of &[_] values is not yet supported"
+    let own tid v =
+      match rust_mut with
+      | Mir.Not ->
+        Ok
+          (CoefAsn
+             ( loc,
+               DummyPat,
+               ExprCallExpr
+                 ( loc,
+                   TypePredExpr (loc, slice_ty_expr, "share"),
+                   [ LitPat lft_expr; LitPat tid; LitPat v ] ) ))
+      | Mir.Mut ->
+        Error "Expressing ownership of &mut [_] values is not yet supported"
     in
     let shr lft tid l =
       Error "Expressing shared ownership of &[_] values is not yet supported"
@@ -1253,8 +1267,20 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           | Leaf {data; size} ->
               let v = DecoderAux.uint128_get data in
               begin match ty, size with
-                {kind=UInt USize}, 8 ->
-                  Ast.LiteralConstTypeExpr (loc, Stdint.Uint128.to_int v)
+                {kind=UInt _}, _ ->
+                  Ast.LiteralConstTypeExpr (loc, Z.of_uint128 v)
+              | {kind=Bool}, 1 ->
+                  Ast.LiteralConstTypeExpr (loc, Z.of_uint128 v)
+              | {kind=Int _}, _ ->
+                  (* Sign-extend the [size]-byte two's-complement value. *)
+                  let bits = 8 * size in
+                  let i = Stdint.Int128.of_uint128 v in
+                  let i =
+                    if bits < 128 then
+                      Stdint.Int128.shift_right (Stdint.Int128.shift_left i (128 - bits)) (128 - bits)
+                    else i
+                  in
+                  Ast.LiteralConstTypeExpr (loc, Z.of_int128 i)
               | _ -> 
                   failwith "Unsupported constant type or size"
               end
@@ -1672,7 +1698,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     in
     let vf_ty =
       Ast.StaticArrayTypeExpr
-        (loc, elem_ty, LiteralConstTypeExpr (loc, Big_int.int_of_big_int len))
+        (loc, elem_ty, LiteralConstTypeExpr (loc, Z.of_big_int len))
     in
     let size = Ast.SizeofExpr (loc, TypeExpr vf_ty) in
     let own tid vs =
@@ -2116,6 +2142,21 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           Rocq_writer.rocq_print_application TranslatorArgs.rocq_writer "Constant" @@ fun () ->
           Rocq_writer.rocq_print_argument TranslatorArgs.rocq_writer @@ fun () ->
           translate_const_operand constant_cpn
+      | RuntimeChecks checks_cpn ->
+          begin match VfMirRd.RuntimeChecks.get checks_cpn with
+            UbChecks ->
+              let expr = Ast.CallExpr (loc, "std::intrinsics::ub_checks", [], [], [], Static) in
+              let expr =
+                if TranslatorArgs.ignore_unwind_paths then
+                  expr
+                else
+                  Ast.CallExpr (loc, "fn_outcome_result", [], [], [ LitPat expr ], Static)
+              in
+              Ok (`TrOperandCopy expr)
+          | _ ->
+              Ast.static_error loc
+                "Nullary operations are not yet supported" None
+          end
       | Undefined _ -> Error (`TrOperand "Unknown Mir Operand kind")
 
     let translate_operands_core (is_variable_length : bool) (oprs : (OperandRd.t * Ast.loc) list) =
@@ -2433,6 +2474,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                       (CallExpr
                          (fn_loc, "ref_origin", [], [], [ LitPat arg ], Static))
                   )
+            | "std::cell::UnsafeCell::<T>::into_inner" ->
+                let [ arg ] = args in Ok (tmp_rvalue_binders, FnCallResult arg)
             | "std::str::<impl str>::as_ptr" ->
                 let [ arg_cpn ] = args_cpn in
                 let [ arg ] = args in
@@ -2648,7 +2691,11 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             Rocq_writer.rocq_print_string_literal TranslatorArgs.rocq_writer t
       end;
       let* main_stmt, targets =
-        match discr_ty.vf_ty with
+        let rec unwrap_const = function
+          | Ast.ConstTypeExpr (_, te) -> unwrap_const te
+          | te -> te
+        in
+        match unwrap_const discr_ty.vf_ty with
         | Ast.ManifestTypeExpr ((*loc*) _, Ast.Bool) -> (
             match (values, targets) with
             | [ v ], [ false_tgt; true_tgt ] when Stdint.Uint128.(zero = DecoderAux.uint128_get v)
@@ -2694,6 +2741,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               ]
             in
             Ok (Ast.SwitchStmt (loc, discr, clauses @ default_clause), targets)
+        | _ ->
+            Ast.static_error loc "Todo: SwitchInt for this discriminant type" None
       in
       if ListAux.is_empty tmp_rvalue_binders then Ok (main_stmt, targets)
       else
@@ -2778,6 +2827,34 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               @ freeze_stmts,
               Mir.GotoTerminator (loc, target),
               [ target ] )
+      | Assert assert_data_cpn ->
+          (* `Assert { cond, expected, target, unwind }`: continue at `target` if `cond == expected`,
+             otherwise panic (i.e. unwind). With -ignore_unwind_paths the panicking branch is
+             modelled as an abort, as the `Terminate` unwind action is. *)
+          let open AssertData in
+          let* tmp_rvalue_binders, [ cond ] =
+            translate_operands [ (cond_get assert_data_cpn, loc) ]
+          in
+          let expected = expected_get assert_data_cpn in
+          let target = translate_basic_block_id (target_get assert_data_cpn) in
+          let fail_stmts, fail_targets =
+            if TranslatorArgs.ignore_unwind_paths then
+              ( [
+                  Ast.ExprStmt
+                    (Ast.CallExpr (loc, "std::process::abort", [], [], [], Ast.Static));
+                ],
+                [] )
+            else translate_unwind_action (unwind_action_get assert_data_cpn) loc
+          in
+          let goto_target = [ Ast.GotoStmt (loc, target) ] in
+          let if_stmt =
+            if expected then Ast.IfStmt (loc, cond, goto_target, fail_stmts)
+            else Ast.IfStmt (loc, cond, fail_stmts, goto_target)
+          in
+          Ok
+            ( [ Ast.BlockStmt (loc, [], tmp_rvalue_binders @ [ if_stmt ], loc, ref []) ],
+              Mir.EncodedTerminator,
+              target :: fail_targets )
       | UnwindResume ->
           Ok
             ( [
@@ -3186,23 +3263,6 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           let* operandl = tr_operand operandl in
           let* operandr = tr_operand operandr in
           Ok (`TrRvalueBinaryOp (operator, operandl, operandr))
-      | NullaryOp null_op_cpn ->
-          let open VfMirRd.NullOp in
-          let runtime_checks_cpn = runtime_checks_get null_op_cpn in
-          begin match VfMirRd.RuntimeChecks.get runtime_checks_cpn with
-            UbChecks ->
-              let expr = Ast.CallExpr (loc, "std::intrinsics::ub_checks", [], [], [], Static) in
-              let expr =
-                if TranslatorArgs.ignore_unwind_paths then
-                  expr
-                else
-                  Ast.CallExpr (loc, "fn_outcome_result", [], [], [ LitPat expr ], Static)
-              in
-              Ok (`TrRvalueExpr expr)
-          | _ ->
-              Ast.static_error loc
-                "Nullary operations are not yet supported" None
-          end
       | UnaryOp un_op_data_cpn ->
           let* operator, operand =
             translate_unary_operation un_op_data_cpn loc

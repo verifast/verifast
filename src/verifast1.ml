@@ -2051,11 +2051,6 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let s = check s in
         StaticArrayType(tp, s)
     | LiteralConstTypeExpr (l, n) ->
-      if n < 0 then static_error l "Const generic argument must be nonnegative" None;
-      begin match ptr_width with
-        LitWidth k -> if lt_big_int (max_unsigned_big_int k) (big_int_of_int n) then static_error l "Const generic argument must be within limits of type 'usize'" None
-      | _ -> if 65535 < n then static_error l "Const generic argument must be within limits of type 'usize' on all supported targets, i.e. it must be at most 65535" None
-      end;
       LiteralConstType n
     | IdentTypeExpr (l, None, id) ->
       begin
@@ -5964,9 +5959,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let rec check e tp =
     match tp, e with
     | StaticArrayType (Int (Signed, CharRank), LiteralConstType n), StringLit (ls, s) ->
+      let n = Z.to_int n in
       if String.length s + 1 > n then static_error ls "String literal does not fit inside character array." None;
       e
     | StaticArrayType (elemTp, LiteralConstType elemCount), InitializerList (ll, es) ->
+      let elemCount = Z.to_int elemCount in
       let rec iter n es =
         match es with
           [] -> []
@@ -6369,8 +6366,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let tparam_typeid_varname tn = tn ^ "_typeid"
 
-  let usize_of_const_symb = lazy_purefuncsymb "usize_of_const"
-  let const_of_usize_symb = lazy_purefuncsymb "const_of_usize"
+  let int_of_const_symb = lazy_purefuncsymb "int_of_const"
+  let const_of_int_symb = lazy_purefuncsymb "const_of_int"
 
   let typeid_of_type_projection traitName traitArg_typeids assocTypeName t0_typeid =
     let g = Printf.sprintf "%s::%s_typeid" traitName assocTypeName in
@@ -6404,7 +6401,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let t0_typeid = typeid_of_core_core l msg env t0 in
     mk_rust_ref_typeid lft_typeid kind t0_typeid
   | StaticArrayType (elemTp, n) -> mk_array_typeid (typeid_of_core_core l msg env elemTp) (eval_const_type_core l msg env n)
-  | LiteralConstType n -> mk_app (const_of_usize_symb ()) [ctxt#mk_intlit n]
+  | LiteralConstType n -> mk_app (const_of_int_symb ()) [ctxt#mk_intlit_of_string (Z.to_string n)]
   | Bool -> bool_typeid_term
   | Float -> float_typeid_term
   | Double -> double_typeid_term
@@ -6453,8 +6450,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   | tp -> static_error l (Printf.sprintf "%sTaking the typeid of type '%s' is not yet supported" (msg ()) (string_of_type tp)) None
   and eval_const_type_core l msg env t =
     match t with
-      LiteralConstType n -> ctxt#mk_intlit n
-    | _ -> mk_app (usize_of_const_symb ()) [typeid_of_core_core l msg env t]
+      LiteralConstType n -> ctxt#mk_intlit_of_string (Z.to_string n)
+    | _ -> mk_app (int_of_const_symb ()) [typeid_of_core_core l msg env t]
 
   let no_msg _ = ""
   let typeid_of_core l env t = typeid_of_core_core l no_msg env t
@@ -6847,11 +6844,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   end;
                   begin match wend with
                     None -> ()
-                  | Some (LitPat (WIntLit (_, n))) when eq_big_int n (big_int_of_int elemCount) -> ()
-                  | _ -> static_error lslice (Printf.sprintf "End of slice, if specified, must equal array size (%d)" elemCount) None
+                  | Some (LitPat (WIntLit (_, n))) when eq_big_int n (Z.to_big_int elemCount) -> ()
+                  | _ -> static_error lslice (Printf.sprintf "End of slice, if specified, must equal array size (%d)" (Z.to_int elemCount)) None
                   end;
                   let elemtype, multiplier = check_slices elemtype wslices in
-                  elemtype, multiplier * elemCount
+                  elemtype, multiplier * Z.to_int elemCount
                 | _ ->
                   static_error lslice (Printf.sprintf "Cannot use a slice here to subscript an expression of type %s; array type expected" (string_of_type elemtype)) None
             in

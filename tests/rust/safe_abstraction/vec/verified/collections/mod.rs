@@ -41,7 +41,8 @@ impl TryReserveError {
         reason = "Uncertain how much info should be exposed",
         issue = "48043"
     )]
-    pub fn kind(&self) -> TryReserveErrorKind
+    #[rustc_const_unstable(feature = "const_heap", issue = "79597")]
+    pub const fn kind(&self) -> TryReserveErrorKind
     //@ req [?f](*self |-> ?err); // NOTE: This assumes that TryReserveError has no UnsafeCell inside.
     //@ ens [f](*self |-> err);
     //@ on_unwind_ens true;
@@ -53,7 +54,7 @@ impl TryReserveError {
 }
 
 /// Details of the allocation that caused a `TryReserveError`
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug)]
 #[unstable(
     feature = "try_reserve_kind",
     reason = "Uncertain how much info should be exposed",
@@ -83,6 +84,24 @@ pub enum TryReserveErrorKind {
     },
 }
 
+#[unstable(
+    feature = "try_reserve_kind",
+    reason = "Uncertain how much info should be exposed",
+    issue = "48043"
+)]
+#[rustc_const_unstable(feature = "const_heap", issue = "79597")]
+#[cfg(not(test))]
+impl const Clone for TryReserveErrorKind {
+    fn clone(&self) -> Self {
+        match self {
+            TryReserveErrorKind::CapacityOverflow => TryReserveErrorKind::CapacityOverflow,
+            TryReserveErrorKind::AllocError { layout, non_exhaustive: () } => {
+                TryReserveErrorKind::AllocError { layout: *layout, non_exhaustive: () }
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 pub use realalloc::collections::TryReserveErrorKind;
 
@@ -100,7 +119,7 @@ impl const From<TryReserveErrorKind> for TryReserveError {
     }
 }
 
-#[unstable(feature = "try_reserve_kind", reason = "new API", issue = "48043")]
+#[unstable(feature = "try_reserve_kind", issue = "48043")]
 #[rustc_const_unstable(feature = "const_convert", issue = "143773")]
 #[cfg(not(test))]
 impl const From<LayoutError> for TryReserveErrorKind {

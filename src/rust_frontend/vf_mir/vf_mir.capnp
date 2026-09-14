@@ -166,7 +166,7 @@ struct ParamConst {
 struct ValTree {
     union {
         leaf @0: ScalarInt;
-        branch @1: List(ValTree);
+        branch @1: List(TyConst);
     }
 }
 
@@ -545,6 +545,7 @@ struct Operand {
         copy @0: Place;
         move @1: Place;
         constant @2: ConstOperand;
+        runtimeChecks @3 : RuntimeChecks;
     }
 }
 
@@ -608,10 +609,6 @@ struct RuntimeChecks {
         contractChecks @1: Void;
         overflowChecks @2: Void;
     }
-}
-
-struct NullOp {
-    runtimeChecks @0: RuntimeChecks;
 }
 
 struct Rvalue {
@@ -706,7 +703,6 @@ struct Rvalue {
         rawPtr @2: RawPtrData;
         cast @3: CastData;
         binaryOp @4: BinaryOpData;
-        nullaryOp @11: NullOp;
         unaryOp @6: UnaryOpData;
         aggregate @5: AggregateData;
         discriminant @7: DiscriminantData;
@@ -771,6 +767,13 @@ struct TerminatorKind {
         unwindAction @2: UnwindAction;
     }
 
+    struct AssertData {
+        cond @0: Operand;
+        expected @1: Bool;
+        target @2: BasicBlockId;
+        unwindAction @3: UnwindAction;
+    }
+
     union {
         goto @0: BasicBlockId;
         switchInt @1: SwitchIntData;
@@ -781,7 +784,7 @@ struct TerminatorKind {
         call @4: FnCallData;
         drop @5: DropData;
         tailCall @8: Void;
-        assert @9: Void;
+        assert @9: AssertData;
         yield @10: Void;
         coroutineDrop @11: Void;
         falseEdge @12: Void;

@@ -112,6 +112,9 @@ cd safe_abstraction
   verifast -ignore_unwind_paths -ignore_ref_creation -allow_assume arc_u32.rs
   verifast -ignore_unwind_paths -ignore_ref_creation -allow_assume arc.rs
   verifast str.rs
+  verifast -ignore_unwind_paths test_division.rs
+  verifast test_const_generics.rs
+  verifast slice_ref.rs
   begin_sequential
     verifast -apply_quick_fix proof_obligs_quick_fix_test_result.rs proof_obligs_quick_fix_test.rs
     verifast -allow_assume proof_obligs_quick_fix_test_result.rs

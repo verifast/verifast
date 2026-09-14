@@ -290,15 +290,15 @@ lem array__to_array<T>(p: *T, vs: list<T>);
     req [?f]array_(p, ?count, map(some, vs));
     ens [f]array(p, count, vs);
 
-fix const_of_usize(n: usize) -> *_;
-fix usize_of_const(type_id: *_) -> usize;
+fix const_of_int(n: usize) -> *_;
+fix int_of_const(type_id: *_) -> i32;
 
-lem_auto usize_of_const_of_usize(n: usize);
+lem_auto int_of_const_of_int(n: i32);
     req true;
-    ens usize_of_const(const_of_usize(n)) == n;
+    ens int_of_const(const_of_int(n)) == n;
 
 fix Array_elems<T, N>(array: [T; N]) -> list<T>;
-// If `length(elems)` is not `usize_of_const(typeid(N))` then the result is unspecified.
+// If `length(elems)` is not `int_of_const(typeid(N))` then the result is unspecified.
 fix Array_of_elems<T, N>(elems: list<T>) -> [T; N];
 
 fix slice_elems<T>(slice: [T]) -> list<T>;
@@ -314,14 +314,14 @@ lem_auto slice_of_elems_slice_elems<T: ?Sized>(slice: [T]);
 
 lem Array__to_array_<T, N>(p: *[T; N]);
     req [?f](*p |-?-> ?array_);
-    ens [f](p as *T)[..usize_of_const(typeid(N))] |-?-> match array_ { none => repeat(nat_of_int(usize_of_const(typeid(N))), none), some(array) => map(some, Array_elems(array)) };
+    ens [f](p as *T)[..int_of_const(typeid(N))] |-?-> match array_ { none => repeat(nat_of_int(int_of_const(typeid(N))), none), some(array) => map(some, Array_elems(array)) };
 
 lem Array_to_array<T, N>(p: *[T; N]);
     req [?f](*p |-> ?array);
-    ens [f](p as *T)[..usize_of_const(typeid(N))] |-> Array_elems(array);
+    ens [f](p as *T)[..int_of_const(typeid(N))] |-> Array_elems(array);
 
 lem array_to_Array<T, N>(p: *[T; N]);
-    req [?f](p as *T)[..usize_of_const(typeid(N))] |-> ?elems;
+    req [?f](p as *T)[..int_of_const(typeid(N))] |-> ?elems;
     ens [f](*p |-> Array_of_elems(elems));
 
 lem from_u8s_<T>(p: *T);
@@ -386,6 +386,20 @@ fix is_valid_utf8(bs: list<u8>) -> bool {
 
 pred str_share(k: lifetime_t, t: thread_id_t, l: *str) = exists(?bs) &*& [_]frac_borrow(k, mk_array(l as *u8, l.len(), bs)) &*& is_valid_utf8(bs) == true;
 type_pred_def <str>.share = str_share;
+
+// Per-element shared ownership of an array of `length` elements, using <T>.share for each
+// element (so it is correct for all T, including types with interior mutability). Moved here
+// from tests/rust/safe_abstraction/vec/verified/vec/mod.rs, which keeps its lemmas about it.
+pred array_share<T>(k: lifetime_t, t: thread_id_t, l: *T, length: usize) =
+    if length == 0 { true }
+    else { [_](<T>.share(k, t, l)) &*& [_]array_share(k, t, l + 1, length - 1) };
+
+pred_ctor slice_share<T>()(k: lifetime_t, t: thread_id_t, l: *[T]) =
+    array_share::<T>(k, t, l as *T, l.len());
+type_pred_def for<T> <[T]>.share = slice_share::<T>;
+
+// <[T]>.own and <[T]>.full_borrow_content are not defined yet, so &mut [T] is not supported
+// yet (the translator reports it as such).
 
 pred ghost_rec_perm(depth: i32;); // Permission to perform `depth` nested lemma function pointer calls.
 
