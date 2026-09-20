@@ -803,6 +803,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               gen_args
               |> Util.flatmap @@ function
                  | Mir.GenArgType arg_ty -> [ arg_ty.vf_ty ]
+                 | Mir.GenArgConst ty_expr -> [ ty_expr ]
                  | _ -> []
             in
             let lft_args =
@@ -886,10 +887,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                         "Lifetime arguments are not yet supported here",
                         None ))
              | Mir.GenArgType arg_ty -> arg_ty.vf_ty
-             | Mir.GenArgConst _ ->
-                 raise
-                   (Ast.StaticError
-                      (loc, "Const arguments are not yet supported here", None))
+             | Mir.GenArgConst ty_expr -> ty_expr
         in
         let vf_ty = ConstructedTypeExpr (loc, name, targs) in
         let sz_expr = SizeofExpr (loc, TypeExpr vf_ty) in
@@ -1278,6 +1276,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | Const ty_const_cpn ->
       let ty_expr =
         match ty_const_cpn.kind with
+        (* A const generic parameter used as a const generic argument; it is a
+           VeriFast type parameter, just like a type parameter is. *)
+        | Param {name} -> Ast.IdentTypeExpr (loc, None, name)
         | Value {ty; val_tree} -> 
           begin match val_tree with
           | Leaf {data; size} ->
@@ -6109,17 +6110,22 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
            with
            | Lifetime -> Ok (`Lifetime name)
            | Type -> Ok (`Type name)
-           | Const ->
-               raise
-                 (Ast.StaticError
-                    ( l,
-                      "Structs with const parameters are not yet supported",
-                      None ))
+           | Const -> Ok (`Const name)
       in
+      (* Type and const parameters are kept in declaration order, which is the order
+         in which rustc supplies the corresponding generic arguments at use sites. *)
       let tparams =
+        Util.flatmap (function (`Type x | `Const x) -> [ x ] | _ -> []) generics
+      in
+      let type_tparams =
         Util.flatmap (function `Type x -> [ x ] | _ -> []) generics
       in
-      let tparams_with_bounds = Verifast0.tparams_with_default_bounds_exprs tparams in
+      let tparams_with_bounds =
+        generics |> Util.flatmap @@ function
+          | `Type x -> [ (x, { Ast.sized = Verifast0.tparam_is_uppercase x }) ]
+          | `Const x -> [ (x, { Ast.sized = false }) ]
+          | _ -> []
+      in
       let lft_params =
         Util.flatmap (function `Lifetime x -> [ x ] | _ -> []) generics
       in
@@ -6145,7 +6151,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         |> List.map decode_clause
       in
       let sized_tparams = compute_sized_tparams clauses in
-      let unsized_tparams = List.filter (fun x -> not (List.mem x sized_tparams)) tparams in
+      let unsized_tparams = List.filter (fun x -> not (List.mem x sized_tparams)) type_tparams in
       let send_tparams = compute_send_tparams clauses in
       let tparams_targs =
         List.map (fun x -> Ast.IdentTypeExpr (def_loc, None, x)) vf_tparams
