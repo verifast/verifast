@@ -111,7 +111,6 @@ let string_of_rvalue = function
     Printf.sprintf "%s(%s)" (string_of_aggregate_kind aggregate_kind) (String.concat ", " (List.map string_of_operand operands))
   | Discriminant {place} ->
     Printf.sprintf "discriminant(%s)" (string_of_place place)
-  | ShallowInitBox -> "<ShallowInitBox>"
 
 let string_of_statement ({source_info; kind}: statement) =
   match kind with

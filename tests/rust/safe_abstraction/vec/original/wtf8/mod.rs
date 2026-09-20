@@ -284,7 +284,7 @@ impl Wtf8Buf {
     /// like concatenating ill-formed UTF-16 strings effectively would.
     #[inline]
     pub fn push_wtf8(&mut self, other: &Wtf8) {
-        match ((&*self).final_lead_surrogate(), other.initial_trail_surrogate()) {
+        match ((*self).final_lead_surrogate(), other.initial_trail_surrogate()) {
             // Replace newly paired surrogates by a supplementary code point.
             (Some(lead), Some(trail)) => {
                 let len_without_lead_surrogate = self.len() - 3;
@@ -322,7 +322,7 @@ impl Wtf8Buf {
     #[inline]
     pub fn push(&mut self, code_point: CodePoint) {
         if let Some(trail) = code_point.to_trail_surrogate() {
-            if let Some(lead) = (&*self).final_lead_surrogate() {
+            if let Some(lead) = (*self).final_lead_surrogate() {
                 let len_without_lead_surrogate = self.len() - 3;
                 self.bytes.truncate(len_without_lead_surrogate);
                 self.push_char(decode_surrogate_pair(lead, trail));
@@ -342,14 +342,18 @@ impl Wtf8Buf {
 
     /// Shortens a string to the specified length.
     ///
+    /// If `new_len` is greater than the string's current length, this has no
+    /// effect.
+    ///
     /// # Panics
     ///
-    /// Panics if `new_len` > current length,
-    /// or if `new_len` is not a code point boundary.
+    /// Panics if `new_len` does not lie on a code point boundary.
     #[inline]
     pub fn truncate(&mut self, new_len: usize) {
-        assert!(self.is_code_point_boundary(new_len));
-        self.bytes.truncate(new_len)
+        if new_len <= self.len() {
+            assert!(self.is_code_point_boundary(new_len));
+            self.bytes.truncate(new_len)
+        }
     }
 
     /// Consumes the WTF-8 string and tries to convert it to a vec of bytes.

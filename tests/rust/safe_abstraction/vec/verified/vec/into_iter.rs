@@ -9,8 +9,7 @@ use core::num::NonZero;
 use core::ops::Deref;
 use core::panic::UnwindSafe;
 use core::ptr::{self, NonNull};
-use core::slice::{self};
-use core::{array, fmt};
+use core::{array, fmt, slice};
 
 #[cfg(not(no_global_oom_handling))]
 use super::AsVecIntoIter;
@@ -116,7 +115,7 @@ impl<T, A: Allocator> IntoIter<T, A> {
     }
 
     fn as_raw_mut_slice(&mut self) -> *mut [T] {
-        ptr::slice_from_raw_parts_mut(self.ptr.as_ptr(), self.len())
+        self.ptr.as_ptr().cast_slice(self.len())
     }
 
     /// Drops remaining elements and relinquishes the backing allocation.
@@ -160,10 +159,49 @@ impl<T, A: Allocator> IntoIter<T, A> {
     }
 
     /// Forgets to Drop the remaining elements while still allowing the backing allocation to be freed.
+    ///
+    /// This method does not consume `self`, and leaves deallocation to `impl Drop for IntoIter`.
+    /// If consuming `self` is possible, consider calling
+    /// [`Self::forget_remaining_elements_and_dealloc()`] instead.
     pub(crate) fn forget_remaining_elements(&mut self) {
         // For the ZST case, it is crucial that we mutate `end` here, not `ptr`.
         // `ptr` must stay aligned, while `end` may be unaligned.
         self.end = self.ptr.as_ptr();
+    }
+
+    /// Forgets to Drop the remaining elements and frees the backing allocation.
+    /// Consuming version of [`Self::forget_remaining_elements()`].
+    ///
+    /// This can be used in place of `drop(self)` when `self` is known to be exhausted,
+    /// to avoid producing a needless `drop_in_place::<[T]>()`.
+    #[inline]
+    pub(crate) fn forget_remaining_elements_and_dealloc(self) {
+        let mut this = ManuallyDrop::new(self);
+        // SAFETY: `this` is in ManuallyDrop, so it will not be double-freed.
+        unsafe {
+            this.dealloc_only();
+        }
+    }
+
+    /// Frees the allocation, without checking or dropping anything else.
+    ///
+    /// The safe version of this method is [`Self::forget_remaining_elements_and_dealloc()`].
+    /// This function exists only to share code between that method and the `impl Drop`.
+    ///
+    /// # Safety
+    ///
+    /// This function must only be called with an [`IntoIter`] that is not going to be dropped
+    /// or otherwise used in any way, either because it is being forgotten or because its `Drop`
+    /// is already executing; otherwise a double-free will occur, and possibly a read from freed
+    /// memory if there are any remaining elements.
+    #[inline]
+    unsafe fn dealloc_only(&mut self) {
+        unsafe {
+            // SAFETY: our caller promises not to touch `*self` again
+            let alloc = ManuallyDrop::take(&mut self.alloc);
+            // RawVec handles deallocation
+            let _ = RawVec::from_nonnull_in(self.buf, self.cap, alloc);
+        }
     }
 
     #[cfg(not(no_global_oom_handling))]
@@ -244,7 +282,7 @@ impl<T, A: Allocator> Iterator for IntoIter<T, A> {
     #[inline]
     fn advance_by(&mut self, n: usize) -> Result<(), NonZero<usize>> {
         let step_size = self.len().min(n);
-        let to_drop = ptr::slice_from_raw_parts_mut(self.ptr.as_ptr(), step_size);
+        let to_drop = self.ptr.as_ptr().cast_slice(step_size);
         if T::IS_ZST {
             // See `next` for why we sub `end` here.
             self.end = self.end.wrapping_byte_sub(step_size);
@@ -329,6 +367,12 @@ impl<T, A: Allocator> Iterator for IntoIter<T, A> {
                 accum = f(accum, tmp);
             }
         }
+
+        // There are in fact no remaining elements to forget, but by doing this we can avoid
+        // potentially generating a needless loop to drop the elements that cannot exist at
+        // this point.
+        self.forget_remaining_elements_and_dealloc();
+
         accum
     }
 
@@ -402,6 +446,47 @@ impl<T, A: Allocator> DoubleEndedIterator for IntoIter<T, A> {
     }
 
     #[inline]
+    fn next_chunk_back<const N: usize>(&mut self) -> Result<[T; N], core::array::IntoIter<T, N>> {
+        let mut raw_ary = [const { MaybeUninit::uninit() }; N];
+
+        let len = self.len();
+
+        if T::IS_ZST {
+            if len < N {
+                self.forget_remaining_elements();
+                // Safety: ZSTs can be conjured ex nihilo, only the amount has to be correct
+                return Err(unsafe { array::IntoIter::new_unchecked(raw_ary, N - len..N) });
+            }
+
+            self.end = self.end.wrapping_byte_sub(N);
+            // Safety: ditto
+            return Ok(unsafe { MaybeUninit::array_assume_init(raw_ary) });
+        }
+
+        if len < N {
+            // Safety: `len` indicates that this many elements are available and we just checked that
+            // it fits into the array.
+            unsafe {
+                ptr::copy_nonoverlapping(self.ptr.as_ptr(), raw_ary.as_mut_ptr() as *mut T, len);
+                self.forget_remaining_elements();
+                return Err(array::IntoIter::new_unchecked(raw_ary, 0..len));
+            }
+        }
+
+        // Safety: `len` is larger than the array size. Copy a fixed amount here to fully initialize
+        // the array.
+        unsafe {
+            ptr::copy_nonoverlapping(
+                self.ptr.add(len - N).as_ptr(),
+                raw_ary.as_mut_ptr() as *mut T,
+                N,
+            );
+            self.end = self.end.sub(N);
+            Ok(MaybeUninit::array_assume_init(raw_ary))
+        }
+    }
+
+    #[inline]
     fn advance_back_by(&mut self, n: usize) -> Result<(), NonZero<usize>> {
         let step_size = self.len().min(n);
         if T::IS_ZST {
@@ -413,9 +498,9 @@ impl<T, A: Allocator> DoubleEndedIterator for IntoIter<T, A> {
         }
         let to_drop = if T::IS_ZST {
             // ZST may cause unalignment
-            ptr::slice_from_raw_parts_mut(ptr::NonNull::<T>::dangling().as_ptr(), step_size)
+            ptr::NonNull::<T>::dangling().as_ptr().cast_slice(step_size)
         } else {
-            ptr::slice_from_raw_parts_mut(self.end as *mut T, step_size)
+            self.end.cast::<T>().cast_mut().cast_slice(step_size)
         };
         // SAFETY: same as for advance_by()
         unsafe {
@@ -466,8 +551,8 @@ where
 
 #[doc(hidden)]
 #[unstable(issue = "none", feature = "std_internals")]
-#[rustc_unsafe_specialization_marker]
-pub trait NonDrop {}
+#[unsafe(rustc_allow_lifetime_dependent_specialization)]
+trait NonDrop {}
 
 // T: Copy as approximation for !Drop since get_unchecked does not advance self.ptr
 // and thus we can't implement drop-handling
@@ -501,10 +586,7 @@ unsafe impl<#[may_dangle] T, A: Allocator> Drop for IntoIter<T, A> {
         impl<T, A: Allocator> Drop for DropGuard<'_, T, A> {
             fn drop(&mut self) {
                 unsafe {
-                    // `IntoIter::alloc` is not used anymore after this and will be dropped by RawVec
-                    let alloc = ManuallyDrop::take(&mut self.0.alloc);
-                    // RawVec handles deallocation
-                    let _ = RawVec::from_nonnull_in(self.0.buf, self.0.cap, alloc);
+                    self.0.dealloc_only();
                 }
             }
         }

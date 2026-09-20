@@ -39,6 +39,7 @@
 #[stable(feature = "rust1", since = "1.0.0")]
 #[rustc_diagnostic_item = "vec_macro"]
 #[allow_internal_unstable(rustc_attrs, liballoc_internals)]
+#[rustc_diagnostic_opaque]
 macro_rules! vec {
     () => (
         $crate::vec::Vec::new()
@@ -47,10 +48,16 @@ macro_rules! vec {
         $crate::vec::from_elem($elem, $n)
     );
     ($($x:expr),+ $(,)?) => (
-        <[_]>::into_vec(
-            // Using the intrinsic produces a dramatic improvement in stack usage for
-            // unoptimized programs using this code path to construct large Vecs.
-            $crate::boxed::box_new([$($x),+])
+        // Using `write_box_via_move` produces a dramatic improvement in stack usage for unoptimized
+        // programs using this code path to construct large Vecs. We can't use `write_via_move`
+        // because this entire invocation has to remain a call chain without `let` bindings, or else
+        // inference and temporary lifetimes change and things break (see `vec-macro-rvalue-scope`,
+        // `vec-macro-coercions`, and `autoderef-vec-box-fn-36786` tests).
+        //
+        // `box_assume_init_into_vec_unsafe` isn't actually safe but the way we use it here is. We
+        // can't use an unsafe block as that would also wrap `$x`.
+        $crate::boxed::box_assume_init_into_vec_unsafe(
+            $crate::intrinsics::write_box_via_move($crate::boxed::Box::new_uninit(), [$($x),+])
         )
     );
 }
@@ -102,6 +109,7 @@ macro_rules! vec {
 #[stable(feature = "rust1", since = "1.0.0")]
 #[allow_internal_unstable(hint_must_use, liballoc_internals)]
 #[rustc_diagnostic_item = "format_macro"]
+#[rustc_diagnostic_opaque]
 macro_rules! format {
     ($($arg:tt)*) => {
         $crate::__export::must_use({

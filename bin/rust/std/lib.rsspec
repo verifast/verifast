@@ -494,6 +494,37 @@ mod mem {
         
     }
     
+    struct Alignment;
+    
+    //@ fix Alignment::as_nonzero_usize(align: Alignment) -> std::num::NonZero<usize>;
+    //@ fix Alignment::new(align: usize) -> Alignment;
+    
+    /*@
+    
+    lem Alignment_as_nonzero_usize_new(align: usize);
+        req is_power_of_2(align) == true;
+        ens Alignment::new(align).as_nonzero_usize().get() == align;
+    
+    lem Alignment_is_power_of_2(align: Alignment);
+        req true;
+        ens is_power_of_2(align.as_nonzero_usize().get()) == true;
+    
+    @*/
+    
+    impl Alignment {
+    
+        fn as_nonzero_usize(self: Alignment) -> std::num::NonZero<usize>;
+        //@ req true;
+        //@ ens result == self.as_nonzero_usize();
+        //@ on_unwind_ens false;
+        
+        fn of<T>() -> Alignment;
+        //@ req true;
+        //@ ens result == Alignment::new(std::mem::align_of::<T>());
+        //@ on_unwind_ens false;
+        
+    }
+    
     mod verifast {
     
         fn unfreeze<T>(ptr: *T);
@@ -733,37 +764,6 @@ mod ptr {
     
     }
     
-    struct Alignment;
-    
-    //@ fix Alignment::as_nonzero(align: Alignment) -> std::num::NonZero<usize>;
-    //@ fix Alignment::new(align: usize) -> Alignment;
-    
-    /*@
-    
-    lem Alignment_as_nonzero_new(align: usize);
-        req is_power_of_2(align) == true;
-        ens Alignment::new(align).as_nonzero().get() == align;
-    
-    lem Alignment_is_power_of_2(align: Alignment);
-        req true;
-        ens is_power_of_2(align.as_nonzero().get()) == true;
-    
-    @*/
-    
-    impl Alignment {
-    
-        fn as_nonzero(self: Alignment) -> std::num::NonZero<usize>;
-        //@ req true;
-        //@ ens result == self.as_nonzero();
-        //@ on_unwind_ens false;
-        
-        fn of<T>() -> Alignment;
-        //@ req true;
-        //@ ens result == Alignment::new(std::mem::align_of::<T>());
-        //@ on_unwind_ens false;
-        
-    }
-    
 }
 
 mod slice {
@@ -899,9 +899,9 @@ mod alloc {
         //@ ens [f](*self |-> l) &*& result == l.align() &*& is_power_of_2(result) == true;
         //@ on_unwind_ens false;
         
-        fn alignment<'a>(self: &'a Layout) -> std::ptr::Alignment;
+        fn alignment<'a>(self: &'a Layout) -> std::mem::Alignment;
         //@ req [?f](*self |-> ?l);
-        //@ ens [f](*self |-> l) &*& result == std::ptr::Alignment::new(l.align()) &*& result.as_nonzero().get() == l.align();
+        //@ ens [f](*self |-> l) &*& result == std::mem::Alignment::new(l.align()) &*& result.as_nonzero_usize().get() == l.align();
 
         fn repeat<'a>(self: &'a Layout, n: usize) -> std::result::Result<(Layout, usize), LayoutError>;
         //@ req [?f](*self |-> ?l);
@@ -1682,7 +1682,10 @@ mod sync {
             SeqCst
         }
 
-        struct AtomicUsize;
+        // `AtomicUsize` etc. are now type aliases for `Atomic<T>`.
+        struct Atomic<T>;
+        
+        type AtomicUsize = Atomic<usize>;
 
         /*@
         
@@ -1694,7 +1697,7 @@ mod sync {
             req true;
             ens std::mem::align_of::<AtomicUsize>() == std::mem::size_of::<usize>();
         
-        fix AtomicUsize::inner(v: AtomicUsize) -> usize;
+        fix Atomic::inner<T>(v: Atomic<T>) -> T;
         pred AtomicUsize(p: *AtomicUsize; v: usize) = *p |-> ?v_ &*& v == v_.inner();
         
         lem AtomicUsize_to_usize(p: *AtomicUsize);
@@ -1741,7 +1744,7 @@ mod sync {
         
         @*/
 
-        impl AtomicUsize {
+        impl Atomic<usize> {
             fn new(v: usize) -> AtomicUsize;
             //@ req true;
             //@ ens result.inner() == v;

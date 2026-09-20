@@ -1,18 +1,19 @@
 use core::async_iter::AsyncIterator;
-use core::iter::FusedIterator;
+use core::iter::{FusedIterator, TrustedLen};
+use core::num::NonZero;
 use core::pin::Pin;
 use core::slice;
 use core::task::{Context, Poll};
 
-use crate::alloc::Allocator;
+use crate::alloc::{Allocator, Global};
 #[cfg(not(no_global_oom_handling))]
 use crate::borrow::Cow;
 use crate::boxed::Box;
 #[cfg(not(no_global_oom_handling))]
 use crate::string::String;
-use crate::vec;
 #[cfg(not(no_global_oom_handling))]
 use crate::vec::Vec;
+use crate::{fmt, vec};
 
 #[stable(feature = "rust1", since = "1.0.0")]
 impl<I: Iterator + ?Sized, A: Allocator> Iterator for Box<I, A> {
@@ -192,3 +193,4 @@ impl<'a> FromIterator<Cow<'a, str>> for Box<str> {
         String::from_iter(iter).into_boxed_str()
     }
 }
+

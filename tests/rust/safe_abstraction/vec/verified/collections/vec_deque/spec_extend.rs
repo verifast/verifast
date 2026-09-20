@@ -58,7 +58,7 @@ where
             self.reserve(additional);
 
             let written = unsafe {
-                self.write_iter_wrapping(self.to_physical_idx(self.len), iter, additional)
+                self.write_iter_wrapping(self.to_wrapped_index(self.len), iter, additional)
             };
 
             debug_assert_eq!(
@@ -78,15 +78,15 @@ where
 
 #[cfg(not(test))]
 impl<T, A1: Allocator, A2: Allocator> SpecExtend<T, vec::IntoIter<T, A2>> for VecDeque<T, A1> {
-    fn spec_extend(&mut self, mut iterator: vec::IntoIter<T, A2>) {
+    fn spec_extend(&mut self, iterator: vec::IntoIter<T, A2>) {
         let slice = iterator.as_slice();
         self.reserve(slice.len());
 
         unsafe {
-            self.copy_slice(self.to_physical_idx(self.len), slice);
+            self.copy_slice(self.to_wrapped_index(self.len), slice);
             self.len += slice.len();
         }
-        iterator.forget_remaining_elements();
+        iterator.forget_remaining_elements_and_dealloc();
     }
 }
 
@@ -109,7 +109,7 @@ where
         self.reserve(slice.len());
 
         unsafe {
-            self.copy_slice(self.to_physical_idx(self.len), slice);
+            self.copy_slice(self.to_wrapped_index(self.len), slice);
             self.len += slice.len();
         }
     }
@@ -155,12 +155,12 @@ where
 #[cfg(not(test))]
 impl<T, A1: Allocator, A2: Allocator> SpecExtendFront<T, vec::IntoIter<T, A2>> for VecDeque<T, A1> {
     #[track_caller]
-    fn spec_extend_front(&mut self, mut iterator: vec::IntoIter<T, A2>) {
+    fn spec_extend_front(&mut self, iterator: vec::IntoIter<T, A2>) {
         let slice = iterator.as_slice();
         self.reserve(slice.len());
         // SAFETY: `slice.len()` space was just reserved and elements in the slice are forgotten after this call
         unsafe { prepend_reversed(self, slice) };
-        iterator.forget_remaining_elements();
+        iterator.forget_remaining_elements_and_dealloc();
     }
 }
 
@@ -170,12 +170,12 @@ impl<T, A1: Allocator, A2: Allocator> SpecExtendFront<T, Rev<vec::IntoIter<T, A2
 {
     #[track_caller]
     fn spec_extend_front(&mut self, iterator: Rev<vec::IntoIter<T, A2>>) {
-        let mut iterator = iterator.into_inner();
+        let iterator = iterator.into_inner();
         let slice = iterator.as_slice();
         self.reserve(slice.len());
         // SAFETY: `slice.len()` space was just reserved and elements in the slice are forgotten after this call
         unsafe { prepend(self, slice) };
-        iterator.forget_remaining_elements();
+        iterator.forget_remaining_elements_and_dealloc();
     }
 }
 

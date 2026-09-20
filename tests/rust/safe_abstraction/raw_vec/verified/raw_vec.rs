@@ -2,7 +2,8 @@
 #![cfg_attr(test, allow(dead_code))]
 
 //@ use std::num::{niche_types::UsizeNoHighBit, NonZero};
-//@ use std::ptr::{NonNull, NonNull_ptr, Unique, Alignment};
+//@ use std::mem::Alignment;
+//@ use std::ptr::{NonNull, NonNull_ptr, Unique};
 //@ use std::alloc::{Layout, alloc_id_t, Allocator, alloc_block_in};
 //@ use std::option::Option;
 
@@ -10,8 +11,8 @@
 // run the tests. See the comment there for an explanation why this is the case.
 
 use core::marker::{Destruct, PhantomData};
-use core::mem::{ManuallyDrop, MaybeUninit, SizedTypeProperties};
-use core::ptr::{self, Alignment, NonNull, Unique};
+use core::mem::{Alignment, ManuallyDrop, MaybeUninit, SizedTypeProperties};
+use core::ptr::{self, NonNull, Unique};
 use core::{cmp, hint};
 
 #[cfg(not(no_global_oom_handling))]
@@ -75,7 +76,7 @@ const ZERO_CAP: Cap = unsafe { Cap::new_unchecked(0) };
 /// `Cap(cap)`, except if `T` is a ZST then `Cap::ZERO`.
 ///
 /// # Safety: cap must be <= `isize::MAX`.
-unsafe fn new_cap<T>(cap: usize) -> Cap
+const unsafe fn new_cap<T>(cap: usize) -> Cap
 //@ req std::mem::size_of::<T>() == 0 || cap <= isize::MAX;
 //@ ens result == if std::mem::size_of::<T>() == 0 { Cap::new(0) } else { Cap::new(cap) };
 //@ on_unwind_ens false;
@@ -1205,7 +1206,7 @@ impl<T, A: Allocator> RawVec<T, A> {
         //@ close exists(std::mem::size_of::<T>());
         //@ std::alloc::Layout_inv(Layout::new::<T>());
         //@ std::alloc::is_valid_layout_size_of_align_of::<T>();
-        //@ std::ptr::Alignment_as_nonzero_new(std::mem::align_of::<T>());
+        //@ std::mem::Alignment_as_nonzero_usize_new(std::mem::align_of::<T>());
         let r = Self { inner: RawVecInner::new_in(alloc, Alignment::of::<T>()), _marker: PhantomData };
         //@ close RawVec::<T, A>(t, r, alloc_id, ?ptr, ?capacity);
         //@ u8s_at_lft__to_array_at_lft_(ptr, capacity);
@@ -1284,7 +1285,7 @@ impl<T, A: Allocator> RawVec<T, A> {
             //@ open [?f0]ref_initialized_::<RawVec<T, A>>(me_ref0)();
             let me_ref = <ManuallyDrop<RawVec<T, A>> as core::ops::Deref>::deref(&me);
             let ptr_ = me_ref.ptr();
-            let slice = ptr::slice_from_raw_parts_mut(ptr_ as *mut MaybeUninit<T>, len);
+            let slice = ptr_.cast::<MaybeUninit<T>>().cast_slice(len);
             //@ close [f0]ref_initialized_::<RawVec<T, A>>(me_ref0)();
             //@ close_frac_borrow(f0, ref_initialized_(me_ref0));
             //@ end_lifetime(k0);
@@ -1321,7 +1322,7 @@ impl<T, A: Allocator> RawVec<T, A> {
     /// If the `ptr` and `capacity` come from a `RawVec` created via `alloc`, then this is
     /// guaranteed.
     #[inline]
-    pub(crate) unsafe fn from_raw_parts_in(ptr: *mut T, capacity: usize, alloc: A) -> Self
+    pub(crate) const unsafe fn from_raw_parts_in(ptr: *mut T, capacity: usize, alloc: A) -> Self
     /*@
     req Allocator(?t, alloc, ?alloc_id) &*&
         ptr != 0 &*&
@@ -1369,7 +1370,8 @@ impl<T, A: Allocator> RawVec<T, A> {
     ///
     /// See [`RawVec::from_raw_parts_in`].
     #[inline]
-    pub(crate) unsafe fn from_nonnull_in(ptr: NonNull<T>, capacity: usize, alloc: A) -> Self
+    #[rustc_const_unstable(feature = "const_heap", issue = "79597")]
+    pub(crate) const unsafe fn from_nonnull_in(ptr: NonNull<T>, capacity: usize, alloc: A) -> Self
     /*@
     req Allocator(?t, alloc, ?alloc_id) &*&
         ptr.as_ptr() as usize % std::mem::align_of::<T>() == 0 &*&
@@ -1464,7 +1466,7 @@ impl<T, A: Allocator> RawVec<T, A> {
 
     /// Returns a shared reference to the allocator backing this `RawVec`.
     #[inline]
-    pub(crate) fn allocator(&self) -> &A
+    pub(crate) const fn allocator(&self) -> &A
     /*@
     req
         [?q]lifetime_token(?k) &*&
@@ -1759,9 +1761,25 @@ impl<T, A: Allocator> RawVec<T, A> {
         //@ vals__of_u8s__take::<T>(capacity1, bs, capacity0);
         r
     }
+
+    /// Shrinks the buffer down to the specified capacity. If the given amount
+    /// is 0, actually completely deallocates.
+    ///
+    /// # Errors
+    ///
+    /// This function returns an error if the allocator cannot shrink the allocation.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the given amount is *larger* than the current capacity.
+    #[inline]
+    pub(crate) fn try_shrink_to_fit(&mut self, cap: usize) -> Result<(), TryReserveError> {
+        unsafe { self.inner.try_shrink_to_fit(cap, T::LAYOUT) }
+    }
 }
 
-unsafe impl<#[may_dangle] T, A: Allocator> Drop for RawVec<T, A> {
+#[rustc_const_unstable(feature = "const_heap", issue = "79597")]
+const unsafe impl<#[may_dangle] T, A: [const] Allocator + [const] Destruct> Drop for RawVec<T, A> {
     /// Frees the memory owned by the `RawVec` *without* trying to drop its contents.
     fn drop(&mut self)
     //@ req thread_token(?t) &*& t == currentThread &*& <RawVec<T, A>>.full_borrow_content(t, self)();
@@ -2248,11 +2266,11 @@ const impl<A: [const] Allocator + [const] Destruct> RawVecInner<A> {
             r
         };
 
-        // FIXME(const-hack): switch back to `map_err`
+        let new_layout_ref = &new_layout;
         match memory {
-            Ok(memory) => Ok(memory),
-            Err(_) => {
-                let e = AllocError { layout: new_layout, non_exhaustive: () };
+            Ok(ptr) => Ok(ptr),
+            Err(err) => {
+                let e = AllocError { layout: *new_layout_ref, non_exhaustive: () };
                 //@ std::alloc::close_Layout_own(t, new_layout);
                 //@ close_tuple_0_own(t);
                 //@ close <std::collections::TryReserveErrorKind>.own(t, e);
@@ -2269,11 +2287,11 @@ impl<A: Allocator> RawVecInner<A> {
     req exists::<usize>(?elemSize) &*&
         thread_token(?t) &*&
         Allocator(t, alloc, ?alloc_id) &*&
-        std::alloc::is_valid_layout(elemSize, align.as_nonzero().get()) == true;
+        std::alloc::is_valid_layout(elemSize, align.as_nonzero_usize().get()) == true;
     @*/
     /*@
     ens thread_token(t) &*&
-        RawVecInner(t, result, Layout::from_size_align(elemSize, align.as_nonzero().get()), alloc_id, ?ptr, ?capacity) &*&
+        RawVecInner(t, result, Layout::from_size_align(elemSize, align.as_nonzero_usize().get()), alloc_id, ?ptr, ?capacity) &*&
         array_at_lft_(alloc_id.lft, ptr, capacity * elemSize, []) &*&
         capacity * elemSize == 0;
     @*/
@@ -2283,19 +2301,19 @@ impl<A: Allocator> RawVecInner<A> {
         leak <Alignment>.own(_t, align);
         close exists::<usize>(0);
         std::alloc::open_Allocator_own(alloc);
-        std::ptr::Alignment_is_power_of_2(align);
-        if align.as_nonzero().get() <= isize::MAX {
-            div_rem_nonneg(isize::MAX, align.as_nonzero().get());
+        std::mem::Alignment_is_power_of_2(align);
+        if align.as_nonzero_usize().get() <= isize::MAX {
+            div_rem_nonneg(isize::MAX, align.as_nonzero_usize().get());
         } else {
-            div_rem_nonneg_unique(isize::MAX, align.as_nonzero().get(), 0, isize::MAX);
+            div_rem_nonneg_unique(isize::MAX, align.as_nonzero_usize().get(), 0, isize::MAX);
         }
         let result = call();
         open RawVecInner(_t, result, ?elemLayout, ?alloc_id, ?ptr, ?capacity);
         std::num::niche_types::UsizeNoHighBit_inv(result.cap);
         std::alloc::Layout_inv(elemLayout);
         mul_zero(capacity, elemLayout.size());
-        assert elemLayout == Layout::from_size_align(0, align.as_nonzero().get());
-        std::alloc::Layout_size_Layout_from_size_align(0, align.as_nonzero().get());
+        assert elemLayout == Layout::from_size_align(0, align.as_nonzero_usize().get());
+        std::alloc::Layout_size_Layout_from_size_align(0, align.as_nonzero_usize().get());
         assert elemLayout.size() == 0;
         assert capacity * elemLayout.size() == 0;
         std::alloc::Allocator_to_own(result.alloc);
@@ -2305,12 +2323,12 @@ impl<A: Allocator> RawVecInner<A> {
     }
     @*/
     {
-        let ptr = Unique::from_non_null(NonNull::without_provenance(align.as_nonzero()));
+        let ptr = Unique::from_non_null(NonNull::without_provenance(align.as_nonzero_usize()));
         // `cap: 0` means "unallocated". zero-sized types are ignored.
         let cap = ZERO_CAP;
         let r = Self { ptr, cap, alloc };
-        //@ div_rem_nonneg_unique(align.as_nonzero().get(), align.as_nonzero().get(), 1, 0);
-        //@ let layout = Layout::from_size_align(elemSize, align.as_nonzero().get());
+        //@ div_rem_nonneg_unique(align.as_nonzero_usize().get(), align.as_nonzero_usize().get(), 1, 0);
+        //@ let layout = Layout::from_size_align(elemSize, align.as_nonzero_usize().get());
         /*@
         if layout.size() == 0 {
             div_rem_nonneg_unique(layout.size(), layout.align(), 0, 0);
@@ -2342,7 +2360,7 @@ impl<A: Allocator> RawVecInner<A> {
     }
 
     #[inline]
-    unsafe fn from_raw_parts_in(ptr: *mut u8, cap: Cap, alloc: A) -> Self
+    const unsafe fn from_raw_parts_in(ptr: *mut u8, cap: Cap, alloc: A) -> Self
     /*@
     req exists::<Layout>(?elem_layout) &*&
         Allocator(?t, alloc, ?alloc_id) &*&
@@ -2376,7 +2394,8 @@ impl<A: Allocator> RawVecInner<A> {
     }
 
     #[inline]
-    unsafe fn from_nonnull_in(ptr: NonNull<u8>, cap: Cap, alloc: A) -> Self
+    #[rustc_const_unstable(feature = "const_heap", issue = "79597")]
+    const unsafe fn from_nonnull_in(ptr: NonNull<u8>, cap: Cap, alloc: A) -> Self
     /*@
     req exists::<Layout>(?elem_layout) &*&
         Allocator(?t, alloc, ?alloc_id) &*&
@@ -2480,7 +2499,7 @@ impl<A: Allocator> RawVecInner<A> {
     }
 
     #[inline]
-    fn allocator(&self) -> &A
+    const fn allocator(&self) -> &A
     /*@
     req [?q]lifetime_token(?k) &*&
         exists(?readOnly) &*&
@@ -2814,6 +2833,20 @@ impl<A: Allocator> RawVecInner<A> {
         }
     }
 
+    /// # Safety
+    ///
+    /// - `elem_layout` must be valid for `self`, i.e. it must be the same `elem_layout` used to
+    ///   initially construct `self`
+    /// - `elem_layout`'s size must be a multiple of its alignment
+    /// - `cap` must be less than or equal to `self.capacity(elem_layout.size())`
+    unsafe fn try_shrink_to_fit(
+        &mut self,
+        cap: usize,
+        elem_layout: Layout,
+    ) -> Result<(), TryReserveError> {
+        unsafe { self.shrink(cap, elem_layout) }
+    }
+
     #[inline]
     const fn needs_to_grow(&self, len: usize, additional: usize, elem_layout: Layout) -> bool
     /*@
@@ -2965,7 +2998,6 @@ impl<A: Allocator> RawVecInner<A> {
     ///   initially construct `self`
     /// - `elem_layout`'s size must be a multiple of its alignment
     /// - `cap` must be less than or equal to `self.capacity(elem_layout.size())`
-    #[cfg(not(no_global_oom_handling))]
     #[inline]
     unsafe fn shrink(&mut self, cap: usize, elem_layout: Layout) -> Result<(), TryReserveError>
     /*@
@@ -3018,7 +3050,6 @@ impl<A: Allocator> RawVecInner<A> {
     ///
     /// # Safety
     /// `cap <= self.capacity()`
-    #[cfg(not(no_global_oom_handling))]
     unsafe fn shrink_unchecked(
         &mut self,
         cap: usize,
@@ -3149,7 +3180,10 @@ impl<A: Allocator> RawVecInner<A> {
         }
         Ok(())
     }
+}
 
+#[rustc_const_unstable(feature = "const_heap", issue = "79597")]
+const impl<A: [const] Allocator> RawVecInner<A> {
     /// # Safety
     ///
     /// This function deallocates the owned allocation, but does not update `ptr` or `cap` to
@@ -3257,7 +3291,7 @@ safety_proof {
             //@ std::alloc::Layout_repeat_size_aligned_intro(elem_layout, cap);
             Ok(layout)
         }
-        Err(_) => {
+        Err(err) => {
             let e = CapacityOverflow;
             //@ close <std::collections::TryReserveErrorKind>.own(currentThread, e);
             Err(e.into())

@@ -1,0 +1,5 @@
+# VeriFast's -extern option points rustc at target/debug/lib<crate>.rlib, so the
+# rlib must carry full metadata. Cargo defaults to -Zembed-metadata=no, which
+# leaves only a stub there.
+[build]
+rustflags = ["-Zembed-metadata=yes"]

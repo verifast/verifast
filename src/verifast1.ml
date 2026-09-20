@@ -101,8 +101,22 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       externs |> flatmap @@ fun path ->
         let crateName = Filename.basename path in
         let externArg = Printf.sprintf "%s=%s/target/debug/lib%s.rlib" crateName path crateName in
-        let libPathArg = Printf.sprintf "dependency=%s/target/debug/deps" path in
-        ["--extern"; externArg; "-L"; libPathArg]
+        (* Cargo used to put dependency artifacts in target/debug/deps; newer versions
+           put each one in target/debug/build/<name>/<hash>/out. Pass whichever exist. *)
+        let isDir d = Sys.file_exists d && Sys.is_directory d in
+        let subdirs d = if isDir d then Array.to_list (Sys.readdir d) |> List.map (Filename.concat d) else [] in
+        let buildOutDirs =
+          subdirs (Printf.sprintf "%s/target/debug/build" path)
+          |> flatmap subdirs
+          |> List.map (fun d -> Filename.concat d "out")
+          |> List.filter isDir
+        in
+        let libPathArgs =
+          (Printf.sprintf "%s/target/debug/deps" path) :: buildOutDirs
+          |> List.filter isDir
+          |> flatmap (fun d -> ["-L"; "dependency=" ^ d])
+        in
+        ["--extern"; externArg] @ libPathArgs
     in
     externs_rustc_args @ rustc_args
   

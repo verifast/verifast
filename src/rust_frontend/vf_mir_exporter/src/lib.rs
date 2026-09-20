@@ -63,7 +63,7 @@ enum PreprocessMode {
     Preprocess
 }
 
-pub fn run_compiler() -> i32 {
+pub fn run_compiler() -> std::process::ExitCode {
     rustc_driver::catch_with_exit_code(move || {
         let mut rustc_args: Vec<_> = std::env::args().collect();
         rustc_args.push("-Coverflow_checks=off".to_owned());
@@ -479,7 +479,7 @@ mod vf_mir_builder {
     use crate::vf_mir_capnp::hir as hir_cpn;
     use crate::vf_mir_capnp::ident as ident_cpn;
     use crate::vf_mir_capnp::mutability as mutability_cpn;
-    use crate::vf_mir_capnp::predicate as predicate_cpn;
+    use crate::vf_mir_capnp::clause as clause_cpn;
     use crate::vf_mir_capnp::real_file_name::remapped_data;
 use crate::vf_mir_capnp::span_data as span_data_cpn;
     use crate::vf_mir_capnp::symbol as symbol_cpn;
@@ -526,7 +526,7 @@ use rustc_span::RemapPathScopeComponents;
     use rustc_middle::ty::GenericParamDef;
     use rustc_middle::ty::GenericParamDefKind;
     use rustc_middle::{mir, ty::TyCtxt};
-    use rustc_span::source_map::Spanned;
+    use rustc_span::Spanned;
     use rustc_span::Span;
     use crate::vf_mir_capnp::aggregate_kind as aggregate_kind_cpn;
     use rvalue_cpn::binary_op_data as binary_op_data_cpn;
@@ -573,7 +573,7 @@ use rustc_span::RemapPathScopeComponents;
     fn collect_submodules<'tcx, 'a>(
         tcx: TyCtxt<'tcx>,
         annots: &'a mut LinkedList<Box<GhostRange>>,
-        mod_id: rustc_span::def_id::LocalModDefId,
+        mod_id: rustc_span::def_id::LocalModId,
     ) -> Vec<Box<Module>> {
         struct ModVisitor<'tcx, 'a> {
             tcx: TyCtxt<'tcx>,
@@ -600,7 +600,7 @@ use rustc_span::RemapPathScopeComponents;
                 let mod_submodules = collect_submodules(
                     self.tcx,
                     &mut mod_annots,
-                    rustc_hir::def_id::LocalModDefId::new_unchecked(n.expect_owner().def_id),
+                    rustc_hir::def_id::LocalModId::new_unchecked(n.expect_owner().def_id),
                 );
                 self.submodules.push(Box::new(Module {
                     name,
@@ -756,10 +756,10 @@ use rustc_span::RemapPathScopeComponents;
                         Self::encode_generic_param_def(generic_param, generic_param_cpn);
                     },
                 );
-                trait_impl_cpn.fill_predicates(
-                    self.tcx.predicates_of(trait_impl.def_id).predicates,
-                    |pred_cpn, pred| {
-                        Self::encode_predicate(&mut enc_ctx, pred, pred_cpn);
+                trait_impl_cpn.fill_clauses(
+                    self.tcx.clauses_of(trait_impl.def_id).clauses,
+                    |clause_cpn, clause| {
+                        Self::encode_clause(&mut enc_ctx, clause, clause_cpn);
                     },
                 );
                 trait_impl_cpn.set_of_trait(&self.tcx.def_path_str(trait_impl.of_trait));
@@ -924,7 +924,7 @@ use rustc_span::RemapPathScopeComponents;
                         Self::encode_generic_param_def(generic_param, generic_param_cpn);
                     },
                 );
-                Self::encode_ty(self.tcx, &mut enc_ctx, alias_def.instantiate_identity(), ty_alias_cpn.reborrow().init_ty());
+                Self::encode_ty(self.tcx, &mut enc_ctx, alias_def.instantiate_identity().skip_normalization(), ty_alias_cpn.reborrow().init_ty());
             });
 
             // Encode traits (consumes annotations)
@@ -968,7 +968,7 @@ use rustc_span::RemapPathScopeComponents;
             let modules = collect_submodules(
                 self.tcx,
                 &mut self.annots,
-                rustc_hir::def_id::LocalModDefId::CRATE_DEF_ID,
+                rustc_hir::def_id::CRATE_MOD_ID,
             );
             vf_mir_cpn.fill_modules(&modules, |module_cpn, module| {
                 Self::encode_module(self.tcx, module_cpn, module);
@@ -1092,9 +1092,9 @@ use rustc_span::RemapPathScopeComponents;
                 variances_cpn.set(i as u32, variance_cpn);
             }
 
-            let predicates = tcx.predicates_of(adt_def.did()).predicates;
-            adt_def_cpn.fill_predicates(predicates, |pred_cpn, pred| {
-                Self::encode_predicate(enc_ctx, pred, pred_cpn);
+            let clauses = tcx.clauses_of(adt_def.did()).clauses;
+            adt_def_cpn.fill_clauses(clauses, |clause_cpn, clause| {
+                Self::encode_clause(enc_ctx, clause, clause_cpn);
             });
             adt_def_cpn.set_implements_drop(adt_def.has_dtor(tcx));
             adt_def_cpn.set_is_repr_c(adt_def.repr().c());
@@ -1144,7 +1144,7 @@ use rustc_span::RemapPathScopeComponents;
             let name_cpn = fdef_cpn.reborrow().init_name();
             Self::encode_symbol(&fdef.name, name_cpn);
             let ty_cpn = fdef_cpn.reborrow().init_ty();
-            let ty = tcx.type_of(fdef.did).instantiate_identity();
+            let ty = tcx.type_of(fdef.did).instantiate_identity().skip_normalization();
             Self::encode_ty(tcx, enc_ctx, ty, ty_cpn);
             let vis_cpn = fdef_cpn.reborrow().init_vis();
             Self::encode_visibility(fdef.vis, vis_cpn);
@@ -1154,7 +1154,7 @@ use rustc_span::RemapPathScopeComponents;
         }
 
         fn encode_visibility(
-            vis: ty::Visibility<rustc_hir::def_id::DefId>,
+            vis: ty::Visibility<rustc_hir::def_id::ModId>,
             mut vis_cpn: visibility_cpn::Builder<'_>,
         ) {
             match vis {
@@ -1163,20 +1163,20 @@ use rustc_span::RemapPathScopeComponents;
             }
         }
 
-        fn encode_predicate(
+        fn encode_clause(
             enc_ctx: &mut EncCtx<'tcx, 'a>,
-            pred: &(ty::Clause<'tcx>, rustc_span::Span),
-            mut pred_cpn: predicate_cpn::Builder<'_>,
+            clause: &(ty::Clause<'tcx>, rustc_span::Span),
+            mut clause_cpn: clause_cpn::Builder<'_>,
         ) {
-            match pred.0.kind().skip_binder() {
-                ty::ClauseKind::RegionOutlives(outlives_pred) => {
-                    let mut outlives_cpn = pred_cpn.init_outlives();
-                    Self::encode_region(enc_ctx.tcx, outlives_pred.0, outlives_cpn.reborrow().init_region1());
-                    Self::encode_region(enc_ctx.tcx, outlives_pred.1, outlives_cpn.reborrow().init_region2());
+            match clause.0.kind().skip_binder() {
+                ty::ClauseKind::RegionOutlives(outlives_clause) => {
+                    let mut outlives_cpn = clause_cpn.init_outlives();
+                    Self::encode_region(enc_ctx.tcx, outlives_clause.0, outlives_cpn.reborrow().init_region1());
+                    Self::encode_region(enc_ctx.tcx, outlives_clause.1, outlives_cpn.reborrow().init_region2());
                 }
-                ty::ClauseKind::Trait(trait_pred) => {
-                    let bound_vars = pred.0.kind().bound_vars();
-                    let mut trait_cpn = pred_cpn.init_trait();
+                ty::ClauseKind::Trait(trait_clause) => {
+                    let bound_vars = clause.0.kind().bound_vars();
+                    let mut trait_cpn = clause_cpn.init_trait();
                     trait_cpn.fill_bound_regions(bound_vars.iter().map(|v| {
                         match v {
                             ty::BoundVariableKind::Region(ty::BoundRegionKind::Named(def_id)) => {
@@ -1190,14 +1190,14 @@ use rustc_span::RemapPathScopeComponents;
                             _ => todo!()
                         }
                     }));
-                    trait_cpn.set_def_id(&enc_ctx.tcx.def_path_str(trait_pred.trait_ref.def_id));
-                    trait_cpn.fill_args(trait_pred.trait_ref.args, |arg_cpn, arg| {
+                    trait_cpn.set_def_id(&enc_ctx.tcx.def_path_str(trait_clause.trait_ref.def_id));
+                    trait_cpn.fill_args(trait_clause.trait_ref.args, |arg_cpn, arg| {
                         Self::encode_gen_arg(enc_ctx.tcx, enc_ctx, arg, arg_cpn);
                     });
                 }
-                ty::ClauseKind::Projection(projection_pred) => {
-                    let bound_vars = pred.0.kind().bound_vars();
-                    let mut proj_cpn = pred_cpn.init_projection();
+                ty::ClauseKind::Projection(projection_clause) => {
+                    let bound_vars = clause.0.kind().bound_vars();
+                    let mut proj_cpn = clause_cpn.init_projection();
                     proj_cpn.fill_bound_regions(bound_vars.iter().map(|v| {
                         match v {
                             ty::BoundVariableKind::Region(ty::BoundRegionKind::Named(def_id)) => {
@@ -1212,19 +1212,19 @@ use rustc_span::RemapPathScopeComponents;
                         }
                     }));
                     let mut proj_term_cpn = proj_cpn.reborrow().init_projection_term();
-                    proj_term_cpn.set_def_id(&enc_ctx.tcx.def_path_str(projection_pred.projection_term.def_id));
-                    proj_term_cpn.fill_args(projection_pred.projection_term.args, |arg_cpn, arg| {
+                    proj_term_cpn.set_def_id(&enc_ctx.tcx.def_path_str(projection_clause.projection_term.expect_projection_def_id()));
+                    proj_term_cpn.fill_args(projection_clause.projection_term.args, |arg_cpn, arg| {
                         Self::encode_gen_arg(enc_ctx.tcx, enc_ctx, arg, arg_cpn);
                     });
                     let term_cpn = proj_cpn.reborrow().init_term();
-                    match projection_pred.term.kind() {
+                    match projection_clause.term.kind() {
                         ty::TermKind::Ty(ty) =>
                             Self::encode_ty(enc_ctx.tcx, enc_ctx, ty, term_cpn.init_ty()),
                         ty::TermKind::Const(const_) =>
                             Self::encode_typesystem_constant(enc_ctx.tcx, enc_ctx, &const_, term_cpn.init_const()),
                     }
                 }
-                _ => pred_cpn.set_ignored(()),
+                _ => clause_cpn.set_ignored(()),
             }
         }
 
@@ -1301,7 +1301,7 @@ use rustc_span::RemapPathScopeComponents;
             body_cpn.set_def_path(&def_path);
 
             let parent_module = tcx.parent_module_from_def_id(def_id.expect_local());
-            if parent_module != rustc_span::def_id::LocalModDefId::CRATE_DEF_ID {
+            if parent_module != rustc_span::def_id::CRATE_MOD_ID {
                 body_cpn.set_module_def_path(&tcx.def_path_str(parent_module.to_def_id()));
             }
 
@@ -1326,9 +1326,9 @@ use rustc_span::RemapPathScopeComponents;
                     },
                 );
 
-                let impl_preds = tcx.predicates_of(impl_did).predicates;
-                body_cpn.fill_impl_block_predicates(impl_preds, |pred_cpn, pred| {
-                    Self::encode_predicate(enc_ctx, pred, pred_cpn);
+                let impl_clauses = tcx.clauses_of(impl_did).clauses;
+                body_cpn.fill_impl_block_clauses(impl_clauses, |clause_cpn, clause| {
+                    Self::encode_clause(enc_ctx, clause, clause_cpn);
                 });
             }
 
@@ -1348,12 +1348,12 @@ use rustc_span::RemapPathScopeComponents;
                 },
             );
 
-            let predicates = tcx.predicates_of(def_id).predicates;
-            trace!("Encoding predicates: {:?}", predicates);
+            let clauses = tcx.clauses_of(def_id).clauses;
+            trace!("Encoding clauses: {:?}", clauses);
             body_cpn
                 .reborrow()
-                .fill_predicates(predicates, |pred_cpn, pred| {
-                    Self::encode_predicate(enc_ctx, pred, pred_cpn);
+                .fill_clauses(clauses, |clause_cpn, clause| {
+                    Self::encode_clause(enc_ctx, clause, clause_cpn);
                 });
 
             if !is_closure {
@@ -1836,6 +1836,7 @@ use rustc_span::RemapPathScopeComponents;
                 }
                 ty::TyKind::FnDef(def_id, substs) => {
                     let fn_def_ty_cpn = ty_kind_cpn.init_fn_def();
+                    let substs = substs.no_bound_vars().expect("FnDef args with bound vars");
                     Self::encode_ty_fn_def(tcx, enc_ctx, def_id, substs, fn_def_ty_cpn);
                 }
                 ty::TyKind::FnPtr(binder, header) => {
@@ -1879,15 +1880,16 @@ use rustc_span::RemapPathScopeComponents;
                         Self::encode_ty(tcx, enc_ctx, gen_arg, gen_arg_cpn);
                     });
                 }
-                ty::TyKind::Alias(kind, alias_ty) => {
+                ty::TyKind::Alias(_is_rigid, alias_ty) => {
                     let mut alias_ty_cpn = ty_kind_cpn.init_alias();
-                    alias_ty_cpn.set_kind(match kind {
-                        ty::AliasTyKind::Projection => crate::vf_mir_capnp::AliasTyKind::Projection,
-                        ty::AliasTyKind::Inherent => crate::vf_mir_capnp::AliasTyKind::Inherent,
-                        ty::AliasTyKind::Opaque => crate::vf_mir_capnp::AliasTyKind::Opaque,
-                        ty::AliasTyKind::Free => crate::vf_mir_capnp::AliasTyKind::Free,
-                    });
-                    alias_ty_cpn.set_def_id(&tcx.def_path_str(alias_ty.def_id));
+                    let (kind_cpn, alias_def_id) = match alias_ty.kind {
+                        ty::AliasTyKind::Projection { def_id } => (crate::vf_mir_capnp::AliasTyKind::Projection, def_id),
+                        ty::AliasTyKind::Inherent { def_id } => (crate::vf_mir_capnp::AliasTyKind::Inherent, def_id),
+                        ty::AliasTyKind::Opaque { def_id } => (crate::vf_mir_capnp::AliasTyKind::Opaque, def_id),
+                        ty::AliasTyKind::Free { def_id } => (crate::vf_mir_capnp::AliasTyKind::Free, def_id),
+                    };
+                    alias_ty_cpn.set_kind(kind_cpn);
+                    alias_ty_cpn.set_def_id(&tcx.def_path_str(alias_def_id));
                     alias_ty_cpn.fill_args(alias_ty.args, |arg_cpn, arg| {
                         Self::encode_gen_arg(tcx, enc_ctx, arg, arg_cpn);
                     });
@@ -1989,12 +1991,12 @@ use rustc_span::RemapPathScopeComponents;
             tcx: TyCtxt<'tcx>,
             enc_ctx: &mut EncCtx<'tcx, 'a>,
             def_id: &hir::def_id::DefId,
-            substs: &'tcx &'tcx ty::List<ty::GenericArg<'tcx>>,
+            substs: ty::GenericArgsRef<'tcx>,
             mut fn_def_ty_cpn: fn_def_ty_cpn::Builder<'_>,
         ) {
             let def_path = tcx.def_path_str(*def_id);
             let late_bound_generic_param_count =
-                tcx.fn_sig(def_id).skip_binder().bound_vars().len();
+                tcx.fn_sig(*def_id).skip_binder().bound_vars().len();
             debug!(
                 "Encoding FnDef for {} with {} late-bound generic params and substs {:?}",
                 def_path, late_bound_generic_param_count, substs
@@ -2153,7 +2155,6 @@ use rustc_span::RemapPathScopeComponents;
                     let storage_dead_cpn = statement_kind_cpn.init_storage_dead();
                     Self::encode_local_decl_id(*local, storage_dead_cpn);
                 }
-                mir::StatementKind::Retag { .. } => statement_kind_cpn.set_nop(()),
                 mir::StatementKind::PlaceMention(place) => {
                     let place_cpn = statement_kind_cpn.init_place_mention();
                     Self::encode_place(enc_ctx, place, place_cpn);
@@ -2226,7 +2227,7 @@ use rustc_span::RemapPathScopeComponents;
         ) {
             debug!("Encoding Rvalue {:?}", rvalue);
             match rvalue {
-                mir::Rvalue::Use(operand) => {
+                mir::Rvalue::Use(operand, _with_retag) => {
                     let operand_cpn = rvalue_cpn.init_use();
                     Self::encode_operand(tcx, enc_ctx, operand, operand_cpn);
                 }
@@ -2283,6 +2284,8 @@ use rustc_span::RemapPathScopeComponents;
                         mir::CastKind::PtrToPtr => cast_kind_cpn.set_ptr_to_ptr(()),
                         mir::CastKind::FnPtrToPtr => cast_kind_cpn.set_fn_ptr_to_ptr(()),
                         mir::CastKind::Transmute => cast_kind_cpn.set_transmute(()),
+                        // Semantically a transmute, except that it is UB if the input is not a valid `Box<T>`.
+                        mir::CastKind::BoxDerefTransmute => cast_kind_cpn.set_transmute(()),
                         mir::CastKind::Subtype => cast_kind_cpn.set_subtype(()),
                     }
                     let operand_cpn = cast_data_cpn.reborrow().init_operand();
@@ -2331,14 +2334,13 @@ use rustc_span::RemapPathScopeComponents;
                         Self::encode_operand(tcx, enc_ctx, operand, operand_cpn);
                     });
                 }
-                // Transmutes a `*mut u8` into shallow-initialized `Box<T>`.
-                mir::Rvalue::ShallowInitBox(operand, ty) => rvalue_cpn.set_shallow_init_box(()),
                 mir::Rvalue::CopyForDeref(place) => {
                     let operand_cpn = rvalue_cpn.init_use();
                     let place_cpn = operand_cpn.init_copy();
                     Self::encode_place(enc_ctx, place, place_cpn);
                 }
                 mir::Rvalue::WrapUnsafeBinder(_, _) => todo!(),
+                mir::Rvalue::Reborrow(_, _, _) => todo!(),
             }
         }
 
@@ -2380,7 +2382,7 @@ use rustc_span::RemapPathScopeComponents;
                         Some(idx) => idx.as_u32()
                     });
 
-                    let adt_def = enc_ctx.tcx.adt_def(def_id);
+                    let adt_def = enc_ctx.tcx.adt_def(*def_id);
                     let variant = adt_def.variant(*variant_idx);
                     adt_data_cpn.set_variant_id(variant.name.as_str());
                     Self::encode_adt_kind(
@@ -2391,7 +2393,7 @@ use rustc_span::RemapPathScopeComponents;
                         .reborrow()
                         .fill_fields(&variant.fields, |mut f_cpn, f| {
                             f_cpn.set_name(f.name.as_str());
-                            let ty = enc_ctx.tcx.type_of(f.did).instantiate_identity();
+                            let ty = enc_ctx.tcx.type_of(f.did).instantiate_identity().skip_normalization();
                             f_cpn.set_is_zero_size(ty.is_phantom_data());
                         });
 
@@ -2524,10 +2526,8 @@ use rustc_span::RemapPathScopeComponents;
                     unwind,
                     replace,
                     drop,
-                    async_fut,
                 } => {
                     assert!(drop.is_none());
-                    assert!(async_fut.is_none());
                     let mut drop_data_cpn = terminator_kind_cpn.init_drop();
                     Self::encode_place(enc_ctx, place, drop_data_cpn.reborrow().init_place());
                     Self::encode_basic_block_id(*target, drop_data_cpn.reborrow().init_target());
@@ -2742,9 +2742,11 @@ use rustc_span::RemapPathScopeComponents;
         ) {
             debug!("Encoding typesystem constant {:?}", ty_const);
             let mut ty_const = *ty_const;
-            if let ty::ConstKind::Unevaluated(_) = ty_const.kind() {
-                let typing_env = ty::TypingEnv { typing_mode: ty::TypingMode::PostAnalysis, param_env: ty::ParamEnv::empty() };
-                if let Ok(ty_const_normalized) = tcx.try_normalize_erasing_regions(typing_env, ty_const) {
+            if let ty::ConstKind::Alias(_, _) = ty_const.kind() {
+                let typing_env = ty::TypingEnv::new(ty::ParamEnv::empty(), ty::TypingMode::PostAnalysis);
+                if let Ok(ty_const_normalized) =
+                    tcx.try_normalize_erasing_regions(typing_env, ty::Unnormalized::new(ty_const))
+                {
                     ty_const = ty_const_normalized;
                 }
             }
@@ -2772,9 +2774,9 @@ use rustc_span::RemapPathScopeComponents;
                 CK::Bound(debruijn_idx, bound_var) => const_kind_cpn.set_bound(()),
                 // A placeholder const - universally quantified higher-ranked const.
                 CK::Placeholder(placeholder_const) => const_kind_cpn.set_placeholder(()),
-                // Used in the HIR by using `Unevaluated` everywhere and later normalizing to one of the other
-                // variants when the code is monomorphic enough for that.
-                CK::Unevaluated(unevaluated) => const_kind_cpn.set_unevaluated(()),
+                // An unnormalized const item (anon const, assoc const or free const item); normalized
+                // to one of the other variants when the code is monomorphic enough for that.
+                CK::Alias(_is_rigid, _alias_const) => const_kind_cpn.set_alias(()),
                 // Used to hold computed value.
                 CK::Value(value) => {
                     let mut value_cpn = const_kind_cpn.init_value();
@@ -2803,8 +2805,8 @@ use rustc_span::RemapPathScopeComponents;
                 }
                 // Used only for `&[u8]` and `&str`
                 VT::Branch(children) => {
-                    val_tree_cpn.fill_branch(children, |child_cpn, child| {
-                        Self::encode_typesystem_constant(tcx, enc_ctx, child, child_cpn);
+                    val_tree_cpn.fill_branch(children.iter(), |child_cpn, child| {
+                        Self::encode_typesystem_constant(tcx, enc_ctx, &child, child_cpn);
                     });
                 }
             }
@@ -2904,8 +2906,16 @@ use rustc_span::RemapPathScopeComponents;
             let local = &enc_ctx.body().local_decls()[place.local];
             let mut pty = mir::PlaceTy::from_ty(local.ty);
             let mut kind = PlaceKind::Other;
-            if place.projection.len() == 2 && local.ty.is_box() {
-                // The only projection that can be applied to a Box is (X.0: std::ptr::Unique<T>).0: std::ptr::NonNull<T>
+            let is_box_field0_projection = local.ty.is_box()
+                && !place.projection.is_empty()
+                && place.projection.len() <= 2
+                && place.projection.iter().all(|elem| {
+                    matches!(elem, mir::ProjectionElem::Field(field_idx, _) if field_idx.as_usize() == 0)
+                });
+            if is_box_field0_projection {
+                // The only projections that can be applied to a Box are
+                // `X.0: std::ptr::Unique<T>` (emitted by ElaborateBoxDerefs) and
+                // `(X.0: std::ptr::Unique<T>).0: std::ptr::NonNull<T>` (emitted by drop glue).
                 let place_projection_cpn = place_cpn.reborrow().init_projection(1);
                 let place_elem_cpn = place_projection_cpn.get(0);
                 let ty_cpn = place_elem_cpn.init_box_as_non_null();

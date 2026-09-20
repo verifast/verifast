@@ -69,23 +69,23 @@ impl<A: Allocator> RawVecInner<A> {
     req exists::<usize>(?elemSize) &*&
         thread_token(?t) &*&
         Allocator(t, alloc, ?alloc_id) &*&
-        std::alloc::is_valid_layout(elemSize, align.as_nonzero().get()) == true;
+        std::alloc::is_valid_layout(elemSize, align.as_nonzero_usize().get()) == true;
     @*/
     /*@
     ens thread_token(t) &*&
-        RawVecInner(t, result, Layout::from_size_align(elemSize, align.as_nonzero().get()), alloc_id, ?ptr, ?capacity) &*&
+        RawVecInner(t, result, Layout::from_size_align(elemSize, align.as_nonzero_usize().get()), alloc_id, ?ptr, ?capacity) &*&
         array_at_lft_(alloc_id.lft, ptr, capacity * elemSize, _) &*&
         capacity * elemSize == 0;
     @*/
     //@ on_unwind_ens false;
     //@ safety_proof { ... }
     {
-        let ptr = Unique::from_non_null(NonNull::without_provenance(align.as_nonzero()));
+        let ptr = Unique::from_non_null(NonNull::without_provenance(align.as_nonzero_usize()));
         // `cap: 0` means "unallocated". zero-sized types are ignored.
         let cap = ZERO_CAP;
         let r = Self { ptr, cap, alloc };
-        //@ div_rem_nonneg_unique(align.as_nonzero().get(), align.as_nonzero().get(), 1, 0);
-        //@ let layout = Layout::from_size_align(elemSize, align.as_nonzero().get());
+        //@ div_rem_nonneg_unique(align.as_nonzero_usize().get(), align.as_nonzero_usize().get(), 1, 0);
+        //@ let layout = Layout::from_size_align(elemSize, align.as_nonzero_usize().get());
         //@ close RawVecInner(t, r, layout, alloc_id, _, _);
         r
     }
