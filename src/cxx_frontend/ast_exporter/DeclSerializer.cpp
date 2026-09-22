@@ -144,7 +144,8 @@ struct DeclSerializerImpl
     }
 
     if (!isStatic) {
-      m_ASTSerializer->serialize(builder.initThis(), decl->getThisObjectType());
+      m_ASTSerializer->serialize(builder.initThis(),
+                                 decl->getFunctionObjectParameterType());
     }
     serializeFunctionDecl(builder.initFunc(), decl, true);
   }

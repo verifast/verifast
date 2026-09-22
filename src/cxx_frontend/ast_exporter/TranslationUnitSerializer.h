@@ -68,7 +68,7 @@ private:
    * @param fileEntry Entry of the file to serialize.
    * @param builder Target builder to serialize to.
    */
-  void serializeFile(const clang::FileEntry *fileEntry,
+  void serializeFile(clang::FileEntryRef fileEntry,
                      stubs::File::Builder builder) const;
 
   const clang::ASTContext *m_ASTContext;

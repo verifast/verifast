@@ -100,7 +100,8 @@ void ContextFreePPCallbacks::InclusionDirective(
     clang::StringRef fileName, bool isAngled,
     clang::CharSourceRange filenameRange, clang::OptionalFileEntryRef file,
     clang::StringRef searchPath, clang::StringRef relativePath,
-    const clang::Module *imported, clang::SrcMgr::CharacteristicKind fileType) {
+    const clang::Module *suggestedModule, bool moduleImported,
+    clang::SrcMgr::CharacteristicKind fileType) {
   if (file.has_value()) {
     m_context->currentInclusion().addIncludeDirective(
         {filenameRange.getAsRange(), fileName, file->getUID(), isAngled});
@@ -153,7 +154,7 @@ ContextFreePPCallbacks::getMacroName(const clang::Token &macroNameToken) const {
 
 bool ContextFreePPCallbacks::macroAllowed(std::string_view macroName) const {
   clang::StringRef n(macroName);
-  return n.startswith("__VF_CXX_CLANG_FRONTEND__") ||
+  return n.starts_with("__VF_CXX_CLANG_FRONTEND__") ||
          m_macroWhiteList.contains(macroName);
 }
 

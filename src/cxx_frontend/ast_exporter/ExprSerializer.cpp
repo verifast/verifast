@@ -204,7 +204,7 @@ struct ExprSerializerImpl
   }
 
   bool VisitCharacterLiteral(clang::CharacterLiteral const *const lit) {
-    using CharKind = clang::CharacterLiteral::CharacterKind;
+    using CharKind = clang::CharacterLiteralKind;
     // Check if encoding is UTF16 or UTF32 as their types are defined unsigned
     // according to C++ standard
     CharKind const kind = lit->getKind();
@@ -256,9 +256,9 @@ struct ExprSerializerImpl
     intLitBuilder.setLSuffix(lSuf);
 
     stubs::NbBase base =
-        spelling.startswith_insensitive("0x")  ? stubs::NbBase::HEX
-        : spelling.startswith_insensitive("0") ? stubs::NbBase::OCTAL
-                                               : stubs::NbBase::DECIMAL;
+        spelling.starts_with_insensitive("0x")  ? stubs::NbBase::HEX
+        : spelling.starts_with_insensitive("0") ? stubs::NbBase::OCTAL
+                                                : stubs::NbBase::DECIMAL;
     intLitBuilder.setBase(base);
 
     llvm::APInt const val = lit->getValue();
