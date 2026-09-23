@@ -83,6 +83,10 @@ public:
         std::make_unique<CommentProcessor>(*m_annotationManager);
 
     compiler.getDiagnostics().setClient(&m_diags, false);
+    // The previous client already received BeginSourceFile; forward it so that
+    // m_diags knows the language options.
+    m_diags.BeginSourceFile(compiler.getLangOpts(),
+                            &compiler.getPreprocessor());
     compiler.getPreprocessor().addCommentHandler(m_commentProcessor.get());
     compiler.getPreprocessor().addPPCallbacks(
         std::make_unique<ContextFreePPCallbacks>(
