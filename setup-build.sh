@@ -30,7 +30,7 @@ dl_and_unzip_vfdeps() {
 dl_and_unzip_llvm-clang() {
   platform="$1"
   hash="$2"
-  dl_and_unzip "https://github.com/verifast/vf-llvm-clang-build/releases/download/v2.0.5/vf-llvm-clang-build-$VF_LLVM_CLANG_BUILD_VERSION-$platform.tar.gz" $hash 256 z
+  dl_and_unzip "https://github.com/mborland/vf-llvm-clang-build/releases/download/23.1.2/vf-llvm-clang-build-$VF_LLVM_CLANG_BUILD_VERSION-$platform.tar.gz" $hash 256 z
 }
 
 script_dir=$(pwd)
@@ -57,7 +57,7 @@ if [ $(uname -s) = "Linux" ]; then
   $HOME/.cargo/bin/cargo install --locked --git https://github.com/btj/capnpc-ocaml-decoder
 
   cd /
-  dl_and_unzip_llvm-clang Linux 835a0da7ae9b237844d5dc9f3aa69cf76df08c7fa07dd1834850fd69c114011e
+  dl_and_unzip_llvm-clang Linux ba8f84c04e6b8006169c9a5def58edef7001ef66457a8d1e86cb1a4dce11cb2b
   dl_and_unzip_vfdeps https://github.com/verifast/vfdeps/releases/download/25.01/$VFDEPS_NAME-linux.txz 8d022c93d51a1d13ec1e782d767c60462405f6865d5ee416f82d6234e93ee580
   . "$script_dir/install-vfdeps.sh"
 
@@ -105,10 +105,10 @@ elif [ $(uname -s) = "Darwin" ]; then
 
   cd /usr/local
   if [ "$(uname -p)" = arm ]; then
-    dl_and_unzip_llvm-clang MacOS-aarch64 e56dee8f06c1bef9ee22f8d70b0ef4b4ddb9bca2590c706afa553bbfd72d3d49
+    dl_and_unzip_llvm-clang MacOS-aarch64 a6aa0ea42ed141761962a669f0dfe2219dc4c0a6251a91b4db2ba3da16978ba8
     dl_and_unzip_vfdeps https://github.com/verifast/vfdeps/releases/download/25.01/$VFDEPS_NAME-macos-aarch64.txz 8bd48b02aa1887321d28b8490fe5803ea045845324f5d2adf49e72ddb6643bc1
   else
-    dl_and_unzip_llvm-clang MacOS ceec6ba6f1b5694fae15b28bf20b33e08dbd6dce11fefe954a5659eb7ba32156
+    dl_and_unzip_llvm-clang MacOS ba782e2d9f7c224dfe0fa7c737f2700cb0fd26dc5d4e19ff0320a8f2c1dce065
     dl_and_unzip_vfdeps https://github.com/verifast/vfdeps/releases/download/25.01/$VFDEPS_NAME-macos.txz 99d9eceb2f4e483a61d84015db5251c99d4ce3932535b4b4e4d37a23d0a0146d
   fi
 

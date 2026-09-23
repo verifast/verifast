@@ -30,7 +30,7 @@ dl_and_unzip() {
 script_dir=$(pwd)
 
 cd /cygdrive/c
-dl_and_unzip https://github.com/verifast/vf-llvm-clang-build/releases/download/v2.0.5/vf-llvm-clang-build-$VF_LLVM_CLANG_BUILD_VERSION-Windows-MinGW-x86_64.tar.gz BA94B5A670F1C23D4F941F16D88D931ACFD7183273B50F6FEE17540FECE5472D 256 z
+dl_and_unzip https://github.com/mborland/vf-llvm-clang-build/releases/download/23.1.2/vf-llvm-clang-build-$VF_LLVM_CLANG_BUILD_VERSION-Windows-MinGW-x86_64.tar.gz 2B49A795D74161584C33B7D47E176A61D217A081F316189D13A02E741FDCF335 256 z
 dl_and_unzip https://github.com/verifast/vfdeps-win/releases/download/23.04/vfdeps-e62a07d-win.txz 63a593c235fbcb4d86c4cbe821aca1a943873daadfbbc1af37f0bb3f 224 j
 
 PATHCMD='export PATH="/cygdrive/c/vfdeps/bin:$PATH"'
