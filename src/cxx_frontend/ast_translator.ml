@@ -177,6 +177,11 @@ module Make (Args : Sig.CXX_TRANSLATOR_ARGS) : Sig.Cxx_Ast_Translator = struct
     in
     files |> Capnp_util.arr_map transl_file
 
+  let report_fail_directives (tu : R.TU.t) : unit =
+    R.TU.fail_directives_get tu
+    |> Capnp_util.arr_map Node_translator.map_annotation
+    |> List.iter @@ fun (l, s) -> Args.report_should_fail s l
+
   let transl_tu (tu : R.TU.t) : Sig.header_type list * Ast.decl list =
     let open R.TU in
     let decls_table = files_get tu |> transl_files in
@@ -187,11 +192,7 @@ module Make (Args : Sig.CXX_TRANSLATOR_ARGS) : Sig.Cxx_Ast_Translator = struct
       |> Capnp_util.arr_map Decl_translator.translate
       |> List.flatten
     in
-    let () =
-      fail_directives_get tu
-      |> Capnp_util.arr_map Node_translator.map_annotation
-      |> List.iter @@ fun (l, s) -> Args.report_should_fail s l
-    in
+    let () = report_fail_directives tu in
     (includes, main_decls)
 
   let transl_ser_result result =
@@ -205,6 +206,9 @@ module Make (Args : Sig.CXX_TRANSLATOR_ARGS) : Sig.Cxx_Ast_Translator = struct
           R.TU.files_get tu
           |> Capnp_util.arr_iter (fun f -> update_file_mapping f |> ignore)
         in
+        (* Report fail directives first, so that errors reported by Clang can
+           be marked with //~ should_fail. *)
+        let () = report_fail_directives tu in
         let errors = errors_get result in
         match Capnp.Array.length errors with
         | 0 -> Error.error Ast.dummy_loc "Expected non-empty list of errors."
