@@ -1,21 +1,80 @@
 {
-  description = "VeriFast dev environment: native toolchain and OCaml stack from Nix, Rust from rustup";
+  description = "VeriFast dev environment: native toolchain, OCaml stack and Rust nightly, all from Nix";
 
   inputs = {
     # nixos-25.05 is the LAST release carrying llvmPackages_16, which the C++ AST
     # exporter needs (upstream ships a stock llvmorg-16.0.1 build). 25.11 onward
-    # carry only LLVM 18-23. Using it as the sole input keeps this to one lock entry.
+    # carry only LLVM 18-23.
     nixpkgs.url = "tarball+https://github.com/NixOS/nixpkgs/archive/ac62194c3917d5f474c1a844b6fd6da2db95077d.tar.gz";
+    # Dated Rust nightlies (with rustc-dev), which nixpkgs does not carry.
+    rust-overlay = {
+      url = "github:oxalica/rust-overlay";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs =
-    { self, nixpkgs }:
+    {
+      self,
+      nixpkgs,
+      rust-overlay,
+    }:
     let
       systems = [
         "x86_64-linux"
         "aarch64-linux"
       ];
-      forAllSystems = f: nixpkgs.lib.genAttrs systems (system: f nixpkgs.legacyPackages.${system});
+      forAllSystems =
+        f:
+        nixpkgs.lib.genAttrs systems (
+          system:
+          f (
+            import nixpkgs {
+              inherit system;
+              overlays = [ rust-overlay.overlays.default ];
+            }
+          )
+        );
+
+      # rust-toolchain.toml stays the single source of truth: channel
+      # nightly-2025-11-25 plus the rustc-dev and llvm-tools-preview components.
+      rustToolchainFile = ./rust-toolchain.toml;
+      rustChannel = (builtins.fromTOML (builtins.readFile rustToolchainFile)).toolchain.channel;
+
+      # rust_fe.ml:47 and refinement_checker/frontend.ml:46 locate the sysroot with
+      # `rustc +nightly-2025-11-25 --print sysroot`; the `+toolchain` argument is a
+      # rustup-shim feature that a plain rustc rejects. Wrap rustc and cargo so they
+      # drop it -- for the pinned channel only, the one toolchain this shell has.
+      # The wrapper execs the toolchain's own binary, so the sysroot it reports is
+      # the aggregated one that contains librustc_driver-*.so (rustc-dev).
+      mkRust =
+        pkgs:
+        let
+          toolchain = pkgs.rust-bin.fromRustupToolchainFile rustToolchainFile;
+          shim =
+            tool:
+            pkgs.writeShellScript "${tool}-rustup-plus-shim" ''
+              case "''${1:-}" in
+                "+${rustChannel}") shift ;;
+                +*)
+                  echo "${tool}: toolchain '$1' is not provided by this Nix shell (only ${rustChannel})" >&2
+                  exit 1
+                  ;;
+              esac
+              exec ${toolchain}/bin/${tool} "$@"
+            '';
+        in
+        pkgs.symlinkJoin {
+          name = "rust-${rustChannel}";
+          paths = [ toolchain ];
+          postBuild = ''
+            for tool in rustc cargo; do
+              rm "$out/bin/$tool"
+            done
+            ln -s ${shim "rustc"} "$out/bin/rustc"
+            ln -s ${shim "cargo"} "$out/bin/cargo"
+          '';
+        };
 
       # Neither in vfdeps nor in nixpkgs; upstream installs it with
       # `cargo install --locked --git`. Without it `dune build` fails for
@@ -86,6 +145,7 @@
           ];
         };
 
+      # Consumed through VF_LLVM_INSTALL_DIR by src/cxx_frontend/Makefile.
       # src/cxx_frontend/ast_exporter/CMakeLists.txt:6-7 derives BOTH
       #   LLVM_DIR  = ${LLVM_INSTALL_DIR}/lib/cmake/llvm
       #   Clang_DIR = ${LLVM_INSTALL_DIR}/lib/cmake/clang
@@ -111,6 +171,7 @@
         llvm16 = mkLlvm16 pkgs;
         z3 = mkZ3 pkgs;
         ppx_parser = mkPpxParser pkgs;
+        rust-toolchain = mkRust pkgs;
       });
 
       devShells = forAllSystems (
@@ -120,7 +181,8 @@
           z3 = mkZ3 pkgs;
           ocamlPackages = ocamlPackagesFor pkgs;
           # CMakeLists.txt:8 does set(CapnProto_DIR "${VFDEPS}/lib/cmake/CapnProto"),
-          # so VFDEPS must be a prefix containing lib/cmake/CapnProto.
+          # so VFDEPS (passed via VF_VFDEPS_DIR) must be a prefix containing
+          # lib/cmake/CapnProto -- which is all the exporter needs from vfdeps.
           capnpPrefix = pkgs.capnproto;
         in
         {
@@ -153,12 +215,12 @@
               ocamlPackages.zarith
               ocamlPackages.merlin
               ocamlPackages.ocaml-lsp
+	      ocamlPackages.ocamlformat
               z3.ocaml
               z3.lib
               z3.out # the z3 binary itself, handy for debugging queries
-              # librustc_driver from the rustup toolchain needs libz.so.1 at
-              # runtime; the Nix shell's loader would not otherwise find one.
-              zlib
+              # Rust nightly with the rustup `+channel` shim (see mkRust)
+              (mkRust pkgs)
               # Rocq metatheory: Rocq 9.0.x + Iris 4.3.0, matching the known-good pair
               coq_9_0
               coqPackages_9_0.iris
@@ -167,8 +229,10 @@
 
             # Constant configuration: plain mkShell attributes, so they are real
             # environment variables of the derivation.
-            LLVM16_PREFIX = "${llvm16}";
-            CAPNP_PREFIX = "${capnpPrefix}";
+            # Opt-in overrides of the /tmp/vf-llvm-clang-build-* and /tmp/vfdeps-*
+            # prefixes that src/cxx_frontend/Makefile otherwise hands to cmake.
+            VF_LLVM_INSTALL_DIR = "${llvm16}";
+            VF_VFDEPS_DIR = "${capnpPrefix}";
 
             WITHOUT_LABLGTK = "yes";
             # read by src/dune:5; bin/verifast then finds the libz3.so copied next to it
@@ -197,15 +261,6 @@
               # Rocq 9.0 renamed COQPATH -> ROCQPATH; nixpkgs' coq setup hook still
               # sets the old one, and every coqc call warns about it.
               if [ -n "''${COQPATH:-}" ]; then export ROCQPATH="$COQPATH"; fi
-
-              # bin/vf-rust-mir-exporter links librustc_driver-*.so from the rustup
-              # sysroot, which needs libz.so.1 -- not found by the Nix loader on its
-              # own. rust_fe.ml:120 prepends the sysroot to LD_LIBRARY_PATH rather
-              # than replacing it, so this entry survives into the exporter process.
-              case ":''${LD_LIBRARY_PATH:-}:" in
-                *":${pkgs.zlib}/lib:"*) ;;
-                *) export LD_LIBRARY_PATH="${pkgs.zlib}/lib''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" ;;
-              esac
             '';
           };
         }

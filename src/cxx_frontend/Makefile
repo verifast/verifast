@@ -31,6 +31,8 @@ endif
 			LLVM_INSTALL_DIR="/tmp/vf-llvm-clang-build-$(VF_LLVM_CLANG_BUILD_VERSION)"; \
 			VFDEPS_DIR="/tmp/$(VFDEPS_NAME)"; \
 		fi; \
+		LLVM_INSTALL_DIR="$${VF_LLVM_INSTALL_DIR:-$$LLVM_INSTALL_DIR}"; \
+		VFDEPS_DIR="$${VF_VFDEPS_DIR:-$$VFDEPS_DIR}"; \
 		cmake -S . -B build -DLLVM_INSTALL_DIR="$$LLVM_INSTALL_DIR" -DVFDEPS="$$VFDEPS_DIR" -DCMAKE_BUILD_TYPE=Release; \
 	fi
 	cd $(CXX_FE_AST_EXPORTER_DIR) && cmake --build build
