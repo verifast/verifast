@@ -591,24 +591,14 @@ jobs:
           BODY=$(gh release view --repo ${{ github.event.repository.full_name }} ${{ github.event.release.tag_name }} --json body --template '{{.body}}')
           gh release edit --repo ${{ github.event.repository.full_name }} ${{ github.event.release.tag_name }} --notes "$BODY"$'\r\n'"- $ARTIFACT_NAME: [attestation]($ATTESTATION_URL)"
 
-  flake-builds:
-    runs-on: ${{ matrix.runner }}
+  flake-check:
+    runs-on: ubunut-latest
     permissions:
       contents: read
-    strategy:
-      matrix:
-        include:
-          - runner: ubuntu-latest
-            system: x86_64-linux
-          - runner: macos-latest
-            system: aarch64-darwin 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@main
+        uses: nixbuild/nix-quick-install-action@v35
 
-      - name: Install omnix
-        run: nix profile install nixpkgs#omnix
-
-      - run: om ci run --systems "${{ matrix.system }}"
+      - run: nix flake check --all-systems -L --extra-experimental-features 'nix-command flakes'
