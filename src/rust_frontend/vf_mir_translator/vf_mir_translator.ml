@@ -217,6 +217,7 @@ module Mir = struct
         fields : D.aggregate_kind_adt_data_field_info list;
       }
     | AggKindTuple
+    | AggKindClosure
 
   type field_def_tr = {
     name : string;
@@ -802,6 +803,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               gen_args
               |> Util.flatmap @@ function
                  | Mir.GenArgType arg_ty -> [ arg_ty.vf_ty ]
+                 | Mir.GenArgConst ty_expr -> [ ty_expr ]
                  | _ -> []
             in
             let lft_args =
@@ -885,10 +887,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                         "Lifetime arguments are not yet supported here",
                         None ))
              | Mir.GenArgType arg_ty -> arg_ty.vf_ty
-             | Mir.GenArgConst _ ->
-                 raise
-                   (Ast.StaticError
-                      (loc, "Const arguments are not yet supported here", None))
+             | Mir.GenArgConst ty_expr -> ty_expr
         in
         let vf_ty = ConstructedTypeExpr (loc, name, targs) in
         let sz_expr = SizeofExpr (loc, TypeExpr vf_ty) in
@@ -1208,13 +1207,43 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
 
   and slice_ref_ty_info loc lft mut elem_ty_info =
     let open Ast in
+    let lft_expr = Rust_parser.expr_of_lft_param_expr loc lft in
+    let slice_ty_expr = SliceTypeExpr (loc, elem_ty_info.Mir.vf_ty) in
+    let rust_mut = mut in
     let mut = match mut with Mir.Not -> Shared | Mir.Mut -> Mutable in
     let vf_ty =
-      RustRefTypeExpr (loc, lft, mut, SliceTypeExpr (loc, elem_ty_info.Mir.vf_ty))
+      RustRefTypeExpr (loc, lft, mut, slice_ty_expr)
     in
     let size = SizeofExpr (loc, TypeExpr vf_ty) in
-    let own tid vs =
-      Error "Expressing ownership of &[_] values is not yet supported"
+    let own tid v =
+      match rust_mut with
+      | Mir.Not ->
+        Ok
+          (CoefAsn
+             ( loc,
+               DummyPat,
+               ExprCallExpr
+                 ( loc,
+                   TypePredExpr (loc, slice_ty_expr, "share"),
+                   [ LitPat lft_expr; LitPat tid; LitPat v ] ) ))
+      | Mir.Mut ->
+        (* Same shape as for `&mut T`: a full borrow of the pointee's full borrow content. *)
+        Ok
+          (CallExpr
+             ( loc,
+               "full_borrow",
+               (*type arguments*) [],
+               (*indices*) [],
+               (*arguments*)
+               [
+                 LitPat lft_expr;
+                 LitPat
+                   (ExprCallExpr
+                      ( loc,
+                        TypePredExpr (loc, slice_ty_expr, "full_borrow_content"),
+                        [ LitPat tid; LitPat v ] ));
+               ],
+               Static ))
     in
     let shr lft tid l =
       Error "Expressing shared ownership of &[_] values is not yet supported"
@@ -1247,6 +1276,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | Const ty_const_cpn ->
       let ty_expr =
         match ty_const_cpn.kind with
+        (* A const generic parameter used as a const generic argument; it is a
+           VeriFast type parameter, just like a type parameter is. *)
+        | Param {name} -> Ast.IdentTypeExpr (loc, None, name)
         | Value {ty; val_tree} -> 
           begin match val_tree with
           | Leaf {data; size} ->
@@ -1254,6 +1286,18 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               begin match ty, size with
                 {kind=UInt _}, _ ->
                   Ast.LiteralConstTypeExpr (loc, Z.of_uint128 v)
+              | {kind=Bool}, 1 ->
+                  Ast.LiteralConstTypeExpr (loc, Z.of_uint128 v)
+              | {kind=Int _}, _ ->
+                  (* Sign-extend the [size]-byte two's-complement value. *)
+                  let bits = 8 * size in
+                  let i = Stdint.Int128.of_uint128 v in
+                  let i =
+                    if bits < 128 then
+                      Stdint.Int128.shift_right (Stdint.Int128.shift_left i (128 - bits)) (128 - bits)
+                    else i
+                  in
+                  Ast.LiteralConstTypeExpr (loc, Z.of_int128 i)
               | _ -> 
                   failwith "Unsupported constant type or size"
               end
@@ -1288,10 +1332,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | `Const -> "(const)"
     | _ -> "(unknown)"
 
-  and extract_implicit_outlives_preds_from_generic_arg regions arg =
+  and extract_implicit_outlives_clauses_from_generic_arg regions arg =
     match arg with
     | `Lifetime region -> List.map (fun r -> (region, r)) regions
-    | `Type ty -> extract_implicit_outlives_preds regions ty
+    | `Type ty -> extract_implicit_outlives_clauses regions ty
     | _ -> []
 
   and translate_fn_name (name : string) (substs_cpn : D.generic_arg list) =
@@ -1582,15 +1626,15 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | `Uint D.USize -> "usize"
     | _ -> "(type)"
 
-  and extract_implicit_outlives_preds regions ty =
+  and extract_implicit_outlives_clauses regions ty =
     match ty with
     | `Ref (r, mut, ty) ->
         List.map (fun r' -> (r, r')) regions
-        @ extract_implicit_outlives_preds (r :: regions) ty
+        @ extract_implicit_outlives_clauses (r :: regions) ty
     | `Adt (name, kind, args) ->
         args
         |> Util.flatmap
-             (extract_implicit_outlives_preds_from_generic_arg regions)
+             (extract_implicit_outlives_clauses_from_generic_arg regions)
     | _ -> []
 
   and translate_param_ty (name : string) (loc : Ast.loc) =
@@ -1645,7 +1689,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | Infer -> Ast.static_error loc "Todo: ConstKind::Infer" None
     | Bound -> Ast.static_error loc "Todo: ConstKind::Bound" None
     | Placeholder -> Ast.static_error loc "Todo: ConstKind::Placeholder" None
-    | Unevaluated -> Ast.static_error loc "Todo: ConstKind::Unevaluated" None
+    | Alias -> Ast.static_error loc "Todo: ConstKind::Alias" None
     | Value v_cpn -> (
         let open VfMirRd.Value in
         let* ty = translate_ty v_cpn.ty loc in
@@ -1752,9 +1796,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     | FnDef fn_def_ty_cpn -> translate_fn_def_ty fn_def_ty_cpn loc
     | FnPtr fn_ptr_ty_cpn -> translate_fn_ptr_ty fn_ptr_ty_cpn loc
     | Dynamic _ -> Ast.static_error loc "Dynamic types are not yet supported" None
-    | Closure _ ->
-        Ast.static_error loc "Closure types are not yet supported" None
-        (* CAVEAT: Once we allow closure types to appear as function call generic arguments, we must also verify closure bodies. *)
+    | Closure closure_ty_cpn ->
+        (* This translation is sound provided that closures are consumed only by calls and such calls are rejected by VeriFast. *)
+        let vf_ty = Ast.ManifestTypeExpr (loc, Ast.StructType (TrTyTuple.tuple0_name, [])) in
+        Ok { Mir.vf_ty; interp = RustBelt.emp_ty_interp loc }
     | CoroutineClosure ->
         Ast.static_error loc "Coroutine closure types are not yet supported"
           None
@@ -2114,6 +2159,21 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           Rocq_writer.rocq_print_application TranslatorArgs.rocq_writer "Constant" @@ fun () ->
           Rocq_writer.rocq_print_argument TranslatorArgs.rocq_writer @@ fun () ->
           translate_const_operand constant_cpn
+      | RuntimeChecks checks_cpn ->
+          begin match VfMirRd.RuntimeChecks.get checks_cpn with
+            UbChecks ->
+              let expr = Ast.CallExpr (loc, "std::intrinsics::ub_checks", [], [], [], Static) in
+              let expr =
+                if TranslatorArgs.ignore_unwind_paths then
+                  expr
+                else
+                  Ast.CallExpr (loc, "fn_outcome_result", [], [], [ LitPat expr ], Static)
+              in
+              Ok (`TrOperandCopy expr)
+          | _ ->
+              Ast.static_error loc
+                "Nullary operations are not yet supported" None
+          end
       | Undefined _ -> Error (`TrOperand "Unknown Mir Operand kind")
 
     let translate_operands_core (is_variable_length : bool) (oprs : (OperandRd.t * Ast.loc) list) =
@@ -2164,6 +2224,27 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let translate_fn_call_rexpr (callee_cpn : OperandRd.t)
         (args_cpn : OperandRd.t list) (call_loc : Ast.loc) (fn_loc : Ast.loc)
         (ghost_generic_arg_list_opt_cpn : OptionRd.t) =
+      let has_closure_substs =
+        match D.decode_operand callee_cpn with
+          Constant {const = Val {ty = {kind = FnDef { id = { name }; substs }}}} ->
+            Printf.printf "%s\n" (String.concat ", " (List.map (fun arg -> string_of_generic_arg (decode_generic_arg arg)) substs));
+            List.exists
+              (fun arg -> match (arg : D.generic_arg) with { kind = Type { kind = Closure _ } } -> true | _ -> false)
+              substs
+        | _ -> false
+      in
+      if has_closure_substs then
+        Ok
+          ( [],
+            FnCallResult
+              (Ast.CallExpr
+                  ( fn_loc,
+                    "#verifast_call_with_closure_genargs",
+                    [],
+                    [],
+                    [],
+                    Static )) )
+      else
       (* Todo @Nima: There should be a way to get separated source spans for args *)
       let args = List.map (fun arg_cpn -> (arg_cpn, fn_loc)) args_cpn in
       let* tmp_rvalue_binders, args =
@@ -2290,6 +2371,21 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                          ( fn_loc,
                            PtrTypeExpr (fn_loc, gen_arg_ty_info.vf_ty),
                            arg )) )
+            (* `p.cast_slice(n)` is defined as `slice_from_raw_parts_mut(p, n)`. *)
+            | "std::ptr::const_ptr::<impl *const T>::cast_slice"
+            | "std::ptr::mut_ptr::<impl *mut T>::cast_slice" ->
+                let [ Mir.GenArgType gen_arg_ty_info ] = substs in
+                let [ arg1; arg2 ] = args in
+                Ok
+                  ( tmp_rvalue_binders,
+                    FnCallResult
+                      (Ast.CallExpr
+                         ( fn_loc,
+                           "std::ptr::slice_from_raw_parts_mut",
+                           [ gen_arg_ty_info.vf_ty ],
+                           [],
+                           [ LitPat arg1; LitPat arg2 ],
+                           Static )) )
             | "std::ptr::const_ptr::<impl *const T>::offset"
             | "std::ptr::mut_ptr::<impl *mut T>::offset" -> (
                 match (substs, args_cpn) with
@@ -2627,7 +2723,11 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             Rocq_writer.rocq_print_string_literal TranslatorArgs.rocq_writer t
       end;
       let* main_stmt, targets =
-        match discr_ty.vf_ty with
+        let rec unwrap_const = function
+          | Ast.ConstTypeExpr (_, te) -> unwrap_const te
+          | te -> te
+        in
+        match unwrap_const discr_ty.vf_ty with
         | Ast.ManifestTypeExpr ((*loc*) _, Ast.Bool) -> (
             match (values, targets) with
             | [ v ], [ false_tgt; true_tgt ] when Stdint.Uint128.(zero = DecoderAux.uint128_get v)
@@ -2673,6 +2773,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               ]
             in
             Ok (Ast.SwitchStmt (loc, discr, clauses @ default_clause), targets)
+        | _ ->
+            Ast.static_error loc "Todo: SwitchInt for this discriminant type" None
       in
       if ListAux.is_empty tmp_rvalue_binders then Ok (main_stmt, targets)
       else
@@ -2757,6 +2859,34 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               @ freeze_stmts,
               Mir.GotoTerminator (loc, target),
               [ target ] )
+      | Assert assert_data_cpn ->
+          (* `Assert { cond, expected, target, unwind }`: continue at `target` if `cond == expected`,
+             otherwise panic (i.e. unwind). With -ignore_unwind_paths the panicking branch is
+             modelled as an abort, as the `Terminate` unwind action is. *)
+          let open AssertData in
+          let* tmp_rvalue_binders, [ cond ] =
+            translate_operands [ (cond_get assert_data_cpn, loc) ]
+          in
+          let expected = expected_get assert_data_cpn in
+          let target = translate_basic_block_id (target_get assert_data_cpn) in
+          let fail_stmts, fail_targets =
+            if TranslatorArgs.ignore_unwind_paths then
+              ( [
+                  Ast.ExprStmt
+                    (Ast.CallExpr (loc, "std::process::abort", [], [], [], Ast.Static));
+                ],
+                [] )
+            else translate_unwind_action (unwind_action_get assert_data_cpn) loc
+          in
+          let goto_target = [ Ast.GotoStmt (loc, target) ] in
+          let if_stmt =
+            if expected then Ast.IfStmt (loc, cond, goto_target, fail_stmts)
+            else Ast.IfStmt (loc, cond, fail_stmts, goto_target)
+          in
+          Ok
+            ( [ Ast.BlockStmt (loc, [], tmp_rvalue_binders @ [ if_stmt ], loc, ref []) ],
+              Mir.EncodedTerminator,
+              target :: fail_targets )
       | UnwindResume ->
           Ok
             ( [
@@ -2860,8 +2990,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           let fields = fields_get_list adt_data_cpn |> List.map D.decode_aggregate_kind_adt_data_field_info in
           Ok Mir.(AggKindAdt { adt_kind; adt_name; variant_name; fields })
       | Closure _ ->
-          failwith "Todo: AggregateKind::Closure"
-          (* CAVEAT: Once we allow closure values, we must also check closure bodies. *)
+          Ok Mir.(AggKindClosure)
       | Coroutine -> failwith "Todo: AggregateKind::Coroutine"
       | CoroutineClosure -> failwith "Todo: AggregateKind::CoroutineClosure"
       | RawPtr -> failwith "Todo: AggregateKind::RawPtr"
@@ -2919,6 +3048,11 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                 operand_exprs
             in
             tmp_rvalue_binders @ field_init_stmts
+          in
+          Ok (`TrRvalueAggregate init_stmts_builder)
+      | AggKindClosure ->
+          let init_stmts_builder (_lhs_place, _lhs_place_is_mutable) =
+            tmp_rvalue_binders
           in
           Ok (`TrRvalueAggregate init_stmts_builder)
       | AggKindAdt { adt_kind; adt_name; variant_name; fields } -> (
@@ -3161,23 +3295,6 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           let* operandl = tr_operand operandl in
           let* operandr = tr_operand operandr in
           Ok (`TrRvalueBinaryOp (operator, operandl, operandr))
-      | NullaryOp null_op_cpn ->
-          let open VfMirRd.NullOp in
-          let runtime_checks_cpn = runtime_checks_get null_op_cpn in
-          begin match VfMirRd.RuntimeChecks.get runtime_checks_cpn with
-            UbChecks ->
-              let expr = Ast.CallExpr (loc, "std::intrinsics::ub_checks", [], [], [], Static) in
-              let expr =
-                if TranslatorArgs.ignore_unwind_paths then
-                  expr
-                else
-                  Ast.CallExpr (loc, "fn_outcome_result", [], [], [ LitPat expr ], Static)
-              in
-              Ok (`TrRvalueExpr expr)
-          | _ ->
-              Ast.static_error loc
-                "Nullary operations are not yet supported" None
-          end
       | UnaryOp un_op_data_cpn ->
           let* operator, operand =
             translate_unary_operation un_op_data_cpn loc
@@ -3226,9 +3343,6 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                    [],
                    List.map (fun v -> Ast.LitPat v) (place_expr :: discriminant_values),
                    Static )))
-      | ShallowInitBox ->
-          Ast.static_error loc
-            "Shallow initialization of a Box is not yet supported" None
       | Undefined _ -> Error (`TrRvalue "Unknown Rvalue kind")
 
     let translate_statement_kind (statement_kind_cpn : StatementKindRd.t)
@@ -4047,7 +4161,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         [] (*overrides*) )
 
   let gen_contract (adt_defs : Mir.adt_def_tr list) (contract_loc : Ast.loc)
-      (lft_vars : string list) (outlives_preds : (string * string) list)
+      (lft_vars : string list) (outlives_clauses : (string * string) list)
       (send_tparams : string list) (sync_tparams : string list)
       (params : (Ast.loc * string * Mir.ty_info) list)
       (ret : Ast.loc * Mir.ty_info) =
@@ -4126,7 +4240,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       else List.map (fun lft_var -> lft_token_b bind_pat_b lft_var) lft_vars
     in
     let outlives_asns =
-      outlives_preds
+      outlives_clauses
       |> List.map @@ fun (r1, r2) ->
          Operation
            ( contract_loc,
@@ -4193,7 +4307,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         Rust_parser.mk_outcome_post contract_loc post_asn unwind_post_asn )
 
   let gen_drop_contract adt_defs self_ty self_ty_targs self_lft_args limpl =
-    let outlives_preds = [] in
+    let outlives_clauses = [] in
     let open Ast in
     let ({ loc = ls; tparams; lft_params; fds_no_zst } : Mir.adt_def_tr) =
       List.find
@@ -4241,7 +4355,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       List.map (fun lft_var -> lft_token_b bind_pat_b lft_var) self_lft_args
     in
     let outlives_asns =
-      outlives_preds
+      outlives_clauses
       |> List.map @@ fun (r1, r2) ->
          Operation
            ( limpl,
@@ -4590,18 +4704,19 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     in
     ListAux.try_map (translate_trait_required_fn adt_defs name) required_fns
 
-  let decode_predicate (pred_cpn : D.predicate) =
-    match pred_cpn with
-    | Outlives outlives_pred_cpn ->
-        `Outlives (outlives_pred_cpn.region1.id, outlives_pred_cpn.region2.id)
-    | Trait trait_pred_cpn ->
-        let args = trait_pred_cpn.args |> List.map decode_generic_arg in
-        `Trait (trait_pred_cpn.def_id, args)
-    | Projection proj_pred_cpn -> `Projection proj_pred_cpn
+  let decode_clause (clause_cpn : D.clause) =
+    match clause_cpn with
+    | Outlives outlives_clause_cpn ->
+        `Outlives
+          (outlives_clause_cpn.region1.id, outlives_clause_cpn.region2.id)
+    | Trait trait_clause_cpn ->
+        let args = trait_clause_cpn.args |> List.map decode_generic_arg in
+        `Trait (trait_clause_cpn.def_id, args)
+    | Projection proj_clause_cpn -> `Projection proj_clause_cpn
     | _ -> `Ignored
 
-  let string_of_predicate pred =
-    match pred with
+  let string_of_clause clause =
+    match clause with
     | `Outlives (r1, r2) -> Printf.sprintf "%s : %s" r1 r2
     | `Trait (name, `Type arg :: args) ->
         Printf.sprintf "%s : %s<%s>"
@@ -4638,10 +4753,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
              [ tparam ]
          | _ -> [])
 
-  let translate_projection_pred (loc : Ast.loc)
-      (proj_pred_cpn : D.predicate_projection) =
+  let translate_projection_clause (loc : Ast.loc)
+      (proj_clause_cpn : D.clause_projection) =
     let* assoc_type_def_id, tparam :: trait_args =
-      let projection_term_cpn = proj_pred_cpn.projection_term in
+      let projection_term_cpn = proj_clause_cpn.projection_term in
       let* trait_args =
         projection_term_cpn.args
         |> ListAux.try_map (fun genarg_cpn ->
@@ -4660,7 +4775,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           (String.length assoc_type_def_id - i - 1) )
     in
     let* rhs =
-      let term = proj_pred_cpn.term in
+      let term = proj_clause_cpn.term in
       match term with
       | Ty ty_cpn ->
           let* ty = translate_decoded_ty ty_cpn loc in
@@ -4785,26 +4900,26 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         let vf_tparams =
           if is_trait_fn_get body_cpn then "Self" :: vf_tparams else vf_tparams
         in
-        let preds =
-          impl_block_predicates_get_list body_cpn @ predicates_get_list body_cpn
-          |> List.map D.decode_predicate
-          |> List.map decode_predicate
+        let clauses =
+          impl_block_clauses_get_list body_cpn @ clauses_get_list body_cpn
+          |> List.map D.decode_clause
+          |> List.map decode_clause
         in
-        let sized_tparams = compute_sized_tparams preds in
+        let sized_tparams = compute_sized_tparams clauses in
         let vf_tparams_with_bounds = vf_tparams |> List.map (fun x -> (x, {Ast.sized = List.mem x sized_tparams})) in
-        let projection_preds =
-          preds
+        let projection_clauses =
+          clauses
           |> Util.flatmap (function
-               | `Projection proj_pred_cpn when proj_pred_cpn.D.bound_regions = [] -> [ proj_pred_cpn ]
+               | `Projection proj_clause_cpn when proj_clause_cpn.D.bound_regions = [] -> [ proj_clause_cpn ]
                | _ -> [])
         in
-        let* projection_pred_stmts =
+        let* projection_clause_stmts =
           ListAux.try_map
-            (translate_projection_pred fn_sig_loc)
-            projection_preds
+            (translate_projection_clause fn_sig_loc)
+            projection_clauses
         in
-        let outlives_preds =
-          preds
+        let outlives_clauses =
+          clauses
           |> Util.flatmap (function
                | `Outlives (r1, r2) -> [ (r1, r2) ]
                | _ -> [])
@@ -4820,15 +4935,15 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         Rocq_writer.rocq_print_big_record_field Args.rocq_writer "output" begin fun () ->
           Rocq_writer.rocq_print_data Args.rocq_writer Vf_mir_rocq.rocq_print_ty output
         end;
-        let implicit_outlives_preds =
+        let implicit_outlives_clauses =
           output :: inputs
           |> Util.flatmap @@ fun ty_cpn ->
              ty_cpn |> decode_ty
-             |> extract_implicit_outlives_preds []
+             |> extract_implicit_outlives_clauses []
         in
-        let outlives_preds = implicit_outlives_preds @ outlives_preds in
-        let send_tparams = compute_send_tparams preds in
-        let sync_tparams = compute_sync_tparams preds in
+        let outlives_clauses = implicit_outlives_clauses @ outlives_clauses in
+        let send_tparams = compute_send_tparams clauses in
+        let sync_tparams = compute_sync_tparams clauses in
         let arg_count = List.length inputs in
         let local_decls_cpn = local_decls_get_list body_cpn in
         let* local_decls =
@@ -4926,7 +5041,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   self_ty_targs self_lft_args fn_sig_loc
               else
                 gen_contract body_tr_defs_ctx.adt_defs fn_sig_loc
-                  lft_param_names outlives_preds send_tparams sync_tparams
+                  lft_param_names outlives_clauses send_tparams sync_tparams
                   param_decls
                   (ret_place_loc, ret_ty_info)
             in
@@ -5007,7 +5122,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             Ok
               (mk_fn_decl contract
                  (Some
-                    ( projection_pred_stmts @ vf_local_decls @ vf_bblocks,
+                    ( projection_clause_stmts @ vf_local_decls @ vf_bblocks,
                       closing_cbrace_loc )))
         in
         let body_sig_opt =
@@ -5900,7 +6015,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     gen_args : Vf_mir_decoder.generic_arg list;
     self_ty : string;
     generics : Vf_mir_decoder.generic_param_def list;
-    predicates : Vf_mir_decoder.predicate list;
+    clauses : Vf_mir_decoder.clause list;
     items : D.trait_impl_item list;
   }
 
@@ -5995,17 +6110,22 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
            with
            | Lifetime -> Ok (`Lifetime name)
            | Type -> Ok (`Type name)
-           | Const ->
-               raise
-                 (Ast.StaticError
-                    ( l,
-                      "Structs with const parameters are not yet supported",
-                      None ))
+           | Const -> Ok (`Const name)
       in
+      (* Type and const parameters are kept in declaration order, which is the order
+         in which rustc supplies the corresponding generic arguments at use sites. *)
       let tparams =
+        Util.flatmap (function (`Type x | `Const x) -> [ x ] | _ -> []) generics
+      in
+      let type_tparams =
         Util.flatmap (function `Type x -> [ x ] | _ -> []) generics
       in
-      let tparams_with_bounds = Verifast0.tparams_with_default_bounds_exprs tparams in
+      let tparams_with_bounds =
+        generics |> Util.flatmap @@ function
+          | `Type x -> [ (x, { Ast.sized = Verifast0.tparam_is_uppercase x }) ]
+          | `Const x -> [ (x, { Ast.sized = false }) ]
+          | _ -> []
+      in
       let lft_params =
         Util.flatmap (function `Lifetime x -> [ x ] | _ -> []) generics
       in
@@ -6025,14 +6145,14 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let* variants_no_zst = ListAux.try_map translate_variant_def decoded_variants_no_zst in
       let span_cpn = def_span_get adt_def_cpn in
       let* def_loc = translate_span_data span_cpn in
-      let preds =
-        predicates_get_list adt_def_cpn
-        |> List.map D.decode_predicate
-        |> List.map decode_predicate
+      let clauses =
+        clauses_get_list adt_def_cpn
+        |> List.map D.decode_clause
+        |> List.map decode_clause
       in
-      let sized_tparams = compute_sized_tparams preds in
-      let unsized_tparams = List.filter (fun x -> not (List.mem x sized_tparams)) tparams in
-      let send_tparams = compute_send_tparams preds in
+      let sized_tparams = compute_sized_tparams clauses in
+      let unsized_tparams = List.filter (fun x -> not (List.mem x sized_tparams)) type_tparams in
+      let send_tparams = compute_send_tparams clauses in
       let tparams_targs =
         List.map (fun x -> Ast.IdentTypeExpr (def_loc, None, x)) vf_tparams
       in
@@ -6272,35 +6392,35 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             in
             let check_impl_covers_adt { loc; trait_impl_cpn } =
               check_impl_generics_matches_adt loc trait_impl_cpn;
-              let impl_preds =
-                TraitImplRd.predicates_get_list trait_impl_cpn
-                |> List.map D.decode_predicate
-                |> List.map decode_predicate
+              let impl_clauses =
+                TraitImplRd.clauses_get_list trait_impl_cpn
+                |> List.map D.decode_clause
+                |> List.map decode_clause
               in
-              impl_preds
-              |> List.iter @@ fun impl_pred ->
-                 if not (List.mem impl_pred preds) then
-                   let string_of_preds preds =
-                     String.concat ", " (List.map string_of_predicate preds)
+              impl_clauses
+              |> List.iter @@ fun impl_clause ->
+                 if not (List.mem impl_clause clauses) then
+                   let string_of_clauses clauses =
+                     String.concat ", " (List.map string_of_clause clauses)
                    in
                    Ast.static_error loc
                      (Printf.sprintf
                         "Trait generic parameter constraint %s does not match \
                          any of the ADT generic parameter constraints %s"
-                        (string_of_predicate impl_pred)
-                        (string_of_preds preds))
+                        (string_of_clause impl_clause)
+                        (string_of_clauses clauses))
                      None
             in
-            let get_impl_preds { loc; trait_impl_cpn } =
+            let get_impl_clauses { loc; trait_impl_cpn } =
               let impl_type_param_map, impl_lifetime_param_map =
                 get_impl_generic_param_map loc trait_impl_cpn
               in
-              let impl_preds =
-                TraitImplRd.predicates_get_list trait_impl_cpn
-                |> List.map D.decode_predicate
-                |> List.map decode_predicate
+              let impl_clauses =
+                TraitImplRd.clauses_get_list trait_impl_cpn
+                |> List.map D.decode_clause
+                |> List.map decode_clause
               in
-              impl_preds
+              impl_clauses
               |> Util.flatmap (function
                    | `Trait (trait_name', `Type (`Param x) :: _) ->
                        [
@@ -6378,7 +6498,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               positive_send_impls
               |> List.fold_left
                    (fun preds trait_impl ->
-                     preds_intersection preds (Some (get_impl_preds trait_impl)))
+                     preds_intersection preds (Some (get_impl_clauses trait_impl)))
                    send_preds
             in
             let sync_preds =
@@ -6408,7 +6528,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               positive_sync_impls
               |> List.fold_left
                    (fun preds trait_impl ->
-                     preds_intersection preds (Some (get_impl_preds trait_impl)))
+                     preds_intersection preds (Some (get_impl_clauses trait_impl)))
                    sync_preds
             in
             (send_preds, sync_preds)
@@ -7352,9 +7472,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
              List.map Vf_mir_decoder.decode_generic_param_def
              @@ generics_get_list trait_impl_cpn
            in
-           let predicates =
-             List.map Vf_mir_decoder.decode_predicate
-             @@ predicates_get_list trait_impl_cpn
+           let clauses =
+             List.map Vf_mir_decoder.decode_clause
+             @@ clauses_get_list trait_impl_cpn
            in
            let items =
              items_get_list trait_impl_cpn |> List.map D.decode_trait_impl_item
@@ -7369,7 +7489,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                 gen_args;
                 self_ty;
                 generics;
-                predicates;
+                clauses;
                 items;
               }
                : trait_impl))
@@ -7432,7 +7552,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
   let compute_trait_impl_fn_specialisations trait_impls =
     trait_impls
     |> Util.flatmap
-         (fun { of_trait; gen_args; self_ty; generics; predicates; items } ->
+         (fun { of_trait; gen_args; self_ty; generics; clauses; items } ->
            items
            |> List.map
                 (fun
@@ -7481,11 +7601,11 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                                          Const (List.assoc name env.const_env);
                                      })
                         in
-                        predicates
-                        |> List.iter (fun pred ->
+                        clauses
+                        |> List.iter (fun clause ->
                                Printf.printf
-                                 "WARNING: fn_specializer: rerouting call of %s to %s: ignoring predicate %s\n"
-                                 trait_fn_name item_def_id (string_of_predicate @@ decode_predicate pred));
+                                 "WARNING: fn_specializer: rerouting call of %s to %s: ignoring clause %s\n"
+                                 trait_fn_name item_def_id (string_of_clause @@ decode_clause clause));
                         Some (item_def_id, substs' @ fn_substs)
                   in
                   (canonicalize_item_name trait_fn_name, specializer)))

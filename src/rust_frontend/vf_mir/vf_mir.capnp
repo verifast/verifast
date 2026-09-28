@@ -166,7 +166,7 @@ struct ParamConst {
 struct ValTree {
     union {
         leaf @0: ScalarInt;
-        branch @1: List(ValTree);
+        branch @1: List(TyConst);
     }
 }
 
@@ -181,7 +181,7 @@ struct ConstKind {
         infer @2: Void;
         bound @3: Void;
         placeholder @4: Void;
-        unevaluated @5: Void;
+        alias @5: Void;
         value @1: Value;
         error @6: Void;
         expr @7: Void;
@@ -276,7 +276,7 @@ struct AdtDef {
     isLocal @5: Bool;
     hirGenerics @6: Hir.Generics;
     variances @10: List(Variance); # One for each generic lifetime or type parameter
-    predicates @7: List(Predicate);
+    clauses @7: List(Clause);
     implementsDrop @8: Bool;
     isReprC @11: Bool;
 }
@@ -392,8 +392,8 @@ struct GenericParamDef {
     kind @1: GenericParamDefKind;
 }
 
-# A predicate that can appear in a 'where' clause
-struct Predicate {
+# A clause that can appear in a 'where' clause
+struct Clause {
     struct Outlives {
         region1 @0: Region;
         region2 @1: Region;
@@ -422,7 +422,7 @@ struct Predicate {
         outlives @0: Outlives;
         trait @2: Trait;
         projection @3: Projection;
-        ignored @1: Void; # A predicate that we are ignoring for now
+        ignored @1: Void; # A clause that we are ignoring for now
     }
 }
 
@@ -454,7 +454,7 @@ struct PlaceElem {
     union {
         deref @0: Void;
         field @1: FieldData;
-        boxAsNonNull @7: Ty; # The MIR pattern `(X.0: std::ptr::Unique<T>).0: std::ptr::NonNull<T>` when X is a Box<T>. The Ty is T. Always appears as part of an RValue::Cast(CastKind::Transmute, Operand::Copy(local.BoxAsNonNull)) (https://github.com/rust-lang/rust/blob/18491d5be00eb3ed2f1ccee2ac5b792694f2a7a0/compiler/rustc_mir_transform/src/elaborate_box_derefs.rs#L71)
+        boxAsNonNull @7: Ty; # The MIR pattern `X.0: std::ptr::Unique<T>` when X is a Box<T>. The Ty is T. Always appears as part of an RValue::Cast(CastKind::BoxDerefTransmute, Operand::Copy(local.BoxAsNonNull)), which we encode as CastKind.transmute (https://github.com/rust-lang/rust/blob/18491d5be00eb3ed2f1ccee2ac5b792694f2a7a0/compiler/rustc_mir_transform/src/elaborate_box_derefs.rs#L71)
         index @3: Void;
         constantIndex @4: Void;
         subslice @5: Void;
@@ -545,6 +545,7 @@ struct Operand {
         copy @0: Place;
         move @1: Place;
         constant @2: ConstOperand;
+        runtimeChecks @3 : RuntimeChecks;
     }
 }
 
@@ -608,10 +609,6 @@ struct RuntimeChecks {
         contractChecks @1: Void;
         overflowChecks @2: Void;
     }
-}
-
-struct NullOp {
-    runtimeChecks @0: RuntimeChecks;
 }
 
 struct Rvalue {
@@ -706,11 +703,9 @@ struct Rvalue {
         rawPtr @2: RawPtrData;
         cast @3: CastData;
         binaryOp @4: BinaryOpData;
-        nullaryOp @11: NullOp;
         unaryOp @6: UnaryOpData;
         aggregate @5: AggregateData;
         discriminant @7: DiscriminantData;
-        shallowInitBox @10: Void;
     }
 }
 
@@ -771,6 +766,13 @@ struct TerminatorKind {
         unwindAction @2: UnwindAction;
     }
 
+    struct AssertData {
+        cond @0: Operand;
+        expected @1: Bool;
+        target @2: BasicBlockId;
+        unwindAction @3: UnwindAction;
+    }
+
     union {
         goto @0: BasicBlockId;
         switchInt @1: SwitchIntData;
@@ -781,7 +783,7 @@ struct TerminatorKind {
         call @4: FnCallData;
         drop @5: DropData;
         tailCall @8: Void;
-        assert @9: Void;
+        assert @9: AssertData;
         yield @10: Void;
         coroutineDrop @11: Void;
         falseEdge @12: Void;
@@ -863,10 +865,10 @@ struct Body {
     unsafety @10: Unsafety;
     implBlockHirGenerics @14: Option(Hir.Generics);
     implBlockGenerics @23: List(GenericParamDef);
-    implBlockPredicates @19: List(Predicate);
+    implBlockClauses @19: List(Clause);
     hirGenerics @11: Hir.Generics;
     generics @20: List(GenericParamDef); # Has only the early-bound generic params
-    predicates @17: List(Predicate);
+    clauses @17: List(Clause);
     isTraitFn @12: Bool;
     isDropFn @13: Bool; # Implements std::ops::Drop::drop
     visibility @22: Visibility;
@@ -908,7 +910,7 @@ struct TraitImpl {
     genArgs @8: List(GenericArg); # The first argument is the self type
     selfTy @1: Text;
     generics @6: List(GenericParamDef);
-    predicates @7: List(Predicate);
+    clauses @7: List(Clause);
     items @2: List(TraitImplItem);
 }
 

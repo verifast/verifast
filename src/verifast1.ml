@@ -101,8 +101,22 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       externs |> flatmap @@ fun path ->
         let crateName = Filename.basename path in
         let externArg = Printf.sprintf "%s=%s/target/debug/lib%s.rlib" crateName path crateName in
-        let libPathArg = Printf.sprintf "dependency=%s/target/debug/deps" path in
-        ["--extern"; externArg; "-L"; libPathArg]
+        (* Cargo used to put dependency artifacts in target/debug/deps; newer versions
+           put each one in target/debug/build/<name>/<hash>/out. Pass whichever exist. *)
+        let isDir d = Sys.file_exists d && Sys.is_directory d in
+        let subdirs d = if isDir d then Array.to_list (Sys.readdir d) |> List.map (Filename.concat d) else [] in
+        let buildOutDirs =
+          subdirs (Printf.sprintf "%s/target/debug/build" path)
+          |> flatmap subdirs
+          |> List.map (fun d -> Filename.concat d "out")
+          |> List.filter isDir
+        in
+        let libPathArgs =
+          (Printf.sprintf "%s/target/debug/deps" path) :: buildOutDirs
+          |> List.filter isDir
+          |> flatmap (fun d -> ["-L"; "dependency=" ^ d])
+        in
+        ["--extern"; externArg] @ libPathArgs
     in
     externs_rustc_args @ rustc_args
   
@@ -2051,12 +2065,6 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let s = check s in
         StaticArrayType(tp, s)
     | LiteralConstTypeExpr (l, n) ->
-      let nb = Z.to_big_int n in
-      if sign_big_int nb < 0 then static_error l "Const generic argument must be nonnegative" None;
-      begin match ptr_width with
-        LitWidth k -> if lt_big_int (max_unsigned_big_int k) nb then static_error l "Const generic argument must be within limits of type 'usize'" None
-      | _ -> if lt_big_int (big_int_of_int 65535) nb then static_error l "Const generic argument must be within limits of type 'usize' on all supported targets, i.e. it must be at most 65535" None
-      end;
       LiteralConstType n
     | IdentTypeExpr (l, None, id) ->
       begin
@@ -5024,6 +5032,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let (x, tp) = List.nth param_names_types (int_of_big_int arg_index) in
       let tp = instantiate_type tpenv tp in
       (WFunCall (l, "#inductive_projection", [t], [w; i1; i2], Static), tp, None)
+    | CallExpr (l, "#verifast_call_with_closure_genargs", _, _, _, Static) ->
+      let rt = InferredType (object end, ref Unconstrained) in
+      (WFunCall (l, "#verifast_call_with_closure_genargs", [], [], Static), rt, None)
     | ExprCallExpr (l, e, es) ->
       let es = List.map (function LitPat e -> e | _ -> static_error l "Patterns are not supported here" None) es in
       let (w, t, _) = check e in
@@ -6369,8 +6380,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let tparam_typeid_varname tn = tn ^ "_typeid"
 
-  let usize_of_const_symb = lazy_purefuncsymb "usize_of_const"
-  let const_of_usize_symb = lazy_purefuncsymb "const_of_usize"
+  let int_of_const_symb = lazy_purefuncsymb "int_of_const"
+  let const_of_int_symb = lazy_purefuncsymb "const_of_int"
 
   let typeid_of_type_projection traitName traitArg_typeids assocTypeName t0_typeid =
     let g = Printf.sprintf "%s::%s_typeid" traitName assocTypeName in
@@ -6404,7 +6415,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let t0_typeid = typeid_of_core_core l msg env t0 in
     mk_rust_ref_typeid lft_typeid kind t0_typeid
   | StaticArrayType (elemTp, n) -> mk_array_typeid (typeid_of_core_core l msg env elemTp) (eval_const_type_core l msg env n)
-  | LiteralConstType n -> mk_app (const_of_usize_symb ()) [ctxt#mk_intlit_of_string (Z.to_string n)]
+  | LiteralConstType n -> mk_app (const_of_int_symb ()) [ctxt#mk_intlit_of_string (Z.to_string n)]
   | Bool -> bool_typeid_term
   | Float -> float_typeid_term
   | Double -> double_typeid_term
@@ -6454,7 +6465,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   and eval_const_type_core l msg env t =
     match t with
       LiteralConstType n -> ctxt#mk_intlit_of_string (Z.to_string n)
-    | _ -> mk_app (usize_of_const_symb ()) [typeid_of_core_core l msg env t]
+    | _ -> mk_app (int_of_const_symb ()) [typeid_of_core_core l msg env t]
 
   let no_msg _ = ""
   let typeid_of_core l env t = typeid_of_core_core l no_msg env t

@@ -1,3 +1,4 @@
+#[allow(deref_nullptr)]
 unsafe fn assert(b: bool)
 //@ req b;
 //@ ens true;

@@ -2876,6 +2876,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         consume_chunk rules h env [] [] [] l (get_pred_symb "std::alloc::alloc_block", true) [] real_unit real_unit_pat (Some 1) [TermPat arg; TermPat (mk_app (get_pure_func_symb "std::alloc::Layout::new") [typeid_of_core l env t])] $. fun _ h _ _ _ _ _ _ ->
         cont h env result
       end
+    | WFunCall (l, "#verifast_call_with_closure_genargs", [], [], Static) ->
+      assert_false h env l "Function calls that pass closures are not yet supported" None
     | WFunCall (l, "#inductive_discriminant", [InductiveType (i, targs)], w::discrExprs, Static) ->
       eval_h h env w $. fun h env v ->
       let (_, inductive_tparams, ctormap, _, _, _, _, _, _) = List.assoc i inductivemap in

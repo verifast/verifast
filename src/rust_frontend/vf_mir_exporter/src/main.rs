@@ -13,11 +13,9 @@ fn init_tracing() {
     tracing::subscriber::set_global_default(subscriber).expect("Setting default subscriber failed");
 }
 
-fn main() {
+fn main() -> std::process::ExitCode {
     use vf_mir_exporter::*;
     init_tracing();
 
-    let exit_code = run_compiler();
-
-    std::process::exit(exit_code);
+    run_compiler()
 }

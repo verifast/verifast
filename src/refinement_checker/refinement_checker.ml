@@ -602,7 +602,7 @@ let fns_to_be_inlined: (string * body) list =
       unsafety=Safe;
       impl_block_hir_generics=Nothing;
       impl_block_generics=[];
-      impl_block_predicates=[];
+      impl_block_clauses=[];
       hir_generics={
         params=[
           {name=Plain {name={name="T"}; span}; bounds=(); span; pure_wrt_drop=false; kind=Type};
@@ -615,7 +615,7 @@ let fns_to_be_inlined: (string * body) list =
         {name="T"; kind=Type};
         {name="A"; kind=Type};
       ];
-      predicates=[];
+      clauses=[];
       is_trait_fn=false;
       is_drop_fn=false;
       visibility=Public;
@@ -699,7 +699,7 @@ let fns_to_be_inlined: (string * body) list =
     unsafety=Safe;
     impl_block_hir_generics=Nothing;
     impl_block_generics=[];
-    impl_block_predicates=[];
+    impl_block_clauses=[];
     hir_generics={
       params=[
         {name=Plain {name={name="T"}; span}; bounds=(); span; pure_wrt_drop=false; kind=Type};
@@ -712,7 +712,7 @@ let fns_to_be_inlined: (string * body) list =
       {name="T"; kind=Type};
       {name="A"; kind=Type};
     ];
-    predicates=[];
+    clauses=[];
     is_trait_fn=false;
     is_drop_fn=false;
     visibility=Public;
@@ -934,7 +934,7 @@ let fns_to_be_inlined: (string * body) list =
     unsafety=Safe;
     impl_block_hir_generics=Nothing;
     impl_block_generics=[];
-    impl_block_predicates=[];
+    impl_block_clauses=[];
     hir_generics={
       params=[
         {name=Plain {name={name="T"}; span}; bounds=(); span; pure_wrt_drop=false; kind=Type};
@@ -951,7 +951,7 @@ let fns_to_be_inlined: (string * body) list =
       {name="U"; kind=Type};
       {name="F"; kind=Type};
     ];
-    predicates=[];
+    clauses=[];
     is_trait_fn=false;
     is_drop_fn=false;
     visibility=Public;
@@ -1172,7 +1172,7 @@ let fns_to_be_inlined: (string * body) list =
     unsafety=Safe;
     impl_block_hir_generics=Nothing;
     impl_block_generics=[];
-    impl_block_predicates=[];
+    impl_block_clauses=[];
     hir_generics={
       params=[
         {name=Plain {name={name="T"}; span}; bounds=(); span; pure_wrt_drop=false; kind=Type};
@@ -1189,7 +1189,7 @@ let fns_to_be_inlined: (string * body) list =
       {name="F"; kind=Type};
       {name="O"; kind=Type};
     ];
-    predicates=[];
+    clauses=[];
     is_trait_fn=false;
     is_drop_fn=false;
     visibility=Public;
@@ -1390,7 +1390,7 @@ let fns_to_be_inlined: (string * body) list =
     unsafety=Safe;
     impl_block_hir_generics=Nothing;
     impl_block_generics=[];
-    impl_block_predicates=[];
+    impl_block_clauses=[];
     hir_generics={
       params=[
         {name=Plain {name={name="T"}; span}; bounds=(); span; pure_wrt_drop=false; kind=Type};
@@ -1405,7 +1405,7 @@ let fns_to_be_inlined: (string * body) list =
       {name="U"; kind=Type};
       {name="F"; kind=Type};
     ];
-    predicates=[];
+    clauses=[];
     is_trait_fn=false;
     is_drop_fn=false;
     visibility=Public;
@@ -1572,7 +1572,7 @@ let fns_to_be_inlined: (string * body) list =
     unsafety=Safe;
     impl_block_hir_generics=Nothing;
     impl_block_generics=[];
-    impl_block_predicates=[];
+    impl_block_clauses=[];
     hir_generics={
       params=[
         {name=Plain {name={name="T"}; span}; bounds=(); span; pure_wrt_drop=false; kind=Type};
@@ -1585,7 +1585,7 @@ let fns_to_be_inlined: (string * body) list =
       {name="T"; kind=Type};
       {name="F"; kind=Type};
     ];
-    predicates=[];
+    clauses=[];
     is_trait_fn=false;
     is_drop_fn=false;
     visibility=Public;
@@ -1606,7 +1606,7 @@ type command =
 | RawPtr of rvalue_raw_ptr_data
 | Cast of Vf_mir_decoder.ty (* Pop a value from the top of the operand stack, cast it to the specified type, and push the result *)
 | BinaryOp of rvalue_binary_op_data_bin_op (* Pop two values from the top of the operand stack, apply the specified binary operator to them, and push the result *)
-| NullaryOp of null_op (* Push the result of the specified nullary operator onto the operand stack *)
+| RuntimeChecks of runtime_checks (* Push the specified runtime checks settings onto the operand stack *)
 | UnaryOp of rvalue_unary_op_data_un_op (* Pop a value from the top of the operand stack, apply the specified unary operator to it, and push the result *)
 | Aggregate of aggregate_kind * int (* Pop the specified number of values from the top of the operand stack and push an aggregate value *)
 | Discriminant (* Pop a value from the top of the operand stack, which is an enum value, and push the discriminant of the enum value *)
@@ -1628,7 +1628,7 @@ let string_of_command c =
   | RawPtr {place} -> Printf.sprintf "RawPtr %s" (string_of_place place)
   | Cast ty -> Printf.sprintf "Cast %s" (string_of_ty ty)
   | BinaryOp operator -> Printf.sprintf "BinaryOp %s" (string_of_bin_op operator)
-  | NullaryOp data -> Printf.sprintf "NullaryOp"
+  | RuntimeChecks checks -> Printf.sprintf "RuntimeChecks"
   | Aggregate (aggregate_kind, n) -> Printf.sprintf "Aggregate %s %d" (string_of_aggregate_kind aggregate_kind) n
   | Discriminant -> "Discriminant"
   | SourceInfo {span} -> Printf.sprintf "SourceInfo %s" (string_of_span span)
@@ -1646,6 +1646,7 @@ let commands_for_loading_place {local; projection}: command list =
 let commands_of_operand = function
   Copy place | Move place -> commands_for_loading_place place
 | Constant c -> [Constant c]
+| RuntimeChecks checks -> [RuntimeChecks checks]
 
 let commands_of_rvalue = function
   Use operand -> commands_of_operand operand
@@ -1656,11 +1657,9 @@ let commands_of_rvalue = function
 | Cast {operand=Copy {local; projection=[BoxAsNonNull _]}} -> [LoadLocal local; BoxAsPtr]
 | Cast {operand; ty} -> commands_of_operand operand @ [Cast ty]
 | BinaryOp {operator; operandl; operandr} -> commands_of_operand operandl @ commands_of_operand operandr @ [BinaryOp operator]
-| NullaryOp nullary_op_data -> [NullaryOp nullary_op_data]
 | UnaryOp {operator; operand} -> commands_of_operand operand @ [UnaryOp operator]
 | Aggregate {aggregate_kind; operands} -> List.concat_map commands_of_operand operands @ [Aggregate (aggregate_kind, List.length operands)]
 | Discriminant {place} -> commands_for_loading_place place @ [Discriminant]
-| ShallowInitBox -> failwith "TODO: ShallowInitBox"
 
 let commands_of_statement_kind = function
   Assign {lhs_place; rhs_rvalue} ->
@@ -2026,6 +2025,13 @@ let check_operand_refines_operand i genv0 env0 span0 caller0 operand0 genv1 env1
     let term0 = eval_const_operand genv0 const_operand_cpn0 in
     let term1 = eval_const_operand genv1 const_operand_cpn1 in
     if term0 <> term1 then failwith (Printf.sprintf "The constants %s at %s and %s at %s are not equal" (string_of_term term0) (string_of_span span0) (string_of_term term1) (string_of_span span1))
+  | RuntimeChecks checks0, RuntimeChecks checks1 ->
+    begin match checks0, checks1 with
+    | UbChecks, UbChecks -> ()
+    | ContractChecks, ContractChecks -> ()
+    | OverflowChecks, OverflowChecks -> ()
+    | _ -> failwith "Operand::RuntimeChecks: checks do not match"
+    end
   | _ -> failwith "Operand kinds do not match"
 
 let check_aggregate_kind_refines_aggregate_kind genv0 (aggregate_kind0: aggregate_kind) genv1 (aggregate_kind1: aggregate_kind) =
@@ -2103,16 +2109,6 @@ let check_rvalue_refines_rvalue genv0 env0 span0 caller0 rhsRvalue0 genv1 env1 s
   let rhs0 = binary_op_data_cpn0.operandr in
   let rhs1 = binary_op_data_cpn1.operandr in
   check_operand_refines_operand 1 genv0 env0 span0 caller0 rhs0 genv1 env1 span1 caller1 rhs1
-| NullaryOp op0, NullaryOp op1 ->
-  begin match op0, op1 with
-  | {runtime_checks=checks0}, {runtime_checks=checks1} ->
-    begin match checks0, checks1 with
-    | UbChecks, UbChecks -> ()
-    | ContractChecks, ContractChecks -> ()
-    | OverflowChecks, OverflowChecks -> ()
-    | _ -> failwith "Rvalue::NullaryOp: operators do not match"
-    end
-  end
 | UnaryOp unary_op_data_cpn0, UnaryOp unary_op_data_cpn1 -> failwith "Rvalue::UnaryOp not supported"
 | Aggregate aggregate_data_cpn0, Aggregate aggregate_data_cpn1 ->
   check_aggregate_refines_aggregate genv0 env0 span0 caller0 aggregate_data_cpn0 genv1 env1 span1 caller1 aggregate_data_cpn1
@@ -2121,7 +2117,6 @@ let check_rvalue_refines_rvalue genv0 env0 span0 caller0 rhsRvalue0 genv1 env1 s
     (Local x0, Local x1) | (LocalProjection x0, LocalProjection x1) -> if List.assoc x0 env0 <> List.assoc x1 env1 then failwith "The discriminees of the two rvalues are not equal"
   | Nonlocal, Nonlocal -> ()
   end
-| ShallowInitBox, ShallowInitBox -> failwith "Rvalue::ShallowInitBox not supported"
 
 type loop_invariant = {
   consts0: (local_variable_path * term) list; (* (lv_path, t) means the value of local `lv_path` of the original program equals t *)
@@ -2238,54 +2233,54 @@ let decode_hir_generic_param (hir_generic_param: hir_generics_generic_param) =
   in
   name, kind
 
-let check_predicate_refines_predicate genv0 pred0 genv1 pred1 =
-  match pred0, pred1 with
-    Outlives outlives_pred0, Outlives outlives_pred1 ->
-      let region1_0 = outlives_pred0.region1 in
-      let region1_1 = outlives_pred1.region1 in
-      if region1_0 <> region1_1 then failwith "The two outlives predicates have different regions on the left-hand side";
-      let region2_0 = outlives_pred0.region2 in
-      let region2_1 = outlives_pred1.region2 in
-      if region2_0 <> region2_1 then failwith "The two outlives predicates have different regions on the right-hand side"
-  | Trait trait_pred0, Trait trait_pred1 ->
-      let trait_id0 = trait_pred0.def_id in
-      let trait_id1 = trait_pred1.def_id in
-      if trait_id0 <> trait_id1 then failwith "The two trait predicates have different trait IDs";
+let check_clause_refines_clause genv0 clause0 genv1 clause1 =
+  match clause0, clause1 with
+    Outlives outlives_clause0, Outlives outlives_clause1 ->
+      let region1_0 = outlives_clause0.region1 in
+      let region1_1 = outlives_clause1.region1 in
+      if region1_0 <> region1_1 then failwith "The two outlives clauses have different regions on the left-hand side";
+      let region2_0 = outlives_clause0.region2 in
+      let region2_1 = outlives_clause1.region2 in
+      if region2_0 <> region2_1 then failwith "The two outlives clauses have different regions on the right-hand side"
+  | Trait trait_clause0, Trait trait_clause1 ->
+      let trait_id0 = trait_clause0.def_id in
+      let trait_id1 = trait_clause1.def_id in
+      if trait_id0 <> trait_id1 then failwith "The two trait clauses have different trait IDs";
       let bound_regions_map =
-        match List.combine trait_pred0.bound_regions trait_pred1.bound_regions with
-          exception Invalid_argument _ -> failwith "The two trait predicates have different numbers of bound regions"
+        match List.combine trait_clause0.bound_regions trait_clause1.bound_regions with
+          exception Invalid_argument _ -> failwith "The two trait clauses have different numbers of bound regions"
         | map -> map
       in
       let genv0 = {genv0 with lifetimes=List.map (fun (x, y) -> (x, Region y)) bound_regions_map @ genv0.lifetimes} in
       let genv1 = {genv1 with lifetimes=List.map (fun (_, y) -> (y, Region y)) bound_regions_map @ genv1.lifetimes} in
-      let generic_args0 = trait_pred0.args in
-      let generic_args1 = trait_pred1.args in
-      if List.map (decode_gen_arg genv0) generic_args0 <> List.map (decode_gen_arg genv1) generic_args1 then failwith "The two trait predicates have different generic arguments"
-  | Projection projection_pred0, Projection projection_pred1 ->
-      let proj_term0 = projection_pred0.projection_term in
-      let proj_term1 = projection_pred1.projection_term in
+      let generic_args0 = trait_clause0.args in
+      let generic_args1 = trait_clause1.args in
+      if List.map (decode_gen_arg genv0) generic_args0 <> List.map (decode_gen_arg genv1) generic_args1 then failwith "The two trait clauses have different generic arguments"
+  | Projection projection_clause0, Projection projection_clause1 ->
+      let proj_term0 = projection_clause0.projection_term in
+      let proj_term1 = projection_clause1.projection_term in
       let proj_term_def_id0 = proj_term0.def_id in
       let proj_term_def_id1 = proj_term1.def_id in
-      if proj_term_def_id0 <> proj_term_def_id1 then failwith "The two projection predicates have different alias identifiers";
+      if proj_term_def_id0 <> proj_term_def_id1 then failwith "The two projection clauses have different alias identifiers";
       let bound_regions_map =
-        match List.combine projection_pred0.bound_regions projection_pred1.bound_regions with
-          exception Invalid_argument _ -> failwith "The two trait predicates have different numbers of bound regions"
+        match List.combine projection_clause0.bound_regions projection_clause1.bound_regions with
+          exception Invalid_argument _ -> failwith "The two trait clauses have different numbers of bound regions"
         | map -> map
       in
       let genv0 = {genv0 with lifetimes=List.map (fun (x, y) -> (x, Region y)) bound_regions_map @ genv0.lifetimes} in
       let genv1 = {genv1 with lifetimes=List.map (fun (_, y) -> (y, Region y)) bound_regions_map @ genv1.lifetimes} in
       let proj_term_generic_args0 = proj_term0.args in
       let proj_term_generic_args1 = proj_term1.args in
-      if List.map (decode_gen_arg genv0) proj_term_generic_args0 <> List.map (decode_gen_arg genv1) proj_term_generic_args1 then failwith "The two projection predicates have different alias generic arguments";
-      let rhs0 = projection_pred0.term in
-      let rhs1 = projection_pred1.term in
+      if List.map (decode_gen_arg genv0) proj_term_generic_args0 <> List.map (decode_gen_arg genv1) proj_term_generic_args1 then failwith "The two projection clauses have different alias generic arguments";
+      let rhs0 = projection_clause0.term in
+      let rhs1 = projection_clause1.term in
       begin match rhs0, rhs1 with
         Ty ty0, Ty ty1 ->
-          if decode_ty genv0 ty0 <> decode_ty genv1 ty1 then failwith "The two projection predicates have different right-hand side types"
+          if decode_ty genv0 ty0 <> decode_ty genv1 ty1 then failwith "The two projection clauses have different right-hand side types"
       | Const const0, Const const1 ->
-          if decode_const_expr genv0 const0 <> decode_const_expr genv1 const1 then failwith "The two projection predicates have different right-hand side constants"
+          if decode_const_expr genv0 const0 <> decode_const_expr genv1 const1 then failwith "The two projection clauses have different right-hand side constants"
       end
-  | _ -> failwith "The two predicates have different kinds"
+  | _ -> failwith "The two clauses have different kinds"
 
 let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
   let error msg =
@@ -2324,22 +2319,22 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
     let {lifetimes=lifetimes0}, {lifetimes=lifetimes1} = iter [] [] [] [] [] [] lft_params0 lft_params1 in
     iter lifetimes0 lifetimes1 [] [] [] [] generics0 generics1
   in
-  let preds0 = body0.predicates in
-  let preds1 = body1.predicates in
-  if List.length preds0 <> List.length preds1 then failwith "The two functions have a different number of predicates";
-  let trait_preds0, preds0 = List.partition (function Trait _ -> true | _ -> false) preds0 in
-  let trait_preds1, preds1 = List.partition (function Trait _ -> true | _ -> false) preds1 in
-  if List.length trait_preds0 <> List.length trait_preds1 then failwith "The two functions have a different number of trait predicates";
-  List.iter2 (fun pred0 pred1 -> check_predicate_refines_predicate root_genv0 pred0 root_genv1 pred1) trait_preds0 trait_preds1;
-  let outlives_preds0, preds0 = List.partition (function Outlives _ -> true | _ -> false) preds0 in
-  let outlives_preds1, preds1 = List.partition (function Outlives _ -> true | _ -> false) preds1 in
-  if List.length outlives_preds0 <> List.length outlives_preds1 then failwith "The two functions have a different number of outlives predicates";
-  List.iter2 (fun pred0 pred1 -> check_predicate_refines_predicate root_genv0 pred0 root_genv1 pred1) outlives_preds0 outlives_preds1;
-  let projection_preds0, preds0 = List.partition (function Projection _ -> true | _ -> false) preds0 in
-  let projection_preds1, preds1 = List.partition (function Projection _ -> true | _ -> false) preds1 in
-  if List.length projection_preds0 <> List.length projection_preds1 then failwith "The two functions have a different number of projection predicates";
-  List.iter2 (fun pred0 pred1 -> check_predicate_refines_predicate root_genv0 pred0 root_genv1 pred1) projection_preds0 projection_preds1;
-  if preds0 <> [] || preds1 <> [] then failwith "Predicate kind not supported";
+  let clauses0 = body0.clauses in
+  let clauses1 = body1.clauses in
+  if List.length clauses0 <> List.length clauses1 then failwith "The two functions have a different number of clauses";
+  let trait_clauses0, clauses0 = List.partition (function Trait _ -> true | _ -> false) clauses0 in
+  let trait_clauses1, clauses1 = List.partition (function Trait _ -> true | _ -> false) clauses1 in
+  if List.length trait_clauses0 <> List.length trait_clauses1 then failwith "The two functions have a different number of trait clauses";
+  List.iter2 (fun clause0 clause1 -> check_clause_refines_clause root_genv0 clause0 root_genv1 clause1) trait_clauses0 trait_clauses1;
+  let outlives_clauses0, clauses0 = List.partition (function Outlives _ -> true | _ -> false) clauses0 in
+  let outlives_clauses1, clauses1 = List.partition (function Outlives _ -> true | _ -> false) clauses1 in
+  if List.length outlives_clauses0 <> List.length outlives_clauses1 then failwith "The two functions have a different number of outlives clauses";
+  List.iter2 (fun clause0 clause1 -> check_clause_refines_clause root_genv0 clause0 root_genv1 clause1) outlives_clauses0 outlives_clauses1;
+  let projection_clauses0, clauses0 = List.partition (function Projection _ -> true | _ -> false) clauses0 in
+  let projection_clauses1, clauses1 = List.partition (function Projection _ -> true | _ -> false) clauses1 in
+  if List.length projection_clauses0 <> List.length projection_clauses1 then failwith "The two functions have a different number of projection clauses";
+  List.iter2 (fun clause0 clause1 -> check_clause_refines_clause root_genv0 clause0 root_genv1 clause1) projection_clauses0 projection_clauses1;
+  if clauses0 <> [] || clauses1 <> [] then failwith "Clause kind not supported";
   let inputs0 = body0.inputs in
   let inputs1 = body1.inputs in
   let inputs0 = List.map (decode_ty root_genv0) inputs0 in
@@ -2563,7 +2558,13 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
           (* Todo: follow unwind path *)
           check_basic_block_refines_basic_block env0 i_bb_target0 env1 i_bb_target1
         | TailCall, TailCall -> error "TailCall not supported"
-        | Assert, Assert -> error "Assert not supported"
+        | Assert assert0, Assert assert1 ->
+          check_operand_refines_operand 0 i_bb0#genv env0 span0 caller0 assert0.cond i_bb1#genv env1 span1 caller1 assert1.cond;
+          if assert0.expected <> assert1.expected then error "The two assert terminators expect different values";
+          let i_bb_target0 = i_bb0#sibling (Stdint.Uint32.to_int assert0.target.index) in
+          let i_bb_target1 = i_bb1#sibling (Stdint.Uint32.to_int assert1.target.index) in
+          (* Todo: follow unwind path *)
+          check_basic_block_refines_basic_block env0 i_bb_target0 env1 i_bb_target1
         | Yield, Yield -> error "Yield not supported"
         | CoroutineDrop, CoroutineDrop -> error "CoroutineDrop not supported"
         | FalseEdge, FalseEdge -> error "FalseEdge not supported"
@@ -2665,14 +2666,11 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
             if op0 <> op1 then error "BinaryOp: The operators do not match";
             let v = fresh_symbol () in
             cont env0 (v::opnds0) env1 (v::opnds1)
-        | NullaryOp op0, NullaryOp op1 ->
-            begin match op0, op1 with
-              {runtime_checks=checks0}, {runtime_checks=checks1} ->
-              begin match checks0, checks1 with
+        | RuntimeChecks checks0, RuntimeChecks checks1 ->
+            begin match checks0, checks1 with
               | UbChecks, UbChecks -> ()
               | ContractChecks, ContractChecks -> ()
               | OverflowChecks, OverflowChecks -> ()
-              end
             end;
             let v = fresh_symbol () in
             cont env0 (v::opnds0) env1 (v::opnds1)
