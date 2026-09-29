@@ -38,13 +38,11 @@
           )
         );
 
-      # rust-toolchain.toml stays the single source of truth: channel
-      # nightly-2025-11-25 plus the rustc-dev and llvm-tools-preview components.
       rustToolchainFile = ./rust-toolchain.toml;
       rustChannel = (builtins.fromTOML (builtins.readFile rustToolchainFile)).toolchain.channel;
 
       # rust_fe.ml:47 and refinement_checker/frontend.ml:46 locate the sysroot with
-      # `rustc +nightly-2025-11-25 --print sysroot`; the `+toolchain` argument is a
+      # `rustc +nightly-... --print sysroot`; the `+toolchain` argument is a
       # rustup-shim feature that a plain rustc rejects. Wrap rustc and cargo so they
       # drop it -- for the pinned channel only, the one toolchain this shell has.
       # The wrapper execs the toolchain's own binary, so the sysroot it reports is
