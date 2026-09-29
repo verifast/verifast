@@ -457,7 +457,7 @@ jobs:
           gh release edit --repo ${{ github.event.repository.full_name }} ${{ github.event.release.tag_name }} --notes "$BODY"$'\r\n'"- $ARTIFACT_NAME: [attestation]($ATTESTATION_URL)"
 
   flake-check:
-    runs-on: ubunut-latest
+    runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
