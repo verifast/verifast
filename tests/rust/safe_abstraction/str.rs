@@ -30,3 +30,18 @@ fn test_str<'a>(s: &'a str) -> &'a str
     }
     s
 }
+
+/*@
+
+lem is_valid_utf8_ed_9f()
+    req true;
+    ens true;
+{
+    // U+D7C0..U+D7FF are encoded as ED 9F 80..ED 9F BF and are valid UTF-8.
+    assert is_valid_utf8(cons(0xED, cons(0x9F, cons(0xBF, nil)))) == true; // U+D7FF
+    assert is_valid_utf8(cons(0xED, cons(0x9F, cons(0x80, nil)))) == true; // U+D7C0
+    // ED A0 80 (U+D800) is a surrogate and must stay invalid.
+    assert is_valid_utf8(cons(0xED, cons(0xA0, cons(0x80, nil)))) == false;
+}
+
+@*/

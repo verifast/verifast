@@ -365,7 +365,7 @@ fix is_valid_utf8(bs: list<u8>) -> bool {
                                     is_utf8_tail(b2) &&
                                     if b0 <= 0xEF {
                                         (0xE1 <= b0 || 0xA0 <= b1) && // Not overlong
-                                        (b0 != 0xED || b1 < 0x9F) && // Not a surrogate
+                                        (b0 != 0xED || b1 <= 0x9F) && // Not a surrogate
                                         is_valid_utf8(rest2)
                                     } else {
                                         match rest2 {
