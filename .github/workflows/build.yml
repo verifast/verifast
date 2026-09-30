@@ -333,6 +333,7 @@ jobs:
 
   build_windows:
     runs-on: windows-2022
+    timeout-minutes: 60
     permissions: {}
 
     steps:
