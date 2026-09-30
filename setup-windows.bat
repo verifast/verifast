@@ -7,7 +7,8 @@
 c:\cygwin\bin\bash -lc "cygcheck -c -d" 
 
 bitsadmin.exe /transfer "cygwin" https://www.cygwin.com/setup-x86_64.exe %TEMP%\setup-cygwin.exe || exit /b
-%TEMP%\setup-cygwin.exe -B -qnNd -R c:/cygwin64 -l c:/cygwin64/var/cache/setup -s https://ftp.fau.de/cygwin/ -P p7zip -P cygutils-extra -P mingw64-x86_64-gcc-g++ -P make -P patch -P rlwrap -P libreadline6 -P diffutils -P wget -P cmake -P ninja || exit /b
+@rem libuv1 is pinned to 1.52.1-1 because with 1.53.0-1, Cygwin cmake hangs during compiler detection
+%TEMP%\setup-cygwin.exe -B -qnNd -R c:/cygwin64 -l c:/cygwin64/var/cache/setup -s https://ftp.fau.de/cygwin/ -P p7zip -P cygutils-extra -P mingw64-x86_64-gcc-g++ -P make -P patch -P rlwrap -P libreadline6 -P diffutils -P wget -P cmake -P ninja -P libuv1=1.52.1-1 || exit /b
 
 @rem Add ",noacl" to prevent cygwin from messing with Windows file permissions
 echo none /cygdrive cygdrive binary,posix=0,user,noacl 0 0 > c:\cygwin64\etc\fstab || exit /b
