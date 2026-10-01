@@ -387,6 +387,16 @@ fix is_valid_utf8(bs: list<u8>) -> bool {
 pred str_share(k: lifetime_t, t: thread_id_t, l: *str) = exists(?bs) &*& [_]frac_borrow(k, mk_array(l as *u8, l.len(), bs)) &*& is_valid_utf8(bs) == true;
 type_pred_def <str>.share = str_share;
 
+// Full borrow content of a `str` place: its bytes, which must be valid UTF-8, as for `<str>.share`.
+// Used for `&mut str` ownership: `<&'a mut str>.own(t, l) = full_borrow('a, <str>.full_borrow_content(t, l))`.
+// Code that writes the bytes through a `&mut str` must restore validity before it closes the borrow.
+// The body is duplicated by `pointee_fbc` in `str_ref_ty_info` in
+// src/rust_frontend/vf_mir_translator/vf_mir_translator.ml (in-out `&mut str` parameters of generated
+// contracts); keep the two in sync.
+pred_ctor str_full_borrow_content(t: thread_id_t, l: *str)() =
+    (l as *u8)[..l.len()] |-> ?bs &*& is_valid_utf8(bs) == true;
+type_pred_def <str>.full_borrow_content = str_full_borrow_content;
+
 // Per-element shared ownership of an array of `length` elements, using <T>.share for each
 // element (so it is correct for all T, including types with interior mutability). Moved here
 // from tests/rust/safe_abstraction/vec/verified/vec/mod.rs, which keeps its lemmas about it.

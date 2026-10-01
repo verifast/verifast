@@ -1115,38 +1115,89 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
 
   and str_ref_ty_info loc lft mut =
     let open Ast in
-    if mut <> Mir.Not then
-      static_error loc "Mutable string references are not yet supported" None;
     let lft_expr = Rust_parser.expr_of_lft_param_expr loc lft in
-    let vf_ty = RustRefTypeExpr (loc, lft, (match mut with Mir.Not -> Shared | Mir.Mut -> Mutable), ManifestTypeExpr (loc, Str)) in
+    let str_ty_expr = ManifestTypeExpr (loc, Str) in
+    let vf_ty = RustRefTypeExpr (loc, lft, (match mut with Mir.Not -> Shared | Mir.Mut -> Mutable), str_ty_expr) in
     let size = SizeofExpr (loc, TypeExpr vf_ty) in
     let own tid v =
-      Ok
-        (CoefAsn
-           ( loc,
-             DummyPat,
-             ExprCallExpr
-               ( loc,
-                 TypePredExpr (loc, ManifestTypeExpr (loc, Str), "share"),
-                 [ LitPat lft_expr; LitPat tid; LitPat v ] ) ))
+      match mut with
+      | Mir.Not ->
+        Ok
+          (CoefAsn
+             ( loc,
+               DummyPat,
+               ExprCallExpr
+                 ( loc,
+                   TypePredExpr (loc, str_ty_expr, "share"),
+                   [ LitPat lft_expr; LitPat tid; LitPat v ] ) ))
+      | Mir.Mut ->
+        (* Same shape as for `&mut T` and `&mut [T]`: a full borrow of the pointee's full borrow content. *)
+        Ok
+          (CallExpr
+             ( loc,
+               "full_borrow",
+               (*type arguments*) [],
+               (*indices*) [],
+               (*arguments*)
+               [
+                 LitPat lft_expr;
+                 LitPat
+                   (ExprCallExpr
+                      ( loc,
+                        TypePredExpr (loc, str_ty_expr, "full_borrow_content"),
+                        [ LitPat tid; LitPat v ] ));
+               ],
+               Static ))
     in
+    (* For a `&mut str` in-out parameter of a generated contract (see `gen_contract`): the bytes
+       and their UTF-8 validity, i.e. the body of `str_full_borrow_content` in
+       bin/rust/prelude_core.rsspec. Keep the two in sync. *)
+    let pointee_fbc =
+      match mut with
+      | Mir.Not -> None
+      | Mir.Mut ->
+        Some (fun tid l suffix ->
+          let value_id = Printf.sprintf "_v%s_%s" suffix l in
+          let u8_ty_expr = ManifestTypeExpr (loc, Int (Unsigned, FixedWidthRank 0)) in
+          Ok
+            (Sep
+               ( loc,
+                 CallExpr
+                   ( loc,
+                     "array",
+                     [ u8_ty_expr ],
+                     [],
+                     [
+                       LitPat (CastExpr (loc, PtrTypeExpr (loc, u8_ty_expr), Var (loc, l)));
+                       LitPat (CallExpr (loc, "ptr_len", [], [], [ LitPat (Var (loc, l)) ], Static));
+                       VarPat (loc, value_id);
+                     ],
+                     Static ),
+                 Operation
+                   ( loc,
+                     Eq,
+                     [
+                       CallExpr (loc, "is_valid_utf8", [], [], [ LitPat (Var (loc, value_id)) ], Static);
+                       True loc;
+                     ] ) )))
+    in
+    let ref_ty_name = match mut with Mir.Not -> "&str" | Mir.Mut -> "&mut str" in
     let shr lft tid l =
-      Error "Expressing shared ownership of &str values is not yet supported"
+      Error (Printf.sprintf "Expressing shared ownership of %s values is not yet supported" ref_ty_name)
     in
     let full_bor_content tid l =
       Error
-        "Expressing the full borrow content of &str values is not yet supported"
+        (Printf.sprintf "Expressing the full borrow content of %s values is not yet supported" ref_ty_name)
     in
     let points_to tid l vid_op =
       Error
-        "Expressing a points-to assertion for a &str object is not yet \
-         supported"
+        (Printf.sprintf "Expressing a points-to assertion for a %s object is not yet supported" ref_ty_name)
     in
     {
       Mir.vf_ty;
       interp =
         RustBelt.
-          { size; own; shr; full_bor_content; points_to; pointee_fbc = None };
+          { size; own; shr; full_bor_content; points_to; pointee_fbc };
     }
 
   and str_ptr_ty_info loc = (* *const/mut str *)
@@ -2508,7 +2559,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                   )
             | "std::cell::UnsafeCell::<T>::into_inner" ->
                 let [ arg ] = args in Ok (tmp_rvalue_binders, FnCallResult arg)
-            | "std::str::<impl str>::as_ptr" ->
+            | "std::str::<impl str>::as_ptr" | "std::str::<impl str>::as_mut_ptr" ->
                 let [ arg_cpn ] = args_cpn in
                 let [ arg ] = args in
                 Ok
