@@ -69,7 +69,7 @@ For simple types T such as `bool` and the integer types, we simply have `<T>.own
 - `<&'a mut T>.own(t, l) = full_borrow('a, <T>.full_borrow_content(t, l))`
 - `<&'a T>.own(t, l) = <T>.share('a, t, l)`
 
-For any type T, we have `<T>.full_borrow_content(t, l) = *l |-> ?x &*& <T>.own(t, x)`.
+For any sized type T, we have `<T>.full_borrow_content(t, l) = *l |-> ?x &*& <T>.own(t, x)`. For `str`, it is the bytes of the place, which must be valid UTF-8 (see `str_full_borrow_content` in [`prelude_core.rsspec`](https://github.com/verifast/verifast/blob/master/bin/rust/prelude_core.rsspec)).
 
 For simple types T such as `bool` and the integer types, we simply have `<T>.share(k, t, l) = frac_borrow(k, <T>.full_borrow_content(t, l))`.
 
