@@ -113,3 +113,8 @@ fn create_str_ref(x: &'static str) -> &'static str;
 //@ req true; // TODO
 //@ ens result == x;
 //@ on_unwind_ens false;
+
+fn reborrow_str_ref(x: &'static str) -> &'static str;
+//@ req true; // TODO
+//@ ens result == x;
+//@ on_unwind_ens false;
