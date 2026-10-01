@@ -51,3 +51,38 @@ unsafe fn sum<I: Iterator<Item = usize>>(i: &mut I) -> usize
         }
     }
 }
+
+unsafe fn call_fnonce_with_addr_taken_local<F: FnOnce()>(f: F)
+//@ req thread_token(?t) &*& <F>.own(t, f);
+//@ ens thread_token(t);
+//@ on_unwind_ens thread_token(t);
+{
+    let mut x = 0u8;
+    let p = &mut x;
+    *p = 1;
+    //@ close_tuple_0_own(t);
+    f();
+    //@ open_tuple_0_own(t);
+}
+
+unsafe fn sum_owned<I: Iterator<Item = usize>>(i: I) -> usize
+//@ req thread_token(?t) &*& <I>.own(t, i);
+//@ ens thread_token(t);
+//@ on_unwind_ens thread_token(t);
+{
+    let mut it = i;
+    let mut result = 0;
+    loop {
+        //@ inv thread_token(t) &*& it |-> ?it1 &*& <I>.own(t, it1);
+        match it.next() {
+            None => {
+                //@ leak <std::option::Option<usize>>.own(_, _);
+                return result;
+            }
+            Some(v) => {
+                //@ leak <std::option::Option<usize>>.own(_, _);
+                result += v;
+            }
+        }
+    }
+}

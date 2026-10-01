@@ -216,6 +216,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         [] -> ()
       | PureStmt _ :: rest -> check_block_declarations rest
       | DeclStmt _ :: rest -> check_block_declarations rest
+      | ExprStmt (CallExpr (_, "#register_type_projection_equality", _, _, _, _)) :: rest -> check_block_declarations rest
       | _ :: rest -> check_after_initial_declarations rest
     in
     check_breakpoint h env l;
