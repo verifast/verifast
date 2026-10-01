@@ -772,6 +772,18 @@ mod slice {
     
     struct IterMut<'a, T>;
 
+    // Safety (std docs): `data` must be non-null, valid for both reads and writes for `len * size_of::<T>()`
+    // many bytes, and properly aligned; it must point to `len` consecutive properly initialized values of
+    // type `T`; the total size `len * size_of::<T>()` must be no larger than `isize::MAX`.
+    // Not checked: that the memory is not accessed through any other pointer, and stays allocated, for the
+    // duration of 'a. As for other slice references (see create_slice_ref in aliasing.rsspec, TODO), the
+    // result is the same pointer and the points-to chunk stays with the caller, so the aliasing rules are
+    // not enforced for the result.
+    unsafe fn from_raw_parts_mut<'a, T>(data: *mut T, len: usize) -> &'a mut [T];
+    //@ req data[..len] |-> ?vs &*& data != 0 &*& data as usize % std::mem::align_of::<T>() == 0 &*& len * std::mem::size_of::<T>() <= isize::MAX;
+    //@ ens data[..len] |-> vs &*& result as *T == data &*& result.len() == len;
+    //@ on_unwind_ens false;
+
 }
 
 mod str {
@@ -781,6 +793,120 @@ mod str {
     struct Chars<'a>;
     
     struct Utf8Error;
+
+    /*@
+
+    // The string slice that remains to be iterated over (`Chars::as_str`).
+    fix Chars::as_str<'a>(chars: Chars<'a>) -> *str;
+
+    // The byte range `[start, end)` that index `i` selects in `str::get_unchecked`. Only defined for
+    // `Range<usize>`; for other index types it is unspecified, so their calls cannot be verified.
+    fix str_slice_index_range<I>(i: I) -> pair<usize, usize>;
+
+    lem_auto(str_slice_index_range::<std::ops::Range<usize>>(std::ops::Range::<usize> { start, end })) str_slice_index_range_Range(start: usize, end: usize);
+        req true;
+        ens str_slice_index_range::<std::ops::Range<usize>>(std::ops::Range::<usize> { start, end }) == pair(start, end);
+
+    @*/
+
+    // Safety (std docs): "The bytes passed in must be valid UTF-8."
+    unsafe fn from_utf8_unchecked<'a>(v: &'a [u8]) -> &'a str;
+    //@ req [?f](v as *u8)[..v.len()] |-> ?bs &*& is_valid_utf8(bs) == true;
+    //@ ens [f](v as *u8)[..v.len()] |-> bs &*& result as *u8 == v as *u8 &*& result.len() == v.len();
+    //@ on_unwind_ens false;
+
+    // Safety (std docs): see from_utf8_unchecked.
+    unsafe fn from_utf8_unchecked_mut<'a>(v: &'a mut [u8]) -> &'a mut str;
+    //@ req [?f](v as *u8)[..v.len()] |-> ?bs &*& is_valid_utf8(bs) == true;
+    //@ ens [f](v as *u8)[..v.len()] |-> bs &*& result as *u8 == v as *u8 &*& result.len() == v.len();
+    //@ on_unwind_ens false;
+
+    impl str {
+
+        // Safety (std docs): "The starting index must not exceed the ending index; Indexes must be within
+        // bounds of the original slice; Indexes must lie on UTF-8 sequence boundaries." The last one is
+        // expressed with `is_char_boundary`, as checked by `str::get` before it calls `get_unchecked`.
+        // Unlike the general rule that functions on `str` may assume valid UTF-8 (primitive_docs.rs), this
+        // spec does not require `self` to be valid UTF-8: the implementation (`impl SliceIndex<str> for
+        // Range<usize>`) only does pointer arithmetic, and `String::retain` calls it on a string whose bytes
+        // before `start` are not valid UTF-8. Accordingly, the result is not claimed to be valid UTF-8.
+        // The bytes are returned split at `start` and `end`, so that a call on the result (as in
+        // `s.get_unchecked(i..j).chars()`) finds its bytes.
+        unsafe fn get_unchecked<I, 'a>(self: &'a str, i: I) -> &'a str;
+        /*@
+        req [?f](self as *u8)[..self.len()] |-> ?bs &*&
+            str_slice_index_range::<I>(i) == pair(?start, ?end) &*& start <= end &*& end <= self.len() &*&
+            is_char_boundary(bs, start) && is_char_boundary(bs, end);
+        @*/
+        /*@
+        ens [f](self as *u8)[..start] |-> take(start, bs) &*&
+            [f](result as *u8)[..result.len()] |-> take(end - start, drop(start, bs)) &*&
+            [f](self as *u8 + end)[..self.len() - end] |-> drop(end, bs) &*&
+            result as *u8 == self as *u8 + start &*& result.len() == end - start;
+        @*/
+        //@ on_unwind_ens false;
+
+        fn chars<'a>(self: &'a str) -> Chars<'a>;
+        //@ req true;
+        //@ ens result.as_str() as *u8 == self as *u8 &*& result.as_str().len() == self.len();
+        //@ on_unwind_ens false;
+
+    }
+
+    impl<'a> std::iter::Iterator for std::str::Chars<'a> {
+
+        // Decodes the first UTF-8 sequence of the remaining bytes, which must be valid UTF-8
+        // (`core::str::next_code_point`, safety: "`bytes` must produce a valid UTF-8-like string").
+        fn next<'b>(self: &'b mut std::str::Chars<'a>) -> std::option::Option<char>;
+        //@ req *self |-> ?chars0 &*& [?f](chars0.as_str() as *u8)[..chars0.as_str().len()] |-> ?bs &*& is_valid_utf8(bs) == true;
+        /*@
+        ens [f](chars0.as_str() as *u8)[..chars0.as_str().len()] |-> bs &*& *self |-> ?chars1 &*&
+            match result {
+                Option::None => bs == [],
+                Option::Some(c) =>
+                    bs != [] &*&
+                    char_utf8(c) == take(utf8_seq_len(head(bs)), bs) &*&
+                    char_len_utf8(c) == utf8_seq_len(head(bs)) &*&
+                    is_unicode_scalar_value(c) == true &*&
+                    chars1.as_str() as *u8 == chars0.as_str() as *u8 + utf8_seq_len(head(bs)) &*&
+                    chars1.as_str().len() == chars0.as_str().len() - utf8_seq_len(head(bs))
+            };
+        @*/
+        //@ on_unwind_ens false;
+
+    }
+
+}
+
+mod char {
+
+    mod methods {
+
+        impl char {
+
+            // "Returns the number of bytes this char would need if encoded in UTF-8."
+            fn len_utf8(self: char) -> usize;
+            //@ req true;
+            //@ ens result == char_len_utf8(self);
+            //@ on_unwind_ens false;
+
+            // "Encodes this character as UTF-8 into the provided byte buffer, and then returns the subslice of
+            // the buffer that contains the encoded character." Panics if the buffer is not large enough;
+            // this spec requires it to be large enough. The validity claim relies on is_valid_utf8 accepting
+            // ED 9F 80..BF (U+D7C0..U+D7FF).
+            fn encode_utf8<'a>(self: char, dst: &'a mut [u8]) -> &'a mut str;
+            //@ req (dst as *u8)[..dst.len()] |-> ?bs0 &*& char_len_utf8(self) <= dst.len();
+            /*@
+            ens (dst as *u8)[..char_len_utf8(self)] |-> char_utf8(self) &*&
+                (dst as *u8 + char_len_utf8(self))[..dst.len() - char_len_utf8(self)] |-> drop(char_len_utf8(self), bs0) &*&
+                result as *u8 == dst as *u8 &*& result.len() == char_len_utf8(self) &*&
+                if is_unicode_scalar_value(self) { is_valid_utf8(char_utf8(self)) == true } else { true };
+            @*/
+            //@ on_unwind_ens false;
+
+        }
+
+    }
 
 }
 
