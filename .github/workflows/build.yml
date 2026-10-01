@@ -456,3 +456,15 @@ jobs:
         run: |
           BODY=$(gh release view --repo ${{ github.event.repository.full_name }} ${{ github.event.release.tag_name }} --json body --template '{{.body}}')
           gh release edit --repo ${{ github.event.repository.full_name }} ${{ github.event.release.tag_name }} --notes "$BODY"$'\r\n'"- $ARTIFACT_NAME: [attestation]($ATTESTATION_URL)"
+
+  flake-check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Nix
+        uses: nixbuild/nix-quick-install-action@v35
+
+      - run: nix flake check --all-systems -L --extra-experimental-features 'nix-command flakes'
