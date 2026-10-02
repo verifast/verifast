@@ -431,7 +431,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           false, LocalVar x ->
           let Some term = try_assoc x env in ((term, false), targs', pats0, pats, g#domain, None)
         | true, PredFam g_name ->
-          let (_, _, _, declared_paramtypes, symb, _, _) = List.assoc g_name predfammap in
+          let (_, _, _, declared_paramtypes, symb, _, _) = try List.assoc g_name predfammap with Not_found -> static_error l (Printf.sprintf "No such predicate family: '%s'. (Array slice assertions may not be supported for this element type.)" g_name) None in
           ((symb, true), targs', pats0, pats, g#domain, Some (g_name, declared_paramtypes))
         | true, PredCtor g ->
           let (_, tparams, PredType ([], ps2, inputParamCount, _), ps1, funcsym) = List.assoc g purefuncmap in
@@ -1347,7 +1347,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let (g_symb, chunk_targs, pats0, pats, types) =
         match is_global_predref, g#name with
           true, PredFam g_name ->
-          let (_, _, _, _, symb, _, _) = List.assoc g_name predfammap in
+          let (_, _, _, _, symb, _, _) = try List.assoc g_name predfammap with Not_found -> static_error l (Printf.sprintf "No such predicate family: '%s'. (Array slice assertions may not be supported for this element type.)" g_name) None in
           ((symb, true), targs', pats0, pats, g#domain)
         | true, PredCtor g_name ->
           let (_, tparams, PredType ([], ps2, inputParamCount, _), ps1, funcsym) = List.assoc g_name purefuncmap in
