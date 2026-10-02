@@ -94,6 +94,7 @@ cd safe_abstraction
   verifast fbc_precise.rs
   verifast -allow_should_fail public_fields.rs
   verifast -allow_assume -ignore_unwind_paths box.rs
+  verifast -ignore_unwind_paths -allow_should_fail -allow_dead_code elided_lifetime_mut_ref_result.rs
   verifast full_bor_primitive_types.rs
   verifast shared_primitive_types.rs
   verifast -ignore_unwind_paths -allow_assume deque_i32.rs

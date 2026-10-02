@@ -4236,7 +4236,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let rec check_type_expr state te =
         match te with
         | IdentTypeExpr (_, _, x) when String.starts_with ~prefix:"'_" x -> true
-        | ManifestTypeExpr (_, tp) -> false
+        | ManifestTypeExpr (_, tp) -> state
         | _ -> type_expr_fold_open check_type_expr state te
       in
       check_type_expr false ret_ty.vf_ty
