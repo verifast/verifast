@@ -930,6 +930,15 @@ use rustc_span::RemapPathScopeComponents;
             // Encode traits (consumes annotations)
             self.encode_traits(&mut req_adt_defs, vf_mir_cpn.reborrow());
 
+            // The spans of the bodies of non-closure functions. An annotation inside the span of a function
+            // nested inside another function's body (e.g. a Drop impl of a struct declared in a function
+            // body) belongs to the nested function, not to the enclosing one.
+            let fn_body_spans: Vec<rustc_span::SpanData> = self
+                .bodies
+                .iter()
+                .filter(|(body, _)| !self.tcx.is_closure_like(body.source.def_id()))
+                .map(|(body, _)| body.span.data())
+                .collect();
             vf_mir_cpn.fill_bodies(&self.bodies, |mut body_cpn, (body, span)| {
                 Self::encode_span_data(
                     self.tcx,
@@ -937,15 +946,20 @@ use rustc_span::RemapPathScopeComponents;
                     body_cpn.reborrow().init_fn_sig_span(),
                 );
                 let body_span = body.span.data();
+                let nested_fn_body_spans: Vec<rustc_span::SpanData> = fn_body_spans
+                    .iter()
+                    .filter(|s| **s != body_span && body_span.contains(**s))
+                    .cloned()
+                    .collect();
                 let mut annots = self
                     .annots
                     .extract_if(|annot| {
-                        body_span.contains(
-                            annot
-                                .span()
-                                .expect("Dummy annot found during serialization")
-                                .data(),
-                        )
+                        let annot_span = annot
+                            .span()
+                            .expect("Dummy annot found during serialization")
+                            .data();
+                        body_span.contains(annot_span)
+                            && !nested_fn_body_spans.iter().any(|s| s.contains(annot_span))
                     })
                     .collect::<LinkedList<_>>();
                 let mut_annots = annots.extract_if(|annot| {
@@ -1462,6 +1476,16 @@ use rustc_span::RemapPathScopeComponents;
                 "There are annotations for {} that are neither in contract nor in the body: {:?}",
                 def_path, enc_ctx.annots
             );
+            // The preprocessor turns a ghost range in a function body into a ghost command; if it did not recognize
+            // the ghost range as being in a function body, the ghost range would be ignored.
+            for annot in &ghost_stmts {
+                assert!(
+                    annot.in_fn_body(),
+                    "The annotation at {:?} in the body of {} was not recognized as being in a function body",
+                    annot.span(),
+                    def_path
+                );
+            }
 
             let ghost_decl_blocks = ghost_stmts
                 .extract_if(|annot| annot.kind == GhostRangeKind::BlockDecls)
