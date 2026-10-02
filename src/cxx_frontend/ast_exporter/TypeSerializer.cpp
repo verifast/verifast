@@ -105,13 +105,6 @@ struct TypeSerializerImpl
     return true;
   }
 
-  bool VisitElaboratedType(const clang::ElaboratedType *type) {
-    stubs::Type::Builder elaboratedBuilder =
-        m_builder.initElaborated().initDesc();
-    m_ASTSerializer->serialize(elaboratedBuilder, type->getNamedType());
-    return true;
-  }
-
   bool VisitTypedefType(const clang::TypedefType *type) {
     m_builder.setTypedef(type->getDecl()->getQualifiedNameAsString());
     return true;
@@ -195,12 +188,6 @@ struct TypeLocSerializerImpl
   bool VisitPointerTypeLoc(const clang::PointerTypeLoc typeLoc) {
     TypeNodeBuilder pointerBuilder = m_builder.initPointer();
     m_ASTSerializer->serialize(pointerBuilder, typeLoc.getPointeeLoc());
-    return true;
-  }
-
-  bool VisitElaboratedTypeLoc(const clang::ElaboratedTypeLoc typeLoc) {
-    TypeNodeBuilder elaboratedBuilder = m_builder.initElaborated();
-    m_ASTSerializer->serialize(elaboratedBuilder, typeLoc.getNamedTypeLoc());
     return true;
   }
 

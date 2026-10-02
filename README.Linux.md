@@ -36,7 +36,7 @@ To install the software needed to build VeriFast, run [setup-build.sh](https://g
       valac libgtksourceview2.0-dev \
       cmake build-essential
     ```
-- It installs LLVM/Clang 13.0.0 (a language front-end and tooling infrastructure for languages in the C language family).
+- It installs LLVM/Clang 23 (a language front-end and tooling infrastructure for languages in the C language family).
 - It installs the OCaml-based dependencies:
   - OCaml 4.13.0
   - Findlib 1.9.1 (for the `ocamlfind` tool, used by Z3's install script and dune)
@@ -60,7 +60,7 @@ To install the software needed to build VeriFast, run [setup-build.sh](https://g
     - Stdint 0.7.0
     - Result 1.5
   
-  It does so by downloading a [vf-llvm-clang-build](https://github.com/NielsMommen/vf-llvm-clang-build/releases/tag/v1.0.0) and [VFDeps](https://github.com/verifast/vfdeps) package with pre-compiled versions of these dependencies. Note: these binaries are location-dependent. They need to be below `/tmp/vf-llvm-clang-build-$VERSION` and `/tmp/vfdeps-$VERSION`, where `$VERSION` is the version (Git hash) of the package; that is, extract the archives into `/tmp`. (You can also extract it elsewhere and then create symlinks called `vf-llvm-clang-build-$VERSION` and `/tmp/vfdeps-$VERSION` that point there.) To see which version is currently being used, see [config.sh](https://github.com/verifast/verifast/blob/master/config.sh).
+  It does so by downloading a [vf-llvm-clang-build](https://github.com/verifast/vf-llvm-clang-build/releases) and [VFDeps](https://github.com/verifast/vfdeps) package with pre-compiled versions of these dependencies. Note: these binaries are location-dependent. They need to be below `/tmp/vf-llvm-clang-build-$VERSION` and `/tmp/vfdeps-$VERSION`, where `$VERSION` is the version (Git hash) of the package; that is, extract the archives into `/tmp`. (You can also extract it elsewhere and then create symlinks called `vf-llvm-clang-build-$VERSION` and `/tmp/vfdeps-$VERSION` that point there.) To see which version is currently being used, see [config.sh](https://github.com/verifast/verifast/blob/master/config.sh).
 
 Building VeriFast
 -----------------

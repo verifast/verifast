@@ -59,15 +59,15 @@ void TranslationUnitSerializer::serializeDecl(const clang::Decl *decl) const {
 }
 
 void TranslationUnitSerializer::serializeFile(
-    const clang::FileEntry *fileEntry, stubs::File::Builder fileBuilder) const {
-  DeclListSerializer &declSerializer = getDeclSerializer(fileEntry->getUID());
+    clang::FileEntryRef fileEntry, stubs::File::Builder fileBuilder) const {
+  DeclListSerializer &declSerializer = getDeclSerializer(fileEntry.getUID());
 
   if (declSerializer.size() == 0) {
     declSerializer << m_annotationManager->getAll(fileEntry);
   }
 
-  fileBuilder.setFd(fileEntry->getUID());
-  fileBuilder.setPath(fileEntry->getName().str());
+  fileBuilder.setFd(fileEntry.getUID());
+  fileBuilder.setPath(fileEntry.getName().str());
 
   declSerializer.adoptToListBuilder(
       fileBuilder.initDecls(declSerializer.size()));
@@ -84,14 +84,21 @@ void TranslationUnitSerializer::serialize(
     serializeDecl(decl);
   }
 
-  llvm::SmallVector<const clang::FileEntry *> fileEntries;
-  m_ASTContext->getSourceManager().getFileManager().GetUniqueIDMapping(
-      fileEntries);
+  // All files entered by the preprocessor, ordered by UID.
+  const clang::SourceManager &sourceManager = m_ASTContext->getSourceManager();
+  llvm::SmallVector<clang::FileEntryRef> fileEntries;
+  for (auto it = sourceManager.fileinfo_begin();
+       it != sourceManager.fileinfo_end(); ++it) {
+    fileEntries.push_back(it->first);
+  }
+  llvm::sort(fileEntries, [](clang::FileEntryRef a, clang::FileEntryRef b) {
+    return a.getUID() < b.getUID();
+  });
   ListBuilder<stubs::File> filesBuilder =
       translationUnitBuilder.initFiles(fileEntries.size());
 
   size_t i(0);
-  for (const clang::FileEntry *entry : fileEntries) {
+  for (clang::FileEntryRef entry : fileEntries) {
     stubs::File::Builder fileBuilder = filesBuilder[i++];
     serializeFile(entry, fileBuilder);
   }

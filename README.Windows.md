@@ -34,7 +34,7 @@ To install the software needed to build VeriFast, run [setup-windows.bat](https:
   ```
 - It calls `vcvarsall.bat` to set the environment to configure the command line for native compilation.
 - Inside a Cygwin Bash shell, it runs [setup-windows.sh](https://github.com/verifast/verifast/blob/master/setup-windows.sh), which installs the following dependencies:
-  - LLVM/Clang 13.0.0 (a language front-end and tooling infrastructure for languages in the C language family)
+  - LLVM/Clang 23 (a language front-end and tooling infrastructure for languages in the C language family)
   - OCaml 4.13.0
   - Findlib 1.9.1 (for the `ocamlfind` tool, used by Z3's install script and dune)
   - OCaml-Num 1.4 (arbitrary-precision arithmetic)
@@ -57,7 +57,7 @@ To install the software needed to build VeriFast, run [setup-windows.bat](https:
     - Stdint 0.7.0
     - Result 1.5
   
-  It does so by downloading a [vf-llvm-clang-build](https://github.com/NielsMommen/vf-llvm-clang-build/releases/tag/v1.0.0) and [VFDeps](https://github.com/verifast/vfdeps-win) package with pre-compiled versions of these dependencies. To see which version is currently being used, see [setup-windows.sh](https://github.com/verifast/verifast/blob/master/setup-windows.sh). Note: these binaries are location-dependent. They need to be below `C:\vf-llvm-clang-build-$VERSION` and `C:\vfdeps`, where `$VERSION` is the version (Git hash) of the package; that is, extract the archives into `C:\`.
+  It does so by downloading a [vf-llvm-clang-build](https://github.com/verifast/vf-llvm-clang-build/releases) and [VFDeps](https://github.com/verifast/vfdeps-win) package with pre-compiled versions of these dependencies. To see which version is currently being used, see [setup-windows.sh](https://github.com/verifast/verifast/blob/master/setup-windows.sh). Note: these binaries are location-dependent. They need to be below `C:\vf-llvm-clang-build-$VERSION` and `C:\vfdeps`, where `$VERSION` is the version (Git hash) of the package; that is, extract the archives into `C:\`.
 
 Building VeriFast
 -----------------

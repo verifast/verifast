@@ -733,6 +733,7 @@ cd tests
     verifast -c switch.cpp
     verifast -c declarations.cpp
     verifast -c arrays.cpp
+    verifast -c -allow_should_fail clang_error.cpp
   cd ..
   cd rust
     call testsuite.mysh

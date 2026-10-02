@@ -11,7 +11,12 @@ find_package(LLVM REQUIRED CONFIG)
 find_package(Clang REQUIRED CONFIG)
 find_package(CapnProto REQUIRED CONFIG)
 
-add_definitions(${LLVM_DEFINITIONS})
+if(NOT LLVM_VERSION_MAJOR EQUAL 23)
+  message(FATAL_ERROR "LLVM/Clang 23 is required, but found LLVM ${LLVM_PACKAGE_VERSION} in ${LLVM_INSTALL_DIR}. Re-run setup-build.sh to install the vf-llvm-clang-build version pinned in config.sh and reconfigure this build directory.")
+endif()
+
+separate_arguments(LLVM_DEFINITIONS_LIST NATIVE_COMMAND ${LLVM_DEFINITIONS})
+add_definitions(${LLVM_DEFINITIONS_LIST})
 
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")

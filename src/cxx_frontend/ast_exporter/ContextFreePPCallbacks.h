@@ -47,7 +47,8 @@ public:
                           clang::OptionalFileEntryRef file,
                           clang::StringRef searchPath,
                           clang::StringRef relativePath,
-                          const clang::Module *imported,
+                          const clang::Module *suggestedModule,
+                          bool moduleImported,
                           clang::SrcMgr::CharacteristicKind fileType) override;
 
   ContextFreePPCallbacks(InclusionContext &context,

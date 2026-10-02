@@ -38,7 +38,7 @@ public:
   void serialize(ListBuilder<stubs::Error> builder) const override;
 
   DiagnosticSerializer(clang::DiagnosticsEngine::Level minLevel)
-      : m_minLevel(minLevel) {}
+      : m_minLevel(minLevel), m_langOpts(nullptr) {}
 
 private:
   /**
