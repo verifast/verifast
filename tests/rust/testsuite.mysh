@@ -31,6 +31,7 @@ pushd ../../rust_tutorials/purely_unsafe/solutions
   call verify.mysh
 popd
 verifast -ignore_ref_creation -allow_assume nonnull.rs
+verifast -skip_specless_fns nonnull_into.rs
 cd purely_unsafe
   verifast enum_discr.rs
   verifast -ignore_unwind_paths leftpad.rs
