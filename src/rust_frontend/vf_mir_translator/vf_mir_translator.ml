@@ -1307,11 +1307,58 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let* pat = RustBelt.Aux.vid_op_to_var_pat vid_op loc in
       Ok (PointsTo (loc, l, RegularPointsTo, pat))
     in
+    (* For a `&mut [T]` in-out parameter of a generated contract (see `gen_contract`): the elements
+       and their ownership, i.e. the body of `slice_full_borrow_content` in
+       bin/rust/prelude_core.rsspec, with the same spelling of the element pointer. Keep the two in sync. *)
+    let pointee_fbc =
+      match rust_mut with
+      | Mir.Not -> None
+      | Mir.Mut ->
+        Some (fun tid l suffix ->
+          let value_id = Printf.sprintf "_v%s_%s" suffix l in
+          let elem_ty_expr = elem_ty_info.Mir.vf_ty in
+          let elems_ptr =
+            CastExpr
+              ( loc,
+                PtrTypeExpr (loc, elem_ty_expr),
+                CallExpr
+                  ( loc,
+                    "strip_pointer_metadata",
+                    [],
+                    [],
+                    [ LitPat (CastExpr (loc, ManifestTypeExpr (loc, InductiveType ("pointer", [])), Var (loc, l))) ],
+                    Static ) )
+          in
+          Ok
+            (Sep
+               ( loc,
+                 CallExpr
+                   ( loc,
+                     "array",
+                     [ elem_ty_expr ],
+                     [],
+                     [
+                       LitPat elems_ptr;
+                       LitPat (CallExpr (loc, "ptr_len", [], [], [ LitPat (Var (loc, l)) ], Static));
+                       VarPat (loc, value_id);
+                     ],
+                     Static ),
+                 CallExpr
+                   ( loc,
+                     "foreach",
+                     [],
+                     [],
+                     [
+                       LitPat (Var (loc, value_id));
+                       LitPat (CallExpr (loc, "own", [ elem_ty_expr ], [], [ LitPat tid ], Static));
+                     ],
+                     Static ) )))
+    in
     {
       Mir.vf_ty;
       interp =
         RustBelt.
-          { size; own; shr; full_bor_content; points_to; pointee_fbc = None };
+          { size; own; shr; full_bor_content; points_to; pointee_fbc };
     }
 
   and translate_generic_arg (gen_arg_cpn : D.generic_arg) (loc : Ast.loc) =
