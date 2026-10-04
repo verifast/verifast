@@ -13,7 +13,7 @@ jobs:
     permissions: {}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           fetch-tags: true
@@ -36,7 +36,7 @@ jobs:
           mv verifast-nightly.tar.gz $ARTIFACT_NAME
           echo "artifact_name=$ARTIFACT_NAME" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: binary-package-ubuntu
           path: upload
@@ -56,7 +56,7 @@ jobs:
       contents: write
     
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           fetch-tags: true
@@ -65,17 +65,17 @@ jobs:
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
         run: git tag -f nightly && git push -f origin nightly:refs/tags/nightly
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: binary-package-ubuntu
 
-      - uses: actions/attest-build-provenance@v1
+      - uses: actions/attest-build-provenance@v4
         with:
           subject-path: ${{ needs.build_ubuntu.outputs.artifact_name }}
 
       - name: Upload binary package as nightly release asset
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
-        uses: actions/github-script@v6
+        uses: actions/github-script@v9
         env:
           ARTIFACT_NAME: ${{ needs.build_ubuntu.outputs.artifact_name }}
         with:
@@ -104,17 +104,17 @@ jobs:
       attestations: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           fetch-tags: true
 
       - name: Download artifact
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           name: binary-package-ubuntu
 
-      - uses: actions/attest-build-provenance@v3
+      - uses: actions/attest-build-provenance@v4
         id: attestation
         with:
           subject-path: ${{ needs.build_ubuntu.outputs.artifact_name }}
@@ -140,7 +140,7 @@ jobs:
     permissions: {}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           fetch-tags: true
@@ -164,7 +164,7 @@ jobs:
     permissions: {}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install aarch64 cross-compiler
         run: sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu
@@ -201,7 +201,7 @@ jobs:
     permissions: {}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           fetch-tags: true
@@ -227,12 +227,12 @@ jobs:
           mv verifast-nightly-osx.tar.gz $ARTIFACT_NAME
           echo "artifact_name=$ARTIFACT_NAME" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: binary-package-macos-aarch
           path: upload
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: vfide_libraries_aarch64
           path: src/vfide-libraries.log
@@ -252,7 +252,7 @@ jobs:
       contents: write
     
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           fetch-tags: true
@@ -261,17 +261,17 @@ jobs:
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
         run: git tag -f nightly && git push -f origin nightly:refs/tags/nightly
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: binary-package-macos-aarch
 
-      - uses: actions/attest-build-provenance@v1
+      - uses: actions/attest-build-provenance@v4
         with:
           subject-path: ${{ needs.build_macos_aarch.outputs.artifact_name }}
 
       - name: Upload binary package as nightly release asset
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
-        uses: actions/github-script@v6
+        uses: actions/github-script@v9
         env:
           ARTIFACT_NAME: ${{ needs.build_macos_aarch.outputs.artifact_name }}
         with:
@@ -300,17 +300,17 @@ jobs:
       attestations: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           fetch-tags: true
 
       - name: Download artifact
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           name: binary-package-macos-aarch
 
-      - uses: actions/attest-build-provenance@v3
+      - uses: actions/attest-build-provenance@v4
         id: attestation
         with:
           subject-path: ${{ needs.build_macos_aarch.outputs.artifact_name }}
@@ -337,7 +337,7 @@ jobs:
     permissions: {}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           fetch-tags: true
@@ -358,7 +358,7 @@ jobs:
           mv verifast-nightly.zip $ARTIFACT_NAME
           echo "artifact_name=$ARTIFACT_NAME" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: binary-package-windows
           path: src/${{ steps.rename_artifact.outputs.artifact_name }}
@@ -378,7 +378,7 @@ jobs:
       contents: write
     
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           fetch-tags: true
@@ -387,17 +387,17 @@ jobs:
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
         run: git tag -f nightly && git push -f origin nightly:refs/tags/nightly
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: binary-package-windows
       
-      - uses: actions/attest-build-provenance@v1
+      - uses: actions/attest-build-provenance@v4
         with:
           subject-path: ${{ needs.build_windows.outputs.artifact_name }}
 
       - name: Upload binary package as nightly release asset
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
-        uses: actions/github-script@v6
+        uses: actions/github-script@v9
         env:
           ARTIFACT_NAME: ${{ needs.build_windows.outputs.artifact_name }}
         with:
@@ -426,17 +426,17 @@ jobs:
       attestations: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           fetch-tags: true
 
       - name: Download artifact
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           name: binary-package-windows
 
-      - uses: actions/attest-build-provenance@v3
+      - uses: actions/attest-build-provenance@v4
         id: attestation
         with:
           subject-path: ${{ needs.build_windows.outputs.artifact_name }}
