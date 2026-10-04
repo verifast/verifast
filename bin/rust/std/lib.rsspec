@@ -755,6 +755,15 @@ mod ptr {
         
     }
     
+    impl<T> std::convert::Into<std::ptr::NonNull<T>> for std::ptr::NonNull<T> {
+    
+        fn into(self: NonNull<T>) -> NonNull<T>;
+        //@ req true;
+        //@ ens result == self;
+        //@ on_unwind_ens false;
+        
+    }
+    
     impl<T> std::convert::From<std::ptr::NonNull<T>> for std::ptr::Unique<T> {
     
         fn from(value: NonNull<T>) -> Unique<T>;
