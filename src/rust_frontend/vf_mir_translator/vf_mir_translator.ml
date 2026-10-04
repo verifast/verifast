@@ -1658,6 +1658,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
   and string_of_decoded_type ty =
     match ty with
     | `Bool -> "bool"
+    | `Never -> "!"
     | `Adt (name, kind, args) ->
         if args = [] then name
         else
@@ -7583,6 +7584,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         | None -> Some { env with type_env = (x, ty2) :: env.type_env }
         | Some ty1' -> match_types env ty1' ty2)
     | Bool, Bool -> Some env
+    | Never, Never -> Some env
     | Int intTy1, Int intTy2 -> if intTy1 = intTy2 then Some env else None
     | UInt uintTy1, UInt uintTy2 -> if uintTy1 = uintTy2 then Some env else None
     | Adt { id = id1; substs = substs1 }, Adt { id = id2; substs = substs2 } ->
@@ -7839,6 +7841,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     (l, incl, hs, ps), List.flatten fn_specialization_decls
 
   let rec generic_arg_of_type_expr tparams: Ast.type_expr -> D.generic_arg = function
+    (* `std::convert::Infallible` is a type alias for `!` *)
+    | Ast.IdentTypeExpr (_, None, "std::convert::Infallible")
+    | Ast.ManifestTypeExpr (_, UnionType "std_empty_") -> { kind = Type {kind=Never} }
     | Ast.IdentTypeExpr (_, None, x) ->
       if List.mem_assoc x tparams then
         if String.starts_with ~prefix:"'" x then

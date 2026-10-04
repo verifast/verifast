@@ -746,6 +746,15 @@ mod ptr {
         
     }
     
+    impl<T> std::convert::Into<std::ptr::NonNull<T>> for std::ptr::NonNull<T> {
+    
+        fn into(self: NonNull<T>) -> NonNull<T>;
+        //@ req true;
+        //@ ens result == self;
+        //@ on_unwind_ens false;
+        
+    }
+    
     impl<T> std::convert::Into<std::ptr::NonNull<T>> for std::ptr::Unique<T> {
     
         fn into(self: Unique<T>) -> NonNull<T>;
@@ -1361,7 +1370,6 @@ mod process {
     //@ on_unwind_ens false;
     //@ terminates;
 }
-//Todo @Nima: Edit Rust parser so it substitutes `!` type with std_empty_ union
 
 mod option {
 
@@ -1934,7 +1942,7 @@ mod rt {
 
 mod convert {
 
-    struct Infallible {}
+    type Infallible = !;
     
     trait Into<T> {
     

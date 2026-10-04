@@ -60,7 +60,7 @@
 
 #![allow(unused_features)]
 #![allow(incomplete_features)]
-#![allow(unused_attributes)]
+#![expect(clippy::partialeq_ne_impl, reason = "we need to implement ne for a lot of alloc types")]
 #![stable(feature = "alloc", since = "1.36.0")]
 #![doc(
     html_playground_url = "https://play.rust-lang.org/",
@@ -91,7 +91,7 @@
 //
 // Library features:
 // tidy-alphabetical-start
-#![feature(allocator_api)]
+#![feature(allocator_ext)]
 #![feature(array_into_iter_constructors)]
 #![feature(ascii_char)]
 #![feature(async_fn_traits)]
@@ -129,7 +129,6 @@
 #![feature(derive_const)]
 #![feature(diagnostic_on_move)]
 #![feature(dispatch_from_dyn)]
-#![feature(drop_guard)]
 #![feature(ergonomic_clones)]
 #![feature(error_generic_member_access)]
 #![feature(exact_size_is_empty)]
@@ -151,6 +150,7 @@
 #![feature(legacy_receiver_trait)]
 #![feature(likely_unlikely)]
 #![feature(local_waker)]
+#![feature(marker_trait_attr)]
 #![feature(maybe_uninit_array_assume_init)]
 #![feature(maybe_uninit_fill)]
 #![feature(maybe_uninit_uninit_array_transpose)]
@@ -161,6 +161,7 @@
 #![feature(ptr_cast_slice)]
 #![feature(ptr_internals)]
 #![feature(ptr_metadata)]
+#![feature(random)]
 #![feature(raw_os_error_ty)]
 #![feature(rev_into_inner)]
 #![feature(seek_stream_len)]
@@ -210,7 +211,6 @@
 #![feature(min_specialization)]
 #![feature(multiple_supertrait_upcastable)]
 #![feature(negative_impls)]
-#![feature(never_type)]
 #![feature(optimize_attribute)]
 #![feature(rustc_attrs)]
 #![feature(slice_internals)]
@@ -257,6 +257,7 @@ pub mod fmt;
 pub mod intrinsics;
 #[unstable(feature = "alloc_io", issue = "154046")]
 pub mod io;
+pub mod panicking;
 #[cfg(not(no_rc))]
 pub mod rc;
 pub mod slice;

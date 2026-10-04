@@ -3,7 +3,7 @@
 
 //@ use std::num::{niche_types::UsizeNoHighBit, NonZero};
 //@ use std::mem::Alignment;
-//@ use std::ptr::{NonNull, NonNull_ptr, Unique};
+//@ use std::ptr::{NonNull, NonNull_ptr};
 //@ use std::alloc::{Layout, alloc_id_t, Allocator, alloc_block_in};
 //@ use std::option::Option;
 
@@ -12,7 +12,8 @@
 
 use core::marker::{Destruct, PhantomData};
 use core::mem::{Alignment, ManuallyDrop, MaybeUninit, SizedTypeProperties};
-use core::ptr::{self, NonNull, Unique};
+use core::panic::UnwindSafe;
+use core::ptr::{self, NonNull};
 use core::{cmp, hint};
 
 #[cfg(not(no_global_oom_handling))]
@@ -69,6 +70,7 @@ type Cap = core::num::niche_types::UsizeNoHighBit;
 
 //@ fix Cap::new(n: usize) -> UsizeNoHighBit { UsizeNoHighBit::new(n) }
 
+// SAFETY: 0 *definitely* is less than isize::MAX.
 const ZERO_CAP: Cap = unsafe { Cap::new_unchecked(0) };
 
 /// `Cap(cap)`, except if `T` is a ZST then `Cap::ZERO`.
@@ -79,6 +81,7 @@ const unsafe fn new_cap<T>(cap: usize) -> Cap
 //@ ens result == if std::mem::size_of::<T>() == 0 { Cap::new(0) } else { Cap::new(cap) };
 //@ on_unwind_ens false;
 {
+    // SAFETY: Upheld by caller.
     if T::IS_ZST { ZERO_CAP } else { unsafe { Cap::new_unchecked(cap) } }
 }
 
@@ -87,14 +90,16 @@ const unsafe fn new_cap<T>(cap: usize) -> Cap
 /// involved. This type is excellent for building your own data structures like Vec and VecDeque.
 /// In particular:
 ///
-/// * Produces `Unique::dangling()` on zero-sized types.
-/// * Produces `Unique::dangling()` on zero-length allocations.
-/// * Avoids freeing `Unique::dangling()`.
+/// * Produces `NonNull::dangling()` on zero-sized types.
+/// * Produces `NonNull::dangling()` on zero-length allocations.
+/// * Avoids freeing `NonNull::dangling()`.
 /// * Catches all overflows in capacity computations (promotes them to "capacity overflow" panics).
 /// * Guards against 32-bit systems allocating more than `isize::MAX` bytes.
+/// * Provides niches for capacities greater than `isize::MAX`.
 /// * Guards against overflowing your length.
 /// * Calls `handle_alloc_error` for fallible allocations.
-/// * Contains a `ptr::Unique` and thus endows the user with all related benefits.
+/// * Implements `Send`, `Sync` and `UnwindSafe` iff `(T, A)` does.
+/// * Carries `PhantomData<T>` for auto trait and `may_dangle` correctness.
 /// * Uses the excess returned from the allocator to use the largest available capacity.
 ///
 /// This type does not in anyway inspect the memory that it manages. When dropped it *will*
@@ -118,7 +123,7 @@ pub(crate) struct RawVec<T, A: Allocator = Global> {
 /// as most operations don't need the actual type, just its layout.
 #[allow(missing_debug_implementations)]
 struct RawVecInner<A: Allocator = Global> {
-    ptr: Unique<u8>,
+    ptr: NonNull<u8>,
     /// Never used for ZSTs; it's `capacity()`'s responsibility to return usize::MAX in that case.
     ///
     /// # Safety
@@ -127,6 +132,11 @@ struct RawVecInner<A: Allocator = Global> {
     cap: Cap,
     alloc: A,
 }
+
+// FIXME: Consider moving these impls to `RawVec`, once #162850 is resolved.
+unsafe impl<A: Allocator + Send> Send for RawVecInner<A> {}
+unsafe impl<A: Allocator + Sync> Sync for RawVecInner<A> {}
+impl<A: Allocator + UnwindSafe> UnwindSafe for RawVecInner<A> {}
 
 /*@
 
@@ -137,7 +147,7 @@ fix logical_capacity(cap: UsizeNoHighBit, elem_size: usize) -> usize {
 pred RawVecInner<A>(t: thread_id_t, self: RawVecInner<A>, elemLayout: Layout, alloc_id: alloc_id_t, ptr: *u8, capacity: usize) =
     Allocator(t, self.alloc, alloc_id) &*&
     capacity == logical_capacity(self.cap, elemLayout.size()) &*&
-    ptr == self.ptr.as_non_null_ptr().as_ptr() &*&
+    ptr == self.ptr.as_ptr() &*&
     ptr as usize % elemLayout.align() == 0 &*&
     pointer_within_limits(ptr) == true &*&
     elemLayout.repeat(capacity) == some(pair(?allocLayout, ?stride)) &*&
@@ -164,7 +174,7 @@ lem RawVecInner_send_<A>(t1: thread_id_t)
 
 pred RawVecInner0<A>(self: RawVecInner<A>, elemLayout: Layout, ptr: *u8, capacity: usize) =
     capacity == logical_capacity(self.cap, elemLayout.size()) &*&
-    ptr == self.ptr.as_non_null_ptr().as_ptr() &*&
+    ptr == self.ptr.as_ptr() &*&
     ptr as usize % elemLayout.align() == 0 &*&
     pointer_within_limits(ptr) == true &*&
     elemLayout.repeat(capacity) == some(pair(?allocLayout, ?stride));
@@ -175,11 +185,10 @@ pred<A> <RawVecInner<A>>.own(t, self_) =
 
 lem RawVecInner_drop<A>()
     req RawVecInner_own::<A>(?_t, ?_v);
-    ens std::ptr::Unique_own::<u8>(_t, _v.ptr) &*& std::num::niche_types::UsizeNoHighBit_own(_t, _v.cap) &*& <A>.own(_t, _v.alloc);
+    ens std::num::niche_types::UsizeNoHighBit_own(_t, _v.cap) &*& <A>.own(_t, _v.alloc);
 {
     open RawVecInner_own::<A>(_t, _v);
     open RawVecInner0(_, _, _, _);
-    std::ptr::close_Unique_own::<u8>(_t, _v.ptr);
     std::num::niche_types::close_UsizeNoHighBit_own(_t, _v.cap);
 }
 
@@ -231,7 +240,7 @@ pred_ctor RawVecInner_frac_borrow_content<A>(l: *RawVecInner<A>, elemLayout: Lay
     (*l).ptr |-> ?u &*&
     (*l).cap |-> ?cap &*&
     capacity == logical_capacity(cap, elemLayout.size()) &*&
-    ptr == u.as_non_null_ptr().as_ptr() &*&
+    ptr == u.as_ptr() &*&
     ptr as usize % elemLayout.align() == 0 &*&
     pointer_within_limits(ptr) == true &*&
     elemLayout.repeat(capacity) == some(pair(?allocLayout, ?stride));
@@ -380,7 +389,7 @@ lem share_RawVecInner0<A>(k: lifetime_t, l: *RawVecInner<A>, elemLayout: Layout,
         *l |-> ?self_ &*&
         Allocator(?t, self_.alloc, ?alloc_id) &*&
         capacity == logical_capacity(self_.cap, elemLayout.size()) &*&
-        ptr == self_.ptr.as_non_null_ptr().as_ptr() &*&
+        ptr == self_.ptr.as_ptr() &*&
         ptr as usize % elemLayout.align() == 0 &*&
         pointer_within_limits(ptr) == true &*&
         elemLayout.repeat(capacity) == some(pair(?allocLayout, ?stride));
@@ -407,7 +416,7 @@ lem end_share_RawVecInner0<A>(l: *RawVecInner<A>)
     ens *l |-> ?self_ &*&
         Allocator(t, self_.alloc, alloc_id) &*&
         capacity == logical_capacity(self_.cap, elemLayout.size()) &*&
-        ptr == self_.ptr.as_non_null_ptr().as_ptr() &*&
+        ptr == self_.ptr.as_ptr() &*&
         ptr as usize % elemLayout.align() == 0 &*&
         pointer_within_limits(ptr) == true &*&
         elemLayout.repeat(capacity) == some(pair(?allocLayout, ?stride));
@@ -507,7 +516,7 @@ lem init_ref_RawVecInner_m<A>(l: *RawVecInner<A>)
     let ptr_ = (*l0).ptr;
     let cap_ = (*l0).cap;
     open [f]ref_initialized_::<A>(&(*l).alloc)();
-    std::ptr::init_ref_Unique(&(*l).ptr, 1/2);
+    std::ptr::init_ref_NonNull(&(*l).ptr, 1/2);
     std::num::niche_types::init_ref_UsizeNoHighBit(&(*l).cap, 1/2);
     init_ref_padding_RawVecInner(l, 1/2);
     {
@@ -520,7 +529,7 @@ lem init_ref_RawVecInner_m<A>(l: *RawVecInner<A>)
         pred Ctx() =
             [f/2]ref_initialized(&(*l).alloc) &*&
             ref_padding_end_token(l, l0, f/2) &*& [f/2]struct_RawVecInner_padding(l0) &*& [1 - f/2]ref_padding_initialized(l) &*&
-            std::ptr::end_ref_Unique_token(&(*l).ptr, &(*l0).ptr, f/2) &*& [f/2](*l0).ptr |-> ptr_ &*& [1 - f/2]ref_initialized(&(*l).ptr) &*&
+            ref_end_token(&(*l).ptr, &(*l0).ptr, f/2) &*& [f/2](*l0).ptr |-> ptr_ &*& [1 - f/2]ref_initialized(&(*l).ptr) &*&
             std::num::niche_types::end_ref_UsizeNoHighBit_token(&(*l).cap, &(*l0).cap, f/2) &*& [f/2](*l0).cap |-> cap_ &*& [1 - f/2]ref_initialized(&(*l).cap);
         produce_lem_ptr_chunk frac_borrow_convert_strong(Ctx, scaledp(f/2, sep_(ref_initialized_(l), RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity))), klong, f, sep_(RawVecInner_frac_borrow_content(l0, elemLayout, ptr, capacity), ref_initialized_(&(*l).alloc)))() {
             open scaledp(f/2, sep_(ref_initialized_(l), RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity)))();
@@ -529,7 +538,7 @@ lem init_ref_RawVecInner_m<A>(l: *RawVecInner<A>)
             open RawVecInner_frac_borrow_content::<A>(l, elemLayout, ptr, capacity)();
             open_ref_initialized_RawVecInner(l);
             open Ctx();
-            std::ptr::end_ref_Unique(&(*l).ptr);
+            std::ptr::end_ref_NonNull(&(*l).ptr);
             std::num::niche_types::end_ref_UsizeNoHighBit(&(*l).cap);
             end_ref_padding_RawVecInner(l);
             close [f]RawVecInner_frac_borrow_content::<A>(l0, elemLayout, ptr, capacity)();
@@ -620,7 +629,7 @@ lem init_ref_RawVecInner<A>(l: *RawVecInner<A>)
     let ptr_ = (*l0).ptr;
     let cap_ = (*l0).cap;
     open [f]ref_initialized_::<A>(&(*l).alloc)();
-    std::ptr::init_ref_Unique(&(*l).ptr, 1/2);
+    std::ptr::init_ref_NonNull(&(*l).ptr, 1/2);
     std::num::niche_types::init_ref_UsizeNoHighBit(&(*l).cap, 1/2);
     init_ref_padding_RawVecInner(l, 1/2);
     {
@@ -633,7 +642,7 @@ lem init_ref_RawVecInner<A>(l: *RawVecInner<A>)
         pred Ctx() =
             [f/2]ref_initialized(&(*l).alloc) &*&
             ref_padding_end_token(l, l0, f/2) &*& [f/2]struct_RawVecInner_padding(l0) &*& [1 - f/2]ref_padding_initialized(l) &*&
-            std::ptr::end_ref_Unique_token(&(*l).ptr, &(*l0).ptr, f/2) &*& [f/2](*l0).ptr |-> ptr_ &*& [1 - f/2]ref_initialized(&(*l).ptr) &*&
+            ref_end_token(&(*l).ptr, &(*l0).ptr, f/2) &*& [f/2](*l0).ptr |-> ptr_ &*& [1 - f/2]ref_initialized(&(*l).ptr) &*&
             std::num::niche_types::end_ref_UsizeNoHighBit_token(&(*l).cap, &(*l0).cap, f/2) &*& [f/2](*l0).cap |-> cap_ &*& [1 - f/2]ref_initialized(&(*l).cap);
         produce_lem_ptr_chunk frac_borrow_convert_strong(Ctx, scaledp(f/2, sep_(ref_initialized_(l), RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity))), klong, f, sep_(RawVecInner_frac_borrow_content(l0, elemLayout, ptr, capacity), ref_initialized_(&(*l).alloc)))() {
             open scaledp(f/2, sep_(ref_initialized_(l), RawVecInner_frac_borrow_content(l, elemLayout, ptr, capacity)))();
@@ -642,7 +651,7 @@ lem init_ref_RawVecInner<A>(l: *RawVecInner<A>)
             open RawVecInner_frac_borrow_content::<A>(l, elemLayout, ptr, capacity)();
             open_ref_initialized_RawVecInner(l);
             open Ctx();
-            std::ptr::end_ref_Unique(&(*l).ptr);
+            std::ptr::end_ref_NonNull(&(*l).ptr);
             std::num::niche_types::end_ref_UsizeNoHighBit(&(*l).cap);
             end_ref_padding_RawVecInner(l);
             close [f]RawVecInner_frac_borrow_content::<A>(l0, elemLayout, ptr, capacity)();
@@ -1305,6 +1314,15 @@ impl<T, A: Allocator> RawVec<T, A> {
             //@ size_align::<T>();
             //@ if len * std::mem::size_of::<T>() != 0 { std::alloc::Layout_repeat_some_size_aligned(Layout::new::<T>(), len); }
             //@ close_points_to_slice_at_lft(slice);
+            // SAFETY: `slice` is a valid pointer for `len` `T`s, and the
+            // above `ManuallyDrop` ensures that the destructor of `me` which
+            // would free the allocation is never run. The caller upholds that
+            // `len` meets or exceeds the last requested capacity, ensuring that
+            // the layout generated when dropping the resulting `Box` fits the
+            // allocation the `RawVec` created.
+            //
+            // Moving the allocator out of `me.inner` is also sound since it is
+            // never accessed after this point.
             Box::from_raw_in(slice, alloc)
         }
     }
@@ -1323,7 +1341,7 @@ impl<T, A: Allocator> RawVec<T, A> {
     pub(crate) const unsafe fn from_raw_parts_in(ptr: *mut T, capacity: usize, alloc: A) -> Self
     /*@
     req Allocator(?t, alloc, ?alloc_id) &*&
-        ptr != 0 &*&
+        ptr as usize != 0 &*&
         ptr as usize % std::mem::align_of::<T>() == 0 &*&
         if capacity * std::mem::size_of::<T>() == 0 {
             true
@@ -1408,7 +1426,7 @@ impl<T, A: Allocator> RawVec<T, A> {
     }
 
     /// Gets a raw pointer to the start of the allocation. Note that this is
-    /// `Unique::dangling()` if `capacity == 0` or `T` is zero-sized. In the former case, you must
+    /// `NonNull::dangling()` if `capacity == 0` or `T` is zero-sized. In the former case, you must
     /// be careful.
     #[inline]
     pub(crate) const fn ptr(&self) -> *mut T
@@ -1772,6 +1790,7 @@ impl<T, A: Allocator> RawVec<T, A> {
     /// Panics if the given amount is *larger* than the current capacity.
     #[inline]
     pub(crate) fn try_shrink_to_fit(&mut self, cap: usize) -> Result<(), TryReserveError> {
+        // SAFETY: Layout is valid for T.
         unsafe { self.inner.try_shrink_to_fit(cap, T::LAYOUT) }
     }
 }
@@ -1829,6 +1848,7 @@ const impl<A: [const] Allocator + [const] Destruct> RawVecInner<A> {
     {
         match Self::try_allocate_in(capacity, AllocInit::Uninitialized, alloc, elem_layout) {
             Ok(mut this) => {
+                // SAFETY: We already allocated at least `capacity`.
                 unsafe {
                     // Make it more obvious that a subsequent Vec::reserve(capacity) will not allocate.
                     //@ let k = begin_lifetime();
@@ -2006,7 +2026,9 @@ const impl<A: [const] Allocator + [const] Destruct> RawVecInner<A> {
         @*/
         //@ mul_mono_l(1, elem_layout.size(), capacity);
         let res = Self {
-            ptr: Unique::from(ptr.cast()),
+            ptr: ptr.cast(),
+            // SAFETY: We return early if `T` is a ZST, and if `capacity` would
+            // overflow an isize layout creation would have returned early as well.
             cap: unsafe { Cap::new_unchecked(capacity) },
             alloc,
         };
@@ -2223,6 +2245,7 @@ const impl<A: [const] Allocator + [const] Destruct> RawVecInner<A> {
         //@ mul_mono_l(1, elem_layout.size(), cap);
         //@ mul_mono_l(capacity0, cap, elem_layout.size());
         
+        // SAFETY: Upheld by caller.
         let memory = if let Some((ptr, old_layout)) = current_memory {
             // FIXME(const-hack): switch to `debug_assert_eq`
             // debug_assert!(old_layout.align() == new_layout.align());
@@ -2232,6 +2255,7 @@ const impl<A: [const] Allocator + [const] Destruct> RawVecInner<A> {
                     core::panicking::panic("assertion failed: old_layout.align() == new_layout.align()"); //~allow_dead_code
                 }
             };
+            // SAFETY: Upheld by caller.
             unsafe {
                 // The allocator checks for alignment equality
                 hint::assert_unchecked(old_layout.align() == new_layout.align());
@@ -2321,7 +2345,7 @@ impl<A: Allocator> RawVecInner<A> {
     }
     @*/
     {
-        let ptr = Unique::from_non_null(NonNull::without_provenance(align.as_nonzero_usize()));
+        let ptr = NonNull::without_provenance(align.as_nonzero_usize());
         // `cap: 0` means "unallocated". zero-sized types are ignored.
         let cap = ZERO_CAP;
         let r = Self { ptr, cap, alloc };
@@ -2362,7 +2386,7 @@ impl<A: Allocator> RawVecInner<A> {
     /*@
     req exists::<Layout>(?elem_layout) &*&
         Allocator(?t, alloc, ?alloc_id) &*&
-        ptr != 0 &*&
+        ptr as usize != 0 &*&
         ptr as usize % elem_layout.align() == 0 &*&
         if cap.as_inner() * elem_layout.size() == 0 {
             true
@@ -2373,7 +2397,8 @@ impl<A: Allocator> RawVecInner<A> {
     @*/
     //@ ens RawVecInner(t, result, elem_layout, alloc_id, ptr, logical_capacity(cap, elem_layout.size()));
     {
-        let r = Self { ptr: unsafe { Unique::new_unchecked(ptr) }, cap, alloc };
+        // SAFETY: Upheld by caller.
+        let r = Self { ptr: unsafe { NonNull::new_unchecked(ptr) }, cap, alloc };
         //@ std::alloc::Layout_inv(elem_layout);
         /*@
         if cap.as_inner() * elem_layout.size() == 0 {
@@ -2408,7 +2433,7 @@ impl<A: Allocator> RawVecInner<A> {
     @*/
     //@ ens RawVecInner(t, result, elem_layout, alloc_id, ptr.as_ptr(), logical_capacity(cap, elem_layout.size()));
     {
-        let r = Self { ptr: Unique::from(ptr), cap, alloc };
+        let r = Self { ptr, cap, alloc };
         /*@
         if cap.as_inner() * elem_layout.size() == 0 {
             std::num::niche_types::UsizeNoHighBit_inv(cap);
@@ -2466,7 +2491,7 @@ impl<A: Allocator> RawVecInner<A> {
         //@ open RawVecInner_share_(k, t, self, elem_layout, alloc_id, ptr, capacity);
         //@ open_frac_borrow(k, RawVecInner_frac_borrow_content(self, elem_layout, ptr, capacity), q);
         //@ open [?f]RawVecInner_frac_borrow_content::<A>(self, elem_layout, ptr, capacity)();
-        let r = self.ptr.cast().as_non_null_ptr();
+        let r = self.ptr.cast();
         //@ close [f]RawVecInner_frac_borrow_content::<A>(self, elem_layout, ptr, capacity)();
         //@ close_frac_borrow(f, RawVecInner_frac_borrow_content(self, elem_layout, ptr, capacity));
         r
@@ -2600,6 +2625,7 @@ impl<A: Allocator> RawVecInner<A> {
             // and could hypothetically handle differences between stride and size, but this memory
             // has already been allocated so we know it can't overflow and currently Rust does not
             // support such types. So we can do better by skipping some checks and avoid an unwrap.
+            // SAFETY: Upheld by caller, unless the element size is 0 which is checked against.
             unsafe {
                 //@ let elemLayout = elem_layout;
                 //@ assert elemLayout.repeat(capacity) == some(pair(?allocLayout, ?stride));
@@ -2610,7 +2636,7 @@ impl<A: Allocator> RawVecInner<A> {
                 let alloc_size = elem_layout.size().unchecked_mul(self.cap.as_inner());
                 let layout = Layout::from_size_align_unchecked(alloc_size, elem_layout.align());
                 let ptr_ = self.ptr.into();
-                //@ std::ptr::NonNull_new_as_ptr((*self).ptr.as_non_null_ptr());
+                //@ std::ptr::NonNull_new_as_ptr((*self).ptr);
                 //@ close [f]RawVecInner_frac_borrow_content::<A>(self, elem_layout, ptr, capacity)();
                 //@ close_frac_borrow(f, RawVecInner_frac_borrow_content::<A>(self, elem_layout, ptr, capacity));
                 Some((ptr_, layout))
@@ -2643,6 +2669,8 @@ impl<A: Allocator> RawVecInner<A> {
         }
 
         if self.needs_to_grow(len, additional, elem_layout) {
+            // SAFETY: `needs_to_grow` ensures that `len + additional` is greater than
+            // the current capacity, with the other preconditions upheld by our caller.
             unsafe {
                 do_reserve_and_handle(self, len, additional, elem_layout);
             }
@@ -2699,6 +2727,7 @@ impl<A: Allocator> RawVecInner<A> {
                 self.grow_amortized(len, additional, elem_layout)?;
             }
         }
+        // SAFETY: If we've already grown, we will not need to again immediately after.
         unsafe {
             //@ let k2 = begin_lifetime();
             //@ share_RawVecInner(k2, self);
@@ -2781,6 +2810,7 @@ impl<A: Allocator> RawVecInner<A> {
                 self.grow_exact(len, additional, elem_layout)?;
             }
         }
+        // SAFETY: If we've already grown, we will not need to again immediately after.
         unsafe {
             //@ let k2 = begin_lifetime();
             //@ share_RawVecInner(k2, self);
@@ -2826,6 +2856,7 @@ impl<A: Allocator> RawVecInner<A> {
         capacity1 == if elem_layout.size() == 0 { usize::MAX } else { cap };
     @*/
     {
+        // SAFETY: Upheld by caller.
         if let Err(err) = unsafe { self.shrink(cap, elem_layout) } {
             handle_error(err);
         }
@@ -2842,6 +2873,7 @@ impl<A: Allocator> RawVecInner<A> {
         cap: usize,
         elem_layout: Layout,
     ) -> Result<(), TryReserveError> {
+        // SAFETY: Upheld by caller.
         unsafe { self.shrink(cap, elem_layout) }
     }
 
@@ -2874,13 +2906,14 @@ impl<A: Allocator> RawVecInner<A> {
     #[rustc_const_unstable(feature = "const_heap", issue = "79597")]
     const unsafe fn set_ptr_and_cap(&mut self, ptr: NonNull<[u8]>, cap: usize)
     //@ req (*self).ptr |-> _ &*& (*self).cap |-> _ &*& cap <= isize::MAX;
-    //@ ens (*self).ptr |-> Unique::from_non_null::<u8>(ptr.as_non_null_ptr()) &*& (*self).cap |-> UsizeNoHighBit::new(cap);
+    //@ ens (*self).ptr |-> ptr.as_non_null_ptr() &*& (*self).cap |-> UsizeNoHighBit::new(cap);
     {
         //@ std::ptr::NonNull_new_as_ptr(ptr.as_non_null_ptr());
         // Allocators currently return a `NonNull<[u8]>` whose length matches
         // the size requested. If that ever changes, the capacity here should
         // change to `ptr.len() / size_of::<T>()`.
-        self.ptr = Unique::from(ptr.cast());
+        self.ptr = ptr.cast();
+        // SAFETY: Upheld by caller.
         self.cap = unsafe { Cap::new_unchecked(cap) };
     }
 
@@ -3047,7 +3080,8 @@ impl<A: Allocator> RawVecInner<A> {
     /// big for LLVM to be willing to inline.
     ///
     /// # Safety
-    /// `cap <= self.capacity()`
+    /// - `cap <= self.capacity()`
+    /// - `elem_layout` must be valid for `self`.
     unsafe fn shrink_unchecked(
         &mut self,
         cap: usize,
@@ -3100,7 +3134,7 @@ impl<A: Allocator> RawVecInner<A> {
         //@ open_points_to(self);
 
         //@ open RawVecInner(t, ?self01, elem_layout, alloc_id, ptr0, capacity0);
-        //@ assert self01.ptr.as_non_null_ptr().as_ptr() == ptr0;
+        //@ assert self01.ptr.as_ptr() == ptr0;
         //@ std::alloc::Layout_inv(elem_layout);
         /*@
         if capacity0 * elem_layout.size() != 0 {
@@ -3119,6 +3153,8 @@ impl<A: Allocator> RawVecInner<A> {
         if cap == 0 {
             //@ let alloc_ref = precreate_ref(&(*self).alloc);
             //@ let k1 = begin_lifetime();
+            // SAFETY: T isn't a ZST if we're here and `ptr` is our pointer that `current_memory`
+            // ensures was allocated with `layout`.
             unsafe {
                 //@ let_lft 'a = k1;
                 //@ std::alloc::init_ref_Allocator_at_lifetime::<'a, A>(alloc_ref);
@@ -3127,18 +3163,20 @@ impl<A: Allocator> RawVecInner<A> {
             };
             //@ end_lifetime(k1);
             //@ std::alloc::end_ref_Allocator_at_lifetime::<A>();
-            self.ptr =
-                unsafe { Unique::new_unchecked(ptr::without_provenance_mut(elem_layout.align())) };
+            self.ptr = NonNull::without_provenance(elem_layout.alignment().as_nonzero_usize());
             self.cap = ZERO_CAP;
             //@ let ptr1_ = (*self).ptr;
-            //@ assert ptr1_.as_non_null_ptr().as_ptr() as usize == elem_layout.align();
+            //@ assert ptr1_.as_ptr() as usize == elem_layout.align();
             //@ div_rem_nonneg_unique(elem_layout.align(), elem_layout.align(), 1, 0);
             //@ std::alloc::Layout_repeat_0_intro(elem_layout);
             //@ close RawVecInner(t, *self, elem_layout, alloc_id, _, _);
         } else {
+            // SAFETY: `cap` is less than the previous capacity, which must have fit in an
+            // isize already for the non-ZST case. `shrink` is also sound to call since
+            // `current_memory` ensures `ptr` and `layout` are correct for the old allocation,
+            // while `new_layout` is computed with a smaller size than the old one per the
+            // requirement we instate on our callers.
             let ptr = unsafe {
-                // Layout cannot overflow here because it would have
-                // overflowed earlier when capacity was larger.
                 //@ mul_mono_l(cap, capacity0, elem_layout.size());
                 let new_size = elem_layout.size().unchecked_mul(cap);
                 let new_layout = Layout::from_size_align_unchecked(new_size, layout.align());
@@ -3206,7 +3244,7 @@ const impl<A: [const] Allocator> RawVecInner<A> {
         //@ init_ref_RawVecInner_(self_ref);
         //@ open_frac_borrow(k, ref_initialized_(self_ref), 1/2);
         //@ open [?f]ref_initialized_::<RawVecInner<A>>(self_ref)();
-        // SAFETY: Precondition passed to caller
+        // SAFETY: Caller ensures `elem_layout` is correct for `self`.
         let current_memory = unsafe { self.current_memory(elem_layout) };
         //@ close [f]ref_initialized_::<RawVecInner<A>>(self_ref)();
         //@ close_frac_borrow(f, ref_initialized_(self_ref));
@@ -3218,6 +3256,8 @@ const impl<A: [const] Allocator> RawVecInner<A> {
         if let Some((ptr, layout)) = current_memory {
             //@ let alloc_ref = precreate_ref(&(*self).alloc);
             //@ let k1 = begin_lifetime();
+            // SAFETY: `current_memory` gives us a pointer with provenance for our allocation
+            // and a matching layout. Caller ensures we're not accessed again after deallocating.
             unsafe {
                 //@ let_lft 'a = k1;
                 //@ std::alloc::init_ref_Allocator_at_lifetime::<'a, A>(alloc_ref);
