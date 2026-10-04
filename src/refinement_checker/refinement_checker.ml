@@ -384,6 +384,7 @@ let eval_mir_const genv mir_const_cpn =
     | ZeroSized ->
       begin match ty with
         Tuple [] -> Tuple []
+      | Adt (_, Struct, _) -> StructValue [] (* E.g. a unit struct such as `Global`; must match Aggregate evaluation *)
       | FnDef (fn, genArgs) ->
         let fn =
           if String.starts_with ~prefix:"core::" fn then
@@ -392,7 +393,7 @@ let eval_mir_const genv mir_const_cpn =
             fn
         in
         FnDef (fn, genArgs)
-      | _ -> failwith "Zero-sized constants are not yet supported"
+      | _ -> failwith (Printf.sprintf "Zero-sized constants of type %s are not yet supported" (string_of_ty ty))
       end
     | Slice bytes -> SliceConstant (ty, bytes)
     end

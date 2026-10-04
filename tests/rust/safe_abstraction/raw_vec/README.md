@@ -12,7 +12,7 @@ RawVec is defined as follows:
 type Cap = core::num::niche_types::UsizeNoHighBit;
 
 struct RawVecInner<A: Allocator = Global> {
-    ptr: Unique<u8>,
+    ptr: NonNull<u8>,
     cap: Cap,
     alloc: A,
 }
@@ -41,7 +41,7 @@ fix logical_capacity(cap: UsizeNoHighBit, elem_size: usize) -> usize {
 pred RawVecInner<A>(t: thread_id_t, self: RawVecInner<A>, elemLayout: Layout, alloc_id: alloc_id_t, ptr: *u8, capacity: usize) =
     Allocator(t, self.alloc, alloc_id) &*&
     capacity == logical_capacity(self.cap, elemLayout.size()) &*&
-    ptr == self.ptr.as_non_null_ptr().as_ptr() &*&
+    ptr == self.ptr.as_ptr() &*&
     ptr as usize % elemLayout.align() == 0 &*&
     pointer_within_limits(ptr) == true &*&
     if capacity * elemLayout.size() == 0 {
@@ -80,7 +80,7 @@ impl<A: Allocator> RawVecInner<A> {
     //@ on_unwind_ens false;
     //@ safety_proof { ... }
     {
-        let ptr = Unique::from_non_null(NonNull::without_provenance(align.as_nonzero_usize()));
+        let ptr = NonNull::without_provenance(align.as_nonzero_usize());
         // `cap: 0` means "unallocated". zero-sized types are ignored.
         let cap = ZERO_CAP;
         let r = Self { ptr, cap, alloc };
@@ -370,7 +370,7 @@ The final part of the `try_allocate_in` proof involves no new concepts:
     @*/
     //@ mul_mono_l(1, elem_layout.size(), capacity);
     let res = Self {
-        ptr: Unique::from(ptr.cast()),
+        ptr: ptr.cast(),
         cap: unsafe { Cap::new_unchecked(capacity) },
         alloc,
     };
@@ -392,7 +392,7 @@ pred_ctor RawVecInner_frac_borrow_content<A>(l: *RawVecInner<A>, elemLayout: Lay
     (*l).ptr |-> ?u &*&
     (*l).cap |-> ?cap &*&
     capacity == logical_capacity(cap, elemLayout.size()) &*&
-    ptr == u.as_non_null_ptr().as_ptr() &*&
+    ptr == u.as_ptr() &*&
     ptr as usize % elemLayout.align() == 0 &*&
     pointer_within_limits(ptr) == true &*&
     if capacity * elemLayout.size() == 0 {
@@ -1012,7 +1012,7 @@ pred<A> <RawVecInner<A>>.own(t, self_) =
 
 pred RawVecInner0<A>(self: RawVecInner<A>, elemLayout: Layout, ptr: *u8, capacity: usize) =
     capacity == logical_capacity(self.cap, elemLayout.size()) &*&
-    ptr == self.ptr.as_non_null_ptr().as_ptr() &*&
+    ptr == self.ptr.as_ptr() &*&
     ptr as usize % elemLayout.align() == 0 &*&
     pointer_within_limits(ptr) == true &*&
     if capacity * elemLayout.size() == 0 {

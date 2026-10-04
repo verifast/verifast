@@ -1496,7 +1496,6 @@ mod process {
     //@ on_unwind_ens false;
     //@ terminates;
 }
-//Todo @Nima: Edit Rust parser so it substitutes `!` type with std_empty_ union
 
 mod option {
 
@@ -2069,7 +2068,7 @@ mod rt {
 
 mod convert {
 
-    struct Infallible {}
+    type Infallible = !;
     
     trait Into<T> {
     

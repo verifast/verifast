@@ -107,6 +107,7 @@ let rec parse_type = function%parser
     parse_type as tp
   ] -> RustRefTypeExpr (l, lft, mutability, tp)
 | [ (l, Kwd "any") ] -> ManifestTypeExpr (l, AnyType)
+| [ (l, Kwd "!") ] -> ManifestTypeExpr (l, UnionType "std_empty_")
 | [ (l, Kwd "Self") ] -> IdentTypeExpr (l, None, "Self")
 | [ (l, Kwd "(");
     [%let tp = function%parser

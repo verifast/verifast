@@ -51,17 +51,17 @@ unsafe extern "Rust" {
 ///
 /// Note: while this type is unstable, the functionality it provides can be
 /// accessed through the [free functions in `alloc`](self#functions).
-#[unstable(feature = "allocator_api", issue = "32838")]
+#[stable(feature = "allocator_api", since = "CURRENT_RUSTC_VERSION")]
 #[derive(Copy, Debug)]
 #[derive_const(Clone, Default)]
 // the compiler needs to know when a Box uses the global allocator vs a custom one
 #[lang = "global_alloc_ty"]
 pub struct Global;
 
-#[unstable(feature = "allocator_api", issue = "32838")]
+#[unstable(feature = "allocator_ext", issue = "163177", implied_by = "allocator_api")]
 unsafe impl core::alloc::AllocatorClone for Global {}
 
-#[unstable(feature = "allocator_api", issue = "32838")]
+#[unstable(feature = "allocator_ext", issue = "163177", implied_by = "allocator_api")]
 unsafe impl core::alloc::StaticAllocator for Global {}
 
 /// Allocates memory with the global allocator.
@@ -122,6 +122,7 @@ unsafe impl core::alloc::StaticAllocator for Global {}
 #[inline]
 #[cfg_attr(miri, track_caller)] // even without panics, this helps for Miri backtraces
 pub unsafe fn alloc(layout: Layout) -> *mut u8 {
+    // SAFETY: Upheld by caller.
     unsafe {
         // Make sure we don't accidentally allow omitting the allocator shim in
         // stable code until it is actually stabilized.
@@ -165,6 +166,7 @@ pub unsafe fn alloc(layout: Layout) -> *mut u8 {
 #[inline]
 #[cfg_attr(miri, track_caller)] // even without panics, this helps for Miri backtraces
 pub unsafe fn dealloc(ptr: *mut u8, layout: Layout) {
+    // SAFETY: Upheld by caller.
     unsafe { dealloc_nonnull(NonNull::new_unchecked(ptr), layout) }
 }
 
@@ -172,6 +174,7 @@ pub unsafe fn dealloc(ptr: *mut u8, layout: Layout) {
 #[inline]
 #[cfg_attr(miri, track_caller)] // even without panics, this helps for Miri backtraces
 unsafe fn dealloc_nonnull(ptr: NonNull<u8>, layout: Layout) {
+    // SAFETY: Upheld by caller.
     unsafe { __rust_dealloc(ptr, layout.size(), layout.alignment()) }
 }
 
@@ -218,6 +221,7 @@ unsafe fn dealloc_nonnull(ptr: NonNull<u8>, layout: Layout) {
 #[inline]
 #[cfg_attr(miri, track_caller)] // even without panics, this helps for Miri backtraces
 pub unsafe fn realloc(ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
+    // SAFETY: Upheld by caller.
     unsafe { realloc_nonnull(NonNull::new_unchecked(ptr), layout, new_size) }
 }
 
@@ -225,6 +229,7 @@ pub unsafe fn realloc(ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 
 #[inline]
 #[cfg_attr(miri, track_caller)] // even without panics, this helps for Miri backtraces
 unsafe fn realloc_nonnull(ptr: NonNull<u8>, layout: Layout, new_size: usize) -> *mut u8 {
+    // SAFETY: Upheld by caller.
     unsafe { __rust_realloc(ptr, layout.size(), layout.alignment(), new_size) }
 }
 
@@ -282,6 +287,7 @@ unsafe fn realloc_nonnull(ptr: NonNull<u8>, layout: Layout, new_size: usize) -> 
 #[inline]
 #[cfg_attr(miri, track_caller)] // even without panics, this helps for Miri backtraces
 pub unsafe fn alloc_zeroed(layout: Layout) -> *mut u8 {
+    // SAFETY: Upheld by caller.
     unsafe {
         // Make sure we don't accidentally allow omitting the allocator shim in
         // stable code until it is actually stabilized.
@@ -525,6 +531,7 @@ impl Global {
                 cmp::min(old_layout.size(), new_layout.size()),
             );
         }
+        // SAFETY: Caller ensures the ptr & layout are correct.
         unsafe {
             self.deallocate_impl(ptr, old_layout);
         }
@@ -532,7 +539,7 @@ impl Global {
     }
 }
 
-#[unstable(feature = "allocator_api", issue = "32838")]
+#[stable(feature = "allocator_api", since = "CURRENT_RUSTC_VERSION")]
 #[rustc_const_unstable(feature = "const_heap", issue = "79597")]
 const unsafe impl Allocator for Global {
     #[inline]
@@ -639,6 +646,7 @@ pub const fn handle_alloc_error(layout: Layout) -> ! {
 
     #[inline]
     fn rt_error(layout: Layout) -> ! {
+        // SAFETY: Safe to call; we control this function.
         unsafe {
             __rust_alloc_error_handler(layout.size(), layout.align());
         }
@@ -655,7 +663,6 @@ pub const fn handle_alloc_error(layout: Layout) -> ! {
 
 #[cfg(not(no_global_oom_handling))]
 #[doc(hidden)]
-#[allow(unused_attributes)]
 #[unstable(feature = "alloc_internals", issue = "none")]
 pub mod __alloc_error_handler {
     // called via generated `__rust_alloc_error_handler` if there is no
@@ -668,3 +675,28 @@ pub mod __alloc_error_handler {
         )
     }
 }
+
+/// Allocator marker trait that is implemented only on `Global`, except when
+/// the allocator feature gate is enabled (in which case it is implemented
+/// for all allocators).
+///
+/// This is to prevent stable code from e.g. constructing `Arc<T, NotGlobal>`
+/// using the `From<Box<T, A>> for Arc<T, A>` impl.
+///
+/// Note that this trait cannot appear in specialization impls (even if not
+/// specialized on).
+///
+/// This trait should be used as a bound whenever a function constructing
+/// a type with an `#[unstable] A: Allocator = Global` parameter may be
+/// callable for `A != Global`.
+#[marker]
+#[unstable(feature = "allocator_ext", issue = "163177", implied_by = "allocator_api")]
+#[doc(hidden)]
+pub trait AllocatorNightly: Allocator {}
+
+#[unstable(feature = "allocator_ext", issue = "163177", implied_by = "allocator_api")]
+#[unstable_feature_bound(allocator_ext)]
+impl<A: Allocator + ?Sized> AllocatorNightly for A {}
+
+#[unstable(feature = "allocator_ext", issue = "163177", implied_by = "allocator_api")]
+impl AllocatorNightly for Global {}

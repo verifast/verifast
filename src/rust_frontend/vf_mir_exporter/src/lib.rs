@@ -1,5 +1,5 @@
 #![feature(rustc_private)]
-#![feature(box_patterns)]
+#![feature(deref_patterns)]
 #![feature(split_array)]
 #![allow(unused_imports)]
 #![allow(unused_variables)]
@@ -519,7 +519,7 @@ use rustc_span::RemapPathScopeComponents;
     use rustc_ast::util::comments::Comment;
     use rustc_hir as hir;
     use rustc_interface::interface::Compiler;
-    use rustc_middle::bug;
+    use rustc_span::bug;
     use rustc_middle::mir::interpret::AllocRange;
     use rustc_middle::mir::UnwindAction;
     use rustc_middle::ty;
@@ -585,9 +585,9 @@ use rustc_span::RemapPathScopeComponents;
                 &mut self,
                 m: &'tcx rustc_hir::Mod<'tcx>,
                 header_span: rustc_span::Span,
-                n: rustc_hir::HirId,
+                n: rustc_hir::def_id::LocalModId,
             ) {
-                let name = self.tcx.hir_ident(n).as_str().into();
+                let name = self.tcx.item_name(n.to_def_id()).as_str().into();
                 let mut body_span = m.spans.inner_span;
                 if Arc::as_ptr(&self.tcx.sess.source_map().lookup_source_file(header_span.lo())) ==
                     Arc::as_ptr(&self.tcx.sess.source_map().lookup_source_file(body_span.lo())) {
@@ -600,7 +600,7 @@ use rustc_span::RemapPathScopeComponents;
                 let mod_submodules = collect_submodules(
                     self.tcx,
                     &mut mod_annots,
-                    rustc_hir::def_id::LocalModId::new_unchecked(n.expect_owner().def_id),
+                    n,
                 );
                 self.submodules.push(Box::new(Module {
                     name,
@@ -2136,7 +2136,7 @@ use rustc_span::RemapPathScopeComponents;
             mut statement_kind_cpn: statement_kind_cpn::Builder<'_>,
         ) {
             match statement_kind {
-                mir::StatementKind::Assign(box (lhs_place, rhs_rval)) => {
+                mir::StatementKind::Assign((lhs_place, rhs_rval)) => {
                     let mut assign_data_cpn = statement_kind_cpn.init_assign();
                     let lhs_place_cpn = assign_data_cpn.reborrow().init_lhs_place();
                     Self::encode_place(enc_ctx, lhs_place, lhs_place_cpn);
@@ -2293,7 +2293,7 @@ use rustc_span::RemapPathScopeComponents;
                     let ty_cpn = cast_data_cpn.init_ty();
                     Self::encode_ty(tcx, enc_ctx, *ty, ty_cpn);
                 }
-                mir::Rvalue::BinaryOp(bin_op, box (operandl, operandr)) => {
+                mir::Rvalue::BinaryOp(bin_op, (operandl, operandr)) => {
                     let mut bin_op_data_cpn = rvalue_cpn.init_binary_op();
                     let bin_op_cpn = bin_op_data_cpn.reborrow().init_operator();
                     Self::encode_bin_op(*bin_op, bin_op_cpn);
@@ -2326,7 +2326,7 @@ use rustc_span::RemapPathScopeComponents;
                     Self::encode_place(enc_ctx, place, discriminant_data_cpn.init_place());
                 }
                 // Creates an aggregate value, like a tuple or struct.
-                mir::Rvalue::Aggregate(box aggregate_kind, operands) => {
+                mir::Rvalue::Aggregate(aggregate_kind, operands) => {
                     let mut aggregate_data_cpn = rvalue_cpn.init_aggregate();
                     let aggregate_kind_cpn = aggregate_data_cpn.reborrow().init_aggregate_kind();
                     Self::encode_aggregate_kind(enc_ctx, aggregate_kind, aggregate_kind_cpn);
@@ -2661,7 +2661,7 @@ use rustc_span::RemapPathScopeComponents;
                     Self::encode_place(enc_ctx, place, place_cpn);
                     None
                 }
-                mir::Operand::Constant(box constant) => {
+                mir::Operand::Constant(constant) => {
                     let constant_cpn = operand_cpn.init_constant();
                     Some(Self::encode_const_operand(tcx, enc_ctx, constant, constant_cpn))
                 }
@@ -2998,6 +2998,7 @@ use rustc_span::RemapPathScopeComponents;
                     PlaceKind::Other
                 }
                 mir::ProjectionElem::UnwrapUnsafeBinder(_) => todo!(),
+                mir::ProjectionElem::PhantomDeref => todo!(),
             }
         }
     }
