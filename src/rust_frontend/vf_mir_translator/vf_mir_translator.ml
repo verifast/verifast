@@ -4868,7 +4868,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     in
     let trait_name, assoc_type_name =
       String.rindex assoc_type_def_id ':' |> fun i ->
-      ( String.sub assoc_type_def_id 0 (i - 1),
+      ( canonicalize_item_name (String.sub assoc_type_def_id 0 (i - 1)),
         String.sub assoc_type_def_id (i + 1)
           (String.length assoc_type_def_id - i - 1) )
     in
