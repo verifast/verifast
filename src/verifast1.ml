@@ -27,6 +27,16 @@ let max (x: int) (y: int) = max x y
 
 exception NoSuchPredicate of string
 
+(** Why the generic function of a C++ function template failed. *)
+type cxx_generic_failure =
+  CxxGenericTypeError (* It does not type-check, for instance because its contract only type-checks for particular type arguments. *)
+| CxxGenericVerificationFailure (* It type-checks but does not verify. *)
+
+(** The generic functions of C++ function templates that failed, by name, with
+    why they failed and the original exception. [verify_program] then verifies
+    the program again, with these templates verified per specialization. *)
+exception CxxGenericFunctionsFailed of (string * cxx_generic_failure * exn) list
+
 type callbacks = {
   reportRange: range_kind -> loc0 -> unit;
   reportUseSite: decl_kind -> loc0 -> loc0 -> unit;
@@ -50,6 +60,7 @@ module type VERIFY_PROGRAM_ARGS = sig
   val breakpoint: (string * int) option
   val focus: (string * int) option (* Only verify the function/method/ctor on the specified source line *)
   val targetPath: int list option
+  val cxx_generic_fallbacks: (string * cxx_generic_failure) list (* C++ function templates whose generic function failed in an earlier run; they are verified per specialization *)
 end
 
 module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
@@ -62,6 +73,28 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let language, dialect = file_specs path
   let is_rust = dialect = Some Rust
+
+  (** Whether a function is the generic function of a C++ function template.
+      The C++ frontend produces no other non-ghost functions with type parameters. *)
+  let is_cxx_generic_function k tparams = dialect = Some Cxx && k = Regular && tparams <> []
+
+  (** Why the generic function of a C++ function template failed, if exception [e] means that it did.
+      A breakpoint is reported as a symbolic execution error, but is not a failure. *)
+  let cxx_generic_failure_of_exn e =
+    match e with
+      StaticError _ -> Some CxxGenericTypeError
+    | SymbolicExecutionError _ when breakpoint = None -> Some CxxGenericVerificationFailure
+    | _ -> None
+
+  (** Runs [body], which checks or verifies function [g]. If [g] is the generic function of a C++ function template and [body] fails,
+      raises CxxGenericFunctionsFailed so that the template is verified per specialization instead. *)
+  let with_cxx_generic_failure k tparams g body =
+    if is_cxx_generic_function k tparams then
+      try body () with e when cxx_generic_failure_of_exn e <> None ->
+        let Some failure = cxx_generic_failure_of_exn e in
+        raise (CxxGenericFunctionsFailed [(g, failure, e)])
+    else
+      body ()
 
   let string_of_type = string_of_type language dialect
   
@@ -1506,6 +1539,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                           let verbose = verbose
                           let include_paths = include_paths
                           let define_macros = define_macros
+                          let generic_fallbacks = []
+                          let generic_fallbacks_if_instantiated = []
                         end
                       )
                       in

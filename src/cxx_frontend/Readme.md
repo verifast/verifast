@@ -31,3 +31,24 @@ In order to produce a C++ AST and export it to VeriFast afterwards, a tool has b
 
 ### Stubs
 [Cap'n proto](https://capnproto.org/) is used to (de)serialize the C++ AST and transmit it to VeriFast's C++ frontend. Stubs code is auto generated for OCaml and C++ in order to (de)serialize from C++ to OCaml. This auto-generated code uses a [stubs schema](stubs/stubs_ast.capnp) which represents the different structures that can be (de)serialized. The stubs schema defines simplified C++ AST nodes.
+
+## Function templates
+A function template whose body only uses its type parameters in ways that mean the same for every scalar type is verified once, not once per instantiation. The exporter serializes the template itself, including its dependent body. The translator turns it into a single generic function, such as `identity<T>(const T)`, whose template type parameters are ghost type parameters (`GhostTypeParam`). Such a template is verified even if nothing instantiates it.
+
+A call to a specialization of such a template whose type arguments are all scalar types (arithmetic types, `bool`, enumerations or pointers) is a call of the generic function, with the type arguments Clang deduced. The generic proof models copying and destroying a value of a type parameter as plain value operations, which is exact only for these types. A specialization with any other type argument, such as a class type, is translated and verified separately. Its copy constructors and destructors are then checked against their contracts.
+
+Every other function template is verified separately for each of its specializations, and not at all if nothing instantiates it. This is the case if the template:
+- uses members of a type parameter (`t->m_x`),
+- makes calls whose arguments depend on a type parameter (including calls of other templates),
+- applies operators other than `=`, `*` and `&` to type-dependent operands,
+- converts to or from a type parameter implicitly (for instance, `int f(T x) { return x; }`), or uses a type-dependent condition,
+- uses casts, `sizeof`, indexing or `new`/`delete` that depend on a type parameter,
+- initializes a type-dependent variable other than with `=`, or uses types other than type parameters and pointers and lvalue references to them,
+- has non-type, template template or variadic template parameters, or is a member function template.
+
+The exporter decides this from the C++ code only, because annotations reach it as raw text. A template whose contract or ghost code only type-checks for particular type arguments (for instance, `requires x > 0`) therefore gets a generic function that fails. VeriFast then verifies the program again, with that template verified per specialization, exactly as if its C++ body could not be verified generically:
+- If the generic function does not type-check, the template is verified per specialization, and not at all if nothing instantiates it.
+- If the generic function type-checks but does not verify, the template is verified per specialization if something instantiates it. Otherwise, the verification failure is reported.
+
+The verifier attributes an error to a template if it occurs while checking the header or verifying the body of its generic function, and `verify_program` (`src/verifast.ml`) passes the names of the generic functions that failed to the exporter (`-generic_fallback` and `-generic_fallback_if_instantiated`). With `-verbose 1`, VeriFast reports each template that it verifies per specialization this way.
+

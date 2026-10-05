@@ -49,7 +49,12 @@ struct StmtSerializerImpl
 
     if (retVal) {
       ExprNodeBuilder retExprBuilder = returnBuilder.initExpr();
-      m_ASTSerializer->serialize(retExprBuilder, retVal);
+      const clang::FunctionDecl *func = m_ASTSerializer->getCurrentFunction();
+      if (func && func->getReturnType()->isReferenceType()) {
+        m_ASTSerializer->serialize(retExprBuilder, retVal);
+      } else {
+        m_ASTSerializer->serializeAsRValue(retExprBuilder, retVal);
+      }
     }
     return true;
   }

@@ -491,12 +491,15 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       check (derived, this_term) overrides
     
   let (funcmap1, prototypes_implemented) =
+    (* The generic functions of C++ function templates whose header failed to check. See CxxGenericFunctionsFailed. *)
+    let cxx_generic_failures = ref [] in
     let rec iter pn ilist funcmap prototypes_implemented ds =
       match ds with
         [] -> (funcmap, List.rev prototypes_implemented)
       | Func (l, k, tparams_with_bounds, rt, fn, xs, nonghost_callers_only, (functype_opt, prototypeImplementationProof_opt), contract_opt, terminates, body, is_virtual, overrides)::ds when k <> Fixpoint ->
         let tparams = List.map fst tparams_with_bounds in
         let fn = full_name pn fn in
+        let check_func () =
         let fterm = List.assoc fn funcnameterms in
         if body <> None then
           ctxt#assert_term (ctxt#mk_eq (ctxt#mk_app func_rank [fterm]) (ctxt#mk_reallit !func_counter));
@@ -535,7 +538,23 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             cont (fn, FuncInfo ([], fterm, l, k, tparams_with_bounds, rt, xmap, nonghost_callers_only, pre, pre_tenv, post, terminates, (functype_opt, (Some (k0, tparams0, rt0, xmap0, nonghost_callers_only0, fenv, pre0, pre_tenv0, post0, terminates0), prototypeImplementationProof_opt)), body', is_virtual, overrides)) ((fn, l0)::prototypes_implemented)
         end @@ fun func_info protos_implemented ->
         let () = check_cxx_spec_overrides fenv func_info (fun name -> assoc2 name funcmap funcmap0) in
-        iter pn ilist (func_info :: funcmap) protos_implemented ds
+        (func_info, protos_implemented)
+        in
+        if is_cxx_generic_function k tparams then begin
+          (* Check the headers of the other functions as well, so that all generic functions that fail are found in one run. *)
+          let tparam_bounds_table0 = !tparam_bounds_table in
+          let tparam_bounds_tables_stack0 = !tparam_bounds_tables_stack in
+          match check_func () with
+            (func_info, protos_implemented) -> iter pn ilist (func_info :: funcmap) protos_implemented ds
+          | exception e when cxx_generic_failure_of_exn e <> None ->
+            let Some failure = cxx_generic_failure_of_exn e in
+            cxx_generic_failures := (fn, failure, e) :: !cxx_generic_failures;
+            tparam_bounds_table := tparam_bounds_table0;
+            tparam_bounds_tables_stack := tparam_bounds_tables_stack0;
+            iter pn ilist funcmap prototypes_implemented ds
+        end else
+          let (func_info, protos_implemented) = check_func () in
+          iter pn ilist (func_info :: funcmap) protos_implemented ds
       | _::ds -> iter pn ilist funcmap prototypes_implemented ds
     in
     let rec iter' (funcmap,prototypes_implemented) ps=
@@ -543,7 +562,9 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         PackageDecl(l,pn,il,ds)::rest-> iter' (iter pn il funcmap prototypes_implemented ds) rest
       | [] -> (funcmap,prototypes_implemented)
     in
-    iter' ([],[]) ps
+    let result = iter' ([],[]) ps in
+    if !cxx_generic_failures <> [] then raise (CxxGenericFunctionsFailed (List.rev !cxx_generic_failures));
+    result
   
   let () =
     if options.option_emit_rocq && filepath = path then begin

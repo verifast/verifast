@@ -3981,9 +3981,10 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           gs
       in
       verify_funcs (pn,ilist) boxes gs lems ds
-    | Func (l, k, _, _, g, _, _, functype_opt, _, _, Some _, is_virtual, _)::ds when k <> Fixpoint ->
+    | Func (l, k, tparams_with_bounds, _, g, _, _, functype_opt, _, _, Some _, is_virtual, _)::ds when k <> Fixpoint ->
       let g = full_name pn g in
       let gs', lems' =
+      with_cxx_generic_failure k tparams_with_bounds g @@ fun () ->
       record_fun_timing l g begin fun () ->
       let FuncInfo ([], fterm, l, k, tparams', rt, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, (_, (prototype_opt, prototypeImplementationProof_opt)), Some (Some (const_params, (ss, closeBraceLoc))), is_virtual, overrides) = List.assoc g funcmap in
       push_tparam_bounds_table ();
@@ -4344,6 +4345,8 @@ Qed.
             let verbose = options.option_verbose
             let include_paths = if Filename.check_suffix path ".h" then [] else include_paths
             let define_macros = define_macros
+            let generic_fallbacks = cxx_generic_fallbacks |> flatmap (function (g, CxxGenericTypeError) -> [g] | _ -> [])
+            let generic_fallbacks_if_instantiated = cxx_generic_fallbacks |> flatmap (function (g, CxxGenericVerificationFailure) -> [g] | _ -> [])
           end
         ) 
         in
@@ -4542,6 +4545,7 @@ end
     *)
 let verify_program_core (* ?verify_program_core *)
     ?(emitter_callback : string -> string -> package list -> unit = fun _ _ _ -> ())
+    ?(cxx_generic_fallbacks : (string * cxx_generic_failure) list = [])
     (type typenode') (type symbol') (type termnode')  (* Explicit type parameters; new in OCaml 3.12 *)
     (ctxt: (typenode', symbol', termnode') Proverapi.context)
     (options : options)
@@ -4563,6 +4567,7 @@ let verify_program_core (* ?verify_program_core *)
     let breakpoint = breakpoint
     let focus = focus
     let targetPath = targetPath
+    let cxx_generic_fallbacks = cxx_generic_fallbacks
   end) in
   ()
 
@@ -4628,13 +4633,61 @@ let verify_program (* ?verify_program *)
     (breakpoint : (string * int) option)
     (focus : (string * int) option)
     (targetPath : int list option) : Stats.stats =
-  lookup_prover prover
-    (object
-       method run: 'typenode 'symbol 'termnode. ('typenode, 'symbol, 'termnode) Proverapi.context -> Stats.stats =
-         fun ctxt -> clear_stats ();
-                     verify_program_core ~emitter_callback:emitter_callback ctxt options path callbacks breakpoint focus targetPath;
-                     !stats
-     end)
+  (* If the generic function of a C++ function template fails, verify the program again with that template verified per
+     specialization, as if it could not be verified generically. If the template has no specializations, a verification
+     failure of its generic function is reported (the exporter keeps the generic function), but a type error is not (the
+     template is not verified at all). *)
+  let is_cxx = snd (file_specs path) = Some Cxx in
+  let rec verify cxx_generic_fallbacks =
+    (* A run that ends in a fallback must not report source locations: the next run reports the same source locations
+       again, as different values, and callers such as vfconsole's dead code check compare locations physically. *)
+    let buffered = ref [] in
+    let buffer f = buffered := f :: !buffered in
+    let flush () = List.iter (fun f -> f ()) (List.rev !buffered) in
+    let run_callbacks =
+      if not is_cxx then callbacks else
+      {callbacks with
+        reportRange = (fun kind l -> buffer (fun () -> callbacks.reportRange kind l));
+        reportUseSite = (fun kind l0 l -> buffer (fun () -> callbacks.reportUseSite kind l0 l));
+        reportStmt = (fun l -> buffer (fun () -> callbacks.reportStmt l));
+        reportStmtExec = (fun l -> buffer (fun () -> callbacks.reportStmtExec l))}
+    in
+    match
+      lookup_prover prover
+        (object
+           method run: 'typenode 'symbol 'termnode. ('typenode, 'symbol, 'termnode) Proverapi.context -> Stats.stats =
+             fun ctxt -> clear_stats ();
+                         verify_program_core ~emitter_callback:emitter_callback ~cxx_generic_fallbacks ctxt options path run_callbacks breakpoint focus targetPath;
+                         !stats
+         end)
+    with
+      stats -> flush (); stats
+    | exception CxxGenericFunctionsFailed failures ->
+      (* A function template with a prototype fails twice. *)
+      let new_failures =
+        failures |> List.fold_left begin fun new_failures (g, failure, e) ->
+          if List.mem (g, failure) cxx_generic_fallbacks || List.exists (fun (g', failure', _) -> g' = g && failure' = failure) new_failures then
+            new_failures
+          else
+            new_failures @ [(g, failure, e)]
+        end []
+      in
+      begin match new_failures with
+        [] -> flush (); let (_, _, e) :: _ = failures in raise e
+      | _ ->
+        new_failures |> List.iter begin fun (g, failure, _) ->
+          if options.option_verbose >= 1 then
+            printf "Verifying function template '%s' per specialization: its generic function %s\n" g
+              (match failure with CxxGenericTypeError -> "does not type-check" | CxxGenericVerificationFailure -> "does not verify")
+        end;
+        verify (cxx_generic_fallbacks @ List.map (fun (g, failure, _) -> (g, failure)) new_failures)
+      end
+    | exception e ->
+      let bt = Printexc.get_raw_backtrace () in
+      flush ();
+      Printexc.raise_with_backtrace e bt
+  in
+  verify []
 
 (* Region: linker *)
 

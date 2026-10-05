@@ -47,8 +47,11 @@ struct DeclSerializerImpl
 
   void serializeFunctionDecl(stubs::Decl::Function::Builder functionBuilder,
                              const clang::FunctionDecl *decl,
-                             bool serializeContract) {
-    std::string name = m_ASTSerializer->getQualifiedFuncName(decl);
+                             bool serializeContract,
+                             std::optional<std::string> nameOverride = {}) {
+    std::string name = nameOverride
+                           ? *nameOverride
+                           : m_ASTSerializer->getQualifiedFuncName(decl);
     clang::FunctionTypeLoc returnTypeLoc = decl->getFunctionTypeLoc();
     bool isImplicit = decl->isImplicit();
     bool isDef = decl->isThisDeclarationADefinition();
@@ -88,7 +91,7 @@ struct DeclSerializerImpl
       assert(decl->doesThisDeclarationHaveABody());
 
       StmtNodeBuilder bodyBuilder = functionBuilder.initBody();
-      m_ASTSerializer->serialize(bodyBuilder, decl->getBody());
+      m_ASTSerializer->serializeBody(bodyBuilder, decl);
     }
   }
 
@@ -194,9 +197,22 @@ struct DeclSerializerImpl
                                decl->getTypeSourceInfo()->getTypeLoc());
 
     if (decl->hasInit()) {
+      // What other initialization styles do depends on the type.
+      if (decl->getType()->isDependentType() &&
+          decl->getInitStyle() != clang::VarDecl::InitializationStyle::CInit) {
+        reportError(decl->getBeginLoc(),
+                    "A variable whose type depends on a template parameter "
+                    "can only be initialized with '='");
+        return true;
+      }
+
       stubs::Decl::Var::VarInit::Builder varInitBuilder = varBuilder.initInit();
       ExprNodeBuilder initExpr = varInitBuilder.initInit();
-      m_ASTSerializer->serialize(initExpr, decl->getInit());
+      if (decl->getType()->isReferenceType()) {
+        m_ASTSerializer->serialize(initExpr, decl->getInit());
+      } else {
+        m_ASTSerializer->serializeAsRValue(initExpr, decl->getInit());
+      }
 
 #define CASE_INIT(CLANG_STYLE, STUBS_STYLE)                                    \
   case clang::VarDecl::InitializationStyle::CLANG_STYLE:                       \
@@ -459,12 +475,44 @@ struct DeclSerializerImpl
     return true;
   }
 
+  void reportError(clang::SourceLocation loc, llvm::StringRef message) {
+    clang::DiagnosticsEngine &diagsEngine =
+        m_ASTSerializer->getASTContext().getDiagnostics();
+    unsigned id = diagsEngine.getCustomDiagID(clang::DiagnosticsEngine::Error,
+                                              "%0");
+    diagsEngine.Report(loc, id) << message;
+  }
+
+  // A function template that can be verified generically (see
+  // ASTSerializer::isVerifiedGenerically) is translated to a single generic
+  // function, which is verified once for abstract type parameters. Calls to
+  // its specializations whose type arguments are all scalar types use that
+  // generic function (see ASTSerializer::usesGenericProof). All other
+  // specializations are serialized and verified separately.
   bool VisitFunctionTemplateDecl(const clang::FunctionTemplateDecl *decl) {
+    const clang::FunctionDecl *funcDecl = decl->getTemplatedDecl();
     stubs::Decl::FunctionTemplate::Builder functionTemplateBuilder =
         m_builder.initFunctionTemplate();
-    const clang::FunctionDecl *funcDecl = decl->getTemplatedDecl();
     functionTemplateBuilder.setName(
         m_ASTSerializer->getQualifiedFuncName(funcDecl));
+
+    size_t i(0);
+    if (m_ASTSerializer->isVerifiedGenerically(decl)) {
+      const clang::TemplateParameterList *tparams =
+          decl->getTemplateParameters();
+      ListBuilder<stubs::Decl::FunctionTemplate::TypeParam> tparamsBuilder =
+          functionTemplateBuilder.initTparams(tparams->size());
+      for (const clang::NamedDecl *tparam : *tparams) {
+        llvm::StringRef name = tparam->getName();
+        stubs::Decl::FunctionTemplate::TypeParam::Builder tparamBuilder =
+            tparamsBuilder[i];
+        tparamBuilder.setName(capnp::Text::Reader(name.data(), name.size()));
+        ++i;
+      }
+
+      serializeFunctionDecl(functionTemplateBuilder.initGeneric(), funcDecl,
+                            true, m_ASTSerializer->getGenericFuncName(decl));
+    }
 
     if (!decl->isImplicit()) {
       AnnotationsRef contract =
@@ -474,22 +522,33 @@ struct DeclSerializerImpl
       m_ASTSerializer->serialize(contractBuilder, contract);
     }
 
-    auto nbSpecs = std::distance(decl->spec_begin(), decl->spec_end());
+    // All redeclarations share their specializations. Serialize them with the
+    // definition only, or with the first declaration if there is none.
+    const clang::FunctionDecl *definition = funcDecl->getDefinition();
+    const clang::FunctionTemplateDecl *owner =
+        definition ? definition->getDescribedFunctionTemplate()
+                   : decl->getCanonicalDecl();
+    if (owner != decl) {
+      return true;
+    }
 
-    size_t i(0);
-    ListBuilder<stubs::Node<stubs::Decl::Function>> specsBuilder =
-        functionTemplateBuilder.initSpecs(nbSpecs);
+    llvm::SmallVector<const clang::FunctionDecl *> specs;
     for (const clang::FunctionDecl *spec : decl->specializations()) {
       const clang::FunctionTemplateSpecializationInfo *info =
           spec->getTemplateSpecializationInfo();
       if (info->isExplicitInstantiationOrSpecialization()) {
-        auto &diagsEngine = m_ASTSerializer->getASTContext().getDiagnostics();
-        auto id = diagsEngine.getCustomDiagID(
-            clang::DiagnosticsEngine::Error,
-            "Explicit instantiation and specialization is not supported");
-        diagsEngine.Report(spec->getBeginLoc(), id);
+        reportError(spec->getBeginLoc(), "Explicit instantiation and "
+                                         "specialization is not supported");
       }
+      if (!m_ASTSerializer->usesGenericProof(spec)) {
+        specs.push_back(spec);
+      }
+    }
 
+    ListBuilder<stubs::Node<stubs::Decl::Function>> specsBuilder =
+        functionTemplateBuilder.initSpecs(specs.size());
+    i = 0;
+    for (const clang::FunctionDecl *spec : specs) {
       NodeBuilder<stubs::Decl::Function> specBuilder = specsBuilder[i++];
       LocBuilder locBuilder = specBuilder.initLoc();
       stubs::Decl::Function::Builder descBuilder = specBuilder.initDesc();

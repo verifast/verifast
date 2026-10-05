@@ -119,6 +119,7 @@ struct Type {
     substTemplateTypeParam @11 :TypeNode;
     constantArray @12 :ConstantArray;
     incompleteArray @13 :TypeNode;
+    templateTypeParam @14 :Text; # name of a type parameter of the enclosing function template
   }
 }
 
@@ -292,9 +293,15 @@ struct Decl {
   }
 
   struct FunctionTemplate {
+    struct TypeParam {
+      name @0 :Text;
+    }
+
     name @0 :Text;
-    specs @1 :List(Node(Function));
+    specs @1 :List(Node(Function)); # specializations that are verified separately
     contract @2 :List(Clause); # optional
+    tparams @3 :List(TypeParam);
+    generic @4 :Function; # the template itself, verified once for abstract type parameters
   }
 
   isImplicit @0 :Bool;
@@ -443,6 +450,11 @@ struct Expr {
     rhs @1 :ExprNode;
   }
 
+  struct FuncTemplateSpecRef {
+    name @0 :Text; # name of the generic function
+    targs @1 :List(Type);
+  }
+
   union {
     unionNotInitialized @0 :Void;
     unaryOp @1 :UnaryOp;
@@ -470,6 +482,7 @@ struct Expr {
     conditionalOp @23 :ConditionalOp;
     arraySubscript @24 :ArraySubscript;
     initList @25 :List(ExprNode);
+    funcTemplateSpecRef @26 :FuncTemplateSpecRef;
   }
 }
 
