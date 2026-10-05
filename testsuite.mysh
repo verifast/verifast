@@ -588,7 +588,13 @@ cd tests
       ifz3 verifast -c -runtime rt/rt.jarspec z3-proves-false.java
     cd ..
   cd ..
+  verifast -c bitxor_signed_limits_regression.c
   cd errors
+    verifast -c -allow_should_fail bitand1_mod_unsoundness.c
+    verifast -c -allow_should_fail bitand_signed_limits_unsoundness.c
+    ifz3v4.5 verifast -prover z3v4.5 -allow_should_fail -c z3_modulo_unsoundness.c
+    verifast -c struct_array_slice_wildcard.c 2>&1 | grep -q "No such predicate family"
+    verifast -c struct_array_slice_wildcard_requires.c 2>&1 | grep -q "No such predicate family"
     verifast -c -allow_should_fail -allow_dead_code issue589.c
     cd pred_confusion
       verifast -c -allow_should_fail pred_confusion.c
