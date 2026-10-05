@@ -46,15 +46,26 @@ module Make (Args : Sig.CXX_TRANSLATOR_ARGS) : Sig.Cxx_Ast_Translator = struct
     (*
        -allow_macro_expansion=<expansions>   Don't check context-free expasions for <expansions>
        -x<language>                          Treat input files as having type <language>
+       -generic_fallback=<name>              Verify a function template per specialization
+       -generic_fallback_if_instantiated=<name>
+                                             Idem, if it has specializations
        -I<dir>                               Include dir
        -D<macros>                            Define macros <macros>
     *)
+    let generic_fallbacks =
+      (Args.generic_fallbacks
+      |> List.map (fun name -> "-generic_fallback=" ^ Filename.quote name))
+      @ (Args.generic_fallbacks_if_instantiated
+        |> List.map (fun name ->
+               "-generic_fallback_if_instantiated=" ^ Filename.quote name))
+    in
     let cmd =
       Printf.sprintf
-        "%s/vf-cxx-ast-exporter %s -allow_macro_expansion=%s -- -x%s \
+        "%s/vf-cxx-ast-exporter %s -allow_macro_expansion=%s %s -- -x%s \
          -std=c++17 -I%s -D%s %s"
         bin_dir file
         (String.concat "," allow_expansions)
+        (String.concat " " generic_fallbacks)
         (match Args.dialect_opt with Some Cxx -> "c++" | _ -> "c")
         bin_dir frontend_macro
         (Args.include_paths |> List.map (fun s -> "-I" ^ s) |> String.concat " ")

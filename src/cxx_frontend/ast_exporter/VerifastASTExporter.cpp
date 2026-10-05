@@ -32,6 +32,22 @@ static llvm::cl::opt<bool> exportImplicitDecls(
     llvm::cl::desc("Enable exporting implicit declarations."),
     llvm::cl::cat(category));
 
+// Generic function names contain commas, so these options are not
+// comma-separated. See vf::GenericFallbacks.
+static llvm::cl::list<std::string> genericFallbacks(
+    "generic_fallback",
+    llvm::cl::desc("Verify the function template whose generic function has "
+                   "this name per specialization."),
+    llvm::cl::value_desc("name"), llvm::cl::ZeroOrMore,
+    llvm::cl::cat(category));
+
+static llvm::cl::list<std::string> genericFallbacksIfInstantiated(
+    "generic_fallback_if_instantiated",
+    llvm::cl::desc("Verify the function template whose generic function has "
+                   "this name per specialization, if it has any."),
+    llvm::cl::value_desc("name"), llvm::cl::ZeroOrMore,
+    llvm::cl::cat(category));
+
 static llvm::cl::extrahelp
     commonHelp(clang::tooling::CommonOptionsParser::HelpMessage);
 
@@ -46,8 +62,13 @@ public:
     stubs::SerResult::Builder resultBuilder =
         messageBuilder.initRoot<stubs::SerResult>();
 
+    GenericFallbacks fallbacks;
+    fallbacks.always.insert(genericFallbacks.begin(), genericFallbacks.end());
+    fallbacks.ifInstantiated.insert(genericFallbacksIfInstantiated.begin(),
+                                    genericFallbacksIfInstantiated.end());
+
     TranslationUnitSerializer serializer(
-        context, *m_annotationManager, *m_inclusionContext,
+        context, *m_annotationManager, *m_inclusionContext, fallbacks,
         messageBuilder.getOrphanage(), !exportImplicitDecls);
 
     serializer.serialize(context.getTranslationUnitDecl(),

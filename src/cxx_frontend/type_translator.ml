@@ -22,6 +22,7 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
     | SubstTemplateTypeParam s -> transl_subst_template_type_param loc s
     | ConstantArray ca -> transl_constant_array_type loc ca
     | IncompleteArray ia -> transl_incomplete_array loc ia
+    | TemplateTypeParam n -> Ast.IdentTypeExpr (loc, None, n)
     | Undefined _ -> failwith "Undefined type."
     | _ -> Error.error loc "Unsupported type."
 

@@ -61,7 +61,8 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
       (ng_callers_only, ft, pre_post, terminates),
       return_type )
 
-  and transl_func_decl (loc : Ast.loc) (f : D.Function.t) : Ast.decl =
+  and transl_func_decl ?(tparams = []) (loc : Ast.loc) (f : D.Function.t) :
+      Ast.decl =
     let ( name,
           params,
           body_opt,
@@ -76,7 +77,7 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
     Ast.Func
       ( loc,
         Ast.Regular,
-        [],
+        tparams,
         return_type,
         name,
         params,
@@ -395,10 +396,31 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
     (* let name = name_get decl in *)
     decls_get decl |> Capnp_util.arr_map translate |> List.flatten
 
+  (* If the exporter could translate the function template to a generic
+     function, [generic] is that function. It is verified once, with the
+     template's type parameters as ghost type parameters. The specializations in
+     [specs] are the ones whose calls do not use the generic function: all of
+     them if there is no generic function, and otherwise those whose type
+     arguments are not all scalar types. They are translated and verified
+     separately. *)
   and transl_function_template_decl (loc : Ast.loc)
       (decl : D.FunctionTemplate.t) : Ast.decl list =
     let open D.FunctionTemplate in
-    (* let name = name_get decl in *)
+    let generic =
+      if not (has_generic decl) then []
+      else
+        let tparams =
+          tparams_get decl |> Capnp_util.arr_map TypeParam.name_get
+        in
+        (* Makes the type parameters type names in annotations. *)
+        Parser.push_typedef_scope ();
+        List.iter Parser.register_tparam tparams;
+        Fun.protect ~finally:Parser.pop_typedef_scope @@ fun () ->
+        (* Not Sized, so that the verifier boxes and unboxes values of these
+           types at call sites. *)
+        let tparams = Ast.unbounded_tparams tparams in
+        [ transl_func_decl ~tparams loc (generic_get decl) ]
+    in
     let ng_callers_only, ft, pre_post, terminates =
       contract_get decl
       |> Capnp_util.arr_map Node_translator.map_annotation
@@ -421,5 +443,6 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
           false,
           [] )
     in
-    specs_get decl |> Capnp_util.arr_map (Node_translator.map ~f:transl_spec)
+    generic
+    @ (specs_get decl |> Capnp_util.arr_map (Node_translator.map ~f:transl_spec))
 end

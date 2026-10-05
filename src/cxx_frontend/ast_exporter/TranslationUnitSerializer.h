@@ -23,10 +23,12 @@ public:
   TranslationUnitSerializer(const clang::ASTContext &ASTContext,
                             const AnnotationManager &annotationManager,
                             const InclusionContext &inclusionContext,
+                            const GenericFallbacks &genericFallbacks,
                             capnp::Orphanage orphanage, bool skipImplicitDecls)
       : m_ASTContext(&ASTContext), m_annotationManager(&annotationManager),
         m_inclusionContext(&inclusionContext),
-        m_serializer(ASTContext, annotationManager, skipImplicitDecls),
+        m_serializer(ASTContext, annotationManager, genericFallbacks,
+                     skipImplicitDecls),
         m_orphanage(orphanage) {}
 
 private:
