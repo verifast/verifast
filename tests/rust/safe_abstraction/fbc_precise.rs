@@ -25,7 +25,7 @@ mod baz {
 /*@
 pred primitive_types_own_is_precise(t: thread_id_t) =
     own_is_precise(<bool>.own) &*&
-    // own_is_precise(<char>.own) &*&
+    own_is_precise(<char>.own) &*&
     own_is_precise(<*_>.own) &*&
     own_is_precise(<u8>.own) &*&
     own_is_precise(<u16>.own) &*&
@@ -42,7 +42,7 @@ pred primitive_types_own_is_precise(t: thread_id_t) =
 
 pred primitive_types_fbc_is_precise() =
     fbc_is_precise(<bool>.full_borrow_content) &*&
-    // fbc_is_precise(<char>.full_borrow_content) &*&
+    fbc_is_precise(<char>.full_borrow_content) &*&
     fbc_is_precise(<*_>.full_borrow_content) &*&
     fbc_is_precise(<u8>.full_borrow_content) &*&
     fbc_is_precise(<u16>.full_borrow_content) &*&

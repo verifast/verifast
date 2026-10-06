@@ -33,6 +33,14 @@ lem close_tuple_0_own(t: thread_id_t);
 
 pred<T1, T2> <(T1, T2)>.share(k, t, l) = <T1>.share(k, t, &(*l).0) &*& <T2>.share(k, t, &(*l).1);
 
+lem open_tuple_1_own<T1>(t: thread_id_t, v: (T1,));
+    req <(T1,)>.own(t, v);
+    ens <T1>.own(t, v.0);
+
+lem close_tuple_1_own<T1>(t: thread_id_t, v: (T1,));
+    req <T1>.own(t, v.0);
+    ens <(T1,)>.own(t, v);
+
 lem open_tuple_4_own<T1, T2, T3, T4>(t: thread_id_t, v: (T1, T2, T3, T4));
     req <(T1, T2, T3, T4)>.own(t, v);
     ens <T1>.own(t, v.0) &*& <T2>.own(t, v.1) &*& <T3>.own(t, v.2) &*& <T4>.own(t, v.3);
