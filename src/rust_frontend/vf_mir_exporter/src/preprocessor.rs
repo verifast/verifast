@@ -112,6 +112,9 @@ impl GhostRange {
     pub fn span(&self) -> Option<rustc_span::Span> {
         self.span
     }
+    pub fn in_fn_body(&self) -> bool {
+        self.in_fn_body
+    }
     pub fn contents(&self) -> &str {
         &self.contents
     }
@@ -246,6 +249,7 @@ pub fn preprocess(
                         if fn_body_brace_depth == brace_depth {
                             fn_body_brace_depth = -1;
                         }
+                        next_block_is_fn_body = false;
                         output.push('}');
                     }
                     '[' => {
@@ -277,7 +281,9 @@ pub fn preprocess(
                                         cs.pos.byte_pos -= 3;
                                         cs.pos.column -= 3;
                                         let start = cs.pos;
-                                        let in_fn_body = fn_body_brace_depth != -1;
+                                        // A ghost range between a nested function's signature and its body is part of that
+                                        // function's contract, not a ghost command of the enclosing function body.
+                                        let in_fn_body = fn_body_brace_depth != -1 && !next_block_is_fn_body;
                                         if !read_only {
                                             if in_fn_body {
                                                 output.push_str(VF_GHOST_CMD_TAG);
@@ -455,7 +461,7 @@ pub fn preprocess(
                                         cs.pos.column -= 3;
                                         cs.pos.byte_pos -= 3;
                                         is_ghost_range = true;
-                                        ghost_range.in_fn_body = fn_body_brace_depth != -1;
+                                        ghost_range.in_fn_body = fn_body_brace_depth != -1 && !next_block_is_fn_body;
                                         ghost_range.start = cs.pos;
                                         if ghost_range.in_fn_body {
                                             is_ghost_cmd = match cs.peek() {
@@ -690,6 +696,10 @@ pub fn preprocess(
                                 }
                                 _ => {
                                     next_block_is_fn_body |= old_last_token_was_fn;
+                                    if nb_hashes > 0 {
+                                        // A raw identifier, such as `r#fn`
+                                        inside_word = true;
+                                    }
                                     break;
                                 }
                             }
@@ -807,6 +817,10 @@ pub fn preprocess(
                         cs.next();
                         output.push(c);
                         next_block_is_fn_body |= old_last_token_was_fn;
+                        if c.is_alphanumeric() {
+                            // A digit or a non-ASCII letter, part of a word, so that e.g. `x1fn` is not seen as `fn`
+                            inside_word = true;
+                        }
                     }
                 }
             }
