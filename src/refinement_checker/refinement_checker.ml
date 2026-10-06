@@ -2061,7 +2061,7 @@ let check_aggregate_kind_refines_aggregate_kind genv0 (aggregate_kind0: aggregat
   | Closure _, Closure _ -> failwith "Aggregate::Closure not supported"
   | Coroutine, Coroutine -> failwith "Aggregate::Coroutine not supported"
   | CoroutineClosure, CoroutineClosure -> failwith "Aggregate::CoroutineClosure not supported"
-  | RawPtr, RawPtr -> failwith "Aggregate::RawPtr not supported"
+  | RawPtr _, RawPtr _ -> failwith "Aggregate::RawPtr not supported"
   | _ -> failwith "Aggregate kinds do not match"
       
 let check_aggregate_refines_aggregate genv0 env0 span0 caller0 aggregate0 genv1 env1 span1 caller1 aggregate1 =

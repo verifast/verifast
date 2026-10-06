@@ -2409,7 +2409,9 @@ use rustc_span::RemapPathScopeComponents;
                 }
                 mir::AggregateKind::Coroutine(_def_id, _substs) => agg_kind_cpn.set_coroutine(()),
                 mir::AggregateKind::CoroutineClosure(_def_id, _substs) => agg_kind_cpn.set_coroutine_closure(()),
-                mir::AggregateKind::RawPtr(_ty, _mutability) => agg_kind_cpn.set_raw_ptr(()),
+                mir::AggregateKind::RawPtr(pointee_ty, _mutability) => {
+                    Self::encode_ty(enc_ctx.tcx, enc_ctx, *pointee_ty, agg_kind_cpn.init_raw_ptr());
+                }
             }
         }
 
