@@ -88,6 +88,270 @@ mod ops {
         
     }
     
+    impl std::iter::IntoIterator for std::ops::Range<u8> {
+    
+        fn into_iter(self: Range<u8>) -> Range<u8>;
+        //@ req true;
+        //@ ens result == self;
+        //@ on_unwind_ens false;
+    
+    }
+    
+    impl std::iter::Iterator for std::ops::Range<u8> {
+    
+        fn next<'a>(self: &'a mut Range<u8>) -> std::option::Option<u8>;
+        //@ req *self |-> ?self0;
+        /*@
+        ens if self0.start < self0.end {
+                *self |-> Range::<u8> { start: self0.start + 1, end: self0.end } &*& result == std::option::Option::Some(self0.start)
+            } else {
+                *self |-> self0 &*& result == std::option::Option::None
+            };
+        @*/
+        //@ on_unwind_ens false;
+        
+    }
+    
+    impl std::iter::IntoIterator for std::ops::Range<u16> {
+    
+        fn into_iter(self: Range<u16>) -> Range<u16>;
+        //@ req true;
+        //@ ens result == self;
+        //@ on_unwind_ens false;
+    
+    }
+    
+    impl std::iter::Iterator for std::ops::Range<u16> {
+    
+        fn next<'a>(self: &'a mut Range<u16>) -> std::option::Option<u16>;
+        //@ req *self |-> ?self0;
+        /*@
+        ens if self0.start < self0.end {
+                *self |-> Range::<u16> { start: self0.start + 1, end: self0.end } &*& result == std::option::Option::Some(self0.start)
+            } else {
+                *self |-> self0 &*& result == std::option::Option::None
+            };
+        @*/
+        //@ on_unwind_ens false;
+        
+    }
+    
+    impl std::iter::IntoIterator for std::ops::Range<u32> {
+    
+        fn into_iter(self: Range<u32>) -> Range<u32>;
+        //@ req true;
+        //@ ens result == self;
+        //@ on_unwind_ens false;
+    
+    }
+    
+    impl std::iter::Iterator for std::ops::Range<u32> {
+    
+        fn next<'a>(self: &'a mut Range<u32>) -> std::option::Option<u32>;
+        //@ req *self |-> ?self0;
+        /*@
+        ens if self0.start < self0.end {
+                *self |-> Range::<u32> { start: self0.start + 1, end: self0.end } &*& result == std::option::Option::Some(self0.start)
+            } else {
+                *self |-> self0 &*& result == std::option::Option::None
+            };
+        @*/
+        //@ on_unwind_ens false;
+        
+    }
+    
+    impl std::iter::IntoIterator for std::ops::Range<u64> {
+    
+        fn into_iter(self: Range<u64>) -> Range<u64>;
+        //@ req true;
+        //@ ens result == self;
+        //@ on_unwind_ens false;
+    
+    }
+    
+    impl std::iter::Iterator for std::ops::Range<u64> {
+    
+        fn next<'a>(self: &'a mut Range<u64>) -> std::option::Option<u64>;
+        //@ req *self |-> ?self0;
+        /*@
+        ens if self0.start < self0.end {
+                *self |-> Range::<u64> { start: self0.start + 1, end: self0.end } &*& result == std::option::Option::Some(self0.start)
+            } else {
+                *self |-> self0 &*& result == std::option::Option::None
+            };
+        @*/
+        //@ on_unwind_ens false;
+        
+    }
+    
+    impl std::iter::IntoIterator for std::ops::Range<u128> {
+    
+        fn into_iter(self: Range<u128>) -> Range<u128>;
+        //@ req true;
+        //@ ens result == self;
+        //@ on_unwind_ens false;
+    
+    }
+    
+    impl std::iter::Iterator for std::ops::Range<u128> {
+    
+        fn next<'a>(self: &'a mut Range<u128>) -> std::option::Option<u128>;
+        //@ req *self |-> ?self0;
+        /*@
+        ens if self0.start < self0.end {
+                *self |-> Range::<u128> { start: self0.start + 1, end: self0.end } &*& result == std::option::Option::Some(self0.start)
+            } else {
+                *self |-> self0 &*& result == std::option::Option::None
+            };
+        @*/
+        //@ on_unwind_ens false;
+        
+    }
+    
+    impl std::iter::IntoIterator for std::ops::Range<i8> {
+    
+        fn into_iter(self: Range<i8>) -> Range<i8>;
+        //@ req true;
+        //@ ens result == self;
+        //@ on_unwind_ens false;
+    
+    }
+    
+    impl std::iter::Iterator for std::ops::Range<i8> {
+    
+        fn next<'a>(self: &'a mut Range<i8>) -> std::option::Option<i8>;
+        //@ req *self |-> ?self0;
+        /*@
+        ens if self0.start < self0.end {
+                *self |-> Range::<i8> { start: self0.start + 1, end: self0.end } &*& result == std::option::Option::Some(self0.start)
+            } else {
+                *self |-> self0 &*& result == std::option::Option::None
+            };
+        @*/
+        //@ on_unwind_ens false;
+        
+    }
+    
+    impl std::iter::IntoIterator for std::ops::Range<i16> {
+    
+        fn into_iter(self: Range<i16>) -> Range<i16>;
+        //@ req true;
+        //@ ens result == self;
+        //@ on_unwind_ens false;
+    
+    }
+    
+    impl std::iter::Iterator for std::ops::Range<i16> {
+    
+        fn next<'a>(self: &'a mut Range<i16>) -> std::option::Option<i16>;
+        //@ req *self |-> ?self0;
+        /*@
+        ens if self0.start < self0.end {
+                *self |-> Range::<i16> { start: self0.start + 1, end: self0.end } &*& result == std::option::Option::Some(self0.start)
+            } else {
+                *self |-> self0 &*& result == std::option::Option::None
+            };
+        @*/
+        //@ on_unwind_ens false;
+        
+    }
+    
+    impl std::iter::IntoIterator for std::ops::Range<i32> {
+    
+        fn into_iter(self: Range<i32>) -> Range<i32>;
+        //@ req true;
+        //@ ens result == self;
+        //@ on_unwind_ens false;
+    
+    }
+    
+    impl std::iter::Iterator for std::ops::Range<i32> {
+    
+        fn next<'a>(self: &'a mut Range<i32>) -> std::option::Option<i32>;
+        //@ req *self |-> ?self0;
+        /*@
+        ens if self0.start < self0.end {
+                *self |-> Range::<i32> { start: self0.start + 1, end: self0.end } &*& result == std::option::Option::Some(self0.start)
+            } else {
+                *self |-> self0 &*& result == std::option::Option::None
+            };
+        @*/
+        //@ on_unwind_ens false;
+        
+    }
+    
+    impl std::iter::IntoIterator for std::ops::Range<i64> {
+    
+        fn into_iter(self: Range<i64>) -> Range<i64>;
+        //@ req true;
+        //@ ens result == self;
+        //@ on_unwind_ens false;
+    
+    }
+    
+    impl std::iter::Iterator for std::ops::Range<i64> {
+    
+        fn next<'a>(self: &'a mut Range<i64>) -> std::option::Option<i64>;
+        //@ req *self |-> ?self0;
+        /*@
+        ens if self0.start < self0.end {
+                *self |-> Range::<i64> { start: self0.start + 1, end: self0.end } &*& result == std::option::Option::Some(self0.start)
+            } else {
+                *self |-> self0 &*& result == std::option::Option::None
+            };
+        @*/
+        //@ on_unwind_ens false;
+        
+    }
+    
+    impl std::iter::IntoIterator for std::ops::Range<i128> {
+    
+        fn into_iter(self: Range<i128>) -> Range<i128>;
+        //@ req true;
+        //@ ens result == self;
+        //@ on_unwind_ens false;
+    
+    }
+    
+    impl std::iter::Iterator for std::ops::Range<i128> {
+    
+        fn next<'a>(self: &'a mut Range<i128>) -> std::option::Option<i128>;
+        //@ req *self |-> ?self0;
+        /*@
+        ens if self0.start < self0.end {
+                *self |-> Range::<i128> { start: self0.start + 1, end: self0.end } &*& result == std::option::Option::Some(self0.start)
+            } else {
+                *self |-> self0 &*& result == std::option::Option::None
+            };
+        @*/
+        //@ on_unwind_ens false;
+        
+    }
+    
+    impl std::iter::IntoIterator for std::ops::Range<isize> {
+    
+        fn into_iter(self: Range<isize>) -> Range<isize>;
+        //@ req true;
+        //@ ens result == self;
+        //@ on_unwind_ens false;
+    
+    }
+    
+    impl std::iter::Iterator for std::ops::Range<isize> {
+    
+        fn next<'a>(self: &'a mut Range<isize>) -> std::option::Option<isize>;
+        //@ req *self |-> ?self0;
+        /*@
+        ens if self0.start < self0.end {
+                *self |-> Range::<isize> { start: self0.start + 1, end: self0.end } &*& result == std::option::Option::Some(self0.start)
+            } else {
+                *self |-> self0 &*& result == std::option::Option::None
+            };
+        @*/
+        //@ on_unwind_ens false;
+        
+    }
+    
     enum ControlFlow<B, C> {
         Continue(C),
         Break(B)
