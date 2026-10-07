@@ -11,6 +11,7 @@
 #include "clang/AST/Type.h"
 #include "clang/AST/TypeLoc.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/SmallBitVector.h"
 #include "llvm/ADT/StringSet.h"
 
 namespace vf {
@@ -96,7 +97,8 @@ public:
 
   /**
    * @brief Name of the generic function that a function template is
-   * translated to, e.g. `identity<T>(const T)`.
+   * translated to, e.g. `identity<T>(const T)` or
+   * `inc<std::integral T>(const T)`.
    */
   std::string
   getGenericFuncName(const clang::FunctionTemplateDecl *decl) const;
@@ -106,11 +108,37 @@ public:
    * function, which is verified once for abstract type parameters.
    *
    * This is the case if its body only uses its type parameters in ways that
-   * mean the same for every scalar type argument, and its generic function did
-   * not fail in an earlier run (see GenericFallbacks). Otherwise, each of its
-   * specializations is verified separately.
+   * mean the same for every scalar type argument, or, for a type parameter
+   * that is constrained by `std::integral`, for every integer type argument
+   * other than bool, and its generic function did not fail in an earlier run
+   * (see GenericFallbacks). Otherwise, each of its specializations is verified
+   * separately.
    */
   bool isVerifiedGenerically(const clang::FunctionTemplateDecl *decl) const;
+
+  /**
+   * @brief The type parameters of the function template \p decl that its
+   * constraints require to satisfy `std::integral`, by index.
+   *
+   * In the generic function, the values of such a type parameter are
+   * integers within limits that are unknown, but that hold for every integer
+   * type other than bool. So arithmetic on them can be verified once.
+   */
+  llvm::SmallBitVector
+  getIntegralTypeParams(const clang::FunctionTemplateDecl *decl) const;
+
+  /**
+   * @brief Whether \p type is an integral type parameter (see
+   * getIntegralTypeParams) of the function template whose generic function is
+   * being serialized.
+   */
+  bool isIntegralTypeParam(clang::QualType type) const;
+
+  /**
+   * @brief Whether the function template whose generic function is being
+   * serialized has integral type parameters (see getIntegralTypeParams).
+   */
+  bool hasIntegralTypeParams() const;
 
   /**
    * @brief Whether a call to the function template specialization \p decl
@@ -119,7 +147,9 @@ public:
    *
    * The generic function is verified with its type parameters treated as
    * values that are copied bitwise and destroyed without side effects. This
-   * only holds for scalar type arguments.
+   * only holds for scalar type arguments. Its integral type parameters are
+   * treated as integer types other than bool, so their type arguments must be
+   * such builtin integer types.
    */
   bool usesGenericProof(const clang::FunctionDecl *decl) const;
 
@@ -156,6 +186,9 @@ private:
   mutable const clang::FunctionDecl *m_currentFunction = nullptr;
   mutable llvm::DenseMap<const clang::FunctionTemplateDecl *, bool>
       m_isVerifiedGenerically;
+  mutable llvm::DenseMap<const clang::FunctionTemplateDecl *,
+                         llvm::SmallBitVector>
+      m_integralTypeParams;
 };
 
 } // namespace vf

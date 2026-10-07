@@ -380,7 +380,7 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
             Ast.Real,
             return_type,
             name,
-            Ast.tparams_with_bounds_expr {Ast.sized=true} ft_type_params,
+            Ast.tparams_with_bounds_expr {Ast.sized=true; integral=false} ft_type_params,
             ft_params,
             params,
             (pre, ("result", post), terminates) )
@@ -410,15 +410,23 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
       if not (has_generic decl) then []
       else
         let tparams =
-          tparams_get decl |> Capnp_util.arr_map TypeParam.name_get
+          tparams_get decl
+          |> Capnp_util.arr_map (fun tparam ->
+                 let open TypeParam in
+                 (name_get tparam, integral_get tparam))
         in
         (* Makes the type parameters type names in annotations. *)
         Parser.push_typedef_scope ();
-        List.iter Parser.register_tparam tparams;
+        List.iter (fun (x, _) -> Parser.register_tparam x) tparams;
         Fun.protect ~finally:Parser.pop_typedef_scope @@ fun () ->
         (* Not Sized, so that the verifier boxes and unboxes values of these
-           types at call sites. *)
-        let tparams = Ast.unbounded_tparams tparams in
+           types at call sites. The values of an integral type parameter are
+           integers, which are not boxed. *)
+        let tparams =
+          tparams
+          |> List.map (fun (x, integral) ->
+                 (x, { Ast.no_bounds with Ast.integral }))
+        in
         [ transl_func_decl ~tparams loc (generic_get decl) ]
     in
     let ng_callers_only, ft, pre_post, terminates =

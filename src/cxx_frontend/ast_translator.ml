@@ -62,7 +62,7 @@ module Make (Args : Sig.CXX_TRANSLATOR_ARGS) : Sig.Cxx_Ast_Translator = struct
     let cmd =
       Printf.sprintf
         "%s/vf-cxx-ast-exporter %s -allow_macro_expansion=%s %s -- -x%s \
-         -std=c++17 -I%s -D%s %s"
+         -std=c++20 -I%s -D%s %s"
         bin_dir file
         (String.concat "," allow_expansions)
         (String.concat " " generic_fallbacks)

@@ -536,6 +536,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | RealTypeParam _ -> ProverInt
     | GhostTypeParam _ -> ProverInductive
     | BoundedGhostTypeParam _ -> ProverInductive
+    | IntegralTypeParam _ -> ProverInt
     | ProjectionType _ -> ProverInductive
     | Void -> ProverInductive
     | InferredType (_, t) -> begin match !t with EqConstraint t -> provertype_of_type t | _ -> t := EqConstraint (InductiveType ("unit", [])); ProverInductive end
@@ -765,7 +766,46 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       min_long_term, max_long_term, max_ulong_term,
       min_intptr_term, max_intptr_term, max_uintptr_term
   
+  (** For each integral type parameter (see IntegralTypeParam) of the function whose body or header is
+      being verified: the limits of the type parameter, and the limits of the type that its values are
+      promoted to. *)
+  let integral_tparam_limits: (string * ((termnode * termnode) * (termnode * termnode))) list ref = ref []
+
+  (** Introduces the limits of the integral type parameter [x] into the current prover context.
+      The function is verified once for all type arguments, so we only assume facts about the limits
+      that hold for every type argument: every integer type other than bool, from char to
+      unsigned __int128. *)
+  let assume_integral_tparam_limits x =
+    let mk_neg_minus_one t = ctxt#mk_sub (ctxt#mk_mul (ctxt#mk_intlit (-1)) t) int_unit_term in
+    let assume_le t1 t2 = ctxt#assert_term (ctxt#mk_le t1 t2) in
+    let min = get_unique_var_symb (x ^ "_MIN") intType in
+    let max = get_unique_var_symb (x ^ "_MAX") intType in
+    assume_le (max_signed_term 0) max;
+    assume_le max (max_unsigned_term max_width);
+    assume_le (mk_neg_minus_one max) min;
+    assume_le min int_zero_term;
+    (* The integer promotions convert a value of type x to int if int can represent all values of x.
+       Otherwise, they convert it to x itself, or to the unsigned type of the same width as x. *)
+    let promoted_min = get_unique_var_symb ("promoted_" ^ x ^ "_MIN") intType in
+    let promoted_max = get_unique_var_symb ("promoted_" ^ x ^ "_MAX") intType in
+    assume_le max promoted_max;
+    assume_le max_int_term promoted_max;
+    assume_le promoted_max (max_unsigned_term max_width);
+    assume_le (mk_neg_minus_one promoted_max) promoted_min;
+    assume_le promoted_min min;
+    integral_tparam_limits := (x, ((min, max), (promoted_min, promoted_max))) :: !integral_tparam_limits
+
   let limits_of_type t =
+    match t with
+      IntegralTypeParam (x, promoted) ->
+      begin match List.assoc_opt x !integral_tparam_limits with
+        Some (limits, promoted_limits) -> if promoted then promoted_limits else limits
+      | None ->
+        (* Outside the verification of the function, e.g. when its contract is used at a call site,
+           nothing is known about the limits. *)
+        (get_unique_var_symb (x ^ "_MIN") intType, get_unique_var_symb (x ^ "_MAX") intType)
+      end
+    | _ ->
     let Some (k, s) = int_rank_and_signedness t in
     match s, width_of_rank k with
       Signed, LitWidth k -> let {min_signed_term; max_signed_term} = integer_limits_table.(k) in (min_signed_term, max_signed_term)
@@ -2029,8 +2069,15 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let rec instantiate_type tpenv t =
     if tpenv = [] then t else
     match t with
-      RealTypeParam x | GhostTypeParam x | BoundedGhostTypeParam (x, _) -> (try List.assoc x tpenv  with _ -> failwith 
+      RealTypeParam x | GhostTypeParam x | BoundedGhostTypeParam (x, _) | IntegralTypeParam (x, false) -> (try List.assoc x tpenv  with _ -> failwith 
         (Printf.sprintf "not found! looking for %s in env %s" x (String.concat ", " (List.map (fun (a,b) -> a ^ "->" ^ (string_of_type b)) tpenv))))
+    | IntegralTypeParam (x, true) ->
+      (* Promoted types only occur in the bodies of functions, which are verified once, for abstract type arguments. *)
+      begin match List.assoc_opt x tpenv with
+        Some (IntegralTypeParam (x', false)) -> IntegralTypeParam (x', true)
+      | Some t -> failwith (Printf.sprintf "Instantiating the promoted type of type parameter %s with %s is not supported" x (string_of_type t))
+      | None -> t
+      end
     | PtrType t -> PtrType (instantiate_type tpenv t)
     | RustRefType (lft, kind, t) -> RustRefType (instantiate_type tpenv lft, kind, instantiate_type tpenv t)
     | InductiveType (i, targs) -> InductiveType (i, List.map (instantiate_type tpenv) targs)
@@ -2076,7 +2123,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let lookup_tparam_bounds x =
     match lookup_tparam_bounds_opt x with
       Some bounds -> bounds
-    | None -> {sized = false; eqs = []}
+    | None -> {sized = false; eqs = []; integral = false}
   
   let register_tparam_eq x eq =
     let bounds = lookup_tparam_bounds x in
@@ -2085,6 +2132,14 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let register_tparam_sized x =
     let bounds = lookup_tparam_bounds x in
     tparam_bounds_table := (x, {bounds with sized = true}) :: !tparam_bounds_table
+
+  let register_tparam_integral x =
+    let bounds = lookup_tparam_bounds x in
+    tparam_bounds_table := (x, {bounds with integral = true}) :: !tparam_bounds_table
+
+  let register_tparam_bounds (x, ({sized; integral}: tparam_bounds_expr)) =
+    if sized then register_tparam_sized x;
+    if integral then register_tparam_integral x
   
   (* Region: check_pure_type: checks validity of type expressions *)
   let check_pure_type_core typedefmap1 (pn,ilist) tpenv te envType reportInferredType =
@@ -2105,7 +2160,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       begin
       if List.mem id tpenv then begin match envType with
       | Real when language = Java -> RealTypeParam id
-      | _ -> match lookup_tparam_bounds_opt id with None -> GhostTypeParam id | Some bounds -> BoundedGhostTypeParam (id, bounds)
+      | _ ->
+        match lookup_tparam_bounds_opt id with
+          None -> GhostTypeParam id
+        | Some {integral=true} -> IntegralTypeParam (id, false)
+        | Some bounds -> BoundedGhostTypeParam (id, bounds)
       end
       else
       match resolve2' Ghost (pn,ilist) l id typedefmap0 typedefmap1 with
@@ -3396,6 +3455,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | (Int (Unsigned, m), Int (Unsigned, n)) when definitely_width_le (width_of_rank m) (width_of_rank n) -> ()
     | (Int (Unsigned, m), Int (Signed, n)) when definitely_width_lt (width_of_rank m) (width_of_rank n) -> ()
     | (Int (_, _), Int (_, _)) when inAnnotation = Some true -> ()
+    | (IntegralTypeParam (x, false), IntegralTypeParam (x0, true)) when x = x0 -> ()
+    | ((Int (_, _)|IntegralTypeParam (_, _)), (Int (_, _)|IntegralTypeParam (_, _))) when inAnnotation = Some true -> ()
     | (Int (_, _), RustChar)| (RustChar, Int (_, _)) -> ()
     | (ObjType (x, _), ObjType (y, _)) when is_subtype_of x y -> ()
     | PtrType (StructType (derived, [])), PtrType (StructType (base, [])) when dialect = Some Cxx && is_derived_of_base derived base -> ()
@@ -3440,6 +3501,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     match tp with 
       Bool | AbstractType _ -> false
     | GhostTypeParam x | BoundedGhostTypeParam (x, _) | RealTypeParam x -> true
+    | IntegralTypeParam (_, _) -> true
     | RustChar | Float | Double | LongDouble -> true (* FIXME: Aren't these finite types? *)
     | Int (_, _) | RealType | PtrType _ | RustRefType _ | PredType (_, _, _, _) | ObjType _ | ArrayType _ | Slice _ | BoxIdType | HandleIdType | AnyType | Str -> true
     | PureFuncType (t1, t2) -> is_universal_type t1 && is_universal_type t2
@@ -4341,6 +4403,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     match t with
     | Int (Signed, k) -> if width_le dummy_loc (width_of_rank k) int_width then intType else t
     | Int (Unsigned, k) -> if definitely_width_lt (width_of_rank k) int_width then intType else if width_le dummy_loc int_width (width_of_rank k) then t else static_error l "Computing the type of this expression involves an integer promotion whose result depends on the target architecture. This is not supported by VeriFast. Insert casts or specify a target (using the -target command-line option) to work around this problem." None
+    | IntegralTypeParam (x, _) -> IntegralTypeParam (x, true)
 
   let usual_arithmetic_conversion inAnnotation l t1 t2 = (* C11 6.3.1.8 *)
     let signed_unsigned t1 t2 n1 n2 =
@@ -4361,7 +4424,13 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let t1 = integer_promotion l t1 in
       let t2 = integer_promotion l t2 in
       match t1, t2 with
-        Int (Signed, n1), Int (Unsigned, n2) -> signed_unsigned t1 t2 n1 n2
+      (* A promoted integral type parameter has at least the rank of int. *)
+      | IntegralTypeParam (x1, true), IntegralTypeParam (x2, true) when x1 = x2 -> t1
+      | IntegralTypeParam (_, true), Int (Signed, IntRank) -> t1
+      | Int (Signed, IntRank), IntegralTypeParam (_, true) -> t2
+      | IntegralTypeParam _, _ | _, IntegralTypeParam _ ->
+        static_error l (Printf.sprintf "The result of the usual arithmetic conversions for operands of types %s and %s depends on the type arguments. This is not supported by VeriFast. Insert casts to work around this problem." (string_of_type t1) (string_of_type t2)) None
+      | Int (Signed, n1), Int (Unsigned, n2) -> signed_unsigned t1 t2 n1 n2
       | Int (Unsigned, n1), Int (Signed, n2) -> signed_unsigned t2 t1 n2 n1
       | Int (s, n1), Int (_, n2) -> Int (s, if width_le l (width_of_rank n1) (width_of_rank n2) then n2 else n1)
 
@@ -4762,6 +4831,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       begin match t with
         Int (_, _) ->
         (WOperation (l, operator, [w1; w2], t), t, None)
+      | IntegralTypeParam (_, _) when operator = Mod ->
+        (WOperation (l, operator, [w1; w2], t), t, None)
+      | IntegralTypeParam (_, _) ->
+        static_error l "The result of a bitwise operation on a value whose type is a type parameter depends on the type argument. This is not supported by VeriFast." None
       | _ -> static_error l "Arguments must be of integral type." None
       end
     | Operation (l, BitNot, [e]) ->
@@ -5571,6 +5644,15 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           static_error l (Printf.sprintf "Integer literal used as %s must be between %s and %s." (string_of_type tp) (string_of_big_int (min_signed_big_int k)) (string_of_big_int (max_signed_big_int k))) None
       else
         wintlit l n
+    | (IntLit (l, n, _, _, _), (IntegralTypeParam (_, promoted) as tp)) when isCast || inAnnotation <> Some true ->
+      (* The evaluation of a cast checks that the value is within the limits of the type. *)
+      if isCast then wintlit l n else
+      (* The values that every type argument (or the type it is promoted to) can represent *)
+      let max = if promoted then max_signed_big_int 1 else max_signed_big_int 0 in
+      if le_big_int zero_big_int n && le_big_int n max then
+        wintlit l n
+      else
+        static_error l (Printf.sprintf "Integer literal used as %s must be between 0 and %s." (string_of_type tp) (string_of_big_int max)) None
     | _ ->
       (* Note: if you add a cast here, i.e. let the typechecker allow
        * a cast, and that cast can change value (e.g. casting a signed int
@@ -5600,6 +5682,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           else
             Upcast (w, t, t0)
         | (Int (_, _)), (Int (_, _)) when isCast -> if definitely_is_upcast (int_rank_and_signedness t) (int_rank_and_signedness t0) then Upcast (w, t, t0) else w
+        (* The evaluation of the cast checks that the value is within the limits of the target type. *)
+        | ((Int (_, _)|IntegralTypeParam (_, _)), IntegralTypeParam (_, _)) | (IntegralTypeParam (_, _), Int (_, _)) when isCast -> w
         | (PtrType _), (Int (Unsigned, PtrRank)) when isCast -> WReadInductiveField (expr_loc w, w, "pointer", "pointer_ctor", "address", [], PtrType Void, PtrType Void)
         | (PtrType _), (Int (Unsigned, m)) when isCast && definitely_is_upcast (int_rank_and_signedness t) (int_rank_and_signedness t0) -> WReadInductiveField (expr_loc w, w, "pointer", "pointer_ctor", "address", [], PtrType Void, PtrType Void)
         | (Int (_, _)), (PtrType _) when isCast && (inAnnotation = Some true || definitely_is_upcast (int_rank_and_signedness t) (int_rank_and_signedness t0)) ->
@@ -6721,7 +6805,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 
   let assume_bounds term (tp: type_) = 
     match tp with
-      Int (_, _) ->
+      Int (_, _) | IntegralTypeParam (_, _) ->
       let min, max = limits_of_type tp in
       ctxt#assert_term (ctxt#mk_and (ctxt#mk_le min term) (ctxt#mk_le term max))
     | PtrType _ | RustRefType _ when language <> Java ->
@@ -8396,7 +8480,7 @@ let check_if_list_is_defined () =
     | Neq -> ctxt#mk_not (ctxt#mk_eq v1 v2)
     | Add ->
       begin match t with
-      | Int (_, _) ->
+      | Int (_, _) | IntegralTypeParam (_, _) ->
         check_overflow (ctxt#mk_add v1 v2)
       | PtrType t ->
         check_pointer_within_limits ass_term l (mk_ptr_add_ l env v1 v2 t)
@@ -8405,7 +8489,7 @@ let check_if_list_is_defined () =
       end
     | Sub ->
       begin match t with
-        Int (_, _) ->
+        Int (_, _) | IntegralTypeParam (_, _) ->
         check_overflow (ctxt#mk_sub v1 v2)
       | PtrType t ->
         check_pointer_within_limits ass_term l (mk_ptr_add_ l env v1 (ctxt#mk_sub int_zero_term v2) t)
@@ -8415,7 +8499,7 @@ let check_if_list_is_defined () =
     | PtrDiff -> check_overflow (ctxt#mk_sub (mk_ptr_address v1) (mk_ptr_address v2))
     | Mul ->
       begin match t with
-        Int (_, _) ->
+        Int (_, _) | IntegralTypeParam (_, _) ->
         check_overflow (ctxt#mk_mul v1 v2)
       | RealType ->
         ctxt#mk_real_mul v1 v2
@@ -8427,7 +8511,7 @@ let check_if_list_is_defined () =
         | _ -> v1, v2
       in
       begin match t with
-        Int (_, _) | PtrType _ ->
+        Int (_, _) | IntegralTypeParam (_, _) | PtrType _ ->
         begin match op with
           Le -> ctxt#mk_le v1 v2
         | Lt -> ctxt#mk_lt v1 v2
@@ -8445,7 +8529,7 @@ let check_if_list_is_defined () =
     | Div ->
       begin match t with
         RealType -> static_error l "Realdiv not supported yet in /=." None
-      | Int (_, _) ->
+      | Int (_, _) | IntegralTypeParam (_, _) ->
         begin match ass_term with
           Some assert_term -> begin
             let min, _ = limits_of_type (woperation_type_result_type op t) in
@@ -8572,7 +8656,7 @@ let check_if_list_is_defined () =
     | CastExpr (l, ManifestTypeExpr (_, t), e) ->
       begin
         match (e, t) with
-          (e, (Int (_, _) as tp)) ->
+          (e, ((Int (_, _)|IntegralTypeParam (_, _)) as tp)) ->
           ev state e $. fun state t ->
           let min, max = limits_of_type tp in
           cont state (check_overflow l min t max)

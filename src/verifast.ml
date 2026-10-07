@@ -3299,13 +3299,12 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     rocq_writer.pending_newline <- true;
     Rocq_writer.rocq_indent rocq_writer @@ fun () ->
     push_tparam_bounds_table ();
-    let tparams' = tparams'_with_bounds |> List.map @@ fun (x, {sized}) ->
-      if sized then
-        register_tparam_sized x;
-      x
-    in
+    List.iter register_tparam_bounds tparams'_with_bounds;
+    let tparams' = List.map fst tparams'_with_bounds in
     let tparams = tparams' @ tparams in
     let _ = push() in
+    let integral_tparam_limits0 = !integral_tparam_limits in
+    tparams'_with_bounds |> List.iter (fun (x, ({integral}: tparam_bounds_expr)) -> if integral then assume_integral_tparam_limits x);
     let tparam_typeid_env = tparams' |> flatmap @@ fun x ->
       if tparam_carries_typeid x then
         let paramName = x ^ "_typeid" in
@@ -3460,6 +3459,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       )
     in
     let _ = pop() in
+    integral_tparam_limits := integral_tparam_limits0;
     pop_tparam_bounds_table ();
     let _ = 
       (match k with
@@ -3991,11 +3991,8 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       begin match prototype_opt, prototypeImplementationProof_opt with
         None, None -> ()
       | Some (k0, tparams0_with_bounds, rt0, ps0, nonghost_callers_only0, fenv, pre0, pre_tenv0, post0, terminates0), _ ->
-        let tparams0 = tparams0_with_bounds |> List.map @@ fun (x, {sized}) ->
-          if sized then
-            register_tparam_sized x;
-            x
-        in
+        List.iter register_tparam_bounds tparams0_with_bounds;
+        let tparams0 = List.map fst tparams0_with_bounds in
         let prolog, lproof_end =
           match prototypeImplementationProof_opt with
             None ->

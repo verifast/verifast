@@ -57,6 +57,17 @@ struct ExprSerializerImpl
       stubs::Expr::Cast::Builder ce = m_builder.initIntegralCast();
       return serializeCast(ce, expr);
     }
+    case clang::CastKind::CK_Dependent:
+      // The verifier checks that the value is within the limits of the type
+      // argument.
+      if (isExplicit && m_ASTSerializer->isIntegralTypeParam(expr->getType())) {
+        stubs::Expr::Cast::Builder ce = m_builder.initIntegralCast();
+        ExprNodeBuilder exprBuilder = ce.initExpr();
+        m_ASTSerializer->serializeAsRValue(exprBuilder, expr->getSubExpr());
+        m_ASTSerializer->serialize(ce.initType(), expr->getType());
+        return true;
+      }
+      [[fallthrough]];
     default:
       if (isExplicit)
         return false;
@@ -107,10 +118,13 @@ struct ExprSerializerImpl
   }
 
   bool VisitUnaryOperator(const clang::UnaryOperator *uo) {
-    // Only `*` and `&` mean the same thing for every scalar type.
+    // Only `*` and `&` mean the same thing for every scalar type. A `!` on a
+    // comparison of values of integral type parameters is a negation.
     if (uo->getSubExpr()->isTypeDependent() &&
         uo->getOpcode() != clang::UnaryOperatorKind::UO_AddrOf &&
-        uo->getOpcode() != clang::UnaryOperatorKind::UO_Deref) {
+        uo->getOpcode() != clang::UnaryOperatorKind::UO_Deref &&
+        !(uo->getOpcode() == clang::UnaryOperatorKind::UO_LNot &&
+          m_ASTSerializer->hasIntegralTypeParams())) {
       return false;
     }
 
@@ -145,9 +159,11 @@ struct ExprSerializerImpl
 
   bool VisitBinaryOperator(const clang::BinaryOperator *bo) {
     // Only `=` means the same thing for every scalar type. For instance, `==`
-    // on floating-point values is not equality.
+    // on floating-point values is not equality. The verifier supports
+    // arithmetic and comparisons on values of integral type parameters.
     if ((bo->getLHS()->isTypeDependent() || bo->getRHS()->isTypeDependent()) &&
-        bo->getOpcode() != clang::BinaryOperatorKind::BO_Assign) {
+        bo->getOpcode() != clang::BinaryOperatorKind::BO_Assign &&
+        !m_ASTSerializer->hasIntegralTypeParams()) {
       return false;
     }
 

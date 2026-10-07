@@ -295,6 +295,7 @@ struct Decl {
   struct FunctionTemplate {
     struct TypeParam {
       name @0 :Text;
+      integral @1 :Bool; # constrained by `std::integral`
     }
 
     name @0 :Text;

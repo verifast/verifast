@@ -724,6 +724,11 @@ cd tests
         verifast_both -c function_template_general_contract.cpp
         verifast -c class_instantiation.cpp
         verifast -c per_instantiation.cpp
+        verifast_both -c increment.cpp
+        verifast_both -c integral.cpp
+        verifast_both -c -allow_should_fail integral_wrong_spec.cpp
+        verifast -c integral_per_instantiation.cpp
+        verifast_both -c integral_fallback.cpp
         verifast -c -allow_should_fail uninstantiated_wrong_spec.cpp
         verifast_both -c fallback.cpp
         verifast -c -allow_should_fail fallback_wrong_spec.cpp

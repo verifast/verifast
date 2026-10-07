@@ -742,8 +742,8 @@ and parse_type_params_with_bounds = function%parser
            [ (_, Kwd ":"); (_, Kwd "?"); (_, Ident "Sized") ] -> false
          | [ ] -> Verifast0.tparam_is_uppercase x
         ]
-      ] -> (x, {sized})
-    | [ (_, PrimePrefixedIdent a) ] -> ("'" ^ a, {sized = false}))
+      ] -> (x, {sized; integral = false})
+    | [ (_, PrimePrefixedIdent a) ] -> ("'" ^ a, {sized = false; integral = false}))
     ];
     (_, Kwd ">") ] -> tparams
 | [ ] -> []
@@ -1065,10 +1065,10 @@ and parse_decl = function%parser
          (_, Kwd "for"); (_, Ident x); (_, Kwd "="); parse_type as tp;
          (_, Kwd "{"); [%let ds = rep parse_decl]; (_, Kwd "}")
        ] ->
-       if tparams <> [x, {sized=true}] then raise (ParseException (l, "`impl<Ts> for T = Type` where Ts is not exactly T is not yet supported"));
+       if tparams <> [x, {sized=true; integral=false}] then raise (ParseException (l, "`impl<Ts> for T = Type` where Ts is not exactly T is not yet supported"));
        ds |> List.flatten |> List.concat_map begin function
            Func (l, k, tparams', rt, g, ps, nonghost_callers_only, ft, co, terminates, body, isVirtual, overrides) ->
-           if tparams' <> [x, {sized=true}] then raise (ParseException (l, "Inside an `impl<T> for T = Type` block, each function must have exactly one type parameter named T"));
+           if tparams' <> [x, {sized=true; integral=false}] then raise (ParseException (l, "Inside an `impl<T> for T = Type` block, each function must have exactly one type parameter named T"));
            let g_specialized = g ^ "::<" ^ string_of_type_expr tp ^ ">" in
            [Func (l, k, [], rt, g_specialized, ps, nonghost_callers_only, ft, co, terminates, body, isVirtual, overrides);
             FuncSpecializationDecl (l, g, true, g_specialized, [], [tp])]
@@ -1084,7 +1084,7 @@ and parse_decl = function%parser
   let prefix = x ^ "::" in
   let ds = ds |> List.flatten |> List.map (prefix_decl_name l prefix) in
   let tparams = tparams_with_default_bounds_exprs tparams in
-  let ds = List.map (decl_add_type_params l (("Self", {sized=false})::tparams)) ds in
+  let ds = List.map (decl_add_type_params l (("Self", {sized=false; integral=false})::tparams)) ds in
   ds
 | [ (l, Kwd "mod"); (lx, Ident x); (_, Kwd "{");
     [%let ds = rep parse_decl];

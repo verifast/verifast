@@ -115,6 +115,7 @@ let rec sexpr_of_type_ (t : type_) : sexpression =
     | RealTypeParam s         -> List [ Symbol "real-type-param"; Symbol s ]
     | InferredRealType s      -> List [ Symbol "inferred-real-type"; Symbol s ]
     | GhostTypeParam s        -> List [ Symbol "ghost-type-param"; Symbol s ]
+    | IntegralTypeParam (s, promoted) -> List [ Symbol "integral-type-param"; Symbol s; Symbol (if promoted then "promoted" else "unpromoted") ]
     | InferredType (_, i)     -> List [ Symbol "type-inferred"; sexpr_of_inferred_type_state !i]
     | ClassOrInterfaceName (s)-> List [ Symbol "type-class-or-interface-name"; Symbol s ]
     | PackageName (s)         -> List [ Symbol "type-package-name"; Symbol s ]

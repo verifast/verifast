@@ -202,9 +202,10 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       match zip tparams_with_bounds tparams0_with_bounds with
         None -> static_error l (msg ^ "Type parameter counts do not match.") None
       | Some bs ->
-        bs |> List.map @@ fun ((x, {sized}), (x0, {sized=sized0})) ->
+        bs |> List.map @@ fun ((x, {sized; integral}), (x0, {sized=sized0; integral=integral0})) ->
           if sized && not sized0 then static_error l (msg ^ Printf.sprintf "Implementation Sized bound on type parameter %s not satisfied." x) None;
-          (x, if sized then BoundedGhostTypeParam (x, {sized; eqs=[]}) else GhostTypeParam x0)
+          if integral <> integral0 then static_error l (msg ^ Printf.sprintf "Type parameter %s is integral in one declaration but not in the other." x) None;
+          (x, if integral then IntegralTypeParam (x0, false) else if sized then BoundedGhostTypeParam (x, {sized; eqs=[]; integral=false}) else GhostTypeParam x0)
     in
     begin
       match (rt, rt0) with
@@ -322,10 +323,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         []
     in
     let tparams1 = tparams0 @ tparams in
-    tparams_with_bounds |> List.iter begin fun (x, {sized}) ->
-      if sized then
-        register_tparam_sized x
-    end;
+    List.iter register_tparam_bounds tparams_with_bounds;
     begin match body with
       Some (ss, closeBraceLoc) ->
       let rec iter = function
@@ -2083,7 +2081,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 
   let assume_is_of_type l t tp cont =
     match tp with
-      Int (_, _) ->
+      Int (_, _) | IntegralTypeParam (_, _) ->
       let (min_term, max_term) = limits_of_type tp in
       assume (ctxt#mk_and (ctxt#mk_le min_term t) (ctxt#mk_le t max_term)) cont
     | PtrType _ | RustRefType _ ->
@@ -3136,7 +3134,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         if not pure then static_error l "A lemma method call is not allowed in a non-pure context." None;
         if leminfo_is_lemma leminfo then static_error l "Lemma method calls in lemmas are currently not supported (for termination reasons)." None
       end;
-      let mtparams_with_bounds = tparams_with_bounds_expr {sized=true} mtparams in
+      let mtparams_with_bounds = tparams_with_bounds_expr {sized=true; integral=false} mtparams in
       check_correct h xo None mtargs args (lm, mtparams_with_bounds, rt, xmap, [], pre, ("result", post), Some epost, terminates, true) is_upcall target_class cont
     | WSuperMethodCall(l, supercn, m, args, (lm, gh, rt, xmap, pre, post, epost, terminates, rank, v)) ->
       if gh = Real && pure then static_error l "Method call is not allowed in a pure context" None;

@@ -188,6 +188,14 @@ struct DeclSerializerImpl
     return true;
   }
 
+  // Clang checks the constraints of templates. A function template constrained
+  // by `std::integral` is verified generically (see
+  // ASTSerializer::getIntegralTypeParams).
+  bool VisitConceptDecl(const clang::ConceptDecl *decl) {
+    m_builder.setEmpty();
+    return true;
+  }
+
   bool VisitVarDecl(const clang::VarDecl *decl) {
     stubs::Decl::Var::Builder varBuilder = m_builder.initVar();
     TypeNodeBuilder typeBuilder = varBuilder.initType();
@@ -500,6 +508,8 @@ struct DeclSerializerImpl
     if (m_ASTSerializer->isVerifiedGenerically(decl)) {
       const clang::TemplateParameterList *tparams =
           decl->getTemplateParameters();
+      llvm::SmallBitVector integral =
+          m_ASTSerializer->getIntegralTypeParams(decl);
       ListBuilder<stubs::Decl::FunctionTemplate::TypeParam> tparamsBuilder =
           functionTemplateBuilder.initTparams(tparams->size());
       for (const clang::NamedDecl *tparam : *tparams) {
@@ -507,6 +517,7 @@ struct DeclSerializerImpl
         stubs::Decl::FunctionTemplate::TypeParam::Builder tparamBuilder =
             tparamsBuilder[i];
         tparamBuilder.setName(capnp::Text::Reader(name.data(), name.size()));
+        tparamBuilder.setIntegral(integral.test(i));
         ++i;
       }
 
