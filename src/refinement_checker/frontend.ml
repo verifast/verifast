@@ -43,11 +43,11 @@ module RustTChain = struct
   let find_tchain_path tchain_name tchain_path =
     try
       let rustc_cmd = "rustc" in
-      let rustc_args = "+" ^ tchain_name ^ " --print " in
       let rustc_args =
-        rustc_args
+        "--print "
         ^ match tchain_path with Root -> "sysroot" | Lib -> "target-libdir"
       in
+      Unix.putenv "RUSTUP_TOOLCHAIN" tchain_name;
       let current_env = Unix.environment () in
       let tchain_path = SysUtil.run_command rustc_cmd rustc_args current_env in
       let tchain_path = String.trim tchain_path in
