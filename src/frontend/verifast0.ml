@@ -61,7 +61,7 @@ let tparam_is_uppercase_or_lifetime tparam =
   String.length tparam > 0 && match tparam.[0] with 'A'..'Z'|'\'' -> true | _ -> false
 
 let tparams_with_default_bounds_exprs tparams =
-  tparams |> List.map (fun x -> (x, {sized = tparam_is_uppercase x}))
+  tparams |> List.map (fun x -> (x, {sized = tparam_is_uppercase x; integral = false}))
 
 let rec c_string_of_type t =
   match t with
@@ -121,6 +121,8 @@ let rec c_string_of_type t =
   | AnyType -> "any"
   | RealTypeParam x -> "<" ^ x ^ ">"
   | GhostTypeParam x -> x
+  | IntegralTypeParam (x, false) -> x
+  | IntegralTypeParam (x, true) -> "promoted(" ^ x ^ ")"
   | InferredRealType x -> x ^ "?"
   | InferredType (_, t) -> begin match !t with EqConstraint t -> c_string_of_type t | _ -> "?" end
   | ArrayType(t) -> (c_string_of_type t) ^ "[]"

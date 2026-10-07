@@ -170,3 +170,5 @@ _opam
 
 .DS_Store
 .devcontainer/devcontainer.local.json
+
+build/

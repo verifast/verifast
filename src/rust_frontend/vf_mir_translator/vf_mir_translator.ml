@@ -5005,7 +5005,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           |> List.map decode_clause
         in
         let sized_tparams = compute_sized_tparams clauses in
-        let vf_tparams_with_bounds = vf_tparams |> List.map (fun x -> (x, {Ast.sized = List.mem x sized_tparams})) in
+        let vf_tparams_with_bounds = vf_tparams |> List.map (fun x -> (x, {Ast.sized = List.mem x sized_tparams; integral = false})) in
         let projection_clauses =
           clauses
           |> Util.flatmap (function
@@ -6221,8 +6221,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       in
       let tparams_with_bounds =
         generics |> Util.flatmap @@ function
-          | `Type x -> [ (x, { Ast.sized = Verifast0.tparam_is_uppercase x }) ]
-          | `Const x -> [ (x, { Ast.sized = false }) ]
+          | `Type x -> [ (x, { Ast.sized = Verifast0.tparam_is_uppercase x; integral = false }) ]
+          | `Const x -> [ (x, { Ast.sized = false; integral = false }) ]
           | _ -> []
       in
       let lft_params =

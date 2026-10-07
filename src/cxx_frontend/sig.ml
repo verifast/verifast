@@ -23,4 +23,10 @@ module type CXX_TRANSLATOR_ARGS = sig
   val verbose: int
   val include_paths: string list
   val define_macros: string list
+
+  (* Generic functions of function templates that failed in an earlier run of
+     VeriFast. The exporter verifies their templates per specialization
+     instead. See GenericFallbacks in the exporter. *)
+  val generic_fallbacks: string list
+  val generic_fallbacks_if_instantiated: string list
 end

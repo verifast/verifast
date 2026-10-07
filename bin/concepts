@@ -1,0 +1,30 @@
+#ifndef CONCEPTS
+#define CONCEPTS
+
+// VeriFast's replacement for the standard <concepts> header. The concepts are
+// defined with Clang's type trait builtins.
+
+namespace std {
+
+template <typename T, typename U>
+concept same_as = __is_same(T, U) && __is_same(U, T);
+
+// A function template whose type parameter T is constrained by
+// `std::integral` is verified once for all integer types other than bool,
+// with T treated as an integer type with unknown limits. Its specializations
+// for bool are verified separately.
+template <typename T>
+concept integral = __is_integral(T);
+
+template <typename T>
+concept signed_integral = integral<T> && __is_signed(T);
+
+template <typename T>
+concept unsigned_integral = integral<T> && !signed_integral<T>;
+
+template <typename T>
+concept floating_point = __is_floating_point(T);
+
+} // namespace std
+
+#endif // CONCEPTS

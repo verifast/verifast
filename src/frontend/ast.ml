@@ -175,6 +175,9 @@ type type_ = (* ?type_ *)
   | BoundedGhostTypeParam of (* a reference to a type parameter declared in the ghost code *)
       string *
       tparam_bounds
+  | IntegralTypeParam of (* a reference to a type parameter that is known to be an integer type other than bool, e.g. a C++ template type parameter constrained by std::integral *)
+      string *
+      bool (* If true, this is not the type parameter itself but the type that its values are promoted to by the integer promotions (C++ [conv.prom]) *)
   | InferredType of < > * inferred_type_state ref (* inferred type, is unified during type checking. '< >' is the type of objects with no methods. This hack is used to prevent types from incorrectly comparing equal, as in InferredType (ref Unconstrained) = InferredType (ref Unconstrained). Yes, ref Unconstrained = ref Unconstrained. But object end <> object end. *)
   | ClassOrInterfaceName of string (* not a real type; used only during type checking *)
   | PackageName of string (* not a real type; used only during type checking *)
@@ -191,6 +194,7 @@ and inferred_type_state =
 and tparam_bounds = {
   sized: bool; (* Is this type parameter constrained to be Sized? *)
   eqs: ((string * type_ list * string) * type_) list; (* type projection equalities: TraitName<TraitArgs>::AssocTypeName == T *)
+  integral: bool; (* Is this type parameter constrained to be an integer type other than bool? See IntegralTypeParam. *)
 }
 
 let rec unfold_inferred_type t =
@@ -240,6 +244,7 @@ let is_instance (l: loc) (t1: type_) (t2: type_) =
     | GhostTypeParam tpn1, _ ->
       begin match List.assoc_opt tpn1 substs with None -> Some ((tpn1, t2)::substs) | Some t -> if t = t2 then Some substs else None end
     | BoundedGhostTypeParam (tpn1, _), _ -> failwith "Not supported yet" (* TODO: type projection equalities should be satisfiable in case we need to add a new substitution entry *)
+    | IntegralTypeParam _, _ -> if t1 = t2 then Some substs else None
     | InferredType (_, state1), _ -> begin match !state1 with EqConstraint t1 -> iter substs t1 t2 | _ -> None end
     | _, InferredType (_, state2) -> begin match !state2 with EqConstraint t2 -> iter substs t1 t2 | _ -> None end
     | ClassOrInterfaceName n1, ClassOrInterfaceName n2 -> failwith "Not supported yet"
@@ -267,7 +272,7 @@ let type_fold_open state f = function
 | ArrayType tp -> f state tp
 | StaticArrayType (elem_tp, size) -> f (f state elem_tp) size
 | LiteralConstType _ -> state
-| BoxIdType | HandleIdType | AnyType | RealTypeParam _ | InferredRealType _ | GhostTypeParam _ | InferredType (_, _) | ClassOrInterfaceName _ | PackageName _ -> state
+| BoxIdType | HandleIdType | AnyType | RealTypeParam _ | InferredRealType _ | GhostTypeParam _ | IntegralTypeParam (_, _) | InferredType (_, _) | ClassOrInterfaceName _ | PackageName _ -> state
 | RefType tp -> f state tp
 | AbstractType _ | StaticLifetime -> state
 | BoundedGhostTypeParam (tp, {eqs}) -> List.fold_left (fun state (_, tp) -> f state tp) state eqs
@@ -352,7 +357,7 @@ let java_long_type = Int (Signed, LongRank)
 
 let is_arithmetic_type t =
   match t with
-    Int (_, _)|RealType|Float|Double|LongDouble -> true
+    Int (_, _)|IntegralTypeParam (_, _)|RealType|Float|Double|LongDouble -> true
   | _ -> false
 
 let is_inductive_type t =
@@ -419,6 +424,7 @@ type type_expr = (* ?type_expr *)
 and
   tparam_bounds_expr = {
     sized: bool; (* Is this type parameter constrained to be Sized? *)
+    integral: bool; (* Is this type parameter constrained to be an integer type other than bool? See IntegralTypeParam. *)
   }
 and
   operator =  (* ?operator *)
@@ -1130,7 +1136,7 @@ and constant_value = (* ?constant_value *)
 let tparams_with_bounds_expr bounds tparams =
   List.map (fun tpname -> (tpname, bounds)) tparams
 
-let no_bounds = { sized = false }
+let no_bounds = { sized = false; integral = false }
 let unbounded_tparams tparams = tparams_with_bounds_expr no_bounds tparams
 
 let func_kind_of_ghostness gh =

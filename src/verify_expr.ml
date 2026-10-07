@@ -202,9 +202,10 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       match zip tparams_with_bounds tparams0_with_bounds with
         None -> static_error l (msg ^ "Type parameter counts do not match.") None
       | Some bs ->
-        bs |> List.map @@ fun ((x, {sized}), (x0, {sized=sized0})) ->
+        bs |> List.map @@ fun ((x, {sized; integral}), (x0, {sized=sized0; integral=integral0})) ->
           if sized && not sized0 then static_error l (msg ^ Printf.sprintf "Implementation Sized bound on type parameter %s not satisfied." x) None;
-          (x, if sized then BoundedGhostTypeParam (x, {sized; eqs=[]}) else GhostTypeParam x0)
+          if integral <> integral0 then static_error l (msg ^ Printf.sprintf "Type parameter %s is integral in one declaration but not in the other." x) None;
+          (x, if integral then IntegralTypeParam (x0, false) else if sized then BoundedGhostTypeParam (x, {sized; eqs=[]; integral=false}) else GhostTypeParam x0)
     in
     begin
       match (rt, rt0) with
@@ -322,10 +323,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         []
     in
     let tparams1 = tparams0 @ tparams in
-    tparams_with_bounds |> List.iter begin fun (x, {sized}) ->
-      if sized then
-        register_tparam_sized x
-    end;
+    List.iter register_tparam_bounds tparams_with_bounds;
     begin match body with
       Some (ss, closeBraceLoc) ->
       let rec iter = function
@@ -491,12 +489,15 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       check (derived, this_term) overrides
     
   let (funcmap1, prototypes_implemented) =
+    (* The generic functions of C++ function templates whose header failed to check. See CxxGenericFunctionsFailed. *)
+    let cxx_generic_failures = ref [] in
     let rec iter pn ilist funcmap prototypes_implemented ds =
       match ds with
         [] -> (funcmap, List.rev prototypes_implemented)
       | Func (l, k, tparams_with_bounds, rt, fn, xs, nonghost_callers_only, (functype_opt, prototypeImplementationProof_opt), contract_opt, terminates, body, is_virtual, overrides)::ds when k <> Fixpoint ->
         let tparams = List.map fst tparams_with_bounds in
         let fn = full_name pn fn in
+        let check_func () =
         let fterm = List.assoc fn funcnameterms in
         if body <> None then
           ctxt#assert_term (ctxt#mk_eq (ctxt#mk_app func_rank [fterm]) (ctxt#mk_reallit !func_counter));
@@ -535,7 +536,23 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             cont (fn, FuncInfo ([], fterm, l, k, tparams_with_bounds, rt, xmap, nonghost_callers_only, pre, pre_tenv, post, terminates, (functype_opt, (Some (k0, tparams0, rt0, xmap0, nonghost_callers_only0, fenv, pre0, pre_tenv0, post0, terminates0), prototypeImplementationProof_opt)), body', is_virtual, overrides)) ((fn, l0)::prototypes_implemented)
         end @@ fun func_info protos_implemented ->
         let () = check_cxx_spec_overrides fenv func_info (fun name -> assoc2 name funcmap funcmap0) in
-        iter pn ilist (func_info :: funcmap) protos_implemented ds
+        (func_info, protos_implemented)
+        in
+        if is_cxx_generic_function k tparams then begin
+          (* Check the headers of the other functions as well, so that all generic functions that fail are found in one run. *)
+          let tparam_bounds_table0 = !tparam_bounds_table in
+          let tparam_bounds_tables_stack0 = !tparam_bounds_tables_stack in
+          match check_func () with
+            (func_info, protos_implemented) -> iter pn ilist (func_info :: funcmap) protos_implemented ds
+          | exception e when cxx_generic_failure_of_exn e <> None ->
+            let Some failure = cxx_generic_failure_of_exn e in
+            cxx_generic_failures := (fn, failure, e) :: !cxx_generic_failures;
+            tparam_bounds_table := tparam_bounds_table0;
+            tparam_bounds_tables_stack := tparam_bounds_tables_stack0;
+            iter pn ilist funcmap prototypes_implemented ds
+        end else
+          let (func_info, protos_implemented) = check_func () in
+          iter pn ilist (func_info :: funcmap) protos_implemented ds
       | _::ds -> iter pn ilist funcmap prototypes_implemented ds
     in
     let rec iter' (funcmap,prototypes_implemented) ps=
@@ -543,7 +560,9 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         PackageDecl(l,pn,il,ds)::rest-> iter' (iter pn il funcmap prototypes_implemented ds) rest
       | [] -> (funcmap,prototypes_implemented)
     in
-    iter' ([],[]) ps
+    let result = iter' ([],[]) ps in
+    if !cxx_generic_failures <> [] then raise (CxxGenericFunctionsFailed (List.rev !cxx_generic_failures));
+    result
   
   let () =
     if options.option_emit_rocq && filepath = path then begin
@@ -2062,7 +2081,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 
   let assume_is_of_type l t tp cont =
     match tp with
-      Int (_, _) ->
+      Int (_, _) | IntegralTypeParam (_, _) ->
       let (min_term, max_term) = limits_of_type tp in
       assume (ctxt#mk_and (ctxt#mk_le min_term t) (ctxt#mk_le t max_term)) cont
     | PtrType _ | RustRefType _ ->
@@ -3115,7 +3134,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         if not pure then static_error l "A lemma method call is not allowed in a non-pure context." None;
         if leminfo_is_lemma leminfo then static_error l "Lemma method calls in lemmas are currently not supported (for termination reasons)." None
       end;
-      let mtparams_with_bounds = tparams_with_bounds_expr {sized=true} mtparams in
+      let mtparams_with_bounds = tparams_with_bounds_expr {sized=true; integral=false} mtparams in
       check_correct h xo None mtargs args (lm, mtparams_with_bounds, rt, xmap, [], pre, ("result", post), Some epost, terminates, true) is_upcall target_class cont
     | WSuperMethodCall(l, supercn, m, args, (lm, gh, rt, xmap, pre, post, epost, terminates, rank, v)) ->
       if gh = Real && pure then static_error l "Method call is not allowed in a pure context" None;

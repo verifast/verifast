@@ -39,6 +39,10 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
     | ConditionalOp op -> transl_conditional_op loc op
     | ArraySubscript s -> transl_array_subscript loc s
     | InitList il -> transl_initializer_list loc il
+    | FuncTemplateSpecRef _ ->
+        Error.error loc
+          "Taking the address of a function template specialization is not \
+           supported."
     | Undefined _ -> failwith "Undefined expression"
     | _ -> Error.error loc "Unsupported expression."
 
@@ -148,39 +152,48 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
   and map_args (args : R.Node.t Capnp_util.capnp_arr) : Ast.pat list =
     args |> Capnp_util.arr_map (fun e -> Ast.LitPat (translate e))
 
-  and transl_call (loc : Ast.loc) (call : E.Call.t) : string * Ast.pat list =
+  and transl_call (loc : Ast.loc) (call : E.Call.t) :
+      string * Ast.type_expr list * Ast.pat list =
     let open E.Call in
     let callee = callee_get call in
     let args = args_get call |> map_args in
-    let name =
+    let name, targs =
       let callee_loc, desc = Node_translator.decompose callee in
       let e = E.get desc in
       match e with
       | E.DeclRef r ->
           (* c-like function call, operator calls (even tho they can be class methods) *)
-          r
+          (r, [])
+      | E.FuncTemplateSpecRef r ->
+          (* call of a function template specialization that is verified by the
+             generic function of the template *)
+          let open E.FuncTemplateSpecRef in
+          ( name_get r,
+            targs_get r
+            |> Capnp_util.arr_map (Type_translator.translate_decomposed callee_loc)
+          )
       | E.Member m ->
           (* C++ method call on explicit or implicit (this) object *)
-          E.Member.name_get m
+          (E.Member.name_get m, [])
       | _ -> Error.error loc "Unsupported callee in function or method call."
     in
-    (name, args)
+    (name, targs, args)
 
   and transl_call_expr (loc : Ast.loc) (call : E.Call.t) : Ast.expr =
-    let name, args = transl_call loc call in
-    Ast.CallExpr (loc, name, [], [], args, Ast.Static)
+    let name, targs, args = transl_call loc call in
+    Ast.CallExpr (loc, name, targs, [], args, Ast.Static)
 
   and transl_operator_call_expr (loc : Ast.loc) (call : E.Call.t) : Ast.expr =
-    let name, Ast.LitPat this_arg :: args = transl_call loc call in
+    let name, targs, Ast.LitPat this_arg :: args = transl_call loc call in
     let args =
       Ast.LitPat (Ast.make_addr_of (Ast.expr_loc this_arg) this_arg) :: args
     in
-    Ast.CallExpr (loc, name, [], [], args, Ast.Static)
+    Ast.CallExpr (loc, name, targs, [], args, Ast.Static)
 
   and transl_member_call_expr (loc : Ast.loc) (member_call : E.MemberCall.t) :
       Ast.expr =
     let open E.MemberCall in
-    let name, args = call_get member_call |> transl_call loc in
+    let name, targs, args = call_get member_call |> transl_call loc in
     let impl_arg =
       let arg = implicit_arg_get member_call |> translate in
       if arrow_get member_call then arg
@@ -190,7 +203,7 @@ module Make (Node_translator : Node_translator.Translator) : Translator = struct
     let binding =
       if target_has_qualifier_get member_call then Ast.Static else Ast.Instance
     in
-    Ast.CallExpr (loc, name, [], [], args, binding)
+    Ast.CallExpr (loc, name, targs, [], args, binding)
 
   and transl_decl_ref_expr (loc : Ast.loc) (ref : string) : Ast.expr =
     Ast.Var (loc, ref)

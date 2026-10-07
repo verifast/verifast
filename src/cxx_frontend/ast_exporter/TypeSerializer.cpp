@@ -41,6 +41,20 @@ struct TypeSerializerImpl
       CASE_TYPE(Bool, BOOL)
       CASE_TYPE_FW(Int128, INT, 128)
       CASE_TYPE_FW(UInt128, U_INT, 128)
+    // Character types whose width and signedness depend on the target
+    case clang::BuiltinType::Kind::WChar_S:
+    case clang::BuiltinType::Kind::WChar_U:
+    case clang::BuiltinType::Kind::Char8:
+    case clang::BuiltinType::Kind::Char16:
+    case clang::BuiltinType::Kind::Char32: {
+      auto FWBuilder = m_builder.initFixedWidth();
+      FWBuilder.setKind(type->isSignedInteger()
+                            ? stubs::Type::FixedWidth::FixedWidthKind::INT
+                            : stubs::Type::FixedWidth::FixedWidthKind::U_INT);
+      FWBuilder.setBits(
+          m_ASTSerializer->getASTContext().getTypeSize(clang::QualType(type, 0)));
+      return true;
+    }
     default:
       return false;
     }
@@ -128,6 +142,15 @@ struct TypeSerializerImpl
         m_builder.initSubstTemplateTypeParam().initDesc();
     m_ASTSerializer->serialize(substTemplateTypeParamBuilder,
                                type->getReplacementType());
+    return true;
+  }
+
+  bool VisitTemplateTypeParmType(const clang::TemplateTypeParmType *type) {
+    const clang::IdentifierInfo *name = type->getIdentifier();
+    if (!name || type->isParameterPack()) {
+      return false;
+    }
+    m_builder.setTemplateTypeParam(name->getName().str());
     return true;
   }
 

@@ -20,6 +20,10 @@ bool checkSuffixIgnoreCase(const clang::StringRef str, const char suffix,
   return false;
 }
 
+bool isTypeDependent(const clang::Expr *expr) {
+  return expr->isTypeDependent();
+}
+
 struct ExprSerializerImpl
     : public clang::ConstStmtVisitor<ExprSerializerImpl, bool> {
 
@@ -53,6 +57,17 @@ struct ExprSerializerImpl
       stubs::Expr::Cast::Builder ce = m_builder.initIntegralCast();
       return serializeCast(ce, expr);
     }
+    case clang::CastKind::CK_Dependent:
+      // The verifier checks that the value is within the limits of the type
+      // argument.
+      if (isExplicit && m_ASTSerializer->isIntegralTypeParam(expr->getType())) {
+        stubs::Expr::Cast::Builder ce = m_builder.initIntegralCast();
+        ExprNodeBuilder exprBuilder = ce.initExpr();
+        m_ASTSerializer->serializeAsRValue(exprBuilder, expr->getSubExpr());
+        m_ASTSerializer->serialize(ce.initType(), expr->getType());
+        return true;
+      }
+      [[fallthrough]];
     default:
       if (isExplicit)
         return false;
@@ -62,6 +77,11 @@ struct ExprSerializerImpl
   }
 
   bool VisitArraySubscriptExpr(const clang::ArraySubscriptExpr *expr) {
+    // Indexing a `T *` needs the size of `T`.
+    if (expr->isTypeDependent()) {
+      return false;
+    }
+
     using SubscriptBuilder = stubs::Expr::ArraySubscript::Builder;
     using ExprBuilder = stubs::Node<stubs::Expr>::Builder;
 
@@ -79,6 +99,11 @@ struct ExprSerializerImpl
   }
 
   bool VisitInitListExpr(const clang::InitListExpr *expr) {
+    if (expr->isTypeDependent() ||
+        llvm::any_of(expr->inits(), isTypeDependent)) {
+      return false;
+    }
+
     // Initialize Cap'n Proto elements
     ListBuilder<stubs::Node<stubs::Expr>> listBuilder = m_builder.initInitList(expr->getNumInits());
 
@@ -93,6 +118,16 @@ struct ExprSerializerImpl
   }
 
   bool VisitUnaryOperator(const clang::UnaryOperator *uo) {
+    // Only `*` and `&` mean the same thing for every scalar type. A `!` on a
+    // comparison of values of integral type parameters is a negation.
+    if (uo->getSubExpr()->isTypeDependent() &&
+        uo->getOpcode() != clang::UnaryOperatorKind::UO_AddrOf &&
+        uo->getOpcode() != clang::UnaryOperatorKind::UO_Deref &&
+        !(uo->getOpcode() == clang::UnaryOperatorKind::UO_LNot &&
+          m_ASTSerializer->hasIntegralTypeParams())) {
+      return false;
+    }
+
     stubs::Expr::UnaryOp::Builder builder = m_builder.initUnaryOp();
 
 #define CASE_OP(CLANG_OP, STUBS_OP)                                            \
@@ -123,6 +158,15 @@ struct ExprSerializerImpl
   }
 
   bool VisitBinaryOperator(const clang::BinaryOperator *bo) {
+    // Only `=` means the same thing for every scalar type. For instance, `==`
+    // on floating-point values is not equality. The verifier supports
+    // arithmetic and comparisons on values of integral type parameters.
+    if ((bo->getLHS()->isTypeDependent() || bo->getRHS()->isTypeDependent()) &&
+        bo->getOpcode() != clang::BinaryOperatorKind::BO_Assign &&
+        !m_ASTSerializer->hasIntegralTypeParams()) {
+      return false;
+    }
+
     stubs::Expr::BinaryOp::Builder builder = m_builder.initBinaryOp();
 
 #define CASE_OP(CLANG_OP, STUBS_OP)                                            \
@@ -169,8 +213,12 @@ struct ExprSerializerImpl
     ExprNodeBuilder lhsBuilder = builder.initLhs();
     ExprNodeBuilder rhsBuilder = builder.initRhs();
 
-    m_ASTSerializer->serialize(lhsBuilder, bo->getLHS());
-    m_ASTSerializer->serialize(rhsBuilder, bo->getRHS());
+    if (bo->isAssignmentOp()) {
+      m_ASTSerializer->serialize(lhsBuilder, bo->getLHS());
+    } else {
+      m_ASTSerializer->serializeAsRValue(lhsBuilder, bo->getLHS());
+    }
+    m_ASTSerializer->serializeAsRValue(rhsBuilder, bo->getRHS());
     return true;
   }
 
@@ -291,6 +339,13 @@ struct ExprSerializerImpl
 
   bool serializeCall(stubs::Expr::Call::Builder &builder,
                      const clang::CallExpr *expr) {
+    // The callee of a call with type-dependent arguments is only resolved
+    // when the template is instantiated.
+    if (expr->isTypeDependent() ||
+        llvm::any_of(expr->arguments(), isTypeDependent)) {
+      return false;
+    }
+
     ExprNodeBuilder calleeBuilder = builder.initCallee();
     m_ASTSerializer->serialize(calleeBuilder, expr->getCallee());
 
@@ -313,11 +368,31 @@ struct ExprSerializerImpl
     const clang::NamedDecl *decl = expr->getDecl();
     if (const clang::FunctionDecl *func =
             llvm::dyn_cast<clang::FunctionDecl>(decl)) {
+      if (m_ASTSerializer->usesGenericProof(func)) {
+        serializeFuncTemplateSpecRef(func);
+        return true;
+      }
       m_builder.setDeclRef(m_ASTSerializer->getQualifiedFuncName(func));
       return true;
     }
     m_builder.setDeclRef(m_ASTSerializer->getQualifiedName(decl));
     return true;
+  }
+
+  void serializeFuncTemplateSpecRef(const clang::FunctionDecl *spec) {
+    stubs::Expr::FuncTemplateSpecRef::Builder refBuilder =
+        m_builder.initFuncTemplateSpecRef();
+    refBuilder.setName(
+        m_ASTSerializer->getGenericFuncName(spec->getPrimaryTemplate()));
+
+    llvm::ArrayRef<clang::TemplateArgument> targs =
+        spec->getTemplateSpecializationArgs()->asArray();
+    capnp::List<stubs::Type>::Builder targsBuilder =
+        refBuilder.initTargs(targs.size());
+    size_t i(0);
+    for (const clang::TemplateArgument &targ : targs) {
+      m_ASTSerializer->serialize(targsBuilder[i++], targ.getAsType());
+    }
   }
 
   bool VisitMemberExpr(const clang::MemberExpr *expr) {
@@ -374,6 +449,10 @@ struct ExprSerializerImpl
   }
 
   bool VisitCXXNewExpr(const clang::CXXNewExpr *expr) {
+    if (expr->isTypeDependent()) {
+      return false;
+    }
+
     stubs::Expr::New::Builder newBuilder = m_builder.initNew();
 
     if (expr->hasInitializer()) {
@@ -388,6 +467,10 @@ struct ExprSerializerImpl
   }
 
   bool VisitCXXDeleteExpr(const clang::CXXDeleteExpr *expr) {
+    if (expr->getArgument()->isTypeDependent()) {
+      return false;
+    }
+
     ExprNodeBuilder deleteBuilder = m_builder.initDelete();
     m_ASTSerializer->serialize(deleteBuilder, expr->getArgument());
     return true;
@@ -461,10 +544,34 @@ struct ExprSerializerImpl
 
     clang::DiagnosticsEngine &diagsEngine =
         m_ASTSerializer->getASTContext().getDiagnostics();
-    unsigned diagID =
-        diagsEngine.getCustomDiagID(clang::DiagnosticsEngine::Error,
-                                    "Expression of kind '%0' is not supported");
-    diagsEngine.Report(expr->getBeginLoc(), diagID) << expr->getStmtClassName();
+    if (!expr->isInstantiationDependent()) {
+      unsigned diagID = diagsEngine.getCustomDiagID(
+          clang::DiagnosticsEngine::Error,
+          "Expression of kind '%0' is not supported");
+      diagsEngine.Report(expr->getBeginLoc(), diagID)
+          << expr->getStmtClassName();
+      return;
+    }
+
+    std::string what;
+    if (const clang::BinaryOperator *bo =
+            llvm::dyn_cast<clang::BinaryOperator>(expr)) {
+      what = ("Operator '" + bo->getOpcodeStr() + "'").str();
+    } else if (const clang::UnaryOperator *uo =
+                   llvm::dyn_cast<clang::UnaryOperator>(expr)) {
+      what = ("Operator '" +
+              clang::UnaryOperator::getOpcodeStr(uo->getOpcode()) + "'")
+                 .str();
+    } else {
+      what = (llvm::Twine("Expression of kind '") + expr->getStmtClassName() +
+              "'")
+                 .str();
+    }
+    unsigned diagID = diagsEngine.getCustomDiagID(
+        clang::DiagnosticsEngine::Error,
+        "%0 depends on a template parameter in a way that is not supported: "
+        "a function template is verified once, for abstract type parameters");
+    diagsEngine.Report(expr->getBeginLoc(), diagID) << what;
   }
 
   ExprSerializerImpl(const ASTSerializer &serializer,

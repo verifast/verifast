@@ -70,6 +70,7 @@ let rec of_type = function
     B sized;
     of_list (fun ((traitName, traitArgs, assocTypeName), tp) -> T [T [S traitName; of_list of_type traitArgs; S assocTypeName]; of_type tp]) eqs
   ])
+| IntegralTypeParam (x, promoted) -> C ("IntegralTypeParam", [S x; B promoted])
 | InferredType (o, r) -> C ("InferredType", [I (Oo.id o); of_ref of_inferred_type_state r])
 | ClassOrInterfaceName x -> C ("ClassOrInterfaceName", [S x])
 | PackageName p -> C ("PackageName", [S p])
@@ -246,9 +247,10 @@ let rec of_type_expr = function
     of_loc l;
     of_type_expr tp
   ])
-and of_tparam_bounds_expr {sized} =
+and of_tparam_bounds_expr {sized; integral} =
   T [
     B sized;
+    B integral;
   ]
 and of_operator = function
   MinValue t -> C ("MinValue", [of_type t])
