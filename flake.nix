@@ -3,9 +3,9 @@
 
   inputs = {
     # Latest stable nixpkgs release
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
+    nixpkgs.url = "https://channels.nixos.org/nixos-26.05/nixexprs.tar.zst";
     # older nixpkgs revision that specifically carries z3 4.8.5
-    z3_old.url = "https://github.com/NixOS/nixpkgs/archive/60d98a51638fef1419a0df7a5e2728925dc32d28.tar.gz";
+    z3_old.url = "https://releases.nixos.org/nixpkgs/nixpkgs-25.05pre771750.0740f6f23876/nixexprs.tar.xz";
     flake-utils.url = "github:numtide/flake-utils";
     # Dated Rust nightlies (with rustc-dev), which nixpkgs does not carry.
     rust-overlay = {
