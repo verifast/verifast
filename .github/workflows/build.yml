@@ -462,9 +462,10 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v5
-
-      - name: Install Nix
-        uses: nixbuild/nix-quick-install-action@v35
-
+      - uses: actions/checkout@v7
+      - uses: cachix/install-nix-action@v31
+      - uses: cachix/cachix-action@v17
+        with:
+          name: verifast
+          authToken: '${{ secrets.CACHIX_AUTH_TOKEN}}'
       - run: nix flake check --all-systems -L --extra-experimental-features 'nix-command flakes'

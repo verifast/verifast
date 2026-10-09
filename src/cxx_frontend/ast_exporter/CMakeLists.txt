@@ -50,7 +50,7 @@ endif()
 
 # generate stubs
 add_custom_command(
-  OUTPUT "${STUBS_SCHEMA}.c++" "{STUBS_SCHEMA}.h"
+  OUTPUT "${STUBS_SCHEMA}.c++" "${STUBS_SCHEMA}.h"
   WORKING_DIRECTORY "${STUBS_DIR}"
   COMMAND capnp
   ARGS
