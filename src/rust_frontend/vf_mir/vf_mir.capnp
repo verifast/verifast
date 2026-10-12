@@ -575,7 +575,7 @@ struct AggregateKind {
         closure @3: ClosureData;
         coroutine @4: Void;
         coroutineClosure @5: Void;
-        rawPtr @6: Void; # Create a raw pointer from a thin pointer and metadata (length or vtable)
+        rawPtr @6: Ty; # Create a raw pointer from a thin pointer and metadata (length or vtable). The pointee type.
     }
 }
 

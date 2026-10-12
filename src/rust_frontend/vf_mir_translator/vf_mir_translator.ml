@@ -218,6 +218,7 @@ module Mir = struct
       }
     | AggKindTuple
     | AggKindClosure
+    | AggKindRawPtr of ty_info (* pointee type *)
 
   type field_def_tr = {
     name : string;
@@ -3092,7 +3093,9 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           Ok Mir.(AggKindClosure)
       | Coroutine -> failwith "Todo: AggregateKind::Coroutine"
       | CoroutineClosure -> failwith "Todo: AggregateKind::CoroutineClosure"
-      | RawPtr -> failwith "Todo: AggregateKind::RawPtr"
+      | RawPtr pointee_ty_cpn ->
+          let* pointee_ty = translate_ty pointee_ty_cpn loc in
+          Ok (Mir.AggKindRawPtr pointee_ty)
       | Undefined _ -> Error (`TrAggregateKind "Unknown AggregateKind")
 
     let translate_aggregate (agg_data_cpn : AggregateDataRd.t) (loc : Ast.loc) =
@@ -3154,6 +3157,53 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             tmp_rvalue_binders
           in
           Ok (`TrRvalueAggregate init_stmts_builder)
+      | AggKindRawPtr pointee_ty -> (
+          (* `core::intrinsics::aggregate_raw_ptr::<*const P, _, _>(data, metadata)` (used for instance by
+             `Vec::as_slice`) builds a raw pointer to P from a thin pointer and the pointer metadata. For P = [T], the
+             metadata is the length, and the result is `std::ptr::slice_from_raw_parts_mut::<T>(data as *T, len)`, as
+             for `cast_slice` above. The data pointer may point to another type than T, hence the cast. The cast is
+             omitted if T contains placeholders for erased lifetimes, which are not allowed in a cast; the data
+             pointer must then point to T already. Other pointee types are not yet supported. *)
+          match (pointee_ty.vf_ty, operand_exprs) with
+          | Ast.SliceTypeExpr (_, elem_ty), [ data_expr; len_expr ] ->
+              let rec contains_inferred_type te =
+                match te with
+                | Ast.InferredTypeExpr _ -> true
+                | _ ->
+                    Ast.type_expr_fold_open
+                      (fun b te -> b || contains_inferred_type te)
+                      false te
+              in
+              let data_expr =
+                if contains_inferred_type elem_ty then data_expr
+                else Ast.CastExpr (loc, PtrTypeExpr (loc, elem_ty), data_expr)
+              in
+              let init_stmts_builder (lhs_place, lhs_place_is_mutable) =
+                let open Ast in
+                tmp_rvalue_binders
+                @ [
+                    ExprStmt
+                      (AssignExpr
+                         ( loc,
+                           lhs_place,
+                           (if lhs_place_is_mutable then Mutation
+                            else Initialization),
+                           result_of_outcome loc
+                             (CallExpr
+                                ( loc,
+                                  "std::ptr::slice_from_raw_parts_mut",
+                                  [ elem_ty ],
+                                  [],
+                                  [ LitPat data_expr; LitPat len_expr ],
+                                  Static )) ));
+                  ]
+              in
+              Ok (`TrRvalueAggregate init_stmts_builder)
+          | _ ->
+              Ast.static_error loc
+                "AggregateKind::RawPtr (aggregate_raw_ptr) is only supported \
+                 for slice pointee types"
+                None)
       | AggKindAdt { adt_kind; adt_name; variant_name; fields } -> (
           match adt_kind with
           | Enum ->
