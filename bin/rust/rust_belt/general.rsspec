@@ -149,7 +149,7 @@ type_pred_decl <Self>.share : pred(lifetime_t, thread_id_t, *Self);
 pred_ctor own<T>(t: thread_id_t)(v: T) = (<T>.own)(t, v);
 
 type_pred_def <bool>.own = bool_own;
-//TODO: How to deal with Rust type `char`? Distinct Rust types should be mapped to distinct VF types, with distinct typeids.
+type_pred_def <char>.own = char_own;
 type_pred_def for <T> <*T>.own = raw_ptr_own::<T>;
 
 type_pred_def <i8>.own = i8_own;
@@ -171,6 +171,7 @@ pred_ctor slice_own<T>()(t: thread_id_t, v: [T]) = foreach(slice_elems(v), (own)
 type_pred_def for<T> <[T]>.own = slice_own::<T>;
 
 type_pred_def <bool>.full_borrow_content = bool_full_borrow_content;
+type_pred_def <char>.full_borrow_content = char_full_borrow_content;
 type_pred_def <*_>.full_borrow_content = raw_ptr_full_borrow_content;
 
 type_pred_def <i8>.full_borrow_content = i8_full_borrow_content;

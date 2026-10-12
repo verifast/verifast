@@ -100,6 +100,7 @@ cd safe_abstraction
   verifast -ignore_unwind_paths -allow_should_fail -allow_dead_code elided_lifetime_mut_ref_result.rs
   verifast full_bor_primitive_types.rs
   verifast shared_primitive_types.rs
+  verifast -allow_should_fail char_own.rs
   verifast -ignore_unwind_paths -allow_assume deque_i32.rs
   verifast -ignore_unwind_paths -ignore_ref_creation -allow_assume deque.rs
   verifast -ignore_ref_creation -allow_assume cell_u32.rs
