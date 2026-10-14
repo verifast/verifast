@@ -26,6 +26,12 @@ mod hint {
     //@ ens true;
     //@ on_unwind_ens false;
 
+    // "Hints to the compiler that a branch condition is unlikely to be true. Returns the value passed to it."
+    fn unlikely(b: bool) -> bool;
+    //@ req true;
+    //@ ens result == b;
+    //@ on_unwind_ens false;
+
 }
 
 mod ops {
@@ -61,6 +67,10 @@ mod ops {
     
     struct Range<Idx> {
         start: Idx,
+        end: Idx,
+    }
+
+    struct RangeTo<Idx> {
         end: Idx,
     }
     
@@ -800,6 +810,8 @@ mod str {
     //@ pred str(str: *str; bytes: list<u8>);
 
     struct Chars<'a>;
+
+    struct CharIndices<'a>;
     
     struct Utf8Error;
 
@@ -807,6 +819,11 @@ mod str {
 
     // The string slice that remains to be iterated over (`Chars::as_str`).
     fix Chars::as_str<'a>(chars: Chars<'a>) -> *str;
+
+    // The string slice that remains to be iterated over (`CharIndices::as_str`), and the byte position of
+    // its start in the string slice that `char_indices` was called on (`CharIndices::offset`).
+    fix CharIndices::as_str<'a>(chars: CharIndices<'a>) -> *str;
+    fix CharIndices::offset<'a>(chars: CharIndices<'a>) -> usize;
 
     // The byte range `[start, end)` that index `i` selects in `str::get_unchecked`. Only defined for
     // `Range<usize>`; for other index types it is unspecified, so their calls cannot be verified.
@@ -860,6 +877,15 @@ mod str {
         //@ ens result.as_str() as *u8 == self as *u8 &*& result.as_str().len() == self.len();
         //@ on_unwind_ens false;
 
+        // `CharIndices { front_offset: 0, iter: self.chars() }`. Like `chars`, this reads no bytes and requires
+        // nothing about them; `CharIndices::next` requires the remaining bytes to be valid UTF-8. The result
+        // comes with `<CharIndices<'a>>.own`, which `mem::drop` and `mem::forget` require. That predicate is
+        // abstract: nothing can be obtained from it.
+        fn char_indices<'a>(self: &'a str) -> CharIndices<'a>;
+        //@ req thread_token(?t);
+        //@ ens thread_token(t) &*& <CharIndices<'a>>.own(t, result) &*& result.as_str() as *u8 == self as *u8 &*& result.as_str().len() == self.len() &*& result.offset() == 0;
+        //@ on_unwind_ens false;
+
     }
 
     impl<'a> std::iter::Iterator for std::str::Chars<'a> {
@@ -879,6 +905,32 @@ mod str {
                     is_unicode_scalar_value(c) == true &*&
                     chars1.as_str() as *u8 == chars0.as_str() as *u8 + utf8_seq_len(head(bs)) &*&
                     chars1.as_str().len() == chars0.as_str().len() - utf8_seq_len(head(bs))
+            };
+        @*/
+        //@ on_unwind_ens false;
+
+    }
+
+    impl<'a> std::iter::Iterator for std::str::CharIndices<'a> {
+
+        // `Chars::next` on the `iter` field. The index is the byte position before the call (`front_offset`),
+        // which then grows by the number of bytes decoded. `<CharIndices<'a>>.own` (see `str::char_indices`)
+        // follows the iterator's value.
+        fn next<'b>(self: &'b mut std::str::CharIndices<'a>) -> std::option::Option<(usize, char)>;
+        //@ req *self |-> ?chars0 &*& <std::str::CharIndices<'a>>.own(?t, chars0) &*& [?f](chars0.as_str() as *u8)[..chars0.as_str().len()] |-> ?bs &*& is_valid_utf8(bs) == true;
+        /*@
+        ens [f](chars0.as_str() as *u8)[..chars0.as_str().len()] |-> bs &*& *self |-> ?chars1 &*& <std::str::CharIndices<'a>>.own(t, chars1) &*&
+            match result {
+                Option::None => bs == [],
+                Option::Some(p) =>
+                    bs != [] &*&
+                    p.0 == chars0.offset() &*&
+                    char_utf8(p.1) == take(utf8_seq_len(head(bs)), bs) &*&
+                    char_len_utf8(p.1) == utf8_seq_len(head(bs)) &*&
+                    is_unicode_scalar_value(p.1) == true &*&
+                    chars1.as_str() as *u8 == chars0.as_str() as *u8 + utf8_seq_len(head(bs)) &*&
+                    chars1.as_str().len() == chars0.as_str().len() - utf8_seq_len(head(bs)) &*&
+                    chars1.offset() == chars0.offset() + utf8_seq_len(head(bs))
             };
         @*/
         //@ on_unwind_ens false;
