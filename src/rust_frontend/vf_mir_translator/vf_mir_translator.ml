@@ -1809,20 +1809,45 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     let* elem_ty_info = translate_ty elem_ty_cpn loc in
     let elem_ty = elem_ty_info.vf_ty in
     let len_cpn = array_ty_cpn.size in
-    let* (CastExpr (_, _, IntLit (_, len, _, _, _))) =
-      translate_ty_const len_cpn loc
+    let* len_ty_expr =
+      match (len_cpn.kind : D.const_kind) with
+      | Param { name } ->
+          (* A const generic parameter as the length: `[T; N]`. `N` is a VeriFast type
+             parameter (see `translate_generic_arg`), so the length is the type `N`
+             itself, whose value is `int_of_const(typeid(N))`. *)
+          Ok (Ast.IdentTypeExpr (loc, None, name))
+      | _ ->
+          let* (CastExpr (_, _, IntLit (_, len, _, _, _))) =
+            translate_ty_const len_cpn loc
+          in
+          Ok (Ast.LiteralConstTypeExpr (loc, Z.of_big_int len))
     in
-    let vf_ty =
-      Ast.StaticArrayTypeExpr
-        (loc, elem_ty, LiteralConstTypeExpr (loc, Z.of_big_int len))
-    in
+    let vf_ty = Ast.StaticArrayTypeExpr (loc, elem_ty, len_ty_expr) in
     let size = Ast.SizeofExpr (loc, TypeExpr vf_ty) in
-    let own tid vs =
-      Error "Expressing ownership of an array is not yet supported"
+    (* Ownership of `[T; N]` values and places is given by the type predicates
+       `<[T; N]>.own`, `<[T; N]>.share` and `<[T; N]>.full_borrow_content`, defined in
+       bin/rust/prelude_core.rsspec (`Array_own`, `Array_share`, `Array_full_borrow_content`). *)
+    let own tid v =
+      Ok
+        (Ast.ExprCallExpr
+           (loc, Ast.TypePredExpr (loc, vf_ty, "own"), [ Ast.LitPat tid; Ast.LitPat v ]))
+    in
+    let shr k t l =
+      Ok
+        (Ast.CoefAsn
+           ( loc,
+             Ast.DummyPat,
+             Ast.ExprCallExpr
+               ( loc,
+                 Ast.TypePredExpr (loc, vf_ty, "share"),
+                 [ Ast.LitPat k; Ast.LitPat t; Ast.LitPat l ] ) ))
     in
     let full_bor_content t l =
-      Error
-        "Expressing the full borrow content of an array is not yet supported"
+      Ok
+        (Ast.ExprCallExpr
+           ( loc,
+             Ast.TypePredExpr (loc, vf_ty, "full_borrow_content"),
+             [ Ast.LitPat t; Ast.LitPat l ] ))
     in
     let points_to tid l vid_op =
       let* pat = RustBelt.Aux.vid_op_to_var_pat vid_op loc in
@@ -1830,18 +1855,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     in
     let interp =
       RustBelt.
-        {
-          size;
-          own;
-          shr =
-            (fun k t l ->
-              Error
-                "Expressing the shared ownership of an array is not yet \
-                 supported");
-          full_bor_content;
-          points_to;
-          pointee_fbc = None;
-        }
+        { size; own; shr; full_bor_content; points_to; pointee_fbc = None }
     in
     Ok { Mir.vf_ty; interp }
 
@@ -2169,6 +2183,12 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           | _ -> failwith "Todo: ConstValue::ZeroSized")
       | Slice _ -> failwith "Todo: ConstValue::Slice"
 
+    (* Const generic parameters used as values in the body being translated, with the
+       Rust type of the use. `mk_fn_decl` turns them into the implicit precondition
+       `MIN <= int_of_const(typeid(N)) <= MAX`, which rustc guarantees for a parameter
+       of that type and which VeriFast needs to type the value as that integer type. *)
+    let const_param_value_types : (string * Ast.type_expr) list ref = ref []
+
     let translate_mir_ty_const (ty_const_cpn : VfMirRd.MirConst.TyData.t)
         (loc : Ast.loc) =
       let open VfMirRd.MirConst.TyData in
@@ -2179,7 +2199,36 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       | `FnDef fn_def_ty_cpn -> Ok (`TrTypedConstantFn fn_def_ty_cpn)
       | `Int _ | `Uint _ | `Bool ->
           let const_cpn = const_get ty_const_cpn in
-          let* e = translate_ty_const (D.decode_ty_const const_cpn) loc in
+          let ty_const = D.decode_ty_const const_cpn in
+          let* e =
+            match (ty_const.kind : D.const_kind) with
+            | Param { name } ->
+                (* A const generic parameter used as a value: `N` in `self.len() < N`.
+                   Its value is `int_of_const(typeid(N))` (bin/rust/prelude_core.rsspec),
+                   cast to the constant's type. *)
+                let* ty_info = translate_ty ty_cpn loc in
+                if not (List.mem_assoc name !const_param_value_types) then
+                  const_param_value_types :=
+                    (name, ty_info.Mir.vf_ty) :: !const_param_value_types;
+                Ok
+                  (Ast.CastExpr
+                     ( loc,
+                       ty_info.Mir.vf_ty,
+                       Ast.CallExpr
+                         ( loc,
+                           "int_of_const",
+                           [],
+                           [],
+                           [
+                             Ast.LitPat
+                               (Ast.Typeid
+                                  ( loc,
+                                    Ast.TypeExpr (Ast.IdentTypeExpr (loc, None, name))
+                                  ));
+                           ],
+                           Ast.Static ) ))
+            | _ -> translate_ty_const ty_const loc
+          in
           Ok (`TrTypedConstantScalar e)
       | _ -> failwith "Todo: Constant of unsupported type"
 
@@ -2457,6 +2506,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                       (`TrFnCallRExpr
                         "Invalid (generic) arg(s) for std::ptr::mut_ptr::<impl \
                          *mut T>::is_null"))
+            | "std::ptr::const_ptr::<impl *const T>::cast"
             | "std::ptr::mut_ptr::<impl *const T>::cast"
             | "std::ptr::mut_ptr::<impl *mut T>::cast" ->
                 let [ _; Mir.GenArgType gen_arg_ty_info ], [ arg_cpn ] =
@@ -4971,6 +5021,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
         let moduleName = module_def_path_get body_cpn in
         (* print_endline ("Translating Mod: " ^ moduleName ^ " --- Body: " ^ name); *)
         let split_name = TrName.split_def_path moduleName name in
+        let outer_const_param_value_types = !const_param_value_types in
+        const_param_value_types := [];
         let impl_block_gens = impl_block_generics_get_list body_cpn |> List.map translate_generic_param_def in
         let hir_gens_cpn = hir_generics_get body_cpn in
         let* gens, gens_loc = translate_hir_generics hir_gens_cpn in
@@ -5005,7 +5057,12 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           |> List.map decode_clause
         in
         let sized_tparams = compute_sized_tparams clauses in
-        let vf_tparams_with_bounds = vf_tparams |> List.map (fun x -> (x, {Ast.sized = List.mem x sized_tparams})) in
+        (* A const generic parameter is a VeriFast type parameter standing for a value, not a
+           type; treat it as Sized so that prelude lemmas such as `Array_to_array<T, N>` apply. *)
+        let const_tparams =
+          gens |> Util.flatmap (fun (name, kind) -> if kind = Hir.GenParamConst then [ name ] else [])
+        in
+        let vf_tparams_with_bounds = vf_tparams |> List.map (fun x -> (x, {Ast.sized = List.mem x sized_tparams || List.mem x const_tparams})) in
         let projection_clauses =
           clauses
           |> Util.flatmap (function
@@ -5161,6 +5218,49 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                 (terminates : bool) ) =
             contract
           in
+          let const_param_range_asn (name, ty) =
+            let v =
+              Ast.CallExpr
+                ( loc,
+                  "int_of_const",
+                  [],
+                  [],
+                  [ Ast.LitPat (Ast.Typeid (loc, Ast.TypeExpr (Ast.IdentTypeExpr (loc, None, name)))) ],
+                  Ast.Static )
+            in
+            let bounds =
+              match ty with
+              | Ast.ManifestTypeExpr (_, (Ast.Int (_, _) as t)) ->
+                  Some (Ast.Operation (loc, Ast.MinValue t, []), Ast.Operation (loc, Ast.MaxValue t, []))
+              | Ast.ManifestTypeExpr (_, Ast.Bool) ->
+                  Some (Ast.IntLit (loc, Big_int.zero_big_int, true, false, Ast.NoLSuffix),
+                        Ast.IntLit (loc, Big_int.unit_big_int, true, false, Ast.NoLSuffix))
+              | _ -> None
+            in
+            Option.map
+              (fun (lo, hi) ->
+                Ast.ExprAsn
+                  ( loc,
+                    Ast.Operation
+                      ( loc,
+                        Ast.And,
+                        [ Ast.Operation (loc, Ast.Le, [ lo; v ]); Ast.Operation (loc, Ast.Le, [ v; hi ]) ] ) ))
+              bounds
+          in
+          let pre_post =
+            Option.map
+              (fun (pre, post) ->
+                let pre =
+                  List.fold_right
+                    (fun cp pre ->
+                      match const_param_range_asn cp with
+                      | Some asn -> Ast.Sep (loc, asn, pre)
+                      | None -> pre)
+                    !const_param_value_types pre
+                in
+                (pre, post))
+              pre_post
+          in
           Ast.Func
             ( loc,
               Ast.Regular,
@@ -5231,6 +5331,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               let body_sig = mk_fn_decl contract_template None in
               Some (split_name, body_sig)
         in
+        const_param_value_types := outer_const_param_value_types;
         Ok
           ( body_sig_opt,
             (split_name, body),

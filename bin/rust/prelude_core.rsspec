@@ -450,6 +450,24 @@ pred_ctor slice_full_borrow_content<T>(t: thread_id_t, l: *[T])() =
     array::<T>(strip_pointer_metadata(l as pointer) as *T, l.len(), ?elems) &*& foreach(elems, own::<T>(t));
 type_pred_def for<T> <[T]>.full_borrow_content = slice_full_borrow_content::<T>;
 
+// Arrays `[T; N]`, with `N` a const generic parameter (a type parameter whose value is
+// `int_of_const(typeid(N))`) or a literal: a value owns its elements; a place is a run of
+// `int_of_const(typeid(N))` elements, shared element-wise or owned together with its elements.
+
+pred_ctor Array_own<T, N>()(t: thread_id_t, v: [T; N]) = foreach(Array_elems::<T, N>(v), own::<T>(t));
+
+type_pred_def for<T, N> <[T; N]>.own = Array_own::<T, N>;
+
+pred_ctor Array_share<T, N>()(k: lifetime_t, t: thread_id_t, l: *[T; N]) =
+    array_share::<T>(k, t, l as *T, int_of_const(typeid(N)));
+
+type_pred_def for<T, N> <[T; N]>.share = Array_share::<T, N>;
+
+pred_ctor Array_full_borrow_content<T, N>(t: thread_id_t, l: *[T; N])() =
+    (l as *T)[..int_of_const(typeid(N))] |-> ?elems &*& foreach(elems, own::<T>(t));
+
+type_pred_def for<T, N> <[T; N]>.full_borrow_content = Array_full_borrow_content::<T, N>;
+
 // <[T]>.own is not defined (a `[T]` value is unsized and never owned by value).
 
 pred ghost_rec_perm(depth: i32;); // Permission to perform `depth` nested lemma function pointer calls.

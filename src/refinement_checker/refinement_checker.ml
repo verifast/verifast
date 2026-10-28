@@ -327,6 +327,7 @@ type term =
 | FieldTerm of term * int
 | UnevaluatedConstTerm of string * gen_arg list
 | RepeatTerm of term * const_expr
+| TyConstTerm of const_expr (* A typesystem constant used as an operand, e.g. a const generic parameter `N` *)
 
 let rec string_of_term = function
   Symbol id -> Printf.sprintf "Symbol %d" id
@@ -342,6 +343,7 @@ let rec string_of_term = function
 | FieldTerm (term, i) -> Printf.sprintf "FieldTerm %s %d" (string_of_term term) i
 | UnevaluatedConstTerm (def, args) -> Printf.sprintf "UnevaluatedConstTerm %s::<%s>" def (String.concat ", " (List.map string_of_gen_arg args))
 | RepeatTerm (term, count) -> Printf.sprintf "RepeatTerm %s %s" (string_of_term term) (string_of_const_expr count)
+| TyConstTerm c -> Printf.sprintf "TyConstTerm %s" (string_of_const_expr c)
 and string_of_terms ts =
   Printf.sprintf "[%s]" (String.concat "; " (List.map string_of_term ts))
 
@@ -362,7 +364,10 @@ let string_of_local_var_state = function
 
 let eval_mir_const genv mir_const_cpn =
   match mir_const_cpn with
-    Ty mir_ty_const_cpn -> failwith "Using typesystem constant expressions as MIR constant operands is not yet supported"
+    Ty mir_ty_const_cpn ->
+    (* A const generic parameter used as a value, or another typesystem constant; const
+       parameters are mapped through the generics environment, so both bodies see the same term. *)
+    TyConstTerm (decode_const_expr genv mir_ty_const_cpn.const)
   | Val mir_val_const_cpn ->
     let ty = decode_ty genv mir_val_const_cpn.ty in
     let mir_const_value_cpn = mir_val_const_cpn.const_value in
@@ -1750,7 +1755,7 @@ let rec process_commands bodies (env: env) opnds (i_bb: basic_block_info) i_s (s
         }
       } ->
       cont (Tuple [])
-    | Constant constant -> fallback "Constants"
+    | Constant {const} -> cont (eval_mir_const i_bb#genv const)
   in
   let rec eval_operands operands fallback cont =
     match operands with
@@ -2335,7 +2340,10 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
   let projection_clauses1, clauses1 = List.partition (function Projection _ -> true | _ -> false) clauses1 in
   if List.length projection_clauses0 <> List.length projection_clauses1 then failwith "The two functions have a different number of projection clauses";
   List.iter2 (fun clause0 clause1 -> check_clause_refines_clause root_genv0 clause0 root_genv1 clause1) projection_clauses0 projection_clauses1;
-  if clauses0 <> [] || clauses1 <> [] then failwith "Clause kind not supported";
+  (* The remaining clauses are the kinds the exporter does not translate (e.g. ConstArgHasType
+     for a const generic parameter), exported as ignored clauses; they carry no information that
+     affects refinement, so only their count is compared. *)
+  if List.length clauses0 <> List.length clauses1 then failwith "The two functions have a different number of ignored clauses";
   let inputs0 = body0.inputs in
   let inputs1 = body1.inputs in
   let inputs0 = List.map (decode_ty root_genv0) inputs0 in

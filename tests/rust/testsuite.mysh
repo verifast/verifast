@@ -2,6 +2,12 @@ begin_parallel
 verifast -allow_should_fail unsized_cast.rs
 verifast -allow_should_fail size_of_ptr_unsized.rs
 verifast -skip_specless_fns const_generic_param.rs
+verifast -skip_specless_fns const_generic_value.rs
+verifast -skip_specless_fns const_generic_array_ty.rs
+verifast -skip_specless_fns const_generic_sized.rs
+verifast -skip_specless_fns -allow_ignore_ref_creation const_generic_first_chunk.rs
+verifast array_layout.rs
+verifast -skip_specless_fns array_ownership.rs
 verifast -allow_dead_code -allow_should_fail struct_layout.rs
 verifast ghost_cmd_inj.rs
 verifast parser_test.rs
