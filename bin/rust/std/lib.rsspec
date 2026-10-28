@@ -578,6 +578,32 @@ mod ptr {
     //@ ens [f]src[..count] |-> vs &*& dst[..count] |-> vs;
     //@ on_unwind_ens false;
     //@ terminates;
+
+    unsafe fn replace<T>(dst: *mut T, src: T) -> T;
+    //@ req *dst |-> ?v;
+    //@ ens *dst |-> src &*& result == v;
+    //@ on_unwind_ens false;
+    //@ terminates;
+
+    /*@
+    // `ptr::swap` permits `x` and `y` to overlap. This specification covers the two cases that
+    // element-wise code needs: `x == y` (`same == true`) and `x` and `y` disjoint
+    // (`same == false`). Partial overlap of non-identical pointers is not covered.
+    pred swap_second_target<T>(same: bool, x: *T, y: *T, vx: T, vy: T) =
+        if same { x == y &*& vy == vx } else { *y |-> vy };
+    @*/
+
+    unsafe fn swap<T>(x: *mut T, y: *mut T);
+    //@ req *x |-> ?vx &*& swap_second_target::<T>(?same, x, y, vx, ?vy);
+    //@ ens *x |-> vy &*& if same { true } else { *y |-> vx };
+    //@ on_unwind_ens false;
+    //@ terminates;
+
+    unsafe fn swap_nonoverlapping<T>(x: *mut T, y: *mut T, count: usize);
+    //@ req x[..count] |-> ?vs1 &*& y[..count] |-> ?vs2;
+    //@ ens x[..count] |-> vs2 &*& y[..count] |-> vs1;
+    //@ on_unwind_ens false;
+    //@ terminates;
     
     unsafe fn write_bytes<T>(dst: *mut T, val: u8, count: usize);
     //@ req dst[..count] |-> _ &*& (dst as usize % std::mem::align_of::<T>()) == 0;
@@ -589,6 +615,11 @@ mod ptr {
     //@ req true;
     //@ ens result == addr as *T;
     
+    fn slice_from_raw_parts<T>(data: *T, len: usize) -> *[T];
+    //@ req true;
+    //@ ens result as *T == data &*& result.len() == len;
+    //@ on_unwind_ens false;
+
     fn slice_from_raw_parts_mut<T>(data: *T, len: usize) -> *[T];
     //@ req true;
     //@ ens result as *T == data &*& result.len() == len;

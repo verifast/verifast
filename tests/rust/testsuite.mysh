@@ -159,3 +159,5 @@ cd ..
 end_parallel
 end_sequential
 end_parallel
+verifast -skip_specless_fns tuple_own.rs
+verifast -skip_specless_fns ptr_swap_replace.rs
