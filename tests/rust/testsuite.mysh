@@ -159,3 +159,4 @@ cd ..
 end_parallel
 end_sequential
 end_parallel
+verifast -skip_specless_fns nested_fn_spec.rs

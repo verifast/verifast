@@ -937,15 +937,27 @@ use rustc_span::RemapPathScopeComponents;
                     body_cpn.reborrow().init_fn_sig_span(),
                 );
                 let body_span = body.span.data();
+                // The spans of `fn` items nested inside this body: their annotations belong to
+                // them, not to this body.
+                let nested_fn_spans = self
+                    .bodies
+                    .iter()
+                    .filter(|(other, _)| {
+                        other.span != body.span
+                            && body_span.contains(other.span.data())
+                            && matches!(self.tcx.def_kind(other.source.def_id()), rustc_hir::def::DefKind::Fn | rustc_hir::def::DefKind::AssocFn)
+                    })
+                    .map(|(other, _)| other.span.data())
+                    .collect::<Vec<_>>();
                 let mut annots = self
                     .annots
                     .extract_if(|annot| {
-                        body_span.contains(
-                            annot
-                                .span()
-                                .expect("Dummy annot found during serialization")
-                                .data(),
-                        )
+                        let annot_span = annot
+                            .span()
+                            .expect("Dummy annot found during serialization")
+                            .data();
+                        body_span.contains(annot_span)
+                            && !nested_fn_spans.iter().any(|nested| nested.contains(annot_span))
                     })
                     .collect::<LinkedList<_>>();
                 let mut_annots = annots.extract_if(|annot| {

@@ -277,7 +277,10 @@ pub fn preprocess(
                                         cs.pos.byte_pos -= 3;
                                         cs.pos.column -= 3;
                                         let start = cs.pos;
-                                        let in_fn_body = fn_body_brace_depth != -1;
+                                        // A ghost range between the signature of a nested `fn`
+                                        // item and its body is that item's specification, not a
+                                        // ghost command of the enclosing body.
+                                        let in_fn_body = fn_body_brace_depth != -1 && !next_block_is_fn_body;
                                         if !read_only {
                                             if in_fn_body {
                                                 output.push_str(VF_GHOST_CMD_TAG);
@@ -455,7 +458,7 @@ pub fn preprocess(
                                         cs.pos.column -= 3;
                                         cs.pos.byte_pos -= 3;
                                         is_ghost_range = true;
-                                        ghost_range.in_fn_body = fn_body_brace_depth != -1;
+                                        ghost_range.in_fn_body = fn_body_brace_depth != -1 && !next_block_is_fn_body;
                                         ghost_range.start = cs.pos;
                                         if ghost_range.in_fn_body {
                                             is_ghost_cmd = match cs.peek() {
