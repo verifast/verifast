@@ -33,6 +33,13 @@ popd
 verifast -ignore_ref_creation -allow_assume nonnull.rs
 verifast -skip_specless_fns nonnull_into.rs
 cd purely_unsafe
+  cd manuallydrop_new_cfg
+    verifast forget.rs
+    verifast shared_cleanup.rs
+    verifast -allow_should_fail false_normal_post.rs
+    verifast -allow_should_fail shared_false_unwind.rs
+    [ "$(sh dead_code_pre.sh)" = $'(type)\ndead_code_pre.rs(1,1-7,2): dead code\ndead_code_pre.rs(6,13-43): dead code\ndead_code_pre.rs(6,41-42): dead code\ndead_code_pre.rs(7,2): dead code\nEXIT:1' ]
+  cd ..
   verifast enum_discr.rs
   verifast -ignore_unwind_paths leftpad.rs
   verifast arrays.rs

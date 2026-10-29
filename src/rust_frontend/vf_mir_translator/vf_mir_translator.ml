@@ -2322,7 +2322,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
 
     let translate_fn_call_rexpr (callee_cpn : OperandRd.t)
         (args_cpn : OperandRd.t list) (call_loc : Ast.loc) (fn_loc : Ast.loc)
-        (ghost_generic_arg_list_opt_cpn : OptionRd.t) =
+        (ghost_generic_arg_list_opt_cpn : OptionRd.t)
+        (manuallydrop_new_identity_lowering : bool ref) =
       let has_closure_substs =
         match D.decode_operand callee_cpn with
           Constant {const = Val {ty = {kind = FnDef { id = { name }; substs }}}} ->
@@ -2593,6 +2594,8 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             | "std::mem::ManuallyDrop::<T>::new"
             | "std::mem::ManuallyDrop::deref"
             | "std::mem::ManuallyDrop::deref_mut" ->
+                manuallydrop_new_identity_lowering :=
+                  fn_name = "std::mem::ManuallyDrop::<T>::new";
                 let [ arg_cpn ] = args_cpn in
                 let [ arg ] = args in
                 Ok (tmp_rvalue_binders, FnCallResult arg)
@@ -2683,9 +2686,10 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       let ghost_generic_arg_list_opt_cpn =
         ghost_generic_arg_list_get fn_call_data_cpn
       in
+      let manuallydrop_new_identity_lowering = ref false in
       let* fn_call_tmp_rval_ctx, fn_call_rexpr =
         translate_fn_call_rexpr func_cpn args_cpn loc fn_loc
-          ghost_generic_arg_list_opt_cpn
+          ghost_generic_arg_list_opt_cpn manuallydrop_new_identity_lowering
       in
       let unwind_stmts, unwind_targets =
         if TranslatorArgs.ignore_unwind_paths then ([], [])
@@ -2793,7 +2797,13 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                        loc,
                        ref [] );
                  ]),
-              targets @ unwind_targets )
+              (match fn_call_rexpr, terminator with
+              | FnCallResult _, Mir.GotoTerminator _
+                when !manuallydrop_new_identity_lowering ->
+                  (* The identity lowering emits only the normal assignment/goto.
+                     Keep successor inventory faithful to that emitted CFG. *)
+                  targets
+              | _ -> targets @ unwind_targets) )
       in
       Ok (full_call_stmts, terminator, targets)
 
