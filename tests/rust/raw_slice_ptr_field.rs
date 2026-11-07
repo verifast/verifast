@@ -34,4 +34,13 @@ pub fn forge<'a>(p: *mut [u8]) -> &'a mut [u8] { //~should_fail
     unsafe { &mut *p }
 }
 
+
+// Full borrow content of a place holding a raw slice pointer: write through `&mut`.
+pub fn set_through_mut_ref(r: &mut *mut [u8], p: *mut [u8]) {
+    *r = p;
+}
+
+// Shared ownership of a place holding a raw slice pointer.
+pub fn take_shared_ref(_r: &*mut [u8]) {}
+
 fn main() {}
