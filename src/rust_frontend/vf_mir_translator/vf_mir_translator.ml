@@ -3019,8 +3019,15 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       | BitXor -> Ok Ast.BitXor
       | BitAnd -> Ok Ast.BitAnd
       | BitOr -> Ok Ast.BitOr
-      | Shl -> failwith "Todo: BinOp::Shl"
-      | Shr -> failwith "Todo: BinOp::Shr"
+      (* The unchecked operators have undefined behavior on overflow (and, for the shifts,
+         on a shift amount of at least the bit width), so they get the same overflow and
+         shift-amount checks as the ordinary operators. MIR's ordinary shifts mask the
+         shift amount instead; requiring it to be in range is stricter. *)
+      | AddUnchecked -> Ok Ast.Add
+      | SubUnchecked -> Ok Ast.Sub
+      | MulUnchecked -> Ok Ast.Mul
+      | Shl | ShlUnchecked -> Ok Ast.ShiftLeft
+      | Shr | ShrUnchecked -> Ok Ast.ShiftRight
       | Eq -> Ok Ast.Eq
       | Lt -> Ok Ast.Lt
       | Le -> Ok Ast.Le

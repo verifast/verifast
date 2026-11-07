@@ -643,6 +643,11 @@ struct Rvalue {
                 ge @14: Void;
                 gt @15: Void;
                 offset @16: Void;
+                addUnchecked @17: Void;
+                subUnchecked @18: Void;
+                mulUnchecked @19: Void;
+                shlUnchecked @20: Void;
+                shrUnchecked @21: Void;
             }
         }
         operator @0: BinOp;
