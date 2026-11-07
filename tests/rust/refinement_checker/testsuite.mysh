@@ -42,4 +42,12 @@ begin_parallel
   refinement-checker result-map_orig.rs result-map_verified.rs
   refinement-checker result-map_err_orig.rs result-map_err_verified.rs
   refinement-checker override-local-mut_orig.rs override-local-mut_verified.rs
+  refinement-checker raw-ptr_orig.rs raw-ptr_verified.rs
+  !refinement-checker raw-ptr_orig.rs raw-ptr_verified_bad1.rs
+  !refinement-checker raw-ptr_orig.rs raw-ptr_verified_bad2.rs
+  !refinement-checker raw-ptr_orig.rs raw-ptr_verified_bad3.rs
+  refinement-checker raw-ptr-local_orig.rs raw-ptr-local_verified.rs
+  !refinement-checker raw-ptr-local_orig.rs raw-ptr-local_verified_bad1.rs
+  !refinement-checker raw-ptr-local_orig.rs raw-ptr-local_verified_bad2.rs
+  !refinement-checker raw-ptr-local_orig.rs raw-ptr-local_verified_bad3.rs
 end_parallel
