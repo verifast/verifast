@@ -1234,20 +1234,15 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
       PtrTypeExpr (loc, SliceTypeExpr (loc, elem_ty_info.Mir.vf_ty))
     in
     let size = SizeofExpr (loc, TypeExpr vf_ty) in
-    let own tid vs =
-      Error "Expressing ownership of *const/mut [_] values is not yet supported"
-    in
-    let shr lft tid l =
-      Error "Expressing shared ownership of *const/mut [_] values is not yet supported"
-    in
-    let full_bor_content tid l =
-      Error
-        "Expressing the full borrow content of *const/mut [_] values is not yet supported"
-    in
+    (* Like a thin raw pointer (see translate_raw_ptr_ty): a raw slice pointer value owns
+       nothing, and a place holding one is described by a plain points-to chunk. *)
+    let own tid vs = Ok (True loc) in
+    let fbc_name = "raw_ptr_full_borrow_content" in
+    let full_bor_content = RustBelt.simple_fbc loc fbc_name in
+    let shr = simple_shr loc fbc_name in
     let points_to tid l vid_op =
-      Error
-        "Expressing a points-to assertion for a *const/mut [_] object is not yet \
-         supported"
+      let* pat = RustBelt.Aux.vid_op_to_var_pat vid_op loc in
+      Ok (PointsTo (loc, l, RegularPointsTo, pat))
     in
     {
       Mir.vf_ty;
