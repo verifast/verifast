@@ -2655,7 +2655,16 @@ let check_body_refines_body bodies0 bodies1 def_path body0 body1 =
               let v = fresh_symbol () in
               cont env0 (v::opnds0) env1 (v::opnds1)
             end
-        | RawPtr raw_ptr_data_cpn0, RawPtr raw_ptr_data_cpn1 -> error "RawPtr: not yet supported"
+        | RawPtr raw_ptr0, RawPtr raw_ptr1 ->
+            (* `&raw const/mut place` evaluates to the address of `place`, like `&place`
+               but without creating a reference. *)
+            if raw_ptr0.mutability <> raw_ptr1.mutability then error "RawPtr: The mutabilities do not match";
+            begin match check_place_refines_place env0 caller0 raw_ptr0.place env1 caller1 raw_ptr1.place with
+              (Local x0, Local x1) | (LocalProjection x0, LocalProjection x1) -> local_address_taken x0 x1
+            | Nonlocal, Nonlocal ->
+              let v = fresh_symbol () in
+              cont env0 (v::opnds0) env1 (v::opnds1)
+            end
         | Cast ty0, Cast ty1 ->
             let v, opnds0, opnds1 = consume_operand opnds0 opnds1 in
             if decode_ty i_bb0#genv ty0 <> decode_ty i_bb1#genv ty1 then
