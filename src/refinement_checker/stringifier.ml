@@ -84,6 +84,11 @@ let string_of_bin_op = function
   | Gt -> ">"
   | Ge -> ">="
   | Offset -> "offset"
+  | AddUnchecked -> "+(unchecked)"
+  | SubUnchecked -> "-(unchecked)"
+  | MulUnchecked -> "*(unchecked)"
+  | ShlUnchecked -> "<<(unchecked)"
+  | ShrUnchecked -> ">>(unchecked)"
 
 let string_of_aggregate_kind = function
   | Array ty -> Printf.sprintf "array(%s)" (string_of_ty ty)
