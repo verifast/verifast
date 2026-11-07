@@ -1,0 +1,26 @@
+pub struct S {
+    a: i32,
+    b: i32,
+}
+
+unsafe fn field_addr(s: *mut S) -> *mut i32 {
+    let r = &raw mut (*s).a; // wrong field
+    r
+}
+
+unsafe fn read_field(s: *const S) -> i32 {
+    *(&raw const (*s).a)
+}
+
+unsafe fn discard_addr(s: *mut S) {
+    let _p = &raw const (*s).a;
+}
+
+fn local_addr() -> i32 {
+    let mut x = 5;
+    let p = &raw mut x;
+    unsafe { *p += 1; }
+    x
+}
+
+fn main() {}
