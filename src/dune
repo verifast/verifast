@@ -1,10 +1,11 @@
 (library
  (name verifast)
  (wrapped false)
+ (preprocess (pps ppx_vf_cov))
  (c_library_flags
   %{env:OCAMLOPT_CCLIB_FLAGS=}
   -L %{env:Z3_DLL_DIR=../../../lib})
- (libraries num Z3 vfconfig stopwatch perf (re_export frontend) java_frontend cxx_frontend rust_frontend))
+ (libraries num Z3 vfconfig stopwatch perf (re_export frontend) java_frontend cxx_frontend rust_frontend vf_cov_runtime))
 (env
   (dev
     ; OCaml warning numbers:

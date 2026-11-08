@@ -276,7 +276,7 @@ include $(RUST_FE_DIR)/Makefile
 
 SET_LDD    = export CAML_LD_LIBRARY_PATH="$$CAML_LD_LIBRARY_PATH:$$GTKSOURCEVIEW_LIBS"
 SET_ENV    = export PATH="$(CWD)/../bin/:$(OCAMLBIN):$$PATH"; \
-             export $(LDLPATHVAR)="$(LDLPATH):$$$(LDLPATHVAR)"
+             export $(LDLPATHVAR)="$(Z3_DLL_DIR):$(LDLPATH):$$$(LDLPATHVAR)"
 COMPILE    = ocamlfind ocamlopt $(OCAMLCFLAGS) -package ppx_parser,camlp-streams
 COMPILE_BC = ocamlfind ocamlc $(OCAMLCFLAGS) -package ppx_parser,camlp-streams
 
@@ -452,10 +452,6 @@ _build/default/vfstrip/vfstrip.exe: .FORCE
 ../bin/java_card_applet$(DOTEXE): _build/default/java_card_applet/java_card_applet.exe
 	if [ ! -e $@ -o $< -nt $@ ]; then cp -f $< $@; fi
 
-ifndef WITHOUT_LABLGTK
-
-VERIFAST_PLUGINS=Redux Cvc4 ExternalZ3 ReduxSmtlib
-
 ifeq ($(OS), Darwin)
   OCAMLOPT_CCLIB_FLAGS += -Xlinker -headerpad_max_install_names
   OCAMLOPT_LINKFLAGS += -cclib "-Xlinker -headerpad_max_install_names"
@@ -466,6 +462,10 @@ else
   OCAMLOPT_CCLIB_FLAGS =
 endif
 export OCAMLOPT_CCLIB_FLAGS
+
+ifndef WITHOUT_LABLGTK
+
+VERIFAST_PLUGINS=Redux Cvc4 ExternalZ3 ReduxSmtlib
 
 ../bin/vfide$(DOTEXE): _build/default/vfide/vfide.exe
 	if [ ! -e $@ -o $< -nt $@ ]; then cp -f $< $@; fi
@@ -581,10 +581,54 @@ clean::
 	rm -f shape_analysis/*.cm[ix] shape_analysis/*.cmo
 
 #------------------------------- Tests --------------------------------------#
-testsuite: $(STDLIB) $(TOOLS_EXCEPT_VFIDE)
-	@echo "  RUN " json_tests
+unit_tests: $(Z3DEPS)
+	@echo "  RUN      " json_tests
 	dune build json_tests/json_tests.exe
 	dune exec json_tests/json_tests.exe
+	@echo "  RUN      " ocaml_unit_tests
+	dune build unit_tests/unit_tests.exe
+	$(SET_ENV); _build/default/unit_tests/unit_tests.exe
+	@echo "  RUN      " coverage_self_test
+	dune build coverage/cov_self_test.exe coverage/vf_cov_report.exe
+	$(SET_ENV); _build/default/coverage/cov_self_test.exe
+	@echo "  RUN      " vf_mir_exporter_unit_tests
+	cd $(VF_MIR_EXP_DIR) && cargo test
+.PHONY: unit_tests
+
+rocq_consistency_check: $(STDLIB) $(TOOLS_EXCEPT_VFIDE)
+	@echo "  CHECK    " rocq_consistency_check
+	$(SET_ENV); cd .. && python3 tests/rust/rocq_check.py
+.PHONY: rocq_consistency_check
+
+mutation_tests: $(STDLIB) $(TOOLS_EXCEPT_VFIDE)
+	@echo "  MUTATE   " mutation_tests
+	$(SET_ENV); cd .. && python3 tests/fuzz_diff_mutation/mutation_test.py
+.PHONY: mutation_tests
+
+differential_miri_tests: $(STDLIB) $(TOOLS_EXCEPT_VFIDE)
+	@echo "  DIFF-MIRI" differential_miri_tests
+	$(SET_ENV); cd .. && python3 tests/fuzz_diff_mutation/differential_miri_test.py
+.PHONY: differential_miri_tests
+
+fuzz_tests: $(STDLIB) $(TOOLS_EXCEPT_VFIDE)
+	@echo "  FUZZ     " fuzz_tests
+	$(SET_ENV); cd .. && python3 tests/fuzz_diff_mutation/fuzz_verifast.py --seed 42 --iterations 100
+.PHONY: fuzz_tests
+
+advanced_tests: unit_tests rocq_consistency_check mutation_tests differential_miri_tests fuzz_tests
+.PHONY: advanced_tests
+
+coverage: $(STDLIB) $(TOOLS_EXCEPT_VFIDE)
+	@echo "  COVERAGE " quick
+	$(SET_ENV); cd .. && ./scripts/run_coverage.sh --quick --rust-cov
+.PHONY: coverage
+
+coverage_full: $(STDLIB) $(TOOLS_EXCEPT_VFIDE)
+	@echo "  COVERAGE " full
+	$(SET_ENV); cd .. && ./scripts/run_coverage.sh --full --rust-cov
+.PHONY: coverage_full
+
+testsuite: $(STDLIB) $(TOOLS_EXCEPT_VFIDE) unit_tests rocq_consistency_check
 	@echo "  MYSH     " testsuite
 	$(SET_ENV); \
         cd ..; bin/mysh -cpus $(NUMCPU) < testsuite.mysh

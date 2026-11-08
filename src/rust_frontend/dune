@@ -1,4 +1,5 @@
 (library
  (name rust_frontend)
  (wrapped false)
- (libraries (re_export frontend) vf_mir_translator vfconfig capnp capnp.unix perf json))
+ (preprocess (pps ppx_vf_cov))
+ (libraries (re_export frontend) vf_mir_translator vfconfig capnp capnp.unix perf json vf_cov_runtime))

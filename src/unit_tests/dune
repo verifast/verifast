@@ -1,0 +1,4 @@
+(executable
+ (name unit_tests)
+ (preprocess (pps ppx_parser))
+ (libraries num str unix json vfconfig stopwatch perf frontend rust_frontend vf_mir_translator vf_mir_decoder stdint verifast vf_cov_runtime))

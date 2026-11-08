@@ -136,6 +136,7 @@ cd safe_abstraction
     del proof_obligs_quick_fix_test_generic_result.rs
   end_sequential
   verifast -ignore_unwind_paths -allow_assume my_range_iterator.rs
+  verifast -allow_should_fail vec_deque_ring.rs
   cd linked_list
     verifast -rustc_args "--edition 2021 --cfg test" -ignore_unwind_paths -skip_specless_fns -allow_assume verified/lib.rs
     refinement-checker --rustc-args "--edition 2021 --cfg test" orig/lib.rs verified/lib.rs
@@ -154,6 +155,9 @@ cd safe_abstraction
     refinement-checker --rustc-args "--edition 2024" with-directives/lib.rs verified/lib.rs
     refinement-checker --rustc-args "--edition 2024" --ignore-directives original/lib.rs with-directives/lib.rs
   cd ..
+cd ..
+cd soundness_negative
+  call testsuite.mysh
 cd ..
 cd refinement_checker
   call testsuite.mysh

@@ -173,3 +173,12 @@ _opam
 
 .DS_Store
 .devcontainer/devcontainer.local.json
+
+# Coverage & fuzz/differential build artifacts
+/coverage/raw/
+/coverage/*.profdata
+*.profraw
+*.vfcov
+/tests/fuzz_diff_mutation/miri_runner/target/
+__pycache__/
+*.long-type-*.txt

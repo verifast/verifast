@@ -50,4 +50,40 @@ begin_parallel
   !refinement-checker raw-ptr-local_orig.rs raw-ptr-local_verified_bad1.rs
   !refinement-checker raw-ptr-local_orig.rs raw-ptr-local_verified_bad2.rs
   !refinement-checker raw-ptr-local_orig.rs raw-ptr-local_verified_bad3.rs
+  refinement-checker rc_cov_binops_shifts_orig.rs rc_cov_binops_shifts_verified.rs
+  !refinement-checker rc_cov_binops_shifts_orig.rs rc_cov_binops_shifts_verified_bad1.rs
+  !refinement-checker rc_cov_binops_shifts_orig.rs rc_cov_binops_shifts_verified_bad2.rs
+  !refinement-checker rc_cov_binops_shifts_orig.rs rc_cov_binops_shifts_verified_bad3.rs
+  refinement-checker rc_cov_unops_casts_orig.rs rc_cov_unops_casts_verified.rs
+  !refinement-checker rc_cov_unops_casts_orig.rs rc_cov_unops_casts_verified_bad1.rs
+  !refinement-checker rc_cov_unops_casts_orig.rs rc_cov_unops_casts_verified_bad2.rs
+  !refinement-checker rc_cov_unops_casts_orig.rs rc_cov_unops_casts_verified_bad3.rs
+  refinement-checker rc_cov_raw_ptr_nested_orig.rs rc_cov_raw_ptr_nested_verified.rs
+  !refinement-checker rc_cov_raw_ptr_nested_orig.rs rc_cov_raw_ptr_nested_verified_bad1.rs
+  !refinement-checker rc_cov_raw_ptr_nested_orig.rs rc_cov_raw_ptr_nested_verified_bad2.rs
+  !refinement-checker rc_cov_raw_ptr_nested_orig.rs rc_cov_raw_ptr_nested_verified_bad3.rs
+  refinement-checker rc_cov_arrays_slices_orig.rs rc_cov_arrays_slices_verified.rs
+  !refinement-checker rc_cov_arrays_slices_orig.rs rc_cov_arrays_slices_verified_bad1.rs
+  !refinement-checker rc_cov_arrays_slices_orig.rs rc_cov_arrays_slices_verified_bad2.rs
+  !refinement-checker rc_cov_arrays_slices_orig.rs rc_cov_arrays_slices_verified_bad3.rs
+  refinement-checker rc_cov_control_flow_match_orig.rs rc_cov_control_flow_match_verified.rs
+  !refinement-checker rc_cov_control_flow_match_orig.rs rc_cov_control_flow_match_verified_bad1.rs
+  !refinement-checker rc_cov_control_flow_match_orig.rs rc_cov_control_flow_match_verified_bad2.rs
+  !refinement-checker rc_cov_control_flow_match_orig.rs rc_cov_control_flow_match_verified_bad3.rs
+  refinement-checker rc_cov_calls_closures_orig.rs rc_cov_calls_closures_verified.rs
+  !refinement-checker rc_cov_calls_closures_orig.rs rc_cov_calls_closures_verified_bad1.rs
+  !refinement-checker rc_cov_calls_closures_orig.rs rc_cov_calls_closures_verified_bad2.rs
+  !refinement-checker rc_cov_calls_closures_orig.rs rc_cov_calls_closures_verified_bad3.rs
+  refinement-checker rc_cov_storage_lifetimes_orig.rs rc_cov_storage_lifetimes_verified.rs
+  !refinement-checker rc_cov_storage_lifetimes_orig.rs rc_cov_storage_lifetimes_verified_bad1.rs
+  !refinement-checker rc_cov_storage_lifetimes_orig.rs rc_cov_storage_lifetimes_verified_bad2.rs
+  !refinement-checker rc_cov_storage_lifetimes_orig.rs rc_cov_storage_lifetimes_verified_bad3.rs
+  refinement-checker rc_cov_directives_mut_orig.rs rc_cov_directives_mut_verified.rs
+  !refinement-checker --ignore-directives rc_cov_directives_mut_orig.rs rc_cov_directives_mut_verified.rs
+  !refinement-checker rc_cov_directives_mut_orig.rs rc_cov_directives_mut_verified_bad1.rs
+  !refinement-checker rc_cov_directives_mut_orig.rs rc_cov_directives_mut_verified_bad2.rs
+  !refinement-checker rc_cov_directives_mut_orig.rs rc_cov_directives_mut_verified_bad3.rs
+  refinement-checker vec_deque_ring_orig.rs vec_deque_ring_verified.rs
+  !refinement-checker vec_deque_ring_orig.rs vec_deque_ring_verified_bad1.rs
+  !refinement-checker vec_deque_ring_orig.rs vec_deque_ring_verified_bad2.rs
 end_parallel

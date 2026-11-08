@@ -1,5 +1,5 @@
 (library
  (name vf_mir_translator)
  (preprocess
-  (pps ppx_parser))
- (libraries stdint capnp frontend vf_mir vf_mir_decoder))
+  (pps ppx_parser ppx_vf_cov))
+ (libraries stdint capnp frontend vf_mir vf_mir_decoder vf_cov_runtime))

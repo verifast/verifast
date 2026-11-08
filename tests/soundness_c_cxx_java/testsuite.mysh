@@ -1,0 +1,8 @@
+begin_parallel
+verifast -c -allow_should_fail c_arith_shifts_overflow_neg.c
+verifast -c -allow_should_fail c_memory_pointers_aliasing_neg.c
+verifast -c -allow_should_fail c_ghost_predicates_lemmas_neg.c
+verifast -c -allow_should_fail c_fractions_concurrency_neg.c
+verifast -c -allow_should_fail -allow_dead_code cxx_soundness_neg.cpp
+verifast -c -allow_should_fail java_soundness_neg.java
+end_parallel

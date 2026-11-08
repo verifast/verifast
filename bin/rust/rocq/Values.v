@@ -1,4 +1,5 @@
 From Coq Require Export QArith.
+From Coq.Logic Require Import PropExtensionality.
 
 Parameter Ptr: Set.
 
@@ -15,14 +16,33 @@ Inductive Value :=
 | VTuple0
 .
 
-Definition value_eq_dec(v1 v2: Value): {v1 = v2} + {v1 <> v2}.
-Admitted.
+Definition Q_eq_dec (q1 q2: Q): {q1 = q2} + {q1 <> q2}.
+Proof.
+  destruct q1 as [n1 d1], q2 as [n2 d2].
+  destruct (Z.eq_dec n1 n2); [destruct (Pos.eq_dec d1 d2) |].
+  - subst. left. reflexivity.
+  - right. intros H. injection H. intros. contradiction.
+  - right. intros H. injection H. intros. contradiction.
+Defined.
 
-Definition value_eqb(v1 v2: Value): bool.
-Admitted.
+Fixpoint value_eq_dec (v1 v2: Value): {v1 = v2} + {v1 <> v2}.
+Proof.
+  decide equality; try apply Ptr_eq_dec; try apply Bool.bool_dec; try apply Q_eq_dec.
+Defined.
 
-Lemma value_eqb_def_(v1 v2: Value): (VBool (value_eqb v1 v2) = VBool true) = (v1 = v2).
-Admitted.
+Definition value_eqb (v1 v2: Value): bool :=
+  if value_eq_dec v1 v2 then true else false.
+
+Lemma prop_ext (P Q: Prop): (P <-> Q) -> P = Q.
+Proof.
+  apply propositional_extensionality.
+Qed.
+
+Lemma value_eqb_def_ (v1 v2: Value): (VBool (value_eqb v1 v2) = VBool true) = (v1 = v2).
+Proof.
+  unfold value_eqb.
+  destruct (value_eq_dec v1 v2); apply prop_ext; split; intros; congruence.
+Qed.
 
 From Coq Require Export List String.
 Import ListNotations.
