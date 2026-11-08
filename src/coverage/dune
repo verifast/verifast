@@ -1,0 +1,22 @@
+(library
+ (name vf_cov_runtime)
+ (wrapped false)
+ (modules vf_cov_runtime)
+ (libraries unix))
+
+(library
+ (name ppx_vf_cov)
+ (kind ppx_rewriter)
+ (modules ppx_vf_cov)
+ (libraries ppxlib vf_cov_runtime))
+
+(executable
+ (name vf_cov_report)
+ (modules vf_cov_report)
+ (libraries unix str))
+
+(executable
+ (name cov_self_test)
+ (modules cov_self_test)
+ (preprocess (pps ppx_vf_cov))
+ (libraries vf_cov_runtime unix str))

@@ -1,0 +1,241 @@
+{
+  "summary": {
+    "category_a": {
+      "passed": 10,
+      "total": 10
+    },
+    "category_b": {
+      "passed": 10,
+      "total": 10
+    },
+    "category_c": {
+      "tracked": 2,
+      "total": 2
+    },
+    "total_time_seconds": 74.8
+  },
+  "results_a": [
+    {
+      "category": "A",
+      "case": "cat_a_01_raw_ptr",
+      "description": "Raw pointer write & read (&raw mut, *p = 42)",
+      "verifast_ok": true,
+      "verifast_time": 0.32967710494995117,
+      "miri_ok": true,
+      "miri_time": 3.68414306640625,
+      "rustc_ok": true,
+      "status": "PASS"
+    },
+    {
+      "category": "A",
+      "case": "cat_a_02_raw_slice",
+      "description": "Raw slice fat pointer field update (*mut [i32])",
+      "verifast_ok": true,
+      "verifast_time": 0.2506704330444336,
+      "miri_ok": true,
+      "miri_time": 1.9558353424072266,
+      "rustc_ok": true,
+      "status": "PASS"
+    },
+    {
+      "category": "A",
+      "case": "cat_a_03_unchecked_add_sub",
+      "description": "Unchecked add & sub within bounds",
+      "verifast_ok": true,
+      "verifast_time": 0.3408503532409668,
+      "miri_ok": true,
+      "miri_time": 2.004132032394409,
+      "rustc_ok": true,
+      "status": "PASS"
+    },
+    {
+      "category": "A",
+      "case": "cat_a_04_unchecked_mul",
+      "description": "Unchecked mul within bounds",
+      "verifast_ok": true,
+      "verifast_time": 0.2972142696380615,
+      "miri_ok": true,
+      "miri_time": 2.1774325370788574,
+      "rustc_ok": true,
+      "status": "PASS"
+    },
+    {
+      "category": "A",
+      "case": "cat_a_05_unchecked_shifts",
+      "description": "Unchecked shl and shr within bitwidth",
+      "verifast_ok": true,
+      "verifast_time": 1.1997580528259277,
+      "miri_ok": true,
+      "miri_time": 2.2838807106018066,
+      "rustc_ok": true,
+      "status": "PASS"
+    },
+    {
+      "category": "A",
+      "case": "cat_a_06_bit_shifts",
+      "description": "Wrapping left shift and signed arithmetic right shift",
+      "verifast_ok": true,
+      "verifast_time": 0.2818620204925537,
+      "miri_ok": true,
+      "miri_time": 2.544508457183838,
+      "rustc_ok": true,
+      "status": "PASS"
+    },
+    {
+      "category": "A",
+      "case": "cat_a_07_struct_field",
+      "description": "Struct field pointer update (&raw mut pt.x)",
+      "verifast_ok": true,
+      "verifast_time": 0.8128664493560791,
+      "miri_ok": true,
+      "miri_time": 4.15130877494812,
+      "rustc_ok": true,
+      "status": "PASS"
+    },
+    {
+      "category": "A",
+      "case": "cat_a_08_tuple_proj",
+      "description": "Raw tuple projection and field addition (*p).0 + (*p).1",
+      "verifast_ok": true,
+      "verifast_time": 0.7949321269989014,
+      "miri_ok": true,
+      "miri_time": 2.826653242111206,
+      "rustc_ok": true,
+      "status": "PASS"
+    },
+    {
+      "category": "A",
+      "case": "cat_a_09_alloc_dealloc",
+      "description": "Heap allocation, initialization, read, and deallocation",
+      "verifast_ok": true,
+      "verifast_time": 0.43076539039611816,
+      "miri_ok": true,
+      "miri_time": 2.111452341079712,
+      "rustc_ok": true,
+      "status": "PASS"
+    },
+    {
+      "category": "A",
+      "case": "cat_a_10_ptr_swap",
+      "description": "In-place pointer swap through raw pointers",
+      "verifast_ok": true,
+      "verifast_time": 0.3873434066772461,
+      "miri_ok": true,
+      "miri_time": 2.7970314025878906,
+      "rustc_ok": true,
+      "status": "PASS"
+    }
+  ],
+  "results_b": [
+    {
+      "category": "B",
+      "case": "cat_b_01_add_overflow",
+      "description": "unchecked_add overflow (255u8 + 1)",
+      "verifast_rejected": true,
+      "miri_detected_ub": true,
+      "expected_ub_sub": "overflow",
+      "status": "PASS"
+    },
+    {
+      "category": "B",
+      "case": "cat_b_02_sub_underflow",
+      "description": "unchecked_sub underflow (0u32 - 1)",
+      "verifast_rejected": true,
+      "miri_detected_ub": true,
+      "expected_ub_sub": "overflow",
+      "status": "PASS"
+    },
+    {
+      "category": "B",
+      "case": "cat_b_03_mul_overflow",
+      "description": "unchecked_mul overflow (200u8 * 2)",
+      "verifast_rejected": true,
+      "miri_detected_ub": true,
+      "expected_ub_sub": "overflow",
+      "status": "PASS"
+    },
+    {
+      "category": "B",
+      "case": "cat_b_04_shl_bitwidth",
+      "description": "unchecked_shl by bitwidth (1u32 << 32)",
+      "verifast_rejected": true,
+      "miri_detected_ub": true,
+      "expected_ub_sub": "overflowing shift",
+      "status": "PASS"
+    },
+    {
+      "category": "B",
+      "case": "cat_b_05_shr_negative",
+      "description": "unchecked_shr by >= bitwidth (1i32 >> 32)",
+      "verifast_rejected": true,
+      "miri_detected_ub": true,
+      "expected_ub_sub": "overflowing shift",
+      "status": "PASS"
+    },
+    {
+      "category": "B",
+      "case": "cat_b_06_null_deref",
+      "description": "Null pointer dereference (*null::<i32>())",
+      "verifast_rejected": true,
+      "miri_detected_ub": true,
+      "expected_ub_sub": "null pointer",
+      "status": "PASS"
+    },
+    {
+      "category": "B",
+      "case": "cat_b_07_use_after_free",
+      "description": "Use-after-free (*p after dealloc)",
+      "verifast_rejected": true,
+      "miri_detected_ub": true,
+      "expected_ub_sub": "freed",
+      "status": "PASS"
+    },
+    {
+      "category": "B",
+      "case": "cat_b_08_double_free",
+      "description": "Double-free (dealloc called twice on same ptr)",
+      "verifast_rejected": true,
+      "miri_detected_ub": true,
+      "expected_ub_sub": "freed",
+      "status": "PASS"
+    },
+    {
+      "category": "B",
+      "case": "cat_b_09_uninit_read",
+      "description": "Reading uninitialized heap memory before write",
+      "verifast_rejected": true,
+      "miri_detected_ub": true,
+      "expected_ub_sub": "uninitialized memory",
+      "status": "PASS"
+    },
+    {
+      "category": "B",
+      "case": "cat_b_10_out_of_bounds",
+      "description": "Out-of-bounds pointer read (*p.add(4))",
+      "verifast_rejected": true,
+      "miri_detected_ub": true,
+      "expected_ub_sub": "pointer arithmetic",
+      "status": "PASS"
+    }
+  ],
+  "results_c": [
+    {
+      "category": "C",
+      "case": "cat_c_01_issue_947",
+      "issue_tag": "[KNOWN_OPEN_ISSUE #947]",
+      "description": "Issue #947: Local pointer escapes inner block after StorageDead",
+      "verifast_accepted": true,
+      "miri_detected_ub": true,
+      "status": "TRACKED"
+    },
+    {
+      "category": "C",
+      "case": "cat_c_02_issue_685",
+      "issue_tag": "[KNOWN_OPEN_ISSUE #685]",
+      "description": "Issue #685: Stacked Borrows mutable reference aliasing raw pointer",
+      "verifast_accepted": true,
+      "miri_detected_ub": true,
+      "status": "TRACKED"
+    }
+  ]
+}

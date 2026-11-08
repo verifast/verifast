@@ -4770,6 +4770,16 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let (w1, w2, t) = promote l e1 e2 in
       begin match t with PtrType _ -> static_error l "Operands should be arithmetic expressions, not pointer expressions" None | _ -> () end;
       (operation_expr funcmap l t operator w1 w2, t, None)
+    | Operation (l, (ShiftLeft | ShiftRight as op), [e1; e2]) when is_rust && inAnnotation <> Some true ->
+      (* Rust has no integer promotion: the result has the type of the left operand, and
+         the shift amount may have any integer type. *)
+      let (w1, t1, _) = check e1 in
+      let (w2, t2, _) = check e2 in
+      begin match t1, t2 with
+        Int (_, _), Int (_, _) -> ()
+      | _ -> static_error l "The operands of a shift must be integers" None
+      end;
+      (WOperation (l, op, [w1; w2], t1), t1, None)
     | Operation (l, (ShiftLeft | ShiftRight as op), [e1; e2]) ->
       let w1, t1 = perform_integral_promotion e1 in
       let w2, _ = perform_integral_promotion e2 in
@@ -8311,7 +8321,18 @@ let check_if_list_is_defined () =
 
   let check_shift_amount ass_term l t v =
     match language, ass_term with
-      CLang, Some assert_term ->
+      _, Some assert_term when is_rust ->
+      (* Rust: shifting by an amount outside 0..bits(T) of the left operand's type T is
+         undefined behavior for `unchecked_shl`/`unchecked_shr`, panics with overflow checks
+         on, and is masked otherwise; we require the amount to be in range. *)
+      begin match t with
+        Int (_, k) ->
+        let width = ctxt#mk_mul (ctxt#mk_intlit 8) (rank_size_term k) in
+        assert_term l (ctxt#mk_le (ctxt#mk_intlit 0) v) "Shifting by a negative amount is not allowed." None;
+        assert_term l (ctxt#mk_lt v width) "Shifting by an amount greater than or equal to the bit width of the operand is not allowed." None
+      | _ -> ()
+      end
+    | CLang, Some assert_term ->
       let width =
         match t with
           Int (Signed, k) -> ctxt#mk_sub (ctxt#mk_mul (ctxt#mk_intlit 8) (rank_size_term k)) (ctxt#mk_intlit 1)
@@ -8441,18 +8462,32 @@ let check_if_list_is_defined () =
       ctxt#mk_mod v1 v2
     | ShiftLeft ->
       begin match language, t, ass_term with
-        CLang, Int (Signed, _), Some assert_term ->
+        CLang, Int (Signed, _), Some assert_term when not is_rust ->
         assert_term l (ctxt#mk_le (ctxt#mk_intlit 0) v1) "Left-shifting a negative value has undefined behavior." None
       | _ -> ()
       end;
       check_shift_amount ass_term l t v2;
       let v = ctxt#mk_app shiftleft_symbol [v1;v2] in
+      (* The Rust frontend translates a MIR integer constant as a cast of a literal. *)
+      let e2 = match e2 with CastExpr (_, _, (WIntLit _ | Upcast (WIntLit _, _, _) as w)) when is_rust -> w | _ -> e2 in
       begin match e2 with
         WIntLit (_, n) | Upcast (WIntLit (_, n), _, _) when le_big_int zero_big_int n && le_big_int n (big_int_of_int 64) ->
         ctxt#assert_term (ctxt#mk_eq v (ctxt#mk_mul v1 (ctxt#mk_intlit_of_string (string_of_big_int (power_int_positive_big_int 2 n)))))
       | _ -> ()
       end;
-      check_overflow v
+      begin match t with
+        Int (_, _) when is_rust && ass_term <> None ->
+        (* In Rust, `x << n` (with `n` in range, checked above) keeps the low bits: bits
+           shifted out are discarded, for `<<` and `unchecked_shl` alike. The truncation
+           functions are opaque in the Rust prelude, so state the two facts we need: the
+           result is in range, and it equals `x * 2^n` when that is already in range. *)
+        let r = mk_truncate_term t v in
+        assume_bounds r t;
+        let min, max = limits_of_type t in
+        ctxt#assert_term (ctxt#mk_implies (ctxt#mk_and (ctxt#mk_le min v) (ctxt#mk_le v max)) (ctxt#mk_eq r v));
+        r
+      | _ -> check_overflow v
+      end
     | _ -> static_error l "This operator is not supported in this position." None
     end
 
@@ -8694,8 +8729,10 @@ let check_if_list_is_defined () =
     | WOperation (l, ShiftRight, [e1; e2], t) ->
       evs state [e1; e2] $. fun state [v1; v2] ->
       check_shift_amount ass_term l t v2;
+      (* In Rust, `>>` on a signed integer is an arithmetic shift; shiftright_symbol models
+         exactly that, so the C check below does not apply. *)
       begin match language, t, ass_term with
-        CLang, Int (Signed, _), Some assert_term ->
+        CLang, Int (Signed, _), Some assert_term when not is_rust ->
         begin match e1 with
           Upcast (_, Int (Unsigned, _), _) -> ()
         | _ ->

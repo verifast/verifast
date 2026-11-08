@@ -2,6 +2,8 @@
  (name cxx_frontend)
  (preprocess
   (per_module
-   ((pps ppx_parser)
-    annotation_parser)))
- (libraries stdint camlp-streams capnp capnp.unix (re_export frontend) cxx_frontend_stubs))
+   ((pps ppx_parser ppx_vf_cov)
+    annotation_parser)
+   ((pps ppx_vf_cov)
+    ast_translator)))
+ (libraries stdint camlp-streams capnp capnp.unix (re_export frontend) cxx_frontend_stubs vf_cov_runtime))

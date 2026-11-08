@@ -1,3 +1,4 @@
 (executable
  (name main)
- (libraries str json stdint threads vfconfig capnp capnp.unix vf_mir vf_mir_decoder perf))
+ (preprocess (pps ppx_vf_cov))
+ (libraries str json stdint threads vfconfig capnp capnp.unix vf_mir vf_mir_decoder perf vf_cov_runtime))

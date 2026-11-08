@@ -1,0 +1,18 @@
+begin_parallel
+  verifast -allow_should_fail -allow_dead_code unchecked_arith_shifts_exhaustive.rs
+  verifast -allow_should_fail -allow_dead_code raw_slice_ptr_soundness.rs
+  verifast -allow_should_fail -allow_dead_code aliasing_and_borrows_neg.rs
+  verifast -allow_should_fail -allow_dead_code lifetime_and_drop_neg.rs
+  verifast -allow_should_fail -allow_dead_code ghost_lemmas_predicates_neg.rs
+  verifast -allow_should_fail -allow_dead_code casts_enums_unions_neg.rs
+  begin_sequential
+    verifast -ignore_unwind_paths -emit_rocq emit_rocq_extended.rs
+    diff -q emit_rocq_extended.v emit_rocq_extended_expected.v
+    ifrocq vfrocq compile emit_rocq_extended.v
+    del emit_rocq_extended.v
+    ifrocq del emit_rocq_extended.vo
+    ifrocq del emit_rocq_extended.vos
+    ifrocq del emit_rocq_extended.vok
+    ifrocq del emit_rocq_extended.glob
+  end_sequential
+end_parallel

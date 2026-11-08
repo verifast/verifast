@@ -1,0 +1,1570 @@
+{
+  "summary": {
+    "tier1_total": 60,
+    "tier1_killed": 60,
+    "tier1_score_percent": 100.0,
+    "tier2_total": 90,
+    "tier2_killed": 90,
+    "tier2_score_percent": 100.0,
+    "total_mutants": 150,
+    "total_killed": 150,
+    "total_survived": 0,
+    "mutation_test_strength_percent": 100.0,
+    "suites": {
+      "source_json": {
+        "total": 8,
+        "killed": 8
+      },
+      "source_sexpr": {
+        "total": 8,
+        "killed": 8
+      },
+      "source_aux": {
+        "total": 8,
+        "killed": 8
+      },
+      "source_simplex": {
+        "total": 6,
+        "killed": 6
+      },
+      "source_redux": {
+        "total": 10,
+        "killed": 10
+      },
+      "source_loc": {
+        "total": 8,
+        "killed": 8
+      },
+      "source_util": {
+        "total": 6,
+        "killed": 6
+      },
+      "source_z": {
+        "total": 6,
+        "killed": 6
+      },
+      "rust_verifier": {
+        "total": 24,
+        "killed": 24
+      },
+      "c_verifier": {
+        "total": 24,
+        "killed": 24
+      },
+      "cxx_verifier": {
+        "total": 10,
+        "killed": 10
+      },
+      "java_verifier": {
+        "total": 10,
+        "killed": 10
+      },
+      "refinement_checker": {
+        "total": 22,
+        "killed": 22
+      }
+    }
+  },
+  "results": [
+    {
+      "tier": 1,
+      "suite": "source_json",
+      "id": "src_json_01_bool_flip",
+      "category": "JSON",
+      "description": "JSON: Boolean serialization flip true <-> false",
+      "killed": true,
+      "diagnostic": "Assertion failed in json unit tests",
+      "duration": 0.3515501022338867
+    },
+    {
+      "tier": 1,
+      "suite": "source_json",
+      "id": "src_json_02_null_corrupt",
+      "category": "JSON",
+      "description": "JSON: Null keyword corrupted to nil",
+      "killed": true,
+      "diagnostic": "Assertion failed in json unit tests",
+      "duration": 0.48335790634155273
+    },
+    {
+      "tier": 1,
+      "suite": "source_json",
+      "id": "src_json_03_int_offset",
+      "category": "JSON",
+      "description": "JSON: Integer serialization off-by-one",
+      "killed": true,
+      "diagnostic": "Assertion failed in json unit tests",
+      "duration": 0.09148693084716797
+    },
+    {
+      "tier": 1,
+      "suite": "source_json",
+      "id": "src_json_04_arr_open",
+      "category": "JSON",
+      "description": "JSON: Array open bracket mutated to curly brace",
+      "killed": true,
+      "diagnostic": "Assertion failed in json unit tests",
+      "duration": 0.09110784530639648
+    },
+    {
+      "tier": 1,
+      "suite": "source_json",
+      "id": "src_json_05_obj_open",
+      "category": "JSON",
+      "description": "JSON: Object open brace mutated to bracket",
+      "killed": true,
+      "diagnostic": "Assertion failed in json unit tests",
+      "duration": 0.0987396240234375
+    },
+    {
+      "tier": 1,
+      "suite": "source_json",
+      "id": "src_json_06_obj_colon",
+      "category": "JSON",
+      "description": "JSON: Object key-value separator mutated to equals",
+      "killed": true,
+      "diagnostic": "Assertion failed in json unit tests",
+      "duration": 0.10478830337524414
+    },
+    {
+      "tier": 1,
+      "suite": "source_json",
+      "id": "src_json_07_arr_comma",
+      "category": "JSON",
+      "description": "JSON: Array element separator mutated to semicolon",
+      "killed": true,
+      "diagnostic": "Assertion failed in json unit tests",
+      "duration": 0.0949866771697998
+    },
+    {
+      "tier": 1,
+      "suite": "source_json",
+      "id": "src_json_08_pp_comma",
+      "category": "JSON",
+      "description": "JSON: Pretty-print element separator mutated to semicolon",
+      "killed": true,
+      "diagnostic": "Assertion failed in json unit tests",
+      "duration": 0.091552734375
+    },
+    {
+      "tier": 1,
+      "suite": "source_sexpr",
+      "id": "src_sexpr_01_empty_sym",
+      "category": "SEXPR",
+      "description": "SExpr: Empty symbol representation omitted",
+      "killed": true,
+      "diagnostic": "Link error in sexpr: File \"test_sexpr.ml\", line 14, characters 10-18:\n14 |   asse",
+      "duration": 0.06063365936279297
+    },
+    {
+      "tier": 1,
+      "suite": "source_sexpr",
+      "id": "src_sexpr_02_kw_prefix",
+      "category": "SEXPR",
+      "description": "SExpr: Keyword colon prefix omitted",
+      "killed": true,
+      "diagnostic": "Link error in sexpr: File \"test_sexpr.ml\", line 14, characters 10-18:\n14 |   asse",
+      "duration": 0.06310248374938965
+    },
+    {
+      "tier": 1,
+      "suite": "source_sexpr",
+      "id": "src_sexpr_03_num_neg",
+      "category": "SEXPR",
+      "description": "SExpr: Big_int numeric sign corrupted",
+      "killed": true,
+      "diagnostic": "Link error in sexpr: File \"test_sexpr.ml\", line 14, characters 10-18:\n14 |   asse",
+      "duration": 0.05693340301513672
+    },
+    {
+      "tier": 1,
+      "suite": "source_sexpr",
+      "id": "src_sexpr_04_quote_char",
+      "category": "SEXPR",
+      "description": "SExpr: Quote symbol character corrupted",
+      "killed": true,
+      "diagnostic": "Link error in sexpr: File \"test_sexpr.ml\", line 14, characters 10-18:\n14 |   asse",
+      "duration": 0.05550074577331543
+    },
+    {
+      "tier": 1,
+      "suite": "source_sexpr",
+      "id": "src_sexpr_05_open_paren",
+      "category": "SEXPR",
+      "description": "SExpr: List opening parenthesis corrupted",
+      "killed": true,
+      "diagnostic": "Link error in sexpr: File \"test_sexpr.ml\", line 14, characters 10-18:\n14 |   asse",
+      "duration": 0.05384063720703125
+    },
+    {
+      "tier": 1,
+      "suite": "source_sexpr",
+      "id": "src_sexpr_06_close_paren",
+      "category": "SEXPR",
+      "description": "SExpr: List closing parenthesis corrupted",
+      "killed": true,
+      "diagnostic": "Link error in sexpr: File \"test_sexpr.ml\", line 14, characters 10-18:\n14 |   asse",
+      "duration": 0.06169009208679199
+    },
+    {
+      "tier": 1,
+      "suite": "source_sexpr",
+      "id": "src_sexpr_07_is_empty_flip",
+      "category": "SEXPR",
+      "description": "SExpr: Empty list predicate inverted",
+      "killed": true,
+      "diagnostic": "Link error in sexpr: File \"test_sexpr.ml\", line 14, characters 10-18:\n14 |   asse",
+      "duration": 0.05036616325378418
+    },
+    {
+      "tier": 1,
+      "suite": "source_sexpr",
+      "id": "src_sexpr_08_group_args",
+      "category": "SEXPR",
+      "description": "SExpr: Single argument group omitted",
+      "killed": true,
+      "diagnostic": "Link error in sexpr: File \"test_sexpr.ml\", line 14, characters 10-18:\n14 |   asse",
+      "duration": 0.05959439277648926
+    },
+    {
+      "tier": 1,
+      "suite": "source_aux",
+      "id": "src_aux_01_is_empty",
+      "category": "AUX",
+      "description": "Ocaml_aux: is_empty list predicate inverted",
+      "killed": true,
+      "diagnostic": "Assertion failed in Ocaml_aux unit tests",
+      "duration": 0.048918962478637695
+    },
+    {
+      "tier": 1,
+      "suite": "source_aux",
+      "id": "src_aux_02_first_flip",
+      "category": "AUX",
+      "description": "Ocaml_aux: first element extraction always None",
+      "killed": true,
+      "diagnostic": "Assertion failed in Ocaml_aux unit tests",
+      "duration": 0.045655012130737305
+    },
+    {
+      "tier": 1,
+      "suite": "source_aux",
+      "id": "src_aux_03_last_singleton",
+      "category": "AUX",
+      "description": "Ocaml_aux: last element base case corrupted",
+      "killed": true,
+      "diagnostic": "Assertion failed in Ocaml_aux unit tests",
+      "duration": 0.0509638786315918
+    },
+    {
+      "tier": 1,
+      "suite": "source_aux",
+      "id": "src_aux_04_partitioni",
+      "category": "AUX",
+      "description": "Ocaml_aux: partitioni filter predicate inverted",
+      "killed": true,
+      "diagnostic": "Assertion failed in Ocaml_aux unit tests",
+      "duration": 0.04932689666748047
+    },
+    {
+      "tier": 1,
+      "suite": "source_aux",
+      "id": "src_aux_05_split3",
+      "category": "AUX",
+      "description": "Ocaml_aux: split3 tuple component permutation",
+      "killed": true,
+      "diagnostic": "Assertion failed in Ocaml_aux unit tests",
+      "duration": 0.04793357849121094
+    },
+    {
+      "tier": 1,
+      "suite": "source_aux",
+      "id": "src_aux_06_merge_cmp",
+      "category": "AUX",
+      "description": "Ocaml_aux: merge_sorted_lists comparison polarity inverted",
+      "killed": true,
+      "diagnostic": "Assertion failed in Ocaml_aux unit tests",
+      "duration": 0.04720187187194824
+    },
+    {
+      "tier": 1,
+      "suite": "source_aux",
+      "id": "src_aux_07_fold_left2_nil",
+      "category": "AUX",
+      "description": "Ocaml_aux: fold_left2_opt empty case returns None",
+      "killed": true,
+      "diagnostic": "Assertion failed in Ocaml_aux unit tests",
+      "duration": 0.04518771171569824
+    },
+    {
+      "tier": 1,
+      "suite": "source_aux",
+      "id": "src_aux_08_sort_reverse",
+      "category": "AUX",
+      "description": "Ocaml_aux: try_sort comparator sign inverted",
+      "killed": true,
+      "diagnostic": "Assertion failed in Ocaml_aux unit tests",
+      "duration": 0.04615902900695801
+    },
+    {
+      "tier": 1,
+      "suite": "source_simplex",
+      "id": "src_simplex_01_sat_to_unsat",
+      "category": "SIMPLEX",
+      "description": "Simplex: Feasible status mapped to Unsat",
+      "killed": true,
+      "diagnostic": "Assertion failed in Simplex unit tests",
+      "duration": 2.5810658931732178
+    },
+    {
+      "tier": 1,
+      "suite": "source_simplex",
+      "id": "src_simplex_02_unsat_to_sat",
+      "category": "SIMPLEX",
+      "description": "Simplex: Infeasible status mapped to Sat",
+      "killed": true,
+      "diagnostic": "Assertion failed in Simplex unit tests",
+      "duration": 1.5683095455169678
+    },
+    {
+      "tier": 1,
+      "suite": "source_simplex",
+      "id": "src_simplex_03_row_fac_neg",
+      "category": "SIMPLEX",
+      "description": "Simplex: Affine combination constant negated",
+      "killed": true,
+      "diagnostic": "Assertion failed in Simplex unit tests",
+      "duration": 1.9487392902374268
+    },
+    {
+      "tier": 1,
+      "suite": "source_simplex",
+      "id": "src_simplex_04_pivot_rule",
+      "category": "SIMPLEX",
+      "description": "Simplex: Pivot variable search rule inverted",
+      "killed": true,
+      "diagnostic": "Assertion failed in Simplex unit tests",
+      "duration": 1.9635696411132812
+    },
+    {
+      "tier": 1,
+      "suite": "source_simplex",
+      "id": "src_simplex_05_row_constant_sign",
+      "category": "SIMPLEX",
+      "description": "Simplex: Manifestly maximized row constant polarity inverted",
+      "killed": true,
+      "diagnostic": "Assertion failed in Simplex unit tests",
+      "duration": 1.6381306648254395
+    },
+    {
+      "tier": 1,
+      "suite": "source_simplex",
+      "id": "src_simplex_06_unbounded_pivot",
+      "category": "SIMPLEX",
+      "description": "Simplex: Unbounded column status flipped to -1",
+      "killed": true,
+      "diagnostic": "Assertion failed in Simplex unit tests",
+      "duration": 1.8229928016662598
+    },
+    {
+      "tier": 1,
+      "suite": "source_redux",
+      "id": "src_redux_01_query_unsat_check",
+      "category": "REDUX",
+      "description": "Redux: query satisfiability result inverted",
+      "killed": true,
+      "diagnostic": "Link error in redux: File \"_none_\", line 1:\nError: Files redux.cmx\n       and /ho",
+      "duration": 2.039750576019287
+    },
+    {
+      "tier": 1,
+      "suite": "source_redux",
+      "id": "src_redux_02_query_negation",
+      "category": "REDUX",
+      "description": "Redux: query refutation polarity un-negated",
+      "killed": true,
+      "diagnostic": "Link error in redux: File \"_none_\", line 1:\nError: Files redux.cmx\n       and /ho",
+      "duration": 1.9909255504608154
+    },
+    {
+      "tier": 1,
+      "suite": "source_redux",
+      "id": "src_redux_03_eval_add",
+      "category": "REDUX",
+      "description": "Redux: Constant arithmetic evaluation flip add to sub",
+      "killed": true,
+      "diagnostic": "Link error in redux: File \"_none_\", line 1:\nError: Files redux.cmx\n       and /ho",
+      "duration": 1.377206563949585
+    },
+    {
+      "tier": 1,
+      "suite": "source_redux",
+      "id": "src_redux_04_eval_sub",
+      "category": "REDUX",
+      "description": "Redux: Constant arithmetic evaluation flip sub to add",
+      "killed": true,
+      "diagnostic": "Link error in redux: File \"_none_\", line 1:\nError: Files redux.cmx\n       and /ho",
+      "duration": 1.3102540969848633
+    },
+    {
+      "tier": 1,
+      "suite": "source_redux",
+      "id": "src_redux_05_eval_mul",
+      "category": "REDUX",
+      "description": "Redux: Constant arithmetic evaluation flip mul to add",
+      "killed": true,
+      "diagnostic": "Link error in redux: File \"_none_\", line 1:\nError: Files redux.cmx\n       and /ho",
+      "duration": 1.3976643085479736
+    },
+    {
+      "tier": 1,
+      "suite": "source_redux",
+      "id": "src_redux_06_assert_eq_same",
+      "category": "REDUX",
+      "description": "Redux: Asserting equality of identical values mapped to Unsat",
+      "killed": true,
+      "diagnostic": "Link error in redux: File \"_none_\", line 1:\nError: Files redux.cmx\n       and /ho",
+      "duration": 1.4110043048858643
+    },
+    {
+      "tier": 1,
+      "suite": "source_redux",
+      "id": "src_redux_07_assert_eq_neq",
+      "category": "REDUX",
+      "description": "Redux: Equality of known disjoint values mapped to Valid",
+      "killed": true,
+      "diagnostic": "Link error in redux: File \"_none_\", line 1:\nError: Files redux.cmx\n       and /ho",
+      "duration": 1.5256190299987793
+    },
+    {
+      "tier": 1,
+      "suite": "source_redux",
+      "id": "src_redux_08_assert_neq_same",
+      "category": "REDUX",
+      "description": "Redux: Disequality of identical values mapped to Valid",
+      "killed": true,
+      "diagnostic": "Link error in redux: File \"_none_\", line 1:\nError: Files redux.cmx\n       and /ho",
+      "duration": 1.4374349117279053
+    },
+    {
+      "tier": 1,
+      "suite": "source_redux",
+      "id": "src_redux_09_assert_le_offset",
+      "category": "REDUX",
+      "description": "Redux: Inequation offset sign flipped in simplex assert_le",
+      "killed": true,
+      "diagnostic": "Link error in redux: File \"_none_\", line 1:\nError: Files redux.cmx\n       and /ho",
+      "duration": 1.2534387111663818
+    },
+    {
+      "tier": 1,
+      "suite": "source_redux",
+      "id": "src_redux_10_assume_le_bound",
+      "category": "REDUX",
+      "description": "Redux: Non-strict inequality Le bound shifted by unit",
+      "killed": true,
+      "diagnostic": "Link error in redux: File \"_none_\", line 1:\nError: Files redux.cmx\n       and /ho",
+      "duration": 1.2929697036743164
+    },
+    {
+      "tier": 1,
+      "suite": "source_loc",
+      "id": "src_loc_01_line_lower_bound",
+      "category": "LOC",
+      "description": "SrcLocAux: line number validation rejects line 1",
+      "killed": true,
+      "diagnostic": "Compile error in src_loc_aux: File \"src_loc_aux.ml\", line 1:\nError: The files ocaml_aux.cm",
+      "duration": 0.037197113037109375
+    },
+    {
+      "tier": 1,
+      "suite": "source_loc",
+      "id": "src_loc_02_col_lower_bound",
+      "category": "LOC",
+      "description": "SrcLocAux: column number validation rejects column 1",
+      "killed": true,
+      "diagnostic": "Compile error in src_loc_aux: File \"src_loc_aux.ml\", line 1:\nError: The files ocaml_aux.cm",
+      "duration": 0.02962946891784668
+    },
+    {
+      "tier": 1,
+      "suite": "source_loc",
+      "id": "src_loc_03_same_file",
+      "category": "LOC",
+      "description": "SrcLocAux: file equality check inverted in loc0 validation",
+      "killed": true,
+      "diagnostic": "Compile error in src_loc_aux: File \"src_loc_aux.ml\", line 1:\nError: The files ocaml_aux.cm",
+      "duration": 0.026624441146850586
+    },
+    {
+      "tier": 1,
+      "suite": "source_loc",
+      "id": "src_loc_04_order",
+      "category": "LOC",
+      "description": "SrcLocAux: span order validation condition inverted",
+      "killed": true,
+      "diagnostic": "Compile error in src_loc_aux: File \"src_loc_aux.ml\", line 1:\nError: The files ocaml_aux.cm",
+      "duration": 0.02778458595275879
+    },
+    {
+      "tier": 1,
+      "suite": "source_loc",
+      "id": "src_loc_05_cmp_ln",
+      "category": "LOC",
+      "description": "SrcLocAux: line comparison polarity inverted for greater than",
+      "killed": true,
+      "diagnostic": "Compile error in src_loc_aux: File \"src_loc_aux.ml\", line 1:\nError: The files ocaml_aux.cm",
+      "duration": 0.02836155891418457
+    },
+    {
+      "tier": 1,
+      "suite": "source_loc",
+      "id": "src_loc_06_cmp_col",
+      "category": "LOC",
+      "description": "SrcLocAux: column comparison polarity inverted for greater than",
+      "killed": true,
+      "diagnostic": "Compile error in src_loc_aux: File \"src_loc_aux.ml\", line 1:\nError: The files ocaml_aux.cm",
+      "duration": 0.02749037742614746
+    },
+    {
+      "tier": 1,
+      "suite": "source_loc",
+      "id": "src_loc_07_cover_start",
+      "category": "LOC",
+      "description": "SrcLocAux: cover_loc0 start position selection inverted",
+      "killed": true,
+      "diagnostic": "Compile error in src_loc_aux: File \"src_loc_aux.ml\", line 1:\nError: The files ocaml_aux.cm",
+      "duration": 0.030132055282592773
+    },
+    {
+      "tier": 1,
+      "suite": "source_loc",
+      "id": "src_loc_08_cover_end",
+      "category": "LOC",
+      "description": "SrcLocAux: cover_loc0 end position selection inverted",
+      "killed": true,
+      "diagnostic": "Compile error in src_loc_aux: File \"src_loc_aux.ml\", line 1:\nError: The files ocaml_aux.cm",
+      "duration": 0.02631354331970215
+    },
+    {
+      "tier": 1,
+      "suite": "source_util",
+      "id": "src_util_01_flatmap_omit",
+      "category": "UTIL",
+      "description": "Util: flatmap omits mapped elements from recursive result",
+      "killed": true,
+      "diagnostic": "Assertion failed in Util unit tests",
+      "duration": 0.22211003303527832
+    },
+    {
+      "tier": 1,
+      "suite": "source_util",
+      "id": "src_util_02_take_base",
+      "category": "UTIL",
+      "description": "Util: take base case returns full list instead of empty",
+      "killed": true,
+      "diagnostic": "Assertion failed in Util unit tests",
+      "duration": 0.12153005599975586
+    },
+    {
+      "tier": 1,
+      "suite": "source_util",
+      "id": "src_util_03_drop_base",
+      "category": "UTIL",
+      "description": "Util: drop base case returns empty list instead of remainder",
+      "killed": true,
+      "diagnostic": "Assertion failed in Util unit tests",
+      "duration": 0.09974145889282227
+    },
+    {
+      "tier": 1,
+      "suite": "source_util",
+      "id": "src_util_04_try_assoc2_none",
+      "category": "UTIL",
+      "description": "Util: try_assoc2 drops lookup into secondary list",
+      "killed": true,
+      "diagnostic": "Assertion failed in Util unit tests",
+      "duration": 0.09247183799743652
+    },
+    {
+      "tier": 1,
+      "suite": "source_util",
+      "id": "src_util_05_dec_frac_exp",
+      "category": "UTIL",
+      "description": "Util: num_of_decimal_fraction decimal places scale inverted",
+      "killed": true,
+      "diagnostic": "Assertion failed in Util unit tests",
+      "duration": 0.10796141624450684
+    },
+    {
+      "tier": 1,
+      "suite": "source_util",
+      "id": "src_util_06_hex_frac_exp",
+      "category": "UTIL",
+      "description": "Util: num_of_hex_fraction fractional places scale inverted",
+      "killed": true,
+      "diagnostic": "Assertion failed in Util unit tests",
+      "duration": 0.11242461204528809
+    },
+    {
+      "tier": 1,
+      "suite": "source_z",
+      "id": "src_z_01_zero",
+      "category": "Z",
+      "description": "Z: Zero constant corrupted to 1",
+      "killed": true,
+      "diagnostic": "Assertion failed in Z unit tests",
+      "duration": 0.07572150230407715
+    },
+    {
+      "tier": 1,
+      "suite": "source_z",
+      "id": "src_z_02_one",
+      "category": "Z",
+      "description": "Z: One constant corrupted to 0",
+      "killed": true,
+      "diagnostic": "Assertion failed in Z unit tests",
+      "duration": 0.07227134704589844
+    },
+    {
+      "tier": 1,
+      "suite": "source_z",
+      "id": "src_z_03_minus_one",
+      "category": "Z",
+      "description": "Z: Minus_one constant polarity inverted to 1",
+      "killed": true,
+      "diagnostic": "Assertion failed in Z unit tests",
+      "duration": 0.07041263580322266
+    },
+    {
+      "tier": 1,
+      "suite": "source_z",
+      "id": "src_z_04_of_int",
+      "category": "Z",
+      "description": "Z: of_int conversion off-by-one",
+      "killed": true,
+      "diagnostic": "Assertion failed in Z unit tests",
+      "duration": 0.06984400749206543
+    },
+    {
+      "tier": 1,
+      "suite": "source_z",
+      "id": "src_z_05_to_int",
+      "category": "Z",
+      "description": "Z: to_int conversion off-by-one",
+      "killed": true,
+      "diagnostic": "Assertion failed in Z unit tests",
+      "duration": 0.09081435203552246
+    },
+    {
+      "tier": 1,
+      "suite": "source_z",
+      "id": "src_z_06_to_big_int",
+      "category": "Z",
+      "description": "Z: to_big_int conversion sign inverted",
+      "killed": true,
+      "diagnostic": "Assertion failed in Z unit tests",
+      "duration": 0.07725977897644043
+    },
+    {
+      "tier": 2,
+      "suite": "rust_verifier",
+      "id": "rust_m01_flip_add_to_sub",
+      "category": "ARITH_OVERFLOW",
+      "description": "Operator flip: unchecked_add -> unchecked_sub",
+      "killed": true,
+      "diagnostic": "/tmp/tmpyycu0u31.rs(18,16-18): error: Cannot prove condition. (Cannot prove result = 120.)",
+      "duration": 1.2918152809143066
+    },
+    {
+      "tier": 2,
+      "suite": "rust_verifier",
+      "id": "rust_m02_flip_sub_to_add",
+      "category": "ARITH_OVERFLOW",
+      "description": "Operator flip: unchecked_sub -> unchecked_add",
+      "killed": true,
+      "diagnostic": "/tmp/tmpu2owtz3c.rs(18,16-18): error: Cannot prove condition. (Cannot prove result = 120.)",
+      "duration": 0.5315003395080566
+    },
+    {
+      "tier": 2,
+      "suite": "rust_verifier",
+      "id": "rust_m03_flip_mul_to_add",
+      "category": "ARITH_OVERFLOW",
+      "description": "Operator flip: unchecked_mul -> unchecked_add",
+      "killed": true,
+      "diagnostic": "/tmp/tmpovxfi4la.rs(26,16-18): error: Cannot prove condition. (Cannot prove result = 1000.)",
+      "duration": 0.49530029296875
+    },
+    {
+      "tier": 2,
+      "suite": "rust_verifier",
+      "id": "rust_m04_weaken_req_add",
+      "category": "ARITH_OVERFLOW",
+      "description": "Precondition weakened: omitted b bound causing overflow",
+      "killed": true,
+      "diagnostic": "/tmp/tmp102a2ly_.rs(20,13-32): error: Potential arithmetic overflow. (Cannot prove (a + b) <= 255.)",
+      "duration": 0.4438033103942871
+    },
+    {
+      "tier": 2,
+      "suite": "rust_verifier",
+      "id": "rust_m05_corrupt_ens_add",
+      "category": "ARITH_OVERFLOW",
+      "description": "Postcondition corrupted: off-by-one result check",
+      "killed": true,
+      "diagnostic": "/tmp/tmpkp6kpcup.rs(18,16-18): error: Cannot prove condition. (Cannot prove result = 121.)",
+      "duration": 0.3756377696990967
+    },
+    {
+      "tier": 2,
+      "suite": "rust_verifier",
+      "id": "rust_m06_corrupt_ens_mul",
+      "category": "ARITH_OVERFLOW",
+      "description": "Postcondition corrupted: incorrect expected product",
+      "killed": true,
+      "diagnostic": "/tmp/tmp897wmzjk.rs(26,16-18): error: Cannot prove condition. (Cannot prove result = 999.)",
+      "duration": 0.3941833972930908
+    },
+    {
+      "tier": 2,
+      "suite": "rust_verifier",
+      "id": "rust_m07_shift_bound_le32",
+      "category": "ARITH_OVERFLOW",
+      "description": "Shift bound weakened: n < 32 -> n <= 32 (allows bitwidth overflow)",
+      "killed": true,
+      "diagnostic": "/tmp/tmpb3t6o2s6.rs(35,5-24): error: Shifting by an amount greater than or equal to the bit width of the operand is not allowed. (Cannot prove n < (8 * 4).)",
+      "duration": 0.3604714870452881
+    },
+    {
+      "tier": 2,
+      "suite": "rust_verifier",
+      "id": "rust_m08_flip_shl_to_shr",
+      "category": "ARITH_OVERFLOW",
+      "description": "Shift operator flip: x << 4 -> x >> 4",
+      "killed": true,
+      "diagnostic": "/tmp/tmp__p97r_f.rs(40,16-18): error: Cannot prove condition. (Cannot prove result = (x * 16).)",
+      "duration": 0.3848278522491455
+    },
+    {
+      "tier": 2,
+      "suite": "rust_verifier",
+      "id": "rust_m09_corrupt_shift_req",
+      "category": "ARITH_OVERFLOW",
+      "description": "Shift input bound weakened: x < 16 -> x <= 16 (overflows u8)",
+      "killed": true,
+      "diagnostic": "/tmp/tmpi4exsfao.rs(40,16-18): error: Cannot prove condition. (Cannot prove result = (x * 16).)",
+      "duration": 0.3474311828613281
+    },
+    {
+      "tier": 2,
+      "suite": "rust_verifier",
+      "id": "rust_m10_flip_unchecked_shl_to_shr",
+      "category": "ARITH_OVERFLOW",
+      "description": "Shift amount exceeds bitwidth",
+      "killed": true,
+      "diagnostic": "/tmp/tmpjepu855a.rs(35,5-29): error: Shifting by an amount greater than or equal to the bit width of the operand is not allowed. (Cannot prove (n + 32) < (8 * 4).)",
+      "duration": 0.35991835594177246
+    },
+    {
+      "tier": 2,
+      "suite": "rust_verifier",
+      "id": "rust_m11_omit_heap_init",
+      "category": "UNINIT_READ",
+      "description": "Pointer init omitted: reading uninitialized heap memory",
+      "killed": true,
+      "diagnostic": "/tmp/tmplrpdetd8.rs(55,13-15): error: No matching heap chunks: [_]points_to<u8>(__result0, _)",
+      "duration": 0.3253519535064697
+    },
+    {
+      "tier": 2,
+      "suite": "rust_verifier",
+      "id": "rust_m12_corrupt_dealloc_layout",
+      "category": "RAW_PTR",
+      "description": "Heap dealloc layout corruption: size mismatch",
+      "killed": true,
+      "diagnostic": "/tmp/vf_mut_bin/rust/std/lib.rsspec(1228,13-24): error: Cannot prove __result == __result1",
+      "duration": 0.3189249038696289
+    },
+    {
+      "tier": 2,
+      "suite": "rust_verifier",
+      "id": "rust_m13_swap_corrupt_write_b",
+      "category": "RAW_PTR",
+      "description": "Semantic pointer corruption: swap writes corrupted value",
+      "killed": true,
+      "diagnostic": "/tmp/tmpomewf3ps.rs(62,26-29): error: Cannot prove vb == va",
+      "duration": 1.1775555610656738
+    },
+    {
+      "tier": 2,
+      "suite": "rust_verifier",
+      "id": "rust_m14_swap_weaken_req",
+      "category": "RAW_PTR",
+      "description": "Ghost annotation removal: dropped *b points_to precondition",
+      "killed": true,
+      "diagnostic": "/tmp/tmploks8uek.rs(62,16-18): error: No such variable, constructor, regular function, predicate, enum element, global variable, or module: vb",
+      "duration": 0.3124213218688965
+    },
+    {
+      "tier": 2,
+      "suite": "rust_verifier",
+      "id": "rust_m15_swap_negate_ens",
+      "category": "RAW_PTR",
+      "description": "Ghost annotation mutation: negated swap postcondition",
+      "killed": true,
+      "diagnostic": "/tmp/tmpwibnvkpt.rs(62,12-15): error: Cannot prove vb == va",
+      "duration": 0.3208937644958496
+    },
+    {
+      "tier": 2,
+      "suite": "rust_verifier",
+      "id": "rust_m16_use_after_dealloc",
+      "category": "RAW_PTR",
+      "description": "Statement reorder: use-after-free (*p after dealloc)",
+      "killed": true,
+      "diagnostic": "error: aborting due to 1 previous error; 3 warnings emitted",
+      "duration": 0.15831708908081055
+    },
+    {
+      "tier": 2,
+      "suite": "rust_verifier",
+      "id": "rust_m17_stack_deref_dangling",
+      "category": "LIFETIME",
+      "description": "Lifetime violation: dangling pointer to expired stack frame",
+      "killed": true,
+      "diagnostic": "/tmp/vf_mut_bin/rust/std/lib.rsspec(1228,13-24): error: No matching heap chunks: std::alloc::alloc_block(stack_v_addr, __result)",
+      "duration": 0.31595396995544434
+    },
+    {
+      "tier": 2,
+      "suite": "rust_verifier",
+      "id": "rust_m18_stack_leak_alloc",
+      "category": "DROP",
+      "description": "Resource leak: allocated heap layout leaked without dealloc",
+      "killed": true,
+      "diagnostic": "/tmp/tmpgry86h34.rs(58,1-2): error: Function leaks heap chunks: points_to<u8>(__result0, 42), std::alloc::alloc_block(result0, __result)",
+      "duration": 0.26474714279174805
+    },
+    {
+      "tier": 2,
+      "suite": "rust_verifier",
+      "id": "rust_m19_struct_mut_false_post",
+      "category": "MUT",
+      "description": "Mutable struct violation: claiming field remained unmutated",
+      "killed": true,
+      "diagnostic": "/tmp/tmp_43oegu4.rs(71,18-21): error: Cannot prove 42 == v0",
+      "duration": 0.28103065490722656
+    },
+    {
+      "tier": 2,
+      "suite": "rust_verifier",
+      "id": "rust_m20_struct_mut_weaken_req",
+      "category": "BORROW",
+      "description": "Ownership violation: accessing tag field without borrow permission",
+      "killed": true,
+      "diagnostic": "/tmp/tmp6fv1xcyc.rs(71,42-44): error: No such variable, constructor, regular function, predicate, enum element, global variable, or module: t0",
+      "duration": 0.27736401557922363
+    },
+    {
+      "tier": 2,
+      "suite": "rust_verifier",
+      "id": "rust_m21_slice_store_omit_req",
+      "category": "SLICE_BOUNDS",
+      "description": "Slice pointer violation: writing slice place without permission",
+      "killed": true,
+      "diagnostic": "/tmp/tmp2bgil9g3.rs(80,5-20): error: No matching heap chunks: SliceHolder_s_(sh, _)",
+      "duration": 0.26191043853759766
+    },
+    {
+      "tier": 2,
+      "suite": "rust_verifier",
+      "id": "rust_m22_slice_store_corrupt_ens",
+      "category": "SLICE_BOUNDS",
+      "description": "Slice postcondition claims original slice retained",
+      "killed": true,
+      "diagnostic": "/tmp/tmp8pqlvxth.rs(78,17-20): error: Cannot prove new_s == old_s",
+      "duration": 0.2621133327484131
+    },
+    {
+      "tier": 2,
+      "suite": "rust_verifier",
+      "id": "rust_m23_vec_deque_wrap_add_overflow",
+      "category": "VEC_DEQUE_INV",
+      "description": "VecDeque ring buffer wrap calculation inverted",
+      "killed": true,
+      "diagnostic": "/tmp/tmp3807pe65.rs(88,9-31): error: Potential arithmetic overflow. (Cannot prove (logical_idx + capacity) <= 18446744073709551615.)",
+      "duration": 0.31613802909851074
+    },
+    {
+      "tier": 2,
+      "suite": "rust_verifier",
+      "id": "rust_m24_vec_deque_is_contiguous_flip",
+      "category": "VEC_DEQUE_INV",
+      "description": "VecDeque contiguous segment check predicate inverted",
+      "killed": true,
+      "diagnostic": "/tmp/tmpkv5hdy8x.rs(96,16-18): error: Cannot prove condition. (Cannot prove result <==> head0 <= (capacity - len).)",
+      "duration": 0.2977933883666992
+    },
+    {
+      "tier": 2,
+      "suite": "c_verifier",
+      "id": "c_m01_loop_off_by_one",
+      "category": "C_LOOP",
+      "description": "Off-by-one loop bound: i < n -> i <= n",
+      "killed": true,
+      "diagnostic": "/tmp/tmp5xa8u_bx.c(43,36-38): error: Cannot prove condition. (Cannot prove (i + 1) <= n.)",
+      "duration": 0.13187313079833984
+    },
+    {
+      "tier": 2,
+      "suite": "c_verifier",
+      "id": "c_m02_loop_invariant_underflow",
+      "category": "C_LOOP",
+      "description": "Loop invariant perturbation: starting value violates invariant",
+      "killed": true,
+      "diagnostic": "/tmp/tmpprdmzo2g.c(43,25-27): error: Cannot prove condition. (Cannot prove 1 <= 0.)",
+      "duration": 0.11812281608581543
+    },
+    {
+      "tier": 2,
+      "suite": "c_verifier",
+      "id": "c_m03_loop_step_mutation",
+      "category": "C_LOOP",
+      "description": "Loop step corruption: stride jump causes invariant mismatch",
+      "killed": true,
+      "diagnostic": "/tmp/tmpss5o_8cc.c(43,36-38): error: Cannot prove condition. (Cannot prove (i + 2) <= n.)",
+      "duration": 0.11488771438598633
+    },
+    {
+      "tier": 2,
+      "suite": "c_verifier",
+      "id": "c_m04_remove_overflow_precondition",
+      "category": "C_LOOP",
+      "description": "Removed overflow precondition: x < INT_MAX -> true",
+      "killed": true,
+      "diagnostic": "/tmp/tmpns0ks2gk.c(18,14-15): error: Potential arithmetic overflow. (Cannot prove (x + 1) <= INT_MAX.)",
+      "duration": 0.12836074829101562
+    },
+    {
+      "tier": 2,
+      "suite": "c_verifier",
+      "id": "c_m05_corrupt_inc_postcondition",
+      "category": "C_LOOP",
+      "description": "Corrupted postcondition: result == x + 2",
+      "killed": true,
+      "diagnostic": "/tmp/tmpcmj_mxy8.c(16,24-26): error: Cannot prove condition. (Cannot prove (x + 1) = (x + 2).)",
+      "duration": 0.10976815223693848
+    },
+    {
+      "tier": 2,
+      "suite": "c_verifier",
+      "id": "c_m06_write_with_half_permission",
+      "category": "C_FRAC",
+      "description": "Fractional permission violation: writing with [1/2] read permission",
+      "killed": true,
+      "diagnostic": "/tmp/tmpwu7gql9d.c(25,5-6): error: No matching heap chunks: int_(p, _)",
+      "duration": 0.13364720344543457
+    },
+    {
+      "tier": 2,
+      "suite": "c_verifier",
+      "id": "c_m07_caller_frac_permission_mismatch",
+      "category": "C_FRAC",
+      "description": "Permission leak / mismatch: consumes more permission than given",
+      "killed": true,
+      "diagnostic": "/tmp/tmpzjxg0960.c(23,17-18): error: No matching heap chunks: [1/2]integer(p, v)",
+      "duration": 0.1073296070098877
+    },
+    {
+      "tier": 2,
+      "suite": "c_verifier",
+      "id": "c_m08_ens_full_permission_claim",
+      "category": "C_FRAC",
+      "description": "Permission duplication: claiming [1] when only [1/2] held",
+      "killed": true,
+      "diagnostic": "/tmp/tmpthl7yj02.c(23,17-18): error: No matching heap chunks: [1]integer(p, v)",
+      "duration": 0.10604000091552734
+    },
+    {
+      "tier": 2,
+      "suite": "c_verifier",
+      "id": "c_m09_swap_corrupt_a",
+      "category": "C_STRUCT",
+      "description": "Pointer swap corruption: overwriting before reading",
+      "killed": true,
+      "diagnostic": "/tmp/tmp0fphqg94.c(30,20-23): error: Cannot prove va == vb",
+      "duration": 0.11254286766052246
+    },
+    {
+      "tier": 2,
+      "suite": "c_verifier",
+      "id": "c_m10_swap_corrupt_b",
+      "category": "C_STRUCT",
+      "description": "Pointer swap corruption: both pointers get same value",
+      "killed": true,
+      "diagnostic": "/tmp/tmp1yh3d9zl.c(30,34-37): error: Cannot prove vb == va",
+      "duration": 0.10714125633239746
+    },
+    {
+      "tier": 2,
+      "suite": "c_verifier",
+      "id": "c_m11_swap_remove_precondition_b",
+      "category": "C_STRUCT",
+      "description": "Ghost annotation removal: *b points_to omitted from precondition",
+      "killed": true,
+      "diagnostic": "/tmp/tmpfp_sjawc.c(30,24-26): error: No such variable, constructor, regular function, predicate, enum element, global variable, or module: vb",
+      "duration": 0.1174468994140625
+    },
+    {
+      "tier": 2,
+      "suite": "c_verifier",
+      "id": "c_m12_swap_corrupt_postcondition",
+      "category": "C_STRUCT",
+      "description": "Postcondition inversion: requires identical rather than swapped",
+      "killed": true,
+      "diagnostic": "/tmp/tmp51pwalfi.c(30,20-23): error: Cannot prove vb == va",
+      "duration": 0.11118745803833008
+    },
+    {
+      "tier": 2,
+      "suite": "c_verifier",
+      "id": "c_m13_array_sum_corrupt_post",
+      "category": "C_ARRAY",
+      "description": "Array sum postcondition corrupted: off-by-one sum claim",
+      "killed": true,
+      "diagnostic": "/tmp/tmpmzjokrva.c(52,48-50): error: Cannot prove condition. (Cannot prove ((nth(0, elems) + nth(1, elems)) + nth(2, elems)) = (((nth(0, elems) + nth(1, elems)) + nth(2, elems)) + 1).)",
+      "duration": 0.16415905952453613
+    },
+    {
+      "tier": 2,
+      "suite": "c_verifier",
+      "id": "c_m14_array_oob_index",
+      "category": "C_ARRAY",
+      "description": "Array access out-of-bounds: reading arr[3] when size is 3",
+      "killed": true,
+      "diagnostic": "/tmp/tmp_2chrart.c(54,33-34): error: No matching array chunk: ints(arr, 0<=3<n, _)",
+      "duration": 0.20537948608398438
+    },
+    {
+      "tier": 2,
+      "suite": "c_verifier",
+      "id": "c_m15_array_missing_points_to",
+      "category": "C_ARRAY",
+      "description": "Array points-to permission omitted from precondition",
+      "killed": true,
+      "diagnostic": "/tmp/tmpg4gmizdh.c(51,30-35): error: No such variable, constructor, regular function, predicate, enum element, global variable, or module: elems",
+      "duration": 0.17925214767456055
+    },
+    {
+      "tier": 2,
+      "suite": "c_verifier",
+      "id": "c_m16_array_weaken_overflow",
+      "category": "C_ARRAY",
+      "description": "Array arithmetic overflow precondition weakened",
+      "killed": true,
+      "diagnostic": "/tmp/tmpm7c5s9ps.c(54,19-20): error: Potential arithmetic underflow. (Cannot prove INT_MIN <= (nth(0, elems) + nth(1, elems)).)",
+      "duration": 0.18578195571899414
+    },
+    {
+      "tier": 2,
+      "suite": "c_verifier",
+      "id": "c_m17_pred_missing_chunk",
+      "category": "C_PRED",
+      "description": "Separation logic predicate: reading struct without holding predicate",
+      "killed": true,
+      "diagnostic": "/tmp/tmpt0dl26u5.c(59,30-31): error: No such variable, constructor, regular function, predicate, enum element, global variable, or module: v",
+      "duration": 0.1366863250732422
+    },
+    {
+      "tier": 2,
+      "suite": "c_verifier",
+      "id": "c_m18_pred_corrupt_post_chunk",
+      "category": "C_PRED",
+      "description": "Separation logic predicate: corrupted predicate postcondition argument",
+      "killed": true,
+      "diagnostic": "/tmp/tmp9hbi1fal.c(59,17-26): error: Cannot prove v == (v + 1)",
+      "duration": 0.12525582313537598
+    },
+    {
+      "tier": 2,
+      "suite": "c_verifier",
+      "id": "c_m19_pred_corrupt_definition",
+      "category": "C_PRED",
+      "description": "Separation logic predicate definition corrupted",
+      "killed": true,
+      "diagnostic": "/tmp/tmph49uc6t2.c(10,1-10): error: Preciseness check failure: body does not fix output parameter 'v'.",
+      "duration": 0.13014435768127441
+    },
+    {
+      "tier": 2,
+      "suite": "c_verifier",
+      "id": "c_m20_lemma_call_bad_precondition",
+      "category": "C_LEMMA",
+      "description": "Ghost lemma call with failing precondition (-10 >= 0)",
+      "killed": true,
+      "diagnostic": "/tmp/tmpn3yp4i5b.c(69,16-18): error: Cannot prove condition. (Cannot prove 0 <= (0 - 10).)",
+      "duration": 0.16981053352355957
+    },
+    {
+      "tier": 2,
+      "suite": "c_verifier",
+      "id": "c_m21_lemma_ensures_false",
+      "category": "C_LEMMA",
+      "description": "Ghost lemma body fails to prove unprovable ensures clause",
+      "killed": true,
+      "diagnostic": "/tmp/tmppad_d4au.c(70,31-33): error: Cannot prove condition. (Cannot prove a = b.)",
+      "duration": 0.1750776767730713
+    },
+    {
+      "tier": 2,
+      "suite": "c_verifier",
+      "id": "c_m22_null_deref_no_check",
+      "category": "C_NULL",
+      "description": "Pointer dereference without null check on malloc return",
+      "killed": true,
+      "diagnostic": "/tmp/tmpkosfflzw.c(89,5-6): error: No matching heap chunks: int_(p, _)",
+      "duration": 0.15342974662780762
+    },
+    {
+      "tier": 2,
+      "suite": "c_verifier",
+      "id": "c_m23_free_stack_ptr",
+      "category": "C_FREE",
+      "description": "Freeing stack pointer instead of heap allocation",
+      "killed": true,
+      "diagnostic": "/tmp/tmpvf7awnm0.c(91,17-18): error: A local variable whose address is taken must be declared at the start of a block.",
+      "duration": 0.13494086265563965
+    },
+    {
+      "tier": 2,
+      "suite": "c_verifier",
+      "id": "c_m24_double_free",
+      "category": "C_FREE",
+      "description": "Double free on heap pointer",
+      "killed": true,
+      "diagnostic": "/tmp/tmplz4aelau.c(91,14-18): error: No matching heap chunks: malloc_block_ints(p, _)",
+      "duration": 0.15132522583007812
+    },
+    {
+      "tier": 2,
+      "suite": "cxx_verifier",
+      "id": "cxx_m01_ctor_omit_close",
+      "category": "CXX_CTOR",
+      "description": "Constructor fails to close valid() class invariant",
+      "killed": true,
+      "diagnostic": "/tmp/tmpgct7dhqu.cpp(8,49-54): error: No matching heap chunks: Shape#valid(this3, Shape_type_info)",
+      "duration": 0.3591272830963135
+    },
+    {
+      "tier": 2,
+      "suite": "cxx_verifier",
+      "id": "cxx_m02_ctor_weaken_req",
+      "category": "CXX_CTOR",
+      "description": "Constructor precondition weakened allowing invalid dimensions",
+      "killed": true,
+      "diagnostic": "/tmp/tmpa3mdo10s.cpp(53,25-26): error: Potential arithmetic underflow. (Cannot prove INT_MIN <= (w + h).)",
+      "duration": 0.1781938076019287
+    },
+    {
+      "tier": 2,
+      "suite": "cxx_verifier",
+      "id": "cxx_m03_ctor_corrupt_vtype",
+      "category": "CXX_CTOR",
+      "description": "Constructor postcondition omits Box_vtype construction witness",
+      "killed": true,
+      "diagnostic": "/tmp/tmpl77qrnbv.cpp(39,5-6): error: Constructor leaks heap chunks: Box_vtype(this3, Box_type_info)",
+      "duration": 0.2242436408996582
+    },
+    {
+      "tier": 2,
+      "suite": "cxx_verifier",
+      "id": "cxx_m04_dtor_omit_open",
+      "category": "CXX_DESTRUCTOR",
+      "description": "Destructor fails to open and dismantle valid() class invariant",
+      "killed": true,
+      "diagnostic": "/tmp/tmp4as8dsk4.cpp(17,9-10): error: Destructor leaks heap chunks: Shape#valid(this3, Shape_type_info)",
+      "duration": 0.18760108947753906
+    },
+    {
+      "tier": 2,
+      "suite": "cxx_verifier",
+      "id": "cxx_m05_dtor_omit_vtype_req",
+      "category": "CXX_DESTRUCTOR",
+      "description": "Destructor precondition omits Box_vtype permission",
+      "killed": true,
+      "diagnostic": "/tmp/tmpv6q9nm3u.cpp(39,5-6): error: Constructor leaks heap chunks: Box_vtype(this3, Box_type_info)",
+      "duration": 0.17246222496032715
+    },
+    {
+      "tier": 2,
+      "suite": "cxx_verifier",
+      "id": "cxx_m06_method_corrupt_post",
+      "category": "CXX_METHOD",
+      "description": "Virtual method postcondition corrupted (result > 10000)",
+      "killed": true,
+      "diagnostic": "/tmp/tmpsdrg4myk.cpp(22,36-37): error: Cannot prove condition. (Cannot prove 10000 < result.)",
+      "duration": 0.182600736618042
+    },
+    {
+      "tier": 2,
+      "suite": "cxx_verifier",
+      "id": "cxx_m07_method_omit_valid_ens",
+      "category": "CXX_METHOD",
+      "description": "Virtual method fails to preserve valid() class invariant",
+      "killed": true,
+      "diagnostic": "/tmp/tmp8q1s28eq.cpp(48,17-21): error: Checking that it correctly overrides 'Shape::area(int)': Implementation leaks heap chunks: Shape#valid(field_ptr(this, Box_type_info, Box_Shape_offset), Box_type_info)",
+      "duration": 0.17613601684570312
+    },
+    {
+      "tier": 2,
+      "suite": "cxx_verifier",
+      "id": "cxx_m08_client_bad_scale",
+      "category": "CXX_METHOD",
+      "description": "Method client violates parameter precondition (scale < 0)",
+      "killed": true,
+      "diagnostic": "/tmp/tmpiodtrey6.cpp(49,41-43): error: Cannot prove condition. (Cannot prove 0 <= (0 - 1).)",
+      "duration": 0.1733548641204834
+    },
+    {
+      "tier": 2,
+      "suite": "cxx_verifier",
+      "id": "cxx_m09_client_bad_ctor_args",
+      "category": "CXX_CTOR",
+      "description": "Constructor client violates parameter precondition (w < 0)",
+      "killed": true,
+      "diagnostic": "/tmp/tmprshphtt6.cpp(35,25-27): error: Cannot prove condition. (Cannot prove 0 <= (0 - 5).)",
+      "duration": 0.1648855209350586
+    },
+    {
+      "tier": 2,
+      "suite": "cxx_verifier",
+      "id": "cxx_m10_dtor_double_delete",
+      "category": "CXX_DESTRUCTOR",
+      "description": "Polymorphic delete called twice on base class pointer",
+      "killed": true,
+      "diagnostic": "/tmp/tmp6a6n7kgl.cpp(67,15-23): error: No matching heap chunks: new_block_Shape(field_ptr(b, Box_type_info, Box_Shape_offset), _)",
+      "duration": 0.18763971328735352
+    },
+    {
+      "tier": 2,
+      "suite": "java_verifier",
+      "id": "java_m01_ctor_omit_init",
+      "category": "JAVA_INV",
+      "description": "Constructor fails to initialize class field val",
+      "killed": true,
+      "diagnostic": "/tmp/tmpx0ppwg1f.java(6,30-33): error: Cannot prove 0 == v",
+      "duration": 0.11241316795349121
+    },
+    {
+      "tier": 2,
+      "suite": "java_verifier",
+      "id": "java_m02_inc_remove_overflow_req",
+      "category": "JAVA_INV",
+      "description": "Removed integer overflow precondition on counter increment",
+      "killed": true,
+      "diagnostic": "/tmp/tmpzsk9al8w.java(29,29-30): error: Potential arithmetic overflow. (Cannot prove (v + 1) <= 2147483647.)",
+      "duration": 0.12794208526611328
+    },
+    {
+      "tier": 2,
+      "suite": "java_verifier",
+      "id": "java_m03_compute_corrupt_ens",
+      "category": "JAVA_INV",
+      "description": "Postcondition claim corrupted: result < 0 instead of > 0",
+      "killed": true,
+      "diagnostic": "/tmp/tmpxori9azz.java(34,47-48): error: Cannot prove condition. (Cannot prove ((v + x) + 1) < 0.)",
+      "duration": 0.1561298370361328
+    },
+    {
+      "tier": 2,
+      "suite": "java_verifier",
+      "id": "java_m04_inc_corrupt_ens",
+      "category": "JAVA_INV",
+      "description": "Postcondition claims val incremented by 2 instead of 1",
+      "killed": true,
+      "diagnostic": "/tmp/tmpmk7_xi81.java(27,30-33): error: Cannot prove (v + 1) == (v + 2)",
+      "duration": 0.12441635131835938
+    },
+    {
+      "tier": 2,
+      "suite": "java_verifier",
+      "id": "java_m05_compute_client_bad_arg",
+      "category": "JAVA_INV",
+      "description": "Client violates method precondition with negative argument",
+      "killed": true,
+      "diagnostic": "/tmp/tmpz5y3stjc.java(33,72-74): error: Cannot prove condition. (Cannot prove 0 <= -1.)",
+      "duration": 0.11567068099975586
+    },
+    {
+      "tier": 2,
+      "suite": "java_verifier",
+      "id": "java_m06_null_deref",
+      "category": "JAVA_NULL",
+      "description": "Method invocation on null object reference",
+      "killed": true,
+      "diagnostic": "/tmp/tmpxlv_9r4y.java(55,11-14): error: Target of method call might be null.",
+      "duration": 0.12468504905700684
+    },
+    {
+      "tier": 2,
+      "suite": "java_verifier",
+      "id": "java_m07_array_oob_index",
+      "category": "JAVA_ARRAY",
+      "description": "Array access out-of-bounds at length boundary arr[n]",
+      "killed": true,
+      "diagnostic": "/tmp/tmpesfvn3bv.java(45,20-21): error: No matching heap chunks: [_]java.lang.array_element<int>(arr, n, _)",
+      "duration": 0.13221383094787598
+    },
+    {
+      "tier": 2,
+      "suite": "java_verifier",
+      "id": "java_m08_array_weaken_req",
+      "category": "JAVA_ARRAY",
+      "description": "Array index precondition weakened allowing out-of-bounds",
+      "killed": true,
+      "diagnostic": "/tmp/tmpedltpgki.java(45,20-21): error: No matching heap chunks: [_]java.lang.array_element<int>(arr, i, _)",
+      "duration": 0.11197423934936523
+    },
+    {
+      "tier": 2,
+      "suite": "java_verifier",
+      "id": "java_m09_array_omit_slice_req",
+      "category": "JAVA_ARRAY",
+      "description": "Array slice permission omitted from method precondition",
+      "killed": true,
+      "diagnostic": "/tmp/tmp_pkjho5u.java(45,20-21): error: No matching heap chunks: [_]java.lang.array_element<int>(arr, i, _)",
+      "duration": 0.12100601196289062
+    },
+    {
+      "tier": 2,
+      "suite": "java_verifier",
+      "id": "java_m10_array_neg_index",
+      "category": "JAVA_ARRAY",
+      "description": "Array write at negative index arr[-1]",
+      "killed": true,
+      "diagnostic": "/tmp/tmpw6l4tw45.java(46,12-13): error: No matching heap chunks: java.lang.array_element<int>(arr, -1, _)",
+      "duration": 0.14704561233520508
+    },
+    {
+      "tier": 2,
+      "suite": "refinement_checker",
+      "id": "refine_m01_basic_op_flip",
+      "category": "RC_RET_VAL",
+      "description": "Refinement: operator flip unchecked_sub -> unchecked_add",
+      "killed": true,
+      "diagnostic": "Fatal error: exception Failure(\"The constants FnDef std::num::<impl i32>::unchecked_sub [] at /home/devin/verifast-src/tests/rust/refinement_checker/basic_orig.rs:2:21-39 and FnDef std::num::<impl i32>::unchecked_add [] at /tmp/tmpu2e0066_.rs:4:17-35 are not equal\")",
+      "duration": 0.4694974422454834
+    },
+    {
+      "tier": 2,
+      "suite": "refinement_checker",
+      "id": "refine_m02_basic_operand_swap",
+      "category": "RC_RET_VAL",
+      "description": "Refinement: operand swap y - z -> z - y",
+      "killed": true,
+      "diagnostic": "Fatal error: exception Failure(\"The values of the 1'th operand of /home/devin/verifast-src/tests/rust/refinement_checker/basic_orig.rs:2:21-39 and /tmp/tmpx5s8ui03.rs:4:17-35 are not equal: Symbol 1 versus Symbol 2\")",
+      "duration": 0.2084648609161377
+    },
+    {
+      "tier": 2,
+      "suite": "refinement_checker",
+      "id": "refine_m03_basic_drop_sub",
+      "category": "RC_RET_VAL",
+      "description": "Refinement: dropped outer subtraction",
+      "killed": true,
+      "diagnostic": "ERROR: While checking that the terminator of basic block 1 in the original program refines the terminator of basic block 1 in the verified program: Terminator kinds do not match",
+      "duration": 0.21133852005004883
+    },
+    {
+      "tier": 2,
+      "suite": "refinement_checker",
+      "id": "refine_m04_raw_ptr_drop_store",
+      "category": "RC_SIDE_EFFECT",
+      "description": "Refinement: omitted store through raw pointer (*q += 1)",
+      "killed": true,
+      "diagnostic": "ERROR: While checking that the command at 0:11 in the original program refines the command at 0:18 in the verified program: Command kinds do not match",
+      "duration": 0.21543431282043457
+    },
+    {
+      "tier": 2,
+      "suite": "refinement_checker",
+      "id": "refine_m05_raw_ptr_wrong_field",
+      "category": "RC_UNSAFE_WRITE",
+      "description": "Refinement: accessed wrong struct field (.a instead of .b)",
+      "killed": true,
+      "diagnostic": "Fatal error: exception Failure(\"Field indices do not match\")",
+      "duration": 0.21340274810791016
+    },
+    {
+      "tier": 2,
+      "suite": "refinement_checker",
+      "id": "refine_m06_raw_ptr_mutate_const",
+      "category": "RC_RET_VAL",
+      "description": "Refinement: mutated local constant 5 -> 6",
+      "killed": true,
+      "diagnostic": "Fatal error: exception Failure(\"The states of the two locals _1 and _1 whose address is taken are not equal\")",
+      "duration": 0.2340407371520996
+    },
+    {
+      "tier": 2,
+      "suite": "refinement_checker",
+      "id": "refine_m07_tuples_swap_fields",
+      "category": "RC_RET_VAL",
+      "description": "Refinement: swapped tuple element order (x, y)",
+      "killed": true,
+      "diagnostic": "ERROR: While checking that the terminator of basic block 0 in the original program refines the terminator of basic block 0 in the verified program: In function flip, at basic block 0 in the original crate and basic block 0 in the verified crate, the return values Value Tuple [FieldTerm Symbol 0 1; FieldTerm Symbol 0 0] and Value Tuple [FieldTerm Symbol 0 0; FieldTerm Symbol 0 1] are not equal",
+      "duration": 0.17116141319274902
+    },
+    {
+      "tier": 2,
+      "suite": "refinement_checker",
+      "id": "refine_m08_tuples_duplicate_field",
+      "category": "RC_RET_VAL",
+      "description": "Refinement: duplicated tuple field (y, y)",
+      "killed": true,
+      "diagnostic": "ERROR: While checking that the terminator of basic block 0 in the original program refines the terminator of basic block 0 in the verified program: In function flip, at basic block 0 in the original crate and basic block 0 in the verified crate, the return values Value Tuple [FieldTerm Symbol 0 1; FieldTerm Symbol 0 0] and Value Tuple [FieldTerm Symbol 0 1; FieldTerm Symbol 0 1] are not equal",
+      "duration": 0.19653630256652832
+    },
+    {
+      "tier": 2,
+      "suite": "refinement_checker",
+      "id": "refine_m09_loop_mutate_arg",
+      "category": "RC_CALL_ARG",
+      "description": "Refinement: perturbed function argument inside loop print(w + 1)",
+      "killed": true,
+      "diagnostic": "ERROR: In function foo, cannot prove that the terminator of basic block 1 in the original version refines statement 13 of basic block 1 in the verified version",
+      "duration": 0.172837495803833
+    },
+    {
+      "tier": 2,
+      "suite": "refinement_checker",
+      "id": "refine_m10_loop_omit_call",
+      "category": "RC_CALL_ARG",
+      "description": "Refinement: omitted function call inside loop body",
+      "killed": true,
+      "diagnostic": "ERROR: While checking that the terminator of basic block 1 in the original program refines the terminator of basic block 1 in the verified program: Terminator kinds do not match",
+      "duration": 0.19977736473083496
+    },
+    {
+      "tier": 2,
+      "suite": "refinement_checker",
+      "id": "refine_m11_option_map_corrupt_some",
+      "category": "RC_RET_VAL",
+      "description": "Refinement: perturbed dereference inside Some map arm",
+      "killed": true,
+      "diagnostic": "ERROR: In function foo, cannot prove that the terminator of basic block 1 in the original version refines statement 15 of basic block 2 in the verified version",
+      "duration": 0.24136996269226074
+    },
+    {
+      "tier": 2,
+      "suite": "refinement_checker",
+      "id": "refine_m12_option_map_swap_variants",
+      "category": "RC_RET_VAL",
+      "description": "Refinement: corrupted match return variant Some -> None",
+      "killed": true,
+      "diagnostic": "ERROR: In function foo, cannot prove that statement 2 of basic block 0.3.0 in the original version refines the terminator of basic block 4 in the verified version",
+      "duration": 0.2232065200805664
+    },
+    {
+      "tier": 2,
+      "suite": "refinement_checker",
+      "id": "refine_m13_structs_field_swap",
+      "category": "RC_RET_VAL",
+      "description": "Refinement: swapped struct field assignments",
+      "killed": true,
+      "diagnostic": "ERROR: While checking that the terminator of basic block 0 in the original program refines the terminator of basic block 0 in the verified program: In function foo, at basic block 0 in the original crate and basic block 0 in the verified crate, the return values Value StructValue [FieldTerm Symbol 0 1; FieldTerm Symbol 0 0] and Value StructValue [FieldTerm Symbol 0 0; FieldTerm Symbol 0 1] are not equal",
+      "duration": 0.22162961959838867
+    },
+    {
+      "tier": 2,
+      "suite": "refinement_checker",
+      "id": "refine_m14_structs_const_perturb",
+      "category": "RC_RET_VAL",
+      "description": "Refinement: perturbed field arithmetic in struct let y = p.y + 1",
+      "killed": true,
+      "diagnostic": "ERROR: In function foo, cannot prove that the terminator of basic block 0 in the original version refines statement 9 of basic block 0 in the verified version",
+      "duration": 0.18942856788635254
+    },
+    {
+      "tier": 2,
+      "suite": "refinement_checker",
+      "id": "refine_m15_vec_deque_wrap_add",
+      "category": "RC_RET_VAL",
+      "description": "Refinement: inverted ring buffer wrap calculation",
+      "killed": true,
+      "diagnostic": "ERROR: While checking that the command at 1:13 in the original program refines the command at 1:14 in the verified program: BinaryOp: The operators do not match",
+      "duration": 0.23029065132141113
+    },
+    {
+      "tier": 2,
+      "suite": "refinement_checker",
+      "id": "refine_m16_vec_deque_is_contiguous",
+      "category": "RC_RET_VAL",
+      "description": "Refinement: off-by-one in contiguous buffer check",
+      "killed": true,
+      "diagnostic": "ERROR: While checking that the command at 0:23 in the original program refines the command at 0:28 in the verified program: BinaryOp: The operators do not match",
+      "duration": 0.2664933204650879
+    },
+    {
+      "tier": 2,
+      "suite": "refinement_checker",
+      "id": "refine_m17_vec_deque_wrap_sub",
+      "category": "RC_RET_VAL",
+      "description": "Refinement: wrap_sub sign perturbation",
+      "killed": true,
+      "diagnostic": "ERROR: While checking that the command at 0:24 in the original program refines the command at 0:28 in the verified program: BinaryOp: The operators do not match",
+      "duration": 0.23196911811828613
+    },
+    {
+      "tier": 2,
+      "suite": "refinement_checker",
+      "id": "refine_m18_vec_deque_to_phys",
+      "category": "RC_RET_VAL",
+      "description": "Refinement: logical to physical index mapping function inverted",
+      "killed": true,
+      "diagnostic": "Fatal error: exception Failure(\"The constants FnDef wrap_add [] at /home/devin/verifast-src/tests/rust/refinement_checker/vec_deque_ring_orig.rs:22:5-42 and FnDef wrap_sub [] at /tmp/tmp1k8kih0r.rs:31:13-50 are not equal\")",
+      "duration": 0.2725954055786133
+    },
+    {
+      "tier": 2,
+      "suite": "refinement_checker",
+      "id": "refine_m19_binops_shift_flip",
+      "category": "RC_RET_VAL",
+      "description": "Refinement: shift direction inverted << -> >>",
+      "killed": true,
+      "diagnostic": "ERROR: While checking that the command at 0:51 in the original program refines the command at 0:61 in the verified program: BinaryOp: The operators do not match",
+      "duration": 0.22148442268371582
+    },
+    {
+      "tier": 2,
+      "suite": "refinement_checker",
+      "id": "refine_m20_binops_sub_flip",
+      "category": "RC_RET_VAL",
+      "description": "Refinement: binary subtraction flipped to addition",
+      "killed": true,
+      "diagnostic": "ERROR: While checking that the command at 0:28 in the original program refines the command at 0:34 in the verified program: BinaryOp: The operators do not match",
+      "duration": 0.22011566162109375
+    },
+    {
+      "tier": 2,
+      "suite": "refinement_checker",
+      "id": "refine_m21_directives_mut_none",
+      "category": "RC_RET_VAL",
+      "description": "Refinement: match arm None default value perturbed",
+      "killed": true,
+      "diagnostic": "ERROR: While checking that the terminator of basic block 6 in the original program refines the terminator of basic block 6 in the verified program: In function bind_and_replace, at basic block 6 in the original crate and basic block 6 in the verified crate, the return values Value Tuple [ScalarInt I32Value 0; Symbol 6] and Value Tuple [ScalarInt I32Value 1; Symbol 6] are not equal",
+      "duration": 0.30550527572631836
+    },
+    {
+      "tier": 2,
+      "suite": "refinement_checker",
+      "id": "refine_m22_directives_mut_replace",
+      "category": "RC_MUT_REF",
+      "description": "Refinement: mem::replace value corrupted (v + 1)",
+      "killed": true,
+      "diagnostic": "ERROR: In function bind_and_replace, cannot prove that the terminator of basic block 5 in the original version refines statement 36 of basic block 5 in the verified version",
+      "duration": 0.38751697540283203
+    }
+  ]
+}

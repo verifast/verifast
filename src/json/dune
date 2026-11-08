@@ -1,3 +1,5 @@
 (library
  (name json)
- (wrapped false))
+ (wrapped false)
+ (preprocess (pps ppx_vf_cov))
+ (libraries vf_cov_runtime))

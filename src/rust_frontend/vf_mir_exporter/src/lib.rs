@@ -2440,6 +2440,11 @@ use rustc_span::RemapPathScopeComponents;
                 mir::BinOp::Ge => bin_op_cpn.set_ge(()),
                 mir::BinOp::Gt => bin_op_cpn.set_gt(()),
                 mir::BinOp::Offset => bin_op_cpn.set_offset(()),
+                mir::BinOp::AddUnchecked => bin_op_cpn.set_add_unchecked(()),
+                mir::BinOp::SubUnchecked => bin_op_cpn.set_sub_unchecked(()),
+                mir::BinOp::MulUnchecked => bin_op_cpn.set_mul_unchecked(()),
+                mir::BinOp::ShlUnchecked => bin_op_cpn.set_shl_unchecked(()),
+                mir::BinOp::ShrUnchecked => bin_op_cpn.set_shr_unchecked(()),
                 _ => todo!(),
             }
         }

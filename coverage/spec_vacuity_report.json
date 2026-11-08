@@ -1,0 +1,985 @@
+{
+  "title": "VeriFast Trusted Specification Vacuity & Smoke Audit Report",
+  "timestamp": "2026-11-08T03:38:35Z",
+  "summary": {
+    "total_header_files": 58,
+    "rust_spec_files": 17,
+    "c_ghost_files": 21,
+    "c_standard_files": 20,
+    "total_axioms": 685,
+    "total_predicates": 331,
+    "total_fixpoints": 318,
+    "total_inductives": 31,
+    "total_functions": 149,
+    "static_violations": 0,
+    "dynamic_probes_total": 40,
+    "dynamic_probes_passed": 40,
+    "dynamic_pass_rate_pct": 100.0,
+    "status": "PASSED"
+  },
+  "phase1_inventory": {
+    "total_files": 58,
+    "rust_headers": 17,
+    "c_ghost_headers": 21,
+    "c_headers": 20,
+    "total_axioms": 685,
+    "total_predicates": 331,
+    "total_fixpoints": 318,
+    "total_inductives": 31,
+    "total_functions": 149,
+    "violations": [],
+    "file_stats": [
+      {
+        "file": "bin/arpa/inet.h",
+        "axioms": 0,
+        "predicates": 0,
+        "fixpoints": 0,
+        "inductives": 0,
+        "functions": 0
+      },
+      {
+        "file": "bin/arrays.gh",
+        "axioms": 5,
+        "predicates": 0,
+        "fixpoints": 1,
+        "inductives": 0,
+        "functions": 0
+      },
+      {
+        "file": "bin/assoclist.gh",
+        "axioms": 14,
+        "predicates": 0,
+        "fixpoints": 0,
+        "inductives": 0,
+        "functions": 0
+      },
+      {
+        "file": "bin/bigstar.gh",
+        "axioms": 2,
+        "predicates": 4,
+        "fixpoints": 0,
+        "inductives": 0,
+        "functions": 0
+      },
+      {
+        "file": "bin/bitops.gh",
+        "axioms": 33,
+        "predicates": 0,
+        "fixpoints": 11,
+        "inductives": 1,
+        "functions": 0
+      },
+      {
+        "file": "bin/bits/pthreadtypes.h",
+        "axioms": 0,
+        "predicates": 0,
+        "fixpoints": 0,
+        "inductives": 0,
+        "functions": 0
+      },
+      {
+        "file": "bin/counting.gh",
+        "axioms": 5,
+        "predicates": 7,
+        "fixpoints": 0,
+        "inductives": 0,
+        "functions": 0
+      },
+      {
+        "file": "bin/ghost_cells.gh",
+        "axioms": 11,
+        "predicates": 2,
+        "fixpoints": 0,
+        "inductives": 0,
+        "functions": 0
+      },
+      {
+        "file": "bin/io.gh",
+        "axioms": 5,
+        "predicates": 4,
+        "fixpoints": 0,
+        "inductives": 1,
+        "functions": 0
+      },
+      {
+        "file": "bin/list.gh",
+        "axioms": 19,
+        "predicates": 2,
+        "fixpoints": 0,
+        "inductives": 1,
+        "functions": 0
+      },
+      {
+        "file": "bin/listex.gh",
+        "axioms": 45,
+        "predicates": 2,
+        "fixpoints": 1,
+        "inductives": 0,
+        "functions": 0
+      },
+      {
+        "file": "bin/lseg.gh",
+        "axioms": 0,
+        "predicates": 3,
+        "fixpoints": 0,
+        "inductives": 0,
+        "functions": 0
+      },
+      {
+        "file": "bin/malloc.h",
+        "axioms": 2,
+        "predicates": 0,
+        "fixpoints": 0,
+        "inductives": 0,
+        "functions": 0
+      },
+      {
+        "file": "bin/maps.gh",
+        "axioms": 0,
+        "predicates": 0,
+        "fixpoints": 0,
+        "inductives": 0,
+        "functions": 0
+      },
+      {
+        "file": "bin/mask.gh",
+        "axioms": 2,
+        "predicates": 0,
+        "fixpoints": 19,
+        "inductives": 1,
+        "functions": 0
+      },
+      {
+        "file": "bin/math.h",
+        "axioms": 0,
+        "predicates": 0,
+        "fixpoints": 0,
+        "inductives": 0,
+        "functions": 0
+      },
+      {
+        "file": "bin/nat.gh",
+        "axioms": 7,
+        "predicates": 0,
+        "fixpoints": 42,
+        "inductives": 1,
+        "functions": 0
+      },
+      {
+        "file": "bin/nat_of_int_facts.gh",
+        "axioms": 1,
+        "predicates": 0,
+        "fixpoints": 5,
+        "inductives": 0,
+        "functions": 0
+      },
+      {
+        "file": "bin/permutations.gh",
+        "axioms": 10,
+        "predicates": 0,
+        "fixpoints": 0,
+        "inductives": 0,
+        "functions": 0
+      },
+      {
+        "file": "bin/prelude.h",
+        "axioms": 157,
+        "predicates": 118,
+        "fixpoints": 33,
+        "inductives": 3,
+        "functions": 0
+      },
+      {
+        "file": "bin/prelude_core.gh",
+        "axioms": 1,
+        "predicates": 0,
+        "fixpoints": 9,
+        "inductives": 6,
+        "functions": 0
+      },
+      {
+        "file": "bin/prelude_cxx.h",
+        "axioms": 0,
+        "predicates": 18,
+        "fixpoints": 0,
+        "inductives": 0,
+        "functions": 0
+      },
+      {
+        "file": "bin/pthread.h",
+        "axioms": 0,
+        "predicates": 7,
+        "fixpoints": 1,
+        "inductives": 0,
+        "functions": 0
+      },
+      {
+        "file": "bin/ptr_rels.gh",
+        "axioms": 3,
+        "predicates": 0,
+        "fixpoints": 1,
+        "inductives": 0,
+        "functions": 0
+      },
+      {
+        "file": "bin/quantifiers.gh",
+        "axioms": 12,
+        "predicates": 3,
+        "fixpoints": 1,
+        "inductives": 0,
+        "functions": 0
+      },
+      {
+        "file": "bin/raw_ghost_lists.gh",
+        "axioms": 4,
+        "predicates": 2,
+        "fixpoints": 0,
+        "inductives": 0,
+        "functions": 0
+      },
+      {
+        "file": "bin/rust/aliasing.rsspec",
+        "axioms": 7,
+        "predicates": 11,
+        "fixpoints": 4,
+        "inductives": 0,
+        "functions": 9
+      },
+      {
+        "file": "bin/rust/counting.rsspec",
+        "axioms": 5,
+        "predicates": 0,
+        "fixpoints": 0,
+        "inductives": 0,
+        "functions": 0
+      },
+      {
+        "file": "bin/rust/ghost_cells.rsspec",
+        "axioms": 4,
+        "predicates": 1,
+        "fixpoints": 0,
+        "inductives": 0,
+        "functions": 0
+      },
+      {
+        "file": "bin/rust/list.rsspec",
+        "axioms": 13,
+        "predicates": 1,
+        "fixpoints": 13,
+        "inductives": 1,
+        "functions": 0
+      },
+      {
+        "file": "bin/rust/listex.rsspec",
+        "axioms": 4,
+        "predicates": 0,
+        "fixpoints": 4,
+        "inductives": 0,
+        "functions": 0
+      },
+      {
+        "file": "bin/rust/mask.rsspec",
+        "axioms": 0,
+        "predicates": 0,
+        "fixpoints": 19,
+        "inductives": 1,
+        "functions": 0
+      },
+      {
+        "file": "bin/rust/nat.rsspec",
+        "axioms": 2,
+        "predicates": 0,
+        "fixpoints": 2,
+        "inductives": 1,
+        "functions": 0
+      },
+      {
+        "file": "bin/rust/prelude.rsspec",
+        "axioms": 3,
+        "predicates": 2,
+        "fixpoints": 0,
+        "inductives": 0,
+        "functions": 0
+      },
+      {
+        "file": "bin/rust/prelude_core.rsspec",
+        "axioms": 41,
+        "predicates": 17,
+        "fixpoints": 47,
+        "inductives": 4,
+        "functions": 0
+      },
+      {
+        "file": "bin/rust/prelude_core_core.rsspec",
+        "axioms": 0,
+        "predicates": 0,
+        "fixpoints": 11,
+        "inductives": 4,
+        "functions": 0
+      },
+      {
+        "file": "bin/rust/ptr_rels.rsspec",
+        "axioms": 3,
+        "predicates": 0,
+        "fixpoints": 1,
+        "inductives": 0,
+        "functions": 0
+      },
+      {
+        "file": "bin/rust/rust_belt/aliasing.rsspec",
+        "axioms": 0,
+        "predicates": 0,
+        "fixpoints": 0,
+        "inductives": 0,
+        "functions": 2
+      },
+      {
+        "file": "bin/rust/rust_belt/general.rsspec",
+        "axioms": 43,
+        "predicates": 41,
+        "fixpoints": 8,
+        "inductives": 0,
+        "functions": 0
+      },
+      {
+        "file": "bin/rust/rust_belt/lem_aux.rsspec",
+        "axioms": 3,
+        "predicates": 2,
+        "fixpoints": 0,
+        "inductives": 0,
+        "functions": 0
+      },
+      {
+        "file": "bin/rust/rust_belt/lifetime_logic.rsspec",
+        "axioms": 79,
+        "predicates": 25,
+        "fixpoints": 9,
+        "inductives": 1,
+        "functions": 0
+      },
+      {
+        "file": "bin/rust/rust_belt/points_to_at_lifetime.rsspec",
+        "axioms": 28,
+        "predicates": 8,
+        "fixpoints": 0,
+        "inductives": 0,
+        "functions": 0
+      },
+      {
+        "file": "bin/rust/std/lib.rsspec",
+        "axioms": 96,
+        "predicates": 19,
+        "fixpoints": 37,
+        "inductives": 1,
+        "functions": 138
+      },
+      {
+        "file": "bin/stdarg.h",
+        "axioms": 0,
+        "predicates": 1,
+        "fixpoints": 1,
+        "inductives": 0,
+        "functions": 0
+      },
+      {
+        "file": "bin/stdbool.h",
+        "axioms": 0,
+        "predicates": 0,
+        "fixpoints": 0,
+        "inductives": 0,
+        "functions": 0
+      },
+      {
+        "file": "bin/stddef.h",
+        "axioms": 0,
+        "predicates": 0,
+        "fixpoints": 0,
+        "inductives": 0,
+        "functions": 0
+      },
+      {
+        "file": "bin/stdint.h",
+        "axioms": 0,
+        "predicates": 0,
+        "fixpoints": 0,
+        "inductives": 0,
+        "functions": 0
+      },
+      {
+        "file": "bin/stdio.h",
+        "axioms": 0,
+        "predicates": 2,
+        "fixpoints": 13,
+        "inductives": 2,
+        "functions": 0
+      },
+      {
+        "file": "bin/stdio_simple.h",
+        "axioms": 0,
+        "predicates": 6,
+        "fixpoints": 6,
+        "inductives": 0,
+        "functions": 0
+      },
+      {
+        "file": "bin/stdlib.h",
+        "axioms": 0,
+        "predicates": 0,
+        "fixpoints": 0,
+        "inductives": 0,
+        "functions": 0
+      },
+      {
+        "file": "bin/stdnoreturn.h",
+        "axioms": 0,
+        "predicates": 0,
+        "fixpoints": 0,
+        "inductives": 0,
+        "functions": 0
+      },
+      {
+        "file": "bin/string.h",
+        "axioms": 0,
+        "predicates": 0,
+        "fixpoints": 0,
+        "inductives": 0,
+        "functions": 0
+      },
+      {
+        "file": "bin/strong_ghost_lists.gh",
+        "axioms": 4,
+        "predicates": 2,
+        "fixpoints": 0,
+        "inductives": 0,
+        "functions": 0
+      },
+      {
+        "file": "bin/target.gh",
+        "axioms": 7,
+        "predicates": 0,
+        "fixpoints": 1,
+        "inductives": 1,
+        "functions": 0
+      },
+      {
+        "file": "bin/threading.h",
+        "axioms": 4,
+        "predicates": 21,
+        "fixpoints": 5,
+        "inductives": 0,
+        "functions": 0
+      },
+      {
+        "file": "bin/typeinfo.h",
+        "axioms": 0,
+        "predicates": 0,
+        "fixpoints": 0,
+        "inductives": 0,
+        "functions": 0
+      },
+      {
+        "file": "bin/unistd.h",
+        "axioms": 0,
+        "predicates": 0,
+        "fixpoints": 0,
+        "inductives": 0,
+        "functions": 0
+      },
+      {
+        "file": "bin/vf__floating_point.h",
+        "axioms": 1,
+        "predicates": 0,
+        "fixpoints": 13,
+        "inductives": 1,
+        "functions": 0
+      }
+    ]
+  },
+  "phase2_dynamic_probes": {
+    "total_probes": 40,
+    "probes_passed": 40,
+    "pass_rate_pct": 100.0,
+    "cases": [
+      {
+        "id": "rust_prelude_baseline",
+        "target": "Rust Prelude Consistency",
+        "lang": "rust",
+        "header": "bin/rust/prelude.rsspec",
+        "description": "Baseline Rust prelude consistency (assert false must fail)",
+        "positive_probe": {
+          "probe": "rust_prelude_baseline_pos",
+          "expect_success": true,
+          "passed": true,
+          "returncode": 0,
+          "duration_ms": 671.78,
+          "detail": "Satisfiable (0 errors found)"
+        },
+        "negative_smoke_probe": {
+          "probe": "rust_prelude_baseline_neg",
+          "expect_success": false,
+          "passed": true,
+          "returncode": 1,
+          "duration_ms": 200.86,
+          "detail": "Properly rejected assert false (consistent)"
+        },
+        "fully_consistent": true
+      },
+      {
+        "id": "rust_alloc_dealloc",
+        "target": "std::alloc::{alloc, dealloc}",
+        "lang": "rust",
+        "header": "bin/rust/std/lib.rsspec",
+        "description": "Dynamic memory allocation and deallocation via Layout",
+        "positive_probe": {
+          "probe": "rust_alloc_dealloc_pos",
+          "expect_success": true,
+          "passed": true,
+          "returncode": 0,
+          "duration_ms": 306.42,
+          "detail": "Satisfiable (0 errors found)"
+        },
+        "negative_smoke_probe": {
+          "probe": "rust_alloc_dealloc_neg",
+          "expect_success": false,
+          "passed": true,
+          "returncode": 1,
+          "duration_ms": 211.45,
+          "detail": "Properly rejected assert false (consistent)"
+        },
+        "fully_consistent": true
+      },
+      {
+        "id": "rust_layout",
+        "target": "std::alloc::Layout",
+        "lang": "rust",
+        "header": "bin/rust/std/lib.rsspec",
+        "description": "Layout constructor and size/align axioms",
+        "positive_probe": {
+          "probe": "rust_layout_pos",
+          "expect_success": true,
+          "passed": true,
+          "returncode": 0,
+          "duration_ms": 191.69,
+          "detail": "Satisfiable (0 errors found)"
+        },
+        "negative_smoke_probe": {
+          "probe": "rust_layout_neg",
+          "expect_success": false,
+          "passed": true,
+          "returncode": 1,
+          "duration_ms": 222.19,
+          "detail": "Properly rejected assert false (consistent)"
+        },
+        "fully_consistent": true
+      },
+      {
+        "id": "rust_nonnull",
+        "target": "std::ptr::NonNull",
+        "lang": "rust",
+        "header": "bin/rust/std/lib.rsspec",
+        "description": "NonNull construction and non-zero address invariants",
+        "positive_probe": {
+          "probe": "rust_nonnull_pos",
+          "expect_success": true,
+          "passed": true,
+          "returncode": 0,
+          "duration_ms": 213.94,
+          "detail": "Satisfiable (0 errors found)"
+        },
+        "negative_smoke_probe": {
+          "probe": "rust_nonnull_neg",
+          "expect_success": false,
+          "passed": true,
+          "returncode": 1,
+          "duration_ms": 208.79,
+          "detail": "Properly rejected assert false (consistent)"
+        },
+        "fully_consistent": true
+      },
+      {
+        "id": "rust_option",
+        "target": "std::option::Option",
+        "lang": "rust",
+        "header": "bin/rust/std/lib.rsspec",
+        "description": "Option::Some construction and unwrap postcondition",
+        "positive_probe": {
+          "probe": "rust_option_pos",
+          "expect_success": true,
+          "passed": true,
+          "returncode": 0,
+          "duration_ms": 240.0,
+          "detail": "Satisfiable (0 errors found)"
+        },
+        "negative_smoke_probe": {
+          "probe": "rust_option_neg",
+          "expect_success": false,
+          "passed": true,
+          "returncode": 1,
+          "duration_ms": 220.45,
+          "detail": "Properly rejected assert false (consistent)"
+        },
+        "fully_consistent": true
+      },
+      {
+        "id": "rust_result",
+        "target": "std::result::Result",
+        "lang": "rust",
+        "header": "bin/rust/std/lib.rsspec",
+        "description": "Result::Ok construction and unwrap postcondition with thread_token",
+        "positive_probe": {
+          "probe": "rust_result_pos",
+          "expect_success": true,
+          "passed": true,
+          "returncode": 0,
+          "duration_ms": 210.97,
+          "detail": "Satisfiable (0 errors found)"
+        },
+        "negative_smoke_probe": {
+          "probe": "rust_result_neg",
+          "expect_success": false,
+          "passed": true,
+          "returncode": 1,
+          "duration_ms": 207.11,
+          "detail": "Properly rejected assert false (consistent)"
+        },
+        "fully_consistent": true
+      },
+      {
+        "id": "rust_copy_nonoverlapping",
+        "target": "std::ptr::copy_nonoverlapping",
+        "lang": "rust",
+        "header": "bin/rust/std/lib.rsspec",
+        "description": "Non-overlapping raw pointer block copy contract",
+        "positive_probe": {
+          "probe": "rust_copy_nonoverlapping_pos",
+          "expect_success": true,
+          "passed": true,
+          "returncode": 0,
+          "duration_ms": 242.65,
+          "detail": "Satisfiable (0 errors found)"
+        },
+        "negative_smoke_probe": {
+          "probe": "rust_copy_nonoverlapping_neg",
+          "expect_success": false,
+          "passed": true,
+          "returncode": 1,
+          "duration_ms": 228.25,
+          "detail": "Properly rejected assert false (consistent)"
+        },
+        "fully_consistent": true
+      },
+      {
+        "id": "rust_write_bytes",
+        "target": "std::ptr::write_bytes",
+        "lang": "rust",
+        "header": "bin/rust/std/lib.rsspec",
+        "description": "Raw pointer byte initialization and repeat axiom",
+        "positive_probe": {
+          "probe": "rust_write_bytes_pos",
+          "expect_success": true,
+          "passed": true,
+          "returncode": 0,
+          "duration_ms": 223.81,
+          "detail": "Satisfiable (0 errors found)"
+        },
+        "negative_smoke_probe": {
+          "probe": "rust_write_bytes_neg",
+          "expect_success": false,
+          "passed": true,
+          "returncode": 1,
+          "duration_ms": 222.48,
+          "detail": "Properly rejected assert false (consistent)"
+        },
+        "fully_consistent": true
+      },
+      {
+        "id": "rust_slice_from_raw_parts",
+        "target": "std::slice::from_raw_parts_mut",
+        "lang": "rust",
+        "header": "bin/rust/std/lib.rsspec",
+        "description": "Safe slice creation from raw pointer and length bounds",
+        "positive_probe": {
+          "probe": "rust_slice_from_raw_parts_pos",
+          "expect_success": true,
+          "passed": true,
+          "returncode": 0,
+          "duration_ms": 196.72,
+          "detail": "Satisfiable (0 errors found)"
+        },
+        "negative_smoke_probe": {
+          "probe": "rust_slice_from_raw_parts_neg",
+          "expect_success": false,
+          "passed": true,
+          "returncode": 1,
+          "duration_ms": 189.35,
+          "detail": "Properly rejected assert false (consistent)"
+        },
+        "fully_consistent": true
+      },
+      {
+        "id": "rust_unchecked_ops",
+        "target": "std::intrinsics::{unchecked_add, unchecked_sub}",
+        "lang": "rust",
+        "header": "bin/rust/prelude_core.rsspec",
+        "description": "Unchecked arithmetic intrinsics within valid ranges",
+        "positive_probe": {
+          "probe": "rust_unchecked_ops_pos",
+          "expect_success": true,
+          "passed": true,
+          "returncode": 0,
+          "duration_ms": 185.94,
+          "detail": "Satisfiable (0 errors found)"
+        },
+        "negative_smoke_probe": {
+          "probe": "rust_unchecked_ops_neg",
+          "expect_success": false,
+          "passed": true,
+          "returncode": 1,
+          "duration_ms": 188.48,
+          "detail": "Properly rejected assert false (consistent)"
+        },
+        "fully_consistent": true
+      },
+      {
+        "id": "c_prelude_baseline",
+        "target": "C Prelude Consistency",
+        "lang": "c",
+        "header": "bin/prelude.h",
+        "description": "Baseline C prelude consistency (assert false must fail)",
+        "positive_probe": {
+          "probe": "c_prelude_baseline_pos",
+          "expect_success": true,
+          "passed": true,
+          "returncode": 0,
+          "duration_ms": 65.08,
+          "detail": "Satisfiable (0 errors found)"
+        },
+        "negative_smoke_probe": {
+          "probe": "c_prelude_baseline_neg",
+          "expect_success": false,
+          "passed": true,
+          "returncode": 1,
+          "duration_ms": 62.3,
+          "detail": "Properly rejected assert false (consistent)"
+        },
+        "fully_consistent": true
+      },
+      {
+        "id": "c_malloc_free",
+        "target": "malloc / free",
+        "lang": "c",
+        "header": "bin/malloc.h",
+        "description": "Standard C malloc and free heap contracts",
+        "positive_probe": {
+          "probe": "c_malloc_free_pos",
+          "expect_success": true,
+          "passed": true,
+          "returncode": 0,
+          "duration_ms": 80.95,
+          "detail": "Satisfiable (0 errors found)"
+        },
+        "negative_smoke_probe": {
+          "probe": "c_malloc_free_neg",
+          "expect_success": false,
+          "passed": true,
+          "returncode": 1,
+          "duration_ms": 84.15,
+          "detail": "Properly rejected assert false (consistent)"
+        },
+        "fully_consistent": true
+      },
+      {
+        "id": "c_realloc",
+        "target": "calloc / realloc",
+        "lang": "c",
+        "header": "bin/malloc.h",
+        "description": "Dynamic resizing with calloc, realloc, chars_join and free",
+        "positive_probe": {
+          "probe": "c_realloc_pos",
+          "expect_success": true,
+          "passed": true,
+          "returncode": 0,
+          "duration_ms": 84.74,
+          "detail": "Satisfiable (0 errors found)"
+        },
+        "negative_smoke_probe": {
+          "probe": "c_realloc_neg",
+          "expect_success": false,
+          "passed": true,
+          "returncode": 1,
+          "duration_ms": 94.9,
+          "detail": "Properly rejected assert false (consistent)"
+        },
+        "fully_consistent": true
+      },
+      {
+        "id": "c_limits",
+        "target": "limits.h / target.gh",
+        "lang": "c",
+        "header": "bin/target.gh",
+        "description": "Integer bounds axioms: INT_MIN, INT_MAX, UINT_MAX",
+        "positive_probe": {
+          "probe": "c_limits_pos",
+          "expect_success": true,
+          "passed": true,
+          "returncode": 0,
+          "duration_ms": 91.85,
+          "detail": "Satisfiable (0 errors found)"
+        },
+        "negative_smoke_probe": {
+          "probe": "c_limits_neg",
+          "expect_success": false,
+          "passed": true,
+          "returncode": 1,
+          "duration_ms": 80.36,
+          "detail": "Properly rejected assert false (consistent)"
+        },
+        "fully_consistent": true
+      },
+      {
+        "id": "c_string_ops",
+        "target": "string.h (memset, memcpy)",
+        "lang": "c",
+        "header": "bin/string.h",
+        "description": "Buffer memory operations with memset and memcpy",
+        "positive_probe": {
+          "probe": "c_string_ops_pos",
+          "expect_success": true,
+          "passed": true,
+          "returncode": 0,
+          "duration_ms": 105.8,
+          "detail": "Satisfiable (0 errors found)"
+        },
+        "negative_smoke_probe": {
+          "probe": "c_string_ops_neg",
+          "expect_success": false,
+          "passed": true,
+          "returncode": 1,
+          "duration_ms": 104.65,
+          "detail": "Properly rejected assert false (consistent)"
+        },
+        "fully_consistent": true
+      },
+      {
+        "id": "c_threading",
+        "target": "threading.h",
+        "lang": "c",
+        "header": "bin/threading.h",
+        "description": "Full lifecycle of mutex (create, acquire, release, dispose)",
+        "positive_probe": {
+          "probe": "c_threading_pos",
+          "expect_success": true,
+          "passed": true,
+          "returncode": 0,
+          "duration_ms": 99.23,
+          "detail": "Satisfiable (0 errors found)"
+        },
+        "negative_smoke_probe": {
+          "probe": "c_threading_neg",
+          "expect_success": false,
+          "passed": true,
+          "returncode": 1,
+          "duration_ms": 102.6,
+          "detail": "Properly rejected assert false (consistent)"
+        },
+        "fully_consistent": true
+      },
+      {
+        "id": "c_stdlib",
+        "target": "stdlib.h (abs, labs)",
+        "lang": "c",
+        "header": "bin/stdlib.h",
+        "description": "Arithmetic math library specifications (abs, labs)",
+        "positive_probe": {
+          "probe": "c_stdlib_pos",
+          "expect_success": true,
+          "passed": true,
+          "returncode": 0,
+          "duration_ms": 108.89,
+          "detail": "Satisfiable (0 errors found)"
+        },
+        "negative_smoke_probe": {
+          "probe": "c_stdlib_neg",
+          "expect_success": false,
+          "passed": true,
+          "returncode": 1,
+          "duration_ms": 105.17,
+          "detail": "Properly rejected assert false (consistent)"
+        },
+        "fully_consistent": true
+      },
+      {
+        "id": "c_stdio",
+        "target": "stdio.h (puts)",
+        "lang": "c",
+        "header": "bin/stdio.h",
+        "description": "Standard I/O string printing contracts",
+        "positive_probe": {
+          "probe": "c_stdio_pos",
+          "expect_success": true,
+          "passed": true,
+          "returncode": 0,
+          "duration_ms": 137.84,
+          "detail": "Satisfiable (0 errors found)"
+        },
+        "negative_smoke_probe": {
+          "probe": "c_stdio_neg",
+          "expect_success": false,
+          "passed": true,
+          "returncode": 1,
+          "duration_ms": 112.61,
+          "detail": "Properly rejected assert false (consistent)"
+        },
+        "fully_consistent": true
+      },
+      {
+        "id": "c_ghost_cells",
+        "target": "ghost_cells.gh",
+        "lang": "c",
+        "header": "bin/ghost_cells.gh",
+        "description": "Ghost cell allocation, mutation, and fractional permissions",
+        "positive_probe": {
+          "probe": "c_ghost_cells_pos",
+          "expect_success": true,
+          "passed": true,
+          "returncode": 0,
+          "duration_ms": 79.87,
+          "detail": "Satisfiable (0 errors found)"
+        },
+        "negative_smoke_probe": {
+          "probe": "c_ghost_cells_neg",
+          "expect_success": false,
+          "passed": true,
+          "returncode": 1,
+          "duration_ms": 90.87,
+          "detail": "Properly rejected assert false (consistent)"
+        },
+        "fully_consistent": true
+      },
+      {
+        "id": "c_list_gh",
+        "target": "list.gh",
+        "lang": "c",
+        "header": "bin/list.gh",
+        "description": "List theory axioms: cons, nil, length, head, tail",
+        "positive_probe": {
+          "probe": "c_list_gh_pos",
+          "expect_success": true,
+          "passed": true,
+          "returncode": 0,
+          "duration_ms": 80.03,
+          "detail": "Satisfiable (0 errors found)"
+        },
+        "negative_smoke_probe": {
+          "probe": "c_list_gh_neg",
+          "expect_success": false,
+          "passed": true,
+          "returncode": 1,
+          "duration_ms": 80.87,
+          "detail": "Properly rejected assert false (consistent)"
+        },
+        "fully_consistent": true
+      }
+    ]
+  }
+}

@@ -1,5 +1,5 @@
 (library
  (name frontend)
  (wrapped false)
- (preprocess (pps ppx_parser))
- (libraries stdint (re_export num) camlp-streams perf stopwatch json))
+ (preprocess (pps ppx_parser ppx_vf_cov))
+ (libraries stdint (re_export num) camlp-streams perf stopwatch json vf_cov_runtime))

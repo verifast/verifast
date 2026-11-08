@@ -813,3 +813,7 @@ pub fn preprocess(
         }
     }
 }
+
+#[cfg(test)]
+#[path = "unit_tests.rs"]
+mod unit_tests;

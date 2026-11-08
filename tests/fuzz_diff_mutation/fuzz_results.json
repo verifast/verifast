@@ -1,0 +1,815 @@
+{
+  "summary": {
+    "seed": 42,
+    "iterations": 100,
+    "total_time_seconds": 19.61,
+    "crashes": 0,
+    "uncaught_exceptions": 0,
+    "timeouts": 0,
+    "graceful_handled": 100
+  },
+  "crashes": [],
+  "uncaught_exceptions": [],
+  "results": [
+    {
+      "iteration": 1,
+      "kind": "c",
+      "description": "Deeply nested ghost specification (depth 10)",
+      "status": "OK",
+      "duration": 0.1662747859954834,
+      "snippet": "/tmp/tmprx33u9vw.c(3,26-29): error: Expression form not allo"
+    },
+    {
+      "iteration": 2,
+      "kind": "raw_c",
+      "description": "UTF-8 BOM / Unicode identifier: ??_ferris",
+      "status": "OK",
+      "duration": 0.04716658592224121,
+      "snippet": "/tmp/tmpoi3yatnk.c(2,7-14): error: Parse error: Parse error."
+    },
+    {
+      "iteration": 3,
+      "kind": "raw_c",
+      "description": "UTF-8 BOM / Unicode identifier: ?spec?",
+      "status": "OK",
+      "duration": 0.040712833404541016,
+      "snippet": "/tmp/tmpxlau5w2h.c(2,5-6): error: Parse error: Parse error. "
+    },
+    {
+      "iteration": 4,
+      "kind": "raw_c",
+      "description": "UTF-8 BOM / Unicode identifier: ?_var",
+      "status": "OK",
+      "duration": 0.039900779724121094,
+      "snippet": "/tmp/tmp_chrwpgl.c(2,5-6): error: Parse error: Parse error. "
+    },
+    {
+      "iteration": 5,
+      "kind": "c",
+      "description": "Extreme integer literal: 0xffffffffffffffffffffffffffff",
+      "status": "OK",
+      "duration": 0.1202235221862793,
+      "snippet": "/tmp/tmpad5k4jaj.c(6,19-81): error: Integer literal used as "
+    },
+    {
+      "iteration": 6,
+      "kind": "rs",
+      "description": "Rust multiple raw pointer deref/cast chain (4 levels)",
+      "status": "OK",
+      "duration": 0.27161598205566406,
+      "snippet": "0 errors found (43 statements verified) (target: x86_64-unkn"
+    },
+    {
+      "iteration": 7,
+      "kind": "c",
+      "description": "Ghost keyword permutations (open/close/assert/leak/produce)",
+      "status": "OK",
+      "duration": 0.12198877334594727,
+      "snippet": "/tmp/tmpohsk004d.c(8,9-30): error: No such variable, constru"
+    },
+    {
+      "iteration": 8,
+      "kind": "rs",
+      "description": "Rust multiple raw pointer deref/cast chain (2 levels)",
+      "status": "OK",
+      "duration": 0.38371777534484863,
+      "snippet": "0 errors found (43 statements verified) (target: x86_64-unkn"
+    },
+    {
+      "iteration": 9,
+      "kind": "rs",
+      "description": "Rust deeply nested tuple hierarchy (depth 4)",
+      "status": "OK",
+      "duration": 0.3006591796875,
+      "snippet": "0 errors found (45 statements verified) (target: x86_64-unkn"
+    },
+    {
+      "iteration": 10,
+      "kind": "java",
+      "description": "Java class with predicate and constructor specification",
+      "status": "OK",
+      "duration": 0.11352229118347168,
+      "snippet": "0 errors found (2 statements verified)"
+    },
+    {
+      "iteration": 11,
+      "kind": "c",
+      "description": "Ghost keyword permutations (open/close/assert/leak/produce)",
+      "status": "OK",
+      "duration": 0.13239097595214844,
+      "snippet": "/tmp/tmpsiq3glkj.c(7,9-21): error: No such variable, constru"
+    },
+    {
+      "iteration": 12,
+      "kind": "c",
+      "description": "Deeply nested ghost specification (depth 27)",
+      "status": "OK",
+      "duration": 0.10880446434020996,
+      "snippet": "/tmp/tmpamrjpsqe.c(3,32-35): error: Expression form not allo"
+    },
+    {
+      "iteration": 13,
+      "kind": "rs",
+      "description": "Rust deeply nested tuple hierarchy (depth 2)",
+      "status": "OK",
+      "duration": 0.2970266342163086,
+      "snippet": "0 errors found (43 statements verified) (target: x86_64-unkn"
+    },
+    {
+      "iteration": 14,
+      "kind": "raw_c",
+      "description": "UTF-8 BOM / Unicode identifier: ?_var",
+      "status": "OK",
+      "duration": 0.04201149940490723,
+      "snippet": "/tmp/tmpt7qd1erp.c(2,5-6): error: Parse error: Parse error. "
+    },
+    {
+      "iteration": 15,
+      "kind": "c",
+      "description": "Deeply nested ghost specification (depth 16)",
+      "status": "OK",
+      "duration": 0.14752507209777832,
+      "snippet": "/tmp/tmpf_67ue0w.c(3,42-45): error: Expression form not allo"
+    },
+    {
+      "iteration": 16,
+      "kind": "c",
+      "description": "Deeply nested ghost specification (depth 34)",
+      "status": "OK",
+      "duration": 0.1564476490020752,
+      "snippet": "/tmp/tmpqunw6mce.c(3,33-36): error: Expression form not allo"
+    },
+    {
+      "iteration": 17,
+      "kind": "c",
+      "description": "Ghost keyword permutations (open/close/assert/leak/produce)",
+      "status": "OK",
+      "duration": 0.152679443359375,
+      "snippet": "/tmp/tmp62tt7a31.c(11,1-2): error: Function leaks heap chunk"
+    },
+    {
+      "iteration": 18,
+      "kind": "refine_pair",
+      "description": "Refinement checker differential probe (1 stmts)",
+      "status": "OK",
+      "duration": 0.2978222370147705,
+      "snippet": "No refinement errors found"
+    },
+    {
+      "iteration": 19,
+      "kind": "c",
+      "description": "Malformed / unclosed ghost comment sequence",
+      "status": "OK",
+      "duration": 0.04021763801574707,
+      "snippet": "/tmp/tmp2b8fu4p3.c(3,5-13): error: Parse error: Parse error."
+    },
+    {
+      "iteration": 20,
+      "kind": "refine_pair",
+      "description": "Refinement checker differential probe (2 stmts)",
+      "status": "OK",
+      "duration": 0.22545123100280762,
+      "snippet": "ERROR: In function compute, cannot prove that statement 8 of"
+    },
+    {
+      "iteration": 21,
+      "kind": "raw_c",
+      "description": "UTF-8 BOM / Unicode identifier: ?spec?",
+      "status": "OK",
+      "duration": 0.04129362106323242,
+      "snippet": "/tmp/tmpp7r58781.c(2,5-6): error: Parse error: Parse error. "
+    },
+    {
+      "iteration": 22,
+      "kind": "c",
+      "description": "Ghost keyword permutations (open/close/assert/leak/produce)",
+      "status": "OK",
+      "duration": 0.11481261253356934,
+      "snippet": "/tmp/tmpk8zhaxou.c(7,9-30): error: No such variable, constru"
+    },
+    {
+      "iteration": 23,
+      "kind": "c",
+      "description": "Deeply nested ghost specification (depth 20)",
+      "status": "OK",
+      "duration": 0.13653564453125,
+      "snippet": "/tmp/tmpx_9_dy89.c(3,42-45): error: Expression form not allo"
+    },
+    {
+      "iteration": 24,
+      "kind": "raw_c",
+      "description": "UTF-8 BOM / Unicode identifier: ?spec?",
+      "status": "OK",
+      "duration": 0.043967485427856445,
+      "snippet": "/tmp/tmpt11r4l24.c(2,5-6): error: Parse error: Parse error. "
+    },
+    {
+      "iteration": 25,
+      "kind": "rs",
+      "description": "Rust multiple raw pointer deref/cast chain (5 levels)",
+      "status": "OK",
+      "duration": 0.3128237724304199,
+      "snippet": "0 errors found (43 statements verified) (target: x86_64-unkn"
+    },
+    {
+      "iteration": 26,
+      "kind": "refine_pair",
+      "description": "Refinement checker differential probe (1 stmts)",
+      "status": "OK",
+      "duration": 0.23966526985168457,
+      "snippet": "No refinement errors found"
+    },
+    {
+      "iteration": 27,
+      "kind": "c",
+      "description": "Deeply nested ghost specification (depth 11)",
+      "status": "OK",
+      "duration": 1.0778870582580566,
+      "snippet": "/tmp/tmp85iau_x_.c(3,32-35): error: Expression form not allo"
+    },
+    {
+      "iteration": 28,
+      "kind": "refine_pair",
+      "description": "Refinement checker differential probe (2 stmts)",
+      "status": "OK",
+      "duration": 0.24692559242248535,
+      "snippet": "ERROR: In function compute, cannot prove that statement 3 of"
+    },
+    {
+      "iteration": 29,
+      "kind": "cpp",
+      "description": "C++ struct with constructor and instance predicate",
+      "status": "OK",
+      "duration": 0.27706122398376465,
+      "snippet": "0 errors found (3 statements verified)"
+    },
+    {
+      "iteration": 30,
+      "kind": "c",
+      "description": "Extreme integer literal: 0x7fffffffffffffffffffffffffff",
+      "status": "OK",
+      "duration": 0.13569068908691406,
+      "snippet": "/tmp/tmp1lbzaysk.c(6,19-53): error: Integer literal used as "
+    },
+    {
+      "iteration": 31,
+      "kind": "raw_c",
+      "description": "UTF-8 BOM / Unicode identifier: ?_beta_?",
+      "status": "OK",
+      "duration": 0.041611671447753906,
+      "snippet": "/tmp/tmpmr_xa0ts.c(2,5-6): error: Parse error: Parse error. "
+    },
+    {
+      "iteration": 32,
+      "kind": "rs",
+      "description": "Rust multiple raw pointer deref/cast chain (2 levels)",
+      "status": "OK",
+      "duration": 0.373441219329834,
+      "snippet": "0 errors found (43 statements verified) (target: x86_64-unkn"
+    },
+    {
+      "iteration": 33,
+      "kind": "c",
+      "description": "Malformed / unclosed ghost comment sequence",
+      "status": "OK",
+      "duration": 0.04794168472290039,
+      "snippet": "/tmp/tmpqholj5ix.c(3,27-28): error: Parse error: Parse error"
+    },
+    {
+      "iteration": 34,
+      "kind": "c",
+      "description": "Extreme integer literal: 999999999999999999999999999999",
+      "status": "OK",
+      "duration": 0.1614542007446289,
+      "snippet": "/tmp/tmpmrnl9yie.c(6,19-79): error: Integer literal used as "
+    },
+    {
+      "iteration": 35,
+      "kind": "c",
+      "description": "Ghost keyword permutations (open/close/assert/leak/produce)",
+      "status": "OK",
+      "duration": 0.04235339164733887,
+      "snippet": "/tmp/tmp5s7xa156.c(7,51-52): error: Parse error: Parse error"
+    },
+    {
+      "iteration": 36,
+      "kind": "raw_c",
+      "description": "UTF-8 BOM / Unicode identifier: ??_ferris",
+      "status": "OK",
+      "duration": 0.04444432258605957,
+      "snippet": "/tmp/tmpvupqb7kq.c(2,7-14): error: Parse error: Parse error."
+    },
+    {
+      "iteration": 37,
+      "kind": "c",
+      "description": "Extreme integer literal: 000000000000000000000000000000",
+      "status": "OK",
+      "duration": 0.1331768035888672,
+      "snippet": "0 errors found (1 statements verified)"
+    },
+    {
+      "iteration": 38,
+      "kind": "rs",
+      "description": "Rust deeply nested tuple hierarchy (depth 2)",
+      "status": "OK",
+      "duration": 0.33353376388549805,
+      "snippet": "0 errors found (43 statements verified) (target: x86_64-unkn"
+    },
+    {
+      "iteration": 39,
+      "kind": "c",
+      "description": "Extreme integer literal: 0",
+      "status": "OK",
+      "duration": 0.16196608543395996,
+      "snippet": "0 errors found (1 statements verified)"
+    },
+    {
+      "iteration": 40,
+      "kind": "refine_pair",
+      "description": "Refinement checker differential probe (2 stmts)",
+      "status": "OK",
+      "duration": 0.22146201133728027,
+      "snippet": "No refinement errors found"
+    },
+    {
+      "iteration": 41,
+      "kind": "c",
+      "description": "Deeply nested ghost specification (depth 29)",
+      "status": "OK",
+      "duration": 0.15569210052490234,
+      "snippet": "/tmp/tmpe25wyq34.c(3,44-47): error: Expression form not allo"
+    },
+    {
+      "iteration": 42,
+      "kind": "raw_c",
+      "description": "UTF-8 BOM / Unicode identifier: ???????_????????",
+      "status": "OK",
+      "duration": 0.09540438652038574,
+      "snippet": "/tmp/tmp7zebsywc.c(2,12-13): error: Parse error: Parse error"
+    },
+    {
+      "iteration": 43,
+      "kind": "cpp",
+      "description": "C++ struct with constructor and instance predicate",
+      "status": "OK",
+      "duration": 0.22127413749694824,
+      "snippet": "0 errors found (3 statements verified)"
+    },
+    {
+      "iteration": 44,
+      "kind": "c",
+      "description": "Ghost keyword permutations (open/close/assert/leak/produce)",
+      "status": "OK",
+      "duration": 0.041136980056762695,
+      "snippet": "/tmp/tmp3en4tkym.c(8,51-52): error: Parse error: Parse error"
+    },
+    {
+      "iteration": 45,
+      "kind": "cpp",
+      "description": "C++ struct with constructor and instance predicate",
+      "status": "OK",
+      "duration": 0.23646116256713867,
+      "snippet": "0 errors found (3 statements verified)"
+    },
+    {
+      "iteration": 46,
+      "kind": "c",
+      "description": "Malformed / unclosed ghost comment sequence",
+      "status": "OK",
+      "duration": 0.05529975891113281,
+      "snippet": "/tmp/tmp_3zwqcj4.c(6,1-4): error: Parse error: Parse error. "
+    },
+    {
+      "iteration": 47,
+      "kind": "c",
+      "description": "Ghost keyword permutations (open/close/assert/leak/produce)",
+      "status": "OK",
+      "duration": 0.06979775428771973,
+      "snippet": "/tmp/tmp7ndg0042.c(10,51-52): error: Parse error: Parse erro"
+    },
+    {
+      "iteration": 48,
+      "kind": "c",
+      "description": "Deeply nested ghost specification (depth 30)",
+      "status": "OK",
+      "duration": 0.22332000732421875,
+      "snippet": "/tmp/tmp4r5kbfpk.c(3,24-27): error: Expression form not allo"
+    },
+    {
+      "iteration": 49,
+      "kind": "raw_c",
+      "description": "UTF-8 BOM / Unicode identifier: ???????_????????",
+      "status": "OK",
+      "duration": 0.04889202117919922,
+      "snippet": "/tmp/tmpf32v61_z.c(2,12-13): error: Parse error: Parse error"
+    },
+    {
+      "iteration": 50,
+      "kind": "c",
+      "description": "Extreme integer literal: 0xffffffffffffffffffffffffffff",
+      "status": "OK",
+      "duration": 0.16315031051635742,
+      "snippet": "/tmp/tmplx5g0pk8.c(6,19-81): error: Integer literal used as "
+    },
+    {
+      "iteration": 51,
+      "kind": "rs",
+      "description": "Rust deeply nested tuple hierarchy (depth 5)",
+      "status": "OK",
+      "duration": 0.4436666965484619,
+      "snippet": "0 errors found (46 statements verified) (target: x86_64-unkn"
+    },
+    {
+      "iteration": 52,
+      "kind": "raw_c",
+      "description": "UTF-8 BOM / Unicode identifier: ?spec?",
+      "status": "OK",
+      "duration": 0.07906889915466309,
+      "snippet": "/tmp/tmpppegrweo.c(2,5-6): error: Parse error: Parse error. "
+    },
+    {
+      "iteration": 53,
+      "kind": "c",
+      "description": "Extreme integer literal: -9223372036854775809",
+      "status": "OK",
+      "duration": 0.2545599937438965,
+      "snippet": "/tmp/tmplm823ogd.c(6,19-20): error: Type mismatch. Actual: i"
+    },
+    {
+      "iteration": 54,
+      "kind": "raw_c",
+      "description": "UTF-8 BOM / Unicode identifier: ?_beta_?",
+      "status": "OK",
+      "duration": 0.13730621337890625,
+      "snippet": "/tmp/tmp8ynqpu4r.c(2,5-6): error: Parse error: Parse error. "
+    },
+    {
+      "iteration": 55,
+      "kind": "raw_c",
+      "description": "UTF-8 BOM / Unicode identifier: ?spec?",
+      "status": "OK",
+      "duration": 0.09460592269897461,
+      "snippet": "/tmp/tmp62_0_m2b.c(2,5-6): error: Parse error: Parse error. "
+    },
+    {
+      "iteration": 56,
+      "kind": "rs",
+      "description": "Rust deeply nested tuple hierarchy (depth 4)",
+      "status": "OK",
+      "duration": 0.5925390720367432,
+      "snippet": "0 errors found (45 statements verified) (target: x86_64-unkn"
+    },
+    {
+      "iteration": 57,
+      "kind": "c",
+      "description": "Deeply nested ghost specification (depth 40)",
+      "status": "OK",
+      "duration": 0.26749515533447266,
+      "snippet": "/tmp/tmp7kg5nf9z.c(3,24-27): error: Expression form not allo"
+    },
+    {
+      "iteration": 58,
+      "kind": "java",
+      "description": "Java class with predicate and constructor specification",
+      "status": "OK",
+      "duration": 0.1835026741027832,
+      "snippet": "0 errors found (2 statements verified)"
+    },
+    {
+      "iteration": 59,
+      "kind": "java",
+      "description": "Java class with predicate and constructor specification",
+      "status": "OK",
+      "duration": 0.25614404678344727,
+      "snippet": "0 errors found (2 statements verified)"
+    },
+    {
+      "iteration": 60,
+      "kind": "c",
+      "description": "Ghost keyword permutations (open/close/assert/leak/produce)",
+      "status": "OK",
+      "duration": 0.07589912414550781,
+      "snippet": "/tmp/tmp_8adigue.c(8,51-52): error: Parse error: Parse error"
+    },
+    {
+      "iteration": 61,
+      "kind": "refine_pair",
+      "description": "Refinement checker differential probe (4 stmts)",
+      "status": "OK",
+      "duration": 0.3022119998931885,
+      "snippet": "ERROR: In function compute, cannot prove that statement 8 of"
+    },
+    {
+      "iteration": 62,
+      "kind": "java",
+      "description": "Java class with predicate and constructor specification",
+      "status": "OK",
+      "duration": 0.12838959693908691,
+      "snippet": "0 errors found (2 statements verified)"
+    },
+    {
+      "iteration": 63,
+      "kind": "rs",
+      "description": "Rust deeply nested tuple hierarchy (depth 2)",
+      "status": "OK",
+      "duration": 0.30486488342285156,
+      "snippet": "0 errors found (43 statements verified) (target: x86_64-unkn"
+    },
+    {
+      "iteration": 64,
+      "kind": "raw_c",
+      "description": "UTF-8 BOM / Unicode identifier: ???????_????????",
+      "status": "OK",
+      "duration": 0.03979063034057617,
+      "snippet": "/tmp/tmpoa745n5u.c(2,12-13): error: Parse error: Parse error"
+    },
+    {
+      "iteration": 65,
+      "kind": "c",
+      "description": "Malformed / unclosed ghost comment sequence",
+      "status": "OK",
+      "duration": 0.03823971748352051,
+      "snippet": "/tmp/tmp71lvd8xg.c(3,5-13): error: Parse error: Parse error."
+    },
+    {
+      "iteration": 66,
+      "kind": "c",
+      "description": "Extreme integer literal: 170141183460469231731687303715",
+      "status": "OK",
+      "duration": 0.13629984855651855,
+      "snippet": "/tmp/tmpxg4vu3zg.c(6,19-58): error: Integer literal used as "
+    },
+    {
+      "iteration": 67,
+      "kind": "refine_pair",
+      "description": "Refinement checker differential probe (1 stmts)",
+      "status": "OK",
+      "duration": 0.25260233879089355,
+      "snippet": "ERROR: In function compute, cannot prove that statement 3 of"
+    },
+    {
+      "iteration": 68,
+      "kind": "java",
+      "description": "Java class with predicate and constructor specification",
+      "status": "OK",
+      "duration": 0.13369274139404297,
+      "snippet": "0 errors found (2 statements verified)"
+    },
+    {
+      "iteration": 69,
+      "kind": "raw_c",
+      "description": "UTF-8 BOM / Unicode identifier: ?_beta_?",
+      "status": "OK",
+      "duration": 0.051952362060546875,
+      "snippet": "/tmp/tmp_l7gx9b7.c(2,5-6): error: Parse error: Parse error. "
+    },
+    {
+      "iteration": 70,
+      "kind": "raw_c",
+      "description": "UTF-8 BOM / Unicode identifier: ?spec?",
+      "status": "OK",
+      "duration": 0.04337430000305176,
+      "snippet": "/tmp/tmpfbicv6_s.c(2,5-6): error: Parse error: Parse error. "
+    },
+    {
+      "iteration": 71,
+      "kind": "c",
+      "description": "Deeply nested ghost specification (depth 34)",
+      "status": "OK",
+      "duration": 0.12336349487304688,
+      "snippet": "/tmp/tmpwudc1rd2.c(3,61-64): error: Expression form not allo"
+    },
+    {
+      "iteration": 72,
+      "kind": "rs",
+      "description": "Rust multiple raw pointer deref/cast chain (3 levels)",
+      "status": "OK",
+      "duration": 0.29659366607666016,
+      "snippet": "0 errors found (43 statements verified) (target: x86_64-unkn"
+    },
+    {
+      "iteration": 73,
+      "kind": "raw_c",
+      "description": "UTF-8 BOM / Unicode identifier: ?_beta_?",
+      "status": "OK",
+      "duration": 0.04065227508544922,
+      "snippet": "/tmp/tmpycrhb8uw.c(2,5-6): error: Parse error: Parse error. "
+    },
+    {
+      "iteration": 74,
+      "kind": "refine_pair",
+      "description": "Refinement checker differential probe (4 stmts)",
+      "status": "OK",
+      "duration": 0.2407057285308838,
+      "snippet": "ERROR: In function compute, cannot prove that statement 3 of"
+    },
+    {
+      "iteration": 75,
+      "kind": "java",
+      "description": "Java class with predicate and constructor specification",
+      "status": "OK",
+      "duration": 0.1237339973449707,
+      "snippet": "0 errors found (2 statements verified)"
+    },
+    {
+      "iteration": 76,
+      "kind": "rs",
+      "description": "Rust multiple raw pointer deref/cast chain (5 levels)",
+      "status": "OK",
+      "duration": 0.32218027114868164,
+      "snippet": "0 errors found (43 statements verified) (target: x86_64-unkn"
+    },
+    {
+      "iteration": 77,
+      "kind": "c",
+      "description": "Extreme integer literal: 340282366920938463463374607431",
+      "status": "OK",
+      "duration": 0.12118959426879883,
+      "snippet": "/tmp/tmptkexvvm9.c(6,19-58): error: Integer literal used as "
+    },
+    {
+      "iteration": 78,
+      "kind": "c",
+      "description": "Ghost keyword permutations (open/close/assert/leak/produce)",
+      "status": "OK",
+      "duration": 0.04257702827453613,
+      "snippet": "/tmp/tmp3fs4bmsh.c(11,51-52): error: Parse error: Parse erro"
+    },
+    {
+      "iteration": 79,
+      "kind": "refine_pair",
+      "description": "Refinement checker differential probe (1 stmts)",
+      "status": "OK",
+      "duration": 0.23114681243896484,
+      "snippet": "ERROR: In function compute, cannot prove that statement 3 of"
+    },
+    {
+      "iteration": 80,
+      "kind": "rs",
+      "description": "Rust multiple raw pointer deref/cast chain (3 levels)",
+      "status": "OK",
+      "duration": 0.3214535713195801,
+      "snippet": "0 errors found (43 statements verified) (target: x86_64-unkn"
+    },
+    {
+      "iteration": 81,
+      "kind": "refine_pair",
+      "description": "Refinement checker differential probe (2 stmts)",
+      "status": "OK",
+      "duration": 0.22175025939941406,
+      "snippet": "No refinement errors found"
+    },
+    {
+      "iteration": 82,
+      "kind": "c",
+      "description": "Extreme integer literal: 0x7fffffffffffffffffffffffffff",
+      "status": "OK",
+      "duration": 0.1269533634185791,
+      "snippet": "/tmp/tmp8ynwvif9.c(6,19-53): error: Integer literal used as "
+    },
+    {
+      "iteration": 83,
+      "kind": "rs",
+      "description": "Rust multiple raw pointer deref/cast chain (3 levels)",
+      "status": "OK",
+      "duration": 0.3077392578125,
+      "snippet": "0 errors found (43 statements verified) (target: x86_64-unkn"
+    },
+    {
+      "iteration": 84,
+      "kind": "refine_pair",
+      "description": "Refinement checker differential probe (2 stmts)",
+      "status": "OK",
+      "duration": 0.21704936027526855,
+      "snippet": "ERROR: In function compute, cannot prove that statement 3 of"
+    },
+    {
+      "iteration": 85,
+      "kind": "rs",
+      "description": "Rust deeply nested tuple hierarchy (depth 4)",
+      "status": "OK",
+      "duration": 0.32510805130004883,
+      "snippet": "0 errors found (45 statements verified) (target: x86_64-unkn"
+    },
+    {
+      "iteration": 86,
+      "kind": "rs",
+      "description": "Rust multiple raw pointer deref/cast chain (4 levels)",
+      "status": "OK",
+      "duration": 0.4213566780090332,
+      "snippet": "0 errors found (43 statements verified) (target: x86_64-unkn"
+    },
+    {
+      "iteration": 87,
+      "kind": "rs",
+      "description": "Rust multiple raw pointer deref/cast chain (4 levels)",
+      "status": "OK",
+      "duration": 0.39902806282043457,
+      "snippet": "0 errors found (43 statements verified) (target: x86_64-unkn"
+    },
+    {
+      "iteration": 88,
+      "kind": "c",
+      "description": "Deeply nested ghost specification (depth 25)",
+      "status": "OK",
+      "duration": 0.14694714546203613,
+      "snippet": "/tmp/tmpskd1uw90.c(3,52-55): error: Expression form not allo"
+    },
+    {
+      "iteration": 89,
+      "kind": "c",
+      "description": "Ghost keyword permutations (open/close/assert/leak/produce)",
+      "status": "OK",
+      "duration": 0.046880245208740234,
+      "snippet": "/tmp/tmprmn8lyfx.c(13,51-52): error: Parse error: Parse erro"
+    },
+    {
+      "iteration": 90,
+      "kind": "java",
+      "description": "Java class with predicate and constructor specification",
+      "status": "OK",
+      "duration": 0.14274263381958008,
+      "snippet": "0 errors found (2 statements verified)"
+    },
+    {
+      "iteration": 91,
+      "kind": "c",
+      "description": "Deeply nested ghost specification (depth 35)",
+      "status": "OK",
+      "duration": 0.15238285064697266,
+      "snippet": "/tmp/tmpmphpdugn.c(3,41-44): error: Expression form not allo"
+    },
+    {
+      "iteration": 92,
+      "kind": "raw_c",
+      "description": "UTF-8 BOM / Unicode identifier: ?_var",
+      "status": "OK",
+      "duration": 0.0441439151763916,
+      "snippet": "/tmp/tmp59375mwl.c(2,5-6): error: Parse error: Parse error. "
+    },
+    {
+      "iteration": 93,
+      "kind": "java",
+      "description": "Java class with predicate and constructor specification",
+      "status": "OK",
+      "duration": 0.13106656074523926,
+      "snippet": "0 errors found (2 statements verified)"
+    },
+    {
+      "iteration": 94,
+      "kind": "c",
+      "description": "Ghost keyword permutations (open/close/assert/leak/produce)",
+      "status": "OK",
+      "duration": 0.1255807876586914,
+      "snippet": "/tmp/tmp1czgn1bf.c(11,9-20): error: No such variable, constr"
+    },
+    {
+      "iteration": 95,
+      "kind": "refine_pair",
+      "description": "Refinement checker differential probe (4 stmts)",
+      "status": "OK",
+      "duration": 0.25097131729125977,
+      "snippet": "ERROR: In function compute, cannot prove that statement 8 of"
+    },
+    {
+      "iteration": 96,
+      "kind": "rs",
+      "description": "Rust deeply nested tuple hierarchy (depth 5)",
+      "status": "OK",
+      "duration": 0.388808012008667,
+      "snippet": "0 errors found (46 statements verified) (target: x86_64-unkn"
+    },
+    {
+      "iteration": 97,
+      "kind": "cpp",
+      "description": "C++ struct with constructor and instance predicate",
+      "status": "OK",
+      "duration": 0.22760725021362305,
+      "snippet": "0 errors found (3 statements verified)"
+    },
+    {
+      "iteration": 98,
+      "kind": "cpp",
+      "description": "C++ struct with constructor and instance predicate",
+      "status": "OK",
+      "duration": 0.21156525611877441,
+      "snippet": "0 errors found (3 statements verified)"
+    },
+    {
+      "iteration": 99,
+      "kind": "rs",
+      "description": "Rust deeply nested tuple hierarchy (depth 5)",
+      "status": "OK",
+      "duration": 0.8727571964263916,
+      "snippet": "0 errors found (46 statements verified) (target: x86_64-unkn"
+    },
+    {
+      "iteration": 100,
+      "kind": "cpp",
+      "description": "C++ struct with constructor and instance predicate",
+      "status": "OK",
+      "duration": 0.40445923805236816,
+      "snippet": "0 errors found (3 statements verified)"
+    }
+  ]
+}

@@ -735,6 +735,9 @@ cd tests
     verifast -c arrays.cpp
     verifast -c -allow_should_fail clang_error.cpp
   cd ..
+  cd soundness_c_cxx_java
+    call testsuite.mysh
+  cd ..
   cd rust
     call testsuite.mysh
   cd ..

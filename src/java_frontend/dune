@@ -1,5 +1,5 @@
 (library
  (name java_frontend)
  (wrapped false)
- (preprocess (pps ppx_parser))
- (libraries camlp-streams num str threads unix (re_export frontend)))
+ (preprocess (pps ppx_parser ppx_vf_cov))
+ (libraries camlp-streams num str threads unix (re_export frontend) vf_cov_runtime))

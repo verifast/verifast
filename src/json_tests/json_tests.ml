@@ -17,3 +17,6 @@ let () =
     buffer_add_json_pp buf 2 j;
     assert(Buffer.contents buf = "{\n  \"key\": \"value\",\n  \"arr\": {\n    \"nested_arr\": [\n      [\n        null,\n        10,\n        []\n      ],\n      \"string\",\n      true\n    ],\n    \"empty object\": {}\n  }\n}")
   end
+
+let () =
+  (try Vf_cov_runtime.dump_stats () with _ -> ())

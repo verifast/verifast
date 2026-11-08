@@ -1,0 +1,192 @@
+name: Hardening & Verification Gates
+
+on:
+  push:
+    branches: [ master, main, 'workstream-*', 'ch*-*' ]
+  pull_request:
+    branches: [ master, main ]
+  merge_group:
+  workflow_dispatch:
+
+jobs:
+  coverage-gate:
+    name: Coverage Verification Gate (OCaml >=95%, Rust >=95%)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Build setup
+        run: ./setup-build.sh
+
+      - name: Build VeriFast
+        run: ./build.sh
+
+      - name: Run Full Coverage Suite
+        run: |
+          . ./config.sh
+          export PATH="/tmp/$VFDEPS_NAME/bin:$HOME/.cargo/bin:$PWD/bin:$PATH"
+          export LD_LIBRARY_PATH="/tmp/$VFDEPS_NAME/lib:$PWD/bin:${LD_LIBRARY_PATH:-}"
+          ./scripts/run_coverage.sh --full --rust-cov
+
+      - name: Upload Coverage Reports
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-artifacts
+          path: |
+            coverage/summary.json
+            coverage/rust_coverage.txt
+            coverage/lcov.info
+            coverage/uncovered_branches.md
+
+  soundness-and-rocq-gate:
+    name: Soundness Negative Suites & Rocq Metatheory Gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Build setup
+        run: ./setup-build.sh
+
+      - name: Build VeriFast & Rocq Metatheory Proofs
+        run: ./build.sh rocq_metatheory_proofs
+
+      - name: Run Negative Soundness Suites
+        run: |
+          . ./config.sh
+          export PATH="/tmp/$VFDEPS_NAME/bin:$HOME/.cargo/bin:$PWD/bin:$PATH"
+          export LD_LIBRARY_PATH="/tmp/$VFDEPS_NAME/lib:$PWD/bin:${LD_LIBRARY_PATH:-}"
+          cd tests/rust/soundness_negative
+          ../../bin/verifast -allow_should_fail -allow_dead_code unchecked_arith_shifts_exhaustive.rs
+          ../../bin/verifast -allow_should_fail -allow_dead_code raw_slice_ptr_soundness.rs
+          ../../bin/verifast -allow_should_fail -allow_dead_code aliasing_and_borrows_neg.rs
+          ../../bin/verifast -allow_should_fail -allow_dead_code lifetime_and_drop_neg.rs
+          ../../bin/verifast -allow_should_fail -allow_dead_code ghost_lemmas_predicates_neg.rs
+          ../../bin/verifast -allow_should_fail -allow_dead_code casts_enums_unions_neg.rs
+          ../../bin/verifast -ignore_unwind_paths -emit_rocq emit_rocq_extended.rs
+          diff -u emit_rocq_extended.v emit_rocq_extended_expected.v
+          rm -f emit_rocq_extended.v
+
+      - name: Run Rocq Metatheory Consistency Validator
+        run: |
+          . ./config.sh
+          export PATH="/tmp/$VFDEPS_NAME/bin:$HOME/.cargo/bin:$PWD/bin:$PATH"
+          export LD_LIBRARY_PATH="/tmp/$VFDEPS_NAME/lib:$PWD/bin:${LD_LIBRARY_PATH:-}"
+          python3 tests/rust/rocq_check.py
+
+      - name: Check Spec Vacuity (if present)
+        run: |
+          . ./config.sh
+          export PATH="/tmp/$VFDEPS_NAME/bin:$HOME/.cargo/bin:$PWD/bin:$PATH"
+          export LD_LIBRARY_PATH="/tmp/$VFDEPS_NAME/lib:$PWD/bin:${LD_LIBRARY_PATH:-}"
+          if [ -f scripts/check_spec_vacuity.py ]; then
+            python3 scripts/check_spec_vacuity.py
+          else
+            echo "scripts/check_spec_vacuity.py not present; skipped."
+          fi
+
+      - name: Upload Soundness & Vacuity Reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: soundness-artifacts
+          path: |
+            coverage/spec_vacuity_report.json
+          if-no-files-found: ignore
+
+  mutation-cross-prover-fuzz-gate:
+    name: Mutation (>=80%), Miri Differential, Cross-Prover, Fuzzer & Gate Check
+    needs: [coverage-gate, soundness-and-rocq-gate]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Build setup
+        run: ./setup-build.sh
+
+      - name: Build VeriFast
+        run: ./build.sh
+
+      - name: Download Coverage Artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: coverage-artifacts
+          path: coverage
+        continue-on-error: true
+
+      - name: Download Soundness & Vacuity Artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: soundness-artifacts
+          path: coverage
+        continue-on-error: true
+
+      - name: Differential Testing against Miri & rustc
+        run: |
+          . ./config.sh
+          export PATH="/tmp/$VFDEPS_NAME/bin:$HOME/.cargo/bin:$PWD/bin:$PATH"
+          export LD_LIBRARY_PATH="/tmp/$VFDEPS_NAME/lib:$PWD/bin:${LD_LIBRARY_PATH:-}"
+          python3 tests/fuzz_diff_mutation/differential_miri_test.py
+
+      - name: Two-Tier Mutation Testing
+        run: |
+          . ./config.sh
+          export PATH="/tmp/$VFDEPS_NAME/bin:$HOME/.cargo/bin:$PWD/bin:$PATH"
+          export LD_LIBRARY_PATH="/tmp/$VFDEPS_NAME/lib:$PWD/bin:${LD_LIBRARY_PATH:-}"
+          python3 tests/fuzz_diff_mutation/mutation_test.py
+
+      - name: Cross-Prover Equivalence Testing (if present)
+        run: |
+          . ./config.sh
+          export PATH="/tmp/$VFDEPS_NAME/bin:$HOME/.cargo/bin:$PWD/bin:$PATH"
+          export LD_LIBRARY_PATH="/tmp/$VFDEPS_NAME/lib:$PWD/bin:${LD_LIBRARY_PATH:-}"
+          if [ -f tests/fuzz_diff_mutation/cross_prover_test.py ]; then
+            python3 tests/fuzz_diff_mutation/cross_prover_test.py
+          else
+            echo "cross_prover_test.py not present; skipped."
+          fi
+
+      - name: Grammar & Structure Fuzzing (100 iterations)
+        run: |
+          . ./config.sh
+          export PATH="/tmp/$VFDEPS_NAME/bin:$HOME/.cargo/bin:$PWD/bin:$PATH"
+          export LD_LIBRARY_PATH="/tmp/$VFDEPS_NAME/lib:$PWD/bin:${LD_LIBRARY_PATH:-}"
+          python3 tests/fuzz_diff_mutation/fuzz_verifast.py --seed 42 --iterations 100
+
+      - name: Unified Verification & Hardening Gate Audit
+        run: |
+          . ./config.sh
+          export PATH="/tmp/$VFDEPS_NAME/bin:$HOME/.cargo/bin:$PWD/bin:$PATH"
+          export LD_LIBRARY_PATH="/tmp/$VFDEPS_NAME/lib:$PWD/bin:${LD_LIBRARY_PATH:-}"
+          python3 scripts/check_hardening_gates.py --report
+
+      - name: Upload Gate Audit Summary & Hardening Report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: hardening-gate-report
+          path: |
+            HARDENING_REPORT.md
+            tests/fuzz_diff_mutation/REPORT.md
+            tests/fuzz_diff_mutation/mutation_report.json
+            tests/fuzz_diff_mutation/differential_results.json
