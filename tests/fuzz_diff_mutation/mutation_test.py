@@ -25,7 +25,44 @@ if not MUT_BIN_DIR.exists():
 REFINEMENT_DIR = REPO_ROOT / "tests" / "rust" / "refinement_checker"
 
 ENV = os.environ.copy()
-ENV["PATH"] = f"/home/devin/.cargo/bin:{MUT_BIN_DIR}:/tmp/vfdeps-adf88dc/bin:" + ENV.get("PATH", "")
+cargo_bin = Path.home() / ".cargo" / "bin"
+devin_cargo = Path("/home/devin/.cargo/bin")
+cargo_paths = [str(cargo_bin)]
+if devin_cargo.exists() and devin_cargo != cargo_bin:
+    cargo_paths.append(str(devin_cargo))
+
+vfdeps_name = "vfdeps-adf88dc"
+config_sh = REPO_ROOT / "config.sh"
+if config_sh.exists():
+    for line in config_sh.read_text().splitlines():
+        if line.startswith("export VFDEPS_NAME="):
+            vfdeps_name = line.split("=", 1)[1].strip()
+
+vfdeps_bin = f"/tmp/{vfdeps_name}/bin"
+ENV["PATH"] = ":".join(cargo_paths) + f":{MUT_BIN_DIR}:{vfdeps_bin}:" + ENV.get("PATH", "")
+
+def find_stdint_dir():
+    try:
+        res = subprocess.run(["ocamlfind", "query", "stdint"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=5)
+        if res.returncode == 0 and res.stdout.strip():
+            p = Path(res.stdout.strip())
+            if p.exists():
+                return str(p)
+    except Exception:
+        pass
+    fallback = Path("/tmp/vfdeps-adf88dc/lib/ocaml/stdint")
+    if fallback.exists():
+        return str(fallback)
+    if config_sh.exists():
+        for line in config_sh.read_text().splitlines():
+            if line.startswith("export VFDEPS_NAME="):
+                vf_name = line.split("=", 1)[1].strip()
+                p = Path(f"/tmp/{vf_name}/lib/ocaml/stdint")
+                if p.exists():
+                    return str(p)
+    return "/tmp/vfdeps-adf88dc/lib/ocaml/stdint"
+
+STDINT_DIR = find_stdint_dir()
 ENV["LD_LIBRARY_PATH"] = f"{MUT_BIN_DIR}:" + ENV.get("LD_LIBRARY_PATH", "")
 ENV["LLVM_PROFILE_FILE"] = "/dev/null"
 
@@ -788,7 +825,7 @@ let () =
 
     inc_args = [
         "-I", ".", "-I", "+num", "-I", "+str", "-I", "+unix",
-        "-I", "/tmp/vfdeps-adf88dc/lib/ocaml/stdint",
+        "-I", STDINT_DIR,
         "-I", str(REPO_ROOT / "src/_build/default/perf/unix/.perf_unix.objs/byte"),
         "-I", str(REPO_ROOT / "src/_build/default/perf/unix/.perf_unix.objs/native"),
         "-I", str(REPO_ROOT / "src/_build/default/perf/.perf.objs/byte"),
@@ -968,12 +1005,12 @@ let () =
             assert target in z_src, f"Target {target} not in z.ml"
             mut_code = z_src.replace(target, repl, 1)
             (work_dir / "z.ml").write_text(mut_code)
-            rc1, _, err1, _ = run_cmd(["ocamlc", "-I", "+num", "-I", "/tmp/vfdeps-adf88dc/lib/ocaml/stdint", "-c", "z.ml"], cwd=work_dir)
+            rc1, _, err1, _ = run_cmd(["ocamlc", "-I", "+num", "-I", STDINT_DIR, "-c", "z.ml"], cwd=work_dir)
             if rc1 != 0:
                 killed = True
                 diag = f"Compile error in z: {err1.strip()[:60]}"
             else:
-                rc2, _, err2, _ = run_cmd(["ocamlc", "-I", "+num", "-I", "/tmp/vfdeps-adf88dc/lib/ocaml/stdint", "nums.cma", "/tmp/vfdeps-adf88dc/lib/ocaml/stdint/stdint.cma", "z.cmo", "test_z.ml", "-o", "test_z_run"], cwd=work_dir)
+                rc2, _, err2, _ = run_cmd(["ocamlc", "-I", "+num", "-I", STDINT_DIR, "nums.cma", f"{STDINT_DIR}/stdint.cma", "z.cmo", "test_z.ml", "-o", "test_z_run"], cwd=work_dir)
                 if rc2 != 0:
                     killed = True
                     diag = f"Link error in z: {err2.strip()[:60]}"

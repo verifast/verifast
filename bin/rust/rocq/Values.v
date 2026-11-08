@@ -1,3 +1,4 @@
+From Coq Require Import Bool.
 From Coq Require Export QArith.
 From Coq.Logic Require Import PropExtensionality.
 
@@ -25,7 +26,7 @@ Proof.
   - right. intros H. injection H. intros. contradiction.
 Defined.
 
-Fixpoint value_eq_dec (v1 v2: Value): {v1 = v2} + {v1 <> v2}.
+Definition value_eq_dec (v1 v2: Value): {v1 = v2} + {v1 <> v2}.
 Proof.
   decide equality; try apply Ptr_eq_dec; try apply Bool.bool_dec; try apply Q_eq_dec.
 Defined.
@@ -43,6 +44,8 @@ Proof.
   unfold value_eqb.
   destruct (value_eq_dec v1 v2); apply prop_ext; split; intros; congruence.
 Qed.
+
+Global Opaque value_eqb.
 
 From Coq Require Export List String.
 Import ListNotations.

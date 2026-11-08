@@ -429,9 +429,15 @@ fn test_preprocess_alloc_dealloc_edge_cases() {
 }
 
 fn find_exporter_binary() -> std::path::PathBuf {
-    let p = std::path::PathBuf::from("/home/devin/verifast-src/bin/vf-rust-mir-exporter");
-    if p.exists() {
-        p
+    let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let p_unix = manifest_dir.join("../../../bin/vf-rust-mir-exporter");
+    let p_win = manifest_dir.join("../../../bin/vf-rust-mir-exporter.exe");
+    if p_win.exists() && cfg!(windows) {
+        p_win
+    } else if p_unix.exists() {
+        p_unix
+    } else if p_win.exists() {
+        p_win
     } else {
         std::path::PathBuf::from(std::env::var("CARGO_BIN_EXE_vf_mir_exporter").unwrap_or_else(|_| "vf-rust-mir-exporter".into()))
     }
@@ -444,7 +450,7 @@ fn get_rustc_sysroot() -> String {
         .output();
     match output {
         Ok(out) => String::from_utf8_lossy(&out.stdout).trim().to_string(),
-        Err(_) => "/home/devin/.rustup/toolchains/nightly-2026-09-25-x86_64-unknown-linux-gnu".to_string(),
+        Err(_) => std::env::var("RUSTUP_HOME").unwrap_or_default(),
     }
 }
 

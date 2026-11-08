@@ -20,7 +20,12 @@ REPO_ROOT = BASE_DIR.parent.parent
 BIN_DIR = REPO_ROOT / "bin"
 
 ENV = os.environ.copy()
-ENV["PATH"] = f"/home/devin/.cargo/bin:{BIN_DIR}:" + ENV.get("PATH", "")
+cargo_bin = Path.home() / ".cargo" / "bin"
+devin_cargo = Path("/home/devin/.cargo/bin")
+cargo_paths = [str(cargo_bin)]
+if devin_cargo.exists() and devin_cargo != cargo_bin:
+    cargo_paths.append(str(devin_cargo))
+ENV["PATH"] = ":".join(cargo_paths) + f":{BIN_DIR}:" + ENV.get("PATH", "")
 ENV["LD_LIBRARY_PATH"] = f"{BIN_DIR}:" + ENV.get("LD_LIBRARY_PATH", "")
 
 UNCAUGHT_EXCEPTION_PATTERNS = [

@@ -29,7 +29,11 @@ jobs:
         run: ./build.sh
 
       - name: Run Full Coverage Suite
-        run: ./scripts/run_coverage.sh --full --rust-cov
+        run: |
+          . ./config.sh
+          export PATH="/tmp/$VFDEPS_NAME/bin:$HOME/.cargo/bin:$PWD/bin:$PATH"
+          export LD_LIBRARY_PATH="/tmp/$VFDEPS_NAME/lib:$PWD/bin:${LD_LIBRARY_PATH:-}"
+          ./scripts/run_coverage.sh --full --rust-cov
 
       - name: Upload Coverage Reports
         uses: actions/upload-artifact@v7
@@ -62,6 +66,9 @@ jobs:
 
       - name: Run Negative Soundness Suites
         run: |
+          . ./config.sh
+          export PATH="/tmp/$VFDEPS_NAME/bin:$HOME/.cargo/bin:$PWD/bin:$PATH"
+          export LD_LIBRARY_PATH="/tmp/$VFDEPS_NAME/lib:$PWD/bin:${LD_LIBRARY_PATH:-}"
           cd tests/rust/soundness_negative
           ../../bin/verifast -allow_should_fail -allow_dead_code unchecked_arith_shifts_exhaustive.rs
           ../../bin/verifast -allow_should_fail -allow_dead_code raw_slice_ptr_soundness.rs
@@ -74,10 +81,17 @@ jobs:
           rm -f emit_rocq_extended.v
 
       - name: Run Rocq Metatheory Consistency Validator
-        run: python3 tests/rust/rocq_check.py
+        run: |
+          . ./config.sh
+          export PATH="/tmp/$VFDEPS_NAME/bin:$HOME/.cargo/bin:$PWD/bin:$PATH"
+          export LD_LIBRARY_PATH="/tmp/$VFDEPS_NAME/lib:$PWD/bin:${LD_LIBRARY_PATH:-}"
+          python3 tests/rust/rocq_check.py
 
       - name: Check Spec Vacuity (if present)
         run: |
+          . ./config.sh
+          export PATH="/tmp/$VFDEPS_NAME/bin:$HOME/.cargo/bin:$PWD/bin:$PATH"
+          export LD_LIBRARY_PATH="/tmp/$VFDEPS_NAME/lib:$PWD/bin:${LD_LIBRARY_PATH:-}"
           if [ -f scripts/check_spec_vacuity.py ]; then
             python3 scripts/check_spec_vacuity.py
           else
@@ -128,13 +142,24 @@ jobs:
         continue-on-error: true
 
       - name: Differential Testing against Miri & rustc
-        run: python3 tests/fuzz_diff_mutation/differential_miri_test.py
+        run: |
+          . ./config.sh
+          export PATH="/tmp/$VFDEPS_NAME/bin:$HOME/.cargo/bin:$PWD/bin:$PATH"
+          export LD_LIBRARY_PATH="/tmp/$VFDEPS_NAME/lib:$PWD/bin:${LD_LIBRARY_PATH:-}"
+          python3 tests/fuzz_diff_mutation/differential_miri_test.py
 
       - name: Two-Tier Mutation Testing
-        run: python3 tests/fuzz_diff_mutation/mutation_test.py
+        run: |
+          . ./config.sh
+          export PATH="/tmp/$VFDEPS_NAME/bin:$HOME/.cargo/bin:$PWD/bin:$PATH"
+          export LD_LIBRARY_PATH="/tmp/$VFDEPS_NAME/lib:$PWD/bin:${LD_LIBRARY_PATH:-}"
+          python3 tests/fuzz_diff_mutation/mutation_test.py
 
       - name: Cross-Prover Equivalence Testing (if present)
         run: |
+          . ./config.sh
+          export PATH="/tmp/$VFDEPS_NAME/bin:$HOME/.cargo/bin:$PWD/bin:$PATH"
+          export LD_LIBRARY_PATH="/tmp/$VFDEPS_NAME/lib:$PWD/bin:${LD_LIBRARY_PATH:-}"
           if [ -f tests/fuzz_diff_mutation/cross_prover_test.py ]; then
             python3 tests/fuzz_diff_mutation/cross_prover_test.py
           else
@@ -142,10 +167,18 @@ jobs:
           fi
 
       - name: Grammar & Structure Fuzzing (100 iterations)
-        run: python3 tests/fuzz_diff_mutation/fuzz_verifast.py --seed 42 --iterations 100
+        run: |
+          . ./config.sh
+          export PATH="/tmp/$VFDEPS_NAME/bin:$HOME/.cargo/bin:$PWD/bin:$PATH"
+          export LD_LIBRARY_PATH="/tmp/$VFDEPS_NAME/lib:$PWD/bin:${LD_LIBRARY_PATH:-}"
+          python3 tests/fuzz_diff_mutation/fuzz_verifast.py --seed 42 --iterations 100
 
       - name: Unified Verification & Hardening Gate Audit
-        run: python3 scripts/check_hardening_gates.py --report
+        run: |
+          . ./config.sh
+          export PATH="/tmp/$VFDEPS_NAME/bin:$HOME/.cargo/bin:$PWD/bin:$PATH"
+          export LD_LIBRARY_PATH="/tmp/$VFDEPS_NAME/lib:$PWD/bin:${LD_LIBRARY_PATH:-}"
+          python3 scripts/check_hardening_gates.py --report
 
       - name: Upload Gate Audit Summary & Hardening Report
         if: always()

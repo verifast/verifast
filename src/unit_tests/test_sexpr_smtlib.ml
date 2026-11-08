@@ -277,7 +277,7 @@ let test_sexpression_emitter () =
   let s_pkg = string_of_sexpression (sexpr_of_package pkg) in
   check "Package decl sexpr" (String.length s_pkg > 0 && String.contains s_pkg 'p');
 
-  let out_path = "/tmp/test_unit_emitter_out.sexpr" in
+  let out_path = Filename.concat (Filename.get_temp_dir_name ()) "test_unit_emitter_out.sexpr" in
   SExpressionEmitter.emit out_path [pkg];
   check "Emit created non-empty file" (Sys.file_exists out_path);
   let ic = open_in out_path in

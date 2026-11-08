@@ -18,7 +18,12 @@ MIRI_RUNNER_DIR = BASE_DIR / "miri_runner"
 CASES_DIR = BASE_DIR / "cases"
 
 ENV = os.environ.copy()
-ENV["PATH"] = f"/home/devin/.cargo/bin:{BIN_DIR}:" + ENV.get("PATH", "")
+cargo_bin = Path.home() / ".cargo" / "bin"
+devin_cargo = Path("/home/devin/.cargo/bin")
+cargo_paths = [str(cargo_bin)]
+if devin_cargo.exists() and devin_cargo != cargo_bin:
+    cargo_paths.append(str(devin_cargo))
+ENV["PATH"] = ":".join(cargo_paths) + f":{BIN_DIR}:" + ENV.get("PATH", "")
 ENV["LD_LIBRARY_PATH"] = f"{BIN_DIR}:" + ENV.get("LD_LIBRARY_PATH", "")
 
 def run_cmd(cmd, cwd=None, timeout=30):

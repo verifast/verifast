@@ -189,7 +189,7 @@ let test_lexer () =
 (* Suite 4: Parser C & Ghost Declarations     *)
 (* ========================================== *)
 let test_parser_c_and_ghost () =
-  let path = "/tmp/test_unit_c_parser.c" in
+  let path = Filename.concat (Filename.get_temp_dir_name ()) "test_unit_c_parser.c" in
   let oc = open_out path in
   output_string oc "
 struct Point {
@@ -381,7 +381,7 @@ let test_ocaml_expr_and_ast () =
   check "fmt Loc noLocs false" (String.contains (string_of_ocaml_expr false oe_loc) 'l');
 
   (* File formatting *)
-  let out_path = "/tmp/test_ocaml_expr_out.ml" in
+  let out_path = Filename.concat (Filename.get_temp_dir_name ()) "test_ocaml_expr_out.ml" in
   print_ocaml_expr_to_file false out_path oe_l;
   check "print_ocaml_expr_to_file exists" (Sys.file_exists out_path);
   Sys.remove out_path;
@@ -929,7 +929,7 @@ let test_lexer_deep () =
   check "get_file_options annot_char" (opts_annot.annot_char = '#');
   check "get_file_options tab_size" (opts_annot.tab_size = 8);
 
-  let tmp_opt_file = "/tmp/test_file_opts.c" in
+  let tmp_opt_file = Filename.concat (Filename.get_temp_dir_name ()) "test_file_opts.c" in
   let oc = open_out tmp_opt_file in
   output_string oc "// verifast_options{prover:redux}\nint main() { return 0; }\n";
   close_out oc;

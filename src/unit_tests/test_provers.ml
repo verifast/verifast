@@ -425,7 +425,7 @@ let test_combineprovers () =
 (* Suite 4: Smtlibprover Comprehensive        *)
 (* ========================================== *)
 let test_smtlibprover () =
-  let dump_path = "/tmp/test_unit_smtlib_dump.smt2" in
+  let dump_path = Filename.concat (Filename.get_temp_dir_name ()) "test_unit_smtlib_dump.smt2" in
   let smt_ctxt = Smtlibprover.dump_smtlib_ctxt dump_path ["dump"; "I"; "Q"; "LIA"; "LRA"; "NDT"; "ALL"] in
   
   check "smtlib type_bool" (smt_ctxt#type_bool = Smtlib.bool);

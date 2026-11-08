@@ -120,6 +120,7 @@ ifdef Z3V4DOT5
     LDLPATH:=$(Z3_DLL_DIR)
     VERIFAST := $(LDLPATHVAR)=${LDLPATH}:$$$(LDLPATHVAR) ../bin/verifast
   else
+    LDLPATH:=$(Z3_DLL_DIR):$(CWD)/../bin
     VERIFAST := ../bin/verifast
   endif
   Z3PRESENT=false
@@ -276,7 +277,7 @@ include $(RUST_FE_DIR)/Makefile
 
 SET_LDD    = export CAML_LD_LIBRARY_PATH="$$CAML_LD_LIBRARY_PATH:$$GTKSOURCEVIEW_LIBS"
 SET_ENV    = export PATH="$(CWD)/../bin/:$(OCAMLBIN):$$PATH"; \
-             export $(LDLPATHVAR)="$(Z3_DLL_DIR):$(LDLPATH):$$$(LDLPATHVAR)"
+             export $(LDLPATHVAR)="$(LDLPATH):$$$(LDLPATHVAR)"
 COMPILE    = ocamlfind ocamlopt $(OCAMLCFLAGS) -package ppx_parser,camlp-streams
 COMPILE_BC = ocamlfind ocamlc $(OCAMLCFLAGS) -package ppx_parser,camlp-streams
 
@@ -581,13 +582,18 @@ clean::
 	rm -f shape_analysis/*.cm[ix] shape_analysis/*.cmo
 
 #------------------------------- Tests --------------------------------------#
-unit_tests: $(Z3DEPS)
+unit_tests: $(STDLIB) $(TOOLS_EXCEPT_VFIDE)
 	@echo "  RUN      " json_tests
 	dune build json_tests/json_tests.exe
 	dune exec json_tests/json_tests.exe
 	@echo "  RUN      " ocaml_unit_tests
 	dune build unit_tests/unit_tests.exe
-	$(SET_ENV); _build/default/unit_tests/unit_tests.exe
+	cp -f _build/default/unit_tests/unit_tests.exe ../bin/unit_tests$(DOTEXE)
+ifeq ($(OS), Darwin)
+	install_name_tool -change libz3.dylib @executable_path/../lib/libz3.dylib ../bin/unit_tests
+endif
+	$(SET_ENV); ../bin/unit_tests$(DOTEXE)
+	rm -f ../bin/unit_tests$(DOTEXE)
 	@echo "  RUN      " coverage_self_test
 	dune build coverage/cov_self_test.exe coverage/vf_cov_report.exe
 	$(SET_ENV); _build/default/coverage/cov_self_test.exe

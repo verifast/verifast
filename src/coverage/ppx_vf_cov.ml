@@ -160,8 +160,7 @@ class cov_mapper mod_var_name file_ref points_ref count_ref = object (self)
       | Ppat_var { txt = name; _ } ->
         let base = Filename.basename !file_ref in
         ((string_contains "refinement_checker" !file_ref || base = "refinement_checker.ml") &&
-         (string_contains "string_of_" name || name = "string_of_ty" || name = "string_of_command" ||
-          name = "check_rvalue_refines_rvalue" || name = "decode_generic_param")) ||
+         (string_contains "string_of_" name || name = "string_of_ty" || name = "string_of_command")) ||
         (base = "vf_mir_translator.ml" &&
          (string_contains "string_of_" name || name = "string_of_decoded_type")) ||
         (base = "verifast1.ml" &&

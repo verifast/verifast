@@ -249,7 +249,15 @@ class HardeningGateAuditor:
                 env = os.environ.copy()
                 env["VF_COV_DIR"] = ""
                 env["LLVM_PROFILE_FILE"] = "/dev/null"
-                env["PATH"] = f"/home/devin/.rustup/toolchains/nightly-2026-09-25-x86_64-unknown-linux-gnu/bin:/home/devin/.cargo/bin:{self.repo_root}/bin:" + env.get("PATH", "")
+                cargo_bin = Path.home() / ".cargo" / "bin"
+                devin_cargo = Path("/home/devin/.cargo/bin")
+                cargo_dirs = [str(cargo_bin)]
+                if devin_cargo.exists() and devin_cargo != cargo_bin:
+                    cargo_dirs.append(str(devin_cargo))
+                rustup_nightly = Path.home() / ".rustup" / "toolchains" / "nightly-2026-09-25-x86_64-unknown-linux-gnu" / "bin"
+                if rustup_nightly.exists():
+                    cargo_dirs.insert(0, str(rustup_nightly))
+                env["PATH"] = ":".join(cargo_dirs) + f":{self.repo_root}/bin:" + env.get("PATH", "")
                 res = subprocess.run(
                     [sys.executable, str(rocq_script)],
                     cwd=str(self.repo_root),

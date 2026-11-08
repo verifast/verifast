@@ -2,8 +2,17 @@
 set -e
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
-export PATH="/home/devin/.cargo/bin:/tmp/vfdeps-adf88dc/bin:/home/devin/verifast-src/bin:$PATH"
-export LD_LIBRARY_PATH="/home/devin/verifast-src/bin:$LD_LIBRARY_PATH"
+REPO_ROOT="$(cd "$DIR/../.." && pwd)"
+if [ -f "$REPO_ROOT/config.sh" ]; then
+  . "$REPO_ROOT/config.sh"
+fi
+VFDEPS="/tmp/${VFDEPS_NAME:-vfdeps-adf88dc}"
+CARGO_PATHS="$HOME/.cargo/bin"
+if [ -d "/home/devin/.cargo/bin" ] && [ "$HOME/.cargo/bin" != "/home/devin/.cargo/bin" ]; then
+  CARGO_PATHS="$CARGO_PATHS:/home/devin/.cargo/bin"
+fi
+export PATH="$CARGO_PATHS:$VFDEPS/bin:$REPO_ROOT/bin:$PATH"
+export LD_LIBRARY_PATH="$REPO_ROOT/bin:${LD_LIBRARY_PATH:-}"
 
 echo "================================================================================"
 echo "Workstream 6: Fuzzing, Mutation Testing, & Differential Testing Suite"

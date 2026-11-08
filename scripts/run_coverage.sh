@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_ROOT="/home/devin/verifast-src"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if [ -f "$REPO_ROOT/config.sh" ]; then
+  . "$REPO_ROOT/config.sh"
+fi
 RAW_DIR="$REPO_ROOT/coverage/raw"
 OUT_DIR="$REPO_ROOT/coverage"
 REPORT_EXE="$REPO_ROOT/src/_build/default/coverage/vf_cov_report.exe"
@@ -48,9 +51,14 @@ for arg in "$@"; do
   esac
 done
 
-export PATH="/home/devin/.cargo/bin:/tmp/vfdeps-adf88dc/bin:$REPO_ROOT/bin:$PATH"
-export LD_LIBRARY_PATH="/tmp/vfdeps-adf88dc/lib:$REPO_ROOT/bin:${LD_LIBRARY_PATH:-}"
-export PKG_CONFIG_PATH="/tmp/vfdeps-adf88dc/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
+VFDEPS="/tmp/${VFDEPS_NAME:-vfdeps-adf88dc}"
+CARGO_PATHS="$HOME/.cargo/bin"
+if [ -d "/home/devin/.cargo/bin" ] && [ "$HOME/.cargo/bin" != "/home/devin/.cargo/bin" ]; then
+  CARGO_PATHS="$CARGO_PATHS:/home/devin/.cargo/bin"
+fi
+export PATH="$CARGO_PATHS:$VFDEPS/bin:$REPO_ROOT/bin:$PATH"
+export LD_LIBRARY_PATH="$VFDEPS/lib:$REPO_ROOT/bin:${LD_LIBRARY_PATH:-}"
+export PKG_CONFIG_PATH="$VFDEPS/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
 
 echo "=== [1/4] Building Coverage Measurement & Unit Test Tools ==="
 chmod -f u+w "$REPO_ROOT/bin/verifast" "$REPO_ROOT/bin/refinement-checker" 2>/dev/null || true
@@ -223,7 +231,14 @@ unset VF_COVERAGE_DIR
 
 if [ "$RUST_COV" = true ]; then
   echo "=== [4a/4] Generating Rust Frontend (vf_mir_exporter) Coverage Report ==="
-  TOOLCHAIN_BIN="/home/devin/.rustup/toolchains/nightly-2026-09-25-x86_64-unknown-linux-gnu/lib/rustlib/x86_64-unknown-linux-gnu/bin"
+  RUSTC_CMD="rustc"
+  if command -v rustup >/dev/null 2>&1 && rustup toolchain list | grep -q "nightly-2026-09-25"; then
+    RUSTC_CMD="rustc +nightly-2026-09-25"
+  fi
+  TOOLCHAIN_BIN="$($RUSTC_CMD --print sysroot)/lib/rustlib/$($RUSTC_CMD -vV | sed -n 's/host: //p')/bin"
+  if [ ! -f "$TOOLCHAIN_BIN/llvm-profdata" ]; then
+    TOOLCHAIN_BIN="$(rustc --print sysroot)/lib/rustlib/$(rustc -vV | sed -n 's/host: //p')/bin"
+  fi
   pushd "$REPO_ROOT/src/rust_frontend/vf_mir_exporter" > /dev/null
   RUSTFLAGS="-C instrument-coverage" LLVM_PROFILE_FILE="$RAW_DIR/rust-unit-%p-%m.profraw" cargo +nightly-2026-09-25 test --quiet
   "$TOOLCHAIN_BIN/llvm-profdata" merge -sparse "$RAW_DIR"/rust-*.profraw -o "$OUT_DIR/rust.profdata"

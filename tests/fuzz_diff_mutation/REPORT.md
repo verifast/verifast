@@ -88,7 +88,7 @@ The differential testing harness contrasts VeriFast's deductive symbolic executi
 | `rust_m09_corrupt_shift_req` | Shift input bound mutation: x < 16 -> x <= 16 (overflows u8) | **KILLED** | `/tmp/tmpo9rkomes.rs(15,16-18): error: Cannot ` |
 | `rust_m10_flip_unchecked_shl_to_shr` | Shift amount perturbation: exceeds bitwidth | **KILLED** | `/tmp/tmp9pcqes0f.rs(10,5-29): error: Shifting` |
 | `rust_m11_omit_heap_init` | Pointer init omission: reading uninitialized heap memory | **KILLED** | `/tmp/tmp19g1baav.rs(14,13-15): error: No matc` |
-| `rust_m12_corrupt_dealloc_layout` | Heap dealloc layout corruption: size mismatch | **KILLED** | `/home/devin/verifast-src/bin/rust/std/lib.rss` |
+| `rust_m12_corrupt_dealloc_layout` | Heap dealloc layout corruption: size mismatch | **KILLED** | `bin/rust/std/lib.rss` |
 | `rust_m13_swap_corrupt_write_b` | Semantic pointer corruption: swap writes corrupted value | **KILLED** | `/tmp/tmpy9ce9rq0.rs(21,26-29): error: Cannot ` |
 | `rust_m14_swap_weaken_req` | Ghost annotation removal: dropped *b points_to precondition | **KILLED** | `/tmp/tmpi7vu2ozx.rs(21,16-18): error: No such` |
 | `rust_m15_swap_negate_ens` | Ghost annotation mutation: negated swap postcondition | **KILLED** | `/tmp/tmp2p0lrkh9.rs(21,12-15): error: Cannot ` |
@@ -156,7 +156,7 @@ The differential testing harness contrasts VeriFast's deductive symbolic executi
 
 ## 4. Architecture & Reproduction Commands
 
-All testing harnesses are located in `/home/devin/verifast-src/tests/fuzz_diff_mutation/` and can be executed individually or in batch:
+All testing harnesses are located in `tests/fuzz_diff_mutation/` and can be executed individually or in batch:
 
 ```bash
 # Run entire suite and regenerate this report:

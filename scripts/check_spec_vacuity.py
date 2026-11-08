@@ -19,7 +19,7 @@ import subprocess
 from pathlib import Path
 
 # Paths
-REPO_DIR = Path("/home/devin/verifast-src")
+REPO_DIR = Path(__file__).resolve().parent.parent
 BIN_DIR = REPO_DIR / "bin"
 RUST_DIR = BIN_DIR / "rust"
 COVERAGE_DIR = REPO_DIR / "coverage"

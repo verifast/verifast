@@ -170,7 +170,7 @@ def main():
     lines.append("")
     lines.append("## 4. Architecture & Reproduction Commands")
     lines.append("")
-    lines.append("All testing harnesses are located in `/home/devin/verifast-src/tests/fuzz_diff_mutation/` and can be executed individually or in batch:")
+    lines.append("All testing harnesses are located in `tests/fuzz_diff_mutation/` and can be executed individually or in batch:")
     lines.append("")
     lines.append("```bash")
     lines.append("# Run entire suite and regenerate this report:")
